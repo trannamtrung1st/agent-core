@@ -96,6 +96,32 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
         Assert.Empty(domainRefs);
     }
 
+    [Fact]
+    public void Frontend_and_contracts_do_not_embed_provider_credentials()
+    {
+        var root = FindRepoRoot();
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "web"), "*", SearchOption.AllDirectories)
+                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                                    && !path.Contains($"{Path.DirectorySeparatorChar}dist{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
+        {
+            if (new FileInfo(file).Length > 2_000_000)
+            {
+                continue;
+            }
+
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("OPENROUTER_API_KEY", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("OPENAI_API_KEY", text, StringComparison.Ordinal);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "src/AgentCore.Contracts"), "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("OPENROUTER_API_KEY", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("ApiKey", text, StringComparison.Ordinal);
+        }
+    }
+
     private static IReadOnlyList<string> PackageOrProjectRefs(string path)
     {
         var document = XDocument.Load(path);

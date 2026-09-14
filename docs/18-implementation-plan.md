@@ -41,6 +41,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** Offline HTTP/SSE contract suite including arbitrary chunk boundaries, UTF-8, missing finish, cancellation, 429 and midstream failure. Default suite must pass without `OPENROUTER_API_KEY`. Explicit opt-in bounded OpenRouter smoke using `openrouter/free`; skip cleanly when the key is missing or opt-in is unset. Do not assert routed-model quality or structured-output correctness. Do not use `openrouter/free` as the demo DefaultModel.
 - **Acceptance criteria:** Same runtime runs ScriptedLanguageModel or OpenAICompatibleLanguageModel via alias configuration; OpenRouter-specific IDs/options stay in Infrastructure and a local endpoint fixture requires no runtime changes; observed partial text is never replayed after a failure; credentials remain backend-only. Default tests never call OpenRouter or spend credits.
 - **Explicit non-goals:** Vendor SDK coupling, tool calling, structured-output platform, speech implied by text compatibility.
+- **Status:** Complete. `OpenAICompatibleLanguageModel` streams via IHttpClientFactory and a private SSE parser. Synthetic DI stays on `ScriptedLanguageModel` and rejects outbound HTTP. Opt-in smoke is `[LiveProviderFact]` (`AGENTCORE_LIVE_PROVIDER_TESTS=1` plus `OPENROUTER_API_KEY`) using `openrouter/free`; committed Real/demo `DefaultModel` remains operator-fixed. See [Milestone 3 verification](reports/m03-verification.md).
 
 ## Milestone 4 — Interaction Controller with synthetic speech/events
 

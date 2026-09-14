@@ -3,6 +3,7 @@ using AgentCore.Api.Mapping;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,11 +15,22 @@ builder.Services.Configure<JsonOptions>(options =>
 });
 
 var agentDirectory = ResolveAgentDirectory(builder);
-builder.Services.AddAgentCoreInfrastructure(agentDirectory);
+var profile = builder.Configuration["AgentCore:Profile"] ?? "Synthetic";
+var languageModel = builder.Configuration.GetSection("Providers:LanguageModels:primary-llm")
+    .Get<LanguageModelProviderOptions>() ?? new LanguageModelProviderOptions { Adapter = "Scripted" };
+if (string.IsNullOrEmpty(languageModel.ApiKey))
+{
+    languageModel.ApiKey = builder.Configuration["OPENROUTER_API_KEY"];
+}
+
+builder.Services.AddAgentCoreInfrastructure(agentDirectory, profile, languageModel);
 builder.Services.AddSingleton<OutboundHttpProbe>();
-builder.Services.AddTransient<ForbiddenOutboundHandler>();
-builder.Services.ConfigureHttpClientDefaults(client =>
-    client.AddHttpMessageHandler<ForbiddenOutboundHandler>());
+if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddTransient<ForbiddenOutboundHandler>();
+    builder.Services.ConfigureHttpClientDefaults(client =>
+        client.AddHttpMessageHandler<ForbiddenOutboundHandler>());
+}
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

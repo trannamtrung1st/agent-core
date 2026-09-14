@@ -6,6 +6,7 @@ using AgentCore.Application.Testing;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -16,7 +17,9 @@ public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddAgentCoreInfrastructure(
         this IServiceCollection services,
-        string agentDirectory)
+        string agentDirectory,
+        string profile = "Synthetic",
+        LanguageModelProviderOptions? languageModel = null)
     {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(SyntheticProviderAliases.Default);
@@ -24,7 +27,24 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IAgentBrain, DefaultAgentBrain>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
-        services.TryAddSingleton<ILanguageModel, ScriptedLanguageModel>();
+        services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.TryAddSingleton<ILanguageModel>(provider =>
+        {
+            var options = languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" };
+            if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(options.Adapter, "Scripted", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(options.Adapter, "Synthetic", StringComparison.OrdinalIgnoreCase))
+            {
+                return new ScriptedLanguageModel();
+            }
+
+            var http = provider.GetRequiredService<IHttpClientFactory>()
+                .CreateClient(OpenAICompatibleLanguageModel.HttpClientName);
+            return new OpenAICompatibleLanguageModel(http, options, provider.GetRequiredService<TimeProvider>());
+        });
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
         services.TryAddSingleton<VoiceAvailability>();
