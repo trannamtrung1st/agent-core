@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -18,10 +19,14 @@ public static class InfrastructureServiceCollectionExtensions
         string agentDirectory)
     {
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton(SyntheticProviderAliases.Default);
+        services.TryAddSingleton<PromptContextBuilder>();
+        services.TryAddSingleton<IAgentBrain, DefaultAgentBrain>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
         services.TryAddSingleton<ILanguageModel, ScriptedLanguageModel>();
-        services.TryAddSingleton<IAgentDefinitionStore>(_ => new FileAgentDefinitionStore(agentDirectory));
+        services.TryAddSingleton<IAgentDefinitionStore>(provider =>
+            new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
         services.TryAddSingleton<VoiceAvailability>();
         services.TryAddSingleton<ISessionOutput, NoOpSessionOutput>();
         services.TryAddSingleton<SessionManager>();

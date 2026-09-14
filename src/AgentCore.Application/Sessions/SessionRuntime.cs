@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
@@ -16,6 +17,7 @@ public sealed class SessionRuntime : IAsyncDisposable
         });
 
     private readonly ILanguageModel _languageModel;
+    private readonly IAgentBrain _brain;
     private readonly IMemoryStore _store;
     private readonly ISessionOutput _output;
     private readonly IIdGenerator _ids;
@@ -38,6 +40,7 @@ public sealed class SessionRuntime : IAsyncDisposable
     public SessionRuntime(
         SessionSnapshot snapshot,
         ILanguageModel languageModel,
+        IAgentBrain brain,
         IMemoryStore store,
         ISessionOutput output,
         IIdGenerator ids,
@@ -46,6 +49,7 @@ public sealed class SessionRuntime : IAsyncDisposable
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
+        _brain = brain;
         _store = store;
         _output = output;
         _ids = ids;
@@ -183,7 +187,39 @@ public sealed class SessionRuntime : IAsyncDisposable
         await PersistAsync(Append(userEntry) with { Status = SessionStatus.Created }, cancellationToken)
             .ConfigureAwait(false);
 
+        var (summary, through) = ConversationSummary.Refresh(
+            _snapshot.Entries,
+            _snapshot.Summary,
+            _snapshot.SummarizedThroughEntrySequence);
+        if (summary != _snapshot.Summary || through != _snapshot.SummarizedThroughEntrySequence)
+        {
+            await PersistAsync(
+                    _snapshot with { Summary = summary, SummarizedThroughEntrySequence = through },
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var responseId = _ids.NewId();
+        var decision = await _brain.DecideAsync(
+                new AgentContext(
+                    _snapshot.Definition,
+                    _snapshot.Entries,
+                    _snapshot.Summary,
+                    Profile: null,
+                    _snapshot.Mode,
+                    _snapshot.PendingTopic,
+                    HelpOfferedDuringSilence: false,
+                    InterruptedHeardText: null,
+                    new AgentTrigger(input.Context.EventId, TriggerKind.UserTurn, input.Text)),
+                responseId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (decision is not Speak speak)
+        {
+            return;
+        }
+
         var entryId = _ids.NewId();
         var sequence = NextSequence();
         var assistant = new ConversationEntry(
@@ -214,11 +250,7 @@ public sealed class SessionRuntime : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
 
-        var request = new ModelRequest(
-            responseId,
-            [new ModelMessage(ModelRole.User, input.Text)],
-            _snapshot.Definition.ConversationPolicy.MaxOutputTokens);
-
+        var request = speak.Request with { ResponseId = responseId };
         BeginWork();
         var responseToken = _responseCts.Token;
         _ = Task.Run(async () =>

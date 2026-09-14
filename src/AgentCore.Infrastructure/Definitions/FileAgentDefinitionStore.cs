@@ -18,7 +18,7 @@ public sealed class FileAgentDefinitionStore : IAgentDefinitionStore
 
     private readonly IReadOnlyDictionary<(string Id, int Version), AgentDefinition> _definitions;
 
-    public FileAgentDefinitionStore(string directory)
+    public FileAgentDefinitionStore(string directory, ProviderAliasSet aliases)
     {
         if (!Directory.Exists(directory))
         {
@@ -36,6 +36,16 @@ public sealed class FileAgentDefinitionStore : IAgentDefinitionStore
                     ?? throw AgentCoreErrors.Validation($"Definition file '{path}' was empty.");
             }
             catch (JsonException ex)
+            {
+                throw AgentCoreErrors.Validation($"Definition file '{path}' is invalid: {ex.Message}");
+            }
+
+            try
+            {
+                AgentDefinitionValidator.Validate(definition);
+                ValidateAliases(definition, aliases);
+            }
+            catch (ArgumentException ex)
             {
                 throw AgentCoreErrors.Validation($"Definition file '{path}' is invalid: {ex.Message}");
             }
@@ -77,5 +87,26 @@ public sealed class FileAgentDefinitionStore : IAgentDefinitionStore
             .OrderByDescending(definition => definition.Version)
             .FirstOrDefault();
         return ValueTask.FromResult(latest);
+    }
+
+    private static void ValidateAliases(AgentDefinition definition, ProviderAliasSet aliases)
+    {
+        if (!aliases.LanguageModels.Contains(definition.ProviderPreferences.LanguageModel))
+        {
+            throw new ArgumentException(
+                $"languageModel alias '{definition.ProviderPreferences.LanguageModel}' is not configured.");
+        }
+
+        if (definition.ProviderPreferences.SpeechRecognizer is { } stt
+            && !aliases.SpeechRecognizers.Contains(stt))
+        {
+            throw new ArgumentException($"speechRecognizer alias '{stt}' is not configured.");
+        }
+
+        if (definition.ProviderPreferences.SpeechSynthesizer is { } tts
+            && !aliases.SpeechSynthesizers.Contains(tts))
+        {
+            throw new ArgumentException($"speechSynthesizer alias '{tts}' is not configured.");
+        }
     }
 }

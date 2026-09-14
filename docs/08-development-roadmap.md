@@ -6,7 +6,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | --- | --- | --- |
 | 0 | Documentation/contracts finalized | Complete; see [Implementation Plan](18-implementation-plan.md) |
 | 1 | Solution skeleton + synthetic text vertical slice | Complete: offline application-service text exchange and health (see [Implementation Plan](18-implementation-plan.md)) |
-| 2 | Agent Definition + Agent Runtime + synthetic provider | Two identities through one runtime and pinned JSON definitions |
+| 2 | Agent Definition + Agent Runtime + synthetic provider | Complete: two identities through one runtime and pinned JSON definitions |
 | 3 | OpenAICompatibleLanguageModel + OpenRouter configuration | Offline SSE contracts; optional `openrouter/free` smoke (not demo DefaultModel); skips without `OPENROUTER_API_KEY` |
 | 4 | Interaction Controller with synthetic speech/events | Deterministic backchannel, interruption and stale-result tests |
 | 5 | SignalR realtime protocol + browser connection + minimal Synthetic Compose | MessagePack browser text slice, leases, identity guards, key-free Compose smoke |

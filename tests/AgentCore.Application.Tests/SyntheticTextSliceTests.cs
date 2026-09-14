@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -84,6 +85,7 @@ public sealed class SyntheticTextSliceTests
         return new SessionRuntime(
             snapshot,
             model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
             store,
             output,
             ids,

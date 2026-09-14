@@ -143,6 +143,7 @@ public sealed class VoiceAvailability
 
 public sealed class SessionRuntimeFactory(
     ILanguageModel languageModel,
+    IAgentBrain brain,
     IMemoryStore store,
     ISessionOutput output,
     IIdGenerator ids,
@@ -150,5 +151,13 @@ public sealed class SessionRuntimeFactory(
     Microsoft.Extensions.Logging.ILoggerFactory loggers)
 {
     public SessionRuntime Create(SessionSnapshot snapshot) =>
-        new(snapshot, languageModel, store, output, ids, time, loggers.CreateLogger(typeof(SessionRuntime).FullName!));
+        new(
+            snapshot,
+            languageModel,
+            brain,
+            store,
+            output,
+            ids,
+            time,
+            loggers.CreateLogger(typeof(SessionRuntime).FullName!));
 }

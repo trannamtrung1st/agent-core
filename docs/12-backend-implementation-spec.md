@@ -4,7 +4,7 @@
 
 ## Agent Definition
 
-JSON only, UTF-8, files loaded through IAgentDefinitionStore from a configured agents directory. A file contains one definition; initial names are agents/examiner.json and agents/customer-support.json. No files are created by this docs task. Store published older versions in version subdirectories if needed; recursively index by (id, version), fail startup on duplicate keys. Versions are immutable positive integers. schemaVersion=1 identifies the format; version identifies that agent's revision. Reject unknown schema versions and unknown fields to catch spelling mistakes. A session pins and persists the validated definition so editing files cannot alter an existing identity.
+JSON only, UTF-8, files loaded through IAgentDefinitionStore from a configured agents directory. A file contains one definition; shipped names are `agents/examiner.json` and `agents/customer-support.json`. Store published older versions in version subdirectories if needed; recursively index by (id, version), fail startup on duplicate keys. Versions are immutable positive integers. schemaVersion=1 identifies the format; version identifies that agent's revision. Reject unknown schema versions and unknown fields to catch spelling mistakes. A session pins and persists the validated definition so editing files cannot alter an existing identity. `FileAgentDefinitionStore` validates field rules and that `ProviderPreferences` aliases resolve (`primary-llm`, and when Voice.Enabled `primary-stt` / `primary-tts` in Synthetic). Missing versions return null from `GetAsync`.
 
 Concrete Domain records (camelCase JSON via System.Text.Json):
 

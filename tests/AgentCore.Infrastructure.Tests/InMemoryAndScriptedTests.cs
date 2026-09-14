@@ -50,7 +50,7 @@ public sealed class InMemoryAndScriptedTests
     public async Task File_store_loads_pinned_demo_definitions()
     {
         var directory = FindAgents();
-        var store = new FileAgentDefinitionStore(directory);
+        var store = new FileAgentDefinitionStore(directory, Application.Ports.SyntheticProviderAliases.Default);
         var examiner = await store.GetAsync("examiner");
         var support = await store.GetAsync("customer-support");
         Assert.NotNull(examiner);
