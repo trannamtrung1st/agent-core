@@ -5,7 +5,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | Milestone | Deliverable | Acceptance gate |
 | --- | --- | --- |
 | 0 | Documentation/contracts finalized | Complete; see [Implementation Plan](18-implementation-plan.md) |
-| 1 | Solution skeleton + synthetic text vertical slice | Offline application-service text exchange and health |
+| 1 | Solution skeleton + synthetic text vertical slice | Complete: offline application-service text exchange and health (see [Implementation Plan](18-implementation-plan.md)) |
 | 2 | Agent Definition + Agent Runtime + synthetic provider | Two identities through one runtime and pinned JSON definitions |
 | 3 | OpenAICompatibleLanguageModel + OpenRouter configuration | Offline SSE contracts; optional `openrouter/free` smoke (not demo DefaultModel); skips without `OPENROUTER_API_KEY` |
 | 4 | Interaction Controller with synthetic speech/events | Deterministic backchannel, interruption and stale-result tests |

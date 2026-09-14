@@ -1,8 +1,8 @@
 # Repository Structure
 
-The repository currently contains README, docs, shared agent instructions in [AGENTS.md](../AGENTS.md), and eleven skills in [.agents/skills](../.agents/skills) used by both Codex and Cursor. The two composition skills, develop and document, load the relevant specialist playbooks. `.agents/` contains development-agent instructions; the future `agents/` directory below holds product Agent Definitions. Existing editor-specific files configure Playwright MCP only.
+The repository contains the Milestone 1 solution (`AgentCore.sln`), versioned demo definitions under `agents/`, a strict React/Vite skeleton in `web/`, README, docs, shared agent instructions in [AGENTS.md](../AGENTS.md), and eleven skills in [.agents/skills](../.agents/skills) used by both Codex and Cursor. The two composition skills, develop and document, load the relevant specialist playbooks. `.agents/` contains development-agent instructions; `agents/` holds product Agent Definitions. Existing editor-specific files configure Playwright MCP only.
 
-The following is a future application implementation layout. Agent instructions and skills do not create application projects or start an implementation milestone. Root `local/` is a gitignored personal scratch folder (notes, temp files); it is not an application project, not a configuration source, and is never committed. [Persistence and Configuration](15-persistence-and-configuration.md#local-personal-workspace) owns secret-handling rules (environment / user-secrets only).
+The application layout matches the project boundaries below. Root `local/` is a gitignored personal scratch folder (notes, temp files); it is not an application project, not a configuration source, and is never committed. [Persistence and Configuration](15-persistence-and-configuration.md#local-personal-workspace) owns secret-handling rules (environment / user-secrets only).
 
 ```text
 src/

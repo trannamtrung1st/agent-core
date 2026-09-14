@@ -40,16 +40,24 @@ Collect a reproducible 20-turn demo run, report sample size, provider/profile, d
 
 ## Running after implementation
 
-The preferred fast developer loop requires no Docker: ASP.NET backend on localhost:5080 and Vite on localhost:5173 with HTTP/WebSocket proxy. Run native .NET and Vite processes for fast startup, direct debugging, hot reload and no container rebuilds. Use SQLite for normal persistent local development, with hosted or synthetic providers. Synthetic tests may still use InMemoryMemoryStore; provider profile and storage selection are independent. The implementation should provide these documented entry commands once the solution/package files exist:
+The preferred fast developer loop requires no Docker: ASP.NET backend on localhost:5080 and Vite on localhost:5173 with HTTP/WebSocket proxy. Run native .NET and Vite processes for fast startup, direct debugging, hot reload and no container rebuilds. Milestone 1 uses in-memory persistence (`Persistence:Provider=InMemory`); select SQLite when Milestone 11 exists. Provider profile and storage selection are independent.
 
 ```text
-dotnet run --project src/AgentCore.Api -- --AgentCore:Profile=Synthetic --Persistence:Provider=Sqlite
+dotnet run --project src/AgentCore.Api -- --AgentCore:Profile=Synthetic --Persistence:Provider=InMemory
 cd web
 npm ci
 npm run dev
 ```
 
-The second process commands run in another terminal. /health confirms boot; select an agent, create a session, attach, send text. The synthetic voice script emits deterministic transcripts/tone output; use Real with independently configured streaming STT/TTS and OpenRouter text with a **fixed** `DefaultModel` for actual microphone transcription and speech. `openrouter/free` is for opt-in adapter smoke only. Supply `OPENROUTER_API_KEY` and, when live speech is wanted, `OPENAI_API_KEY` from environment or `dotnet user-secrets`. [Configuration](15-persistence-and-configuration.md) defines all profile overrides. Default test commands remain Synthetic and must not require these keys. These are future commands, not claims that the application exists today.
+The second process commands run in another terminal. `GET /health` confirms Synthetic boot (`{"status":"healthy","profile":"Synthetic","protocolVersion":1}`). Create a session with `POST /api/v1/sessions`. Do not send live user text over HTTP; Milestone 1 streams text through application services (`SessionRuntime`). Attach and browser text arrive in Milestone 5. The synthetic voice script emits deterministic transcripts/tone output in later milestones; use Real with independently configured streaming STT/TTS and OpenRouter text with a **fixed** `DefaultModel` for actual microphone transcription and speech. `openrouter/free` is for opt-in adapter smoke only. Supply `OPENROUTER_API_KEY` and, when live speech is wanted, `OPENAI_API_KEY` from environment or `dotnet user-secrets`. [Configuration](15-persistence-and-configuration.md) defines all profile overrides. Default test commands remain Synthetic and must not require these keys.
+
+```text
+dotnet test
+cd web
+npm ci
+npm run test -- --run
+npm run build
+```
 
 Demo/production-like packaging: Vite builds static SPA into web/dist; build/publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process; SQLite uses a writable data directory/volume. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Milestone 12 adds container hardening, SQLite volume/restart tests, real-provider Compose configuration, hybrid topology and backup/shutdown polish. The first key-free Compose environment is introduced at Milestone 5. No Dockerfile or deployment config is created by this task, and Kubernetes is unnecessary.
 

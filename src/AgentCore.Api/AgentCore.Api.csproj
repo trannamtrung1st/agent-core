@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentCore.Application\AgentCore.Application.csproj" />
+    <ProjectReference Include="..\AgentCore.Infrastructure\AgentCore.Infrastructure.csproj" />
+    <ProjectReference Include="..\AgentCore.Contracts\AgentCore.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>
