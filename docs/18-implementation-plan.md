@@ -13,12 +13,12 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 
 ## Milestone 1 — Solution skeleton and synthetic text vertical slice
 
-- **Goal:** Prove the boundaries with one offline text exchange.
+- **Goal:** Prove the boundaries with one offline text exchange using native .NET + Vite; Docker is not required.
 - **Scope:** Create .NET project layout/tests and Vite strict TypeScript skeleton; DI, health, minimal lifecycle services, in-memory state, synthetic model and a test-host driver. Use a console/test harness invoking application services for streamed text until SignalR Milestone 5; do not add a temporary public text HTTP endpoint.
 - **Required interfaces:** ILanguageModel, IIdGenerator, TimeProvider, ISessionOutput, initial IMemoryStore.
 - **Tests:** Build references, xUnit stream ordering and cancellation, WebApplicationFactory /health and session creation, frontend build.
 - **Acceptance criteria:** Synthetic boots without keys/network; an application integration test submits text and receives ordered normalized deltas and terminal output. Domain references no web/provider/persistence framework.
-- **Explicit non-goals:** Real providers, voice, durable storage, complete browser realtime connection, MediatR or extra platform infrastructure.
+- **Explicit non-goals:** Real providers, voice, durable storage, complete browser realtime connection, Docker/Compose setup, MediatR or extra platform infrastructure.
 
 ## Milestone 2 — Agent Definition and Agent Runtime
 
@@ -59,7 +59,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 ## Milestone 6 — Microphone, AudioWorklet and STT
 
 - **Goal:** Convert continuously streamed microphone input into speech activity and normalized partial/final evidence.
-- **Scope:** getUserMedia, worklet resampling/PCM16 encoding, VAD boundaries, bounded separate audio ingress, synthetic and independently configured streaming STT adapter, partial/final transcript flow, capability discovery and batch-only degraded fallback.
+- **Scope:** getUserMedia, worklet resampling/PCM16 encoding, VAD boundaries, bounded separate audio ingress, synthetic and initial OpenAiSpeechRecognizer selected through configuration/DI, partial/final transcript flow, capability discovery and batch-only degraded fallback.
 - **Required interfaces:** ISpeechRecognizer, ISpeechRecognitionSession, RecognitionCapabilities, AudioFrame; protocol InputAudioDto.
 - **Tests:** Sample-rate conversion/sample offsets, byte ordering, overflow/discontinuity, boundary ordering, duplicate finals, batch capability degradation, permission/device errors.
 - **Acceptance criteria:** Voice input produces one final user turn per utterance; raw audio never enters the normal mailbox/event log or persistence. Synthetic mode uses script-driven recognition with no keys.
@@ -68,7 +68,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 ## Milestone 7 — TTS streaming and playback
 
 - **Goal:** Turn streamed model text into natural Speech Segments and start TTS playback before the full answer exists.
-- **Scope:** ResponseTextAccumulator/SpeechSegmenter, synthetic and independently configured streaming TTS adapter, canonical conversion, output queue/worklet, timing marks, playback acknowledgements, full-duplex capture.
+- **Scope:** ResponseTextAccumulator/SpeechSegmenter, synthetic and initial OpenAiSpeechSynthesizer selected through configuration/DI, canonical conversion, output queue/worklet, timing marks, playback acknowledgements, full-duplex capture.
 - **Required interfaces:** ISpeechSynthesizer, SpeechRequest/SpeechSynthesisEvent, OutputAudioDto and playback controls.
 - **Tests:** Segment/sample continuity, empty final marker, underrun/overflow, cancellation, browser worklet acknowledgement, microphone remains active during output.
 - **Acceptance criteria:** Playback starts before full response completion when capabilities permit; sequence/duration counters are correct; no HTML audio element handles streamed PCM; response completion waits for playback.
@@ -113,10 +113,10 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 ## Milestone 12 — Per-stage latency measurement, provider tuning and demo hardening
 
 - **Goal:** Demonstrate presence with measured behavior and a simple deployable app.
-- **Scope:** OpenTelemetry traces/metrics, structured safe logs, developer timeline, separate STT/controller/LLM/segmentation/TTS/transport/playback measurements, hosted/hybrid/on-prem configuration checks, same-origin static build, shutdown/backup checks, accessibility and connection/device errors.
+- **Scope:** OpenTelemetry traces/metrics, structured safe logs, developer timeline, separate STT/controller/LLM/segmentation/TTS/transport/playback measurements, hosted/hybrid/on-prem configuration checks, same-origin static build, then one production-like application container and Docker Compose integration/demo environment with a SQLite volume, shutdown/backup checks, accessibility and connection/device errors.
 - **Required interfaces:** Existing ports remain stable; ActivitySource/Meter, ILogger, TimeProvider and safe error mapping.
-- **Tests:** Full offline backend/frontend/Playwright gates, redaction checks, bounded queue stress, 20-turn measured demo, manual real microphone/headset/speaker pass, restore/restart test.
-- **Acceptance criteria:** Both identities demonstrate text, full-duplex voice, meaningful interruption, restrained initiative and reconnect. Latency targets report actual measurements, not promised SLAs. Synthetic demo runs without secrets; production-like build is one logical application plus SQLite file.
+- **Tests:** Full offline backend/frontend/Playwright gates, redaction checks, bounded queue stress, 20-turn measured demo, manual real microphone/headset/speaker pass, restore/restart test, Compose smoke test with Synthetic providers and SQLite volume survival across container recreation.
+- **Acceptance criteria:** Both identities demonstrate text, full-duplex voice, meaningful interruption, restrained initiative and reconnect. Latency targets report actual measurements, not promised SLAs. Synthetic demo runs without secrets; production-like build is one application container plus persistent SQLite volume; docker compose up supports reproducible integration/demo. Native dotnet + Vite development remains usable without Docker.
 - **Explicit non-goals:** Kubernetes, horizontal scaling, services, generic autonomous-agent functionality, elaborate avatars or analytics dashboards.
 
 ## Handoff rule

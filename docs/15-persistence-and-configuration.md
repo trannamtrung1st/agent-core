@@ -2,7 +2,7 @@
 
 ## Persistence model
 
-EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore in Infrastructure. Synthetic development/CI defaults to InMemoryMemoryStore; SQLite contract/integration suites use a temporary database. Real profile defaults to SQLite. No raw microphone frames, TTS chunks, credentials, provider request bodies, every token delta, or high-frequency controller internals are persisted.
+EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore in Infrastructure. The base Synthetic/testing profile defaults to InMemoryMemoryStore; the normal native developer workflow explicitly selects SQLite as shown in [Operations](17-observability-and-operations.md#running-after-implementation). SQLite contract/integration suites use a temporary database. Real profile defaults to SQLite. No raw microphone frames, TTS chunks, credentials, provider request bodies, every token delta, or high-frequency controller internals are persisted.
 
 | Entity | Key and fields | Rules |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
 }
 ```
 
-Configuration fields for inactive adapters are ignored after structural validation; Synthetic must never attempt example URLs or require ApiKey. Real profile requires explicitly configured non-synthetic LLM/STT/TTS for voice. Preferred real configuration: OpenAICompatibleLanguageModel (Adapter=OpenAICompatible) pointing at OpenRouter for text, independently selected streaming STT and TTS adapters for speech. OpenAICompatibleBatch and OpenAICompatibleSpeech are optional speech adapter examples, not required speech providers; batch STT is a degraded profile, not the primary streaming demonstration. Batch STT must set StreamingAudio/PartialTranscripts/SpeechBoundaryEvents=false; actual capability results must not overclaim configured values. Adapters validate requested capabilities and fail startup for impossible combinations. `heuristic` is the built-in classifier alias, not another remote provider.
+Configuration fields for inactive adapters are ignored after structural validation; Synthetic must never attempt example URLs or require ApiKey. Real profile requires explicitly configured non-synthetic LLM/STT/TTS for voice. Preferred real configuration: OpenAICompatibleLanguageModel (Adapter=OpenAICompatible) pointing at OpenRouter for text, OpenAiSpeechRecognizer and OpenAiSpeechSynthesizer (Adapter=OpenAI in their respective capability maps) for initial hosted speech. OpenAICompatibleBatch and OpenAICompatibleSpeech are optional speech adapter examples, not required speech providers; batch STT is a degraded profile, not the primary streaming demonstration. Batch STT must set StreamingAudio/PartialTranscripts/SpeechBoundaryEvents=false; actual capability results must not overclaim configured values. Adapters validate requested capabilities and fail startup for impossible combinations. `heuristic` is the built-in classifier alias, not another remote provider.
 
 Example .NET environment overrides for OpenRouter text plus an **optional batch-STT degraded speech configuration** (operator supplies actual secrets; these are placeholders):
 
@@ -195,7 +195,7 @@ DefaultModel is the concrete model field; it is not copied into ModelRequest or 
 
 To migrate text inference on-prem, retain Adapter=OpenAICompatible and replace BaseUrl with e.g. `http://localhost:8000/v1/`, DefaultModel with the served local model name, and ApiKey/AdditionalHeaders with the local server's requirements. A vLLM-compatible endpoint is an example, not mandatory infrastructure. Direct OpenAI can use `https://api.openai.com/v1/` with its own credentials/model and verified compatibility settings. OpenRouter remains a hosted gateway; changing its model ID does not make inference local.
 
-For STT and TTS, independently choose an installed adapter alias, endpoint, model, credentials and speech capabilities. Prefer streaming STT with partials and streaming TTS; validate support rather than setting flags optimistically. Local speech may need a different concrete adapter if its protocol differs, but never changes ISpeechRecognizer/ISpeechSynthesizer or controller logic. All secrets/endpoints can be overridden using the same .NET double-underscore syntax, including:
+For STT and TTS, initially choose the OpenAI adapters, then independently replace the adapter alias, endpoint, model, credentials and speech capabilities as needed. Prefer streaming STT with partials and streaming TTS; validate support rather than setting flags optimistically. Local speech may need a different concrete adapter if its protocol differs, but never changes ISpeechRecognizer/ISpeechSynthesizer or controller logic. All secrets/endpoints can be overridden using the same .NET double-underscore syntax, including:
 
 ```text
 Providers__SpeechRecognizers__primary-stt__BaseUrl=<hosted-or-local-stt-endpoint>
@@ -208,3 +208,48 @@ Providers__SpeechSynthesizers__primary-tts__Voices__default=<tts-voice>
 ```
 
 [Technology Decisions](10-technology-decisions.md) owns the provider rationale. No actual configuration files are created by this documentation update; React receives only safe effective capabilities, never credentials, model IDs or endpoints.
+
+
+## Provider selection and DI
+
+Bind strongly typed SpeechRecognitionProviderOptions, LanguageModelProviderOptions and SpeechSynthesisProviderOptions as the values of the existing SpeechRecognizers, LanguageModels and SpeechSynthesizers option maps. At startup the API composition root resolves each Adapter value to an Infrastructure implementation and registers the corresponding capability through DI. Within the speech maps, `OpenAI` selects OpenAiSpeechRecognizer/OpenAiSpeechSynthesizer; `Synthetic` selects their synthetic counterparts. `Local` below denotes a future installed local adapter, not automatic compatibility with every local server. An unknown/uninstalled adapter fails configuration validation.
+
+These are Markdown-only selection overrides merged with the existing full options example, not additional configuration schemas or actual files. Each selected adapter also requires its validated capabilities/timeouts and any model/voice configuration. Provider-specific model IDs and secrets stay in backend options.
+
+Initial hosted configuration:
+
+```json
+{
+  "Providers": {
+    "SpeechRecognizers": {"primary-stt": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<stt-model>", "ApiKey": "<backend-secret>"}},
+    "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "https://openrouter.ai/api/v1/", "DefaultModel": "<text-model>", "ApiKey": "<backend-secret>"}},
+    "SpeechSynthesizers": {"primary-tts": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<backend-secret>"}}
+  }
+}
+```
+
+Synthetic configuration (Profile=Synthetic; no keys or external calls):
+
+```json
+{
+  "Providers": {
+    "SpeechRecognizers": {"primary-stt": {"Adapter": "Synthetic"}},
+    "LanguageModels": {"primary-llm": {"Adapter": "Scripted"}},
+    "SpeechSynthesizers": {"primary-tts": {"Adapter": "Synthetic"}}
+  }
+}
+```
+
+Future local configuration (service names illustrate a Compose network):
+
+```json
+{
+  "Providers": {
+    "SpeechRecognizers": {"primary-stt": {"Adapter": "Local", "BaseUrl": "http://local-stt:8000/", "DefaultModel": "<local-stt-model>"}},
+    "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "http://local-llm:8000/v1/", "DefaultModel": "<local-text-model>"}},
+    "SpeechSynthesizers": {"primary-tts": {"Adapter": "Local", "BaseUrl": "http://local-tts:8000/", "DefaultModel": "<local-tts-model>", "Voices": {"default": "<local-voice>"}}}
+  }
+}
+```
+
+Use the documented double-underscore environment overrides for endpoints and secrets in native processes or Compose. When moving local, explicitly clear/replace any inherited hosted ApiKey and headers; the examples do not imply a public unauthenticated local service. React never receives credentials. Updating configuration/DI bindings is not an Agent Runtime code change. A provider lacking partials or timing marks selects existing capability-based policies; it does not require a new controller design. A new protocol may require a new Infrastructure adapter only.

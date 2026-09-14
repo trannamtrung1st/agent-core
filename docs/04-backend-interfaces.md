@@ -6,6 +6,22 @@ These C# 14 signatures are the implementation contract, not source files. Ports 
 
 ILanguageModel, ISpeechRecognizer and ISpeechSynthesizer are independent portable capabilities. MVP orchestration always composes these three ports; no IAIProvider, OpenRouter-specific port or native-audio reasoning dependency is introduced. Each agent selects logical provider aliases, allowing different text models by identity. Infrastructure resolves those aliases to hosted, hybrid or local configurations. The recommended hosted text alias resolves to OpenAICompatibleLanguageModel configured for OpenRouter; the same adapter can target direct OpenAI or a compatible local server. See [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations).
 
+### Speech provider replacement rule
+
+Changing the STT, LLM or TTS provider must not require changes to Agent Runtime or Interaction Controller. Provider selection uses application configuration and dependency injection; concrete adapters belong in Infrastructure. OpenAI STT/TTS are the first adapters, not special cases inside Agent Core.
+
+```text
+ISpeechRecognizer                  ISpeechSynthesizer
+├── OpenAiSpeechRecognizer          ├── OpenAiSpeechSynthesizer
+├── LocalSpeechRecognizer           ├── LocalSpeechSynthesizer
+├── FutureHostedSpeechRecognizer    ├── FutureHostedSpeechSynthesizer
+└── SyntheticSpeechRecognizer       └── SyntheticSpeechSynthesizer
+```
+
+Future names illustrate replaceable implementations, not mandatory projects/providers. Adapters normalize vendor behavior and payloads; no OpenAI request/response type crosses into Domain, Application, Agent Runtime, Interaction Controller or wire contracts. Capability differences select the existing [fallback policies](05-interaction-controller.md#stt-capability-fallback-and-local-ducking), not a runtime rewrite. Confidence remains optional (null when unavailable); streaming input, partials, boundaries and cancellation must be reported honestly.
+
+SyntheticSpeechRecognizer, SyntheticSpeechSynthesizer and ScriptedLanguageModel remain mandatory for offline unit/conversation tests, frontend development, CI, latency simulation, cancellation and interruption tests. They require no API keys. [Configuration](15-persistence-and-configuration.md#provider-selection-and-di) owns adapter selection examples.
+
 ## Language model and failures
 
 ```csharp
@@ -101,7 +117,7 @@ StreamingAudio on RecognitionCapabilities means SupportsStreamingInput; PartialT
 
 PushAudioAsync/ObserveBoundaryAsync await bounded local admission only, not a network transcription. A batch adapter runs one supervised transcription at a time and may buffer at most two pending utterances; overflow yields RecognitionFailed(Unavailable) and resets the voice stream. Non-streaming recognizers buffer at most 30 seconds per utterance and submit after Ended; they still implement this session port. Ended must flush a buffered utterance, while CompleteInput closes the entire voice stream. Capability flags describe underlying quality/latency, not whether the interface exists. Discovery occurs when loading configured adapters, validates formats, and is included as effective capabilities in session.ready. No external capability probing is needed in synthetic mode. Text compatibility does not imply speech support. See [Controller](05-interaction-controller.md) for degraded barge-in.
 
-TTS capability discovery also reports VoiceSelection and SpeakingRate. When unsupported, only the configured default voice and rate 1.0 are accepted; an explicitly requested unsupported non-default fails validation rather than pretending it worked. StreamingAudio=false still permits phrase-level synthesis and playback between phrases, never a requirement to wait for the entire agent response. Hosted speech selection is independent of the text gateway; OpenAI speech is optional, not required.
+TTS capability discovery also reports VoiceSelection and SpeakingRate. When unsupported, only the configured default voice and rate 1.0 are accepted; an explicitly requested unsupported non-default fails validation rather than pretending it worked. StreamingAudio=false still permits phrase-level synthesis and playback between phrases, never a requirement to wait for the entire agent response. Hosted speech selection is independent of the text gateway; OpenAI speech is the initial hosted selection, not a permanent architectural requirement.
 
 Timing marks use UTF-16 text end offsets relative to the segment and canonical sample offsets relative to that segment. The runtime adds segment offsets to obtain response-wide coordinates. Completion must follow the last audio/mark; all TTS events are tagged by the worker with captured ResponseId and SegmentIndex.
 

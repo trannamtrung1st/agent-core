@@ -40,10 +40,10 @@ Collect a reproducible 20-turn demo run, report sample size, provider/profile, d
 
 ## Running after implementation
 
-Development uses two processes: ASP.NET backend on localhost:5080 and Vite on localhost:5173 with HTTP/WebSocket proxy. Synthetic profile is the default, requires no keys, uses in-memory persistence unless SQLite explicitly chosen, and boots without outbound network. The implementation should provide these documented entry commands once the solution/package files exist:
+The preferred fast developer loop requires no Docker: ASP.NET backend on localhost:5080 and Vite on localhost:5173 with HTTP/WebSocket proxy. Run native .NET and Vite processes for fast startup, direct debugging, hot reload and no container rebuilds. Use SQLite for normal persistent local development, with hosted or synthetic providers. Synthetic tests may still use InMemoryMemoryStore; provider profile and storage selection are independent. The implementation should provide these documented entry commands once the solution/package files exist:
 
 ```text
-dotnet run --project src/AgentCore.Api -- --AgentCore:Profile=Synthetic
+dotnet run --project src/AgentCore.Api -- --AgentCore:Profile=Synthetic --Persistence:Provider=Sqlite
 cd web
 npm ci
 npm run dev
@@ -51,11 +51,32 @@ npm run dev
 
 The second process commands run in another terminal. /health confirms boot; select an agent, create a session, attach, send text. The synthetic voice script emits deterministic transcripts/tone output; use Real with independently configured streaming STT/TTS and the preferred OpenRouter text configuration for actual microphone transcription and speech. [Configuration](15-persistence-and-configuration.md) defines all profile overrides. These are future commands, not claims that the application exists today.
 
-Demo/production-like packaging: Vite builds static SPA into web/dist; build/publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process; SQLite uses a writable data directory/volume. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. A multi-stage container may be added during implementation. No Dockerfile or deployment config is created by this task, and Kubernetes is unnecessary.
+Demo/production-like packaging: Vite builds static SPA into web/dist; build/publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process; SQLite uses a writable data directory/volume. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Milestone 12 adds the production-like multi-stage application container and supported Compose integration/demo workflow after native development and provider integration work. No Dockerfile or deployment config is created by this task, and Kubernetes is unnecessary.
 
 Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket upgrade forwarding, a single backend instance and a persistent SQLite volume. Do not horizontally replicate SessionManager against the same SQLite file. During shutdown stop admitting new sessions, mark active responses interrupted, request client flush, save checkpoints and await workers within the 5-second shutdown budget. If process termination prevents clean save, recovery semantics apply.
 
 Back up SQLite using its backup mechanism or a controlled stopped-app copy; copying only the main file while WAL is active is not a reliable backup. Apply EF migrations once at startup before serving traffic for this single-process MVP; fail startup on migration error. Test a restore before a demo that needs durable history.
+
+## Docker Compose integration and demo
+
+Docker Compose is the supported reproducible local integration/demo environment, while Docker remains optional for ordinary development. Once the container artifacts are implemented, `docker compose up` starts the production-like local application (hosted mode requires operator-supplied backend provider credentials). Support the same composition with Synthetic providers for a key-free demo; building/pulling container dependencies may require network even though synthetic runtime behavior does not. No Dockerfile or Compose file is created in this documentation task.
+
+```text
+Docker Compose
+└── agent-core (one application container)
+    ├── ASP.NET Core API + SignalR
+    ├── built React SPA served as static assets
+    └── SQLite file in a mounted persistent volume
+
+Hosted services outside Compose:
+OpenAI STT · OpenRouter text model · OpenAI TTS
+```
+
+Do not split frontend and backend into separate production runtime containers. Vite is a build stage in this artifact, not a production server. The SQLite volume must survive application container recreation; the container's writable layer is not durable storage. Compose should expose the application locally, pass backend configuration/secrets, and use /health for readiness. No additional reverse proxy, Redis, broker, service mesh or Kubernetes is required.
+
+Future Compose topologies may add `local-stt`, `local-llm` and `local-tts` services beside `agent-core`. Hybrid mode enables only the desired local capabilities; fully on-prem mode uses all three local services. These are inference services at the Infrastructure boundary, not a redesign into Agent Core microservices. SQLite may later be replaced by PostgreSQL through the existing persistence boundary without changing the one-application-container philosophy.
+
+**Invariants:** Provider location is an infrastructure concern. Hosted, hybrid and on-prem provider topologies must not change core Agent Runtime semantics. Docker is an orchestration/deployment tool, not an architectural dependency of Agent Core.
 
 ## Hosted, hybrid and on-prem deployment
 
@@ -63,7 +84,7 @@ The same composed Session Runtime and Interaction Controller support all three t
 
 | Deployment | Speech Recognizer / STT | Text Language Model via compatible adapter | Speech Synthesizer / TTS |
 | --- | --- | --- | --- |
-| Hosted MVP | Independently selected cloud STT | OpenRouter hosted gateway | Independently selected cloud TTS |
+| Hosted MVP | OpenAI initially; replaceable STT | OpenRouter hosted gateway | OpenAI initially; replaceable TTS |
 | Hybrid | Local STT | OpenRouter or other hosted endpoint | Local TTS |
 | Future fully on-prem | Local STT | Local OpenAI-compatible inference server | Local TTS |
 

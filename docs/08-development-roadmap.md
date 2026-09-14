@@ -16,7 +16,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | 9 | Semantic barge-in / ducking / supersession / spoken-until | Cancel segments/TTS/LLM; reject late output/playback feedback |
 | 10 | Proactive interaction | Useful trigger or StaySilent with cooldown |
 | 11 | SQLite persistence + reconnect/resume | Recover history/identity without replaying old audio |
-| 12 | Per-stage latency + provider tuning + demo hardening | Measured composed pipeline, offline tests and one-app deployment |
+| 12 | Per-stage latency + provider tuning + demo hardening | Measured pipeline, offline tests and one-app Docker Compose demo |
 
 Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-duplex operation and Milestone 9 completes semantic interruption/audio races. Protocol attach/reconnect starts in memory at Milestone 5; Milestone 11 adds durable recovery. Instrumentation hooks begin early; Milestone 12 completes the measured tuning pass. Do not interpret dependency order as permission to defer fundamental invariants.
 

@@ -46,6 +46,24 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations) owns examples and alias/model resolution; [Operations](17-observability-and-operations.md#hosted-hybrid-and-on-prem-deployment) owns deployment topologies.
 
+## Decision: STT/TTS are replaceable providers
+
+**Decision:** OpenAI STT/TTS are the initial hosted adapters. Changing STT, LLM or TTS must not require changes to Agent Runtime or Interaction Controller.
+
+**Rationale:** Support future on-prem deployment, deterministic testing, cost/quality experimentation, no vendor lock-in and independent evolution of speech and reasoning.
+
+**Consequence:** Application depends on capability interfaces; configuration and DI select Infrastructure adapters. Capabilities may differ, so existing degraded interaction policies remain supported. Vendor-specific code stays at the edge. [Provider ports](04-backend-interfaces.md#speech-provider-replacement-rule) and [configuration](15-persistence-and-configuration.md#provider-selection-and-di) own the concrete contracts and examples.
+
+## Decision: Docker Compose for reproducible local integration
+
+**Decision:** Docker is optional for development; Docker Compose is supported for reproducible integration/demo. The fast loop is native .NET + Vite. The production-like MVP artifact is one application container serving API, SignalR and built SPA, with a persistent SQLite volume.
+
+**Rationale:** Provide a one-command demo environment, environment parity and a simple path to adding local inference services later.
+
+**Trade-off:** Container builds/restarts are slower than the native hot-reload loop, so Compose does not block early runtime/frontend work.
+
+**Consequence:** Add container/Compose artifacts at Milestone 12, after native development, synthetic full-stack and real-provider integration. Hosted, hybrid and on-prem topologies keep the same runtime semantics. Docker is deployment tooling, not an Agent Core dependency. [Operations](17-observability-and-operations.md#docker-compose-integration-and-demo) owns topology and workflow details.
+
 ## Explicit non-goals
 
 No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, Next.js or large component framework. No autonomous tools/platform, distributed event bus or generic repository framework. Reconsider only when actual requirements justify the cost.
