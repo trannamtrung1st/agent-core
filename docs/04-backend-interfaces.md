@@ -1,512 +1,203 @@
 # Backend Interfaces
 
-## Goal
+These C# 14 signatures are the implementation contract, not source files. Ports and normalized provider records live in Application; definition/conversation records live in Domain as specified in [Backend Implementation](12-backend-implementation-spec.md). Use BCL `System`, `System.Collections.Generic`, `System.Threading`, and `System.Threading.Tasks` namespaces. Collections passed to workers must be immutable snapshots, even where typed as `IReadOnlyList<T>`.
 
-Agent Core should be extensible by design without turning the MVP into an abstraction-heavy framework.
+## Portable capabilities and concrete configurations
 
-Use small generic interfaces around external capabilities. Keep domain concepts stable while allowing concrete providers to vary.
+ILanguageModel, ISpeechRecognizer and ISpeechSynthesizer are independent portable capabilities. MVP orchestration always composes these three ports; no IAIProvider, OpenRouter-specific port or native-audio reasoning dependency is introduced. Each agent selects logical provider aliases, allowing different text models by identity. Infrastructure resolves those aliases to hosted, hybrid or local configurations. The recommended hosted text alias resolves to OpenAICompatibleLanguageModel configured for OpenRouter; the same adapter can target direct OpenAI or a compatible local server. See [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations).
 
-The first real provider can use an OpenAI-compatible API. Test and synthetic providers should implement the same contracts.
+## Language model and failures
 
-The examples below use TypeScript-like pseudocode. They describe contracts, not a required implementation language.
-
-## Design rules
-
-1. Core code must not depend on vendor SDK types.
-2. Interfaces should represent Agent Core needs, not every feature offered by a provider.
-3. Provider-specific capabilities may be exposed through optional capability flags or extension interfaces.
-4. Streaming and cancellation are first-class.
-5. Time, IDs, memory, and external I/O should be injectable for deterministic testing.
-6. Synthetic implementations should be easy to write.
-7. Prefer composition over one giant `AIProvider` interface.
-
-## Language model port
-
-```ts
-export type Role = "system" | "user" | "assistant" | "tool";
-
-export interface ModelMessage {
-  role: Role;
-  content: string;
-  name?: string;
-  metadata?: Record<string, unknown>;
+```csharp
+public enum ProviderErrorCode
+{
+    Authentication, RateLimited, Timeout, Cancelled, InvalidRequest,
+    Unavailable, UnsupportedCapability, Unknown
 }
-
-export interface GenerationOptions {
-  model?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-  stop?: string[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface TextDelta {
-  type: "text_delta";
-  text: string;
-}
-
-export interface GenerationCompleted {
-  type: "completed";
-  finishReason?: string;
-  usage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-  };
-}
-
-export interface GenerationError {
-  type: "error";
-  error: Error;
-}
-
-export type GenerationEvent =
-  | TextDelta
-  | GenerationCompleted
-  | GenerationError;
-
-export interface LanguageModel {
-  readonly name: string;
-
-  generate(
-    messages: ModelMessage[],
-    options: GenerationOptions,
-    signal?: AbortSignal,
-  ): AsyncIterable<GenerationEvent>;
+public sealed record ProviderFailure(
+    ProviderErrorCode Code, string SafeMessage, TimeSpan? RetryAfter = null);
+public enum ModelRole { System, User, Assistant }
+public enum ModelStopReason { Completed, LengthLimit, ContentFiltered }
+public sealed record ModelMessage(ModelRole Role, string Text);
+public sealed record ModelCapabilities(bool StreamingText, bool Cancellation);
+public sealed record ModelRequest(
+    Guid ResponseId, IReadOnlyList<ModelMessage> Messages,
+    int MaxOutputTokens = 512, double? Temperature = null);
+public abstract record ModelGenerationEvent;
+public sealed record ModelTextDelta(string Text) : ModelGenerationEvent;
+public sealed record ModelCompleted(ModelStopReason Reason,
+    int? InputTokens = null, int? OutputTokens = null) : ModelGenerationEvent;
+public sealed record ModelFailed(ProviderFailure Failure) : ModelGenerationEvent;
+public interface ILanguageModel
+{
+    ModelCapabilities Capabilities { get; }
+    IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+        ModelRequest request, CancellationToken cancellationToken = default);
 }
 ```
 
-This interface deliberately does not mention OpenAI request objects.
+Exactly one terminal Completed/Failed event per successful enumeration, followed by EOF. Caller cancellation may throw `OperationCanceledException` instead. Unexpected exceptions are normalized at the supervised application boundary; provider exception details never go to Contracts. Empty EOF is `Unavailable`, never implicit success. Model events have request-scoped identity; the pump adds ResponseId from its captured request, never from current mutable state. Tool calls and structured-output generation are outside MVP; unsupported requested capabilities fail before making a request.
 
-## Optional structured-output capability
+The Language Model reasons over normalized text messages only. ModelRequest has no vendor model ID; the configured adapter instance owns DefaultModel. Selecting another model means selecting/configuring a logical provider alias, never inspecting OpenRouter model IDs in Agent Runtime. Hidden provider reasoning fields are not spoken content and never become ModelTextDelta.
 
-Do not force all language-model providers to support identical features.
+## Independent speech ports
 
-```ts
-export interface StructuredOutputModel {
-  generateObject<T>(request: {
-    messages: ModelMessage[];
-    schema: unknown;
-    options?: GenerationOptions;
-    signal?: AbortSignal;
-  }): Promise<T>;
+```csharp
+public sealed record AudioFormat(string Encoding, int SampleRateHz, int Channels);
+public sealed record AudioFrame(long FrameSequence, long SampleOffset,
+    ReadOnlyMemory<byte> Data);
+public sealed record RecognitionCapabilities(bool StreamingAudio,
+    bool PartialTranscripts, bool SpeechBoundaryEvents, bool Cancellation);
+public sealed record SynthesisCapabilities(bool StreamingAudio, bool TimingMarks,
+    bool Cancellation, bool VoiceSelection, bool SpeakingRate,
+    IReadOnlyList<AudioFormat> SupportedFormats);
+public sealed record RecognitionOptions(AudioFormat Format, string Language);
+public abstract record SpeechRecognitionEvent(Guid UtteranceId);
+public sealed record SpeechStarted(Guid UtteranceId) : SpeechRecognitionEvent(UtteranceId);
+public sealed record SpeechPartial(Guid UtteranceId, int Revision, string Text,
+    double? Confidence) : SpeechRecognitionEvent(UtteranceId);
+public sealed record SpeechFinal(Guid UtteranceId, string Text,
+    double? Confidence) : SpeechRecognitionEvent(UtteranceId);
+public sealed record SpeechEnded(Guid UtteranceId) : SpeechRecognitionEvent(UtteranceId);
+public sealed record RecognitionFailed(Guid UtteranceId, ProviderFailure Failure)
+    : SpeechRecognitionEvent(UtteranceId);
+public enum SpeechBoundary { Started, Ended }
+public interface ISpeechRecognizer
+{
+    RecognitionCapabilities Capabilities { get; }
+    ValueTask<ISpeechRecognitionSession> OpenAsync(RecognitionOptions options,
+        CancellationToken cancellationToken = default);
+}
+public interface ISpeechRecognitionSession : IAsyncDisposable
+{
+    ValueTask PushAudioAsync(AudioFrame frame, CancellationToken cancellationToken = default);
+    ValueTask ObserveBoundaryAsync(Guid utteranceId, SpeechBoundary boundary,
+        CancellationToken cancellationToken = default);
+    ValueTask CompleteInputAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<SpeechRecognitionEvent> ReadEventsAsync(
+        CancellationToken cancellationToken = default);
+}
+public sealed record SpeechRequest(Guid ResponseId, int SegmentIndex,
+    int TextStart, string Text, string Voice, double SpeakingRate, AudioFormat Format);
+public abstract record SpeechSynthesisEvent;
+public sealed record SpeechAudio(AudioFrame Frame) : SpeechSynthesisEvent;
+public sealed record SpeechTimingMark(int TextEndExclusive, long SampleOffset)
+    : SpeechSynthesisEvent;
+public sealed record SpeechSynthesisCompleted(long TotalSamples) : SpeechSynthesisEvent;
+public sealed record SpeechSynthesisFailed(ProviderFailure Failure) : SpeechSynthesisEvent;
+public interface ISpeechSynthesizer
+{
+    SynthesisCapabilities Capabilities { get; }
+    IAsyncEnumerable<SpeechSynthesisEvent> SynthesizeAsync(SpeechRequest request,
+        CancellationToken cancellationToken = default);
 }
 ```
 
-The runtime can use this capability when available and fall back to another strategy when it is not.
+Canonical AudioFormat is `("pcm_s16le", 24000, 1)`. AudioFrame memory is owned by the producer until awaited push completes; push must copy if it retains the buffer. Yielded synthesis memory must remain valid until the consumer advances enumeration, which copies before queuing. One audio writer and one event reader per recognition session; these may execute concurrently. Boundary observations share the ordered audio writer, not a parallel call into the recognizer. `CompleteInputAsync` half-closes audio and drains finals; disposal cancels and releases all resources and is idempotent. Cancellation of OpenAsync creates no usable session.
 
-## Speech recognizer port
+Browser VAD assigns an utteranceId through `crypto.randomUUID()` (an injectable deterministic browser ID factory in tests). Adapters map provider segments/boundaries to that active utterance; in composed MVP mode, buffer provider boundary evidence until the browser Started marker establishes that ID. Browser boundaries are authoritative segmentation; provider boundaries refine confidence/timing and cannot create a second user turn. The future native mode owns its own ID mapping instead. Revisions increase per utterance; one final wins and later corrections are ignored. Boundary events carry no audio.
 
-```ts
-export interface AudioChunk {
-  data: Uint8Array;
-  format: "pcm16" | "opus" | "wav";
-  sampleRateHz?: number;
-  channels?: number;
-  timestampMs?: number;
+StreamingAudio on RecognitionCapabilities means SupportsStreamingInput; PartialTranscripts, SpeechBoundaryEvents and Cancellation describe the corresponding independently discovered support. Prefer streaming input with partials in the hosted MVP configuration, but do not require partials from every adapter. Confidence is optional evidence, never a guaranteed comparable score.
+
+PushAudioAsync/ObserveBoundaryAsync await bounded local admission only, not a network transcription. A batch adapter runs one supervised transcription at a time and may buffer at most two pending utterances; overflow yields RecognitionFailed(Unavailable) and resets the voice stream. Non-streaming recognizers buffer at most 30 seconds per utterance and submit after Ended; they still implement this session port. Ended must flush a buffered utterance, while CompleteInput closes the entire voice stream. Capability flags describe underlying quality/latency, not whether the interface exists. Discovery occurs when loading configured adapters, validates formats, and is included as effective capabilities in session.ready. No external capability probing is needed in synthetic mode. Text compatibility does not imply speech support. See [Controller](05-interaction-controller.md) for degraded barge-in.
+
+TTS capability discovery also reports VoiceSelection and SpeakingRate. When unsupported, only the configured default voice and rate 1.0 are accepted; an explicitly requested unsupported non-default fails validation rather than pretending it worked. StreamingAudio=false still permits phrase-level synthesis and playback between phrases, never a requirement to wait for the entire agent response. Hosted speech selection is independent of the text gateway; OpenAI speech is optional, not required.
+
+Timing marks use UTF-16 text end offsets relative to the segment and canonical sample offsets relative to that segment. The runtime adds segment offsets to obtain response-wide coordinates. Completion must follow the last audio/mark; all TTS events are tagged by the worker with captured ResponseId and SegmentIndex.
+
+## Agent decisions and interruption
+
+```csharp
+public enum InteractionDecision { Ignore, Continue, Queue, Interrupt, InjectEvent, RequestAgentDecision }
+public sealed record InterruptionContext(Guid ResponseId, Guid UtteranceId,
+    string PartialText, string HeardText, TimeSpan SpeechDuration,
+    double? Confidence, bool HasPartialTranscripts);
+public interface IInterruptionClassifier
+{
+    ValueTask<InteractionDecision> ClassifyAsync(InterruptionContext context,
+        CancellationToken cancellationToken = default);
 }
-
-export type TranscriptEvent =
-  | {
-      type: "speech_started";
-      timestampMs: number;
-    }
-  | {
-      type: "partial_transcript";
-      text: string;
-      confidence?: number;
-    }
-  | {
-      type: "final_transcript";
-      text: string;
-      confidence?: number;
-    }
-  | {
-      type: "speech_ended";
-      timestampMs: number;
-    };
-
-export interface SpeechRecognitionSession {
-  push(chunk: AudioChunk): Promise<void>;
-  events(): AsyncIterable<TranscriptEvent>;
-  close(): Promise<void>;
-  cancel(reason?: string): Promise<void>;
+public enum TriggerKind { UserTurn, LongSilence, EnvironmentUpdate, UnfinishedInteraction }
+public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text,
+    string? EnvironmentKind = null);
+public sealed record AgentContext(AgentDefinition Definition,
+    IReadOnlyList<ConversationEntry> History, string Summary,
+    UserProfile? Profile, SessionMode Mode, string? PendingTopic,
+    bool HelpOfferedDuringSilence, string? InterruptedHeardText, AgentTrigger Trigger);
+public abstract record AgentDecision;
+public sealed record StaySilent(string Reason) : AgentDecision;
+public sealed record Speak(ModelRequest Request) : AgentDecision;
+public interface IAgentBrain
+{
+    ValueTask<AgentDecision> DecideAsync(AgentContext context, Guid responseId,
+        CancellationToken cancellationToken = default);
 }
-
-export interface SpeechRecognizer {
-  createSession(options?: {
-    language?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<SpeechRecognitionSession>;
+public interface IIdGenerator
+{
+    Guid NewId();
+    Guid NewSessionId();
 }
 ```
 
-## Speech synthesizer port
+IAgentBrain is an application policy/context-builder boundary. The default brain deterministically gates initiative and builds a normalized ModelRequest; Session Runtime then enumerates ILanguageModel. It does not run a second conversational LLM call just to decide every user turn. Optional future model-assisted initiative is behind this port; its result must pass the same policy recheck. Allocate a candidate response ID before deciding; only Speak makes it live and emits started. StaySilent allocates no visible response. Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
 
-```ts
-export type SpeechSynthesisEvent =
-  | { type: "audio"; chunk: AudioChunk }
-  | { type: "mark"; charIndex: number; timestampMs: number }
-  | { type: "completed" }
-  | { type: "error"; error: Error };
+Use injected `TimeProvider` for UTC timestamps, monotonic elapsed time, and timers (`Task.Delay(delay, timeProvider, token)` or `CreateTimer`). Do not define IClock. Production NewId calls `Guid.CreateVersion7(timeProvider.GetUtcNow())`; NewSessionId calls `Guid.NewGuid()` for cryptographically random UUIDv4 local/demo bearer session IDs. Tests use reproducible sequences for both. IDs are serialized as strings at browser boundaries.
 
-export interface SpeechRequest {
-  text: string;
-  voice?: string;
-  speakingRate?: number;
-  metadata?: Record<string, unknown>;
+## Persistence, definitions and output
+
+```csharp
+public interface IAgentDefinitionStore
+{
+    ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default);
+    ValueTask<AgentDefinition?> GetAsync(string id, int? version = null,
+        CancellationToken cancellationToken = default);
 }
-
-export interface SpeechSynthesizer {
-  synthesize(
-    request: SpeechRequest,
-    signal?: AbortSignal,
-  ): AsyncIterable<SpeechSynthesisEvent>;
+public interface IMemoryStore
+{
+    ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision,
+        CancellationToken cancellationToken = default);
+    ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(Guid sessionId,
+        long afterEntrySequence, int limit, CancellationToken cancellationToken = default);
+    ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
+    ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision,
+        CancellationToken cancellationToken = default);
 }
-```
-
-`mark` events are useful for tracking approximately what portion of a generated response has actually been spoken before an interruption.
-
-## Realtime transport port
-
-The runtime should not care whether the client connection is WebSocket, WebRTC data channel, or another transport.
-
-```ts
-export interface ClientEvent {
-  type: string;
-  payload: unknown;
-  timestampMs: number;
-}
-
-export interface ServerEvent {
-  type: string;
-  payload: unknown;
-  timestampMs: number;
-}
-
-export interface RealtimeConnection {
-  incoming(): AsyncIterable<ClientEvent>;
-  send(event: ServerEvent): Promise<void>;
-  close(reason?: string): Promise<void>;
-}
-
-export interface RealtimeTransport {
-  accept(sessionId: string): Promise<RealtimeConnection>;
+public interface ISessionOutput
+{
+    ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default);
 }
 ```
 
-## Memory store port
+SessionSnapshot/UserProfile fields and atomic save semantics are specified in [Persistence](15-persistence-and-configuration.md); SessionOutput is the application output family in [Event Model](07-event-model.md). Save with expectedRevision=0 inserts; subsequent saves compare stored revision and write expectedRevision+1. Conflict is an application persistence conflict, not last-write-wins. There is no generic repository interface. Definition lookup returns null for missing versions, throws a normalized validation failure for malformed data, and pins a version for the full session.
 
-```ts
-export interface SessionSnapshot {
-  sessionId: string;
-  agentId: string;
-  conversation: unknown;
-  workingState: Record<string, unknown>;
-  summary?: string;
-  updatedAt: string;
+## Native realtime extension contract (future only)
+
+This is a future design escape hatch only. Do not implement, register, negotiate or test a native provider in the MVP milestone path. The composed pipeline does not branch on native capability availability. The signatures below reserve a separate optimized path after MVP.
+
+```csharp
+public sealed record NativeRealtimeCapabilities(bool AudioInput, bool AudioOutput,
+    bool Reasoning, bool Transcription, bool TurnDetection, bool Interrupt);
+public sealed record NativeSessionOptions(AudioFormat Format, AgentDefinition Definition);
+public sealed record NativeTurnRequest(Guid ResponseId, IReadOnlyList<ModelMessage> Context);
+public abstract record NativeRealtimeEvent;
+public sealed record NativeRecognition(SpeechRecognitionEvent Event) : NativeRealtimeEvent;
+public sealed record NativeText(Guid ResponseId, ModelGenerationEvent Event) : NativeRealtimeEvent;
+public sealed record NativeSpeech(Guid ResponseId, SpeechSynthesisEvent Event) : NativeRealtimeEvent;
+public sealed record NativeTurnSuggested(Guid EventId) : NativeRealtimeEvent;
+public interface INativeRealtimeProvider
+{
+    NativeRealtimeCapabilities Capabilities { get; }
+    ValueTask<INativeRealtimeSession> OpenAsync(NativeSessionOptions options,
+        CancellationToken cancellationToken = default);
 }
-
-export interface UserProfile {
-  userId: string;
-  data: Record<string, unknown>;
-  updatedAt: string;
-}
-
-export interface MemoryStore {
-  loadSession(sessionId: string): Promise<SessionSnapshot | null>;
-  saveSession(snapshot: SessionSnapshot): Promise<void>;
-
-  loadUserProfile(userId: string): Promise<UserProfile | null>;
-  saveUserProfile(profile: UserProfile): Promise<void>;
-}
-```
-
-## Clock and ID ports
-
-These seem minor, but they make controller and timer behavior deterministic in tests.
-
-```ts
-export interface Clock {
-  nowMs(): number;
-  sleep(ms: number, signal?: AbortSignal): Promise<void>;
-}
-
-export interface IdGenerator {
-  next(): string;
+public interface INativeRealtimeSession : IAsyncDisposable
+{
+    ValueTask PushAudioAsync(AudioFrame frame, CancellationToken cancellationToken = default);
+    ValueTask BeginTurnAsync(NativeTurnRequest request, CancellationToken cancellationToken = default);
+    ValueTask InterruptAsync(Guid responseId, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<NativeRealtimeEvent> ReadEventsAsync(CancellationToken cancellationToken = default);
 }
 ```
 
-Synthetic tests can use a fake clock and deterministic IDs.
-
-## Interaction classification port
-
-Some interruption decisions should use heuristics; ambiguous cases may use a small model. Keep this replaceable.
-
-```ts
-export type InterruptionDecision =
-  | "interrupt"
-  | "continue"
-  | "queue"
-  | "ignore";
-
-export interface InterruptionContext {
-  transcript: string;
-  isAgentSpeaking: boolean;
-  agentTextSpoken?: string;
-  speechDurationMs?: number;
-  recentEvents: unknown[];
-}
-
-export interface InterruptionClassifier {
-  classify(
-    context: InterruptionContext,
-    signal?: AbortSignal,
-  ): Promise<InterruptionDecision>;
-}
-```
-
-A default implementation might combine:
-
-- deterministic rules;
-- VAD / audio thresholds;
-- text heuristics;
-- a low-latency LLM fallback for ambiguous cases.
-
-## Agent behavior model port
-
-The main conversational model can also be hidden behind a more domain-specific interface if desired.
-
-```ts
-export interface AgentTurnInput {
-  agent: AgentDefinition;
-  state: AgentRuntimeState;
-  event: AgentEvent;
-}
-
-export type AgentIntent =
-  | { type: "say"; text: string }
-  | { type: "stay_silent"; reason?: string }
-  | { type: "update_state"; patch: Record<string, unknown> };
-
-export interface AgentBrain {
-  respond(
-    input: AgentTurnInput,
-    signal?: AbortSignal,
-  ): AsyncIterable<AgentIntent>;
-}
-```
-
-This allows the rest of Agent Core to be tested without invoking a real LLM at all.
-
-## Provider registry
-
-Keep configuration outside domain logic.
-
-```ts
-export interface ProviderRegistry {
-  languageModels: Map<string, LanguageModel>;
-  speechRecognizers: Map<string, SpeechRecognizer>;
-  speechSynthesizers: Map<string, SpeechSynthesizer>;
-  interruptionClassifiers: Map<string, InterruptionClassifier>;
-}
-```
-
-An agent or environment can select adapters by logical name:
-
-```yaml
-providers:
-  language_model: primary-llm
-  speech_to_text: primary-stt
-  text_to_speech: primary-tts
-  interruption_classifier: fast-controller-model
-```
-
-The logical names map to concrete adapters through application configuration.
-
-## OpenAI-compatible adapter
-
-The first implementation can be an adapter around an OpenAI-compatible HTTP API.
-
-Conceptually:
-
-```ts
-class OpenAICompatibleLanguageModel implements LanguageModel {
-  constructor(private config: {
-    baseUrl: string;
-    apiKey?: string;
-    defaultModel: string;
-    headers?: Record<string, string>;
-  }) {}
-
-  async *generate(
-    messages: ModelMessage[],
-    options: GenerationOptions,
-    signal?: AbortSignal,
-  ): AsyncIterable<GenerationEvent> {
-    // Translate generic request -> provider request.
-    // Stream provider response.
-    // Translate provider chunks -> generic GenerationEvent.
-  }
-}
-```
-
-Configuration example:
-
-```yaml
-providers:
-  primary-llm:
-    adapter: openai-compatible
-    base_url: ${LLM_BASE_URL}
-    api_key: ${LLM_API_KEY}
-    default_model: ${LLM_MODEL}
-```
-
-Do not let `base_url`, `choices`, `delta`, or other provider-specific concepts leak into Agent Runtime code.
-
-## Synthetic provider
-
-A synthetic provider is valuable from day one.
-
-Example:
-
-```ts
-class ScriptedLanguageModel implements LanguageModel {
-  constructor(private replies: string[]) {}
-
-  async *generate(): AsyncIterable<GenerationEvent> {
-    const reply = this.replies.shift() ?? "";
-
-    for (const token of reply.split(" ")) {
-      yield { type: "text_delta", text: token + " " };
-    }
-
-    yield { type: "completed", finishReason: "scripted" };
-  }
-}
-```
-
-This enables:
-
-- deterministic unit tests;
-- latency simulations;
-- cancellation tests;
-- interruption tests;
-- frontend development without model costs;
-- demo fallback behavior.
-
-## Synthetic speech adapters
-
-Useful test implementations include:
-
-```text
-SyntheticSpeechRecognizer
-- accepts fake transcript events directly
-- can simulate partial/final transcripts
-- can simulate VAD boundaries
-
-SilentSpeechSynthesizer
-- emits timing markers without real audio
-
-SyntheticSpeechSynthesizer
-- emits generated PCM silence/noise for transport tests
-```
-
-## Capability discovery
-
-Avoid one huge interface full of optional methods.
-
-A provider can instead expose capabilities:
-
-```ts
-export interface ProviderCapabilities {
-  streaming: boolean;
-  cancellation: boolean;
-  structuredOutput?: boolean;
-  audioInput?: boolean;
-  audioOutput?: boolean;
-  realtimeNative?: boolean;
-}
-```
-
-This keeps Agent Core generic while allowing optimized paths later.
-
-## Native realtime providers later
-
-A future provider might support audio-in/audio-out and model reasoning through one realtime session.
-
-Do not force this through separate STT + LLM + TTS internally if that damages latency.
-
-Instead add an optional higher-level port:
-
-```ts
-export interface NativeRealtimeAgentSession {
-  sendAudio(chunk: AudioChunk): Promise<void>;
-  sendEvent(event: AgentEvent): Promise<void>;
-  events(): AsyncIterable<AgentEvent>;
-  interrupt(): Promise<void>;
-  close(): Promise<void>;
-}
-
-export interface NativeRealtimeProvider {
-  createSession(config: unknown): Promise<NativeRealtimeAgentSession>;
-}
-```
-
-The orchestration layer can select either:
-
-```text
-Pipeline mode:
-STT -> LLM -> TTS
-
-or
-
-Native realtime mode:
-provider realtime session
-```
-
-Both should emit normalized Agent Core events to the rest of the application.
-
-## Error model
-
-Normalize provider failures.
-
-```ts
-export type ProviderErrorCode =
-  | "auth_error"
-  | "rate_limited"
-  | "timeout"
-  | "cancelled"
-  | "invalid_request"
-  | "unavailable"
-  | "unknown";
-
-export class ProviderError extends Error {
-  constructor(
-    public readonly code: ProviderErrorCode,
-    message: string,
-    public readonly retryable: boolean,
-    public readonly cause?: unknown,
-  ) {
-    super(message);
-  }
-}
-```
-
-This prevents provider-specific error classes from spreading through the runtime.
-
-## Testing philosophy
-
-Every important runtime behavior should be testable without network access.
-
-Examples:
-
-- user interrupts after 800 ms -> current speech is cancelled;
-- user says "mhm" -> agent continues;
-- background noise -> ignored;
-- 8 seconds of silence -> idle event emitted;
-- fake external order event -> agent may proactively respond;
-- model stream cancelled -> no stale audio continues playing;
-- old response arrives after supersession -> discarded.
-
-If a behavior cannot be tested with fake/synthetic providers, the boundary is probably too tightly coupled.
-
+Native audio goes directly to this session without decomposing it into STT/LLM/TTS. The adapter maps vendor response IDs to application-issued ResponseIds. Native turn detection suggests a turn; the runtime authorizes BeginTurnAsync. An adapter unable to gate autonomous output must buffer until authorization or advertise UnsupportedCapability. Interrupt must retain identity filtering even if the provider cannot cancel promptly. Native events normalize into the same internal and wire semantics; native implementation, extension detection and protocol negotiation are all deferred beyond MVP.

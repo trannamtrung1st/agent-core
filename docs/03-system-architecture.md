@@ -1,209 +1,81 @@
 # System Architecture
 
-## High-level architecture
+## Decision
 
-```text
-┌─────────────────────────────────────────────────────┐
-│                     Web Client                      │
-│                                                     │
-│  Chat UI            Voice Call UI                   │
-│  Text Input          Microphone / Playback          │
-└───────────────────────────┬─────────────────────────┘
-                            │
-                            │ realtime transport
-                            ▼
-┌─────────────────────────────────────────────────────┐
-│                   Session Server                    │
-│                                                     │
-│  ┌───────────────────────────────────────────────┐  │
-│  │             Interaction Controller            │  │
-│  │                                               │  │
-│  │ speech activity / partial text / timers       │  │
-│  │ interruption / queue / ignore / inject        │  │
-│  └──────────────────────┬────────────────────────┘  │
-│                         │ normalized events          │
-│                         ▼                            │
-│  ┌───────────────────────────────────────────────┐  │
-│  │                 Agent Runtime                 │  │
-│  │                                               │  │
-│  │ identity / policy / state / generation        │  │
-│  └──────────────────────┬────────────────────────┘  │
-│                         │                            │
-│           ┌─────────────┼─────────────┐              │
-│           ▼             ▼             ▼              │
-│        Memory        Event Bus     Output Router      │
-└───────────┬─────────────┬─────────────┬──────────────┘
-            │             │             │
-            ▼             ▼             ▼
-        LLM Adapter    STT Adapter   TTS Adapter
-            │             │             │
-            └─────────────┴─────────────┘
-                    Provider Layer
+Agent Core is one .NET 10 modular monolith with a React SPA. Its purpose remains to make an AI agent feel present in a live conversation. The Agent Runtime owns conversational meaning; the Interaction Controller arbitrates turn-taking. Both execute under one Session Runtime's state ownership.
+
+The canonical MVP is a composed, text-first voice pipeline: STT → Interaction Controller → Agent Runtime / text Language Model → speech segmentation → TTS. The microphone continues processing input during generated speech; full-duplex describes the user's experience, not a requirement for audio reasoning. Native speech-to-speech is future-only and does not participate in MVP startup, routing or provider selection.
+
+```mermaid
+flowchart TD
+    Browser[React SPA: microphone, chat, speaker] <-->|SignalR + MessagePack| Hub[Thin session hub]
+    Browser -->|REST lifecycle| Api[Minimal APIs / SessionManager]
+    Api --> Session[Session Runtime: single state owner]
+    Hub -->|UI commands| Session
+    Hub -->|Binary PCM: separate audio ingress| STT[ISpeechRecognizer / STT]
+    STT -->|Speech activity and partial/final transcripts| Session
+    Session --> Controller[Interaction Controller]
+    Controller -->|Arbitrated interaction| Agent[Agent Runtime: identity and text context]
+    Agent --> LLM[ILanguageModel]
+    LLM --> Adapter[OpenAICompatibleLanguageModel]
+    Adapter --> OR[OpenRouter: initial hosted configuration]
+    Adapter --> Direct[Direct OpenAI or compatible hosted endpoint]
+    Adapter --> Local[Local compatible inference server: future on-prem]
+    LLM -->|Normalized text stream via session mailbox| Acc[ResponseTextAccumulator]
+    Acc --> Segmenter[SpeechSegmenter]
+    Segmenter -->|Speech Segment| TTS[ISpeechSynthesizer / TTS]
+    TTS -->|Separate binary audio output| Hub
+    Session --> Store[IMemoryStore / EF Core + SQLite]
 ```
 
-## Architectural principle
+The adapter's outgoing edges are deployment choices, not three simultaneous requests. The selected endpoint's normalized response returns through ILanguageModel. STT and TTS each independently select hosted, local or synthetic adapters. OpenRouter model IDs and provider payloads stay in Infrastructure configuration/mapping. [Technology Decisions](10-technology-decisions.md) explains hosted/on-prem choices; [Voice](06-realtime-voice.md) owns streaming and segmentation.
 
-The domain/core layer should not import a vendor SDK.
 
-Concrete provider SDKs belong in adapter modules. Core logic should depend on small interfaces.
+[Repository Structure](11-repository-structure.md) specifies project references. [Backend Interfaces](04-backend-interfaces.md) owns C# ports. [Protocol](14-api-and-realtime-protocol.md) owns browser DTOs; no universal event bus DTO bridges every layer.
 
-Example dependency direction:
-
-```text
-Domain / Core
-    ↓ depends on interfaces only
-Application / Runtime
-    ↓
-Provider Interfaces
-    ↑ implemented by
-Adapters
-    ├── OpenAI-Compatible
-    ├── Synthetic
-    ├── Fake / Test
-    ├── Local Model
-    └── Future Providers
-```
-
-This makes the runtime:
-
-- testable;
-- swappable;
-- easier to benchmark;
-- easier to run offline or synthetically;
-- less dependent on one provider's feature model.
-
-## Major modules
-
-### Agent Definition
-
-Static/reusable configuration describing identity and policy.
-
-Suggested concepts:
+## Per-session execution
 
 ```text
-AgentDefinition
-├── identity
-├── goals
-├── behaviorPolicy
-├── conversationPolicy
-├── initiativePolicy
-├── voiceConfig
-└── modelPreferences
+SessionManager (singleton, atomically get/create per sessionId)
+  +-- SessionRuntime A (one logical async event loop)
+  |     +-- bounded Channel<SessionInput>, single reader
+  |     +-- Agent Runtime, Interaction Controller, owned mutable state
+  |     +-- session lifetime CancellationTokenSource
+  |     +-- current response CancellationTokenSource and responseId
+  |     +-- active speech recognition session + bounded audio ingress
+  |     +-- tracked model/TTS/classifier/persistence tasks
+  +-- SessionRuntime B (independent state and event loop)
 ```
 
-### Agent Runtime
+Only the single mailbox reader mutates conversational state, controller state, response status, transcript assembly, application sequence counters, timers' logical generations, and playback estimates. Agent Runtime and Interaction Controller are ordinary application objects invoked by this reader, not additional concurrent state writers. The controller keeps observing inputs while LLM work runs because network enumeration never blocks the reader.
 
-One active agent instance in a session.
+Mailbox handlers perform short deterministic transitions, take immutable snapshots for external work, and launch supervised tasks. Provider tasks publish normalized results tagged with session epoch, responseId or utteranceId, and operation ID. No provider callback mutates runtime state. Persistence completion and classifier decisions also return through the mailbox. Do not hold locks over network calls or await entire model/TTS streams inside handlers.
 
-Responsibilities:
+The manager uses atomic creation/removal and an asynchronous lifecycle gate so concurrent REST/attach operations cannot create two owners. A runtime has a random epoch for its in-process lifetime. Recovery creates a new epoch; old work cannot target it. Hub instances are transient and never own a runtime. DI scopes for persistence are per operation, not a shared DbContext for an entire call.
 
-- consume normalized events;
-- update conversation/session state;
-- build model context;
-- decide whether to respond;
-- start/cancel generation;
-- emit response events;
-- coordinate memory writes;
-- expose state to the controller.
+## Ordering and bounded work
 
-### Interaction Controller
+Use `Channel<T>` with capacity 256, `SingleReader=true`, `FullMode=Wait` for normalized session inputs. Admission establishes ordering; client timestamps do not. The reader assigns increasing internal sequence numbers. Provider pumps await channel capacity outside the loop. Audio is a separate bounded stream (see [Voice](06-realtime-voice.md)); raw frames never occupy this mailbox. Coalesce partial transcripts and playback progress before admission to the newest revision, but never discard finals, interruption confirmations, terminal results, or lifecycle commands.
 
-Independent loop that arbitrates live input and environment signals.
+An ingress enqueue deadline of 250 ms prevents an overloaded connection from waiting forever: reject new commands as recoverable `SessionBusy`; do not report success for unaccepted input. Provider/lifecycle producers remain cancellable and supervised; shutdown cancels them before disposal. Use a separate bounded output sender so the mailbox never waits on a slow browser. Control output has reserved capacity (32 items); text output is bounded at 256 items and audio at 2 seconds. The sender prioritizes stop/error/lifecycle controls, honors response start/terminal ordering fences, and rechecks response validity before every send. It alone owns wire-send sequence counters; the media coordinator alone owns audio frame counters, neither of which mutates conversational state. Audio exhaustion fails the voice response rather than silently dropping PCM; control exhaustion detaches the unresponsive connection and cancels its response. See protocol sequence rules for priority delivery.
 
-Responsibilities:
+Responses have one linked cancellation source for LLM, TTS and response-specific classifier/decision work. STT links to session/voice lifetime, not response lifetime: cancelling output must not cancel listening. Token sources are cancelled promptly and disposed only after their tasks finish. Every task is tracked and faults are observed; shutdown has a 5-second join budget, then quarantines late results by epoch. Adapters must honor cancellation and dispose network streams.
 
-- speech activity tracking;
-- interruption classification;
-- turn ownership;
-- queueing;
-- idle timers;
-- external event normalization;
-- proactive triggers.
+## Lifecycle
 
-### Event Bus
+A created session is inactive until attached. One connection owns a session at a time. Disconnect supersedes active output and suspends audio and initiative. Retain the idle runtime for a 60-second reconnect grace period; then persist a paused snapshot and evict it. A later attach reconstructs the session from SQLite. Clean end is terminal and idempotent. Process restart pauses recoverable sessions and marks unfinished responses interrupted; it never resumes an old provider stream. [Protocol](14-api-and-realtime-protocol.md#connection-lifecycle) defines ownership and resynchronization.
 
-A typed internal stream connecting runtime components.
+## Invariants
 
-The bus should support:
-
-- ordered events within a session;
-- event identifiers;
-- timestamps;
-- optional causation/correlation IDs;
-- cancellation/supersession;
-- instrumentation hooks.
-
-For the MVP this can be in-process. It does not need Kafka, Redis Streams, or another distributed broker.
-
-### Output Router
-
-Converts agent intentions into output channels.
-
-Examples:
-
-- text delta -> web client;
-- text response -> chat history;
-- speech request -> TTS;
-- audio chunks -> client;
-- stop speech -> playback cancellation;
-- UI state -> client.
-
-### Memory
-
-Use an interface so storage can change later.
-
-MVP implementations can be:
-
-- in-memory for tests;
-- SQLite/Postgres for sessions;
-- simple JSON summary fields.
-
-### Provider Layer
-
-Provider adapters implement generic runtime interfaces.
-
-The first adapter should support an OpenAI-compatible HTTP API. This should not leak provider-specific request/response objects into the core runtime.
-
-## Suggested backend package layout
-
-```text
-backend/
-├── core/
-│   ├── agent/
-│   ├── interaction/
-│   ├── events/
-│   ├── conversation/
-│   └── memory/
-│
-├── application/
-│   ├── session/
-│   ├── orchestration/
-│   └── services/
-│
-├── ports/
-│   ├── language-model.ts
-│   ├── speech-recognizer.ts
-│   ├── speech-synthesizer.ts
-│   ├── realtime-transport.ts
-│   ├── memory-store.ts
-│   ├── clock.ts
-│   └── id-generator.ts
-│
-├── adapters/
-│   ├── openai-compatible/
-│   ├── synthetic/
-│   ├── memory/
-│   └── transport/
-│
-├── api/
-│   ├── http/
-│   └── websocket/
-│
-└── tests/
-    ├── unit/
-    ├── integration/
-    └── conversation/
-```
-
-The exact language/framework is open. The important boundary is ports/interfaces in the center and adapters at the edge.
-
+- One Session Runtime owns mutation of one session's conversational state.
+- Provider objects never mutate Agent Runtime state directly; provider-specific DTOs stay in Infrastructure.
+- A superseded response never becomes visible again. Already-rendered text may remain marked interrupted; queued or late text/audio/completion cannot extend it.
+- Superseding a Response stops new Speech Segments, cancels pending TTS/LLM work and drops queued audio before R2 can start. Late provider and browser playback events cannot affect the current turn.
+- Cancellation plus identity checks are mandatory at mailbox acceptance, output send, browser reduction and audio playback.
+- Agent output and user input coexist; the microphone remains active during playback except explicit mute/end/disconnect.
+- Speech activity may produce Continue rather than Interrupt.
+- Raw microphone frames are neither normal domain events nor persisted data.
+- Initiative policy gates every proactive response; StaySilent is valid.
+- Synthetic mode requires no network or AI credentials; the entire composed pipeline is testable offline without a microphone, speaker or GPU.
+- One response is live per session, but historical responses and an in-progress user utterance may coexist.
+- No mutable state, transient audio, provider handles or CancellationTokenSource is stored in an Agent Definition.

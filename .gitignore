@@ -1,0 +1,66 @@
+# macOS and editor state
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# .NET build and test output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+[Aa]rtifacts/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage.cobertura.xml
+*.nupkg
+*.snupkg
+
+# React / Vite / Node.js
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+*.local
+.eslintcache
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+appsettings.Local.json
+appsettings.*.local.json
+
+# Runtime data and diagnostics
+data/
+logs/
+tmp/
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Playwright tests
+playwright-report/
+blob-report/
+test-results/
+
+# Playwright MCP profile, snapshots, downloads, and other output
+.playwright-mcp/

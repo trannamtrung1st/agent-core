@@ -1,280 +1,128 @@
 # Interaction Controller
 
-## Purpose
+The Interaction Controller asks “What is happening in the conversation?” It observes speech activity, partial/final transcripts, agent/playback state, idle timers and environment events, then arbitrates Ignore/Continue/Queue/Interrupt/InjectEvent/RequestAgentDecision. It does not perform general agent reasoning. Agent Runtime asks “What should the agent do about it?” and owns identity, policy, context, text-model reasoning, response generation and initiative decisions. Controller evaluations run synchronously inside the Session Runtime mailbox; optional classification runs outside it against a snapshot. [Architecture](03-system-architecture.md) defines ownership and queues.
 
-The Interaction Controller is a separate live event-processing loop that observes user activity and environment state while the Agent Runtime is operating.
+## State representation
 
-It is best understood as a conversation traffic controller.
+Avoid a single enum that incorrectly forbids simultaneous user input and agent output. Store these orthogonal fields:
 
-Its job is not to generate the agent's personality or content. Its job is to determine what interaction event is actually happening and how that event should affect the live conversation.
+| Field | Values |
+| --- | --- |
+| Lifecycle | Created, Attached, Paused, Ending, Ended |
+| Input | Idle, Listening, UserSpeaking, Finalizing |
+| Output | Idle, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted |
+| Candidate | None or (candidateId, utteranceId, responseId, revision, deadline) |
+| Response | responseId, status (Live, Superseded, Completed, Failed), modelDone, audioDone, playbackDone |
 
-## Primary inputs
+The UI derives one label with precedence: Ended, Reconnecting, Interrupted (brief notice), User speaking, Agent speaking, Thinking, Listening. InterruptionCandidate is a debug state layered over input/output; it does not erase the underlying state.
 
-The controller may observe:
+## Transition table
 
-- microphone voice activity;
-- partial speech transcripts;
-- final speech transcripts;
-- text messages;
-- agent speaking state;
-- agent generation state;
-- output playback position;
-- silence / idle timers;
-- UI state;
-- external application events;
-- tool completion events;
-- future sensor or environment signals.
+All rows run in mailbox admission order. Missing/old epoch, attachment, utterance revision or response identity is ignored before applying a row.
 
-## Primary decisions
+| Event and guard | Decision | State/action |
+| --- | --- | --- |
+| Attach Created/Paused | InjectEvent | Attached; text Input=Idle, voice Input=Listening; start recognition if voice |
+| user.text while attached | Interrupt if response live; else InjectEvent | Supersede old response first; persist user turn; WaitingForAgent; launch brain after save |
+| SpeechStarted while no output | InjectEvent | UserSpeaking; reset silence generation |
+| SpeechStarted while live output | Queue evidence | UserSpeaking; create InterruptionCandidate, optional duck |
+| SpeechPartial explicit stop/question | Interrupt | Supersede captured response; keep accepting utterance |
+| Short complete backchannel during output | Continue | Clear candidate, restore gain, retain as non-turn acknowledgement |
+| Low-confidence noise/echo | Ignore | Clear candidate; restore gain; no user history turn |
+| Ambiguous sustained speech | RequestAgentDecision | One bounded classifier request per candidate, never per audio frame |
+| SpeechEnded | Queue | Finalizing; wait for capability-specific final deadline (below) |
+| SpeechFinal nonempty, not backchannel | Interrupt if still live; InjectEvent | Commit exactly one user entry; WaitingForAgent; launch brain |
+| Brain Speak, current turn generation valid | InjectEvent | Allocate live Response with supplied ID; AgentGenerating; start LLM |
+| Brain StaySilent | Continue | Output Idle; schedule next eligible initiative check |
+| First actual playback ack | Continue | AgentSpeaking (input remains independently active) |
+| Model terminal, text mode | Continue | Await terminal persistence then complete on success; fail on error |
+| Model/TTS terminal, voice mode | Queue | Success waits for final audio sent and playback.completed |
+| Playback completed, model/TTS done | Continue | Await terminal persistence then complete; Input Listening if no user speech |
+| Confirmed interrupt | Interrupt | Output Interrupted; stop/cancel, then wait for final user text |
+| Idle/environment trigger while eligible | RequestAgentDecision | Evaluate initiative against immutable context |
+| Environment trigger while speaking/busy | Queue | At most one newest event per kind, maximum 16, expiry 30 seconds |
+| Disconnect | Interrupt | Paused; cancel output/STT/timers, reject old attachment input |
+| End from any nonterminal state | Interrupt | Ending; cancel/flush, durable terminal save, then Ended |
 
-For the MVP, keep the decision vocabulary small:
+Invalid transitions never resurrect output: completion for Superseded is ignored; duplicate finals/commands are deduplicated; playback progress for an unknown response is rejected; attach to Ended is a conflict. Final transcript may precede SpeechEnded and commits immediately; later Ended does not reopen the utterance. Empty final restores Listening. Final deadline is 2 seconds for partial-capable streaming STT and 20 seconds for batch/no-partial STT, measured from Ended. Final timeout produces recoverable SpeechRecognitionTimeout and discards the incomplete utterance. A final arriving after timeout is ignored. New speech during brain evaluation invalidates that decision's turn generation; no old Speak result may begin.
 
-```text
-INTERRUPT
-CONTINUE
-QUEUE
-IGNORE
-INJECT_EVENT
-REQUEST_AGENT_INITIATIVE
+## Interruption policy and defaults
+
+Use deterministic rules first. Normalize text with invariant case, trim whitespace and punctuation for phrase matching, and preserve original text for history. Explicit phrase matches at the beginning of the utterance (whole words, not substrings) such as `stop`, `wait`, `hang on`, `hold on`, `what do you mean`, and `no` or `that's not what I asked` take the turn immediately. A full utterance matching `mhm`, `yeah`, `right`, `okay`, `uh huh` or `uh-huh`, duration <=700 ms, usually continues. A partial `yeah` is provisional: a subsequent `yeah, but ...` must be reconsidered. An acknowledgement during idle is a normal user turn, not discarded.
+
+Speech activity with confidence >=0.7 and duration >=120 ms creates a candidate; shorter/noisy activity is ignored unless an explicit command transcript exists. Browser VAD confidence is an observation, not a calibrated truth. Echo matching alone must not suppress explicit stop phrases. Tune VAD thresholds with microphone tests; headphones are the initial demo recommendation.
+
+Default semantic policy: use partial text when available; one optional fast IInterruptionClassifier call after 250 ms of ambiguous evidence, deadline 200 ms. Classifier replies must match candidateId, responseId, utteranceId and latest evidence revision. Ignore stale replies. A partial matching a backchannel delays the sustained-speech fallback until 700 ms or a non-backchannel revision. Otherwise at 500 ms sustained confident speech with no decisive text, interrupt; if speech has ended and only ambiguous brief evidence remains, continue until a final transcript resolves it. Classifier errors/timeouts take this deterministic fallback. No LLM request per microphone buffer.
+
+## STT capability fallback and local ducking
+
+| Effective policy | Evidence | Exact default behavior |
+| --- | --- | --- |
+| semantic (best case) | VAD + Partial Transcripts + deterministic semantics, optional bounded classifier | Use the rules above; brief acknowledgements usually Continue |
+| speechAndFinal (degraded; default without partials) | Confident speech + Final Transcript | Duck locally if enabled; classify a final that arrives before 250 ms of sustained speech; otherwise interrupt at 250 ms and use the eventual final for the new turn |
+| speechActivity (minimal; explicit configured fallback) | Speech activity only for the interruption decision | Interrupt at 250 ms confident sustained speech regardless of transcript availability; wait for a usable final before generating a reply |
+
+PartialTranscripts=false selects Interaction.NoPartialPolicy (`speechAndFinal` default; `speechActivity` permitted). These policies cannot preserve all backchannels; an acknowledgement arriving after the activity deadline never resurrects a Superseded Response. Threshold DegradedInterruptMs is configurable. Without provider SpeechBoundaryEvents, browser VAD supplies activity boundaries. Batch-only STT buffers an utterance and returns its final later; capture remains active while that request or TTS runs. A recognizer failure can still stop playback based on speech activity, but does not manufacture a user transcript or trigger a reply; follow the voice error/reconnect path.
+
+Local ducking is an optional frontend UX optimization, enabled by default, not a required domain state. Local speech reduces playback gain to 0.2 with a 20 ms ramp while the controller gathers evidence. Continue/Ignore restores gain; confirmed interruption flushes completely. Playback progression continues at reduced volume. If no decision arrives within 600 ms, restore locally; a later authoritative stop still applies. The existing playback.gain control is a transport hint, not agent reasoning. Ducking must be independently disableable without changing interruption correctness.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant R as STT
+    participant C as Controller in Session Runtime
+    B->>B: R1 playing; microphone remains active
+    B->>R: User says mhm
+    B->>B: Optional local duck
+    R-->>C: Partial then final acknowledgement
+    C->>C: Backchannel rule selects Continue
+    C-->>B: Restore gain for R1
+    B->>B: Continue R1, no new Response or TTS restart
 ```
 
-### INTERRUPT
+## Barge-in and races
 
-Stop or supersede current agent output and process the new user utterance.
-
-### CONTINUE
-
-The new signal is acknowledged internally but should not stop the current agent turn.
-
-Typical example: "mhm" during agent speech.
-
-### QUEUE
-
-Preserve the event and handle it after the current turn or at the next safe boundary.
-
-### IGNORE
-
-Treat the signal as irrelevant noise or background activity.
-
-### INJECT_EVENT
-
-Convert external state into a normalized event for the Agent Runtime.
-
-### REQUEST_AGENT_INITIATIVE
-
-Ask the Agent Runtime whether it wants to proactively say something.
-
-This does not mean the controller itself speaks.
-
-## Important separation
-
-The controller should detect and classify events, but the agent should normally decide conversational meaning and content.
-
-Example:
-
-```text
-Controller:
-"The user has been silent for 8 seconds."
-
-Agent Runtime:
-"Given my identity and context, should I say anything?"
+```mermaid
+sequenceDiagram
+    participant B as Browser / audio worklet
+    participant S as Session Runtime + Controller
+    participant P as LLM / TTS workers
+    B->>S: SpeechStarted(U1) while R1 plays
+    B->>B: Duck; microphone stays active
+    B->>S: Partial(U1, "wait")
+    S->>S: Mark R1 Superseded first; freeze last heard estimate
+    S->>S: Invalidate unsent text, segment timer and queued TTS jobs
+    S->>B: playback.stop(R1)
+    S->>P: Cancel TTS and LLM response work (STT continues)
+    S->>B: agent.response.interrupted(R1)
+    B->>B: Tombstone R1; flush queue and worklet; retain interrupted text
+    B->>S: playback.stopped(R1, consumedSamples)
+    P-->>S: Late R1 text/audio/completion
+    S->>S: Reject by status + responseId
+    B->>S: Final(U1, "Wait, what did you mean?")
+    S->>S: Commit user turn; create R2 from conservative heard context
+    S->>P: Generate R2
+    P-->>B: R1 bytes already in flight
+    B->>B: Reject tombstoned R1 even after R2 starts
 ```
 
-Avoid hardcoding:
+Ordering is mark superseded, invalidate pending segments/output, queue high-priority playback.stop, cancel pending/active TTS and LLM work, then emit interrupted. Do not wait for a browser acknowledgement or provider cancellation before continuing input processing. A browser may already have played in-flight samples before receiving stop; the invariant applies after each side learns supersession, not retroactively to physical audio. Freeze Spoken Until from the last validated Playback Progress when marking superseded. Late browser started/progress/completed/stopped events for R1 are ignored for conversational state, history and context (a stop acknowledgement may be counted only in diagnostics). R2 never waits for or consumes stale R1 playback feedback. This deliberately conservative estimate may omit the final fraction of speech.
 
-```text
-8 seconds -> automatically say "Are you still there?"
+## Timers and initiative
+
+Timers use TimeProvider and enqueue events containing a timer generation. User activity, detach/end and response starts invalidate old generations. Fire only while attached, input quiet and output idle. Defaults: idle threshold from Agent Definition (8 seconds), minimum evaluation interval/cooldown 30 seconds, one idle intervention per uninterrupted silence period. StaySilent also consumes evaluation cooldown to prevent timer storms. New user activity rearms the silence period. Environment events are deduplicated by EventId and expire after 30 seconds.
+
+```mermaid
+sequenceDiagram
+    participant T as TimeProvider / environment fixture
+    participant C as Controller in mailbox
+    participant A as Agent Runtime / IAgentBrain
+    T->>C: Eligible trigger
+    C->>C: Check attachment, silence, cooldown and dedupe
+    C->>A: RequestAgentDecision(snapshot)
+    A-->>C: StaySilent or Speak(request)
+    C->>C: Recheck turn generation and initiative policy
+    C-->>T: Record evaluation outcome
 ```
 
-That would mix interaction mechanics with identity behavior.
-
-## Interruption flow
-
-Example:
-
-```text
-Agent starts speaking
-      │
-      ▼
-Controller continues receiving microphone input
-      │
-      ▼
-User speech detected
-      │
-      ▼
-Partial transcript available
-      │
-      ▼
-Interruption classifier
-      │
-      ├── CONTINUE -> keep playing agent audio
-      │
-      └── INTERRUPT
-             │
-             ├── stop/fade audio playback
-             ├── cancel or supersede model generation
-             ├── capture spoken-until position
-             ├── emit user interruption event
-             └── allow Agent Runtime to respond
-```
-
-## Backchannel handling
-
-The controller should distinguish conversational backchannels from genuine turn-taking where possible.
-
-Likely continue:
-
-- "mhm";
-- "uh-huh";
-- "yeah";
-- short acknowledgment sounds.
-
-Likely interrupt:
-
-- "wait";
-- "stop";
-- "hold on";
-- "what do you mean?";
-- "no, that's not what I said";
-- longer semantic utterances.
-
-This classification should not rely only on text. Useful signals include:
-
-- speech duration;
-- volume / confidence;
-- partial transcript;
-- whether the agent is speaking;
-- timing relative to sentence boundaries;
-- recent conversation context.
-
-## Decision strategy
-
-Use layered decision-making for speed.
-
-```text
-1. deterministic checks
-2. audio/VAD heuristics
-3. transcript heuristics
-4. fast model classification only when ambiguous
-```
-
-Examples of deterministic checks:
-
-```text
-if no agent output is active:
-    do not classify as barge-in
-
-if speech duration is below minimum threshold and no transcript exists:
-    ignore
-
-if explicit stop phrase is detected:
-    interrupt immediately
-```
-
-A model should not be required for every tiny controller event.
-
-## Idle and proactive behavior
-
-The controller owns clocks and thresholds, while the Agent Runtime owns behavior.
-
-Example event:
-
-```json
-{
-  "type": "idle_timeout",
-  "duration_ms": 8000,
-  "session_id": "..."
-}
-```
-
-The runtime can then decide:
-
-- say nothing;
-- offer help;
-- repeat a question;
-- change topic;
-- end the session politely.
-
-## Initiative policy
-
-Agent definition can include a policy such as:
-
-```yaml
-initiative:
-  enabled: true
-  level: medium
-  min_interval_ms: 30000
-  triggers:
-    - long_silence
-    - important_environment_event
-    - unfinished_task
-```
-
-The controller enforces mechanical constraints such as timing and duplicate suppression.
-
-The runtime evaluates whether speaking is appropriate.
-
-## Concurrency model
-
-The controller should conceptually run independently from model generation.
-
-It should not block while waiting for the main LLM.
-
-An implementation may use:
-
-- async tasks;
-- actors;
-- channels/queues;
-- an event loop;
-- lightweight threads;
-- coroutines.
-
-The exact mechanism is less important than the logical independence.
-
-## Supersession
-
-Every generated response should have an ID.
-
-If a new meaningful user turn supersedes the previous response, later chunks from the old generation must be discarded.
-
-Example:
-
-```text
-response A starts
-user interrupts
-response A marked superseded
-response B starts
-late chunk from A arrives -> discard
-```
-
-This prevents stale speech from leaking into the call.
-
-## Controller state
-
-A minimal state model:
-
-```text
-agent_output:
-  idle | generating | speaking
-
-user_input:
-  idle | speaking | finalizing
-
-turn_owner:
-  none | user | agent
-
-active_response_id:
-  string | null
-
-last_user_activity_at:
-  timestamp
-
-last_agent_activity_at:
-  timestamp
-
-last_proactive_event_at:
-  timestamp | null
-```
-
-This is enough to implement a large portion of the MVP behavior.
-
+Initiative supports LongSilence, EnvironmentUpdate, UnfinishedInteraction only during an active attached application session. No push, email, SMS, agent automation platform or background notification service. Queue expires instead of interrupting a user to deliver a stale proactive update.

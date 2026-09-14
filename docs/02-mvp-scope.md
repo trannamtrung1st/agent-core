@@ -14,40 +14,7 @@ If the answer is yes, the Agent Core concept is proven.
 
 A reusable configuration object should define an agent's identity and behavioral policy.
 
-Example:
-
-```yaml
-agent:
-  id: english_examiner
-
-  identity:
-    name: Alex
-    role: IELTS speaking examiner
-    personality:
-      warmth: 0.4
-      formality: 0.8
-      patience: 0.7
-
-  goals:
-    - conduct a realistic speaking examination
-    - keep the candidate talking
-    - evaluate answers silently
-
-  behavior:
-    interruption_style: acknowledge_then_continue
-    initiative_level: medium
-    silence_threshold_ms: 5000
-
-  conversation:
-    response_length: concise
-    ask_one_question_at_a_time: true
-
-  voice:
-    voice_id: default
-    speaking_rate: 1.0
-```
-
-The schema can change. The important point is that identity should be first-class data rather than a single prompt string.
+The versioned JSON schema and two complete definitions are specified in [Backend Implementation](12-backend-implementation-spec.md#agent-definition). Identity is first-class data, separate from mutable session state. YAML is not used.
 
 ### Persistent session runtime
 
@@ -58,7 +25,7 @@ Session
 ├── Agent Runtime
 ├── Interaction Controller
 ├── Conversation State
-├── Event Bus
+├── Session Mailbox
 ├── Audio / Realtime Pipeline
 └── Provider Adapters
 ```
@@ -69,7 +36,7 @@ The user can send text messages and receive agent responses.
 
 ### Voice conversation
 
-The user can enter a call-like mode where microphone input and agent output coexist in real time.
+The user can enter a call-like mode where microphone input and agent output coexist in real time. The canonical MVP path is streaming STT → Interaction Controller → text Agent Runtime / LLM → speech segmentation → streaming TTS. The microphone remains active while playback runs; batch-only providers follow a degraded capability policy, never an alternating record/play UX.
 
 ### Barge-in / interruption
 
@@ -101,11 +68,14 @@ The agent can respond to controller-generated events such as silence or external
 
 ### Basic memory
 
-Use only three conceptual layers initially:
+Use four deliberately small memory categories initially:
 
 ```text
 Working state
 Current live conversation and immediate runtime state
+
+Conversation/session history
+Persistent user and assistant entries
 
 Session summary
 Important information from the current conversation
@@ -133,6 +103,7 @@ Required screens/states:
 
 Do not spend MVP time on:
 
+- native speech-to-speech/realtime model implementation;
 - agent marketplace;
 - visual agent builder;
 - arbitrary workflow automation;
@@ -164,3 +135,7 @@ A successful build should demonstrate all of the following:
 - the UI remains simple and understandable;
 - model and voice providers can be replaced without rewriting Agent Core.
 
+
+## Implementation limits
+
+The baseline is a modular monolith with SQLite and a React SPA. [Technology Decisions](10-technology-decisions.md) owns the complete non-goal list. Proactivity operates only during an attached active session; push notifications, SMS, email, and background mobile services are excluded. Authentication and public multi-user hosting are deferred.
