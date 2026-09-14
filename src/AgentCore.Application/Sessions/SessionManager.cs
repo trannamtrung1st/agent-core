@@ -148,7 +148,8 @@ public sealed class SessionRuntimeFactory(
     ISessionOutput output,
     IIdGenerator ids,
     TimeProvider time,
-    Microsoft.Extensions.Logging.ILoggerFactory loggers)
+    Microsoft.Extensions.Logging.ILoggerFactory loggers,
+    IInterruptionClassifier classifier)
 {
     public SessionRuntime Create(SessionSnapshot snapshot) =>
         new(
@@ -159,5 +160,6 @@ public sealed class SessionRuntimeFactory(
             output,
             ids,
             time,
-            loggers.CreateLogger(typeof(SessionRuntime).FullName!));
+            loggers.CreateLogger(typeof(SessionRuntime).FullName!),
+            classifier);
 }

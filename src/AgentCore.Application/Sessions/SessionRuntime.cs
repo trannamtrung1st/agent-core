@@ -1,13 +1,14 @@
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Interaction;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Sessions;
 
-public sealed class SessionRuntime : IAsyncDisposable
+public sealed partial class SessionRuntime : IAsyncDisposable
 {
     private readonly Channel<SessionInput> _mailbox = Channel.CreateBounded<SessionInput>(
         new BoundedChannelOptions(256)
@@ -18,11 +19,14 @@ public sealed class SessionRuntime : IAsyncDisposable
 
     private readonly ILanguageModel _languageModel;
     private readonly IAgentBrain _brain;
+    private readonly IInterruptionClassifier _classifier;
     private readonly IMemoryStore _store;
     private readonly ISessionOutput _output;
     private readonly IIdGenerator _ids;
     private readonly TimeProvider _time;
     private readonly ILogger _logger;
+    private readonly RecognitionCapabilities _recognition;
+    private readonly InteractionPolicy _policy;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Task _loop;
     private readonly object _idleGate = new();
@@ -36,6 +40,17 @@ public sealed class SessionRuntime : IAsyncDisposable
     private CancellationTokenSource? _responseCts;
     private int _inflight;
     private TaskCompletionSource _idle = CompletedIdle();
+    private TaskCompletionSource _mailboxIdle = CompletedIdle();
+    private InputActivity _input = InputActivity.Idle;
+    private OutputActivity _outputActivity = OutputActivity.Idle;
+    private InterruptionCandidate? _candidate;
+    private ResponseLifecycle? _responseLifecycle;
+    private int _timerGeneration = 1;
+    private int _turnGeneration;
+    private Guid? _committedUtteranceId;
+    private Guid? _activeUtteranceId;
+    private DateTimeOffset? _utteranceStarted;
+    private double? _activityScore;
 
     public SessionRuntime(
         SessionSnapshot snapshot,
@@ -45,16 +60,23 @@ public sealed class SessionRuntime : IAsyncDisposable
         ISessionOutput output,
         IIdGenerator ids,
         TimeProvider time,
-        ILogger logger)
+        ILogger logger,
+        IInterruptionClassifier? classifier = null,
+        RecognitionCapabilities? recognition = null,
+        InteractionPolicy? policy = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
         _brain = brain;
+        _classifier = classifier ?? new HeuristicInterruptionClassifier();
         _store = store;
         _output = output;
         _ids = ids;
         _time = time;
         _logger = logger;
+        _recognition = recognition ?? new RecognitionCapabilities(true, true, true, true);
+        _policy = policy ?? new InteractionPolicy();
+        _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         _epoch = _ids.NewId();
         _loop = Task.Run(() => RunAsync(_lifetime.Token));
     }
@@ -87,6 +109,77 @@ public sealed class SessionRuntime : IAsyncDisposable
         var context = NewContext();
         BeginWork();
         await _mailbox.Writer.WriteAsync(new CancelResponseReceived(context, responseId), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task WaitUntilMailboxDrainedAsync(CancellationToken cancellationToken = default)
+    {
+        TaskCompletionSource idle;
+        lock (_idleGate)
+        {
+            idle = _mailboxIdle;
+        }
+
+        return idle.Task.WaitAsync(cancellationToken);
+    }
+
+    public InterruptionCandidate? Candidate => _candidate;
+
+    public InputActivity Input => _input;
+
+    public int TimerGeneration => _timerGeneration;
+
+    public int TurnGeneration => _turnGeneration;
+
+    public Guid? ActiveResponseId => _activeResponseId;
+
+    public InteractionDecision? LastControllerDecision { get; private set; }
+
+    public async Task AttachAsync(CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new AttachReceived(context), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SubmitSpeechAsync(
+        SpeechRecognitionEvent evidence,
+        double? activityScore = null,
+        CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new SpeechEvidenceReceived(context, evidence, activityScore), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SubmitClassifierResultAsync(
+        Guid candidateId,
+        Guid utteranceId,
+        Guid responseId,
+        int revision,
+        InteractionDecision decision,
+        CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(
+                new ClassifierReturned(context, candidateId, utteranceId, responseId, revision, decision),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SubmitTimerElapsedAsync(
+        string kind,
+        int generation,
+        Guid? utteranceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(
+                new TimerElapsedReceived(context, kind, generation, utteranceId),
+                cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -130,6 +223,22 @@ public sealed class SessionRuntime : IAsyncDisposable
                     {
                         case UserTextReceived user:
                             await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case SpeechEvidenceReceived speech:
+                            await HandleSpeechAsync(speech, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case ClassifierReturned classified:
+                            await HandleClassifierAsync(classified, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case BrainReturned brain:
+                            await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
+                            brain.Processed.TrySetResult();
+                            break;
+                        case TimerElapsedReceived timer:
+                            await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case AttachReceived:
+                            await HandleAttachAsync(cancellationToken).ConfigureAwait(false);
                             break;
                         case ModelResultReceived model:
                             await HandleModelAsync(model, cancellationToken).ConfigureAwait(false);
@@ -199,27 +308,28 @@ public sealed class SessionRuntime : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
+        _timerGeneration++;
         var responseId = _ids.NewId();
-        var decision = await _brain.DecideAsync(
-                new AgentContext(
-                    _snapshot.Definition,
-                    _snapshot.Entries,
-                    _snapshot.Summary,
-                    Profile: null,
-                    _snapshot.Mode,
-                    _snapshot.PendingTopic,
-                    HelpOfferedDuringSilence: false,
-                    InterruptedHeardText: null,
-                    new AgentTrigger(input.Context.EventId, TriggerKind.UserTurn, input.Text)),
-                responseId,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.UserTurn, input.Text);
+        var turn = ++_turnGeneration;
+        _outputActivity = OutputActivity.WaitingForAgent;
+        LaunchBrain(input.Context, trigger, responseId, turn);
+    }
 
-        if (decision is not Speak speak)
+    private async Task HandleBrainAsync(BrainReturned input, CancellationToken cancellationToken)
+    {
+        if (input.TurnGeneration != _turnGeneration)
         {
             return;
         }
 
+        if (input.Decision is not Speak speak)
+        {
+            _outputActivity = OutputActivity.Idle;
+            return;
+        }
+
+        var now = _time.GetUtcNow();
         var entryId = _ids.NewId();
         var sequence = NextSequence();
         var assistant = new ConversationEntry(
@@ -228,29 +338,31 @@ public sealed class SessionRuntime : IAsyncDisposable
             SourceEventId: null,
             ConversationRole.Assistant,
             string.Empty,
-            responseId,
+            input.ResponseId,
             EntryStatus.Streaming,
             _snapshot.Mode,
             0,
             0,
             now);
 
-        _activeResponseId = responseId;
+        _activeResponseId = input.ResponseId;
         _activeEntryId = entryId;
         _generated = string.Empty;
         _responseTerminal = false;
+        _responseLifecycle = ResponseLifecycle.Live;
+        _outputActivity = OutputActivity.AgentGenerating;
         _responseCts = new CancellationTokenSource();
         await PersistAsync(Append(assistant), cancellationToken).ConfigureAwait(false);
 
         await PublishAsync(
                 new SessionOutput(
                     input.Context,
-                    responseId,
-                    new ResponseStartedOutput(entryId, sequence, "UserTurn")),
+                    input.ResponseId,
+                    new ResponseStartedOutput(entryId, sequence, input.Trigger.Kind.ToString())),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        var request = speak.Request with { ResponseId = responseId };
+        var request = speak.Request with { ResponseId = input.ResponseId };
         BeginWork();
         var responseToken = _responseCts.Token;
         _ = Task.Run(async () =>
@@ -258,6 +370,42 @@ public sealed class SessionRuntime : IAsyncDisposable
             try
             {
                 await PumpModelAsync(request, input.Context, responseToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                EndWork();
+            }
+        }, CancellationToken.None);
+    }
+
+    private void LaunchBrain(EventContext cause, AgentTrigger trigger, Guid responseId, int turn)
+    {
+        var context = new AgentContext(
+            _snapshot.Definition,
+            _snapshot.Entries,
+            _snapshot.Summary,
+            Profile: null,
+            _snapshot.Mode,
+            _snapshot.PendingTopic,
+            HelpOfferedDuringSilence: false,
+            InterruptedHeardText: null,
+            trigger);
+        BeginWork();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var decision = await _brain.DecideAsync(context, responseId, _lifetime.Token).ConfigureAwait(false);
+                var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var inbound = NewContext(cause.EventId);
+                BeginWork();
+                if (!_mailbox.Writer.TryWrite(new BrainReturned(inbound, turn, responseId, trigger, decision, processed)))
+                {
+                    EndWork();
+                    return;
+                }
+
+                await processed.Task.ConfigureAwait(false);
             }
             finally
             {
@@ -350,26 +498,29 @@ public sealed class SessionRuntime : IAsyncDisposable
 
     private async Task SupersedeAsync(EventContext context, Guid responseId, CancellationToken cancellationToken)
     {
-        _responseCts?.Cancel();
-        if (_responseTerminal)
+        _responseLifecycle = ResponseLifecycle.Superseded;
+        _outputActivity = OutputActivity.Interrupted;
+        if (!_responseTerminal)
         {
-            ClearActive();
-            return;
+            _responseTerminal = true;
+            UpdateAssistant(EntryStatus.Interrupted, received: _generated.Length);
+            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+            await PublishAsync(
+                    new SessionOutput(context, responseId, new ResponseCompletedOutput(true, HeardTextEndExclusive: 0)),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        _responseTerminal = true;
-        UpdateAssistant(EntryStatus.Interrupted, received: _generated.Length);
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-        await PublishAsync(
-                new SessionOutput(context, responseId, new ResponseCompletedOutput(true, HeardTextEndExclusive: 0)),
-                cancellationToken)
-            .ConfigureAwait(false);
+        _responseCts?.Cancel();
         ClearActive();
+        _turnGeneration++;
     }
 
     private async Task CompleteAsync(ModelResultReceived input, bool failed, CancellationToken cancellationToken)
     {
         _responseTerminal = true;
+        _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
+        _outputActivity = OutputActivity.Idle;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
         var received = _generated.Length;
         UpdateAssistant(status, received);
@@ -467,6 +618,11 @@ public sealed class SessionRuntime : IAsyncDisposable
             {
                 _idle = NewIdle();
             }
+
+            if (_mailboxIdle.Task.IsCompleted)
+            {
+                _mailboxIdle = NewIdle();
+            }
         }
     }
 
@@ -475,6 +631,11 @@ public sealed class SessionRuntime : IAsyncDisposable
         lock (_idleGate)
         {
             _inflight--;
+            if (_mailbox.Reader.Count == 0)
+            {
+                _mailboxIdle.TrySetResult();
+            }
+
             if (_inflight == 0 && _mailbox.Reader.Count == 0)
             {
                 _idle.TrySetResult();

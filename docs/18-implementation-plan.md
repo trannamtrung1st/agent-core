@@ -51,6 +51,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** “mhm” Continue, “wait” Interrupt, noise Ignore, final-before-ended, stale classifier and late model results, RequestInterruptionClassification vs RequestAgentDecision separation, capability fallback, invalid timer generation.
 - **Acceptance criteria:** Controlled tests reproduce R1→superseded→R2 and discard every stale R1 output; controller keeps processing while model is gated.
 - **Explicit non-goals:** Real microphone, production semantic perfection, per-frame LLM classification, dedicated OS threads or actor framework.
+- **Status:** Complete. Orthogonal controller fields, heuristic barge-in, FakeInterruptionClassifier, and mailbox-isolated brain/classifier workers cover mhm/wait/noise, final-before-ended, stale classifier, late R1 after R2, capability fallback, and invalid timer generation. See [Milestone 4 verification](reports/m04-verification.md).
 
 ## Milestone 5 — SignalR protocol and browser connection
 

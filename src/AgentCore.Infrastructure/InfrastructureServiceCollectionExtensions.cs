@@ -1,5 +1,6 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Interaction;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -25,6 +26,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(SyntheticProviderAliases.Default);
         services.TryAddSingleton<PromptContextBuilder>();
         services.TryAddSingleton<IAgentBrain, DefaultAgentBrain>();
+        services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>

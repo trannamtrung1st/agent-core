@@ -16,6 +16,35 @@ public abstract record SessionInput(EventContext Context);
 
 public sealed record UserTextReceived(EventContext Context, string Text) : SessionInput(Context);
 
+public sealed record SpeechEvidenceReceived(
+    EventContext Context,
+    SpeechRecognitionEvent Evidence,
+    double? ActivityScore) : SessionInput(Context);
+
+public sealed record ClassifierReturned(
+    EventContext Context,
+    Guid CandidateId,
+    Guid UtteranceId,
+    Guid ResponseId,
+    int Revision,
+    InteractionDecision Decision) : SessionInput(Context);
+
+public sealed record BrainReturned(
+    EventContext Context,
+    int TurnGeneration,
+    Guid ResponseId,
+    AgentTrigger Trigger,
+    AgentDecision Decision,
+    TaskCompletionSource Processed) : SessionInput(Context);
+
+public sealed record TimerElapsedReceived(
+    EventContext Context,
+    string Kind,
+    int Generation,
+    Guid? UtteranceId) : SessionInput(Context);
+
+public sealed record AttachReceived(EventContext Context) : SessionInput(Context);
+
 public sealed record ModelResultReceived(
     EventContext Context,
     Guid ResponseId,
