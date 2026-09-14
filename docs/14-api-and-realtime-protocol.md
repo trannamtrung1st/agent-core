@@ -35,10 +35,10 @@ POST request:
 201 / GET session response:
 
 ```json
-{"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","agentId":"examiner","agentVersion":1,"mode":"text","status":"created","createdAt":"2026-09-15T00:00:00.000Z","updatedAt":"2026-09-15T00:00:00.000Z","lastEntrySequence":0,"summary":"","activeResponseId":null,"protocolVersion":1}
+{"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","agentId":"examiner","agentVersion":1,"mode":"text","pendingMode":null,"status":"created","createdAt":"2026-09-15T00:00:00.000Z","updatedAt":"2026-09-15T00:00:00.000Z","lastEntrySequence":0,"activeResponseId":null,"protocolVersion":1}
 ```
 
-status is `created|attached|paused|ending|ended`; activeResponseId is required and nullable. GET reads the current runtime projection when active, durable snapshot otherwise. Initial mode is honored only after attach; creation performs no provider calls.
+status is `created|attached|paused|ending|ended`; `pendingMode` is `text|voice` while a mode change is queued, otherwise null. activeResponseId is required and nullable. GET reads the current runtime projection when active, durable snapshot otherwise. Session summary is server-only and never appears on this view. Initial mode is honored only after attach; creation performs no provider calls.
 
 History response (all listed entry fields required; nullable responseId/sourceEventId):
 
@@ -134,7 +134,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 
 | Type | Required payload fields |
 | --- | --- |
-| session.ready | mode, status, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), summary, activeResponseId: null |
+| session.ready | mode, pendingMode: text\|voice\|null, status, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), activeResponseId: null |
 | transcript.partial | utteranceId, revision: integer, text |
 | transcript.final | utteranceId, text, entryId: UUID\|null, entrySequence: integer\|null |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
@@ -145,12 +145,12 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | playback.stop | reason: interrupted\|disconnected\|ended\|providerFailed\|audioFailed\|modeChange |
 | agent.response.interrupted | reason: userBargeIn\|newText\|disconnected\|ended\|modeChange, heardTextEndExclusive: integer |
 | agent.response.completed | status: completed\|failed, heardTextEndExclusive: integer |
-| session.state.changed | status, mode: text\|voice, inputState, outputState, muted: boolean, streamId: UUID\|null |
+| session.state.changed | status, mode: text\|voice, pendingMode: text\|voice\|null, inputState, outputState, muted: boolean, streamId: UUID\|null |
 | error | category, code, message, fatal: boolean, retryAfterMs: integer\|null |
 
 For transcript.final, entryId/entrySequence are null for ignored backchannels/noise and present for an accepted user turn; SourceEventId for that entry is utteranceId. Its persistence acknowledgement gates generation. `agent.response.started` identifies the new assistant entry even before its first periodic checkpoint.
 
-session.ready audioFormat is `{encoding:"pcm_s16le",sampleRateHz:24000,channels:1,frameDurationMs:20}` in voice, null in text. capabilities is `{stt:{streamingAudio,partialTranscripts,speechBoundaryEvents,cancellation},tts:{streamingAudio,timingMarks,cancellation,voiceSelection,speakingRate,supportedFormats},bargeInPolicy:"semantic"|"speechAndFinal"|"speechActivity"|"none"}` and contains **effective** adapter capabilities only. Speech booleans are false and supportedFormats is empty in text mode. In voice mode supportedFormats lists canonical encoding/sampleRateHz/channels records that the adapter can produce. ready has no live response: attaching never replays or continues interrupted output. Ready history items use the same public fields as GET `/messages` (including `deliveryMode` and both text-end offsets); it is not a persistence snapshot.
+session.ready audioFormat is `{encoding:"pcm_s16le",sampleRateHz:24000,channels:1,frameDurationMs:20}` in voice, null in text. capabilities is `{stt:{streamingAudio,partialTranscripts,speechBoundaryEvents,cancellation},tts:{streamingAudio,timingMarks,cancellation,voiceSelection,speakingRate,supportedFormats},bargeInPolicy:"semantic"|"speechAndFinal"|"speechActivity"|"none"}` and contains **effective** adapter capabilities only. Speech booleans are false and supportedFormats is empty in text mode. In voice mode supportedFormats lists canonical encoding/sampleRateHz/channels records that the adapter can produce. ready has no live response: attaching never replays or continues interrupted output. Ready history items use the same public fields as GET `/messages` (including `deliveryMode` and both text-end offsets); it is not a persistence snapshot and must not include session summary.
 
 Example server control (other events use identical metadata with their table payload):
 
@@ -166,7 +166,7 @@ Session IDs act as local/demo bearer capabilities: use cryptographically random 
 
 Attach atomically acquires a fresh attachmentId lease, activating an in-memory runtime. If `MaxActiveSessions` would be exceeded, reject with recoverable `SessionCapacityExceeded` and `retryAfterMs` defaulting to 5000; the durable session remains and may be retried. An exact repeated Attach eventId on the same connection returns the original acknowledgement/ready snapshot and lease; it never creates a second owner. A new Attach on an already attached connection is rejected until it disconnects. A still-attached session rejects a second connection with SessionInUse; no silent takeover. Disconnect invalidates the old lease, supersedes output, closes STT and pauses initiative. If the server hasn't detected disconnect yet, reconnect retries SessionInUse with bounded backoff rather than stealing the session. Configure SignalR keepalive 10 seconds/client timeout 30 seconds. Grace retention is 60 seconds after disconnect is observed.
 
-Attach loads/reconciles the durable snapshot if necessary and returns ready with current history/status/**mode**; it does not replay event/audio buffers. lastServerSequence helps diagnose a gap only. Before attach the browser discards all playback buffers and marks old active responses interrupted. Once ready arrives it replaces its history projection by entryId and may fetch older pages. A recently modified interrupted entry must be refreshed even if its entry sequence predates the cursor. User unsent text remains in the composer; retry uncertain accepted text only with original eventId. An ended session cannot be resumed; create a new one explicitly. `session.mode.set` follows [controller mode rules](05-interaction-controller.md#mode-transitions). Re-entering voice after reconnect still requires a user gesture to start capture/playback.
+Attach loads/reconciles the durable snapshot if necessary and returns ready with current history/status/**mode**/pendingMode; it does not replay event/audio buffers. lastServerSequence helps diagnose a gap only. Before attach the browser discards all playback buffers and marks old active responses interrupted. Once ready arrives it replaces its history projection by entryId and may fetch older pages. A recently modified interrupted entry must be refreshed even if its entry sequence predates the cursor. User unsent text remains in the composer; retry uncertain accepted text only with original eventId. An ended session cannot be resumed; create a new one explicitly. `session.mode.set` follows [controller mode rules](05-interaction-controller.md#mode-transitions). Re-entering voice after reconnect still requires a user gesture to start capture/playback.
 
 ProtocolVersion !=1 yields ProtocolVersionMismatch before attachment or audio acceptance, reports supportedVersions=[1] in the safe error extension, then closes the connection. No automatic version downgrade. Clean End/DELETE first disables input and supersedes output, then persists status Ended, sends state changed, releases lease. If persistence fails, remain Ending with retryable SessionPersistenceUnavailable; do not falsely report successful durable end.
 

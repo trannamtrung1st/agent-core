@@ -42,7 +42,7 @@ coverage/
 appsettings.Local.json
 appsettings.*.local.json
 
-# Personal workspace: configs, secret drop-files, temp files (never commit)
+# Personal workspace: scratch and temp files (never commit)
 /local/
 
 # Runtime data and diagnostics

@@ -129,7 +129,7 @@ Have a text exchange, start voice on the **same** session, interrupt a long voic
 
 ## Demo preparation and capability caveat
 
-Use Synthetic first to verify scenarios without credentials; scripted STT supplies transcript content and synthetic TTS emits tones/silence for transport checks. Real text may use OpenRouter (`openrouter/free` by default) when `OPENROUTER_API_KEY` is supplied; live OpenAI realtime transcription STT (recommended `gpt-live-transcribe`) and TTS may wait for `OPENAI_API_KEY`. Native speech-to-speech is excluded. Semantic backchannel demonstration requires partial-capable STT; batch STT intentionally uses speech-activity/final-transcript interruption and may interrupt on acknowledgements. Show that trade-off honestly in the developer panel.
+Use Synthetic first to verify scenarios without credentials; scripted STT supplies transcript content and synthetic TTS emits tones/silence for transport checks. Real/demo text uses OpenRouter with a **fixed** operator-selected model ID when `OPENROUTER_API_KEY` is supplied; `openrouter/free` is for adapter smoke only. Live OpenAI realtime transcription STT (recommended `gpt-live-transcribe`) and TTS may wait for `OPENAI_API_KEY`. Native speech-to-speech is excluded. Semantic backchannel demonstration requires partial-capable STT; batch STT intentionally uses speech-activity/final-transcript interruption and may interrupt on acknowledgements. Show that trade-off honestly in the developer panel.
 
 Measure the interruption and playback timeline using [Operations](17-observability-and-operations.md). [Testing Strategy](16-testing-strategy.md) turns these scenarios into deterministic regression tests. Do not substitute a live-provider phrasing assertion for a synthetic correctness test.
 

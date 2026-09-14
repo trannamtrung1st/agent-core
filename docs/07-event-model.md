@@ -36,12 +36,11 @@ public sealed record PublicHistoryEntry(Guid EntryId, long Sequence,
     EntryStatus Status, int HeardTextEndExclusive, int ReceivedTextEndExclusive,
     SessionMode DeliveryMode, DateTimeOffset CreatedAt);
 public sealed record SessionReadyProjection(
-    SessionMode Mode, SessionStatus Status, PublicAgentDescriptor Agent,
-    Guid? StreamId, AudioFormat? AudioFormat,
+    SessionMode Mode, SessionMode? PendingMode, SessionStatus Status,
+    PublicAgentDescriptor Agent, Guid? StreamId, AudioFormat? AudioFormat,
     RecognitionCapabilities Recognition, SynthesisCapabilities Synthesis,
     string BargeInPolicy, long LastEntrySequence,
-    IReadOnlyList<PublicHistoryEntry> History, string Summary,
-    Guid? ActiveResponseId);
+    IReadOnlyList<PublicHistoryEntry> History, Guid? ActiveResponseId);
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 public sealed record TranscriptOutput(Guid UtteranceId, bool IsFinal,
     int? Revision, string Text, Guid? EntryId, long? EntrySequence) : OutputPayload;
@@ -57,12 +56,13 @@ public sealed record ResponseInterruptedOutput(string Reason,
 public sealed record ResponseCompletedOutput(bool Failed,
     int HeardTextEndExclusive) : OutputPayload;
 public sealed record StateChangedOutput(SessionStatus Status, SessionMode Mode,
-    string InputState, string OutputState, bool Muted, Guid? StreamId) : OutputPayload;
+    SessionMode? PendingMode, string InputState, string OutputState, bool Muted,
+    Guid? StreamId) : OutputPayload;
 public sealed record ErrorOutput(string Category, string Code, string SafeMessage,
     bool Fatal, TimeSpan? RetryAfter) : OutputPayload;
 ```
 
-This is the closed application output family. History entries in the projection already apply public received-prefix rules and include deliveryMode; they must not contain Agent system instructions, provider configuration, credentials, unreceived generated assistant tails or internal runtime fields. Persistence `SessionSnapshot` remains a separate store contract. The string reason/state/code vocabularies are restricted to the [controller states](05-interaction-controller.md#state-representation) and [protocol inventory](14-api-and-realtime-protocol.md#server-events); they are not extensible arbitrary metadata. Api maps these records to distinct Contracts DTOs. `ReadyOutput` is already a safe Application projection. The API must not receive a full `SessionSnapshot` and remember to strip fields. It does not serialize SessionSnapshot, Agent Definition internals or ProviderFailure directly. ResponseId is required for response/text/playback payloads and null for unscoped payloads.
+This is the closed application output family. History entries in the projection already apply public received-prefix rules and include deliveryMode; they must not contain Agent system instructions, provider configuration, credentials, session summary, unreceived generated assistant tails or internal runtime fields. Persistence `SessionSnapshot` remains a separate store contract. The string reason/state/code vocabularies are restricted to the [controller states](05-interaction-controller.md#state-representation) and [protocol inventory](14-api-and-realtime-protocol.md#server-events); they are not extensible arbitrary metadata. Api maps these records to distinct Contracts DTOs. `ReadyOutput` is already a safe Application projection. The API must not receive a full `SessionSnapshot` and remember to strip fields. It does not serialize SessionSnapshot, Agent Definition internals or ProviderFailure directly. ResponseId is required for response/text/playback payloads and null for unscoped payloads.
 
 Audio uses a separate response-tagged queue exposed through this additional application port, implemented by Api alongside ISessionOutput:
 

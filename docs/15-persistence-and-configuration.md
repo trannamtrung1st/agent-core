@@ -6,7 +6,7 @@ EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore
 
 | Entity | Key and fields | Rules |
 | --- | --- | --- |
-| Session | SessionId UUID string PK; AgentId, AgentVersion, DefinitionJson, Mode, Status, CreatedAtUtc, UpdatedAtUtc, Revision | Store pinned validated definition; terminal Ended is irreversible |
+| Session | SessionId UUID string PK; AgentId, AgentVersion, DefinitionJson, Mode, PendingMode nullable, Status, CreatedAtUtc, UpdatedAtUtc, Revision | Store pinned validated definition; terminal Ended is irreversible |
 | ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text; ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive; ReceivedTextEndExclusive; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry |
 | SessionSnapshot | SessionId PK/FK; SchemaVersion=1; Summary; SummarizedThroughEntrySequence; PendingTopic nullable; ProfileId nullable; LastEntrySequence; UpdatedAtUtc | Persist coarse semantic continuity, never tasks/timers/active provider streams |
 | UserProfile | ProfileId UUID PK; PreferencesJson; Revision; UpdatedAtUtc | <=16 allowlisted preferences, <=2,000 total characters; MVP uses one local profile |
@@ -28,7 +28,8 @@ public sealed record ConversationEntry(Guid EntryId, long Sequence,
 public sealed record UserProfile(Guid ProfileId, long Revision,
     IReadOnlyDictionary<string, string> Preferences, DateTimeOffset UpdatedAt);
 public sealed record SessionSnapshot(int SchemaVersion, Guid SessionId,
-    long Revision, AgentDefinition Definition, SessionMode Mode, SessionStatus Status,
+    long Revision, AgentDefinition Definition, SessionMode Mode, SessionMode? PendingMode,
+    SessionStatus Status,
     IReadOnlyList<ConversationEntry> Entries, string Summary,
     long SummarizedThroughEntrySequence, string? PendingTopic, Guid? ProfileId,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
@@ -42,7 +43,7 @@ Stored Text retains full generated text. DeliveryMode records the interaction mo
 
 One persistence write is in flight per Session Runtime. Capture immutable snapshots and serialize write dispatch, coalescing pending periodic checkpoints to the newest state. The mailbox still accepts interrupt/end events while writes execute. On completion, advance durable revision only for the acknowledged snapshot; apply subsequent dirty state to the next revision. Never let an old snapshot overwrite new spoken-until or terminal state.
 
-Durability boundaries: save on creation, accepted final user turn, response terminal, mode change, pause/disconnect and end. During active generation checkpoint at most once per second, preserving only currently assembled text and conservative heard/received offsets. A 1-second streaming checkpoint **must not** rewrite every historical conversation row. Persistence identifies/upserts changed or currently streaming entries plus changed snapshot/session metadata. Immutable completed historical entries are not rewritten every checkpoint. Transactional SaveAsync, expectedRevision and optimistic-concurrency semantics are unchanged; Snapshot.Entries in the in-memory contract may still list the full session, but the Infrastructure writer must not issue no-op UPDATEs for unchanged completed rows. User turn generation waits for its save acknowledgement; final response completion waits for terminal save acknowledgement. Checkpoints cannot mark a still-streaming response completed. Temporary storage failure pauses new generation, emits recoverable SessionPersistenceUnavailable and retries local save after 1/2/5 seconds (maximum 3 retries); continued failure cancels active output, invalidates the attachment and pauses a non-ending session for explicit reconnect. An Ending session remains Ending until its terminal save succeeds; it cannot resume. Conflict is fatal for that runtime because it indicates a second writer or bug.
+Durability boundaries: save on creation, accepted final user turn, response terminal, mode change (including queued `PendingMode`), pause/disconnect and end. During active generation checkpoint at most once per second, preserving only currently assembled text and conservative heard/received offsets. A 1-second streaming checkpoint **must not** rewrite every historical conversation row. Persistence identifies/upserts changed or currently streaming entries plus changed snapshot/session metadata. Immutable completed historical entries are not rewritten every checkpoint. Transactional SaveAsync, expectedRevision and optimistic-concurrency semantics are unchanged; Snapshot.Entries in the in-memory contract may still list the full session, but the Infrastructure writer must not issue no-op UPDATEs for unchanged completed rows. User turn generation waits for its save acknowledgement; final response completion waits for terminal save acknowledgement. Checkpoints cannot mark a still-streaming response completed. Temporary storage failure pauses new generation, emits recoverable SessionPersistenceUnavailable and retries local save after 1/2/5 seconds (maximum 3 retries); continued failure cancels active output, invalidates the attachment and pauses a non-ending session for explicit reconnect. An Ending session remains Ending until its terminal save succeeds; it cannot resume. Conflict is fatal for that runtime because it indicates a second writer or bug.
 
 A crash may lose up to the last checkpoint interval of streaming text/progress, but not a user turn whose save succeeded. On startup/load, reconcile Attached→Paused and Streaming→Interrupted transactionally; keep the last recorded heard offset, never assume unacknowledged audio was heard. Ending recovers by completing the end transaction before attach; it cannot return to active. Provider streams, audio, timer generations and connection leases are never resumed.
 
@@ -144,7 +145,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
 }
 ```
 
-Configuration fields for inactive adapters are ignored after structural validation; Synthetic must never attempt example URLs or require ApiKey. Bind operator secrets from environment or user-secrets only: `OPENROUTER_API_KEY` into the OpenRouter-configured language-model `ApiKey`, and `OPENAI_API_KEY` into the OpenAI STT and TTS `ApiKey` fields. Nested `Providers__...__ApiKey` remains valid. Neither variable is required for Profile=Synthetic, default tests, or application boot in synthetic mode. Real profile requires an explicitly configured non-synthetic LLM. STT/TTS adapters are required only when a loaded definition has `Voice.Enabled`. Preferred real configuration: OpenAICompatibleLanguageModel (Adapter=OpenAICompatible) pointing at OpenRouter for text with default test `DefaultModel` `openrouter/free`; OpenAiSpeechRecognizer (Adapter=OpenAI, recommended DefaultModel `gpt-live-transcribe`) over realtime transcription; OpenAiSpeechSynthesizer (Adapter=OpenAI) for TTS. A Real **voice** process still needs speech keys when those adapters are selected; a Real **text** process needs only the OpenRouter key. Missing `OPENAI_API_KEY` must not fail synthetic/offline tests or block completing the text-conversation path. OpenAICompatibleBatch and OpenAICompatibleSpeech are optional degraded/compatible speech adapters, not the primary streaming demonstration.
+Configuration fields for inactive adapters are ignored after structural validation; Synthetic must never attempt example URLs or require ApiKey. Bind operator secrets from environment or user-secrets only: `OPENROUTER_API_KEY` into the OpenRouter-configured language-model `ApiKey`, and `OPENAI_API_KEY` into the OpenAI STT and TTS `ApiKey` fields. Nested `Providers__...__ApiKey` remains valid. Neither variable is required for Profile=Synthetic, default tests, or application boot in synthetic mode. Real profile requires an explicitly configured non-synthetic LLM. STT/TTS adapters are required only when a loaded definition has `Voice.Enabled`. Preferred **Real/demo** configuration: OpenAICompatibleLanguageModel (Adapter=OpenAICompatible) pointing at OpenRouter for text with an operator-selected **fixed** `DefaultModel` (placeholder `<operator-fixed-openrouter-model-id>`); OpenAiSpeechRecognizer (Adapter=OpenAI, recommended DefaultModel `gpt-live-transcribe`) over realtime transcription; OpenAiSpeechSynthesizer (Adapter=OpenAI) for TTS. `openrouter/free` is reserved for opt-in adapter smoke tests, not the demo profile. A Real **voice** process still needs speech keys when those adapters are selected; a Real **text** process needs only the OpenRouter key. Missing `OPENAI_API_KEY` must not fail synthetic/offline tests or block completing the text-conversation path. OpenAICompatibleBatch and OpenAICompatibleSpeech are optional degraded/compatible speech adapters, not the primary streaming demonstration.
 
 **Effective capabilities** come from the selected adapter. Optional `RequiredCapabilities` lists flags that must be **true**. Optional `DisabledCapabilities` may turn off optional adapter features (for example disable partials to test `speechAndFinal`). Do not use `RequiredCapabilities: false` to describe a batch adapter; select `OpenAICompatibleBatch`, which reports streaming/partials as false. Do not use a configuration `Capabilities` object to make an adapter claim unimplemented behavior. Built-in `OpenAI`/`Synthetic`/`Scripted` adapters define their own capabilities (Synthetic may withhold partials via adapter-specific test options). Generic compatible/local adapters may document operator assertions validated by contract tests. `heuristic` is the built-in classifier alias. `MaxActiveSessions` applies to in-memory runtimes on attach/activation; durable Created/Paused/Ended rows do not consume a slot.
 
@@ -156,7 +157,7 @@ Persistence__Provider=Sqlite
 Persistence__ConnectionString=Data Source=data/agent-core.db
 Providers__LanguageModels__primary-llm__Adapter=OpenAICompatible
 Providers__LanguageModels__primary-llm__BaseUrl=https://openrouter.ai/api/v1/
-Providers__LanguageModels__primary-llm__DefaultModel=openrouter/free
+Providers__LanguageModels__primary-llm__DefaultModel=<operator-fixed-openrouter-model-id>
 OPENROUTER_API_KEY=<backend-secret>
 Providers__SpeechRecognizers__primary-stt__Adapter=OpenAICompatibleBatch
 Providers__SpeechSynthesizers__primary-tts__Adapter=OpenAICompatibleSpeech
@@ -169,11 +170,9 @@ Operators must also set real speech BaseUrl/DefaultModel/voice mapping for their
 
 ## Local personal workspace
 
-Repository root `local/` is gitignored. Operators and agents may store personal configs, scratch files and secret drop-files there; nothing under `local/` is shared in git. [Repository Structure](11-repository-structure.md) records the folder; this section owns secret-handling rules.
+Repository root `local/` is gitignored scratch (personal notes, temp files). Nothing under `local/` is shared in git. [Repository Structure](11-repository-structure.md) records the folder.
 
-`local/` is **not** an application configuration source. Do not bind options from files in `local/`, do not load it with `IConfiguration`, and do not copy its contents into committed `appsettings*.json`. Runtime continues to bind `OPENROUTER_API_KEY` / `OPENAI_API_KEY` from environment or ASP.NET user-secrets only.
-
-Named drop-file for hosted text: `local/open-router-key.txt`. The operator pastes the OpenRouter API key as the first non-empty line, trimmed, with no quotes and no `Bearer ` prefix. This file is a **one-time bootstrap** only. When the API project first exists, copy it into user-secrets on `src/AgentCore.Api` (for example `dotnet user-secrets set OPENROUTER_API_KEY <trimmed-value> --project src/AgentCore.Api`) or into the equivalent process environment. After that, day-to-day Real runs and opt-in live tests use `OPENROUTER_API_KEY` from user-secrets or environment; do not keep reading the drop-file. Never print the key in chat, logs, traces, docs, commits or command history that will be shared. Missing or empty `local/open-router-key.txt` is not a test failure and must not block Synthetic/default suites. Other personal files may live in `local/`; do not invent additional named secret drop-files until a spec names them.
+`local/` is **not** an application configuration source. Do not bind options from files in `local/`, do not load it with `IConfiguration`, and do not copy its contents into committed `appsettings*.json`. Do not specify named secret drop-files. Bind `OPENROUTER_API_KEY` / `OPENAI_API_KEY` from process environment or `dotnet user-secrets` on the API project (for example `dotnet user-secrets set OPENROUTER_API_KEY <value> --project src/AgentCore.Api` once that project exists). Never print keys in chat, logs, traces, docs, commits or shared command history. Missing hosted keys are not a test failure and must not block Synthetic/default suites.
 
 ## Hosted and on-prem provider configurations
 
@@ -189,17 +188,16 @@ Preferred hosted text override (merge into the synthetic example when Profile=Re
         "Adapter": "OpenAICompatible",
         "BaseUrl": "https://openrouter.ai/api/v1/",
         "ApiKey": "<OPENROUTER_API_KEY>",
-        "DefaultModel": "openrouter/free",
+        "DefaultModel": "<operator-fixed-openrouter-model-id>",
         "AdditionalHeaders": {},
-        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120},
-        "Capabilities": {"StreamingText": true, "Cancellation": true}
+        "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
       }
     }
   }
 }
 ```
 
-DefaultModel is the concrete model field; it is not copied into ModelRequest or public DTOs. The default hosted test value is OpenRouter's Free Models Router id `openrouter/free`, a stable router slug rather than a transient catalog model. Quality and structured-output correctness of whatever free model is routed are not configuration or milestone gates. To compare identities later, configure aliases `examiner-llm` and `support-llm` with different DefaultModel values, then select those aliases in each definition's ProviderPreferences.LanguageModel. No Agent Runtime condition branches on a provider/model name.
+DefaultModel is the concrete model field; it is not copied into ModelRequest or public DTOs. Real/demo must use a **fixed** operator-selected OpenRouter model ID. These docs use the placeholder `<operator-fixed-openrouter-model-id>` rather than pinning a catalog snapshot. Opt-in adapter smoke may set `DefaultModel` to `openrouter/free`; do not assert quality or structured-output correctness of whatever free model is routed. To compare identities later, configure aliases `examiner-llm` and `support-llm` with different DefaultModel values, then select those aliases in each definition's ProviderPreferences.LanguageModel. No Agent Runtime condition branches on a provider/model name.
 
 To migrate text inference on-prem, retain Adapter=OpenAICompatible and replace BaseUrl with e.g. `http://localhost:8000/v1/`, DefaultModel with the served local model name, and ApiKey/AdditionalHeaders with the local server's requirements. A vLLM-compatible endpoint is an example, not mandatory infrastructure. Direct OpenAI can use `https://api.openai.com/v1/` with its own credentials/model and verified compatibility settings. OpenRouter remains a hosted gateway; changing its model ID does not make inference local.
 
@@ -230,7 +228,7 @@ Initial hosted configuration:
 {
   "Providers": {
     "SpeechRecognizers": {"primary-stt": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "gpt-live-transcribe", "ApiKey": "<OPENAI_API_KEY>"}},
-    "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "https://openrouter.ai/api/v1/", "DefaultModel": "openrouter/free", "ApiKey": "<OPENROUTER_API_KEY>"}},
+    "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "https://openrouter.ai/api/v1/", "DefaultModel": "<operator-fixed-openrouter-model-id>", "ApiKey": "<OPENROUTER_API_KEY>"}},
     "SpeechSynthesizers": {"primary-tts": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<OPENAI_API_KEY>"}}
   }
 }

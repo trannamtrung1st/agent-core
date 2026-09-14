@@ -62,7 +62,7 @@ A transition is admitted only when safe:
 
 | Current condition | Rule |
 | --- | --- |
-| Output live, request voice | **Wait.** Queue at most one pending mode change. Do not supersede the live text response. Apply voice start after that response is Completed, Failed, or Interrupted by an independent user action. |
+| Output live, request voice | **Wait.** Queue at most one pending mode change (`PendingMode=Voice`). Do not supersede the live text response. Apply voice start after that response is Completed, Failed, or Interrupted by an independent user action. Project `pendingMode` so the UI can show Starting voice… and disable the voice-call control until the transition applies. |
 | Output live, request text (leaving voice) | **Supersede** the live voice response using the normal stop/cancel sequence (`playback.stop` and `agent.response.interrupted` with reason `modeChange`), freeze Spoken Until, dispose speech resources, then set Mode=Text. Playback cannot continue after speech resources are released. |
 | Input UserSpeaking or Finalizing | **Wait** until the utterance commits, is discarded, or times out. Do not split an utterance across modes. |
 | Ending or Ended | Reject the mode command. |
