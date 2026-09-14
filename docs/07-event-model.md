@@ -29,9 +29,20 @@ public sealed record InitiativeTriggered(EventContext Context, AgentTrigger Trig
 public sealed record SessionOutput(EventContext Context, Guid? ResponseId,
     OutputPayload Payload);
 public abstract record OutputPayload;
-public sealed record ReadyOutput(SessionSnapshot Snapshot, Guid? StreamId,
+public sealed record PublicAgentDescriptor(string Id, int Version, string Name,
+    string Role, string Description, bool VoiceAvailable);
+public sealed record PublicHistoryEntry(Guid EntryId, long Sequence,
+    Guid? SourceEventId, ConversationRole Role, string Text, Guid? ResponseId,
+    EntryStatus Status, int HeardTextEndExclusive, int ReceivedTextEndExclusive,
+    SessionMode DeliveryMode, DateTimeOffset CreatedAt);
+public sealed record SessionReadyProjection(
+    SessionMode Mode, SessionStatus Status, PublicAgentDescriptor Agent,
+    Guid? StreamId, AudioFormat? AudioFormat,
     RecognitionCapabilities Recognition, SynthesisCapabilities Synthesis,
-    string BargeInPolicy) : OutputPayload;
+    string BargeInPolicy, long LastEntrySequence,
+    IReadOnlyList<PublicHistoryEntry> History, string Summary,
+    Guid? ActiveResponseId);
+public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 public sealed record TranscriptOutput(Guid UtteranceId, bool IsFinal,
     int? Revision, string Text, Guid? EntryId, long? EntrySequence) : OutputPayload;
 public sealed record ResponseStartedOutput(Guid EntryId, long EntrySequence,
@@ -45,13 +56,13 @@ public sealed record ResponseInterruptedOutput(string Reason,
     int HeardTextEndExclusive) : OutputPayload;
 public sealed record ResponseCompletedOutput(bool Failed,
     int HeardTextEndExclusive) : OutputPayload;
-public sealed record StateChangedOutput(SessionStatus Status, string InputState,
-    string OutputState, bool Muted, Guid? StreamId) : OutputPayload;
+public sealed record StateChangedOutput(SessionStatus Status, SessionMode Mode,
+    string InputState, string OutputState, bool Muted, Guid? StreamId) : OutputPayload;
 public sealed record ErrorOutput(string Category, string Code, string SafeMessage,
     bool Fatal, TimeSpan? RetryAfter) : OutputPayload;
 ```
 
-This is the closed application output family. The string reason/state/code vocabularies are restricted to the [controller states](05-interaction-controller.md#state-representation) and [protocol inventory](14-api-and-realtime-protocol.md#server-events); they are not extensible arbitrary metadata. Api maps these records to distinct Contracts DTOs and projects ReadyOutput's snapshot to the public descriptor/history only. It does not serialize SessionSnapshot or ProviderFailure directly. ResponseId is required for response/text/playback payloads and null for unscoped payloads.
+This is the closed application output family. History entries in the projection already apply public received-prefix rules and include deliveryMode; they must not contain Agent system instructions, provider configuration, credentials, unreceived generated assistant tails or internal runtime fields. Persistence `SessionSnapshot` remains a separate store contract. The string reason/state/code vocabularies are restricted to the [controller states](05-interaction-controller.md#state-representation) and [protocol inventory](14-api-and-realtime-protocol.md#server-events); they are not extensible arbitrary metadata. Api maps these records to distinct Contracts DTOs. `ReadyOutput` is already a safe Application projection. The API must not receive a full `SessionSnapshot` and remember to strip fields. It does not serialize SessionSnapshot, Agent Definition internals or ProviderFailure directly. ResponseId is required for response/text/playback payloads and null for unscoped payloads.
 
 Audio uses a separate response-tagged queue exposed through this additional application port, implemented by Api alongside ISessionOutput:
 
@@ -70,25 +81,26 @@ Required additional mailbox cases and their owned data:
 
 | Input | Required data beyond EventContext |
 | --- | --- |
-| Attach/Detach/EndRequested | connection lease ID; attach mode/cursor; end reason |
-| UserSpeechStarted/UserSpeechEnded | utteranceId, confidence/duration observation |
+| Attach/Detach/EndRequested | connection lease ID; lastServerSequence cursor; end reason |
+| ModeSetRequested | requested SessionMode |
+| UserSpeechStarted/UserSpeechEnded | utteranceId, activityScore/duration observation |
 | PartialTranscriptReceived/FinalTranscriptReceived | utteranceId, revision for partial, text/confidence (mapped RecognitionReceived) |
 | InterruptionCandidate/ClassifierReturned | candidateId, utteranceId, captured responseId, evidence revision, decision |
 | BrainReturned | turnGeneration, candidate responseId, AgentDecision |
 | TtsTimingReceived/TtsSegmentCompleted/Failed | responseId, segmentIndex, text/sample timing marks, sample duration or normalized failure |
 | PlaybackObserved | responseId, consumedSamples, phase, acknowledged text offset |
-| EnvironmentReceived | eventId, allowlisted kind and validated string data |
+| EnvironmentReceived | eventId, allowlisted kind and validated string data (from IEnvironmentEventIngress) |
 | TimerElapsed | timer kind, timer generation |
 | PersistenceCompleted/Failed | write revision, normalized failure |
 | VoiceFailed | streamId, normalized audio/recognition failure |
 
 ## Ordering, causality and routing
 
-EventContext is stamped at application ingress using TimeProvider and IIdGenerator. Root correlationId equals the initiating eventId; descendants retain it. causationId identifies the immediate known parent or is null for roots. The mailbox reader assigns a separate internal long sequence on dequeue; this is diagnostic order, not wire sequence. Provider callbacks have no authority to choose sequence or current response identity.
+EventContext is stamped at **application ingress** using TimeProvider and IIdGenerator. Clients do not supply `correlationId` or `causationId`. Root `CorrelationId` is a server mapping decision: it **may** use the accepted client `eventId` as the correlation seed for that user command, or a newly generated ID; descendants retain it. `CausationId` identifies the immediate known parent or is null for roots. Client `timestamp`, when present, is advisory only and never becomes EventContext.Timestamp. The mailbox reader assigns a separate internal long sequence on dequeue; this is diagnostic order, not wire sequence. Provider callbacks have no authority to choose sequence, correlation, causation or current response identity.
 
 One user command can produce many internal and wire events. Map them explicitly, preserve correlation, generate distinct eventIds, and set causation to the producing event. Wire output order and client retries have separate counters defined in the protocol. No promise of cross-session ordering or durable event replay exists. Persist business history/checkpoints, not the full event timeline.
 
-Synthetic environment input is a typed in-process fixture calling a concrete application entry method, not a public arbitrary-event endpoint. Initially permit `order_status_changed` with `orderReference` and status `shipped|delayed|delivered`, and `unfinished_interaction` with a short topic (empty topic explicitly clears pending state). Unknown kinds are rejected. It is data for policy evaluation, not executable instructions.
+Synthetic environment input is a typed in-process fixture calling `IEnvironmentEventIngress`, not a public arbitrary-event endpoint. Initially permit `order_status_changed` with `orderReference` and status `shipped|delayed|delivered`, and `unfinished_interaction` with a short topic (empty topic explicitly clears pending state). Unknown kinds are rejected. It is data for policy evaluation, not executable instructions.
 
 ## Stale results
 

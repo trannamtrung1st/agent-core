@@ -28,13 +28,32 @@ Raw microphone frames go directly from hub audio ingress to the active ISpeechRe
 | --- | --- |
 | MicrophoneCapture | getUserMedia on a user gesture, request echoCancellation/noiseSuppression/autoGainControl where supported; release tracks on end |
 | InputAudioWorklet | Capture device float samples, stateful resample from actual AudioContext sample rate to 24 kHz, clamp and encode PCM16 LE |
-| VoiceActivityObserver | Observe energy/noise floor, emit meaningful boundaries and confidence; never gate all microphone capture during agent speech |
+| VoiceActivityObserver | 20 ms energy/noise-floor activityScore; emit speech-start/end evidence; never gate capture during agent speech |
 | RealtimeConnection | SignalR connection, attachment, bounded sending, command identity and reconnect |
 | OutputAudioQueue | Validate responseId/frame order, bounded canonical PCM queue, resample for actual output sample rate |
 | OutputAudioWorklet | Render PCM continuously, fill silence on underrun, apply gain ramps and flush by responseId |
 | PlaybackTracker | Report actually consumed canonical samples, started/progress/completed/stopped |
 
-Use Web Audio API and AudioWorklets, not HTML audio elements for streamed PCM. Do not assume the requested capture rate is honored. Transfer ArrayBuffers between worklets and main thread; do not require SharedArrayBuffer or cross-origin isolation for MVP. Keep React rendering outside the audio loop. Microphone remains active during agent speech. Mute stops sending microphone frames and ends the current utterance, but retains the permission/capture service; unmute starts a new input stream. End/disconnect stops capture and playback. Resume voice after reconnect requires a user gesture if browser autoplay rules require it.
+Use Web Audio API and AudioWorklets, not HTML audio elements for streamed PCM. Do not assume the requested capture rate is honored. Transfer ArrayBuffers between worklets and main thread; do not require SharedArrayBuffer or cross-origin isolation for MVP. Keep React rendering outside the audio loop. Microphone remains active during agent speech. Mute stops sending microphone frames and ends the current utterance, but retains the permission/capture service; unmute starts a new input stream. End/disconnect or a successful mode switch to text stops capture and playback. Resume voice after reconnect or after re-entering voice requires a user gesture if browser autoplay rules require it.
+
+## Browser VAD (MVP)
+
+MVP uses a small in-browser energy / adaptive noise-floor observer. It does **not** use a third-party VAD model in the first implementation. The published score is `activityScore` in `[0, 1]`, not calibrated statistical confidence.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| FrameDurationMs | 20 | Observation hop; matches canonical capture frames |
+| NoiseFloorAdapt | 0.05 | Exponential move of noise floor toward quiet frames |
+| StartThreshold | 0.7 | activityScore must exceed this to consider speech-start |
+| StartHangFrames | 3 | Consecutive above-threshold frames before SpeechStarted |
+| EndThreshold | 0.4 | activityScore must fall below this to consider speech-end |
+| EndHangFrames | 15 | Consecutive below-threshold frames before SpeechEnded |
+| MinActivityMs | 120 | Shorter bursts are not emitted as start/end |
+| ActivityScoreSmoothing | 0.3 | EMA smoothing of per-frame energy above noise floor |
+
+Algorithm sketch: for each 20 ms frame, compute RMS energy; while not in speech, raise/lower an adaptive noise floor toward quiet energy; `activityScore = clamp((energy - noiseFloor) / (speechRef - noiseFloor), 0, 1)` with a configurable speechRef (default a few times the floor, floored to a minimum). Apply start hysteresis, then end hysteresis and MinActivityMs. Device change, track restart, mute, or new input streamId **resets** noise floor, hang counters and in-speech state. All values live under Voice.Vad and are tuned with hardware tests.
+
+VAD emits `user.speech.started` / `user.speech.ended` evidence only. It never starts an Agent response, never commits a user history turn, and never bypasses STT/controller policy. Provider turn-detection events, if present, are likewise evidence. [Controller](05-interaction-controller.md) remains authoritative.
 
 ## Speech segmentation
 
@@ -124,12 +143,19 @@ sequenceDiagram
 
 Track generatedText, synthesized segment boundaries/durations, and last acknowledged consumedSamples separately. Browser reports progress every 100 ms while playing, and immediately at start, completion and stop. Only samples actually consumed by the output worklet count; buffering, time spent underrunning and speculative queued audio do not. Canonical sample counts remain valid after output resampling. Progress is monotonic and capped at sent samples.
 
-With TTS timing marks, use the greatest TextEndExclusive at or before consumedSamples. Without marks, for each fully synthesized segment use `floor(segmentTextLength * playedSegmentSamples / totalSegmentSamples)`, round down to the preceding word boundary, and add fully played preceding segments. For a currently synthesized segment whose total duration is unknown, credit only prior completed segments until its length is known. This deliberately underestimates. A fully played completed segment credits its entire text. Clamp offsets to valid UTF-16 boundaries.
+Heard text is a **conservative undercount**. Never infer that a user heard a word from proportional audio duration; speech timing is nonuniform.
 
-On interruption, persist full generated text internally, receivedTextEndExclusive for the public history projection, and heardTextEndExclusive for future context. The prompt uses only the acknowledged prefix plus an application-owned interruption note, never the unplayed tail. Text-mode responses count as delivered only through the latest acknowledged rendered text offset, conservatively zero if none; response.received at final render normally credits the whole completed response. Mixed mode is fixed per session to avoid ambiguous history semantics.
+| Timing information | Heard credit rule |
+| --- | --- |
+| TTS timing marks present | Greatest `TextEndExclusive` at or before `consumedSamples` (response-wide after adding segment offsets). Clamp to valid UTF-16 boundaries. |
+| No timing marks | Credit **entire text** of each **fully played completed** Speech Segment. Credit **zero text** from the currently playing (partially consumed) segment, even if more than half its samples have played. Sum only those completed segments. |
 
-When playback.stop arrives, tombstone the response before flushing main-thread and worklet queues. The worklet must check response identity itself so posted buffers cannot race a flush. playback.stopped confirms local flush for diagnostics; after supersession its late offset is ignored for state/history/context, just like late started/progress/completed. Freeze the last validated pre-supersession Spoken Until; conservatively undercounting is preferable to changing R2 context from stale feedback. [Controller](05-interaction-controller.md#barge-in-and-races) owns the interruption sequence.
+The existing relatively small Speech Segments bound the undercount. A fully played completed segment credits its entire text. Do not use `textLength * playedSamples / totalSamples`.
+
+On interruption, persist full generated text internally, receivedTextEndExclusive for the public history projection, and heardTextEndExclusive for future context. Record the response's **delivery mode** (`text` or `voice`) on the conversation entry. The prompt uses heard prefix for voice-delivered assistant entries and received prefix for text-delivered entries, plus an application-owned interruption note, never the unplayed/unrendered tail. Unseen/unheard assistant tails must not enter future model context after a later mode switch. Text-mode responses count as delivered only through the latest acknowledged rendered text offset, conservatively zero if none; `response.received` at final render normally credits the whole completed response.
+
+When `playback.stop` arrives, tombstone the response before flushing main-thread and worklet queues. The worklet must check response identity itself so posted buffers cannot race a flush. `playback.stopped` confirms local flush for diagnostics; after supersession its late offset is ignored for state/history/context, just like late started/progress/completed. Freeze the last validated pre-supersession Spoken Until; conservatively undercounting is preferable to changing R2 context from stale feedback. [Controller](05-interaction-controller.md#barge-in-and-races) owns the interruption sequence.
 
 ## Capability degradation
 
-STT and TTS are independently selected. Non-streaming STT transcribes at utterance end; no partial semantic guarantee. Non-streaming TTS buffers a phrase before normalized PCM output; latency increases. Missing timing marks use the conservative duration estimate. Missing cancellation support still invokes local supersession and discards provider results. Voice setup fails recoverably if format conversion or a required audio direction is unsupported; text remains available through a new text session. Native realtime is a future optional optimization only: no MVP adapter, routing branch or milestone implements it. Hosted, hybrid and local STT/TTS remain the same composed pipeline.
+STT and TTS are independently selected. Streaming hosted STT is OpenAI realtime transcription via `OpenAiSpeechRecognizer`; it is speech-to-text only. Non-streaming batch STT (`OpenAICompatibleBatch`) transcribes at utterance end with **no partials**; barge-in uses `speechAndFinal` or configured `speechActivity`. Do not pretend batch recognition provides streaming semantics. Non-streaming TTS buffers a phrase before normalized PCM output; latency increases. Missing timing marks use the conservative completed-segment credit above, never proportional duration. Missing cancellation support still invokes local supersession and discards provider results. Voice setup fails recoverably with `VoiceUnavailable` if format conversion or a required audio direction is unsupported; the same session remains available in text mode. Native realtime speech-to-speech is a future optional optimization only: no MVP adapter, routing branch or milestone implements it. Hosted, hybrid and local STT/TTS remain the same composed pipeline.

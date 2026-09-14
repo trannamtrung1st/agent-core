@@ -26,12 +26,12 @@ The static Agent Definition stores only configuration and policy. Mutable runtim
 
 The user interacts with an agent in a simple personal-chat interface.
 
-Two interaction modes are required:
+Two interaction modes are required on **one** personal conversation:
 
 - text conversation;
 - voice conversation.
 
-Voice should feel closer to a natural call than to a traditional record-submit-wait pipeline. The user should be able to speak while the agent is speaking. The system then decides whether that speech should interrupt the agent, be ignored, be queued, or be treated as a non-disruptive acknowledgement.
+The user can enter and leave voice without starting a second unrelated session or losing history. Voice should feel closer to a natural call than to a traditional record-submit-wait pipeline. The user should be able to speak while the agent is speaking. The system then decides whether that speech should interrupt the agent, be ignored, be queued, or be treated as a non-disruptive acknowledgement.
 
 The MVP realizes this experience through a composed, text-first pipeline with independently replaceable Speech Recognizer, Language Model and Speech Synthesizer. Continuous input and output preserve conversational presence; native speech-to-speech reasoning is not required. [System Architecture](03-system-architecture.md) defines the implementation.
 

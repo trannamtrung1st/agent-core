@@ -4,11 +4,11 @@ These C# 14 signatures are the implementation contract, not source files. Ports 
 
 ## Portable capabilities and concrete configurations
 
-ILanguageModel, ISpeechRecognizer and ISpeechSynthesizer are independent portable capabilities. MVP orchestration always composes these three ports; no IAIProvider, OpenRouter-specific port or native-audio reasoning dependency is introduced. Each agent selects logical provider aliases, allowing different text models by identity. Infrastructure resolves those aliases to hosted, hybrid or local configurations. The recommended hosted text alias resolves to OpenAICompatibleLanguageModel configured for OpenRouter; the same adapter can target direct OpenAI or a compatible local server. See [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations).
+ILanguageModel, ISpeechRecognizer and ISpeechSynthesizer are independent portable capabilities. A conversational agent always requires a language-model alias. Speech recognizer and synthesizer aliases are required only when that Agent Definition has `Voice.Enabled`. MVP voice orchestration composes all three ports; text-only agents compose ILanguageModel alone. No IAIProvider, OpenRouter-specific port or native-audio reasoning dependency is introduced. Each agent selects logical provider aliases, allowing different text models by identity. Infrastructure resolves those aliases to hosted, hybrid or local configurations. The recommended hosted text alias resolves to OpenAICompatibleLanguageModel configured for OpenRouter; the same adapter can target direct OpenAI or a compatible local server. The recommended hosted STT adapter is OpenAiSpeechRecognizer over an OpenAI **realtime transcription** session (speech-to-text only; not native speech-to-speech reasoning), with configurable model and default recommendation `gpt-live-transcribe`. See [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations) and [OpenAI realtime STT](12-backend-implementation-spec.md#openai-realtime-transcription-adapter).
 
 ### Speech provider replacement rule
 
-Changing the STT, LLM or TTS provider must not require changes to Agent Runtime or Interaction Controller. Provider selection uses application configuration and dependency injection; concrete adapters belong in Infrastructure. OpenAI STT/TTS are the first adapters, not special cases inside Agent Core.
+Changing the STT, LLM or TTS provider must not require changes to Agent Runtime or Interaction Controller. Provider selection uses application configuration and dependency injection; concrete adapters belong in Infrastructure. OpenAI realtime transcription and OpenAI TTS are the first hosted speech adapters, not special cases inside Agent Core. Batch `/audio/transcriptions` is a separate degraded adapter.
 
 ```text
 ISpeechRecognizer                  ISpeechSynthesizer
@@ -18,7 +18,7 @@ ISpeechRecognizer                  ISpeechSynthesizer
 └── SyntheticSpeechRecognizer       └── SyntheticSpeechSynthesizer
 ```
 
-Future names illustrate replaceable implementations, not mandatory projects/providers. Adapters normalize vendor behavior and payloads; no OpenAI request/response type crosses into Domain, Application, Agent Runtime, Interaction Controller or wire contracts. Capability differences select the existing [fallback policies](05-interaction-controller.md#stt-capability-fallback-and-local-ducking), not a runtime rewrite. Confidence remains optional (null when unavailable); streaming input, partials, boundaries and cancellation must be reported honestly.
+Future names illustrate replaceable implementations, not mandatory projects/providers. Adapters normalize vendor behavior and payloads; no OpenAI request/response type crosses into Domain, Application, Agent Runtime, Interaction Controller or wire contracts. Capability differences select the existing [fallback policies](05-interaction-controller.md#stt-capability-fallback-and-local-ducking), not a runtime rewrite. STT `SpeechPartial`/`SpeechFinal` Confidence remains optional (null when unavailable); streaming input, partials, boundaries and cancellation must be reported honestly as **effective adapter capabilities**, never as operator-invented flags.
 
 SyntheticSpeechRecognizer, SyntheticSpeechSynthesizer and ScriptedLanguageModel remain mandatory for offline unit/conversation tests, frontend development, CI, latency simulation, cancellation and interruption tests. They require no API keys. [Configuration](15-persistence-and-configuration.md#provider-selection-and-di) owns adapter selection examples.
 
@@ -111,11 +111,27 @@ public interface ISpeechSynthesizer
 
 Canonical AudioFormat is `("pcm_s16le", 24000, 1)`. AudioFrame memory is owned by the producer until awaited push completes; push must copy if it retains the buffer. Yielded synthesis memory must remain valid until the consumer advances enumeration, which copies before queuing. One audio writer and one event reader per recognition session; these may execute concurrently. Boundary observations share the ordered audio writer, not a parallel call into the recognizer. `CompleteInputAsync` half-closes audio and drains finals; disposal cancels and releases all resources and is idempotent. Cancellation of OpenAsync creates no usable session.
 
-Browser VAD assigns an utteranceId through `crypto.randomUUID()` (an injectable deterministic browser ID factory in tests). Adapters map provider segments/boundaries to that active utterance; in composed MVP mode, buffer provider boundary evidence until the browser Started marker establishes that ID. Browser boundaries are authoritative segmentation; provider boundaries refine confidence/timing and cannot create a second user turn. The future native mode owns its own ID mapping instead. Revisions increase per utterance; one final wins and later corrections are ignored. Boundary events carry no audio.
+Browser VAD assigns an utteranceId through `crypto.randomUUID()` (an injectable deterministic browser ID factory in tests). That application `utteranceId` is authoritative. The STT adapter binds the current provider transcription item (for OpenAI realtime transcription, `item_id`) to the active utteranceId when browser `ObserveBoundaryAsync(Started)` is observed, and commits that item on `Ended` (OpenAI `input_audio_buffer.commit` when provider turn detection is disabled). Provider transcript deltas for that item become `SpeechPartial`; the committed/completed transcript becomes `SpeechFinal`. If the provider emits an item before browser Started, buffer it until the browser ID exists. Browser VAD / Interaction Controller remain authoritative for conversation semantics. Provider-native turn detection must not autonomously create Agent responses: if a concrete API requires turn-detection events, map them only as speech-activity evidence (optional `SpeechStarted`/`SpeechEnded` hints). They never authorize `Speak`, never allocate a response, and never override browser utterance segmentation. The future native speech-to-speech mode owns its own ID mapping instead. Revisions increase per utterance; one final wins and later corrections or duplicate finals are ignored. Boundary events carry no audio.
 
-StreamingAudio on RecognitionCapabilities means SupportsStreamingInput; PartialTranscripts, SpeechBoundaryEvents and Cancellation describe the corresponding independently discovered support. Prefer streaming input with partials in the hosted MVP configuration, but do not require partials from every adapter. Confidence is optional evidence, never a guaranteed comparable score.
+STT adapter lifecycle (streaming hosted path): open a provider transcription session; configure canonical PCM16 mono 24 kHz input; continuously forward admitted PCM; map transcript deltas to `SpeechPartial`; map committed/final transcript to `SpeechFinal`; map provider errors to `RecognitionFailed`/`ProviderFailure`; cancel/dispose on voice stream end, mode exit to text, detach or disconnect; reconnect by creating a **new** provider session and streamId (never splice PCM). Late partials after the utterance is terminal, timed out, cancelled, or replaced by a newer utteranceId are ignored. A provider final after the 2 s/20 s utterance timeout is ignored. Starting another utterance binds a new utteranceId; unfinished previous provider items are cancelled and cannot emit a second user turn. Recognition cancellation disposes the session and produces no `SpeechFinal` and no user history entry.
 
-PushAudioAsync/ObserveBoundaryAsync await bounded local admission only, not a network transcription. A batch adapter runs one supervised transcription at a time and may buffer at most two pending utterances; overflow yields RecognitionFailed(Unavailable) and resets the voice stream. Non-streaming recognizers buffer at most 30 seconds per utterance and submit after Ended; they still implement this session port. Ended must flush a buffered utterance, while CompleteInput closes the entire voice stream. Capability flags describe underlying quality/latency, not whether the interface exists. Discovery occurs when loading configured adapters, validates formats, and is included as effective capabilities in session.ready. No external capability probing is needed in synthetic mode. Text compatibility does not imply speech support. See [Controller](05-interaction-controller.md) for degraded barge-in.
+StreamingAudio on RecognitionCapabilities means SupportsStreamingInput; PartialTranscripts, SpeechBoundaryEvents and Cancellation describe independently **effective** support. Prefer streaming input with partials in the hosted MVP configuration (`OpenAiSpeechRecognizer` realtime transcription), but do not require partials from every adapter. Confidence is optional evidence, never a guaranteed comparable score.
+
+`ISpeechRecognizer.Capabilities` / `ISpeechSynthesizer.Capabilities` / `ILanguageModel.Capabilities` are **effective capabilities**: runtime facts returned by the selected adapter instance after it loads. Configuration may declare `RequiredCapabilities` as flags that **must be true** (a subset of what the adapter actually provides). It may set `DisabledCapabilities` to turn off optional adapter features. Do not set `RequiredCapabilities` to false to “require absence”; choose a batch/degraded adapter instead. Built-in adapters (`OpenAI`, `Synthetic`/`Scripted`) define or negotiate their own capabilities. Generic OpenAI-compatible/local adapters whose protocol cannot be auto-discovered may accept operator **capability assertions**; those assertions are validated by Infrastructure contract tests against the declared protocol, and startup still fails if `RequiredCapabilities` exceed what the adapter class can actually do. `session.ready` exposes only effective capabilities.
+
+PushAudioAsync/ObserveBoundaryAsync await bounded local admission only, not a network transcription. A batch adapter runs one supervised transcription at a time and may buffer at most two pending utterances; overflow yields RecognitionFailed(Unavailable) and resets the voice stream. Non-streaming recognizers buffer at most 30 seconds per utterance and submit after Ended; they still implement this session port and advertise no partials. Ended must flush a buffered utterance, while CompleteInput closes the entire voice stream. Capability flags describe underlying quality/latency, not whether the interface exists. Discovery occurs when loading configured adapters, validates formats, and is included as effective capabilities in session.ready. No external capability probing is needed in synthetic mode. Text compatibility does not imply speech support. See [Controller](05-interaction-controller.md) for degraded barge-in.
+
+Public `voiceAvailable` for an agent is:
+
+```text
+voiceAvailable =
+    AgentDefinition.Voice.Enabled
+    && selected STT adapter resolves
+    && selected TTS adapter resolves
+    && effective STT and TTS capabilities support the canonical session format
+```
+
+A backend with a valid text-only configuration must start without STT/TTS adapters. Creating or switching to voice when `voiceAvailable` is false yields typed recoverable `VoiceUnavailable`; the session remains in text mode.
 
 TTS capability discovery also reports VoiceSelection and SpeakingRate. When unsupported, only the configured default voice and rate 1.0 are accepted; an explicitly requested unsupported non-default fails validation rather than pretending it worked. StreamingAudio=false still permits phrase-level synthesis and playback between phrases, never a requirement to wait for the entire agent response. Hosted speech selection is independent of the text gateway; OpenAI speech is the initial hosted selection, not a permanent architectural requirement.
 
@@ -124,10 +140,13 @@ Timing marks use UTF-16 text end offsets relative to the segment and canonical s
 ## Agent decisions and interruption
 
 ```csharp
-public enum InteractionDecision { Ignore, Continue, Queue, Interrupt, InjectEvent, RequestAgentDecision }
+public enum InteractionDecision {
+    Ignore, Continue, Queue, Interrupt, InjectEvent,
+    RequestInterruptionClassification, RequestAgentDecision
+}
 public sealed record InterruptionContext(Guid ResponseId, Guid UtteranceId,
     string PartialText, string HeardText, TimeSpan SpeechDuration,
-    double? Confidence, bool HasPartialTranscripts);
+    double? ActivityScore, double? TranscriptConfidence, bool HasPartialTranscripts);
 public interface IInterruptionClassifier
 {
     ValueTask<InteractionDecision> ClassifyAsync(InterruptionContext context,
@@ -155,7 +174,7 @@ public interface IIdGenerator
 }
 ```
 
-IAgentBrain is an application policy/context-builder boundary. The default brain deterministically gates initiative and builds a normalized ModelRequest; Session Runtime then enumerates ILanguageModel. It does not run a second conversational LLM call just to decide every user turn. Optional future model-assisted initiative is behind this port; its result must pass the same policy recheck. Allocate a candidate response ID before deciding; only Speak makes it live and emits started. StaySilent allocates no visible response. Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
+`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. The default brain deterministically gates initiative and builds a normalized ModelRequest; Session Runtime then enumerates ILanguageModel. It does not run a second conversational LLM call just to decide every user turn. Optional future model-assisted initiative is behind this port; its result must pass the same policy recheck. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
 
 Use injected `TimeProvider` for UTC timestamps, monotonic elapsed time, and timers (`Task.Delay(delay, timeProvider, token)` or `CreateTimer`). Do not define IClock. Production NewId calls `Guid.CreateVersion7(timeProvider.GetUtcNow())`; NewSessionId calls `Guid.NewGuid()` for cryptographically random UUIDv4 local/demo bearer session IDs. Tests use reproducible sequences for both. IDs are serialized as strings at browser boundaries.
 
@@ -186,6 +205,20 @@ public interface ISessionOutput
 ```
 
 SessionSnapshot/UserProfile fields and atomic save semantics are specified in [Persistence](15-persistence-and-configuration.md); SessionOutput is the application output family in [Event Model](07-event-model.md). Save with expectedRevision=0 inserts; subsequent saves compare stored revision and write expectedRevision+1. Conflict is an application persistence conflict, not last-write-wins. There is no generic repository interface. Definition lookup returns null for missing versions, throws a normalized validation failure for malformed data, and pins a version for the full session.
+
+Environment data enters Application only through this narrow ingress. It is not a message bus and is not a public HTTP `/events` endpoint:
+
+```csharp
+public sealed record EnvironmentEvent(Guid EventId, string Kind,
+    IReadOnlyDictionary<string, string> Data);
+public interface IEnvironmentEventIngress
+{
+    ValueTask PublishAsync(Guid sessionId, EnvironmentEvent input,
+        CancellationToken cancellationToken = default);
+}
+```
+
+Implementations allowlist kinds, validate data, scope the event to `sessionId`, reject executable/instruction-like payloads, and admit a normalized `EnvironmentReceived` into the session mailbox. Synthetic demo fixtures and future CRM/calendar adapters use this boundary. Unknown sessions or kinds fail without affecting other runtimes.
 
 ## Native realtime extension contract (future only)
 

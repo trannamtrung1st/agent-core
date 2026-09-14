@@ -1,6 +1,8 @@
 # Repository Structure
 
-This is a future implementation layout. This documentation task creates no projects or executable files.
+The repository currently contains README, docs, shared agent instructions in [AGENTS.md](../AGENTS.md), and eleven skills in [.agents/skills](../.agents/skills) used by both Codex and Cursor. The two composition skills, develop and document, load the relevant specialist playbooks. `.agents/` contains development-agent instructions; the future `agents/` directory below holds product Agent Definitions. Existing editor-specific files configure Playwright MCP only.
+
+The following is a future application implementation layout. Agent instructions and skills do not create application projects or start an implementation milestone. Root `local/` is a gitignored personal workspace (configs, secret drop-files, temp files); it is not an application project and is never committed. [Persistence and Configuration](15-persistence-and-configuration.md#local-personal-workspace) owns how operators drop secrets there.
 
 ```text
 src/
@@ -17,6 +19,7 @@ tests/
 web/                        # React/Vite SPA and its frontend tests
 agents/                     # versioned JSON definitions, created during implementation
 docs/                       # this specification
+local/                      # gitignored personal workspace; never committed
 ```
 
 Arrows below mean “references,” not data flow:
@@ -34,7 +37,7 @@ flowchart BT
 | Project | Allowed dependencies and responsibility |
 | --- | --- |
 | Domain | BCL only; immutable Agent Definition, policy and conversation value records |
-| Application | Domain and Microsoft logging abstractions; Agent Runtime, Interaction Controller, Session Runtime/manager, ports, text context builder, ResponseTextAccumulator/SpeechSegmenter, TimeProvider, Channels |
+| Application | Domain and Microsoft logging abstractions; Agent Runtime, Interaction Controller, Session Runtime/manager, ports including IEnvironmentEventIngress, text context builder, ResponseTextAccumulator/SpeechSegmenter, TimeProvider, Channels |
 | Contracts | BCL and MessagePack serialization annotations only; wire records, no Domain/Application/provider references |
 | Infrastructure | Application, Domain, EF Core 10/SQLite, HttpClient factory/resilience and concrete adapters; never Contracts |
 | Api | Application, Infrastructure, Contracts; ASP.NET Core 10, SignalR, serialization, OpenAPI, health, DI and boundary mapping |
@@ -47,4 +50,4 @@ Use ordinary services and DI. No MediatR, generic repository per entity, actor f
 
 Singletons: SessionManager, TimeProvider.System, ID generator, immutable validated definition cache and provider factories. Per runtime: Agent Runtime, controller and cancellation/state. Per operation: EF DbContext via factory. HttpClient lifetime is managed by IHttpClientFactory; no per-frame client creation. Provider adapters must either be stateless/thread-safe or instantiated per provider session.
 
-OpenAICompatibleLanguageModel lives in Infrastructure and accepts OpenRouter/direct-hosted/local-server configuration. There is no OpenRouter core project or interface. STT and TTS adapters are separate capability implementations, including synthetic and local variants. Native realtime remains documentation-only future design, not an MVP project or startup dependency.
+OpenAICompatibleLanguageModel lives in Infrastructure and accepts OpenRouter/direct-hosted/local-server configuration. There is no OpenRouter core project or interface. STT and TTS adapters are separate capability implementations, including synthetic and local variants. Native realtime remains documentation-only future design, not an MVP project or startup dependency. Intended CI is GitHub Actions after project scripts exist; this documentation pass does not add workflow files.

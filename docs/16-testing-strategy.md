@@ -1,6 +1,14 @@
 # Testing Strategy
 
-The architecture is acceptable only if conversational mechanics are testable without network or provider credentials. Synthetic is a first-class boot profile, not a stub added after real integrations. [Implementation Plan](18-implementation-plan.md) names milestone gates.
+The architecture is acceptable only if conversational mechanics are testable without network or provider credentials. Synthetic is a first-class boot profile, not a stub added after real integrations. [Implementation Plan](18-implementation-plan.md) names milestone gates. [Technology Decisions](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in) owns the verification policy.
+
+## Default versus live-provider verification
+
+Default verification is fully offline and deterministic: Synthetic/scripted adapters, stub `HttpMessageHandler` or loopback SSE, and hardware-free Playwright. External-provider smoke tests are explicit opt-in only. Implement the planned OpenAI-compatible LLM and OpenAI STT/TTS adapters, but do not add extra hosted mock or third-party inference services solely for testing.
+
+`OPENROUTER_API_KEY` and `OPENAI_API_KEY` are operator secrets for Real-profile runs and opt-in smokes. Their presence in the process environment must not cause default `dotnet test`, frontend unit tests or synthetic Playwright to call hosted APIs or spend credits. Live tests require an explicit opt-in (implementation-defined trait/filter or env such as `AGENTCORE_LIVE_PROVIDER_TESTS`) **and** the relevant key. If opted in and the key is missing, skip cleanly (not fail). If the key is present but opt-in is unset, skip. Do not weaken or skip synthetic HTTP/SSE, speech-contract or conversation-matrix tests because live-provider testing is deferred. A one-time local bootstrap into user-secrets is specified in [local personal workspace](15-persistence-and-configuration.md#local-personal-workspace); live tests then use `OPENROUTER_API_KEY`, not the drop-file.
+
+OpenRouter live smoke, when opted in, may use `openrouter/free`. Do not assert catalog quality, exact phrasing or structured-output correctness. OpenAI STT/TTS live integration and manual headset/speaker verification may wait until `OPENAI_API_KEY` is supplied; missing that key must not fail normal build/test. Prioritize verifying the text-conversation path with Synthetic and, optionally, OpenRouter.
 
 ## Synthetic fixtures
 
@@ -36,16 +44,19 @@ Use this mode for CI, frontend development, deterministic conversation scenarios
 | Late R1 chunks | Release non-cooperative R1 text/audio/terminal after R2 | No client output or history extension for R1 |
 | Backchannel | Speech start + partial/final “mhm” <=700 ms | Continue, gain restored, no new user turn during output |
 | Explicit interrupt | Partial “wait” while R1 plays | Stop emitted, R1 superseded, STT remains alive |
-| Noise/echo | Low confidence brief activity | Ignore, no LLM/classifier call |
-| Missing partial STT | 250 ms confident speech, capabilities false | Speech-activity interrupt without invented transcript |
-| Ambiguous classifier race | Old decision after new revision/response | Old decision ignored; bounded deterministic fallback |
+| Noise/echo | Low activityScore brief activity | Ignore, no LLM/classifier call |
+| Missing partial STT | 250 ms activityScore at/above threshold, PartialTranscripts false | Speech-activity interrupt without invented transcript |
+| Ambiguous classifier race | Old IInterruptionClassifier decision after new revision/response | Old classification ignored; bounded deterministic fallback; AgentBrain is not invoked |
+| Classifier vs brain | Ambiguous mic event vs idle trigger | Classifier path never calls IAgentBrain; initiative path never calls IInterruptionClassifier |
 | Proactive timer | Advance TimeProvider through idle threshold | One eligible trigger with current timer generation |
-| StaySilent | Brain declines idle intervention | No response.started; cooldown prevents repeat storm |
+| StaySilent | Brain declines idle intervention | No agent.response.started; cooldown prevents repeat storm |
 | Provider midstream failure | Two deltas then Unavailable | Partial marked failed; no retry/replay; output cancelled |
 | Reconnect | Detach R1, attach fresh lease | Snapshot restored, no old audio, old connection rejected |
 | TTS cancelled | Cancel while pending segment | No next segment started; worker disposed; STT continues |
 | Superseded audio | Queue PCM in worklet then stop/R2 | R1 never renders after flush acknowledgement |
-| Spoken-until | Generated tail not played; partial progress | Future context includes only conservative heard prefix |
+| Spoken-until | Generated tail not played; no timing marks; first half of audio duration corresponds to less than half the text | Credits only fully played completed segments; zero text from the partial current segment; must not over-credit via duration proportion |
+| Mode continuity | Text turns, then session.mode.set(voice), then back to text | Same sessionId and history; deliveryMode preserved; no second conversation |
+| Session capacity | Attach when MaxActiveSessions in-memory runtimes are live | SessionCapacityExceeded, recoverable, retryAfterMs defaults to 5000; durable create still succeeds |
 | Late playback after supersession | Deliver R1 started/progress/completed/stopped after R2 | No R1 state/history/context change; only diagnostic stop timing may be recorded |
 | Speech segmentation | Split sentence across deltas; advance deadline; hit hard cap | Natural units, exact offsets, bounded buffer, no token-per-TTS jobs |
 | Segment cancellation | Supersede R1 before timer/job release | No new R1 Speech Segment or TTS job |
@@ -69,8 +80,16 @@ WebApplicationFactory covers HTTP and in-process integration; additionally start
 
 Vitest: Zustand reducers, supersession guards, sample-offset accounting, segmentation/resampling math and queue bounds. React Testing Library: user interactions/statuses, keyboard access, safe errors, retained drafts. Playwright: synthetic text, voice fixture, stop/late audio, mute, disconnect/reconnect and history. Use deterministic scenario fixtures and fake media devices; test actual AudioWorklet execution where supported. Assertions observe sample counters and flush acknowledgements, not unreliable “did sound play” timing guesses.
 
-Opt-in real-provider smoke tests require explicit operator credentials and small bounded requests; excluded from default CI. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency. Unit gates remain deterministic and do not require real-model phrasing to match.
+Opt-in real-provider smoke tests require explicit operator credentials, an explicit opt-in flag, and small bounded requests. They are excluded from default local `dotnet test` / npm / Playwright loops. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency and may be deferred without `OPENAI_API_KEY`. Unit gates remain deterministic and do not require real-model phrasing to match.
 
 ## Future implementation commands
 
-Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host. The implementation must define these scripts and host startup in its test config; they are not runnable in this docs-only repository yet. CI gates are offline backend/frontend checks plus synthetic Playwright. Real-provider credentials must not be required to build or pass core tests.
+Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host. The implementation must define these scripts and host startup in its test config; they are not runnable in this docs-only repository yet. Default gates are offline backend/frontend checks plus synthetic Playwright. Intended repository CI is GitHub Actions; do not create workflow files until those projects/scripts exist. Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
+
+## CI evolution
+
+```text
+early milestones: dotnet build/test; frontend install/build/unit tests
+after browser realtime exists: synthetic browser integration
+after synthetic voice exists: synthetic Playwright voice scenarios
+```

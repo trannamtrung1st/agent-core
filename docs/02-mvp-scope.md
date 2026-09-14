@@ -92,12 +92,14 @@ The UI should look and feel like a personal messaging app.
 
 Required screens/states:
 
-- conversation list or direct session entry;
+- agent picker plus one direct active conversation;
 - text chat;
-- voice-call mode;
+- voice-call mode on the same conversation;
 - microphone mute;
-- end call;
+- end call (return to text mode, not a different session);
 - visible status such as Listening / Thinking / Speaking.
+
+A conversation-list / history-browser / inbox UI is not required. Persistence and reconnect exist for continuity of the active conversation, not as a session-management product.
 
 ## Explicitly out of scope
 

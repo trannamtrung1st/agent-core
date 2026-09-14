@@ -1,6 +1,6 @@
 # Interaction Controller
 
-The Interaction Controller asks “What is happening in the conversation?” It observes speech activity, partial/final transcripts, agent/playback state, idle timers and environment events, then arbitrates Ignore/Continue/Queue/Interrupt/InjectEvent/RequestAgentDecision. It does not perform general agent reasoning. Agent Runtime asks “What should the agent do about it?” and owns identity, policy, context, text-model reasoning, response generation and initiative decisions. Controller evaluations run synchronously inside the Session Runtime mailbox; optional classification runs outside it against a snapshot. [Architecture](03-system-architecture.md) defines ownership and queues.
+The Interaction Controller asks “What is happening in the conversation?” It observes speech activity, partial/final transcripts, agent/playback state, idle timers and environment events, then arbitrates Ignore/Continue/Queue/Interrupt/InjectEvent/RequestInterruptionClassification/RequestAgentDecision. It does not perform general agent reasoning. Agent Runtime asks “What should the agent do about it?” and owns identity, policy, context, text-model reasoning, response generation and initiative decisions. Controller evaluations run synchronously inside the Session Runtime mailbox; optional classification and brain decisions run outside it against snapshots. [Architecture](03-system-architecture.md) defines ownership and queues.
 
 ## State representation
 
@@ -9,10 +9,12 @@ Avoid a single enum that incorrectly forbids simultaneous user input and agent o
 | Field | Values |
 | --- | --- |
 | Lifecycle | Created, Attached, Paused, Ending, Ended |
+| Mode | Text, Voice (one conversation; mode may transition) |
 | Input | Idle, Listening, UserSpeaking, Finalizing |
 | Output | Idle, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted |
 | Candidate | None or (candidateId, utteranceId, responseId, revision, deadline) |
 | Response | responseId, status (Live, Superseded, Completed, Failed), modelDone, audioDone, playbackDone |
+| PendingMode | None or requested Text/Voice while waiting for a safe transition |
 
 The UI derives one label with precedence: Ended, Reconnecting, Interrupted (brief notice), User speaking, Agent speaking, Thinking, Listening. InterruptionCandidate is a debug state layered over input/output; it does not erase the underlying state.
 
@@ -22,14 +24,15 @@ All rows run in mailbox admission order. Missing/old epoch, attachment, utteranc
 
 | Event and guard | Decision | State/action |
 | --- | --- | --- |
-| Attach Created/Paused | InjectEvent | Attached; text Input=Idle, voice Input=Listening; start recognition if voice |
+| Attach Created/Paused | InjectEvent | Attached using stored Mode (attach payload has no mode); text Input=Idle, voice Input=Listening; start recognition if voice |
+| session.mode.set | See [mode transitions](#mode-transitions) | Queue or apply; never a second session |
 | user.text while attached | Interrupt if response live; else InjectEvent | Supersede old response first; persist user turn; WaitingForAgent; launch brain after save |
 | SpeechStarted while no output | InjectEvent | UserSpeaking; reset silence generation |
 | SpeechStarted while live output | Queue evidence | UserSpeaking; create InterruptionCandidate, optional duck |
 | SpeechPartial explicit stop/question | Interrupt | Supersede captured response; keep accepting utterance |
 | Short complete backchannel during output | Continue | Clear candidate, restore gain, retain as non-turn acknowledgement |
-| Low-confidence noise/echo | Ignore | Clear candidate; restore gain; no user history turn |
-| Ambiguous sustained speech | RequestAgentDecision | One bounded classifier request per candidate, never per audio frame |
+| Low activityScore noise/echo | Ignore | Clear candidate; restore gain; no user history turn |
+| Ambiguous sustained speech | RequestInterruptionClassification | One bounded IInterruptionClassifier request per candidate, never per audio frame |
 | SpeechEnded | Queue | Finalizing; wait for capability-specific final deadline (below) |
 | SpeechFinal nonempty, not backchannel | Interrupt if still live; InjectEvent | Commit exactly one user entry; WaitingForAgent; launch brain |
 | Brain Speak, current turn generation valid | InjectEvent | Allocate live Response with supplied ID; AgentGenerating; start LLM |
@@ -39,18 +42,40 @@ All rows run in mailbox admission order. Missing/old epoch, attachment, utteranc
 | Model/TTS terminal, voice mode | Queue | Success waits for final audio sent and playback.completed |
 | Playback completed, model/TTS done | Continue | Await terminal persistence then complete; Input Listening if no user speech |
 | Confirmed interrupt | Interrupt | Output Interrupted; stop/cancel, then wait for final user text |
-| Idle/environment trigger while eligible | RequestAgentDecision | Evaluate initiative against immutable context |
+| Idle/environment trigger while eligible | RequestAgentDecision | Invoke IAgentBrain against immutable context |
 | Environment trigger while speaking/busy | Queue | At most one newest event per kind, maximum 16, expiry 30 seconds |
 | Disconnect | Interrupt | Paused; cancel output/STT/timers, reject old attachment input |
 | End from any nonterminal state | Interrupt | Ending; cancel/flush, durable terminal save, then Ended |
 
-Invalid transitions never resurrect output: completion for Superseded is ignored; duplicate finals/commands are deduplicated; playback progress for an unknown response is rejected; attach to Ended is a conflict. Final transcript may precede SpeechEnded and commits immediately; later Ended does not reopen the utterance. Empty final restores Listening. Final deadline is 2 seconds for partial-capable streaming STT and 20 seconds for batch/no-partial STT, measured from Ended. Final timeout produces recoverable SpeechRecognitionTimeout and discards the incomplete utterance. A final arriving after timeout is ignored. New speech during brain evaluation invalidates that decision's turn generation; no old Speak result may begin.
+Invalid transitions never resurrect output: completion for Superseded is ignored; duplicate finals/commands are deduplicated; playback progress for an unknown response is rejected; attach to Ended is a conflict. Final transcript may precede SpeechEnded and commits immediately; later Ended does not reopen the utterance. Empty final restores Listening. Final deadline is 2 seconds for partial-capable streaming STT and 20 seconds for batch/no-partial STT, measured from Ended. Final timeout produces recoverable SpeechRecognitionTimeout and discards the incomplete utterance. A final arriving after timeout is ignored. New speech during brain evaluation invalidates that decision's turn generation; no old Speak result may begin. Classifier replies never start an Agent response by themselves.
+
+## Mode transitions
+
+One Session remains one conversation. Mode is not a second session.
+
+```text
+text → session.mode.set(voice) → initialize microphone / STT / audio output → voice
+voice → session.mode.set(text) → dispose speech resources → text
+```
+
+A transition is admitted only when safe:
+
+| Current condition | Rule |
+| --- | --- |
+| Output live, request voice | **Wait.** Queue at most one pending mode change. Do not supersede the live text response. Apply voice start after that response is Completed, Failed, or Interrupted by an independent user action. |
+| Output live, request text (leaving voice) | **Supersede** the live voice response using the normal stop/cancel sequence (`playback.stop` and `agent.response.interrupted` with reason `modeChange`), freeze Spoken Until, dispose speech resources, then set Mode=Text. Playback cannot continue after speech resources are released. |
+| Input UserSpeaking or Finalizing | **Wait** until the utterance commits, is discarded, or times out. Do not split an utterance across modes. |
+| Ending or Ended | Reject the mode command. |
+| Voice requested but `voiceAvailable` is false | `VoiceUnavailable`; remain in text. |
+| Created/Paused with no live response | Record the new mode on the snapshot; initialize or skip speech on the next attach. |
+
+After a successful switch to voice, Input becomes Listening and recognition starts. After a successful switch to text, Input becomes Idle, streamId is null, and STT/TTS sessions are disposed. History, summary, profile and response identity are unchanged. Each assistant entry keeps the delivery mode it was generated under so later prompt building can apply received vs heard prefixes.
 
 ## Interruption policy and defaults
 
 Use deterministic rules first. Normalize text with invariant case, trim whitespace and punctuation for phrase matching, and preserve original text for history. Explicit phrase matches at the beginning of the utterance (whole words, not substrings) such as `stop`, `wait`, `hang on`, `hold on`, `what do you mean`, and `no` or `that's not what I asked` take the turn immediately. A full utterance matching `mhm`, `yeah`, `right`, `okay`, `uh huh` or `uh-huh`, duration <=700 ms, usually continues. A partial `yeah` is provisional: a subsequent `yeah, but ...` must be reconsidered. An acknowledgement during idle is a normal user turn, not discarded.
 
-Speech activity with confidence >=0.7 and duration >=120 ms creates a candidate; shorter/noisy activity is ignored unless an explicit command transcript exists. Browser VAD confidence is an observation, not a calibrated truth. Echo matching alone must not suppress explicit stop phrases. Tune VAD thresholds with microphone tests; headphones are the initial demo recommendation.
+Speech activity with activityScore >= configured threshold (default 0.7) and duration >=120 ms creates a candidate; shorter/noisy activity is ignored unless an explicit command transcript exists. Browser `activityScore` is an uncalibrated energy/hysteresis observation, not a statistical confidence. Echo matching alone must not suppress explicit stop phrases. Tune VAD thresholds with microphone tests; headphones are the initial demo recommendation. VAD is evidence only and never authorizes an Agent response.
 
 Default semantic policy: use partial text when available; one optional fast IInterruptionClassifier call after 250 ms of ambiguous evidence, deadline 200 ms. Classifier replies must match candidateId, responseId, utteranceId and latest evidence revision. Ignore stale replies. A partial matching a backchannel delays the sustained-speech fallback until 700 ms or a non-backchannel revision. Otherwise at 500 ms sustained confident speech with no decisive text, interrupt; if speech has ended and only ambiguous brief evidence remains, continue until a final transcript resolves it. Classifier errors/timeouts take this deterministic fallback. No LLM request per microphone buffer.
 
@@ -119,7 +144,7 @@ sequenceDiagram
     participant A as Agent Runtime / IAgentBrain
     T->>C: Eligible trigger
     C->>C: Check attachment, silence, cooldown and dedupe
-    C->>A: RequestAgentDecision(snapshot)
+    C->>A: RequestAgentDecision → IAgentBrain(snapshot)
     A-->>C: StaySilent or Speak(request)
     C->>C: Recheck turn generation and initiative policy
     C-->>T: Record evaluation outcome

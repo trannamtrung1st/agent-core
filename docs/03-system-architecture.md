@@ -39,6 +39,7 @@ The adapter's outgoing edges are deployment choices, not three simultaneous requ
 SessionManager (singleton, atomically get/create per sessionId)
   +-- SessionRuntime A (one logical async event loop)
   |     +-- bounded Channel<SessionInput>, single reader
+  |     +-- current mode Text|Voice (may transition; one conversation)
   |     +-- Agent Runtime, Interaction Controller, owned mutable state
   |     +-- session lifetime CancellationTokenSource
   |     +-- current response CancellationTokenSource and responseId
@@ -63,7 +64,9 @@ Responses have one linked cancellation source for LLM, TTS and response-specific
 
 ## Lifecycle
 
-A created session is inactive until attached. One connection owns a session at a time. Disconnect supersedes active output and suspends audio and initiative. Retain the idle runtime for a 60-second reconnect grace period; then persist a paused snapshot and evict it. A later attach reconstructs the session from SQLite. Clean end is terminal and idempotent. Process restart pauses recoverable sessions and marks unfinished responses interrupted; it never resumes an old provider stream. [Protocol](14-api-and-realtime-protocol.md#connection-lifecycle) defines ownership and resynchronization.
+A created session is inactive until attached. One connection owns a session at a time. One logical Session is one conversation: interaction mode is `text` or `voice` and may transition; starting voice does not create a second unrelated session or copy-less history fork. Disconnect supersedes active output and suspends audio and initiative. Retain the idle runtime for a 60-second reconnect grace period; then persist a paused snapshot and evict it. A later attach reconstructs the session from SQLite with the same history and current mode. Clean end is terminal and idempotent. Process restart pauses recoverable sessions and marks unfinished responses interrupted; it never resumes an old provider stream. [Protocol](14-api-and-realtime-protocol.md#connection-lifecycle) defines ownership, mode transitions and resynchronization.
+
+`MaxActiveSessions` counts **in-memory Session Runtimes** (attached or in reconnect-grace). Creating a durable inactive session record does not consume a live slot. Attach or other activation that would exceed the limit fails with recoverable `SessionCapacityExceeded` and `RetryAfter` defaulting to 5 seconds; it must not evict another user's runtime.
 
 ## Invariants
 
@@ -78,4 +81,5 @@ A created session is inactive until attached. One connection owns a session at a
 - Initiative policy gates every proactive response; StaySilent is valid.
 - Synthetic mode requires no network or AI credentials; the entire composed pipeline is testable offline without a microphone, speaker or GPU.
 - One response is live per session, but historical responses and an in-progress user utterance may coexist.
+- Conversation continuity is per Session, independent of the current text/voice mode. Delivery metadata on each assistant entry selects heard vs received prefix for future context; unseen/unheard tails never enter the model.
 - No mutable state, transient audio, provider handles or CancellationTokenSource is stored in an Agent Definition.

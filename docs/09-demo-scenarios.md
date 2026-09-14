@@ -79,7 +79,7 @@ The exact wording should come from the agent identity, not from the controller.
 
 ## Demo 5 - Environment event
 
-While speaking with the support agent, use the in-process synthetic environment driver to submit an `EnvironmentUpdate` trigger with kind `order_status_changed`, orderReference `DEMO-001`, and status `shipped`. [Event Model](07-event-model.md) defines this application input; it is not an arbitrary public wire event.
+While speaking with the support agent, use the in-process synthetic environment driver through `IEnvironmentEventIngress` to submit kind `order_status_changed`, orderReference `DEMO-001`, and status `shipped`. [Event Model](07-event-model.md) defines this application input; it is not an arbitrary public wire event.
 
 Expected result:
 
@@ -123,13 +123,13 @@ The late chunk from A is discarded and never reaches the user.
 
 This proves the runtime handles concurrency rather than only the happy path.
 
-## Demo 8 - Reconnect and heard context
+## Demo 8 - Reconnect, mode switch and heard context
 
-Interrupt a long response after its first phrase, disconnect and reconnect. The interrupted text remains visibly marked in history, audio does not replay, and the next answer uses only the conservative heard prefix. Repeat after restarting the backend with SQLite enabled.
+Have a text exchange, start voice on the **same** session, interrupt a long voice response after its first phrase, disconnect and reconnect. Interrupted text remains visibly marked, audio does not replay, and the next answer uses only the conservative heard prefix for that voice-delivered entry. Return to text mode without creating a new session. Repeat after restarting the backend with SQLite enabled.
 
 ## Demo preparation and capability caveat
 
-Use Synthetic first to verify scenarios without credentials; scripted STT supplies transcript content and synthetic TTS emits tones/silence for transport checks. Real mode prefers independently selected streaming STT/TTS with OpenRouter text through the compatible adapter; native speech-to-speech is excluded. Semantic backchannel demonstration requires partial-capable STT; batch STT intentionally uses speech-activity interruption and may interrupt on acknowledgements. Show that trade-off honestly in the developer panel.
+Use Synthetic first to verify scenarios without credentials; scripted STT supplies transcript content and synthetic TTS emits tones/silence for transport checks. Real text may use OpenRouter (`openrouter/free` by default) when `OPENROUTER_API_KEY` is supplied; live OpenAI realtime transcription STT (recommended `gpt-live-transcribe`) and TTS may wait for `OPENAI_API_KEY`. Native speech-to-speech is excluded. Semantic backchannel demonstration requires partial-capable STT; batch STT intentionally uses speech-activity/final-transcript interruption and may interrupt on acknowledgements. Show that trade-off honestly in the developer panel.
 
 Measure the interruption and playback timeline using [Operations](17-observability-and-operations.md). [Testing Strategy](16-testing-strategy.md) turns these scenarios into deterministic regression tests. Do not substitute a live-provider phrasing assertion for a synthetic correctness test.
 

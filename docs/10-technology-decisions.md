@@ -18,7 +18,7 @@ These decisions are the implementation baseline. Resolve package patches at impl
 | Frontend | React SPA, Vite, strict TypeScript, plain CSS/CSS Modules | Simple personal chat; client-only audio | Expand UI only for product needs |
 | Client state/API | Zustand; fetch wrapper; @microsoft/signalr + @microsoft/signalr-protocol-msgpack | Small active state store, few HTTP endpoints | Add data caching only with evidence |
 | Observability | Microsoft.Extensions.Logging, OpenTelemetry via ActivitySource/Meter | Correlate conversational latency with privacy defaults | Optional OTLP export |
-| Tests | xUnit, WebApplicationFactory; Vitest, React Testing Library, Playwright | Offline deterministic behavior and boundary tests | Opt-in real-provider smoke tests |
+| Tests | xUnit, WebApplicationFactory; Vitest, React Testing Library, Playwright | Offline deterministic behavior and boundary tests | Explicit opt-in live-provider smokes; skip when keys are missing |
 
 MessagePack is case-sensitive; use explicit camelCase string keys and binary DTOs tested with the JavaScript client, as described in [Microsoft's SignalR MessagePack documentation](https://learn.microsoft.com/en-us/aspnet/core/signalr/messagepackhubprotocol?view=aspnetcore-10.0). Http resilience policies must explicitly account for unsafe methods; see [Microsoft HTTP resilience guidance](https://learn.microsoft.com/en-us/dotnet/core/resilience/http-resilience). Project-specific timeout/retry choices are specified in [Backend Implementation](12-backend-implementation-spec.md), not implied library defaults.
 
@@ -36,23 +36,41 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 ## Decision: OpenRouter first for hosted text reasoning
 
-**Decision:** Prefer OpenRouter as the initial hosted text gateway, configured through OpenAICompatibleLanguageModel. It is a configuration choice, never an Agent Core dependency or reasoning interface. The gateway exposes an OpenAI-style endpoint at `https://openrouter.ai/api/v1/`; see the [OpenRouter quickstart](https://openrouter.ai/docs/quickstart).
+**Decision:** Prefer OpenRouter as the initial hosted text gateway, configured through OpenAICompatibleLanguageModel. It is a configuration choice, never an Agent Core dependency or reasoning interface. The gateway exposes an OpenAI-style endpoint at `https://openrouter.ai/api/v1/`; see the [OpenRouter quickstart](https://openrouter.ai/docs/quickstart). Implement and configure this adapter during the existing milestone plan (Milestone 3). The default hosted **test** `DefaultModel` is OpenRouter's Free Models Router, `openrouter/free`; see the [Free Models Router](https://openrouter.ai/docs/guides/routing/routers/free-router). Exact routed-model quality and structured-output correctness are not milestone gates. Read the key from environment or backend user-secrets only (`OPENROUTER_API_KEY`); do not commit secrets. One-time operator bootstrap from a gitignored drop-file is specified in [local personal workspace](15-persistence-and-configuration.md#local-personal-workspace); it is not a runtime config source. Default tests remain Synthetic/offline and must pass without this key. Real OpenRouter smoke tests are explicit opt-in and skip cleanly when the key is missing.
 
-**Rationale:** A hosted gateway makes it practical to experiment with model families and compare conversation latency, quality and cost while retaining one adapter protocol.
+**Rationale:** A hosted gateway makes it practical to experiment with model families and compare conversation latency, quality and cost while retaining one adapter protocol. The free router unblocks live adapter smoke without treating catalog quality as an acceptance criterion.
 
-**Trade-off:** OpenRouter is hosted, not on-prem. Its model catalog, rate limits, parameters and streaming details vary; compatibility needs contract tests rather than assumptions.
+**Trade-off:** OpenRouter is hosted, not on-prem. Its model catalog, rate limits, parameters and streaming details vary; compatibility needs contract tests rather than assumptions. `openrouter/free` may route to different free models per request.
 
-**Future migration:** Replace the configured endpoint and model mapping with a local OpenAI-compatible inference server; select local STT and TTS independently. vLLM is one example with a [compatible Chat API](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/), not a required dependency. Direct OpenAI and other compatible hosted providers are also possible configurations. Agent Runtime and Interaction Controller do not change.
+**Future migration:** Replace the configured endpoint and model mapping with a local OpenAI-compatible inference server; select local STT and TTS independently. vLLM is one example with a [compatible Chat API](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/), not a required dependency. Direct OpenAI and other compatible hosted providers are also possible configurations. Operators may later override `DefaultModel` for quality. Agent Runtime and Interaction Controller do not change.
 
 [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations) owns examples and alias/model resolution; [Operations](17-observability-and-operations.md#hosted-hybrid-and-on-prem-deployment) owns deployment topologies.
 
 ## Decision: STT/TTS are replaceable providers
 
-**Decision:** OpenAI STT/TTS are the initial hosted adapters. Changing STT, LLM or TTS must not require changes to Agent Runtime or Interaction Controller.
+**Decision:** OpenAI realtime transcription (`OpenAiSpeechRecognizer`, recommended model `gpt-live-transcribe`) and OpenAI TTS are the initial hosted speech adapters. Changing STT, LLM or TTS must not require changes to Agent Runtime or Interaction Controller. Batch `/audio/transcriptions` is a separate degraded adapter. Implement the planned speech ports and adapters, but do not block development, default tests or CI on a real OpenAI key. Prioritize completing and verifying the text-conversation path. Automated tests use Synthetic STT/TTS. Real OpenAI STT/TTS integration tests and manual voice verification may wait until the operator supplies `OPENAI_API_KEY`. Missing OpenAI credentials must not fail normal build/test.
 
-**Rationale:** Support future on-prem deployment, deterministic testing, cost/quality experimentation, no vendor lock-in and independent evolution of speech and reasoning.
+**Rationale:** Support future on-prem deployment, deterministic testing, cost/quality experimentation, no vendor lock-in and independent evolution of speech and reasoning. Speech credentials arrive later than the text adapter without changing architecture.
 
 **Consequence:** Application depends on capability interfaces; configuration and DI select Infrastructure adapters. Capabilities may differ, so existing degraded interaction policies remain supported. Vendor-specific code stays at the edge. [Provider ports](04-backend-interfaces.md#speech-provider-replacement-rule) and [configuration](15-persistence-and-configuration.md#provider-selection-and-di) own the concrete contracts and examples.
+
+## Decision: default verification is offline; live providers are explicit opt-in
+
+**Decision:** Default verification is fully offline and deterministic (Synthetic adapters plus HTTP/SSE fixtures). External-provider smoke tests run only when the operator explicitly opts in. Presence of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` in the environment must not cause `dotnet test` or other default suites to call hosted APIs. Opt-in smokes skip cleanly when the required key is missing. Normal development/test loops must not silently spend API credits. Deferred live-provider testing does not weaken or skip synthetic contract tests. Do not introduce additional external services solely for testing.
+
+**Rationale:** Keep milestone gates reproducible without secrets or network, while still allowing a bounded live check of the real adapters when keys exist.
+
+**Trade-off:** Hosted speech quality and free-router phrasing remain unverified until an explicit smoke or manual pass.
+
+**Consequence:** [Testing Strategy](16-testing-strategy.md) owns fixtures, skip/opt-in mechanics and suite gates. [Implementation Plan](18-implementation-plan.md) applies this policy to existing milestones rather than adding test-only architecture.
+
+## Decision: local git CLI now; GitHub Actions is intended CI
+
+**Decision:** Day-to-day implementation uses the local `git` CLI. Intended repository CI is **GitHub Actions**. Do not create full application workflow files until the corresponding .NET/`web` projects and test scripts exist. When introduced, core CI must remain offline: `dotnet` build/test, frontend install/build/unit tests, then synthetic Playwright after those milestones, never requiring OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider smokes stay opt-in.
+
+**Rationale:** Keep early work unblocked, then make the promised offline gates reproducible on the repository host.
+
+**Consequence:** [Implementation Plan](18-implementation-plan.md) and [Testing Strategy](16-testing-strategy.md) own when workflows appear. This documentation pass does not add `.github/workflows`.
 
 ## Decision: Docker Compose for reproducible local integration
 
@@ -62,11 +80,11 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Trade-off:** Container builds/restarts are slower than the native hot-reload loop, so Compose does not block early runtime/frontend work.
 
-**Consequence:** Add container/Compose artifacts at Milestone 12, after native development, synthetic full-stack and real-provider integration. Hosted, hybrid and on-prem topologies keep the same runtime semantics. Docker is deployment tooling, not an Agent Core dependency. [Operations](17-observability-and-operations.md#docker-compose-integration-and-demo) owns topology and workflow details.
+**Consequence:** Add the first usable key-free Compose environment at Milestone 5 (after the synthetic browser text path). Milestone 12 hardens containers, SQLite volume/restart, real-provider configuration, hybrid topology and operations. Hosted, hybrid and on-prem topologies keep the same runtime semantics. Docker is deployment tooling, not an Agent Core dependency. [Operations](17-observability-and-operations.md#docker-compose-integration-and-demo) owns topology and workflow details.
 
 ## Explicit non-goals
 
-No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, Next.js or large component framework. No autonomous tools/platform, distributed event bus or generic repository framework. Reconsider only when actual requirements justify the cost.
+No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, Next.js or large component framework. No autonomous tools/platform, distributed event bus or generic repository framework. No extra hosted mock or third-party test-only inference service. Reconsider only when actual requirements justify the cost.
 
 ## What may still be measured
 
