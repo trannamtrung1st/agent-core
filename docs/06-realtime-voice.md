@@ -26,7 +26,7 @@ Raw microphone frames go directly from hub audio ingress to the active ISpeechRe
 
 | Module | Responsibility |
 | --- | --- |
-| MicrophoneCapture | getUserMedia on a user gesture, request echoCancellation/noiseSuppression/autoGainControl where supported; release tracks on end |
+| MicrophoneCapture | getUserMedia during Voice-click **preflight** (user activation); request echoCancellation/noiseSuppression/autoGainControl where supported; hold tracks without sending PCM until server Mode is voice; release on end, cancel, timeout, failure or disconnect |
 | InputAudioWorklet | Capture device float samples, stateful resample from actual AudioContext sample rate to 24 kHz, clamp and encode PCM16 LE |
 | VoiceActivityObserver | 20 ms energy/noise-floor activityScore; emit speech-start/end evidence; never gate capture during agent speech |
 | RealtimeConnection | SignalR connection, attachment, bounded sending, command identity and reconnect |
@@ -34,7 +34,7 @@ Raw microphone frames go directly from hub audio ingress to the active ISpeechRe
 | OutputAudioWorklet | Render PCM continuously, fill silence on underrun, apply gain ramps and flush by responseId |
 | PlaybackTracker | Report actually consumed canonical samples, started/progress/completed/stopped |
 
-Use Web Audio API and AudioWorklets, not HTML audio elements for streamed PCM. Do not assume the requested capture rate is honored. Transfer ArrayBuffers between worklets and main thread; do not require SharedArrayBuffer or cross-origin isolation for MVP. Keep React rendering outside the audio loop. Microphone remains active during agent speech. Mute stops sending microphone frames and ends the current utterance, but retains the permission/capture service; unmute starts a new input stream. End/disconnect or a successful mode switch to text stops capture and playback. Resume voice after reconnect or after re-entering voice requires a user gesture if browser autoplay rules require it.
+Use Web Audio API and AudioWorklets, not HTML audio elements for streamed PCM. Do not assume the requested capture rate is honored. Transfer ArrayBuffers between worklets and main thread; do not require SharedArrayBuffer or cross-origin isolation for MVP. Keep React rendering outside the audio loop. Create/resume AudioContext and load worklets during Voice-click preflight so a later queued mode wait does not depend on leftover user activation. Do not send PCM, start STT, or claim Listening until the server has applied voice mode. Microphone remains active during agent speech. Mute stops sending microphone frames and ends the current utterance, but retains the permission/capture service; unmute starts a new input stream. End/disconnect, pending-voice cancel/timeout, or a successful mode switch to text stops capture and playback and releases preflight resources. Resume voice after reconnect requires a **new** Voice click (preflight + `session.mode.set`); do not auto-apply a previous `PendingMode=Voice`. [Frontend voice preflight](13-frontend-implementation-spec.md#voice-preflight) owns the click sequence; [Controller](05-interaction-controller.md#mode-transitions) owns when Mode becomes Voice.
 
 ## Browser VAD (MVP)
 

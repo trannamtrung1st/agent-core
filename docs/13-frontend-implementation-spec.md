@@ -14,11 +14,40 @@ Text chat: agent header, scrollable conversation, composer/send, voice-call butt
 
 Voice call: agent name, single human-readable status (Listening, User speaking, Thinking, Agent speaking, Interrupted, Reconnecting), transcript/history disclosure, Mute and End call. Microphone remains active while the agent speaks. Keep the call layout simple, accessible buttons with labels, keyboard support and visible focus. Error text explains the next action. An optional developer-only panel shows event timeline, latencies, IDs, transcript evidence and controller decisions without dominating the call UI.
 
-The voice-call control is a **mode transition on the same session**, not a new conversation. From text chat, it sends `session.mode.set(voice)`, then initializes microphone/STT/audio output from that user gesture **after** the server applies voice mode. While `pendingMode` is `voice` (queued because a text response is still live), show **Starting voice…**, disable the voice-call button, and do not claim the transition failed. End call sends `session.mode.set(text)`, disposes tracks/AudioContext/worklets, and returns to the same conversation's text composer. History, drafts and identity remain. Mute only affects input. If voice is unavailable, show `VoiceUnavailable` and stay in text. Follow [mode-transition safety](05-interaction-controller.md#mode-transitions): wait out a live text response before entering voice; leaving voice while the agent is speaking supersedes that voice response.
+The voice-call control is a **mode transition on the same session**, not a new conversation. Follow [voice preflight](#voice-preflight) so browser user activation is used before any async wait. End call (or Cancel while Starting voice…) sends `session.mode.set(text)`, disposes prepared tracks/AudioContext/worklets, and returns to the same conversation's text composer. History, drafts and identity remain. Mute only affects input. If voice is unavailable, show `VoiceUnavailable` and stay in text. Follow [mode-transition safety](05-interaction-controller.md#mode-transitions): the server may queue voice until a live text response ends; leaving voice while the agent is speaking supersedes that voice response.
+
+## Voice preflight
+
+User activation may expire before a queued `pendingMode=voice` wait finishes. The Voice click must therefore prepare audio **locally first**, then ask the server to change mode, and only then send PCM.
+
+```text
+User clicks Voice
+    ↓
+local audio preflight while the gesture is active
+    ├── request microphone permission
+    ├── create/resume AudioContext
+    ├── initialize worklets
+    └── DO NOT send PCM yet
+    ↓
+send session.mode.set(voice)
+    ↓
+if pending:
+    show Starting voice…
+    retain prepared audio resources
+    offer Cancel (session.mode.set(text))
+    ↓
+server Mode becomes voice (streamId issued)
+    ↓
+start sending microphone PCM
+    ↓
+start STT / playback normally
+```
+
+If preflight fails (permission denied, missing AudioWorklet, suspended context that cannot resume), do not send `session.mode.set`. If the mode request fails, is cancelled, the connection drops, or `PendingVoiceTimeoutMs` elapses, release prepared resources and return to the text composer. After reconnect, `pendingMode` is null; the user must press Voice again so a new gesture can preflight.
 
 ## Connection service
 
-Register event handlers before starting HubConnection. Enable MessagePack and WebSockets. Use reconnect delays 0/2/5/10 seconds within a 60-second UI retry budget, including initial start failures; after budget exhaustion offer explicit Retry. Each new connection invokes Attach; reconnect alone does not restore attachment. session.ready is an authoritative snapshot, not an ordinary delta. Stop all playback immediately on connection loss, discard input buffers and show Reconnecting. Do not replay microphone frames or proactive timers.
+Register event handlers before starting HubConnection. Enable MessagePack and WebSockets. Use reconnect delays 0/2/5/10 seconds within a 60-second UI retry budget, including initial start failures; after budget exhaustion offer explicit Retry. Each new connection invokes Attach; reconnect alone does not restore attachment. session.ready is an authoritative snapshot, not an ordinary delta. Stop all playback immediately on connection loss, discard input buffers, release any preflight audio resources, and show Reconnecting. Do not replay microphone frames or proactive timers.
 
 Use fetch only for agent/session/history endpoints. Default same-origin relative URLs; Vite proxies /api, /hubs (WebSocket upgrade) and /health to localhost:5080 in development. Never put API keys in frontend configuration. A new attachment invalidates old callbacks by captured attachmentId; service cleanup unregisters handlers and aborts old requests. React StrictMode mount/unmount must not create duplicate microphone tracks or hub subscriptions.
 
@@ -28,7 +57,7 @@ Primary supported demo target: **current Chromium-family desktop browsers (Chrom
 
 ## Audio services
 
-[Realtime Voice](06-realtime-voice.md) specifies DSP, queues, formats and tracking. The UI presents a continuous call over the composed text-first pipeline, not voice notes or native speech-to-speech reasoning. Initialize capture/playback from the call button's user gesture. Handle denied permission, missing AudioWorklet, suspended AudioContext and device loss as actionable audio errors. Do not claim Listening until recognition stream ready and capture active. If the device rate is 44.1/48 kHz, resample continuously with preserved filter state; never assume 24 kHz device support.
+[Realtime Voice](06-realtime-voice.md) specifies DSP, queues, formats and tracking. The UI presents a continuous call over the composed text-first pipeline, not voice notes or native speech-to-speech reasoning. Run [voice preflight](#voice-preflight) from the call button's user gesture; send PCM only after the server applies voice mode. Handle denied permission, missing AudioWorklet, suspended AudioContext and device loss as actionable audio errors. Do not claim Listening until Mode is voice, the recognition stream is ready, and capture is sending. If the device rate is 44.1/48 kHz, resample continuously with preserved filter state; never assume 24 kHz device support.
 
 The output worklet validates its active response epoch and stops at the next render quantum on flush, with a short fade where practical. It reports consumed samples independently of UI rendering. The connection service emits playback acknowledgements every 100 ms, and text mode emits response.received every 100 ms and at final render. These receipts are advisory delivery evidence, validated on the server. Queue underflow outputs silence without advancing consumed samples. Queue overflow triggers a recoverable AudioBackpressure error and stops that response.
 
@@ -36,7 +65,7 @@ Local VAD ducking is an optional, independently disableable UX optimization; res
 
 ## Frontend acceptance
 
-Tests must cover stream append by textStart, duplicate delivery, late R1 data, control sequence gaps, `session.mode.set` continuity, pending voice start (Starting voice… / disabled control), audio ordering/flush, permission denial, mute/unmute stream changes, reconnect snapshot replacement, uncertain text retry and graceful error rendering. Playwright runs against Synthetic without keys, using a fake media device and explicit scripted speech fixture for transcript content. Synthetic STT does not pretend to recognize arbitrary real microphone speech. A manual real-device pass on the primary Chromium demo target is required for echo, AudioContext/autoplay behavior and audible stop latency; these are not guaranteed by DOM tests. Firefox/Safari checks are best-effort until verified.
+Tests must cover stream append by textStart, duplicate delivery, late R1 data, control sequence gaps, `session.mode.set` continuity, voice preflight (no PCM until Mode=voice), pending voice start (Starting voice… / Cancel), pending-voice release on disconnect/timeout/failure, audio ordering/flush, permission denial, mute/unmute stream changes, reconnect snapshot replacement, uncertain text retry and graceful error rendering. Playwright runs against Synthetic without keys, using a fake media device and explicit scripted speech fixture for transcript content. Synthetic STT does not pretend to recognize arbitrary real microphone speech. A manual real-device pass on the primary Chromium demo target is required for echo, AudioContext/autoplay behavior and audible stop latency; these are not guaranteed by DOM tests. Firefox/Safari checks are best-effort until verified.
 
 
 ## Synthetic playback simulation

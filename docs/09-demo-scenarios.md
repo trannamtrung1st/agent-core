@@ -125,7 +125,7 @@ This proves the runtime handles concurrency rather than only the happy path.
 
 ## Demo 8 - Reconnect, mode switch and heard context
 
-Have a text exchange, start voice on the **same** session, interrupt a long voice response after its first phrase, disconnect and reconnect. Interrupted text remains visibly marked, audio does not replay, and the next answer uses only the conservative heard prefix for that voice-delivered entry. Return to text mode without creating a new session. Repeat after restarting the backend with SQLite enabled.
+Have a text exchange, start voice on the **same** session (preflight then `session.mode.set`), interrupt a long voice response after its first phrase, disconnect and reconnect. Interrupted text remains visibly marked, audio does not replay, and the next answer uses only the conservative heard prefix for that voice-delivered entry. A voice request that was still pending when the connection died does not resume; press Voice again. Return to text mode without creating a new session. Repeat after restarting the backend with SQLite enabled.
 
 ## Demo preparation and capability caveat
 

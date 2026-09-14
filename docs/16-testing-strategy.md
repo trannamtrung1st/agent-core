@@ -56,7 +56,9 @@ Use this mode for CI, frontend development, deterministic conversation scenarios
 | Superseded audio | Queue PCM in worklet then stop/R2 | R1 never renders after flush acknowledgement |
 | Spoken-until | Generated tail not played; no timing marks; first half of audio duration corresponds to less than half the text | Credits only fully played completed segments; zero text from the partial current segment; must not over-credit via duration proportion |
 | Mode continuity | Text turns, then session.mode.set(voice), then back to text | Same sessionId and history; deliveryMode preserved; no second conversation |
-| Pending voice start | session.mode.set(voice) while a text response is live | pendingMode=voice; mode stays text until the response ends; UI Starting voice… / control disabled |
+| Pending voice start | session.mode.set(voice) while a text response is live | pendingMode=voice; mode stays text until the response ends; UI Starting voice…; no PCM until Mode=voice |
+| Pending voice disconnect | Disconnect while PendingMode=Voice | Response interrupted; PendingMode=null; Mode=Text; reconnect ready does not start STT; user must press Voice again |
+| Pending voice timeout | Advance TimeProvider past PendingVoiceTimeoutMs | PendingMode cleared; Mode=Text; client releases preflight resources |
 | Session capacity | Attach when MaxActiveSessions in-memory runtimes are live | SessionCapacityExceeded, recoverable, retryAfterMs defaults to 5000; durable create still succeeds |
 | Late playback after supersession | Deliver R1 started/progress/completed/stopped after R2 | No R1 state/history/context change; only diagnostic stop timing may be recorded |
 | Speech segmentation | Split sentence across deltas; advance deadline; hit hard cap | Natural units, exact offsets, bounded buffer, no token-per-TTS jobs |

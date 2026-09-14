@@ -14,7 +14,7 @@ Avoid a single enum that incorrectly forbids simultaneous user input and agent o
 | Output | Idle, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted |
 | Candidate | None or (candidateId, utteranceId, responseId, revision, deadline) |
 | Response | responseId, status (Live, Superseded, Completed, Failed), modelDone, audioDone, playbackDone |
-| PendingMode | None or requested Text/Voice while waiting for a safe transition |
+| PendingMode | None or requested Text/Voice while waiting for a safe transition; Voice pending is cleared on disconnect, crash recovery, cancel, or timeout |
 
 The UI derives one label with precedence: Ended, Reconnecting, Interrupted (brief notice), User speaking, Agent speaking, Thinking, Listening. InterruptionCandidate is a debug state layered over input/output; it does not erase the underlying state.
 
@@ -44,7 +44,7 @@ All rows run in mailbox admission order. Missing/old epoch, attachment, utteranc
 | Confirmed interrupt | Interrupt | Output Interrupted; stop/cancel, then wait for final user text |
 | Idle/environment trigger while eligible | RequestAgentDecision | Invoke IAgentBrain against immutable context |
 | Environment trigger while speaking/busy | Queue | At most one newest event per kind, maximum 16, expiry 30 seconds |
-| Disconnect | Interrupt | Paused; cancel output/STT/timers, reject old attachment input |
+| Disconnect | Interrupt | Paused; cancel output/STT/timers; clear `PendingMode`; reject old attachment input |
 | End from any nonterminal state | Interrupt | Ending; cancel/flush, durable terminal save, then Ended |
 
 Invalid transitions never resurrect output: completion for Superseded is ignored; duplicate finals/commands are deduplicated; playback progress for an unknown response is rejected; attach to Ended is a conflict. Final transcript may precede SpeechEnded and commits immediately; later Ended does not reopen the utterance. Empty final restores Listening. Final deadline is 2 seconds for partial-capable streaming STT and 20 seconds for batch/no-partial STT, measured from Ended. Final timeout produces recoverable SpeechRecognitionTimeout and discards the incomplete utterance. A final arriving after timeout is ignored. New speech during brain evaluation invalidates that decision's turn generation; no old Speak result may begin. Classifier replies never start an Agent response by themselves.
@@ -53,8 +53,10 @@ Invalid transitions never resurrect output: completion for Superseded is ignored
 
 One Session remains one conversation. Mode is not a second session.
 
+The browser must complete audio **preflight** on the Voice click (user activation) before or as it sends `session.mode.set(voice)`. The server still owns when Mode becomes Voice. See [Frontend](13-frontend-implementation-spec.md#voice-preflight).
+
 ```text
-text → session.mode.set(voice) → initialize microphone / STT / audio output → voice
+text → local audio preflight (no PCM) → session.mode.set(voice) → [optional pending] → Mode=Voice → start PCM / STT / playback
 voice → session.mode.set(text) → dispose speech resources → text
 ```
 
@@ -62,12 +64,14 @@ A transition is admitted only when safe:
 
 | Current condition | Rule |
 | --- | --- |
-| Output live, request voice | **Wait.** Queue at most one pending mode change (`PendingMode=Voice`). Do not supersede the live text response. Apply voice start after that response is Completed, Failed, or Interrupted by an independent user action. Project `pendingMode` so the UI can show Starting voice… and disable the voice-call control until the transition applies. |
+| Output live, request voice | **Wait.** Queue at most one pending mode change (`PendingMode=Voice`). Do not supersede the live text response. Apply voice start after that response is Completed or Failed, or Interrupted by a **user** action that is not disconnect/end (`userBargeIn`/`newText`). Do not apply pending voice because disconnect interrupted the response. Project `pendingMode` so the UI can show Starting voice… until the transition applies. Bound the wait with `PendingVoiceTimeoutMs` (default 30000): on timeout clear `PendingMode`, remain Text, and emit `session.state.changed`. |
 | Output live, request text (leaving voice) | **Supersede** the live voice response using the normal stop/cancel sequence (`playback.stop` and `agent.response.interrupted` with reason `modeChange`), freeze Spoken Until, dispose speech resources, then set Mode=Text. Playback cannot continue after speech resources are released. |
+| Request text while `PendingMode=Voice` | **Cancel pending.** Clear `PendingMode`; remain Text. Do not apply voice later for that request. |
 | Input UserSpeaking or Finalizing | **Wait** until the utterance commits, is discarded, or times out. Do not split an utterance across modes. |
 | Ending or Ended | Reject the mode command. |
 | Voice requested but `voiceAvailable` is false | `VoiceUnavailable`; remain in text. |
-| Created/Paused with no live response | Record the new mode on the snapshot; initialize or skip speech on the next attach. |
+| Created/Paused with no live response | Record **applied** Mode on the snapshot. Do not honor a leftover `PendingMode=Voice` after disconnect or crash recovery. |
+| Disconnect or crash recovery | Interrupt live output. Set `PendingMode=null`. If voice was never applied, Mode remains Text. Reconnect must not start STT or expect PCM from the old pending request. |
 
 After a successful switch to voice, Input becomes Listening and recognition starts. After a successful switch to text, Input becomes Idle, streamId is null, and STT/TTS sessions are disposed. History, summary, profile and response identity are unchanged. Each assistant entry keeps the delivery mode it was generated under so later prompt building can apply received vs heard prefixes.
 
