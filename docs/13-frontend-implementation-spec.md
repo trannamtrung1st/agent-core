@@ -2,7 +2,7 @@
 
 ## Baseline and modules
 
-React SPA, Vite, strict TypeScript, Zustand, @microsoft/signalr, @microsoft/signalr-protocol-msgpack, browser fetch, plain modern CSS/CSS Modules. Vitest and React Testing Library test behavior; Playwright tests synthetic end-to-end flows. No SSR, Next.js, heavy data cache or large component framework.
+React SPA, Vite, pnpm, strict TypeScript, Zustand, @microsoft/signalr, @microsoft/signalr-protocol-msgpack, browser fetch, plain modern CSS/CSS Modules. Vitest and React Testing Library test behavior; Playwright tests synthetic end-to-end flows. No SSR, Next.js, heavy data cache or large component framework.
 
 Future web/src modules: app (routing/composition), features/chat, features/voice, services/api, services/realtime, services/audio (capture, encoding, VAD, queue, worklets, progress), state/sessionStore, contracts. Wire types are hand-maintained against [Protocol](14-api-and-realtime-protocol.md) with serialization fixtures; no generated types are created during this docs task. Browser services own long-lived connections/audio; React components subscribe, issue commands and render state.
 

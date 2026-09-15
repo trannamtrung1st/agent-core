@@ -2,10 +2,11 @@
 
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY web/ ./
-RUN npm run build
+RUN pnpm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src

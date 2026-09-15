@@ -15,7 +15,7 @@ These decisions are the implementation baseline. Resolve package patches at impl
 | Time/IDs | TimeProvider, injectable IIdGenerator; UUIDv7 event/response IDs, random UUIDv4 session IDs | Deterministic tests; session IDs retain random bearer entropy | Keep wire UUID strings stable |
 | Speech | Independent STT/TTS, canonical PCM16 mono 24 kHz | Canonical composed text-first pipeline; format conversion at adapters | Future-only INativeRealtimeProvider optimization |
 | Definitions | Versioned JSON files via store | No YAML dependency; immutable identities | Alternative store preserving schema/version semantics |
-| Frontend | React SPA, Vite, strict TypeScript, plain CSS/CSS Modules | Simple personal chat; client-only audio | Expand UI only for product needs |
+| Frontend | React SPA, Vite, pnpm, strict TypeScript, plain CSS/CSS Modules | Simple personal chat; client-only audio | Expand UI only for product needs |
 | Client state/API | Zustand; fetch wrapper; @microsoft/signalr + @microsoft/signalr-protocol-msgpack | Small active state store, few HTTP endpoints | Add data caching only with evidence |
 | Observability | Microsoft.Extensions.Logging, OpenTelemetry via ActivitySource/Meter | Correlate conversational latency with privacy defaults | Optional OTLP export |
 | Tests | xUnit, WebApplicationFactory; Vitest, React Testing Library, Playwright | Offline deterministic behavior and boundary tests | Explicit opt-in live-provider smokes; skip when keys are missing |

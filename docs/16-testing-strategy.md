@@ -83,11 +83,11 @@ WebApplicationFactory covers HTTP and in-process integration; additionally start
 
 Vitest: Zustand reducers, supersession guards, sample-offset accounting, segmentation/resampling math and queue bounds. React Testing Library: user interactions/statuses, keyboard access, safe errors, retained drafts. Playwright: synthetic text, voice fixture, stop/late audio, mute, disconnect/reconnect and history. Use deterministic scenario fixtures and fake media devices; test actual AudioWorklet execution where supported. Assertions observe sample counters and flush acknowledgements, not unreliable “did sound play” timing guesses.
 
-Opt-in real-provider smoke tests require explicit operator credentials, an explicit opt-in flag, and small bounded requests. They are excluded from default local `dotnet test` / npm / Playwright loops. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency and may be deferred without `OPENAI_API_KEY`. Unit gates remain deterministic and do not require real-model phrasing to match.
+Opt-in real-provider smoke tests require explicit operator credentials, an explicit opt-in flag, and small bounded requests. They are excluded from default local `dotnet test` / pnpm / Playwright loops. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency and may be deferred without `OPENAI_API_KEY`. Unit gates remain deterministic and do not require real-model phrasing to match.
 
 ## Future implementation commands
 
-Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host; `scripts/compose-sqlite-volume.sh` for Compose volume survival. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`). Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
+Once projects exist: `dotnet test` from solution root; `pnpm install --frozen-lockfile`, `pnpm run test --run`, `pnpm run build` from web; `pnpm exec playwright test` with the synthetic test host; `scripts/compose-sqlite-volume.sh` for Compose volume survival. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`). Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
 
 ## CI evolution
 

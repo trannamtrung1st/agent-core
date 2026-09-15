@@ -21,7 +21,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Acceptance criteria:** Synthetic boots without keys/network; an application integration test submits text and receives ordered normalized deltas and terminal output. Domain references no web/provider/persistence framework.
 - **Explicit non-goals:** Real providers, voice, durable storage, complete browser realtime connection, Docker/Compose setup, MediatR or extra platform infrastructure.
 - **Verification:** Local `dotnet build` / `dotnet test` and, once `web/` exists, frontend install/build/unit tests. Default verification never requires provider keys, internet inference, microphone, speaker or GPU.
-- **Status:** Complete. Synthetic text runs through `SessionRuntime` + `ScriptedLanguageModel` (application tests, not a public chat HTTP endpoint). `/health` and session lifecycle HTTP APIs are covered by WebApplicationFactory. Commands: `dotnet test`; `cd web && npm ci && npm run test -- --run && npm run build`. See [Milestone 1 verification](reports/m01-verification.md).
+- **Status:** Complete. Synthetic text runs through `SessionRuntime` + `ScriptedLanguageModel` (application tests, not a public chat HTTP endpoint). `/health` and session lifecycle HTTP APIs are covered by WebApplicationFactory. Commands: `dotnet test`; `cd web && pnpm install --frozen-lockfile && pnpm run test --run && pnpm run build`. See [Milestone 1 verification](reports/m01-verification.md).
 
 ## Milestone 2 — Agent Definition and Agent Runtime
 
