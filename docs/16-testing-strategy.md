@@ -87,7 +87,7 @@ Opt-in real-provider smoke tests require explicit operator credentials, an expli
 
 ## Future implementation commands
 
-Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`). Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
+Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host; `scripts/compose-sqlite-volume.sh` for Compose volume survival. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`). Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
 
 ## CI evolution
 

@@ -47,6 +47,7 @@ builder.Services.AddOptions<HostingOptions>()
 var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
 builder.Services.AddSingleton<SessionHost>();
+builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>
 {
@@ -107,10 +108,15 @@ app.MapGet("/api/v1/agents/{agentId}", async (string agentId, int? version, Sess
     }
 });
 
-app.MapPost("/api/v1/sessions", async (CreateSessionRequest? body, SessionManager sessions, HttpContext http, CancellationToken cancellationToken) =>
+app.MapPost("/api/v1/sessions", async (CreateSessionRequest? body, SessionManager sessions, SessionHost host, HttpContext http, CancellationToken cancellationToken) =>
 {
     try
     {
+        if (!host.Admitting)
+        {
+            throw AgentCoreErrors.ShuttingDown();
+        }
+
         if (body is null || string.IsNullOrWhiteSpace(body.AgentId))
         {
             throw AgentCoreErrors.Validation("agentId is required.");

@@ -18,10 +18,12 @@ WORKDIR /app
 COPY --from=build /app/publish ./
 COPY --from=web /src/web/dist ./wwwroot
 COPY agents ./agents
+RUN mkdir -p /data
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 ENV AgentCore__Profile=Synthetic
 ENV AgentCore__AgentDirectory=/app/agents
-ENV Persistence__Provider=InMemory
+ENV Persistence__Provider=Sqlite
+ENV Persistence__ConnectionString=Data Source=/data/agent-core.db
 ENV Providers__LanguageModels__primary-llm__Adapter=Scripted
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "AgentCore.Api.dll"]

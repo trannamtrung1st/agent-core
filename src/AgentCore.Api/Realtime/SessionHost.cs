@@ -30,6 +30,7 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
     private readonly ConcurrentDictionary<Guid, Live> _live = new();
     private readonly ConcurrentDictionary<string, Guid> _connections = new();
     private readonly object _gate = new();
+    private bool _admitting = true;
 
     public SessionHost(
         SessionManager sessions,
@@ -51,6 +52,8 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
     public SessionSnapshot? LiveSnapshot(Guid sessionId) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.Snapshot : null;
 
+    public bool Admitting => _admitting;
+
     public async ValueTask PublishAsync(Guid sessionId, EnvironmentEvent input, CancellationToken cancellationToken = default)
     {
         if (!_live.TryGetValue(sessionId, out var live))
@@ -67,6 +70,11 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         if (!ack.Accepted)
         {
             return ack;
+        }
+
+        if (!_admitting)
+        {
+            return Reject(command.EventId, "Session", "ServiceUnavailable", "The host is shutting down.", false, 1000);
         }
 
         var sessionId = Guid.Parse(command.SessionId);
@@ -172,6 +180,37 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         }
 
         await _sessions.EndAsync(sessionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task DrainAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            _admitting = false;
+        }
+
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromSeconds(5));
+        foreach (var live in _live.Values.ToArray())
+        {
+            try
+            {
+                if (live.Runtime.ActiveResponseId is not null)
+                {
+                    await live.Runtime.CancelActiveResponseAsync(budget.Token).ConfigureAwait(false);
+                }
+
+                await live.Runtime.DetachAsync().ConfigureAwait(false);
+                await live.Runtime.WaitUntilMailboxDrainedAsync(budget.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (AgentCoreException)
+            {
+            }
+        }
     }
 
     public async Task<CommandAck> SendTextAsync(string connectionId, ClientCommand command, CancellationToken cancellationToken)

@@ -47,4 +47,7 @@ public static class AgentCoreErrors
 
     public static AgentCoreException Conflict(string detail) =>
         new("Conflict", detail, 409, fatal: true);
+
+    public static AgentCoreException ShuttingDown() =>
+        new("ServiceUnavailable", "The host is shutting down.", 503) { RetryAfterMs = 1000 };
 }

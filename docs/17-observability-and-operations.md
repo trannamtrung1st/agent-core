@@ -25,7 +25,7 @@ Conversation latency is a product feature. Use Application ActivitySource `Agent
 
 Trace spans: session attach, user turn, brain decision, model generation, each TTS segment, interruption, persistence write. Long voice calls should not require one unbounded trace; link per-turn activities by correlation ID. Metrics: histograms for the durations above, mailbox wait, input/output queue depth, active sessions, discarded stale chunks, interruptions by decision, normalized failures, reconnect count and underruns. Use provider alias, decision and error code as low-cardinality metric tags; sessionId/eventId/responseId belong in traces/logs, not metric labels.
 
-Application code records those histograms on `ActivitySource`/`Meter` `AgentCore.Runtime`. Observed synthetic 20-turn numbers live in [Milestone 12 demo verification](reports/m12-demo-verification.md); they are measurements, not SLAs. Compose SQLite volume survival remains a later Milestone 12 packaging check.
+Application code records those histograms on `ActivitySource`/`Meter` `AgentCore.Runtime`. Observed synthetic 20-turn numbers live in [Milestone 12 demo verification](reports/m12-demo-verification.md); they are measurements, not SLAs. Compose SQLite volume survival is covered by `scripts/compose-sqlite-volume.sh` and [MVP handoff](reports/m12-mvp-handoff.md).
 
 Structured log fields where relevant: sessionId, eventId, responseId, provider (logical alias), durationMs, decision, attachmentId, errorCode. Do not log raw audio, API keys, AdditionalHeaders or complete conversations by default. Debug transcript/content logging is explicit local opt-in with a bounded timeline, never an accidental production default. Redact provider URL query strings and failure bodies. Browser receives user-safe messages only.
 
@@ -62,20 +62,36 @@ npm run build
 npx playwright test
 ```
 
-Demo/production-like packaging: Vite builds static SPA into web/dist; the Dockerfile publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Milestone 12 adds container hardening, SQLite volume/restart tests, real-provider Compose configuration, hybrid topology and backup/shutdown polish. Kubernetes is unnecessary.
+Demo/production-like packaging: Vite builds static SPA into web/dist; the Dockerfile publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Compose mounts a persistent SQLite volume at `/data`. Kubernetes is unnecessary.
 
-Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket upgrade forwarding, a single backend instance and a persistent SQLite volume. Do not horizontally replicate SessionManager against the same SQLite file. During shutdown stop admitting new sessions, mark active responses interrupted, request client flush, save checkpoints and await workers within the 5-second shutdown budget. If process termination prevents clean save, recovery semantics apply.
+Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket upgrade forwarding, a single backend instance and a persistent SQLite volume. Do not horizontally replicate SessionManager against the same SQLite file. During shutdown the host stops admitting new sessions, interrupts live responses, detaches runtimes, and waits up to five seconds for mailbox drain. If process termination prevents a clean save, crash recovery semantics apply.
 
-Back up SQLite using its backup API (`VACUUM INTO` or the SQLite backup mechanism) or a copy taken while the process is stopped. Copying only the main file while WAL/`-wal`/`-shm` companions are active is not a reliable backup. Apply schema at startup (`EnsureCreated` for this MVP initial schema; treat it as the first migration) before serving traffic; fail startup on schema error. Test a restore before a demo that needs durable history. Native development can keep `Persistence__Provider=InMemory` or set `Persistence__Provider=Sqlite` with `Persistence__ConnectionString=Data Source=data/agent-core.db`.
+Back up SQLite using `SqliteMemoryStore.BackupToAsync` (SQLite backup API) or a copy taken while the process is stopped. Copying only the main file while WAL/`-wal`/`-shm` companions are active is not a reliable backup. Apply schema at startup (`EnsureCreated` for this MVP initial schema; treat it as the first migration) before serving traffic; fail startup on schema error. Test a restore before a demo that needs durable history. Native development can keep `Persistence__Provider=InMemory` or set `Persistence__Provider=Sqlite` with `Persistence__ConnectionString=Data Source=data/agent-core.db`.
 
 ## Docker Compose integration and demo
 
-Docker Compose is the supported reproducible local integration/demo environment, while Docker remains optional for ordinary development. Native `dotnet run` + Vite remains the fast loop. `docker compose up --build` starts one Synthetic application container (built SPA, in-memory store, no provider keys) on http://127.0.0.1:5080. Building/pulling container dependencies may require network even though synthetic runtime behavior does not. Milestone 12 hardens SQLite volumes, Real-provider configuration and shutdown polish.
+Docker Compose is the supported reproducible local integration/demo environment, while Docker remains optional for ordinary development. Native `dotnet run` + Vite remains the fast loop. `docker compose up --build` starts one Synthetic application container (built SPA, SQLite on volume `agent-core-data`, no provider keys) on http://127.0.0.1:5080. Building/pulling container dependencies may require network even though synthetic runtime behavior does not. `docker compose down` keeps the volume; `docker compose down -v` destroys it. Volume survival: `scripts/compose-sqlite-volume.sh`.
 
 ```text
 docker compose up --build
 curl -sS http://127.0.0.1:5080/health
+./scripts/compose-sqlite-volume.sh
 ```
+
+Real/hosted Compose is the same one-container image with operator environment overrides (never committed secrets), for example:
+
+```text
+AgentCore__Profile=Real
+Providers__LanguageModels__primary-llm__Adapter=OpenAICompatible
+Providers__LanguageModels__primary-llm__BaseUrl=https://openrouter.ai/api/v1/
+Providers__LanguageModels__primary-llm__DefaultModel=<operator-fixed-openrouter-model-id>
+OPENROUTER_API_KEY=<backend-secret>
+Providers__SpeechRecognizers__primary-stt__Adapter=OpenAI
+Providers__SpeechSynthesizers__primary-tts__Adapter=OpenAI
+OPENAI_API_KEY=<backend-secret-when-using-openai-speech>
+```
+
+Default `docker compose` smoke stays Synthetic/scripted and key-free. Hybrid/on-prem keeps the same `agent-core` service and points STT/LLM/TTS BaseUrl values at local inference processes.
 
 ```text
 Docker Compose

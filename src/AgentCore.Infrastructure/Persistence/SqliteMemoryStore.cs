@@ -23,6 +23,23 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await db.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask BackupToAsync(string destinationPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        var directory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var source = (Microsoft.Data.Sqlite.SqliteConnection)db.Database.GetDbConnection();
+        await source.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var destination = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={destinationPath}");
+        await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
+        source.BackupDatabase(destination);
+    }
+
     public async ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

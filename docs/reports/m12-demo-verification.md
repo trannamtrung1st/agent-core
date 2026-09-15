@@ -23,4 +23,4 @@ Assistant entries keep `Text` (generated), `ReceivedTextEndExclusive` (delivered
 
 ## Remaining Milestone 12
 
-Container SQLite volume across recreate, restore/restart packaging checks, and the full MVP handoff report.
+None for this measurement item. Container SQLite volume, restore/restart packaging, and the MVP handoff report are in [m12-mvp-handoff](m12-mvp-handoff.md).

@@ -9,7 +9,16 @@ services:
     environment:
       AgentCore__Profile: Synthetic
       AgentCore__AgentDirectory: /app/agents
-      Persistence__Provider: InMemory
+      Persistence__Provider: Sqlite
+      Persistence__ConnectionString: Data Source=/data/agent-core.db
       Providers__LanguageModels__primary-llm__Adapter: Scripted
+    volumes:
+      - agent-core-data:/data
     # Native `dotnet run` + Vite remains the fast loop. This service is the
-    # optional key-free Synthetic demo path (one app container + built SPA).
+    # optional key-free Synthetic demo path (one app container + built SPA +
+    # persistent SQLite volume). `docker compose down` keeps the volume;
+    # `docker compose down -v` destroys it.
+    # Real/hosted providers stay documented in docs/17; do not put keys here.
+
+volumes:
+  agent-core-data:

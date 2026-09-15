@@ -163,6 +163,41 @@ public sealed class MemoryStoreContractTests
         Assert.Equal(SessionStatus.Paused, loaded.Status);
     }
 
+    [Fact]
+    public async Task Backup_restore_reopens_the_session()
+    {
+        var source = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        var backup = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}-bak.db");
+        try
+        {
+            await using (var opened = OpenSqlite(source, deleteOnDispose: false))
+            {
+                await opened.Store.EnsureCreatedAsync();
+                await opened.Store.SaveAsync(First(), 0);
+                await opened.Store.BackupToAsync(backup);
+            }
+
+            await using var restored = OpenSqlite(backup, deleteOnDispose: true);
+            var loaded = await restored.Store.LoadAsync(First().SessionId);
+            Assert.Equal("examiner", loaded!.Definition.Id);
+            Assert.Equal(1, loaded.Revision);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var path in new[] { source, source + "-wal", source + "-shm", backup, backup + "-wal", backup + "-shm" })
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
     private static async Task<SqliteHarness> SqliteAsync()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
