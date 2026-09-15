@@ -9,8 +9,8 @@ Recorded 2026-09-15. Synthetic/offline only. No speaker, GPU, or hosted keys. Pl
 | Command | Working directory | Exit status |
 | --- | --- | --- |
 | `dotnet test AgentCore.sln --nologo` | repository root | 0 — Domain 3, Application 49, Infrastructure 33 passed + 3 skipped live smokes, Api 12 |
-| `npm run test -- --run` | `web/` | 0 — 14 Vitest tests |
+| `npm run test -- --run` | `web/` | 0 — 18 Vitest tests |
 | `npm run build` | `web/` | 0 |
-| `CI=1 npx playwright test` | `web/` | 0 — 5 passed |
+| `CI=1 npx playwright test e2e/voice-interrupt.spec.ts e2e/voice-playback.spec.ts` | `web/` | 0 — 3 passed, including flush-before-R2 and no post-flush R1 samples |
 
-Observed: Wait barge-in emits `playback.stop` then `agent.response.interrupted` while STT stays active; late R1 playback does not revise heard offsets; no-timing-mark credit excludes the partial current segment from the next prompt; speechActivity interrupts at the degraded deadline; local duck/restore and worklet flush prevent stale R1 audio from rendering as R2.
+Observed: Wait barge-in emits `playback.stop` then `agent.response.interrupted` while STT stays active; worklet flush acknowledgement is required before R2 samples render; late R1 playback does not revise heard offsets; no-timing-mark credit excludes the partial current segment from the next prompt; speechActivity interrupts at the degraded deadline; local duck/restore and worklet flush prevent stale R1 audio from rendering as R2.

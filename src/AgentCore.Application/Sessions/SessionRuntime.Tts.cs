@@ -308,6 +308,11 @@ public sealed partial class SessionRuntime
 
         if (string.Equals(input.Kind, "completed", StringComparison.OrdinalIgnoreCase))
         {
+            if (_ackedSamples < _sentSamples)
+            {
+                return;
+            }
+
             _playbackDone = true;
             await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
         }
@@ -335,7 +340,7 @@ public sealed partial class SessionRuntime
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
         UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed, _accumulator.Length);
-        var heard = failed ? 0 : _accumulator.Length;
+        var heard = failed ? 0 : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishAsync(

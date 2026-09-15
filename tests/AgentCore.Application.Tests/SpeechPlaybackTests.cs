@@ -63,6 +63,34 @@ public sealed class SpeechPlaybackTests
     }
 
     [Fact]
+    public async Task Playback_completed_before_final_samples_does_not_credit_unplayed_text()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new ScriptedLanguageModel(["There are three points."]));
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Hello");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        var responseId = final.ResponseId!.Value;
+        var sent = runtime.SentSamples;
+        Assert.True(sent > 2);
+        await runtime.SubmitPlaybackAsync(responseId, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(responseId, "completed", sent / 2, 0);
+        await runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain(output.Terminals, item => item.InterruptReason is null);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.True(assistant.HeardTextEndExclusive < assistant.Text.Length);
+        await runtime.SubmitPlaybackAsync(responseId, "completed", sent, 0);
+        await runtime.WaitUntilIdleAsync();
+        var terminal = Assert.Single(output.Terminals, item => item.InterruptReason is null);
+        Assert.False(terminal.Failed);
+        Assert.Equal(
+            runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).HeardTextEndExclusive,
+            terminal.HeardTextEndExclusive);
+    }
+
+    [Fact]
     public async Task Unacked_output_stops_at_two_seconds()
     {
         var output = new CapturingSessionOutput();

@@ -22,6 +22,12 @@ class MicrophoneCapture {
   private workletReady = false;
   private outputReady = false;
   private consumedSamples = 0;
+  private queuedSamples = 0;
+  private outputResponseId: string | null = null;
+  private outputEpoch = 0;
+  private outputClosed = true;
+  private renderedByResponse: Record<string, number> = {};
+  private completedResponses: string[] = [];
   private onConsumed: ((consumed: number) => void) | null = null;
   private frameSequence = 1;
   private sampleOffset = 0;
@@ -47,6 +53,30 @@ class MicrophoneCapture {
 
   playbackConsumed(): number {
     return this.consumedSamples;
+  }
+
+  playbackQueued(): number {
+    return this.queuedSamples;
+  }
+
+  playbackResponseId(): string | null {
+    return this.outputResponseId;
+  }
+
+  playbackEpoch(): number {
+    return this.outputEpoch;
+  }
+
+  playbackClosed(): boolean {
+    return this.outputClosed;
+  }
+
+  playbackRendered(): Record<string, number> {
+    return { ...this.renderedByResponse };
+  }
+
+  playbackCompletedResponses(): string[] {
+    return [...this.completedResponses];
   }
 
   setPlaybackListener(listener: ((consumed: number) => void) | null): void {
@@ -112,11 +142,37 @@ class MicrophoneCapture {
       worklet.port.onmessage = (event: MessageEvent<{ pcm: ArrayBuffer; sampleOffset: number }>) => {
         void this.onFrame(event.data.pcm, event.data.sampleOffset);
       };
-      output.port.onmessage = (event: MessageEvent<{ type?: string; consumed?: number }>) => {
+      output.port.onmessage = (event: MessageEvent<{
+        type?: string;
+        consumed?: number;
+        queued?: number;
+        responseId?: string | null;
+        epoch?: number;
+        closed?: boolean;
+        rendered?: Record<string, number>;
+      }>) => {
         if (event.data.type === "flushed") {
           const waiters = this.flushWaiters;
           this.flushWaiters = [];
           waiters.forEach((resolve) => resolve());
+        }
+        if (event.data.type === "complete" && event.data.responseId) {
+          this.completedResponses.push(event.data.responseId);
+        }
+        if (typeof event.data.queued === "number") {
+          this.queuedSamples = event.data.queued;
+        }
+        if (typeof event.data.epoch === "number") {
+          this.outputEpoch = event.data.epoch;
+        }
+        if (typeof event.data.closed === "boolean") {
+          this.outputClosed = event.data.closed;
+        }
+        if (event.data.rendered) {
+          this.renderedByResponse = event.data.rendered;
+        }
+        if ("responseId" in event.data) {
+          this.outputResponseId = event.data.responseId ?? null;
         }
         if (typeof event.data.consumed === "number") {
           this.consumedSamples = event.data.consumed;
@@ -162,13 +218,12 @@ class MicrophoneCapture {
     this.prepared?.output.port.postMessage({ type: "gain", gain, rampMs });
   }
 
-  enqueuePlayback(responseId: string, pcm: Uint8Array): void {
+  enqueuePlayback(responseId: string, pcm: Uint8Array, isFinal = false): void {
     const samples = decodePcm16Le(pcm);
     this.prepared?.output.port.postMessage(
-      { type: "enqueue", responseId, pcm: samples.buffer },
+      { type: "enqueue", responseId, pcm: samples.buffer, isFinal },
       [samples.buffer]
     );
-    this.prepared?.output.port.postMessage({ type: "snapshot" });
   }
 
   flushPlayback(responseId: string): Promise<void> {
@@ -177,6 +232,9 @@ class MicrophoneCapture {
     });
     this.prepared?.output.port.postMessage({ type: "flush", responseId });
     this.consumedSamples = 0;
+    this.queuedSamples = 0;
+    this.outputResponseId = null;
+    this.outputClosed = true;
     if (!this.prepared) {
       this.flushWaiters.forEach((resolve) => resolve());
       this.flushWaiters = [];
@@ -190,6 +248,12 @@ class MicrophoneCapture {
     this.workletReady = false;
     this.outputReady = false;
     this.consumedSamples = 0;
+    this.queuedSamples = 0;
+    this.outputResponseId = null;
+    this.outputEpoch = 0;
+    this.outputClosed = true;
+    this.renderedByResponse = {};
+    this.completedResponses = [];
     this.onConsumed = null;
     this.utteranceId = null;
     const prepared = this.prepared;

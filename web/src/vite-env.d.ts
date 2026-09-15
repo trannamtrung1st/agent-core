@@ -8,6 +8,17 @@ interface Window {
     workletLoaded: () => boolean;
     outputWorkletLoaded: () => boolean;
     playbackConsumed: () => number;
+    playbackDiagnostics?: () => {
+      consumed: number;
+      queued: number;
+      responseId: string | null;
+      epoch: number;
+      closed: boolean;
+      rendered: Record<string, number>;
+      completedResponses: string[];
+      started: boolean;
+      final: boolean;
+    };
     audioOutputsReceived: () => number;
     captureStreaming: () => boolean;
   };

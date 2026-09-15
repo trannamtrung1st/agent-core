@@ -11,9 +11,11 @@ let commandSequence = 0;
 let audioFramesSent = 0;
 let audioOutputsReceived = 0;
 let playbackConsumed = 0;
+let playbackSentSamples = 0;
 let playbackResponseId: string | null = null;
 let playbackStarted = false;
 let playbackFinal = false;
+let playbackCompletedSent = false;
 let progressTimer: number | null = null;
 let disposed = false;
 let duckTimer: number | null = null;
@@ -32,6 +34,20 @@ export function audioFramesSentCount(): number {
 
 export function playbackConsumedCount(): number {
   return playbackConsumed;
+}
+
+export function playbackDiagnostics() {
+  return {
+    consumed: capture.playbackConsumed(),
+    queued: capture.playbackQueued(),
+    responseId: capture.playbackResponseId() ?? playbackResponseId,
+    epoch: capture.playbackEpoch(),
+    closed: capture.playbackClosed(),
+    rendered: capture.playbackRendered(),
+    completedResponses: capture.playbackCompletedResponses(),
+    started: playbackStarted,
+    final: playbackFinal
+  };
 }
 
 export function audioOutputsReceivedCount(): number {
@@ -155,22 +171,29 @@ function enqueueLiveAudio(
     return;
   }
 
-  if (pcm.length > 0) {
-    capture.enqueuePlayback(responseId, pcm);
-  }
-
-  if (!playbackStarted) {
+  if (!playbackStarted || playbackResponseId !== responseId) {
     playbackStarted = true;
     playbackResponseId = responseId;
+    playbackFinal = false;
+    playbackCompletedSent = false;
+    playbackConsumed = 0;
+    playbackSentSamples = 0;
     capture.setPlaybackListener((consumed) => {
       playbackConsumed = consumed;
+      maybeCompletePlayback();
     });
     void sendPlayback("PlaybackStarted", "playback.started", responseId, 0);
     startProgress();
   }
 
+  playbackSentSamples += pcm.length / 2;
+  if (pcm.length > 0 || isFinal) {
+    capture.enqueuePlayback(responseId, pcm, isFinal);
+  }
+
   if (isFinal) {
     playbackFinal = true;
+    maybeCompletePlayback();
   }
 }
 
@@ -216,8 +239,10 @@ async function interruptPlayback(responseId: string): Promise<void> {
   if (playbackResponseId === responseId) {
     playbackStarted = false;
     playbackFinal = false;
+    playbackCompletedSent = false;
     playbackResponseId = null;
     playbackConsumed = 0;
+    playbackSentSamples = 0;
     capture.setPlaybackListener(null);
     void sendPlayback("PlaybackStopped", "playback.stopped", responseId, capture.playbackConsumed());
   }
@@ -245,11 +270,30 @@ function startProgress(): void {
     const consumed = capture.playbackConsumed();
     playbackConsumed = consumed;
     void sendPlayback("PlaybackProgress", "playback.progress", responseId, consumed);
-    if (playbackFinal) {
-      void sendPlayback("PlaybackCompleted", "playback.completed", responseId, consumed);
-      stopProgress();
-    }
+    maybeCompletePlayback();
   }, 100);
+}
+
+function maybeCompletePlayback(): void {
+  const responseId = playbackResponseId;
+  if (!responseId || !playbackFinal || playbackCompletedSent) {
+    return;
+  }
+
+  if (capture.playbackQueued() > 0 || capture.playbackConsumed() < playbackSentSamples) {
+    return;
+  }
+
+  const consumed = capture.playbackConsumed();
+  playbackCompletedSent = true;
+  playbackConsumed = consumed;
+  void sendPlayback("PlaybackCompleted", "playback.completed", responseId, consumed);
+  stopProgress();
+  playbackStarted = false;
+  playbackFinal = false;
+  playbackResponseId = null;
+  playbackSentSamples = 0;
+  capture.setPlaybackListener(null);
 }
 
 function stopProgress(): void {
@@ -275,7 +319,9 @@ function stopPlayback(responseId?: string): void {
   void capture.flushPlayback("");
   playbackStarted = false;
   playbackFinal = false;
+  playbackCompletedSent = false;
   playbackResponseId = null;
+  playbackSentSamples = 0;
   capture.setPlaybackListener(null);
 }
 
@@ -546,6 +592,7 @@ if (typeof window !== "undefined") {
     workletLoaded: () => capture.workletLoaded(),
     outputWorkletLoaded: () => capture.outputWorkletLoaded(),
     playbackConsumed: playbackConsumedCount,
+    playbackDiagnostics,
     audioOutputsReceived: audioOutputsReceivedCount,
     captureStreaming: () => capture.isStreaming()
   };
