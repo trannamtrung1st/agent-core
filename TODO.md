@@ -1,0 +1,2 @@
+- [ ] Agent can proactively end session if no response from user for a certain amount of time. [TBD]
+- [ ] Message/voice output along with extra content in markdown format. [TBD]
