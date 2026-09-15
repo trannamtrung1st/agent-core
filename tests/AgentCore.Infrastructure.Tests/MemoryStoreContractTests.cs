@@ -113,6 +113,71 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Profile_allowlist_is_enforced_and_survives_sqlite_reopen()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
+        foreach (var store in stores)
+        {
+            var profile = new UserProfile(
+                LocalUserProfile.Id,
+                1,
+                new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+                now);
+            await store.SaveProfileAsync(profile, 0);
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+                store.SaveProfileAsync(profile with
+                {
+                    Revision = 2,
+                    Preferences = new Dictionary<string, string> { ["theme"] = "dark" }
+                }, 1).AsTask());
+        }
+
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        try
+        {
+            await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+            {
+                await opened.Store.EnsureCreatedAsync();
+                await opened.Store.SaveProfileAsync(
+                    new UserProfile(
+                        LocalUserProfile.Id,
+                        1,
+                        new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+                        now),
+                    0);
+            }
+
+            await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+            await reopened.Store.EnsureCreatedAsync();
+            var loaded = await reopened.Store.LoadProfileAsync(LocalUserProfile.Id);
+            Assert.Equal("Pat", loaded!.Preferences["preferredName"]);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+        }
+    }
+
+    [Fact]
+    public async Task Sqlite_migrate_reopens_existing_database()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(First(), 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        var loaded = await reopened.Store.LoadAsync(First().SessionId);
+        Assert.Equal("examiner", loaded!.Definition.Id);
+        Assert.Equal(1, loaded.Revision);
+    }
+
+    [Fact]
     public async Task Duplicate_source_event_retry_upserts_without_a_second_row()
     {
         await using var harness = await SqliteAsync();

@@ -387,6 +387,76 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "older-retry": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const eventId = uuid();
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const muted = await connection.invoke(
+        "SetMuted",
+        command(session.sessionId, 2, "session.mute", { muted: true }, { attachmentId })
+      );
+      if (!muted.accepted) {
+        throw new Error(JSON.stringify(muted));
+      }
+      const retry = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId })
+      );
+      if (!retry.accepted || retry.eventId !== first.eventId) {
+        throw new Error(JSON.stringify(retry));
+      }
+      await connection.stop();
+      break;
+    }
+    case "reconnect-retry": {
+      const session = await createSession();
+      const first = await connect();
+      await first.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const firstAttachment = events[0].attachmentId;
+      const eventId = uuid();
+      const send = await first.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId: firstAttachment, eventId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      await waitFor((evt) => evt.type === "agent.response.completed");
+      await first.stop();
+      events.length = 0;
+      const second = await connect();
+      await second.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const retry = await second.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId: events[0].attachmentId, eventId })
+      );
+      if (!retry.accepted) {
+        throw new Error(JSON.stringify(retry));
+      }
+      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`);
+      if (!page.ok) {
+        throw new Error(`history ${page.status}`);
+      }
+      const body = await page.json();
+      const users = body.items.filter((item) => item.role === "user");
+      if (users.length !== 1) {
+        throw new Error(`expected one user entry, got ${users.length}`);
+      }
+      await second.stop();
+      break;
+    }
     case "capacity": {
       const a = await createSession();
       const b = await createSession();

@@ -16,4 +16,4 @@ Date: 2026-09-15
 - Kestrel JS fixtures cover mismatched `SendAudio` sessionId (fatal close) and `user.speech.ended` held until preceding PCM samples.
 - Protected `.agents/skills/testing/SKILL.md` restored to the pre-run npm wording.
 
-Remaining: bind completion evidence to the live HEAD after this commit.
+TDP completion, not this file, records the live HEAD after remaining gate evidence is committed.

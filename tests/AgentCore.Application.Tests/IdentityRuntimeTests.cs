@@ -68,6 +68,75 @@ public sealed class IdentityRuntimeTests
     }
 
     [Fact]
+    public async Task Restarted_session_prompt_includes_bound_local_profile()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var now = time.GetUtcNow();
+        await store.SaveProfileAsync(
+            new UserProfile(
+                LocalUserProfile.Id,
+                1,
+                new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+                now),
+            0);
+        var firstModel = new RecordingLanguageModel(new ScriptedLanguageModel());
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var snapshot = new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            Load("examiner"),
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            LocalUserProfile.Id,
+            now,
+            now);
+        await store.SaveAsync(snapshot, 0);
+        await using (var runtime = new SessionRuntime(
+            snapshot,
+            firstModel,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            new CapturingSessionOutput(),
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance))
+        {
+            await runtime.AttachAsync();
+            await runtime.SubmitUserTextAsync("Hello");
+            await runtime.WaitUntilIdleAsync();
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        Assert.Contains("preferredName=Pat", firstModel.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
+
+        var restored = (await store.LoadAsync(snapshot.SessionId))!;
+        var secondModel = new RecordingLanguageModel(new ScriptedLanguageModel());
+        await using var second = new SessionRuntime(
+            restored,
+            secondModel,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            new CapturingSessionOutput(),
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance);
+        await second.AttachAsync();
+        await second.SubmitUserTextAsync("Again");
+        await second.WaitUntilIdleAsync();
+        Assert.Contains("preferredName=Pat", secondModel.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Two_sessions_are_independent_and_revisions_are_deterministic()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));

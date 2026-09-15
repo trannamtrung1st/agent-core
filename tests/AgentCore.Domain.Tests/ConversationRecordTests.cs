@@ -45,4 +45,14 @@ public sealed class ConversationRecordTests
         Assert.Equal("examiner", definition.Id);
         Assert.Equal("Alex", definition.Identity.Name);
     }
+
+    [Fact]
+    public void Local_profile_rejects_unknown_keys_and_oversized_preferences()
+    {
+        LocalUserProfile.Validate(new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            LocalUserProfile.Validate(new Dictionary<string, string> { ["nickname"] = "x" }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            LocalUserProfile.Validate(new Dictionary<string, string> { ["language"] = new string('a', 2001) }));
+    }
 }

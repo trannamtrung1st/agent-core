@@ -80,6 +80,31 @@ public sealed class SessionRealtimeLifecycleTests
     }
 
     [Fact]
+    public async Task Uncertain_source_event_retry_across_reconstruction_does_not_duplicate_user_turn()
+    {
+        var store = new InMemoryMemoryStore();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        var sourceEventId = Guid.Parse("019944af-0000-7000-8000-0000000000ee");
+        await using (var runtime = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store))
+        {
+            await runtime.AttachAsync();
+            Assert.True(await runtime.SubmitUserTextAsync("Hello", sourceEventId));
+            await runtime.WaitUntilIdleAsync();
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var snapshot = (await store.LoadAsync(Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")))!;
+        await using var restored = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store, snapshot);
+        await restored.AttachAsync();
+        await restored.WaitUntilMailboxDrainedAsync();
+        Assert.True(await restored.SubmitUserTextAsync("Hello", sourceEventId));
+        await restored.WaitUntilIdleAsync();
+        Assert.Equal(1, restored.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.User));
+        Assert.Equal(sourceEventId, restored.Snapshot.Entries.Single(entry => entry.Role == ConversationRole.User).SourceEventId);
+    }
+
+    [Fact]
     public async Task Same_session_can_move_text_voice_text()
     {
         var output = new CapturingSessionOutput();

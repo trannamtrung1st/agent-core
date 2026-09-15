@@ -53,6 +53,10 @@ Synthetic 20-turn `AgentCore.Runtime` histograms with observed count/p50/p95/max
 | 12 demo | `e2eb3c3` |
 | 12 packaging | this commit (`feat(m12): harden Compose SQLite volume`) |
 
+## Output review remainder
+
+Whole-output findings for wire retry/receipts, EF migrate reopen, profile prompt continuity, and observed stage tables are recorded in [output-review-gate-evidence.md](output-review-gate-evidence.md). TDP completion records the live Git HEAD; this file does not self-hash that commit.
+
 ## Files by concern (packaging)
 
 - One container + SQLite volume: `Dockerfile`, `docker-compose.yml`, `scripts/compose-sqlite-volume.sh`

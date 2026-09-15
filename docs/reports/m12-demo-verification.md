@@ -19,14 +19,14 @@ Recorded 2026-09-15. Synthetic/offline only. No speaker, GPU, or hosted keys. He
 
 | Stage | Count | p50 (ms) | p95 (ms) | max (ms) |
 | --- | ---: | ---: | ---: | ---: |
-| controller | 46 | 0.005 | 0.620 | 1.021 |
-| llm | 48 | 0.002 | 0.013 | 0.947 |
-| persist | 176 | 0.001 | 0.003 | 0.045 |
-| stt | 2 | 0.107 | 2.186 | 2.186 |
-| segmentation | 4 | 0.032 | 1.065 | 1.065 |
-| tts | 4 | 0.034 | 2.156 | 2.156 |
-| transport | 4 | 0.026 | 0.598 | 0.598 |
-| playback | 1 | 0.500 | 0.500 | 0.500 |
+| controller | 46 | 0.005 | 0.815 | 1.415 |
+| llm | 50 | 0.001 | 0.030 | 0.959 |
+| persist | 176 | 0.001 | 0.004 | 0.049 |
+| stt | 2 | 0.111 | 2.400 | 2.400 |
+| segmentation | 4 | 0.038 | 3.101 | 3.101 |
+| tts | 4 | 0.024 | 3.945 | 3.945 |
+| transport | 4 | 0.029 | 0.675 | 0.675 |
+| playback | 1 | 10.714 | 10.714 | 10.714 |
 
 These are measurements, not SLAs. Re-run `dotnet test --filter Twenty_turn_synthetic_demo_records_observed_stage_latencies` to refresh the table file.
 
