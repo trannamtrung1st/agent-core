@@ -49,8 +49,11 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
-        services.TryAddSingleton<VoiceAvailability>();
-        services.TryAddSingleton<ISessionOutput, NoOpSessionOutput>();
+        services.TryAddSingleton(new VoiceAvailability
+        {
+            SpeechAdaptersResolved = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+        });
+        services.TryAddSingleton(new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<SessionRuntimeFactory>();
         return services;

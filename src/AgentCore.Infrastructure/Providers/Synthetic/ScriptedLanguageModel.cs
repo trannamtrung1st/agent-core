@@ -46,6 +46,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             }
 
             yield return new ModelTextDelta(chunks[index]);
+            if (index == 0 && lastUser.Contains("hold the line", StringComparison.OrdinalIgnoreCase))
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();

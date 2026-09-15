@@ -1,0 +1,213 @@
+import { HttpTransportType, HubConnectionBuilder } from "@microsoft/signalr";
+import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
+
+const base = process.env.BASE_URL;
+const scenario = process.argv[2];
+if (!base || !scenario) {
+  console.error("usage: node client.mjs <scenario>");
+  process.exit(2);
+}
+
+const events = [];
+
+function uuid() {
+  return crypto.randomUUID();
+}
+
+function command(sessionId, sequence, type, payload, extra = {}) {
+  const body = {
+    protocolVersion: extra.protocolVersion ?? 1,
+    sessionId,
+    eventId: extra.eventId ?? uuid(),
+    sequence,
+    timestamp: new Date().toISOString(),
+    responseId: extra.responseId ?? null,
+    attachmentId: extra.attachmentId ?? null,
+    type,
+    payload
+  };
+  if (extra.correlationId !== undefined) {
+    body.correlationId = extra.correlationId;
+  }
+  if (extra.causationId !== undefined) {
+    body.causationId = extra.causationId;
+  }
+  return body;
+}
+
+async function connect() {
+  const connection = new HubConnectionBuilder()
+    .withUrl(`${base}/hubs/session`, {
+      skipNegotiation: true,
+      transport: HttpTransportType.WebSockets
+    })
+    .withHubProtocol(new MessagePackHubProtocol())
+    .build();
+  connection.on("SessionEvent", (evt) => events.push(evt));
+  await connection.start();
+  return connection;
+}
+
+async function createSession() {
+  const response = await fetch(`${base}/api/v1/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ agentId: "examiner", mode: "text" })
+  });
+  if (!response.ok) {
+    throw new Error(`create failed ${response.status}`);
+  }
+  return response.json();
+}
+
+async function run() {
+  switch (scenario) {
+    case "text-roundtrip": {
+      const session = await createSession();
+      const connection = await connect();
+      const attach = await connection.invoke(
+        "Attach",
+        command(session.sessionId, 0, "session.attach", { lastServerSequence: null })
+      );
+      if (!attach.accepted) {
+        throw new Error(JSON.stringify(attach));
+      }
+      await waitFor((evt) => evt.type === "session.ready");
+      const send = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId: events[0].attachmentId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      await waitFor((evt) => evt.type === "agent.response.completed");
+      const types = events.map((evt) => evt.type);
+      if (!types.includes("agent.text.delta") || !types.includes("agent.text.completed")) {
+        throw new Error(`missing text events: ${types.join(",")}`);
+      }
+      if (events.some((evt) => evt.correlationId == null || evt.sequence < 1)) {
+        throw new Error("server envelopes missing correlation or sequence");
+      }
+      await connection.stop();
+      break;
+    }
+    case "protocol-version": {
+      const session = await createSession();
+      const connection = await connect();
+      const ack = await connection.invoke(
+        "Attach",
+        command(session.sessionId, 0, "session.attach", { lastServerSequence: null }, { protocolVersion: 2 })
+      );
+      if (ack.accepted || ack.error?.code !== "ProtocolVersionMismatch") {
+        throw new Error(JSON.stringify(ack));
+      }
+      await connection.stop();
+      break;
+    }
+    case "client-correlation": {
+      const session = await createSession();
+      const connection = await connect();
+      const ack = await connection.invoke(
+        "Attach",
+        command(session.sessionId, 0, "session.attach", { lastServerSequence: null }, { correlationId: uuid() })
+      );
+      if (ack.accepted || ack.error?.code !== "ProtocolError") {
+        throw new Error(JSON.stringify(ack));
+      }
+      await connection.stop();
+      break;
+    }
+    case "second-connection": {
+      const session = await createSession();
+      const first = await connect();
+      const attach = await first.invoke(
+        "Attach",
+        command(session.sessionId, 0, "session.attach", { lastServerSequence: null })
+      );
+      if (!attach.accepted) {
+        throw new Error(JSON.stringify(attach));
+      }
+      const second = await connect();
+      const denied = await second.invoke(
+        "Attach",
+        command(session.sessionId, 0, "session.attach", { lastServerSequence: null })
+      );
+      if (denied.accepted || denied.error?.code !== "SessionInUse") {
+        throw new Error(JSON.stringify(denied));
+      }
+      await second.stop();
+      await first.stop();
+      break;
+    }
+    case "stale-sequence": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const stale = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Again" }, { attachmentId })
+      );
+      if (stale.accepted || stale.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(stale));
+      }
+      await connection.stop();
+      break;
+    }
+    case "capacity": {
+      const a = await createSession();
+      const b = await createSession();
+      const extra = await fetch(`${base}/api/v1/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentId: "examiner", mode: "text" })
+      });
+      if (!extra.ok) {
+        throw new Error(`create should succeed, got ${extra.status}`);
+      }
+      const first = await connect();
+      const attached = await first.invoke("Attach", command(a.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      if (!attached.accepted) {
+        throw new Error(JSON.stringify(attached));
+      }
+      const second = await connect();
+      const denied = await second.invoke("Attach", command(b.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      if (denied.accepted || denied.error?.code !== "SessionCapacityExceeded" || denied.error?.retryAfterMs !== 5000) {
+        throw new Error(JSON.stringify(denied));
+      }
+      await second.stop();
+      await first.stop();
+      break;
+    }
+    default:
+      throw new Error(`unknown scenario ${scenario}`);
+  }
+}
+
+function waitFor(match, timeoutMs = 8000) {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(() => {
+      if (events.some(match)) {
+        clearInterval(timer);
+        resolve();
+      } else if (Date.now() - started > timeoutMs) {
+        clearInterval(timer);
+        reject(new Error(`timeout waiting; saw ${events.map((evt) => evt.type).join(",")}`));
+      }
+    }, 20);
+  });
+}
+
+run().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

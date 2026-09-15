@@ -29,17 +29,179 @@ public sealed partial class SessionRuntime
             ? _time.GetUtcNow() - started
             : TimeSpan.Zero;
 
-    private async Task HandleAttachAsync(CancellationToken cancellationToken)
+    private async Task HandleAttachAsync(AttachReceived input, CancellationToken cancellationToken)
     {
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             return;
         }
 
-        _snapshot = _snapshot with { Status = SessionStatus.Attached, UpdatedAt = _time.GetUtcNow() };
+        _snapshot = _snapshot with
+        {
+            Status = SessionStatus.Attached,
+            PendingMode = null,
+            UpdatedAt = _time.GetUtcNow()
+        };
         _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
+        if (_snapshot.Mode == SessionMode.Voice)
+        {
+            _streamId ??= _ids.NewId();
+        }
+
+        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task HandleDetachAsync(DetachReceived input, CancellationToken cancellationToken)
+    {
+        if (_activeResponseId is { } live)
+        {
+            await SupersedeAsync(input.Context, live, cancellationToken, "disconnected").ConfigureAwait(false);
+        }
+
+        _snapshot = _snapshot with
+        {
+            Status = SessionStatus.Paused,
+            PendingMode = null,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        _input = InputActivity.Idle;
+        _streamId = null;
+        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleSetModeAsync(SetModeReceived input, CancellationToken cancellationToken)
+    {
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        {
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new ErrorOutput("Session", "ValidationError", "Session has ended.", false, null)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (input.Mode == SessionMode.Voice && !_snapshot.Definition.Voice.Enabled)
+        {
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new ErrorOutput("Session", "VoiceUnavailable", "Voice is not available for this agent.", false, null)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (input.Mode == SessionMode.Text && _snapshot.PendingMode == SessionMode.Voice)
+        {
+            _timerGeneration++;
+            _snapshot = _snapshot with { PendingMode = null, UpdatedAt = _time.GetUtcNow() };
+            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (input.Mode == SessionMode.Voice && _activeResponseId is not null)
+        {
+            _snapshot = _snapshot with { PendingMode = SessionMode.Voice, UpdatedAt = _time.GetUtcNow() };
+            _pendingVoiceGeneration = ++_timerGeneration;
+            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            var generation = _pendingVoiceGeneration;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(_policy.PendingVoiceTimeoutMs), _time, _lifetime.Token)
+                        .ConfigureAwait(false);
+                    BeginWork();
+                    if (!_mailbox.Writer.TryWrite(new TimerElapsedReceived(NewContext(), "pendingVoice", generation, null)))
+                    {
+                        EndWork();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }, CancellationToken.None);
+            return;
+        }
+
+        if (input.Mode == SessionMode.Text && _activeResponseId is { } live && _snapshot.Mode == SessionMode.Voice)
+        {
+            await SupersedeAsync(input.Context, live, cancellationToken, "modeChange").ConfigureAwait(false);
+        }
+
+        await ApplyModeAsync(input.Mode, cancellationToken).ConfigureAwait(false);
+        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ApplyModeAsync(SessionMode mode, CancellationToken cancellationToken)
+    {
+        _snapshot = _snapshot with
+        {
+            Mode = mode,
+            PendingMode = null,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        if (mode == SessionMode.Voice)
+        {
+            _input = InputActivity.Listening;
+            _streamId = _ids.NewId();
+        }
+        else
+        {
+            _input = InputActivity.Idle;
+            _streamId = null;
+        }
+
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
     }
+
+    private SessionReadyProjection BuildReady()
+    {
+        var voice = _snapshot.Mode == SessionMode.Voice;
+        var history = _snapshot.Entries.TakeLast(50).Select(PublicHistory.FromEntry).ToArray();
+        return new SessionReadyProjection(
+            _snapshot.Mode,
+            _snapshot.PendingMode,
+            _snapshot.Status,
+            PublicHistory.FromDefinition(_snapshot.Definition, _snapshot.Definition.Voice.Enabled),
+            voice ? _streamId : null,
+            voice ? CanonicalAudio.Format : null,
+            voice
+                ? _recognition
+                : new RecognitionCapabilities(false, false, false, false),
+            voice
+                ? new SynthesisCapabilities(false, false, false, false, false, [])
+                : new SynthesisCapabilities(false, false, false, false, false, []),
+            voice ? _policy.BargeInPolicy : "none",
+            history.Length == 0 ? 0 : history[^1].Sequence,
+            history,
+            ActiveResponseId: null);
+    }
+
+    private async Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
+        await PublishAsync(
+                new SessionOutput(
+                    context,
+                    null,
+                    new StateChangedOutput(
+                        _snapshot.Status,
+                        _snapshot.Mode,
+                        _snapshot.PendingMode,
+                        _input.ToString(),
+                        _outputActivity.ToString(),
+                        Muted: false,
+                        _streamId)),
+                cancellationToken)
+            .ConfigureAwait(false);
 
     private async Task HandleSpeechAsync(SpeechEvidenceReceived input, CancellationToken cancellationToken)
     {
@@ -125,6 +287,20 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (input.Kind == "pendingVoice")
+        {
+            if (_snapshot.PendingMode == SessionMode.Voice)
+            {
+                _snapshot = _snapshot with { PendingMode = null, Mode = SessionMode.Text, UpdatedAt = _time.GetUtcNow() };
+                _streamId = null;
+                _input = InputActivity.Idle;
+                await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+                await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
         if (input.Kind == "idle"
             && _snapshot.Status == SessionStatus.Attached
             && _input is InputActivity.Idle or InputActivity.Listening
@@ -154,7 +330,7 @@ public sealed partial class SessionRuntime
 
         if (evaluation.Decision is InteractionDecision.Interrupt && _activeResponseId is { } live)
         {
-            await SupersedeAsync(context, live, cancellationToken).ConfigureAwait(false);
+            await SupersedeAsync(context, live, cancellationToken, "userBargeIn").ConfigureAwait(false);
         }
 
         if (evaluation.CommitUserTurn && evaluation.UserText is { } text)

@@ -1,5 +1,6 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
+using AgentCore.Api.Realtime;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
@@ -24,6 +25,15 @@ if (string.IsNullOrEmpty(languageModel.ApiKey))
 }
 
 builder.Services.AddAgentCoreInfrastructure(agentDirectory, profile, languageModel);
+builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
+builder.Services.AddSingleton<SessionHost>();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 32 * 1024;
+    options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.MaximumParallelInvocationsPerClient = 4;
+}).AddMessagePackProtocol();
 builder.Services.AddSingleton<OutboundHttpProbe>();
 if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
 {
@@ -39,6 +49,8 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+app.MapHub<SessionHub>("/hubs/session");
 
 app.MapGet("/health", (IConfiguration configuration) =>
         Results.Json(new HealthResponse(
@@ -92,12 +104,17 @@ app.MapPost("/api/v1/sessions", async (CreateSessionRequest? body, SessionManage
     }
 });
 
-app.MapGet("/api/v1/sessions/{sessionId:guid}", async (Guid sessionId, SessionManager sessions, CancellationToken cancellationToken) =>
+app.MapGet("/api/v1/sessions/{sessionId:guid}", async (
+    Guid sessionId,
+    SessionManager sessions,
+    SessionHost host,
+    CancellationToken cancellationToken) =>
 {
     try
     {
-        var snapshot = await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return Results.Json(HttpMapping.ToView(snapshot, activeResponseId: null));
+        var snapshot = host.LiveSnapshot(sessionId)
+            ?? await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        return Results.Json(HttpMapping.ToView(snapshot, host.ActiveResponseId(sessionId)));
     }
     catch (AgentCoreException ex)
     {
@@ -129,11 +146,14 @@ app.MapGet("/api/v1/sessions/{sessionId:guid}/messages", async (
     }
 });
 
-app.MapDelete("/api/v1/sessions/{sessionId:guid}", async (Guid sessionId, SessionManager sessions, CancellationToken cancellationToken) =>
+app.MapDelete("/api/v1/sessions/{sessionId:guid}", async (
+    Guid sessionId,
+    SessionHost host,
+    CancellationToken cancellationToken) =>
 {
     try
     {
-        await sessions.EndAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        await host.TerminateAsync(sessionId, cancellationToken).ConfigureAwait(false);
         return Results.NoContent();
     }
     catch (AgentCoreException ex)

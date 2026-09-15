@@ -51,6 +51,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private Guid? _activeUtteranceId;
     private DateTimeOffset? _utteranceStarted;
     private double? _activityScore;
+    private Guid? _streamId;
+    private int _pendingVoiceGeneration;
 
     public SessionRuntime(
         SessionSnapshot snapshot,
@@ -135,11 +137,32 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public InteractionDecision? LastControllerDecision { get; private set; }
 
+    public async Task DetachAsync(CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new DetachReceived(context), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SetModeAsync(SessionMode mode, CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new SetModeReceived(context, mode), cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task AttachAsync(CancellationToken cancellationToken = default)
     {
         var context = NewContext();
         BeginWork();
         await _mailbox.Writer.WriteAsync(new AttachReceived(context), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RequestEndAsync(CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new EndSessionReceived(context), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SubmitSpeechAsync(
@@ -237,8 +260,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         case TimerElapsedReceived timer:
                             await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
                             break;
-                        case AttachReceived:
-                            await HandleAttachAsync(cancellationToken).ConfigureAwait(false);
+                        case AttachReceived attach:
+                            await HandleAttachAsync(attach, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case DetachReceived detach:
+                            await HandleDetachAsync(detach, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case SetModeReceived mode:
+                            await HandleSetModeAsync(mode, cancellationToken).ConfigureAwait(false);
                             break;
                         case ModelResultReceived model:
                             await HandleModelAsync(model, cancellationToken).ConfigureAwait(false);
@@ -247,8 +276,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         case CancelResponseReceived cancel:
                             await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
                             break;
-                        case EndSessionReceived:
-                            await EndAsync(cancellationToken).ConfigureAwait(false);
+                        case EndSessionReceived ended:
+                            await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
                             break;
                     }
                 }
@@ -276,7 +305,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (_activeResponseId is { } live)
         {
-            await SupersedeAsync(input.Context, live, cancellationToken).ConfigureAwait(false);
+            await SupersedeAsync(input.Context, live, cancellationToken, "newText").ConfigureAwait(false);
         }
 
         var now = _time.GetUtcNow();
@@ -493,10 +522,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        await SupersedeAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false);
+        await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userBargeIn").ConfigureAwait(false);
     }
 
-    private async Task SupersedeAsync(EventContext context, Guid responseId, CancellationToken cancellationToken)
+    private async Task SupersedeAsync(
+        EventContext context,
+        Guid responseId,
+        CancellationToken cancellationToken,
+        string reason = "newText")
     {
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
@@ -506,7 +539,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             UpdateAssistant(EntryStatus.Interrupted, received: _generated.Length);
             await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
             await PublishAsync(
-                    new SessionOutput(context, responseId, new ResponseCompletedOutput(true, HeardTextEndExclusive: 0)),
+                    new SessionOutput(
+                        context,
+                        responseId,
+                        new ResponseCompletedOutput(true, HeardTextEndExclusive: 0, InterruptReason: reason)),
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -541,6 +577,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
         ClearActive();
+        if (_snapshot.PendingMode == SessionMode.Voice)
+        {
+            await ApplyModeAsync(SessionMode.Voice, cancellationToken).ConfigureAwait(false);
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming, _generated.Length);
@@ -574,10 +615,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseCts = null;
     }
 
-    private async Task EndAsync(CancellationToken cancellationToken)
+    private async Task HandleEndAsync(EndSessionReceived input, CancellationToken cancellationToken)
     {
-        _snapshot = _snapshot with { Status = SessionStatus.Ended, UpdatedAt = _time.GetUtcNow() };
+        if (_activeResponseId is { } live)
+        {
+            await SupersedeAsync(input.Context, live, cancellationToken, "ended").ConfigureAwait(false);
+        }
+
+        _snapshot = _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() };
+        _input = InputActivity.Idle;
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
     }
 
     private SessionSnapshot Append(ConversationEntry entry)

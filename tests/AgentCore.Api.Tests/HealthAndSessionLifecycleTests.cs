@@ -59,13 +59,14 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
-    public async Task Voice_create_is_unavailable_without_speech_adapters()
+    public async Task Synthetic_voice_create_is_available()
     {
         var client = _factory.CreateClient();
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
-        Assert.Equal(HttpStatusCode.Conflict, created.StatusCode);
-        using var document = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        Assert.Equal("VoiceUnavailable", document.RootElement.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.Equal("voice", view!.Mode);
+        Assert.Equal(0, _factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
 
     [Fact]

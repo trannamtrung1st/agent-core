@@ -1,0 +1,9 @@
+{
+  "name": "agent-core-realtime-js",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@microsoft/signalr": "^9.0.6",
+    "@microsoft/signalr-protocol-msgpack": "^9.0.6"
+  }
+}

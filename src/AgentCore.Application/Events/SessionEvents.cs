@@ -45,6 +45,10 @@ public sealed record TimerElapsedReceived(
 
 public sealed record AttachReceived(EventContext Context) : SessionInput(Context);
 
+public sealed record DetachReceived(EventContext Context) : SessionInput(Context);
+
+public sealed record SetModeReceived(EventContext Context, SessionMode Mode) : SessionInput(Context);
+
 public sealed record ModelResultReceived(
     EventContext Context,
     Guid ResponseId,
@@ -102,7 +106,21 @@ public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload
 
 public sealed record TextCompletedOutput(int TextLength) : OutputPayload;
 
-public sealed record ResponseCompletedOutput(bool Failed, int HeardTextEndExclusive) : OutputPayload;
+public sealed record ResponseCompletedOutput(
+    bool Failed,
+    int HeardTextEndExclusive,
+    string? InterruptReason = null) : OutputPayload;
+
+public sealed record ResponseInterruptedOutput(string Reason, int HeardTextEndExclusive) : OutputPayload;
+
+public sealed record StateChangedOutput(
+    SessionStatus Status,
+    SessionMode Mode,
+    SessionMode? PendingMode,
+    string InputState,
+    string OutputState,
+    bool Muted,
+    Guid? StreamId) : OutputPayload;
 
 public sealed record ErrorOutput(
     string Category,

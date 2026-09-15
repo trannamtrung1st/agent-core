@@ -13,6 +13,7 @@ public sealed class AgentCoreException : Exception
     public string Code { get; }
     public int StatusCode { get; }
     public bool Fatal { get; }
+    public int? RetryAfterMs { get; init; }
 }
 
 public static class AgentCoreErrors
@@ -25,6 +26,21 @@ public static class AgentCoreErrors
 
     public static AgentCoreException VoiceUnavailable() =>
         new("VoiceUnavailable", "Voice is not available for this agent.", 409);
+
+    public static AgentCoreException SessionInUse() =>
+        new("SessionInUse", "Session is attached to another connection.", 409);
+
+    public static AgentCoreException SessionCapacityExceeded() =>
+        new("SessionCapacityExceeded", "Maximum active sessions reached.", 429) { RetryAfterMs = 5000 };
+
+    public static AgentCoreException Protocol(string detail) =>
+        new("ProtocolError", detail, 400);
+
+    public static AgentCoreException ProtocolVersionMismatch() =>
+        new("ProtocolVersionMismatch", "Unsupported protocol version.", 400);
+
+    public static AgentCoreException StaleCommand() =>
+        new("StaleCommand", "Command is stale for this attachment.", 409);
 
     public static AgentCoreException Persistence(string detail) =>
         new("SessionPersistenceUnavailable", detail, 503, fatal: false);

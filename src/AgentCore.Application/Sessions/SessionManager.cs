@@ -136,7 +136,7 @@ public sealed class VoiceAvailability
         && SpeechAdaptersResolved;
 
     /// <summary>
-    /// Milestone 1 has no STT/TTS adapters, so voice remains unavailable.
+    /// Synthetic adapters count as resolved. Hosted speech adapters arrive in later milestones.
     /// </summary>
     public bool SpeechAdaptersResolved { get; init; }
 }
@@ -145,13 +145,13 @@ public sealed class SessionRuntimeFactory(
     ILanguageModel languageModel,
     IAgentBrain brain,
     IMemoryStore store,
-    ISessionOutput output,
     IIdGenerator ids,
     TimeProvider time,
     Microsoft.Extensions.Logging.ILoggerFactory loggers,
-    IInterruptionClassifier classifier)
+    IInterruptionClassifier classifier,
+    InteractionPolicy policy)
 {
-    public SessionRuntime Create(SessionSnapshot snapshot) =>
+    public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
             snapshot,
             languageModel,
@@ -161,5 +161,7 @@ public sealed class SessionRuntimeFactory(
             ids,
             time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!),
-            classifier);
+            classifier,
+            recognition: null,
+            policy);
 }

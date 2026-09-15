@@ -5,7 +5,92 @@
 }
 
 main {
-  max-width: 40rem;
-  margin: 3rem auto;
-  padding: 0 1rem;
+  max-width: 44rem;
+  margin: 2rem auto;
+  padding: 0 1rem 3rem;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.picker,
+.composer {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #9fb3c8;
+  border-radius: 0.4rem;
+  padding: 0.5rem;
+}
+
+button {
+  border: 0;
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  background: #243b53;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #2cb1bc;
+  outline-offset: 2px;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.transcript {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.transcript li {
+  background: #fff;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.transcript li[data-role="user"] {
+  background: #d9e2ec;
+}
+
+.error {
+  color: #9b1c1c;
 }

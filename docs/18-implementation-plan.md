@@ -62,6 +62,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Acceptance criteria:** Text UI works offline end-to-end, late R1 deltas are rejected on both sides, hub has no runtime logic and browser cannot obtain provider secrets. `docker compose up` with Synthetic is a supported optional integration path.
 - **Explicit non-goals:** WebRTC, authentication system, unbounded event replay, audio DSP, Kubernetes, Redis, brokers, reverse proxies, separate frontend/backend production containers.
 - **CI:** Document GitHub Actions as intended repository CI. Add synthetic browser integration when `web/` scripts exist. Do not create full workflow files until those projects exist.
+- **Status:** Browser SignalR/MessagePack text path, leases, pending-voice timeout/disconnect, Kestrel JavaScript fixtures and Playwright text E2E are implemented. See [Milestone 5 verification](reports/m05-verification.md). Minimal Synthetic Compose and workflow files remain the following Milestone 5 work item.
 
 ## Milestone 6 — Microphone, AudioWorklet and STT
 
