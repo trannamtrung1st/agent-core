@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
@@ -16,8 +19,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         new BoundedChannelOptions(256)
         {
             SingleReader = true,
-            FullMode = BoundedChannelFullMode.Wait
+            FullMode = BoundedChannelFullMode.DropWrite
         });
+    private readonly ConcurrentQueue<SessionInput> _urgent = new();
 
     private readonly ILanguageModel _languageModel;
     private readonly IAgentBrain _brain;
@@ -71,6 +75,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private readonly HashSet<Guid> _environmentIds = [];
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
+    private int _mailboxPressureSignaled;
+    private long _ttsStartedAt;
+    private bool _recordedLlm;
+    private bool _recordedStt;
+    private bool _recordedSegment;
+    private bool _recordedTts;
+    private bool _recordedTransport;
+    private bool _recordedPlayback;
 
     public SessionRuntime(
         SessionSnapshot snapshot,
@@ -111,7 +123,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public SessionSnapshot Snapshot => _snapshot;
 
-    public async Task SubmitUserTextAsync(string text, CancellationToken cancellationToken = default)
+    public Task SubmitUserTextAsync(string text, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         if (text.Length > 8000)
@@ -119,23 +131,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             throw AgentCoreErrors.Validation("Text exceeds 8000 UTF-16 code units.");
         }
 
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new UserTextReceived(context, text), cancellationToken)
-            .ConfigureAwait(false);
+        Enqueue(new UserTextReceived(context, text), urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task CancelActiveResponseAsync(CancellationToken cancellationToken = default)
+    public Task CancelActiveResponseAsync(CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         if (_activeResponseId is not { } responseId)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new CancelResponseReceived(context, responseId), cancellationToken)
-            .ConfigureAwait(false);
+        Enqueue(new CancelResponseReceived(context, responseId), urgent: true);
+        return Task.CompletedTask;
     }
 
     public Task WaitUntilMailboxDrainedAsync(CancellationToken cancellationToken = default)
@@ -169,46 +183,55 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public InteractionDecision? LastControllerDecision { get; private set; }
 
-    public async Task DetachAsync(CancellationToken cancellationToken = default)
+    public Task DetachAsync(CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new DetachReceived(context), cancellationToken).ConfigureAwait(false);
+        Enqueue(new DetachReceived(context), urgent: true);
+        return Task.CompletedTask;
     }
 
-    public async Task SetModeAsync(SessionMode mode, CancellationToken cancellationToken = default)
+    public Task SetModeAsync(SessionMode mode, CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new SetModeReceived(context, mode), cancellationToken).ConfigureAwait(false);
+        Enqueue(new SetModeReceived(context, mode), urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task AttachAsync(CancellationToken cancellationToken = default)
+    public Task AttachAsync(CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new AttachReceived(context), cancellationToken).ConfigureAwait(false);
+        Enqueue(new AttachReceived(context), urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task RequestEndAsync(CancellationToken cancellationToken = default)
+    public Task RequestEndAsync(CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new EndSessionReceived(context), cancellationToken).ConfigureAwait(false);
+        Enqueue(new EndSessionReceived(context), urgent: true);
+        return Task.CompletedTask;
     }
 
-    public async Task SubmitSpeechAsync(
+    public Task SubmitSpeechAsync(
         SpeechRecognitionEvent evidence,
         double? activityScore = null,
         CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new SpeechEvidenceReceived(context, evidence, activityScore), cancellationToken)
-            .ConfigureAwait(false);
+        Enqueue(new SpeechEvidenceReceived(context, evidence, activityScore), urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task SubmitClassifierResultAsync(
+    public Task SubmitClassifierResultAsync(
         Guid candidateId,
         Guid utteranceId,
         Guid responseId,
@@ -216,55 +239,60 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         InteractionDecision decision,
         CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(
-                new ClassifierReturned(context, candidateId, utteranceId, responseId, revision, decision),
-                cancellationToken)
-            .ConfigureAwait(false);
+        Enqueue(
+            new ClassifierReturned(context, candidateId, utteranceId, responseId, revision, decision),
+            urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task SetMutedAsync(bool muted, CancellationToken cancellationToken = default)
+    public Task SetMutedAsync(bool muted, CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new MuteReceived(context, muted), cancellationToken).ConfigureAwait(false);
+        Enqueue(new MuteReceived(context, muted), urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task SubmitPlaybackAsync(
+    public Task SubmitPlaybackAsync(
         Guid responseId,
         string kind,
         long consumedSamples,
         int textEndExclusive,
         CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(
-                new PlaybackReportReceived(context, responseId, kind, consumedSamples, textEndExclusive),
-                cancellationToken)
-            .ConfigureAwait(false);
+        Enqueue(
+            new PlaybackReportReceived(context, responseId, kind, consumedSamples, textEndExclusive),
+            urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task SubmitTimerElapsedAsync(
+    public Task SubmitTimerElapsedAsync(
         string kind,
         int generation,
         Guid? utteranceId = null,
         CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(
-                new TimerElapsedReceived(context, kind, generation, utteranceId),
-                cancellationToken)
-            .ConfigureAwait(false);
+        Enqueue(new TimerElapsedReceived(context, kind, generation, utteranceId), urgent: false);
+        return Task.CompletedTask;
     }
 
-    public async Task SubmitEnvironmentAsync(EnvironmentEvent input, CancellationToken cancellationToken = default)
+    public Task SubmitEnvironmentAsync(EnvironmentEvent input, CancellationToken cancellationToken = default)
     {
+        _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        await _mailbox.Writer.WriteAsync(new EnvironmentReceived(context, input), cancellationToken).ConfigureAwait(false);
+        Enqueue(new EnvironmentReceived(context, input), urgent: false);
+        return Task.CompletedTask;
     }
 
     public Task WaitUntilIdleAsync(CancellationToken cancellationToken = default)
@@ -301,71 +329,33 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         try
         {
-            await foreach (var input in _mailbox.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            while (await _mailbox.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                try
+                while (_urgent.TryDequeue(out var urgent))
                 {
-                    switch (input)
+                    await DispatchAsync(urgent, cancellationToken).ConfigureAwait(false);
+                }
+
+                while (_mailbox.Reader.TryRead(out var input))
+                {
+                    if (input is PulseReceived)
                     {
-                        case UserTextReceived user:
-                            await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case SpeechEvidenceReceived speech:
-                            await HandleSpeechAsync(speech, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case AudioIngressFaultReceived fault:
-                            await HandleAudioFaultAsync(fault, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case ClassifierReturned classified:
-                            await HandleClassifierAsync(classified, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case BrainReturned brain:
-                            await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
-                            brain.Processed.TrySetResult();
-                            break;
-                        case TimerElapsedReceived timer:
-                            await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case AttachReceived attach:
-                            await HandleAttachAsync(attach, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case DetachReceived detach:
-                            await HandleDetachAsync(detach, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case SetModeReceived mode:
-                            await HandleSetModeAsync(mode, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case MuteReceived mute:
-                            await HandleMuteAsync(mute, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case ModelResultReceived model:
-                            await HandleModelAsync(model, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case SynthesisResultReceived synthesis:
-                            await HandleSynthesisAsync(synthesis, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case PlaybackReportReceived playback:
-                            await HandlePlaybackAsync(playback, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case CancelResponseReceived cancel:
-                            await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case EndSessionReceived ended:
-                            await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
-                            break;
-                        case EnvironmentReceived environment:
-                            await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
-                            break;
+                        continue;
+                    }
+
+                    await DispatchAsync(input, cancellationToken).ConfigureAwait(false);
+                    while (_urgent.TryDequeue(out var nested))
+                    {
+                        await DispatchAsync(nested, cancellationToken).ConfigureAwait(false);
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-                }
-                finally
-                {
-                    EndWork();
-                }
+
+                TrySignalIdle();
+            }
+
+            while (_urgent.TryDequeue(out var rest))
+            {
+                await DispatchAsync(rest, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -373,8 +363,122 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
+    private async Task DispatchAsync(SessionInput input, CancellationToken cancellationToken)
+    {
+        try
+        {
+            switch (input)
+            {
+                case UserTextReceived user:
+                    await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);
+                    break;
+                case SpeechEvidenceReceived speech:
+                    await HandleSpeechAsync(speech, cancellationToken).ConfigureAwait(false);
+                    break;
+                case AudioIngressFaultReceived fault:
+                    await HandleAudioFaultAsync(fault, cancellationToken).ConfigureAwait(false);
+                    break;
+                case ClassifierReturned classified:
+                    await HandleClassifierAsync(classified, cancellationToken).ConfigureAwait(false);
+                    break;
+                case BrainReturned brain:
+                    await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
+                    brain.Processed.TrySetResult();
+                    break;
+                case TimerElapsedReceived timer:
+                    await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
+                    break;
+                case AttachReceived attach:
+                    await HandleAttachAsync(attach, cancellationToken).ConfigureAwait(false);
+                    break;
+                case DetachReceived detach:
+                    await HandleDetachAsync(detach, cancellationToken).ConfigureAwait(false);
+                    break;
+                case SetModeReceived mode:
+                    await HandleSetModeAsync(mode, cancellationToken).ConfigureAwait(false);
+                    break;
+                case MuteReceived mute:
+                    await HandleMuteAsync(mute, cancellationToken).ConfigureAwait(false);
+                    break;
+                case ModelResultReceived model:
+                    await HandleModelAsync(model, cancellationToken).ConfigureAwait(false);
+                    break;
+                case SynthesisResultReceived synthesis:
+                    await HandleSynthesisAsync(synthesis, cancellationToken).ConfigureAwait(false);
+                    break;
+                case PlaybackReportReceived playback:
+                    await HandlePlaybackAsync(playback, cancellationToken).ConfigureAwait(false);
+                    break;
+                case CancelResponseReceived cancel:
+                    await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
+                    break;
+                case EndSessionReceived ended:
+                    await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
+                    break;
+                case EnvironmentReceived environment:
+                    await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
+                    break;
+                case MailboxSaturatedReceived saturated:
+                    await HandleMailboxSaturatedAsync(saturated, cancellationToken).ConfigureAwait(false);
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
+    private void Enqueue(SessionInput input, bool urgent)
+    {
+        if (urgent)
+        {
+            _urgent.Enqueue(input);
+            _mailbox.Writer.TryWrite(new PulseReceived(input.Context));
+            return;
+        }
+
+        if (_mailbox.Writer.TryWrite(input))
+        {
+            return;
+        }
+
+        EndWork();
+        RuntimeTelemetry.RecordDropped("mailbox");
+        if (Interlocked.Exchange(ref _mailboxPressureSignaled, 1) == 0)
+        {
+            BeginWork();
+            _urgent.Enqueue(new MailboxSaturatedReceived(input.Context));
+            _mailbox.Writer.TryWrite(new PulseReceived(input.Context));
+        }
+    }
+
+    private async Task HandleMailboxSaturatedAsync(MailboxSaturatedReceived input, CancellationToken cancellationToken)
+    {
+        await PublishAsync(
+                new SessionOutput(
+                    input.Context,
+                    null,
+                    new ErrorOutput(
+                        "Transport",
+                        "Backpressure",
+                        "The session mailbox is full. Stop or retry after the current work drains.",
+                        false,
+                        TimeSpan.FromSeconds(1))),
+                cancellationToken)
+            .ConfigureAwait(false);
+        Interlocked.Exchange(ref _mailboxPressureSignaled, 0);
+    }
+
     private async Task HandleUserTextAsync(UserTextReceived input, CancellationToken cancellationToken)
     {
+        using var activity = RuntimeTelemetry.Activity.StartActivity("user_turn");
+        var started = Stopwatch.GetTimestamp();
+        _recordedLlm = false;
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             return;
@@ -421,6 +525,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var turn = ++_turnGeneration;
         _helpOfferedDuringSilence = false;
         _outputActivity = OutputActivity.WaitingForAgent;
+        RuntimeTelemetry.Record("controller", RuntimeTelemetry.ElapsedMs(started));
+        _logger.LogInformation(
+            "User turn accepted {SessionId} {EventId} chars {CharCount}",
+            SessionId,
+            input.Context.EventId,
+            input.Text.Length);
         LaunchBrain(input.Context, trigger, responseId, turn);
     }
 
@@ -532,7 +642,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             try
             {
+                var brainStarted = Stopwatch.GetTimestamp();
+                using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 var decision = await _brain.DecideAsync(context, responseId, _lifetime.Token).ConfigureAwait(false);
+                RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted));
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var inbound = NewContext(cause.EventId);
                 BeginWork();
@@ -553,10 +666,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task PumpModelAsync(ModelRequest request, EventContext cause, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
+        using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         try
         {
             await foreach (var evt in _languageModel.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
             {
+                if (!_recordedLlm && evt is ModelTextDelta)
+                {
+                    _recordedLlm = true;
+                    RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
+                }
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var context = NewContext(cause.EventId);
                 BeginWork();
@@ -655,12 +775,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleCancelAsync(CancelResponseReceived input, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
         if (_activeResponseId != input.ResponseId)
         {
             return;
         }
 
         await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userBargeIn").ConfigureAwait(false);
+        RuntimeTelemetry.Record("bargein", RuntimeTelemetry.ElapsedMs(started));
     }
 
     private async Task SupersedeAsync(
@@ -810,9 +932,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             throw AgentCoreErrors.Validation("Session entry limit of 1000 was reached.");
         }
 
+        using var activity = RuntimeTelemetry.Activity.StartActivity("persist");
+        var started = Stopwatch.GetTimestamp();
         var next = snapshot with { Revision = _snapshot.Revision + 1, UpdatedAt = _time.GetUtcNow() };
         await _store.SaveAsync(next, _snapshot.Revision, cancellationToken).ConfigureAwait(false);
         _snapshot = next;
+        RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(started));
     }
 
     private async Task CheckpointStreamingAsync(CancellationToken cancellationToken)
@@ -840,6 +965,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         frame.Data),
                     cancellationToken)
                 .ConfigureAwait(false);
+            if (!_recordedTransport)
+            {
+                _recordedTransport = true;
+                RuntimeTelemetry.Record("transport", 0);
+            }
             return;
         }
 
@@ -874,6 +1004,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         lock (_idleGate)
         {
             _inflight--;
+            if (_mailbox.Reader.Count == 0)
+            {
+                _mailboxIdle.TrySetResult();
+            }
+
+            if (_inflight == 0 && _mailbox.Reader.Count == 0)
+            {
+                _idle.TrySetResult();
+            }
+        }
+    }
+
+    private void TrySignalIdle()
+    {
+        lock (_idleGate)
+        {
             if (_mailbox.Reader.Count == 0)
             {
                 _mailboxIdle.TrySetResult();

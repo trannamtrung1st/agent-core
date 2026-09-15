@@ -1,8 +1,10 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
+using System.Diagnostics;
 
 namespace AgentCore.Application.Sessions;
 
@@ -32,6 +34,8 @@ public sealed partial class SessionRuntime
 
     private async Task HandleAttachAsync(AttachReceived input, CancellationToken cancellationToken)
     {
+        using var activity = RuntimeTelemetry.Activity.StartActivity("attach");
+        var started = Stopwatch.GetTimestamp();
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             return;
@@ -65,6 +69,7 @@ public sealed partial class SessionRuntime
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), cancellationToken)
             .ConfigureAwait(false);
+        RuntimeTelemetry.Record("attach", RuntimeTelemetry.ElapsedMs(started));
         ScheduleIdleTimer(SilenceThreshold());
     }
 
@@ -299,8 +304,18 @@ public sealed partial class SessionRuntime
                 ScheduleCandidateTimer(queued.UtteranceId);
             }
         }
+        if (input.Evidence is SpeechStarted)
+        {
+            _recordedStt = false;
+        }
+
         if (input.Evidence is SpeechPartial partial)
         {
+            if (!_recordedStt)
+            {
+                _recordedStt = true;
+                RuntimeTelemetry.Record("stt", 0);
+            }
             await PublishAsync(
                     new SessionOutput(
                         input.Context,

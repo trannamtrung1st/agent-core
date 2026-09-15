@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByLabel("Identity")).toBeVisible();
   await page.getByRole("button", { name: "Start conversation" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 

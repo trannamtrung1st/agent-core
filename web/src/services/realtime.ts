@@ -460,7 +460,7 @@ export async function requestVoice(): Promise<void> {
     capture.release();
     useChatStore.setState({
       preflightReady: false,
-      error: error instanceof Error ? error.message : "Microphone preflight failed."
+      error: microphoneError(error)
     });
     return;
   }
@@ -519,6 +519,18 @@ export async function hangUp(): Promise<void> {
     selectedAgentId: snapshot.selectedAgentId
   });
   disposed = false;
+}
+
+function microphoneError(error: unknown): string {
+  if (error instanceof DOMException && error.name === "NotAllowedError") {
+    return "Microphone permission was denied. Enable the microphone or continue in text.";
+  }
+
+  if (error instanceof Error && /AudioWorklet/i.test(error.message)) {
+    return "This browser cannot start voice capture. Continue in text.";
+  }
+
+  return error instanceof Error ? error.message : "Microphone preflight failed.";
 }
 
 if (typeof window !== "undefined") {

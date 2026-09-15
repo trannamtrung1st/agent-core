@@ -50,7 +50,7 @@ export function ChatApp() {
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => void startConversation()}>
+          <button type="button" aria-label="Start conversation" onClick={() => void startConversation()}>
             Start conversation
           </button>
         </section>
@@ -92,25 +92,25 @@ export function ChatApp() {
               />
             </label>
             <div className="actions">
-              <button type="submit" disabled={!canSend}>
+              <button type="submit" aria-label="Send" disabled={!canSend}>
                 Send
               </button>
               {state.voiceAvailable ? (
                 pendingVoice ? (
-                  <button type="button" onClick={() => void cancelVoice()}>
+                  <button type="button" aria-label="Cancel voice" onClick={() => void cancelVoice()}>
                     Cancel
                   </button>
                 ) : state.mode === "voice" ? (
-                  <button type="button" onClick={() => void setMuted(!state.muted)}>
+                  <button type="button" aria-label={state.muted ? "Unmute" : "Mute"} onClick={() => void setMuted(!state.muted)}>
                     {state.muted ? "Unmute" : "Mute"}
                   </button>
                 ) : (
-                  <button type="button" onClick={() => void requestVoice()}>
+                  <button type="button" aria-label="Voice" onClick={() => void requestVoice()}>
                     Voice
                   </button>
                 )
               ) : null}
-              <button type="button" onClick={() => void hangUp()}>
+              <button type="button" aria-label="End" onClick={() => void hangUp()}>
                 End
               </button>
             </div>
@@ -124,6 +124,10 @@ export function ChatApp() {
 function connectionLabel(connection: string, mode: string): string {
   if (connection === "reconnecting") {
     return "Reconnecting";
+  }
+
+  if (connection === "failed") {
+    return "Connection failed. Check the network and try again.";
   }
 
   if (connection === "ready") {

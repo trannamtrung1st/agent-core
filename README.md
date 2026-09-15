@@ -63,7 +63,7 @@ Fast development uses native .NET + Vite processes with SQLite; Docker is not re
 - [Observability and Operations](docs/17-observability-and-operations.md)
 - [Implementation Plan](docs/18-implementation-plan.md)
 
-The future run commands are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation). Milestone 1 commands are runnable today; later commands appear as those milestones land.
+The future run commands are documented in [Operations](docs/17-observability-and-operations.md#running-after-implementation). Milestone 12 records per-stage `AgentCore.Runtime` measurements on the synthetic 20-turn demo; Compose SQLite volume hardening is the remaining Milestone 12 packaging item.
 
 ## Working with Codex and Cursor
 

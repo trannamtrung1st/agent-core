@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
@@ -32,6 +33,19 @@ builder.Services.AddAgentCoreInfrastructure(
     languageModel,
     builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions());
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
+builder.Services.AddOptions<ObservabilityOptions>()
+    .Bind(builder.Configuration.GetSection("Observability"))
+    .Validate(options => options.TimelineCapacity is >= 1 and <= 1000, "Observability:TimelineCapacity must be between 1 and 1000.")
+    .Validate(
+        options => !options.OtlpEnabled || Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out _),
+        "Observability:OtlpEndpoint is required when OtlpEnabled is true.")
+    .ValidateOnStart();
+builder.Services.AddOptions<HostingOptions>()
+    .Bind(builder.Configuration.GetSection("Hosting"))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.BindUrl), "Hosting:BindUrl is required.")
+    .ValidateOnStart();
+var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
+RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>

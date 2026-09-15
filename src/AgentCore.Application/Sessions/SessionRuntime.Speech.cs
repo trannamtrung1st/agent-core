@@ -1,5 +1,6 @@
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 
@@ -35,6 +36,7 @@ public sealed partial class SessionRuntime
 
             if (!_ingress.TryWrite(new IngressAudio(frame)))
             {
+                RuntimeTelemetry.RecordDropped("audio");
                 EnqueueFault("AudioDiscontinuity", "Input audio queue exceeded 500 ms.");
                 return false;
             }
@@ -61,10 +63,7 @@ public sealed partial class SessionRuntime
     private void EnqueueFault(string code, string message)
     {
         BeginWork();
-        if (!_mailbox.Writer.TryWrite(new AudioIngressFaultReceived(NewContext(), code, message)))
-        {
-            EndWork();
-        }
+        Enqueue(new AudioIngressFaultReceived(NewContext(), code, message), urgent: true);
     }
 
     private async Task StartRecognitionAsync(CancellationToken cancellationToken)
@@ -165,10 +164,7 @@ public sealed partial class SessionRuntime
     private void EnqueueSpeech(SpeechRecognitionEvent evidence, double? activityScore)
     {
         BeginWork();
-        if (!_mailbox.Writer.TryWrite(new SpeechEvidenceReceived(NewContext(), evidence, activityScore)))
-        {
-            EndWork();
-        }
+        Enqueue(new SpeechEvidenceReceived(NewContext(), evidence, activityScore), urgent: false);
     }
 
     private async Task HandleAudioFaultAsync(AudioIngressFaultReceived input, CancellationToken cancellationToken)

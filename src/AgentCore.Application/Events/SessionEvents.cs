@@ -14,6 +14,10 @@ public sealed record EventContext(
 
 public abstract record SessionInput(EventContext Context);
 
+public sealed record PulseReceived(EventContext Context) : SessionInput(Context);
+
+public sealed record MailboxSaturatedReceived(EventContext Context) : SessionInput(Context);
+
 public sealed record UserTextReceived(EventContext Context, string Text) : SessionInput(Context);
 
 public sealed record SpeechEvidenceReceived(

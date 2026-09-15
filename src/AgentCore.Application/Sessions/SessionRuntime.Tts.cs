@@ -1,9 +1,11 @@
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace AgentCore.Application.Sessions;
 
@@ -58,6 +60,11 @@ public sealed partial class SessionRuntime
         _ttsJobsStarted = 0;
         _currentSegment = null;
         _spokenUntil.Reset();
+        _recordedLlm = false;
+        _recordedSegment = false;
+        _recordedTts = false;
+        _recordedTransport = false;
+        _recordedPlayback = false;
         _segmenter = _activeResponseId is { } id
             && _snapshot.Mode == SessionMode.Voice
             && _synthesizer is not null
@@ -89,6 +96,12 @@ public sealed partial class SessionRuntime
         foreach (var segment in segments)
         {
             _pendingSegments.Enqueue(segment);
+        }
+
+        if (segments.Count > 0 && !_recordedSegment)
+        {
+            _recordedSegment = true;
+            RuntimeTelemetry.Record("segmentation", 0);
         }
     }
 
@@ -138,6 +151,7 @@ public sealed partial class SessionRuntime
 
         _ttsBusy = true;
         _ttsJobsStarted++;
+        _ttsStartedAt = Stopwatch.GetTimestamp();
         _currentSegment = segment;
         _segmentSampleOrigin = _outputSampleOffset;
         _spokenUntil.TrackSegment(segment, _segmentSampleOrigin);
@@ -211,6 +225,11 @@ public sealed partial class SessionRuntime
         switch (input.Event)
         {
             case SpeechAudio audio:
+                if (!_recordedTts)
+                {
+                    _recordedTts = true;
+                    RuntimeTelemetry.Record("tts", RuntimeTelemetry.ElapsedMs(_ttsStartedAt));
+                }
                 if (_sentSamples - _ackedSamples + PcmCodec.SampleCount(audio.Frame.Data) > MaxUnackedSamples)
                 {
                     _heldSynthesis = input;
@@ -269,6 +288,11 @@ public sealed partial class SessionRuntime
         if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase)
             || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase))
         {
+            if (!_recordedPlayback)
+            {
+                _recordedPlayback = true;
+                RuntimeTelemetry.Record("playback", 0);
+            }
             if (_outputActivity == OutputActivity.AgentGenerating)
             {
                 _outputActivity = OutputActivity.AgentSpeaking;

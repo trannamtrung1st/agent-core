@@ -127,6 +127,10 @@ This proves the runtime handles concurrency rather than only the happy path.
 
 Have a text exchange, start voice on the **same** session (preflight then `session.mode.set`), interrupt a long voice response after its first phrase, disconnect and reconnect. Interrupted text remains visibly marked, audio does not replay, and the next answer uses only the conservative heard prefix for that voice-delivered entry. A voice request that was still pending when the connection died does not resume; press Voice again. Return to text mode without creating a new session. Repeat after restarting the backend with SQLite enabled.
 
+## Synthetic 20-turn measurement
+
+Run the same identities through twenty synthetic text turns, then a full-duplex voice exchange, an interruption, restrained idle or environment initiative, and detach/reattach. Record per-stage `AgentCore.Runtime` durations as observed numbers (not SLAs). Distinguish generated, received, and heard text on assistant entries. The automated path is `TwentyTurnDemoTests`; a headset pass remains optional and key-gated.
+
 ## Demo preparation and capability caveat
 
 Use Synthetic first to verify scenarios without credentials; scripted STT supplies transcript content and synthetic TTS emits tones/silence for transport checks. Real/demo text uses OpenRouter with a **fixed** operator-selected model ID when `OPENROUTER_API_KEY` is supplied; `openrouter/free` is for adapter smoke only. Live OpenAI realtime transcription STT (recommended `gpt-live-transcribe`) and TTS may wait for `OPENAI_API_KEY`. Native speech-to-speech is excluded. Semantic backchannel demonstration requires partial-capable STT; batch STT intentionally uses speech-activity/final-transcript interruption and may interrupt on acknowledgements. Show that trade-off honestly in the developer panel.
