@@ -11,7 +11,7 @@ public sealed partial class SessionRuntime
     {
         lock (_audioGate)
         {
-            if (_snapshot.Mode != SessionMode.Voice || _recognitionSession is null)
+            if (_snapshot.Mode != SessionMode.Voice || _recognitionSession is null || _muted)
             {
                 return false;
             }
@@ -49,7 +49,7 @@ public sealed partial class SessionRuntime
     {
         lock (_audioGate)
         {
-            if (_snapshot.Mode != SessionMode.Voice || _recognitionSession is null)
+            if (_snapshot.Mode != SessionMode.Voice || _recognitionSession is null || _muted)
             {
                 return false;
             }
@@ -211,6 +211,7 @@ public sealed partial class SessionRuntime
         };
         _input = InputActivity.Idle;
         _streamId = null;
+        _muted = false;
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishAsync(
                 new SessionOutput(

@@ -50,3 +50,4 @@ jobs:
       - name: Synthetic Playwright
         working-directory: web
         run: npx playwright test
+        # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.

@@ -128,6 +128,15 @@ class MicrophoneCapture {
     }
   }
 
+  async muteInput(): Promise<void> {
+    if (this.utteranceId && this.hooks) {
+      await this.hooks.speechEnded(this.utteranceId, this.sampleOffset, 0);
+      this.utteranceId = null;
+    }
+
+    this.streaming = false;
+  }
+
   start(hooks: CaptureHooks): void {
     this.hooks = hooks;
     this.streaming = true;

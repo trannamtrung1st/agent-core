@@ -43,6 +43,7 @@ export type SessionView = {
   tombstones: Record<string, "interrupted" | "completed" | "failed">;
   lastServerSequence: number;
   streamId: string | null;
+  muted: boolean;
   draft: string;
   error: string | null;
   preflightReady: boolean;
@@ -63,6 +64,7 @@ export const emptySession = (): SessionView => ({
   tombstones: {},
   lastServerSequence: 0,
   streamId: null,
+  muted: false,
   draft: "",
   error: null,
   preflightReady: false
@@ -147,6 +149,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         tombstones: {},
         lastServerSequence: event.sequence,
         streamId: payload.streamId == null ? null : asString(payload.streamId),
+        muted: Boolean(payload.muted),
         error: null,
         preflightReady: false
       };
@@ -232,6 +235,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         mode,
         pendingMode,
         streamId: event.payload.streamId == null ? null : asString(event.payload.streamId),
+        muted: Boolean(event.payload.muted),
         preflightReady: mode === "voice" ? false : pendingMode === "voice" ? state.preflightReady : false
       };
     }

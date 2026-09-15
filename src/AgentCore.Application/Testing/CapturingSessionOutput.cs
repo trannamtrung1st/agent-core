@@ -2,7 +2,7 @@ using AgentCore.Application.Events;
 
 namespace AgentCore.Application.Testing;
 
-public sealed class CapturingSessionOutput : ISessionOutput
+public sealed class CapturingSessionOutput : ISessionOutput, ISessionAudioOutput
 {
     private readonly List<SessionOutput> _items = [];
     private readonly List<Waiter> _waiters = [];
@@ -37,6 +37,27 @@ public sealed class CapturingSessionOutput : ISessionOutput
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    public ValueTask PublishAsync(ResponseAudio audio, CancellationToken cancellationToken = default)
+    {
+        var context = new EventContext(
+            Guid.Empty,
+            audio.SessionId,
+            Guid.Empty,
+            DateTimeOffset.UtcNow,
+            Guid.Empty,
+            null);
+        return PublishAsync(
+            new SessionOutput(
+                context,
+                audio.ResponseId == Guid.Empty ? null : audio.ResponseId,
+                new AudioFrameOutput(
+                    audio.FrameSequence,
+                    audio.SampleOffset,
+                    audio.IsFinal,
+                    audio.Data.ToArray())),
+            cancellationToken);
     }
 
     public Task<SessionOutput> WaitForAsync(

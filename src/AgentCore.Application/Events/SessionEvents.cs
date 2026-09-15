@@ -59,6 +59,8 @@ public sealed record ModelResultReceived(
 
 public sealed record CancelResponseReceived(EventContext Context, Guid ResponseId) : SessionInput(Context);
 
+public sealed record MuteReceived(EventContext Context, bool Muted) : SessionInput(Context);
+
 public sealed record SynthesisResultReceived(
     EventContext Context,
     Guid ResponseId,
@@ -158,6 +160,19 @@ public sealed record ErrorOutput(
 public interface ISessionOutput
 {
     ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default);
+}
+
+public sealed record ResponseAudio(
+    Guid SessionId,
+    Guid ResponseId,
+    long FrameSequence,
+    long SampleOffset,
+    bool IsFinal,
+    ReadOnlyMemory<byte> Data);
+
+public interface ISessionAudioOutput
+{
+    ValueTask PublishAsync(ResponseAudio audio, CancellationToken cancellationToken = default);
 }
 
 public static class PublicHistory

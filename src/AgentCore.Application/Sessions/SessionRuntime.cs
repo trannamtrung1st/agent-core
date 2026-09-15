@@ -30,6 +30,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly RecognitionCapabilities _recognition;
     private readonly ISpeechRecognizer? _recognizer;
     private readonly ISpeechSynthesizer? _synthesizer;
+    private readonly ISessionAudioOutput? _audioOutput;
     private readonly InteractionPolicy _policy;
     private readonly object _audioGate = new();
     private AudioIngress _ingress = new();
@@ -63,6 +64,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private double? _activityScore;
     private Guid? _streamId;
     private int _pendingVoiceGeneration;
+    private bool _muted;
 
     public SessionRuntime(
         SessionSnapshot snapshot,
@@ -77,7 +79,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         RecognitionCapabilities? recognition = null,
         InteractionPolicy? policy = null,
         ISpeechRecognizer? recognizer = null,
-        ISpeechSynthesizer? synthesizer = null)
+        ISpeechSynthesizer? synthesizer = null,
+        ISessionAudioOutput? audioOutput = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
@@ -90,6 +93,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _logger = logger;
         _recognizer = recognizer;
         _synthesizer = synthesizer;
+        _audioOutput = audioOutput ?? output as ISessionAudioOutput;
         _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
@@ -151,6 +155,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public Guid? StreamId => _streamId;
 
+    public bool Muted => _muted;
+
+    public bool RecognitionActive => _recognitionSession is not null;
+
+    public OutputActivity Output => _outputActivity;
+
     public InteractionDecision? LastControllerDecision { get; private set; }
 
     public async Task DetachAsync(CancellationToken cancellationToken = default)
@@ -206,6 +216,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 new ClassifierReturned(context, candidateId, utteranceId, responseId, revision, decision),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task SetMutedAsync(bool muted, CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new MuteReceived(context, muted), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SubmitPlaybackAsync(
@@ -304,6 +321,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             break;
                         case SetModeReceived mode:
                             await HandleSetModeAsync(mode, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case MuteReceived mute:
+                            await HandleMuteAsync(mute, cancellationToken).ConfigureAwait(false);
                             break;
                         case ModelResultReceived model:
                             await HandleModelAsync(model, cancellationToken).ConfigureAwait(false);
@@ -724,8 +744,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _snapshot = next;
     }
 
-    private async Task PublishAsync(SessionOutput output, CancellationToken cancellationToken) =>
+    private async Task PublishAsync(SessionOutput output, CancellationToken cancellationToken)
+    {
+        if (output.Payload is AudioFrameOutput frame && _audioOutput is not null)
+        {
+            await _audioOutput.PublishAsync(
+                    new ResponseAudio(
+                        output.Context.SessionId,
+                        output.ResponseId ?? Guid.Empty,
+                        frame.FrameSequence,
+                        frame.SampleOffset,
+                        frame.IsFinal,
+                        frame.Data),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await _output.PublishAsync(output, cancellationToken).ConfigureAwait(false);
+    }
 
     private EventContext NewContext(Guid? causationId = null)
     {

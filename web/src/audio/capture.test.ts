@@ -32,4 +32,41 @@ describe("capture preflight", () => {
     await expect(capture.preflight()).rejects.toThrow(/AudioWorklet/);
     expect(capture.isPrepared()).toBe(false);
   });
+
+  it("muteInput stops streaming without releasing the graph", async () => {
+    const stop = vi.fn();
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getTracks: () => [{ stop }]
+        })
+      }
+    });
+    const port = { onmessage: null as ((event: MessageEvent) => void) | null, postMessage: vi.fn() };
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      destination = {};
+      resume = vi.fn();
+      close = vi.fn();
+      audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
+      createGain = () => ({ gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() });
+      createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+    });
+    vi.stubGlobal("AudioWorkletNode", class {
+      port = port;
+      connect = vi.fn();
+      disconnect = vi.fn();
+    });
+    await capture.preflight();
+    capture.start({
+      sendAudio: vi.fn(),
+      speechStarted: vi.fn(),
+      speechEnded: vi.fn()
+    });
+    expect(capture.isStreaming()).toBe(true);
+    await capture.muteInput();
+    expect(capture.isStreaming()).toBe(false);
+    expect(capture.isPrepared()).toBe(true);
+    expect(stop).not.toHaveBeenCalled();
+  });
 });

@@ -190,6 +190,14 @@ function syncCapture(): void {
   }
 
   if (state.mode === "voice" && state.streamId && connection) {
+    if (state.muted) {
+      if (capture.isStreaming()) {
+        void capture.muteInput();
+      }
+
+      return;
+    }
+
     if (!capture.isStreaming()) {
       const hub = connection;
       const sessionId = state.sessionId;
@@ -376,9 +384,21 @@ export async function requestVoice(): Promise<void> {
 
 export async function cancelVoice(): Promise<void> {
   capture.release();
-  useChatStore.setState({ preflightReady: false });
+  useChatStore.setState({ preflightReady: false, muted: false });
   commandSequence += 1;
   await invoke("SetMode", "session.mode.set", { mode: "text" }, commandSequence);
+}
+
+export async function setMuted(muted: boolean): Promise<void> {
+  if (muted) {
+    await capture.muteInput();
+  }
+
+  commandSequence += 1;
+  const ack = await invoke("SetMuted", "session.mute", { muted }, commandSequence);
+  if (!ack?.accepted) {
+    useChatStore.setState({ error: ack?.error?.message ?? "Mute failed." });
+  }
 }
 
 export async function hangUp(): Promise<void> {

@@ -93,6 +93,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Acceptance criteria:** No automatic microphone stop during agent speech, no record-submit-playback cycle, no multimodal reasoning requirement. Existing response identity guards remain active; the next milestone validates full semantic interruption and Spoken Until.
 - **Explicit non-goals:** Speech-to-speech models, half-duplex fallback UX, perfect echo suppression or provider-specific reasoning logic.
 - **CI:** After synthetic voice exists, add synthetic Playwright voice scenarios to core CI (still no keys, mic, speaker or GPU).
+- **Status:** Complete. Independent input/output lifetimes, mute/unmute, detach cancellation, and synthetic Playwright duplex/mute/disconnect coverage are implemented. Core CI remains key-free with Chromium fake media. See [Milestone 8 verification](reports/m08-verification.md).
 
 ## Milestone 9 — Semantic barge-in, ducking, supersession and spoken-until
 

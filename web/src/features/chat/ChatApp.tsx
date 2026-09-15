@@ -8,6 +8,7 @@ import {
   selectAgent,
   sendDraft,
   setDraft,
+  setMuted,
   startConversation
 } from "../../services/realtime";
 
@@ -98,6 +99,10 @@ export function ChatApp() {
                 pendingVoice ? (
                   <button type="button" onClick={() => void cancelVoice()}>
                     Cancel
+                  </button>
+                ) : state.mode === "voice" ? (
+                  <button type="button" onClick={() => void setMuted(!state.muted)}>
+                    {state.muted ? "Unmute" : "Mute"}
                   </button>
                 ) : (
                   <button type="button" onClick={() => void requestVoice()}>

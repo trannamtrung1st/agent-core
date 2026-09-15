@@ -110,4 +110,25 @@ describe("applyServerEvent", () => {
     expect(state.preflightReady).toBe(false);
     expect(state.entries).toHaveLength(1);
   });
+
+  it("applies mute from session.state.changed without dropping voice mode", () => {
+    const ready = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: { mode: "voice", pendingMode: null, status: "attached", agent: { name: "Alex" }, history: [], streamId: "s-1" }
+      })
+    );
+    const muted = applyServerEvent(
+      ready,
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: { status: "attached", mode: "voice", pendingMode: null, muted: true, streamId: "s-1" }
+      })
+    );
+    expect(muted.mode).toBe("voice");
+    expect(muted.muted).toBe(true);
+  });
 });

@@ -20,7 +20,7 @@ public sealed class AgentCoreOptions
     public int PendingVoiceTimeoutMs { get; set; } = 30_000;
 }
 
-public sealed class SessionHost : ISessionOutput
+public sealed class SessionHost : ISessionOutput, ISessionAudioOutput
 {
     private readonly SessionManager _sessions;
     private readonly SessionRuntimeFactory _factory;
@@ -331,6 +331,12 @@ public sealed class SessionHost : ISessionOutput
             return reject!;
         }
 
+        if (string.Equals(command.Type, "session.mute", StringComparison.Ordinal))
+        {
+            await live.Runtime.SetMutedAsync(AsBool(command.Payload, "muted") ?? false).ConfigureAwait(false);
+            return Accept(command.EventId);
+        }
+
         if (command.Type.StartsWith("playback.", StringComparison.Ordinal)
             && Guid.TryParse(command.ResponseId, out var responseId))
         {
@@ -350,6 +356,27 @@ public sealed class SessionHost : ISessionOutput
         return Accept(command.EventId);
     }
 
+    public ValueTask PublishAsync(ResponseAudio audio, CancellationToken cancellationToken = default)
+    {
+        if (!_live.TryGetValue(audio.SessionId, out var live) || live.ConnectionId is null)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        var dto = new OutputAudioDto
+        {
+            ProtocolVersion = 1,
+            SessionId = audio.SessionId.ToString(),
+            AttachmentId = live.AttachmentId.ToString(),
+            ResponseId = audio.ResponseId.ToString(),
+            FrameSequence = audio.FrameSequence,
+            SampleOffset = audio.SampleOffset,
+            IsFinal = audio.IsFinal,
+            Data = audio.Data.ToArray()
+        };
+        return new ValueTask(_hubs.Clients.Client(live.ConnectionId).SendAsync("AudioOutput", dto, cancellationToken));
+    }
+
     public ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default)
     {
         if (!_live.TryGetValue(output.Context.SessionId, out var live) || live.ConnectionId is null)
@@ -359,18 +386,15 @@ public sealed class SessionHost : ISessionOutput
 
         if (output.Payload is AudioFrameOutput audio)
         {
-            var dto = new OutputAudioDto
-            {
-                ProtocolVersion = 1,
-                SessionId = output.Context.SessionId.ToString(),
-                AttachmentId = live.AttachmentId.ToString(),
-                ResponseId = output.ResponseId?.ToString() ?? "",
-                FrameSequence = audio.FrameSequence,
-                SampleOffset = audio.SampleOffset,
-                IsFinal = audio.IsFinal,
-                Data = audio.Data
-            };
-            return new ValueTask(_hubs.Clients.Client(live.ConnectionId).SendAsync("AudioOutput", dto, cancellationToken));
+            return PublishAsync(
+                new ResponseAudio(
+                    output.Context.SessionId,
+                    output.ResponseId ?? Guid.Empty,
+                    audio.FrameSequence,
+                    audio.SampleOffset,
+                    audio.IsFinal,
+                    audio.Data),
+                cancellationToken);
         }
 
         var evt = SessionEventMapper.Map(output, live.AttachmentId, live.NextSequence());
@@ -472,6 +496,21 @@ public sealed class SessionHost : ISessionOutput
             _ => long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
                 ? parsed
                 : null
+        };
+    }
+
+    private static bool? AsBool(Dictionary<string, object?> payload, string key)
+    {
+        if (!payload.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            bool flag => flag,
+            string text when bool.TryParse(text, out var parsed) => parsed,
+            _ => bool.TryParse(value.ToString(), out var parsed) ? parsed : null
         };
     }
 

@@ -81,8 +81,42 @@ public sealed partial class SessionRuntime
         };
         _input = InputActivity.Idle;
         _streamId = null;
+        _muted = false;
+        InvalidateSpeechJobs();
+        _ttsCts?.Cancel();
         await StopRecognitionAsync().ConfigureAwait(false);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleMuteAsync(MuteReceived input, CancellationToken cancellationToken)
+    {
+        if (_snapshot.Mode != SessionMode.Voice)
+        {
+            return;
+        }
+
+        if (input.Muted == _muted)
+        {
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        _muted = input.Muted;
+        if (_muted)
+        {
+            _input = _input == InputActivity.UserSpeaking ? InputActivity.Listening : _input;
+        }
+        else
+        {
+            _streamId = _ids.NewId();
+            lock (_audioGate)
+            {
+                _expectedFrameSequence = 1;
+                _expectedSampleOffset = 0;
+            }
+        }
+
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
     }
 
@@ -186,6 +220,7 @@ public sealed partial class SessionRuntime
         {
             _input = InputActivity.Idle;
             _streamId = null;
+            _muted = false;
             await StopRecognitionAsync().ConfigureAwait(false);
         }
 
@@ -226,7 +261,7 @@ public sealed partial class SessionRuntime
                         _snapshot.PendingMode,
                         _input.ToString(),
                         _outputActivity.ToString(),
-                        Muted: false,
+                        Muted: _muted,
                         _streamId)),
                 cancellationToken)
             .ConfigureAwait(false);
