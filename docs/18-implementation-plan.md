@@ -72,6 +72,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** Sample-rate conversion/sample offsets, byte ordering, overflow/discontinuity, boundary ordering, duplicate finals, batch capability degradation, permission/device errors, VAD activityScore hysteresis, VoiceUnavailable, voice preflight (PCM gated on applied Mode). Automated tests use Synthetic STT. Infrastructure contract tests for OpenAiSpeechRecognizer session payloads: omit optional vendor fields such as transcription `delay` by default; include them only on an explicit supported-API fixture. Real OpenAI STT integration tests are explicit opt-in and skip when `OPENAI_API_KEY` is missing; they may be deferred without failing default build/test.
 - **Acceptance criteria:** Voice input produces one final user turn per utterance; raw audio never enters the normal mailbox/event log or persistence. Synthetic mode uses script-driven recognition with no keys. Missing OpenAI credentials does not fail the default suite.
 - **Explicit non-goals:** Real TTS output, assuming text-provider speech compatibility, perfect VAD/echo removal.
+- **Status:** Complete. Synthetic STT, bounded audio ingress, OpenAiSpeechRecognizer session payloads, batch degraded adapter, AudioWorklet preflight/PCM gating, and fake-device Playwright coverage are implemented. Missing `OPENAI_API_KEY` does not fail the default suite. See [Milestone 6 verification](reports/m06-verification.md).
 
 ## Milestone 7 — TTS streaming and playback
 

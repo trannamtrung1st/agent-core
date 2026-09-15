@@ -18,7 +18,7 @@ export function ChatApp() {
     void bootstrap().catch(() => undefined);
   }, []);
 
-  const pendingVoice = state.pendingMode === "voice";
+  const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const canSend = state.connection === "ready" && state.draft.trim().length > 0;
 
   return (

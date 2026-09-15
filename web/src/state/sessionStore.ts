@@ -42,6 +42,7 @@ export type SessionView = {
   liveResponseId: string | null;
   tombstones: Record<string, "interrupted" | "completed" | "failed">;
   lastServerSequence: number;
+  streamId: string | null;
   draft: string;
   error: string | null;
   preflightReady: boolean;
@@ -61,6 +62,7 @@ export const emptySession = (): SessionView => ({
   liveResponseId: null,
   tombstones: {},
   lastServerSequence: 0,
+  streamId: null,
   draft: "",
   error: null,
   preflightReady: false
@@ -144,6 +146,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         liveResponseId: payload.activeResponseId == null ? null : asString(payload.activeResponseId),
         tombstones: {},
         lastServerSequence: event.sequence,
+        streamId: payload.streamId == null ? null : asString(payload.streamId),
         error: null,
         preflightReady: false
       };
@@ -217,16 +220,44 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
           entry.responseId === event.responseId ? { ...entry, status } : entry)
       };
     }
-    case "session.state.changed":
+    case "session.state.changed": {
+      const mode = asString(event.payload.mode) === "voice" ? "voice" : "text";
+      const pendingMode = event.payload.pendingMode == null
+        ? null
+        : asString(event.payload.pendingMode) === "voice" ? "voice" : "text";
       return {
         ...state,
         lastServerSequence: event.sequence,
         status: asString(event.payload.status) || state.status,
-        mode: asString(event.payload.mode) === "voice" ? "voice" : "text",
-        pendingMode: event.payload.pendingMode == null
-          ? null
-          : asString(event.payload.pendingMode) === "voice" ? "voice" : "text"
+        mode,
+        pendingMode,
+        streamId: event.payload.streamId == null ? null : asString(event.payload.streamId),
+        preflightReady: mode === "voice" ? false : pendingMode === "voice" ? state.preflightReady : false
       };
+    }
+    case "transcript.final": {
+      const utteranceId = asString(event.payload.utteranceId);
+      const text = asString(event.payload.text);
+      const entryId = event.payload.entryId == null ? utteranceId : asString(event.payload.entryId);
+      if (state.entries.some((entry) => entry.entryId === entryId && entry.role === "user")) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      const entry: HistoryEntry = {
+        entryId,
+        sequence: asNumber(event.payload.entrySequence) || (state.entries.at(-1)?.sequence ?? 0) + 1,
+        sourceEventId: event.eventId,
+        role: "user",
+        text,
+        responseId: null,
+        status: "completed",
+        deliveryMode: "voice",
+        heardTextEndExclusive: text.length,
+        receivedTextEndExclusive: text.length,
+        createdAt: event.timestamp
+      };
+      return { ...state, lastServerSequence: event.sequence, entries: upsert(state.entries, entry) };
+    }
     case "error":
       return {
         ...state,

@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
 using AgentCore.Application.Ports;
@@ -26,7 +27,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly TimeProvider _time;
     private readonly ILogger _logger;
     private readonly RecognitionCapabilities _recognition;
+    private readonly ISpeechRecognizer? _recognizer;
     private readonly InteractionPolicy _policy;
+    private readonly object _audioGate = new();
+    private AudioIngress _ingress = new();
+    private ISpeechRecognitionSession? _recognitionSession;
+    private CancellationTokenSource? _sttCts;
+    private long _expectedFrameSequence = 1;
+    private long _expectedSampleOffset;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Task _loop;
     private readonly object _idleGate = new();
@@ -65,7 +73,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ILogger logger,
         IInterruptionClassifier? classifier = null,
         RecognitionCapabilities? recognition = null,
-        InteractionPolicy? policy = null)
+        InteractionPolicy? policy = null,
+        ISpeechRecognizer? recognizer = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
@@ -76,7 +85,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _ids = ids;
         _time = time;
         _logger = logger;
-        _recognition = recognition ?? new RecognitionCapabilities(true, true, true, true);
+        _recognizer = recognizer;
+        _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         _epoch = _ids.NewId();
@@ -134,6 +144,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     public int TurnGeneration => _turnGeneration;
 
     public Guid? ActiveResponseId => _activeResponseId;
+
+    public Guid? StreamId => _streamId;
 
     public InteractionDecision? LastControllerDecision { get; private set; }
 
@@ -230,6 +242,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _responseCts?.Cancel();
+        await StopRecognitionAsync().ConfigureAwait(false);
         _lifetime.Dispose();
         _responseCts?.Dispose();
     }
@@ -249,6 +262,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             break;
                         case SpeechEvidenceReceived speech:
                             await HandleSpeechAsync(speech, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case AudioIngressFaultReceived fault:
+                            await HandleAudioFaultAsync(fault, cancellationToken).ConfigureAwait(false);
                             break;
                         case ClassifierReturned classified:
                             await HandleClassifierAsync(classified, cancellationToken).ConfigureAwait(false);
@@ -624,6 +640,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _snapshot = _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() };
         _input = InputActivity.Idle;
+        await StopRecognitionAsync().ConfigureAwait(false);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
     }

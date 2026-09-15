@@ -21,6 +21,8 @@ public sealed record SpeechEvidenceReceived(
     SpeechRecognitionEvent Evidence,
     double? ActivityScore) : SessionInput(Context);
 
+public sealed record AudioIngressFaultReceived(EventContext Context, string Code, string Message) : SessionInput(Context);
+
 public sealed record ClassifierReturned(
     EventContext Context,
     Guid CandidateId,
@@ -121,6 +123,10 @@ public sealed record StateChangedOutput(
     string OutputState,
     bool Muted,
     Guid? StreamId) : OutputPayload;
+
+public sealed record TranscriptPartialOutput(Guid UtteranceId, int Revision, string Text) : OutputPayload;
+
+public sealed record TranscriptFinalOutput(Guid UtteranceId, string Text, Guid? EntryId, long? EntrySequence) : OutputPayload;
 
 public sealed record ErrorOutput(
     string Category,

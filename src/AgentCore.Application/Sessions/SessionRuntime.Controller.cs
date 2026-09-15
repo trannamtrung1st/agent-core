@@ -46,6 +46,19 @@ public sealed partial class SessionRuntime
         if (_snapshot.Mode == SessionMode.Voice)
         {
             _streamId ??= _ids.NewId();
+            try
+            {
+                await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false);
+                return;
+            }
         }
 
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
@@ -68,6 +81,7 @@ public sealed partial class SessionRuntime
         };
         _input = InputActivity.Idle;
         _streamId = null;
+        await StopRecognitionAsync().ConfigureAwait(false);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
     }
@@ -154,11 +168,25 @@ public sealed partial class SessionRuntime
         {
             _input = InputActivity.Listening;
             _streamId = _ids.NewId();
+            try
+            {
+                await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                await FailVoiceAsync(NewContext(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
         }
         else
         {
             _input = InputActivity.Idle;
             _streamId = null;
+            await StopRecognitionAsync().ConfigureAwait(false);
         }
 
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
@@ -224,6 +252,30 @@ public sealed partial class SessionRuntime
             UtteranceDuration(),
             _ids.NewId());
         await ApplyEvaluationAsync(input.Context, evaluation, cancellationToken).ConfigureAwait(false);
+        if (input.Evidence is SpeechPartial partial)
+        {
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new TranscriptPartialOutput(partial.UtteranceId, partial.Revision, partial.Text)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (input.Evidence is SpeechFinal final)
+        {
+            var committed = _snapshot.Entries.LastOrDefault(entry =>
+                entry.Role == ConversationRole.User && entry.Text == final.Text);
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new TranscriptFinalOutput(final.UtteranceId, final.Text, committed?.EntryId, committed?.Sequence)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (input.Evidence is SpeechEnded && _committedUtteranceId == input.Evidence.UtteranceId)
         {
             _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;

@@ -4,5 +4,7 @@ interface Window {
   __agentCore?: {
     audioFramesSent: () => number;
     disconnect: () => Promise<void>;
+    capturePrepared: () => boolean;
+    workletLoaded: () => boolean;
   };
 }

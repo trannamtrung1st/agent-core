@@ -245,7 +245,7 @@ public sealed class SessionHost : ISessionOutput
         return Accept(command.EventId);
     }
 
-    public Task<CommandAck> RejectSpeechAsync(string connectionId, ClientCommand command)
+    public Task<CommandAck> AdmitSpeechAsync(string connectionId, ClientCommand command, SpeechBoundary boundary)
     {
         var ack = Validate(command, attach: false);
         if (!ack.Accepted)
@@ -263,33 +263,58 @@ public sealed class SessionHost : ISessionOutput
             return Task.FromResult(Reject(command.EventId, "Protocol", "ProtocolError", "Speech is not admitted until voice mode is applied.", true, null));
         }
 
+        if (!Guid.TryParse(AsString(command.Payload, "utteranceId"), out var utteranceId))
+        {
+            return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "utteranceId is required.", false, null));
+        }
+
+        var streamId = AsString(command.Payload, "streamId");
+        if (live.Runtime.StreamId is { } expected
+            && !string.Equals(streamId, expected.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(Reject(command.EventId, "Transport", "AudioDiscontinuity", "Speech streamId does not match.", false, null));
+        }
+
+        var score = AsDouble(command.Payload, "activityScore");
+        if (!live.Runtime.TryAdmitBoundary(utteranceId, boundary, score))
+        {
+            return Task.FromResult(Reject(command.EventId, "Transport", "AudioDiscontinuity", "Speech boundary was dropped.", false, null));
+        }
+
         return Task.FromResult(Accept(command.EventId));
     }
 
-    public async Task RejectAudioAsync(string connectionId, InputAudioDto dto)
+    public async Task AdmitAudioAsync(string connectionId, InputAudioDto dto)
     {
-        if (!_connections.TryGetValue(connectionId, out var sessionId)
-            || !_live.TryGetValue(sessionId, out var live)
-            || live.Runtime.Snapshot.Mode != SessionMode.Voice)
+        if (!_connections.TryGetValue(connectionId, out var sessionId) || !_live.TryGetValue(sessionId, out var live))
         {
-            if (_connections.TryGetValue(connectionId, out sessionId) && _live.TryGetValue(sessionId, out live))
-            {
-                await PublishAsync(
-                        new SessionOutput(
-                            new EventContext(
-                                Guid.NewGuid(),
-                                sessionId,
-                                Guid.Empty,
-                                _time.GetUtcNow(),
-                                Guid.NewGuid(),
-                                null),
-                            null,
-                            new ErrorOutput("Protocol", "ProtocolError", "Do not send PCM until Mode is voice.", true, null)),
-                        CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
+            return;
         }
 
+        if (live.Runtime.Snapshot.Mode != SessionMode.Voice
+            || !string.Equals(dto.AttachmentId, live.AttachmentId.ToString(), StringComparison.OrdinalIgnoreCase)
+            || live.Runtime.StreamId is not { } streamId
+            || !string.Equals(dto.StreamId, streamId.ToString(), StringComparison.OrdinalIgnoreCase)
+            || dto.ProtocolVersion != 1)
+        {
+            await PublishAsync(
+                    new SessionOutput(
+                        new EventContext(
+                            Guid.NewGuid(),
+                            sessionId,
+                            Guid.Empty,
+                            _time.GetUtcNow(),
+                            Guid.NewGuid(),
+                            null),
+                        null,
+                        new ErrorOutput("Protocol", "ProtocolError", "Do not send PCM until Mode is voice.", true, null)),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var frame = new AudioFrame(dto.FrameSequence, dto.SampleOffset, dto.Data);
+        _ = live.Runtime.TryAdmitAudio(frame);
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
@@ -396,6 +421,28 @@ public sealed class SessionHost : ISessionOutput
         return true;
     }
 
+    private static string? AsString(Dictionary<string, object?> payload, string key) =>
+        payload.TryGetValue(key, out var value) ? value?.ToString() : null;
+
+    private static double? AsDouble(Dictionary<string, object?> payload, string key)
+    {
+        if (!payload.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            double number => number,
+            float number => number,
+            int number => number,
+            long number => number,
+            _ => double.TryParse(value.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null
+        };
+    }
+
     private static CommandAck Accept(string eventId) => new() { EventId = eventId, Accepted = true };
 
     private static CommandAck Reject(string eventId, string category, string code, string message, bool fatal, int? retry) =>
@@ -478,6 +525,19 @@ public static class SessionEventMapper
                 ["outputState"] = ToOutput(state.OutputState),
                 ["muted"] = state.Muted,
                 ["streamId"] = state.StreamId?.ToString()
+            }),
+            TranscriptPartialOutput partial => ("transcript.partial", new Dictionary<string, object?>
+            {
+                ["utteranceId"] = partial.UtteranceId.ToString(),
+                ["revision"] = partial.Revision,
+                ["text"] = partial.Text
+            }),
+            TranscriptFinalOutput final => ("transcript.final", new Dictionary<string, object?>
+            {
+                ["utteranceId"] = final.UtteranceId.ToString(),
+                ["text"] = final.Text,
+                ["entryId"] = final.EntryId?.ToString(),
+                ["entrySequence"] = final.EntrySequence
             }),
             ErrorOutput error => ("error", new Dictionary<string, object?>
             {

@@ -149,7 +149,8 @@ public sealed class SessionRuntimeFactory(
     TimeProvider time,
     Microsoft.Extensions.Logging.ILoggerFactory loggers,
     IInterruptionClassifier classifier,
-    InteractionPolicy policy)
+    InteractionPolicy policy,
+    ISpeechRecognizer recognizer)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -162,6 +163,7 @@ public sealed class SessionRuntimeFactory(
             time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!),
             classifier,
-            recognition: null,
-            policy);
+            recognition: recognizer.Capabilities,
+            policy,
+            recognizer);
 }

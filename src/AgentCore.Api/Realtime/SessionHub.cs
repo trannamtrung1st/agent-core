@@ -1,3 +1,4 @@
+using AgentCore.Application.Ports;
 using AgentCore.Contracts.Realtime;
 using Microsoft.AspNetCore.SignalR;
 
@@ -18,12 +19,12 @@ public sealed class SessionHub(SessionHost host) : Hub
         host.EndAsync(Context.ConnectionId, command, Context.ConnectionAborted);
 
     public Task<CommandAck> SpeechStarted(ClientCommand command) =>
-        host.RejectSpeechAsync(Context.ConnectionId, command);
+        host.AdmitSpeechAsync(Context.ConnectionId, command, SpeechBoundary.Started);
 
     public Task<CommandAck> SpeechEnded(ClientCommand command) =>
-        host.RejectSpeechAsync(Context.ConnectionId, command);
+        host.AdmitSpeechAsync(Context.ConnectionId, command, SpeechBoundary.Ended);
 
-    public Task SendAudio(InputAudioDto dto) => host.RejectAudioAsync(Context.ConnectionId, dto);
+    public Task SendAudio(InputAudioDto dto) => host.AdmitAudioAsync(Context.ConnectionId, dto);
 
     public Task<CommandAck> PlaybackStarted(ClientCommand command) => host.AcceptControlAsync(Context.ConnectionId, command);
 

@@ -1,5 +1,6 @@
 import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
+import { capture } from "../audio/capture";
 import { useChatStore } from "../state/chatStore";
 import { applyServerEvent, emptySession, type ServerEvent } from "../state/sessionStore";
 import { createSession, endSession, listAgents } from "./api";
@@ -53,6 +54,69 @@ async function invoke(method: string, type: string, payload: Record<string, unkn
 
 function handleEvent(raw: ServerEvent): void {
   useChatStore.setState(applyServerEvent(useChatStore.getState(), raw));
+  syncCapture();
+}
+
+function syncCapture(): void {
+  const state = useChatStore.getState();
+  if (state.connection !== "ready") {
+    capture.release();
+    return;
+  }
+
+  if (state.mode === "voice" && state.streamId && connection) {
+    if (!capture.isStreaming()) {
+      const hub = connection;
+      const sessionId = state.sessionId;
+      const attachmentId = state.attachmentId;
+      const streamId = state.streamId;
+      capture.start({
+        sendAudio: async (frame) => {
+          if (!hub || !sessionId || !attachmentId || !streamId) {
+            return;
+          }
+
+          audioFramesSent += 1;
+          await hub.send("SendAudio", {
+            protocolVersion: 1,
+            sessionId,
+            attachmentId,
+            streamId,
+            frameSequence: frame.frameSequence,
+            sampleOffset: frame.sampleOffset,
+            data: frame.data
+          });
+        },
+        speechStarted: async (utteranceId, sampleOffset, activityScore) => {
+          commandSequence += 1;
+          await invoke("SpeechStarted", "user.speech.started", {
+            streamId,
+            utteranceId,
+            sampleOffset,
+            activityScore
+          }, commandSequence);
+        },
+        speechEnded: async (utteranceId, sampleOffset, activityScore) => {
+          commandSequence += 1;
+          await invoke("SpeechEnded", "user.speech.ended", {
+            streamId,
+            utteranceId,
+            sampleOffset,
+            durationMs: 0,
+            activityScore
+          }, commandSequence);
+        }
+      });
+    }
+
+    return;
+  }
+
+  if (state.pendingMode === "voice" || state.preflightReady) {
+    return;
+  }
+
+  capture.release();
 }
 
 async function startConnection(sessionId: string): Promise<void> {
@@ -68,13 +132,16 @@ async function startConnection(sessionId: string): Promise<void> {
     .withAutomaticReconnect([0, 2000, 5000, 10000])
     .build();
   connection.on("SessionEvent", handleEvent);
-  connection.onreconnecting(() =>
-    useChatStore.setState({ connection: "reconnecting", pendingMode: null, preflightReady: false }));
+  connection.onreconnecting(() => {
+    capture.release();
+    useChatStore.setState({ connection: "reconnecting", pendingMode: null, preflightReady: false });
+  });
   connection.onreconnected(async () => {
     commandSequence = 0;
     await invoke("Attach", "session.attach", { lastServerSequence: useChatStore.getState().lastServerSequence || null }, 0);
   });
   connection.onclose(() => {
+    capture.release();
     if (!disposed) {
       useChatStore.setState({ connection: "reconnecting", pendingMode: null, preflightReady: false });
     }
@@ -88,6 +155,7 @@ async function startConnection(sessionId: string): Promise<void> {
 }
 
 async function stopConnection(): Promise<void> {
+  capture.release();
   if (!connection) {
     return;
   }
@@ -148,12 +216,35 @@ export async function requestVoice(): Promise<void> {
     return;
   }
 
-  useChatStore.setState({ preflightReady: true });
+  useChatStore.setState({ preflightReady: true, error: null });
+  try {
+    await capture.preflight();
+  } catch (error) {
+    capture.release();
+    useChatStore.setState({
+      preflightReady: false,
+      error: error instanceof Error ? error.message : "Microphone preflight failed."
+    });
+    return;
+  }
   commandSequence += 1;
-  await invoke("SetMode", "session.mode.set", { mode: "voice" }, commandSequence);
+  try {
+    const ack = await invoke("SetMode", "session.mode.set", { mode: "voice" }, commandSequence);
+    if (!ack?.accepted) {
+      capture.release();
+      useChatStore.setState({ preflightReady: false, error: ack?.error?.message ?? "Voice mode was rejected." });
+    }
+  } catch (error) {
+    capture.release();
+    useChatStore.setState({
+      preflightReady: false,
+      error: error instanceof Error ? error.message : "Voice mode failed."
+    });
+  }
 }
 
 export async function cancelVoice(): Promise<void> {
+  capture.release();
   useChatStore.setState({ preflightReady: false });
   commandSequence += 1;
   await invoke("SetMode", "session.mode.set", { mode: "text" }, commandSequence);
@@ -172,6 +263,7 @@ export async function hangUp(): Promise<void> {
   }
 
   await stopConnection();
+  capture.release();
   useChatStore.setState({
     ...emptySession(),
     agents: snapshot.agents,
@@ -184,8 +276,11 @@ if (typeof window !== "undefined") {
   window.__agentCore = {
     audioFramesSent: audioFramesSentCount,
     disconnect: async () => {
+      capture.release();
       await stopConnection();
       useChatStore.setState({ connection: "reconnecting", pendingMode: null, preflightReady: false });
-    }
+    },
+    capturePrepared: () => capture.isPrepared() || capture.isStreaming(),
+    workletLoaded: () => capture.workletLoaded()
   };
 }

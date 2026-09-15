@@ -33,6 +33,11 @@ public static class InfrastructureServiceCollectionExtensions
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
+        services.AddHttpClient(OpenAICompatibleBatchSpeechRecognizer.HttpClientName, client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.TryAddSingleton<ISpeechRecognizer>(_ => new SyntheticSpeechRecognizer());
         services.TryAddSingleton<ILanguageModel>(provider =>
         {
             var options = languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" };

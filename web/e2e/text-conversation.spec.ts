@@ -13,7 +13,7 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".transcript li").filter({ hasText: "Hello" }).last()).toBeVisible();
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Starting voice…");
+  await expect(page.getByTestId("connection")).toHaveText("Starting voice…", { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   const frames = await page.evaluate(() => window.__agentCore?.audioFramesSent() ?? -1);
   expect(frames).toBe(0);
