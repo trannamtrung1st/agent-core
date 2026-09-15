@@ -60,7 +60,7 @@ npm run build
 npx playwright test
 ```
 
-Demo/production-like packaging: Vite builds static SPA into web/dist; build/publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process; SQLite uses a writable data directory/volume. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Milestone 12 adds container hardening, SQLite volume/restart tests, real-provider Compose configuration, hybrid topology and backup/shutdown polish. The first key-free Compose environment is introduced at Milestone 5. No Dockerfile or deployment config is created by this task, and Kubernetes is unnecessary.
+Demo/production-like packaging: Vite builds static SPA into web/dist; the Dockerfile publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Milestone 12 adds container hardening, SQLite volume/restart tests, real-provider Compose configuration, hybrid topology and backup/shutdown polish. Kubernetes is unnecessary.
 
 Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket upgrade forwarding, a single backend instance and a persistent SQLite volume. Do not horizontally replicate SessionManager against the same SQLite file. During shutdown stop admitting new sessions, mark active responses interrupted, request client flush, save checkpoints and await workers within the 5-second shutdown budget. If process termination prevents clean save, recovery semantics apply.
 
@@ -68,7 +68,12 @@ Back up SQLite using its backup mechanism or a controlled stopped-app copy; copy
 
 ## Docker Compose integration and demo
 
-Docker Compose is the supported reproducible local integration/demo environment, while Docker remains optional for ordinary development. A minimal Synthetic Compose path (one application container, built SPA, in-memory or SQLite, no provider keys) is specified for Milestone 5. Milestone 12 hardens that artifact. Once implemented, `docker compose up` starts the production-like local application (hosted mode requires operator-supplied backend provider credentials). Support the same composition with Synthetic providers for a key-free demo; building/pulling container dependencies may require network even though synthetic runtime behavior does not. No Dockerfile or Compose file is created in this documentation task.
+Docker Compose is the supported reproducible local integration/demo environment, while Docker remains optional for ordinary development. Native `dotnet run` + Vite remains the fast loop. `docker compose up --build` starts one Synthetic application container (built SPA, in-memory store, no provider keys) on http://127.0.0.1:5080. Building/pulling container dependencies may require network even though synthetic runtime behavior does not. Milestone 12 hardens SQLite volumes, Real-provider configuration and shutdown polish.
+
+```text
+docker compose up --build
+curl -sS http://127.0.0.1:5080/health
+```
 
 ```text
 Docker Compose

@@ -70,7 +70,7 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Rationale:** Keep early work unblocked, then make the promised offline gates reproducible on the repository host.
 
-**Consequence:** [Implementation Plan](18-implementation-plan.md) and [Testing Strategy](16-testing-strategy.md) own when workflows appear. This documentation pass does not add `.github/workflows`.
+**Consequence:** [Implementation Plan](18-implementation-plan.md) and [Testing Strategy](16-testing-strategy.md) own when workflows appear. Milestone 5 adds `.github/workflows/synthetic.yml` for key-free backend, frontend, and synthetic Playwright gates.
 
 ## Decision: Docker Compose for reproducible local integration
 

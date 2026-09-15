@@ -87,7 +87,7 @@ Opt-in real-provider smoke tests require explicit operator credentials, an expli
 
 ## Future implementation commands
 
-Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host. The implementation must define these scripts and host startup in its test config; they are not runnable in this docs-only repository yet. Default gates are offline backend/frontend checks plus synthetic Playwright. Intended repository CI is GitHub Actions; do not create workflow files until those projects/scripts exist. Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
+Once projects exist: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web; `npx playwright test` with the synthetic test host. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`). Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
 
 ## CI evolution
 

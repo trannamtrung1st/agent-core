@@ -1,0 +1,32 @@
+# Git
+.git
+.github
+.gitignore
+
+# Local / editor
+local
+.cursor
+.codex
+.playwright-mcp
+**/.DS_Store
+
+# Build output
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.vite
+**/coverage
+**/TestResults
+**/test-results
+**/playwright-report
+**/blob-report
+
+# Secrets and data
+**/.env
+**/.env.*
+**/*.db
+**/*.sqlite*
+data
+logs
+tmp

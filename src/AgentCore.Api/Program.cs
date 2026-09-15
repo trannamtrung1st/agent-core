@@ -45,6 +45,13 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+var spaIndex = ResolveSpaIndex(app);
+if (spaIndex is not null)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -162,6 +169,8 @@ app.MapDelete("/api/v1/sessions/{sessionId:guid}", async (
     }
 });
 
+MapSpaFallback(app, spaIndex);
+
 app.Run();
 
 static string ResolveAgentDirectory(WebApplicationBuilder builder)
@@ -182,6 +191,42 @@ static string ResolveAgentDirectory(WebApplicationBuilder builder)
 
     return candidates.FirstOrDefault(Directory.Exists)
            ?? throw new InvalidOperationException("Agent definition directory was not found.");
+}
+
+static string? ResolveSpaIndex(WebApplication app)
+{
+    var webRoot = app.Environment.WebRootPath;
+    if (string.IsNullOrEmpty(webRoot))
+    {
+        return null;
+    }
+
+    var index = Path.Combine(webRoot, "index.html");
+    return File.Exists(index) ? index : null;
+}
+
+static void MapSpaFallback(WebApplication app, string? index)
+{
+    if (index is null)
+    {
+        return;
+    }
+
+    app.MapFallback(async context =>
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(index).ConfigureAwait(false);
+    });
 }
 
 public partial class Program;

@@ -1,0 +1,52 @@
+name: synthetic
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  offline:
+    name: Synthetic offline gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            tests/realtime-js/package-lock.json
+
+      - name: Restore JavaScript protocol fixture
+        working-directory: tests/realtime-js
+        run: npm ci
+
+      - name: Backend tests
+        run: dotnet test AgentCore.sln --nologo
+
+      - name: Frontend install, unit tests, and build
+        working-directory: web
+        run: |
+          npm ci
+          npm run test -- --run
+          npm run build
+
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install chromium --with-deps
+
+      - name: Synthetic Playwright
+        working-directory: web
+        run: npx playwright test

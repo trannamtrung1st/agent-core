@@ -9,7 +9,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | 2 | Agent Definition + Agent Runtime + synthetic provider | Complete: two identities through one runtime and pinned JSON definitions |
 | 3 | OpenAICompatibleLanguageModel + OpenRouter configuration | Complete: offline SSE contracts; optional `openrouter/free` smoke (not demo DefaultModel); skips without opt-in + `OPENROUTER_API_KEY` |
 | 4 | Interaction Controller with synthetic speech/events | Complete: deterministic backchannel, interruption, stale-result and classifier/brain isolation tests |
-| 5 | SignalR realtime protocol + browser connection + minimal Synthetic Compose | Browser MessagePack text slice, leases, identity guards implemented; Compose smoke is the remaining M5 gate |
+| 5 | SignalR realtime protocol + browser connection + minimal Synthetic Compose | Complete: MessagePack browser text slice, leases, identity guards, key-free Compose smoke, GitHub Actions (see [Implementation Plan](18-implementation-plan.md)) |
 | 6 | Microphone + AudioWorklet + streaming STT | Continuous PCM and partial/final transcript pipeline; explicit capability fallback |
 | 7 | Speech segmentation + streaming TTS + playback | Natural segments and first audio before full response completion |
 | 8 | Full-duplex voice | Microphone/STT remain active while agent audio plays |
