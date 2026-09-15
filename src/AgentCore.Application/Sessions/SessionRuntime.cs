@@ -49,6 +49,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly ResponseTextAccumulator _accumulator = new();
     private bool _responseTerminal;
     private CancellationTokenSource? _responseCts;
+    private DateTimeOffset _lastCheckpoint = DateTimeOffset.MinValue;
     private int _inflight;
     private TaskCompletionSource _idle = CompletedIdle();
     private TaskCompletionSource _mailboxIdle = CompletedIdle();
@@ -487,6 +488,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseLifecycle = ResponseLifecycle.Live;
         _outputActivity = OutputActivity.AgentGenerating;
         _responseCts = new CancellationTokenSource();
+        _lastCheckpoint = _time.GetUtcNow();
         await PersistAsync(Append(assistant), cancellationToken).ConfigureAwait(false);
 
         await PublishAsync(
@@ -611,6 +613,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         cancellationToken)
                     .ConfigureAwait(false);
                 UpdateStreamingAssistant();
+                await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
                 if (UsesVoicePlayback)
                 {
                     EnqueueSegments(_segmenter!.Append(text, _time.GetUtcNow()));
@@ -802,9 +805,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task PersistAsync(SessionSnapshot snapshot, CancellationToken cancellationToken)
     {
+        if (snapshot.Entries.Count > 1000)
+        {
+            throw AgentCoreErrors.Validation("Session entry limit of 1000 was reached.");
+        }
+
         var next = snapshot with { Revision = _snapshot.Revision + 1, UpdatedAt = _time.GetUtcNow() };
         await _store.SaveAsync(next, _snapshot.Revision, cancellationToken).ConfigureAwait(false);
         _snapshot = next;
+    }
+
+    private async Task CheckpointStreamingAsync(CancellationToken cancellationToken)
+    {
+        if (_time.GetUtcNow() - _lastCheckpoint < TimeSpan.FromSeconds(1))
+        {
+            return;
+        }
+
+        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        _lastCheckpoint = _time.GetUtcNow();
     }
 
     private async Task PublishAsync(SessionOutput output, CancellationToken cancellationToken)

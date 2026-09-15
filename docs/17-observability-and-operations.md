@@ -64,7 +64,7 @@ Demo/production-like packaging: Vite builds static SPA into web/dist; the Docker
 
 Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket upgrade forwarding, a single backend instance and a persistent SQLite volume. Do not horizontally replicate SessionManager against the same SQLite file. During shutdown stop admitting new sessions, mark active responses interrupted, request client flush, save checkpoints and await workers within the 5-second shutdown budget. If process termination prevents clean save, recovery semantics apply.
 
-Back up SQLite using its backup mechanism or a controlled stopped-app copy; copying only the main file while WAL is active is not a reliable backup. Apply EF migrations once at startup before serving traffic for this single-process MVP; fail startup on migration error. Test a restore before a demo that needs durable history.
+Back up SQLite using its backup API (`VACUUM INTO` or the SQLite backup mechanism) or a copy taken while the process is stopped. Copying only the main file while WAL/`-wal`/`-shm` companions are active is not a reliable backup. Apply schema at startup (`EnsureCreated` for this MVP initial schema; treat it as the first migration) before serving traffic; fail startup on schema error. Test a restore before a demo that needs durable history. Native development can keep `Persistence__Provider=InMemory` or set `Persistence__Provider=Sqlite` with `Persistence__ConnectionString=Data Source=data/agent-core.db`.
 
 ## Docker Compose integration and demo
 

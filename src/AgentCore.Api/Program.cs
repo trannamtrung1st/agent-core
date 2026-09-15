@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
+using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 
@@ -25,7 +26,11 @@ if (string.IsNullOrEmpty(languageModel.ApiKey))
     languageModel.ApiKey = builder.Configuration["OPENROUTER_API_KEY"];
 }
 
-builder.Services.AddAgentCoreInfrastructure(agentDirectory, profile, languageModel);
+builder.Services.AddAgentCoreInfrastructure(
+    agentDirectory,
+    profile,
+    languageModel,
+    builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions());
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
@@ -46,6 +51,7 @@ if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+await InitializePersistenceAsync(app.Services).ConfigureAwait(false);
 
 var spaIndex = ResolveSpaIndex(app);
 if (spaIndex is not null)
@@ -229,6 +235,36 @@ static void MapSpaFallback(WebApplication app, string? index)
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.SendFileAsync(index).ConfigureAwait(false);
     });
+}
+
+static async Task InitializePersistenceAsync(IServiceProvider services)
+{
+    var persistence = services.GetRequiredService<PersistenceOptions>();
+    if (!string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    var dataSource = persistence.ConnectionString
+        .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+        .Select(part => part.Split('=', 2, StringSplitOptions.TrimEntries))
+        .FirstOrDefault(part => part.Length == 2 && part[0].Equals("Data Source", StringComparison.OrdinalIgnoreCase));
+    if (dataSource is { Length: 2 })
+    {
+        var directory = Path.GetDirectoryName(dataSource[1]);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+    }
+
+    var store = services.GetRequiredService<IMemoryStore>();
+    if (store is SqliteMemoryStore sqlite)
+    {
+        await sqlite.EnsureCreatedAsync().ConfigureAwait(false);
+    }
+
+    await store.RecoverCrashedSessionsAsync().ConfigureAwait(false);
 }
 
 public partial class Program;

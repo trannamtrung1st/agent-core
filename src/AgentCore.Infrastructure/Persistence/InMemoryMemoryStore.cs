@@ -111,14 +111,23 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         }
     }
 
+    public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            foreach (var id in _sessions.Keys.ToArray())
+            {
+                _sessions[id] = MemoryStoreSemantics.Recover(_sessions[id], DateTimeOffset.UtcNow);
+            }
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
     private static SessionSnapshot Clone(SessionSnapshot snapshot) =>
         snapshot with { Entries = snapshot.Entries.ToArray() };
 
     private static bool SameContent(SessionSnapshot left, SessionSnapshot right) =>
-        left.Status == right.Status
-        && left.Mode == right.Mode
-        && left.PendingMode == right.PendingMode
-        && left.Summary == right.Summary
-        && left.Entries.Count == right.Entries.Count
-        && left.Entries.Zip(right.Entries).All(pair => pair.First == pair.Second);
+        MemoryStoreSemantics.SameContent(left, right);
 }

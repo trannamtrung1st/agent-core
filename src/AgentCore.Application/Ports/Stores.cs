@@ -31,6 +31,8 @@ public interface IMemoryStore
     ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
 
     ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default);
+
+    ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IIdGenerator

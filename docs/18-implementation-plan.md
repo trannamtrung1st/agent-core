@@ -123,6 +123,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** SQLite/in-memory contract parity, transaction rollback/conflict, reopen after simulated crash, old-entry heard offset refresh, streaming checkpoint does not rewrite unchanged completed rows, PendingMode=Voice cleared on pause/crash recovery, deduped uncertain text retry, clean end and failed end save.
 - **Acceptance criteria:** A restarted process resumes a paused session with pinned identity/history and conservative heard offsets; no PCM/provider stream replay; known ended session cannot attach; WAL/backup behavior documented.
 - **Explicit non-goals:** Vector memory, Redis, generic repository framework, PostgreSQL deployment or multi-user login.
+- **Status:** Complete. EF Core 10/SQLite and InMemoryMemoryStore share revision/idempotency/conflict rules; crash recovery pauses attached sessions, interrupts streaming rows, and clears PendingMode. See [Milestone 11 verification](reports/m11-verification.md).
 
 ## Milestone 12 — Per-stage latency measurement, provider tuning and demo hardening
 

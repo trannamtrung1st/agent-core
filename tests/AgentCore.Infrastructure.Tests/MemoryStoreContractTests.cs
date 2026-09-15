@@ -1,0 +1,266 @@
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Time.Testing;
+
+namespace AgentCore.Infrastructure.Tests;
+
+public sealed class MemoryStoreContractTests
+{
+    [Fact]
+    public async Task In_memory_and_sqlite_share_revision_idempotency_and_conflict()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        foreach (var store in stores)
+        {
+            var snapshot = First();
+            await store.SaveAsync(snapshot, 0);
+            await store.SaveAsync(snapshot, 0);
+            var loaded = await store.LoadAsync(snapshot.SessionId);
+            Assert.Equal(1, loaded!.Revision);
+            var stale = snapshot with { Revision = 1, Summary = "stale" };
+            var conflict = await Assert.ThrowsAsync<AgentCoreException>(() => store.SaveAsync(stale, 0).AsTask());
+            Assert.Equal("Conflict", conflict.Code);
+            var next = snapshot with { Revision = 2, Summary = "ok" };
+            await store.SaveAsync(next, 1);
+            loaded = await store.LoadAsync(snapshot.SessionId);
+            Assert.Equal("ok", loaded!.Summary);
+            Assert.Equal(2, loaded.Revision);
+        }
+    }
+
+    [Fact]
+    public async Task Sqlite_transaction_rollback_does_not_keep_session()
+    {
+        await using var harness = await SqliteAsync();
+        var id = Guid.NewGuid().ToString("D");
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            await using var tx = await db.Database.BeginTransactionAsync();
+            db.Sessions.Add(new SessionRecord
+            {
+                SessionId = id,
+                AgentId = "examiner",
+                AgentVersion = 1,
+                DefinitionJson = "{}",
+                Mode = nameof(SessionMode.Text),
+                Status = nameof(SessionStatus.Created),
+                CreatedAtUtc = 0,
+                UpdatedAtUtc = 0,
+                Revision = 1,
+                Snapshot = new SnapshotRecord { SessionId = id, SchemaVersion = 1 }
+            });
+            await db.SaveChangesAsync();
+            await tx.RollbackAsync();
+        }
+
+        await using var verify = await harness.Factory.CreateDbContextAsync();
+        Assert.Equal(0, await verify.Sessions.CountAsync());
+    }
+
+    [Fact]
+    public async Task Reopen_after_crash_pauses_attached_and_interrupts_streaming()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        var id = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        var streaming = Entry(id, 1, EntryStatus.Streaming, "Hello extra");
+        var first = First() with
+        {
+            Status = SessionStatus.Attached,
+            PendingMode = SessionMode.Voice,
+            Entries = [streaming]
+        };
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(first, 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        await reopened.Store.RecoverCrashedSessionsAsync();
+        var loaded = await reopened.Store.LoadAsync(first.SessionId);
+        Assert.Equal(SessionStatus.Paused, loaded!.Status);
+        Assert.Null(loaded.PendingMode);
+        Assert.Equal(EntryStatus.Interrupted, loaded.Entries[0].Status);
+        Assert.Equal(streaming.HeardTextEndExclusive, loaded.Entries[0].HeardTextEndExclusive);
+    }
+
+    [Fact]
+    public async Task Checkpoint_does_not_rewrite_unchanged_completed_rows()
+    {
+        await using var harness = await SqliteAsync();
+        var completed = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Done");
+        var streaming = Entry(Guid.NewGuid(), 2, EntryStatus.Streaming, "Hi");
+        var first = First() with { Revision = 1, Entries = [completed] };
+        await harness.Store.SaveAsync(first, 0);
+        harness.Store.EntryUpdates = 0;
+        var second = first with
+        {
+            Revision = 2,
+            Entries = [completed, streaming]
+        };
+        await harness.Store.SaveAsync(second, 1);
+        Assert.Equal(1, harness.Store.EntryUpdates);
+        var loaded = await harness.Store.LoadAsync(first.SessionId);
+        Assert.Equal(completed.HeardTextEndExclusive, loaded!.Entries[0].HeardTextEndExclusive);
+        Assert.Equal("Done", loaded.Entries[0].Text);
+    }
+
+    [Fact]
+    public async Task Duplicate_source_event_retry_upserts_without_a_second_row()
+    {
+        await using var harness = await SqliteAsync();
+        var source = Guid.Parse("019944af-0000-7000-8000-000000000010");
+        var entry = Entry(source, 1, EntryStatus.Completed, "Hello") with { SourceEventId = source };
+        var first = First() with { Entries = [entry] };
+        await harness.Store.SaveAsync(first, 0);
+        var retry = first with { Revision = 2, Summary = "retry" };
+        await harness.Store.SaveAsync(retry, 1);
+        var loaded = await harness.Store.LoadAsync(first.SessionId);
+        Assert.Single(loaded!.Entries);
+        Assert.Equal(source, loaded.Entries[0].SourceEventId);
+        Assert.Equal("retry", loaded.Summary);
+    }
+
+    [Fact]
+    public async Task Clean_and_failed_end_persist_terminal_status()
+    {
+        await using var harness = await SqliteAsync();
+        var failed = Entry(Guid.NewGuid(), 1, EntryStatus.Failed, "oops");
+        var clean = First() with { Revision = 1, Status = SessionStatus.Ended, PendingMode = null };
+        await harness.Store.SaveAsync(clean, 0);
+        var loaded = await harness.Store.LoadAsync(clean.SessionId);
+        Assert.Equal(SessionStatus.Ended, loaded!.Status);
+        Assert.Null(loaded.PendingMode);
+
+        var other = First() with
+        {
+            SessionId = Guid.Parse("019944af-0000-7000-8000-000000000099"),
+            Entries = [failed]
+        };
+        await harness.Store.SaveAsync(other, 0);
+        var ended = other with { Revision = 2, Status = SessionStatus.Ended };
+        await harness.Store.SaveAsync(ended, 1);
+        loaded = await harness.Store.LoadAsync(other.SessionId);
+        Assert.Equal(SessionStatus.Ended, loaded!.Status);
+        Assert.Equal(EntryStatus.Failed, loaded.Entries[0].Status);
+    }
+
+    [Fact]
+    public async Task Pending_voice_clears_on_pause_recovery()
+    {
+        await using var harness = await SqliteAsync();
+        var snapshot = First() with { Status = SessionStatus.Paused, PendingMode = null };
+        await harness.Store.SaveAsync(snapshot, 0);
+        var loaded = await harness.Store.LoadAsync(snapshot.SessionId);
+        Assert.Null(loaded!.PendingMode);
+        Assert.Equal(SessionStatus.Paused, loaded.Status);
+    }
+
+    private static async Task<SqliteHarness> SqliteAsync()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        var harness = OpenSqlite(path, deleteOnDispose: true);
+        await harness.Store.EnsureCreatedAsync();
+        return harness;
+    }
+
+    private static SqliteHarness OpenSqlite(string path, bool deleteOnDispose)
+    {
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>()
+            .UseSqlite($"Data Source={path}")
+            .Options;
+        var factory = new TestFactory(options);
+        var store = new SqliteMemoryStore(factory, new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero)));
+        return new SqliteHarness(path, factory, store, deleteOnDispose);
+    }
+
+    private static SessionSnapshot First() =>
+        new(
+            1,
+            Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842"),
+            1,
+            Definition(),
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+
+    private static ConversationEntry Entry(Guid id, long sequence, EntryStatus status, string text) =>
+        new(
+            id,
+            sequence,
+            id,
+            ConversationRole.Assistant,
+            text,
+            id,
+            status,
+            SessionMode.Text,
+            Math.Min(3, text.Length),
+            text.Length,
+            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+
+    private static AgentDefinition Definition() =>
+        new(
+            1,
+            "examiner",
+            1,
+            new AgentIdentity("Alex", "role", "desc", "tone"),
+            ["goal"],
+            "instructions",
+            new BehaviorPolicy("acknowledgeThenContinue", true, true),
+            new ConversationPolicy("concise", true, "en", 256),
+            new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
+            new VoiceConfiguration(false, "default", 1.0),
+            new ProviderPreferences("primary-llm", null, null),
+            new Dictionary<string, string>());
+
+    private sealed class TestFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
+    {
+        public AgentCoreDbContext CreateDbContext() => new(options);
+
+        public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateDbContext());
+    }
+
+    private sealed class SqliteHarness(
+        string path,
+        IDbContextFactory<AgentCoreDbContext> factory,
+        SqliteMemoryStore store,
+        bool deleteOnDispose) : IAsyncDisposable
+    {
+        public IDbContextFactory<AgentCoreDbContext> Factory { get; } = factory;
+        public SqliteMemoryStore Store { get; } = store;
+
+        public ValueTask DisposeAsync()
+        {
+            SqliteConnection.ClearAllPools();
+            if (deleteOnDispose)
+            {
+                try
+                {
+                    File.Delete(path);
+                    File.Delete(path + "-wal");
+                    File.Delete(path + "-shm");
+                }
+                catch (IOException)
+                {
+                }
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+}
