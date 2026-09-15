@@ -479,7 +479,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot.Mode,
             _snapshot.PendingTopic,
             HelpOfferedDuringSilence: false,
-            InterruptedHeardText: null,
+            InterruptedHeardText: LastInterruptedHeardText(),
             trigger);
         BeginWork();
         _ = Task.Run(async () =>
@@ -624,6 +624,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
+        var heard = _spokenUntil.Credit(_ackedSamples);
+        ApplyHeard(heard);
         InvalidateSpeechJobs();
         if (!_responseTerminal)
         {
@@ -634,7 +636,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     new SessionOutput(
                         context,
                         responseId,
-                        new ResponseCompletedOutput(true, HeardTextEndExclusive: 0, InterruptReason: reason)),
+                        new PlaybackStopOutput(ToStopReason(reason))),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await PublishAsync(
+                    new SessionOutput(
+                        context,
+                        responseId,
+                        new ResponseCompletedOutput(true, HeardTextEndExclusive: heard, InterruptReason: reason)),
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -709,6 +718,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _ttsCts?.Dispose();
         _ttsCts = null;
     }
+
+    private static string ToStopReason(string reason) => reason switch
+    {
+        "disconnected" => "disconnected",
+        "ended" => "ended",
+        "modeChange" => "modeChange",
+        _ => "interrupted"
+    };
 
     private async Task HandleEndAsync(EndSessionReceived input, CancellationToken cancellationToken)
     {

@@ -13,7 +13,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | 6 | Microphone + AudioWorklet + streaming STT | Complete: synthetic STT + AudioWorklet preflight/PCM gating (see [Implementation Plan](18-implementation-plan.md)) |
 | 7 | Speech segmentation + streaming TTS + playback | Complete: synthetic TTS starts before model completion; output worklet acknowledgements; capture stays active (see [Implementation Plan](18-implementation-plan.md)) |
 | 8 | Full-duplex voice | Complete: PCM/STT continue during playback; mute is input-only; disconnect releases both paths (see [Implementation Plan](18-implementation-plan.md)) |
-| 9 | Semantic barge-in / ducking / supersession / spoken-until | Cancel segments/TTS/LLM; reject late output/playback feedback |
+| 9 | Semantic barge-in / ducking / supersession / spoken-until | Complete: wait replaces the live response; backchannels continue; conservative spoken-until; worklet flush before R2 (see [Implementation Plan](18-implementation-plan.md)) |
 | 10 | Proactive interaction | Useful trigger or StaySilent with cooldown |
 | 11 | SQLite persistence + reconnect/resume | Recover history/identity without replaying old audio |
 | 12 | Per-stage latency + provider tuning + demo/container hardening | Measured pipeline, offline tests, Compose volume/restart and operations polish |

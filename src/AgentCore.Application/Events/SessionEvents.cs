@@ -146,6 +146,10 @@ public sealed record StateChangedOutput(
     bool Muted,
     Guid? StreamId) : OutputPayload;
 
+public sealed record PlaybackStopOutput(string Reason) : OutputPayload;
+
+public sealed record PlaybackGainOutput(double Gain, int RampMs, Guid? CandidateId) : OutputPayload;
+
 public sealed record TranscriptPartialOutput(Guid UtteranceId, int Revision, string Text) : OutputPayload;
 
 public sealed record TranscriptFinalOutput(Guid UtteranceId, string Text, Guid? EntryId, long? EntrySequence) : OutputPayload;

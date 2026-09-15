@@ -6,6 +6,11 @@ class OutputProcessor extends AudioWorkletProcessor {
     this._underrun = 0;
     this._responseId = null;
     this._epoch = 0;
+    this._gain = 1;
+    this._targetGain = 1;
+    this._gainStart = 1;
+    this._rampLeft = 0;
+    this._rampTotal = 1;
     this.port.onmessage = (event) => this.onMessage(event.data);
   }
 
@@ -25,6 +30,14 @@ class OutputProcessor extends AudioWorkletProcessor {
       merged.set(this._queue);
       merged.set(incoming, this._queue.length);
       this._queue = merged;
+      return;
+    }
+
+    if (data.type === "gain") {
+      this._gainStart = this._gain;
+      this._targetGain = typeof data.gain === "number" ? data.gain : 1;
+      this._rampTotal = Math.max(1, Math.round(((data.rampMs ?? 20) / 1000) * sampleRate));
+      this._rampLeft = this._rampTotal;
       return;
     }
 
@@ -58,8 +71,21 @@ class OutputProcessor extends AudioWorkletProcessor {
     }
 
     const needed = channel.length;
+    const applyGain = (value) => {
+      if (this._rampLeft > 0) {
+        const done = this._rampTotal - this._rampLeft + 1;
+        this._gain = this._gainStart + (this._targetGain - this._gainStart) * (done / this._rampTotal);
+        this._rampLeft -= 1;
+      } else {
+        this._gain = this._targetGain;
+      }
+      return value * this._gain;
+    };
+
     if (this._queue.length >= needed) {
-      channel.set(this._queue.subarray(0, needed));
+      for (let index = 0; index < needed; index += 1) {
+        channel[index] = applyGain(this._queue[index]);
+      }
       this._queue = this._queue.subarray(needed);
       this._consumed += needed;
       this.port.postMessage({ type: "snapshot", consumed: this._consumed, queued: this._queue.length, underrun: this._underrun, responseId: this._responseId });

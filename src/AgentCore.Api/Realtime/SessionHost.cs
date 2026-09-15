@@ -606,6 +606,16 @@ public static class SessionEventMapper
                 ["status"] = terminal.Failed ? "failed" : "completed",
                 ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive
             }),
+            PlaybackStopOutput stop => ("playback.stop", new Dictionary<string, object?>
+            {
+                ["reason"] = stop.Reason
+            }),
+            PlaybackGainOutput gain => ("playback.gain", new Dictionary<string, object?>
+            {
+                ["gain"] = gain.Gain,
+                ["rampMs"] = gain.RampMs,
+                ["candidateId"] = gain.CandidateId?.ToString()
+            }),
             StateChangedOutput state => ("session.state.changed", new Dictionary<string, object?>
             {
                 ["status"] = HttpMapping.ToStatus(state.Status),

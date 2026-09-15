@@ -103,6 +103,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** Interrupt at every pipeline boundary; intentionally non-cooperative late R1 text/audio/completion after R2; timing-mark path; no-timing-mark path that credits zero text from a partially played segment even when the first half of audio duration is less than half the text; late playback events ignored after supersession; semantic, speechAndFinal and speechActivity fallback policies.
 - **Acceptance criteria:** “Wait” stops and replaces response; short backchannels usually continue in partial-capable mode; no stale R1 output plays after local supersession; next context excludes unplayed tail.
 - **Explicit non-goals:** Perfect intent recognition, exact phoneme synchronization, muting microphone during output.
+- **Status:** Complete. Playback.stop precedes interrupted; spoken-until credits timing marks or fully played segments only; late R1 playback is ignored; local duck/restore and worklet flush gate R2 audio. See [Milestone 9 verification](reports/m09-verification.md).
 
 ## Milestone 10 — Proactive interaction
 

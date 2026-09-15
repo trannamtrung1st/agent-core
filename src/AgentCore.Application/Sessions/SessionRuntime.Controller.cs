@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
 using AgentCore.Application.Ports;
@@ -287,6 +288,14 @@ public sealed partial class SessionRuntime
             UtteranceDuration(),
             _ids.NewId());
         await ApplyEvaluationAsync(input.Context, evaluation, cancellationToken).ConfigureAwait(false);
+        if (input.Evidence is SpeechStarted && evaluation.Decision is InteractionDecision.Queue && evaluation.Candidate is { } queued)
+        {
+            await PublishGainAsync(input.Context, 0.2, queued.CandidateId, cancellationToken).ConfigureAwait(false);
+            if (!_recognition.PartialTranscripts || _policy.BargeInPolicy == "speechActivity")
+            {
+                ScheduleCandidateTimer(queued.UtteranceId);
+            }
+        }
         if (input.Evidence is SpeechPartial partial)
         {
             await PublishAsync(
@@ -439,6 +448,11 @@ public sealed partial class SessionRuntime
             await SupersedeAsync(context, live, cancellationToken, "userBargeIn").ConfigureAwait(false);
         }
 
+        if (evaluation.Decision is InteractionDecision.Continue or InteractionDecision.Ignore)
+        {
+            await PublishGainAsync(context, 1.0, evaluation.Candidate?.CandidateId, cancellationToken).ConfigureAwait(false);
+        }
+
         if (evaluation.CommitUserTurn && evaluation.UserText is { } text)
         {
             await CommitSpeechTurnAsync(context, text, cancellationToken).ConfigureAwait(false);
@@ -480,6 +494,62 @@ public sealed partial class SessionRuntime
         var turn = ++_turnGeneration;
         _outputActivity = OutputActivity.WaitingForAgent;
         LaunchBrain(context, trigger, responseId, turn);
+    }
+
+    private string? LastInterruptedHeardText()
+    {
+        var interrupted = _snapshot.Entries.LastOrDefault(entry =>
+            entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Interrupted);
+        if (interrupted is null)
+        {
+            return null;
+        }
+
+        var text = PromptContextBuilder.EligibleAssistantText(interrupted);
+        return text.Length == 0 ? null : text;
+    }
+
+    private void ScheduleCandidateTimer(Guid utteranceId)
+    {
+        var generation = _timerGeneration;
+        var delay = _policy.BargeInPolicy == "semantic" && _recognition.PartialTranscripts
+            ? TimeSpan.FromMilliseconds(_policy.SustainedInterruptMs)
+            : TimeSpan.FromMilliseconds(_policy.DegradedInterruptMs);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
+                BeginWork();
+                if (!_mailbox.Writer.TryWrite(new TimerElapsedReceived(NewContext(), "candidate", generation, utteranceId)))
+                {
+                    EndWork();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, CancellationToken.None);
+    }
+
+    private async Task PublishGainAsync(
+        EventContext context,
+        double gain,
+        Guid? candidateId,
+        CancellationToken cancellationToken)
+    {
+        if (_snapshot.Mode != SessionMode.Voice || _activeResponseId is null && gain < 1.0)
+        {
+            return;
+        }
+
+        await PublishAsync(
+                new SessionOutput(
+                    context,
+                    _activeResponseId,
+                    new PlaybackGainOutput(gain, 20, candidateId)),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private void LaunchClassifier(EventContext cause, InterruptionCandidate candidate, InterruptionContext context)

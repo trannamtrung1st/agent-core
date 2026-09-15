@@ -113,6 +113,11 @@ class MicrophoneCapture {
         void this.onFrame(event.data.pcm, event.data.sampleOffset);
       };
       output.port.onmessage = (event: MessageEvent<{ type?: string; consumed?: number }>) => {
+        if (event.data.type === "flushed") {
+          const waiters = this.flushWaiters;
+          this.flushWaiters = [];
+          waiters.forEach((resolve) => resolve());
+        }
         if (typeof event.data.consumed === "number") {
           this.consumedSamples = event.data.consumed;
           this.onConsumed?.(event.data.consumed);
@@ -151,6 +156,12 @@ class MicrophoneCapture {
     this.prepared?.worklet.port.postMessage({ type: "emit" });
   }
 
+  private flushWaiters: Array<() => void> = [];
+
+  setGain(gain: number, rampMs = 20): void {
+    this.prepared?.output.port.postMessage({ type: "gain", gain, rampMs });
+  }
+
   enqueuePlayback(responseId: string, pcm: Uint8Array): void {
     const samples = decodePcm16Le(pcm);
     this.prepared?.output.port.postMessage(
@@ -160,9 +171,17 @@ class MicrophoneCapture {
     this.prepared?.output.port.postMessage({ type: "snapshot" });
   }
 
-  flushPlayback(responseId: string): void {
+  flushPlayback(responseId: string): Promise<void> {
+    const waiter = new Promise<void>((resolve) => {
+      this.flushWaiters.push(resolve);
+    });
     this.prepared?.output.port.postMessage({ type: "flush", responseId });
     this.consumedSamples = 0;
+    if (!this.prepared) {
+      this.flushWaiters.forEach((resolve) => resolve());
+      this.flushWaiters = [];
+    }
+    return waiter;
   }
 
   release(): void {

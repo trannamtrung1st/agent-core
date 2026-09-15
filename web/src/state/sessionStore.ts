@@ -125,7 +125,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
     return { ...state, error: "Control sequence gap. Reconnect required.", connection: "failed" };
   }
 
-  if (event.responseId && state.tombstones[event.responseId] && event.type.startsWith("agent.text")) {
+    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "playback.gain")) {
     return { ...state, lastServerSequence: event.sequence };
   }
 

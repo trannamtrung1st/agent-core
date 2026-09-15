@@ -49,12 +49,15 @@ public sealed class RecordingAgentBrain(IAgentBrain inner) : IAgentBrain
 
     private readonly List<TriggerKind> _triggers = [];
 
+    public AgentContext? LastContext { get; private set; }
+
     public async ValueTask<AgentDecision> DecideAsync(
         AgentContext context,
         Guid responseId,
         CancellationToken cancellationToken = default)
     {
         Calls++;
+        LastContext = context;
         _triggers.Add(context.Trigger.Kind);
         return await inner.DecideAsync(context, responseId, cancellationToken).ConfigureAwait(false);
     }

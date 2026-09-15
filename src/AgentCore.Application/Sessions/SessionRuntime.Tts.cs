@@ -30,6 +30,7 @@ public sealed partial class SessionRuntime
     private int _segmentTimerGeneration;
     private int _ttsJobsStarted;
     private CancellationTokenSource? _ttsCts;
+    private readonly SpokenUntilAccumulator _spokenUntil = new();
 
     public int TtsJobsStarted => _ttsJobsStarted;
 
@@ -56,6 +57,7 @@ public sealed partial class SessionRuntime
         _ackedSamples = 0;
         _ttsJobsStarted = 0;
         _currentSegment = null;
+        _spokenUntil.Reset();
         _segmenter = _activeResponseId is { } id
             && _snapshot.Mode == SessionMode.Voice
             && _synthesizer is not null
@@ -138,6 +140,7 @@ public sealed partial class SessionRuntime
         _ttsJobsStarted++;
         _currentSegment = segment;
         _segmentSampleOrigin = _outputSampleOffset;
+        _spokenUntil.TrackSegment(segment, _segmentSampleOrigin);
         _ttsCts?.Cancel();
         _ttsCts?.Dispose();
         _ttsCts = CancellationTokenSource.CreateLinkedTokenSource(_responseCts?.Token ?? _lifetime.Token, _lifetime.Token);
@@ -218,8 +221,22 @@ public sealed partial class SessionRuntime
                     .ConfigureAwait(false);
                 _openAudio = Rebase(audio.Frame, isFinal: false);
                 break;
-            case SpeechSynthesisCompleted:
+            case SpeechTimingMark mark:
+                if (_currentSegment is { } timed)
+                {
+                    _spokenUntil.AddTimingMark(
+                        timed.TextStart + mark.TextEndExclusive,
+                        _segmentSampleOrigin + mark.SampleOffset);
+                }
+
+                break;
+            case SpeechSynthesisCompleted completed:
                 _ttsBusy = false;
+                if (_currentSegment is { } done)
+                {
+                    _spokenUntil.CompleteSegment(done.SegmentIndex, completed.TotalSamples);
+                }
+
                 _currentSegment = null;
                 KickTts(input.Context);
                 await FinishAudioIfReadyAsync(input.Context, input.ResponseId, cancellationToken).ConfigureAwait(false);
@@ -248,6 +265,7 @@ public sealed partial class SessionRuntime
         }
 
         _ackedSamples = input.ConsumedSamples;
+        ApplyHeard(_spokenUntil.Credit(_ackedSamples));
         if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase)
             || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase))
         {
@@ -294,12 +312,7 @@ public sealed partial class SessionRuntime
         _outputActivity = OutputActivity.Idle;
         UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed, _accumulator.Length);
         var heard = failed ? 0 : _accumulator.Length;
-        var entries = _snapshot.Entries.Select(entry =>
-                entry.EntryId == _activeEntryId
-                    ? entry with { HeardTextEndExclusive = heard }
-                    : entry)
-            .ToArray();
-        _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
+        ApplyHeard(heard);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishAsync(
                 new SessionOutput(
@@ -376,5 +389,21 @@ public sealed partial class SessionRuntime
         _outputSampleOffset += PcmCodec.SampleCount(data);
         _sentSamples = _outputSampleOffset;
         return output;
+    }
+
+    private void ApplyHeard(int heard)
+    {
+        if (_activeEntryId is not { } entryId)
+        {
+            return;
+        }
+
+        heard = Math.Clamp(heard, 0, _accumulator.Length);
+        var entries = _snapshot.Entries.Select(entry =>
+                entry.EntryId == entryId && heard >= entry.HeardTextEndExclusive
+                    ? entry with { HeardTextEndExclusive = heard }
+                    : entry)
+            .ToArray();
+        _snapshot = _snapshot with { Entries = entries };
     }
 }

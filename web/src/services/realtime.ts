@@ -16,6 +16,11 @@ let playbackStarted = false;
 let playbackFinal = false;
 let progressTimer: number | null = null;
 let disposed = false;
+let duckTimer: number | null = null;
+let flushing = false;
+const stoppedResponses = new Set<string>();
+const pendingAudio: Array<{ responseId?: string; data?: unknown; isFinal?: boolean }> = [];
+const duckingEnabled = true;
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -75,8 +80,18 @@ async function invoke(
 
 function handleEvent(raw: ServerEvent): void {
   useChatStore.setState(applyServerEvent(useChatStore.getState(), raw));
+  if (raw.type === "playback.gain") {
+    const gain = typeof raw.payload.gain === "number" ? raw.payload.gain : 1;
+    const rampMs = typeof raw.payload.rampMs === "number" ? raw.payload.rampMs : 20;
+    applyGain(gain, rampMs);
+  }
+
+  if (raw.type === "playback.stop" && raw.responseId) {
+    void interruptPlayback(raw.responseId);
+  }
+
   if (raw.type === "agent.response.interrupted" && raw.responseId) {
-    stopPlayback(raw.responseId);
+    void interruptPlayback(raw.responseId);
   }
 
   syncCapture();
@@ -117,6 +132,22 @@ function handleAudioOutput(dto: {
     return;
   }
 
+  if (stoppedResponses.has(responseId) || useChatStore.getState().tombstones[responseId]) {
+    return;
+  }
+
+  if (flushing) {
+    pendingAudio.push(dto);
+    return;
+  }
+
+  enqueueLiveAudio(dto, responseId);
+}
+
+function enqueueLiveAudio(
+  dto: { responseId?: string; data?: unknown; isFinal?: boolean },
+  responseId: string
+): void {
   const pcm = bytesOf(dto.data ?? (dto as { Data?: unknown }).Data);
   const isFinal = Boolean(dto.isFinal ?? (dto as { IsFinal?: boolean }).IsFinal);
   if (pcm.length / 2 > MAX_QUEUED_SAMPLES) {
@@ -140,6 +171,66 @@ function handleAudioOutput(dto: {
 
   if (isFinal) {
     playbackFinal = true;
+  }
+}
+
+function applyGain(gain: number, rampMs: number): void {
+  if (!duckingEnabled) {
+    return;
+  }
+
+  if (duckTimer !== null) {
+    window.clearTimeout(duckTimer);
+    duckTimer = null;
+  }
+
+  capture.setGain(gain, rampMs);
+}
+
+function duckLocally(): void {
+  if (!duckingEnabled || !playbackStarted) {
+    return;
+  }
+
+  applyGain(0.2, 20);
+  duckTimer = window.setTimeout(() => {
+    capture.setGain(1, 20);
+    duckTimer = null;
+  }, 600);
+}
+
+async function interruptPlayback(responseId: string): Promise<void> {
+  if (stoppedResponses.has(responseId) && !playbackStarted) {
+    return;
+  }
+
+  stoppedResponses.add(responseId);
+  flushing = true;
+  stopProgress();
+  if (duckTimer !== null) {
+    window.clearTimeout(duckTimer);
+    duckTimer = null;
+  }
+
+  await capture.flushPlayback(responseId);
+  if (playbackResponseId === responseId) {
+    playbackStarted = false;
+    playbackFinal = false;
+    playbackResponseId = null;
+    playbackConsumed = 0;
+    capture.setPlaybackListener(null);
+    void sendPlayback("PlaybackStopped", "playback.stopped", responseId, capture.playbackConsumed());
+  }
+
+  flushing = false;
+  const queued = pendingAudio.splice(0, pendingAudio.length);
+  for (const item of queued) {
+    const id = item.responseId ?? (item as { ResponseId?: string }).ResponseId;
+    if (!id || stoppedResponses.has(id) || useChatStore.getState().tombstones[id]) {
+      continue;
+    }
+
+    enqueueLiveAudio(item, id);
   }
 }
 
@@ -174,8 +265,14 @@ async function sendPlayback(method: string, type: string, responseId: string, co
 }
 
 function stopPlayback(responseId?: string): void {
+  const id = responseId ?? playbackResponseId ?? "";
+  if (id) {
+    void interruptPlayback(id);
+    return;
+  }
+
   stopProgress();
-  capture.flushPlayback(responseId ?? playbackResponseId ?? "");
+  void capture.flushPlayback("");
   playbackStarted = false;
   playbackFinal = false;
   playbackResponseId = null;
@@ -221,6 +318,7 @@ function syncCapture(): void {
           });
         },
         speechStarted: async (utteranceId, sampleOffset, activityScore) => {
+          duckLocally();
           commandSequence += 1;
           await invoke("SpeechStarted", "user.speech.started", {
             streamId,
