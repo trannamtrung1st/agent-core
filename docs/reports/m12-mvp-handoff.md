@@ -33,7 +33,7 @@ Playwright (`CI=1 npx playwright test`, 5 passed) was last recorded on the measu
 
 ## Measured latencies
 
-Synthetic 20-turn `AgentCore.Runtime` histograms: see [m12-demo-verification](m12-demo-verification.md). Values are process-local Stopwatch samples on Scripted/Synthetic adapters, not SLAs.
+Synthetic 20-turn `AgentCore.Runtime` histograms with observed count/p50/p95/max: [m12-stage-latencies.md](m12-stage-latencies.md) and [m12-demo-verification.md](m12-demo-verification.md). Values are process-local Stopwatch samples on Scripted/Synthetic adapters, not SLAs.
 
 ## Commit map (implementation milestones)
 

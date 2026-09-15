@@ -38,6 +38,6 @@ Run affected suites and every required gate for a claimed milestone. A small fix
 
 ## Commands and results
 
-Inspect actual solution/package/test-host configuration before executing. Planned commands: `dotnet test` from solution root; `pnpm install --frozen-lockfile`, `pnpm run test --run`, `pnpm run build` from web/; `pnpm exec playwright test` with the synthetic host configured. They are runnable only after their artifacts/scripts exist. Do not create projects to run a docs-only check.
+Inspect actual solution/package/test-host configuration before executing. Planned commands: `dotnet test` from solution root; `npm ci`, `npm run test -- --run`, `npm run build` from web/; `npx playwright test` with the synthetic host configured. They are runnable only after their artifacts/scripts exist. Do not create projects to run a docs-only check.
 
 Report exact commands, results and omitted/blocked gates with reasons. Separate setup failures from test failures. An unrun check, future command or manual inspection is not a passing test.

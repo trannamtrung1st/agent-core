@@ -291,6 +291,102 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "audio-session-mismatch": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const mode = await connection.invoke(
+        "SetMode",
+        command(session.sessionId, 1, "session.mode.set", { mode: "voice" }, { attachmentId })
+      );
+      if (!mode.accepted) {
+        throw new Error(JSON.stringify(mode));
+      }
+      await waitFor((evt) => evt.type === "session.state.changed" && evt.payload?.mode === "voice");
+      try {
+        await connection.invoke("SendAudio", {
+          protocolVersion: 1,
+          sessionId: uuid(),
+          attachmentId,
+          streamId: uuid(),
+          frameSequence: 1,
+          sampleOffset: 0,
+          data: new Uint8Array(960)
+        });
+      } catch {
+        // abort may cancel the invoke
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      if (connection.state === "Connected") {
+        throw new Error("mismatched audio sessionId must abort the connection");
+      }
+      try {
+        await connection.stop();
+      } catch {
+        // already closed
+      }
+      break;
+    }
+    case "speech-boundary-order": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const mode = await connection.invoke(
+        "SetMode",
+        command(session.sessionId, 1, "session.mode.set", { mode: "voice" }, { attachmentId })
+      );
+      if (!mode.accepted) {
+        throw new Error(JSON.stringify(mode));
+      }
+      const state = await waitForEvent((evt) => evt.type === "session.state.changed" && evt.payload?.mode === "voice");
+      const streamId = state.payload.streamId;
+      const utteranceId = uuid();
+      const ended = await connection.invoke(
+        "SpeechEnded",
+        command(
+          session.sessionId,
+          2,
+          "user.speech.ended",
+          { streamId, utteranceId, sampleOffset: 480, durationMs: 20, activityScore: 0.2 },
+          { attachmentId }
+        )
+      );
+      if (!ended.accepted) {
+        throw new Error(JSON.stringify(ended));
+      }
+      const started = await connection.invoke(
+        "SpeechStarted",
+        command(
+          session.sessionId,
+          3,
+          "user.speech.started",
+          { streamId, utteranceId, sampleOffset: 0, activityScore: 0.9 },
+          { attachmentId }
+        )
+      );
+      if (!started.accepted) {
+        throw new Error(JSON.stringify(started));
+      }
+      if (events.some((evt) => evt.type === "transcript.final")) {
+        throw new Error("ended boundary must wait for preceding audio samples");
+      }
+      await connection.invoke("SendAudio", {
+        protocolVersion: 1,
+        sessionId: session.sessionId,
+        attachmentId,
+        streamId,
+        frameSequence: 1,
+        sampleOffset: 0,
+        data: new Uint8Array(960)
+      });
+      await waitFor((evt) => evt.type === "transcript.final");
+      await connection.stop();
+      break;
+    }
     case "capacity": {
       const a = await createSession();
       const b = await createSession();
@@ -322,12 +418,17 @@ async function run() {
 }
 
 function waitFor(match, timeoutMs = 8000) {
+  return waitForEvent(match, timeoutMs).then(() => undefined);
+}
+
+function waitForEvent(match, timeoutMs = 8000) {
   const started = Date.now();
   return new Promise((resolve, reject) => {
     const timer = setInterval(() => {
-      if (events.some(match)) {
+      const found = events.find(match);
+      if (found) {
         clearInterval(timer);
-        resolve();
+        resolve(found);
       } else if (Date.now() - started > timeoutMs) {
         clearInterval(timer);
         reject(new Error(`timeout waiting; saw ${events.map((evt) => evt.type).join(",")}`));

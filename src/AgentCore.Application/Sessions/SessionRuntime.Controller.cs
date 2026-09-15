@@ -316,7 +316,7 @@ public sealed partial class SessionRuntime
             if (!_recordedStt)
             {
                 _recordedStt = true;
-                RuntimeTelemetry.Record("stt", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_sttMark)));
+                RuntimeTelemetry.Record("stt", RuntimeTelemetry.ElapsedMs(_sttMark));
             }
             await PublishAsync(
                     new SessionOutput(
@@ -329,6 +329,11 @@ public sealed partial class SessionRuntime
 
         if (input.Evidence is SpeechFinal final)
         {
+            if (!_recordedStt)
+            {
+                _recordedStt = true;
+                RuntimeTelemetry.Record("stt", RuntimeTelemetry.ElapsedMs(_sttMark));
+            }
             var committed = _snapshot.Entries.LastOrDefault(entry =>
                 entry.Role == ConversationRole.User && entry.Text == final.Text);
             await PublishAsync(

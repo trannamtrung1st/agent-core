@@ -78,6 +78,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
+    private long _segmentPipelineStarted;
+    private long _firstAudioReadyAt;
+    private long _firstFrameSentAt;
     private bool _recordedLlm;
     private long _sttMark;
     private bool _recordedStt;
@@ -765,6 +768,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
                 if (UsesVoicePlayback)
                 {
+                    if (_segmentPipelineStarted == 0)
+                    {
+                        _segmentPipelineStarted = Stopwatch.GetTimestamp();
+                    }
+
                     EnqueueSegments(_segmenter!.Append(text, _time.GetUtcNow()));
                     ScheduleSegmentTimer();
                     KickTts(input.Context);
@@ -784,6 +792,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             new SessionOutput(input.Context, input.ResponseId, new TextCompletedOutput(_accumulator.Length)),
                             cancellationToken)
                         .ConfigureAwait(false);
+                    if (_segmentPipelineStarted == 0)
+                    {
+                        _segmentPipelineStarted = Stopwatch.GetTimestamp();
+                    }
+
                     EnqueueSegments(_segmenter!.Complete());
                     KickTts(input.Context);
                     await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
@@ -1042,27 +1055,44 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task PublishAsync(SessionOutput output, CancellationToken cancellationToken)
     {
-        if (output.Payload is AudioFrameOutput frame && _audioOutput is not null)
+        if (output.Payload is AudioFrameOutput frame)
         {
-            await _audioOutput.PublishAsync(
-                    new ResponseAudio(
-                        output.Context.SessionId,
-                        output.ResponseId ?? Guid.Empty,
-                        frame.FrameSequence,
-                        frame.SampleOffset,
-                        frame.IsFinal,
-                        frame.Data),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (!_recordedTransport)
+            NoteAudioTransport();
+            if (_audioOutput is not null)
             {
-                _recordedTransport = true;
-                RuntimeTelemetry.Record("transport", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_ttsStartedAt)));
+                await _audioOutput.PublishAsync(
+                        new ResponseAudio(
+                            output.Context.SessionId,
+                            output.ResponseId ?? Guid.Empty,
+                            frame.FrameSequence,
+                            frame.SampleOffset,
+                            frame.IsFinal,
+                            frame.Data),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
             }
-            return;
         }
 
         await _output.PublishAsync(output, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void NoteAudioTransport()
+    {
+        if (_firstFrameSentAt == 0)
+        {
+            _firstFrameSentAt = Stopwatch.GetTimestamp();
+        }
+
+        if (_recordedTransport)
+        {
+            return;
+        }
+
+        _recordedTransport = true;
+        RuntimeTelemetry.Record(
+            "transport",
+            RuntimeTelemetry.ElapsedMs(_firstAudioReadyAt != 0 ? _firstAudioReadyAt : _ttsStartedAt));
     }
 
     private EventContext NewContext(Guid? causationId = null)

@@ -65,6 +65,9 @@ public sealed partial class SessionRuntime
         _recordedTts = false;
         _recordedTransport = false;
         _recordedPlayback = false;
+        _segmentPipelineStarted = 0;
+        _firstAudioReadyAt = 0;
+        _firstFrameSentAt = 0;
         _segmenter = _activeResponseId is { } id
             && _snapshot.Mode == SessionMode.Voice
             && _synthesizer is not null
@@ -101,7 +104,9 @@ public sealed partial class SessionRuntime
         if (segments.Count > 0 && !_recordedSegment)
         {
             _recordedSegment = true;
-            RuntimeTelemetry.Record("segmentation", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_ttsStartedAt)));
+            RuntimeTelemetry.Record(
+                "segmentation",
+                RuntimeTelemetry.ElapsedMs(_segmentPipelineStarted != 0 ? _segmentPipelineStarted : Stopwatch.GetTimestamp()));
         }
     }
 
@@ -228,6 +233,11 @@ public sealed partial class SessionRuntime
                 if (!_recordedTts)
                 {
                     _recordedTts = true;
+                    if (_firstAudioReadyAt == 0)
+                    {
+                        _firstAudioReadyAt = Stopwatch.GetTimestamp();
+                    }
+
                     RuntimeTelemetry.Record("tts", RuntimeTelemetry.ElapsedMs(_ttsStartedAt));
                 }
                 if (_sentSamples - _ackedSamples + PcmCodec.SampleCount(audio.Frame.Data) > MaxUnackedSamples)
@@ -286,13 +296,21 @@ public sealed partial class SessionRuntime
         _ackedSamples = input.ConsumedSamples;
         ApplyHeard(_spokenUntil.Credit(_ackedSamples));
         if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(input.Kind, "completed", StringComparison.OrdinalIgnoreCase))
         {
             if (!_recordedPlayback)
             {
                 _recordedPlayback = true;
-                RuntimeTelemetry.Record("playback", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_ttsStartedAt)));
+                RuntimeTelemetry.Record(
+                    "playback",
+                    RuntimeTelemetry.ElapsedMs(_firstFrameSentAt != 0 ? _firstFrameSentAt : _ttsStartedAt));
             }
+        }
+
+        if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase))
+        {
             if (_outputActivity == OutputActivity.AgentGenerating)
             {
                 _outputActivity = OutputActivity.AgentSpeaking;

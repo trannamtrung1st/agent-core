@@ -15,7 +15,20 @@ Recorded 2026-09-15. Synthetic/offline only. No speaker, GPU, or hosted keys. He
 
 ## Observed stage latencies
 
-`TwentyTurnDemoTests` runs 20 scripted text turns per identity (examiner, customer-support) plus voice duplex, interruption, idle or environment initiative, and detach/reattach. Durations are `Stopwatch` samples on `AgentCore.Runtime` (`controller`, `llm`, `persist`, `brain`, `stt`, `segmentation`, `tts`, `transport`, `playback` when that stage ran). On this host the 20-turn loop finished in well under one second total (Application suite 190 ms including other tests); per-turn scripted LLM first-token time is typically under 10 ms. These are measurements, not SLAs. Sample: Synthetic profile, in-process FakeTimeProvider, no network.
+`TwentyTurnDemoTests` runs 20 scripted text turns per identity (examiner, customer-support) plus voice duplex, interruption, idle or environment initiative, and detach/reattach. Stage durations are `Stopwatch` deltas on `AgentCore.Runtime` (not placeholders). Durable table: [m12-stage-latencies.md](m12-stage-latencies.md). Host sample recorded 2026-09-15, Synthetic profile, in-process FakeTimeProvider, no network:
+
+| Stage | Count | p50 (ms) | p95 (ms) | max (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| controller | 46 | 0.005 | 0.620 | 1.021 |
+| llm | 48 | 0.002 | 0.013 | 0.947 |
+| persist | 176 | 0.001 | 0.003 | 0.045 |
+| stt | 2 | 0.107 | 2.186 | 2.186 |
+| segmentation | 4 | 0.032 | 1.065 | 1.065 |
+| tts | 4 | 0.034 | 2.156 | 2.156 |
+| transport | 4 | 0.026 | 0.598 | 0.598 |
+| playback | 1 | 0.500 | 0.500 | 0.500 |
+
+These are measurements, not SLAs. Re-run `dotnet test --filter Twenty_turn_synthetic_demo_records_observed_stage_latencies` to refresh the table file.
 
 ## Generated / received / heard
 

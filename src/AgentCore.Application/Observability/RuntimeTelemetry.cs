@@ -68,7 +68,11 @@ public static class RuntimeTelemetry
                 }
 
                 var ordered = pair.Value.OrderBy(value => value).ToArray();
-                result[pair.Key] = new StageStats(ordered.Length, ordered[ordered.Length / 2], ordered[^1]);
+                result[pair.Key] = new StageStats(
+                    ordered.Length,
+                    Percentile(ordered, 0.50),
+                    Percentile(ordered, 0.95),
+                    ordered[^1]);
             }
         }
 
@@ -80,11 +84,22 @@ public static class RuntimeTelemetry
         Timeline.Clear();
         Samples.Clear();
     }
+
+    private static double Percentile(double[] ordered, double percentile)
+    {
+        if (ordered.Length == 1)
+        {
+            return ordered[0];
+        }
+
+        var index = (int)Math.Ceiling(percentile * ordered.Length) - 1;
+        return ordered[Math.Clamp(index, 0, ordered.Length - 1)];
+    }
 }
 
 public sealed record TimelineEvent(string Stage, double DurationMs, string? Detail, DateTimeOffset At);
 
-public sealed record StageStats(int Count, double P50Ms, double MaxMs);
+public sealed record StageStats(int Count, double P50Ms, double P95Ms, double MaxMs);
 
 public static class SafeLogRedactor
 {

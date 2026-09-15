@@ -13,7 +13,7 @@ Recorded 2026-09-15. Synthetic/offline only. No microphone, speaker, GPU, or hos
 | `npm run build` | `web/` | 0 |
 | `npx playwright test` | `web/` | 0 — 1 passed |
 
-Observed: `/hubs/session` MessagePack leases, pending-voice timeout/disconnect, Kestrel JavaScript protocol fixtures, Playwright text exchange with Starting voice… / Cancel and no PCM.
+Observed: `/hubs/session` MessagePack leases, pending-voice timeout/disconnect, Kestrel JavaScript protocol fixtures (including exact retry, eventId payload mismatch, missing attachment, method/type mismatch, command gaps, fatal close, `response.received`, audio session identity, and speech boundary ordering), Playwright text exchange with Starting voice… / Cancel and no PCM.
 
 ## Compose and CI
 

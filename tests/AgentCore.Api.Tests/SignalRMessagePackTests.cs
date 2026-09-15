@@ -145,5 +145,7 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("command-gap")]
     [InlineData("fatal-close")]
     [InlineData("response-received")]
+    [InlineData("audio-session-mismatch")]
+    [InlineData("speech-boundary-order")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }
