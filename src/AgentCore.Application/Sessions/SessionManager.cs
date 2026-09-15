@@ -91,11 +91,6 @@ public sealed class SessionManager
     public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (snapshot.Status == SessionStatus.Ended)
-        {
-            return;
-        }
-
         var ended = snapshot with
         {
             Status = SessionStatus.Ended,
@@ -103,7 +98,18 @@ public sealed class SessionManager
             Revision = snapshot.Revision + 1,
             UpdatedAt = _time.GetUtcNow()
         };
-        await _store.SaveAsync(ended, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _store.SaveAsync(ended, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable")
+        {
+            var loaded = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            if (loaded.Status != SessionStatus.Ended)
+            {
+                throw;
+            }
+        }
     }
 
     private async Task<UserProfile> EnsureLocalProfileAsync(DateTimeOffset now, CancellationToken cancellationToken)

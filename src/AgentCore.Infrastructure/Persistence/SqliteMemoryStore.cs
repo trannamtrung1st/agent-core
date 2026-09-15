@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
@@ -201,7 +202,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             {
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex) when (IsUniqueKeyViolation(ex))
             {
                 throw AgentCoreErrors.Conflict("Profile already exists.");
             }
@@ -369,4 +370,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     private static DateTimeOffset FromUnix(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+
+    private static bool IsUniqueKeyViolation(DbUpdateException exception)
+    {
+        for (var inner = exception.InnerException; inner is not null; inner = inner.InnerException)
+        {
+            if (inner is SqliteException sqlite && sqlite.SqliteExtendedErrorCode is 1555 or 2067)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

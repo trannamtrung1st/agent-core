@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useChatStore } from "../../state/chatStore";
 import {
   bootstrap,
   cancelVoice,
   hangUp,
+  reportCommittedEntries,
   requestVoice,
   selectAgent,
   sendDraft,
@@ -18,6 +19,10 @@ export function ChatApp() {
   useEffect(() => {
     void bootstrap().catch(() => undefined);
   }, []);
+
+  useLayoutEffect(() => {
+    reportCommittedEntries(state.entries);
+  }, [state.entries]);
 
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const voiceLive = state.mode === "voice" && state.captureLive;

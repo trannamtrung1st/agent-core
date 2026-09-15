@@ -312,7 +312,9 @@ public sealed partial class SessionRuntime
 
         _ackedSamples = input.ConsumedSamples;
         _ackedPlaybackText = input.TextEndExclusive;
+        ApplyReceived(_ackedPlaybackText);
         ApplyHeard(_spokenUntil.Credit(_ackedSamples));
+        await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
         if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase)
             || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase)
             || string.Equals(input.Kind, "completed", StringComparison.OrdinalIgnoreCase))
@@ -379,6 +381,7 @@ public sealed partial class SessionRuntime
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
         UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed);
+        ApplyReceived(_ackedPlaybackText);
         var heard = failed ? 0 : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
@@ -472,6 +475,22 @@ public sealed partial class SessionRuntime
         var entries = _snapshot.Entries.Select(entry =>
                 entry.EntryId == entryId && heard >= entry.HeardTextEndExclusive
                     ? entry with { HeardTextEndExclusive = heard }
+                    : entry)
+            .ToArray();
+        _snapshot = _snapshot with { Entries = entries };
+    }
+
+    private void ApplyReceived(int received)
+    {
+        if (_activeEntryId is not { } entryId)
+        {
+            return;
+        }
+
+        received = Math.Clamp(received, 0, _accumulator.Length);
+        var entries = _snapshot.Entries.Select(entry =>
+                entry.EntryId == entryId && received >= entry.ReceivedTextEndExclusive
+                    ? entry with { ReceivedTextEndExclusive = received }
                     : entry)
             .ToArray();
         _snapshot = _snapshot with { Entries = entries };

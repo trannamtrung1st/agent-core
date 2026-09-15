@@ -24,16 +24,6 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         var admitted = 0;
         var bothAdmitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        host.AfterAdmitHold = async () =>
-        {
-            if (Interlocked.Increment(ref admitted) == 2)
-            {
-                bothAdmitted.TrySetResult();
-            }
-
-            await release.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        };
-
         try
         {
             var client = _factory.CreateClient();
@@ -53,21 +43,34 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
             var attached = await hub.InvokeAsync<CommandAck>("Attach", attach);
             Assert.True(attached.Accepted, attached.Error?.Message);
             var attachment = await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var mode = await hub.InvokeAsync<CommandAck>(
+                "SetMode",
+                Command(session.SessionId, 1, "session.mode.set", new SetModePayload { Mode = "voice" }, attachment));
+            Assert.True(mode.Accepted, mode.Error?.Message);
+            host.AfterAdmitHold = async () =>
+            {
+                if (Interlocked.Increment(ref admitted) == 2)
+                {
+                    bothAdmitted.TrySetResult();
+                }
+
+                await release.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            };
             var firstId = Guid.NewGuid().ToString();
             var secondId = Guid.NewGuid().ToString();
             var firstTask = hub.InvokeAsync<CommandAck>(
                 "SetMuted",
-                Command(session.SessionId, 1, "session.mute", new MutePayload { Muted = true }, attachment, firstId));
+                Command(session.SessionId, 2, "session.mute", new MutePayload { Muted = true }, attachment, firstId));
             var secondTask = hub.InvokeAsync<CommandAck>(
                 "SetMuted",
-                Command(session.SessionId, 2, "session.mute", new MutePayload { Muted = false }, attachment, secondId));
+                Command(session.SessionId, 3, "session.mute", new MutePayload { Muted = false }, attachment, secondId));
             await bothAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             var firstRetry = hub.InvokeAsync<CommandAck>(
                 "SetMuted",
-                Command(session.SessionId, 1, "session.mute", new MutePayload { Muted = true }, attachment, firstId));
+                Command(session.SessionId, 2, "session.mute", new MutePayload { Muted = true }, attachment, firstId));
             var secondRetry = hub.InvokeAsync<CommandAck>(
                 "SetMuted",
-                Command(session.SessionId, 2, "session.mute", new MutePayload { Muted = false }, attachment, secondId));
+                Command(session.SessionId, 3, "session.mute", new MutePayload { Muted = false }, attachment, secondId));
             release.TrySetResult();
             var first = await firstTask.WaitAsync(TimeSpan.FromSeconds(10));
             var second = await secondTask.WaitAsync(TimeSpan.FromSeconds(10));
@@ -79,6 +82,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
             Assert.True(retriedSecond.Accepted);
             Assert.Equal(first.EventId, retriedFirst.EventId);
             Assert.Equal(second.EventId, retriedSecond.EventId);
+            Assert.False(host.RuntimeMuted(Guid.Parse(session.SessionId)));
         }
         finally
         {

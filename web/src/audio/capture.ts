@@ -1,4 +1,5 @@
 import { decodePcm16Le } from "./pcm";
+import { MAX_QUEUED_SAMPLES } from "./outputAdmission";
 import { VoiceActivityObserver } from "./vad";
 
 export type CaptureHooks = {
@@ -29,11 +30,14 @@ class MicrophoneCapture {
   private renderedByResponse: Record<string, number> = {};
   private completedResponses: string[] = [];
   private onConsumed: ((consumed: number) => void) | null = null;
+  private onOverflow: (() => void) | null = null;
   private frameSequence = 1;
   private sampleOffset = 0;
+  private streamGeneration = 0;
   private utteranceId: string | null = null;
   private readonly vad = new VoiceActivityObserver();
   private hooks: CaptureHooks | null = null;
+  outgoingHold: (() => Promise<void>) | null = null;
 
   isPrepared(): boolean {
     return this.prepared !== null;
@@ -81,6 +85,10 @@ class MicrophoneCapture {
 
   setPlaybackListener(listener: ((consumed: number) => void) | null): void {
     this.onConsumed = listener;
+  }
+
+  setOverflowListener(listener: (() => void) | null): void {
+    this.onOverflow = listener;
   }
 
   async preflight(): Promise<void> {
@@ -160,6 +168,7 @@ class MicrophoneCapture {
         }
         if (event.data.type === "overflow") {
           this.queuedSamples = typeof event.data.queued === "number" ? event.data.queued : this.queuedSamples;
+          this.onOverflow?.();
         }
         if (event.data.type === "complete" && event.data.responseId) {
           this.completedResponses.push(event.data.responseId);
@@ -195,17 +204,19 @@ class MicrophoneCapture {
   }
 
   async muteInput(): Promise<void> {
-    if (this.utteranceId && this.hooks) {
-      await this.hooks.speechEnded(this.utteranceId, this.sampleOffset, 0);
-      this.utteranceId = null;
-    }
-
+    this.streamGeneration += 1;
     this.streaming = false;
     this.prepared?.worklet.port.postMessage({ type: "pause" });
     this.prepared?.worklet.port.postMessage({ type: "reset" });
     this.frameSequence = 1;
     this.sampleOffset = 0;
     this.vad.reset();
+    const utteranceId = this.utteranceId;
+    const hooks = this.hooks;
+    this.utteranceId = null;
+    if (utteranceId && hooks) {
+      await hooks.speechEnded(utteranceId, this.sampleOffset, 0);
+    }
   }
 
   start(hooks: CaptureHooks): void {
@@ -214,6 +225,7 @@ class MicrophoneCapture {
     }
 
     this.hooks = hooks;
+    this.streamGeneration += 1;
     this.streaming = true;
     this.frameSequence = 1;
     this.sampleOffset = 0;
@@ -233,12 +245,18 @@ class MicrophoneCapture {
     this.prepared?.output.port.postMessage({ type: "gain", gain, rampMs });
   }
 
-  enqueuePlayback(responseId: string, pcm: Uint8Array, isFinal = false): void {
+  enqueuePlayback(responseId: string, pcm: Uint8Array, isFinal = false): boolean {
     const samples = decodePcm16Le(pcm);
+    if (this.queuedSamples + samples.length > MAX_QUEUED_SAMPLES) {
+      return false;
+    }
+
+    this.queuedSamples += samples.length;
     this.prepared?.output.port.postMessage(
       { type: "enqueue", responseId, pcm: samples.buffer, isFinal },
       [samples.buffer]
     );
+    return true;
   }
 
   flushPlayback(responseId: string): Promise<number> {
@@ -278,6 +296,7 @@ class MicrophoneCapture {
     this.renderedByResponse = {};
     this.completedResponses = [];
     this.onConsumed = null;
+    this.onOverflow = null;
     this.utteranceId = null;
     const waiters = this.flushWaiters;
     this.flushWaiters = [];
@@ -304,6 +323,7 @@ class MicrophoneCapture {
   }
 
   private async onFrame(pcm: ArrayBuffer, workletOffset: number): Promise<void> {
+    const generation = this.streamGeneration;
     if (!this.streaming || !this.hooks) {
       return;
     }
@@ -322,6 +342,14 @@ class MicrophoneCapture {
       await this.hooks.speechStarted(this.utteranceId, this.sampleOffset, activity.activityScore);
     }
 
+    if (this.outgoingHold) {
+      await this.outgoingHold();
+    }
+
+    if (this.streamGeneration !== generation || !this.streaming || !this.hooks) {
+      return;
+    }
+
     await this.hooks.sendAudio({
       frameSequence: this.frameSequence,
       sampleOffset: this.sampleOffset,
@@ -329,6 +357,10 @@ class MicrophoneCapture {
     });
     this.frameSequence += 1;
     this.sampleOffset += floats.length;
+
+    if (this.streamGeneration !== generation || !this.streaming) {
+      return;
+    }
 
     if (activity.event?.type === "ended" && this.utteranceId) {
       await this.hooks.speechEnded(this.utteranceId, this.sampleOffset, activity.activityScore);

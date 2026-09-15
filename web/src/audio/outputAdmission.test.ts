@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { EARLY_AUDIO_MS, MAX_QUEUED_SAMPLES, OutputAudioGate } from "./outputAdmission";
 
 const empty = new Uint8Array(960);
+const overflow = new Uint8Array((MAX_QUEUED_SAMPLES - 959) * 2);
 
 describe("output audio admission", () => {
-  it("buffers unknown response audio and plays after started", () => {
+  it("buffers contiguous pre-start frames in the 60 ms window and rejects cumulative overflow", () => {
     const gate = new OutputAudioGate();
     const expected = {
       sessionId: "s1",
@@ -13,7 +14,7 @@ describe("output audio admission", () => {
       stopped: new Set<string>(),
       queuedSamples: 0
     };
-    const frame = {
+    const first = {
       sessionId: "s1",
       attachmentId: "a1",
       responseId: "r1",
@@ -21,9 +22,34 @@ describe("output audio admission", () => {
       sampleOffset: 0,
       data: empty
     };
-    expect(gate.admit(frame, expected)).toBe("buffer");
+    const second = {
+      sessionId: "s1",
+      attachmentId: "a1",
+      responseId: "r1",
+      frameSequence: 2,
+      sampleOffset: 480,
+      data: empty
+    };
+    expect(EARLY_AUDIO_MS).toBe(60);
+    expect(gate.admit(first, expected)).toBe("buffer");
+    expect(gate.admit(second, expected)).toBe("buffer");
+    expect(gate.queuedBuffered()).toBe(960);
+    expect(
+      gate.admit(
+        {
+          sessionId: "s1",
+          attachmentId: "a1",
+          responseId: "r1",
+          frameSequence: 3,
+          sampleOffset: 960,
+          data: overflow
+        },
+        expected
+      )
+    ).toBe("reject");
     gate.markStarted("r1");
-    expect(gate.commitBuffered(frame, 0)).toBe(true);
+    expect(gate.commitBuffered(first, 0)).toBe(true);
+    expect(gate.commitBuffered(second, 480)).toBe(true);
   });
 
   it("rejects stale identity, sequence gaps, and cumulative queue overflow", () => {
@@ -60,11 +86,5 @@ describe("output audio admission", () => {
         { ...expected, queuedSamples: MAX_QUEUED_SAMPLES }
       )
     ).toBe("reject");
-  });
-});
-
-describe("early audio window", () => {
-  it("is 60 ms", () => {
-    expect(EARLY_AUDIO_MS).toBe(60);
   });
 });

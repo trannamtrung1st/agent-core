@@ -129,7 +129,32 @@ describe("output worklet response lifecycle", () => {
     expect(flushed.consumed).toBe(256);
   });
 
-  it("reports canonical consumed samples when rendering at 48 kHz", () => {
+    it("rejects a second overflowing frame without advancing consumed past queued audio", () => {
+      const Processor = loadProcessor();
+      const processor = new Processor();
+      const max = 24000 * 2;
+      processor.port.onmessage?.({
+        data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(max - 128).fill(0.2) }
+      });
+      processor.port.messages.length = 0;
+      processor.port.onmessage?.({
+        data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(256).fill(0.4) }
+      });
+      const overflow = processor.port.messages.find((item) => (item as { type?: string }).type === "overflow") as {
+        queued?: number;
+      };
+      expect(overflow.queued).toBe(max - 128);
+      channel(processor, 128);
+      const snapshot = processor.port.messages.filter((item) => (item as { type?: string }).type === "snapshot").at(-1) as {
+        consumed?: number;
+        queued?: number;
+      };
+      expect(snapshot.queued).toBe(max - 256);
+      expect(snapshot.consumed).toBe(128);
+      expect(processor.port.messages.some((item) => (item as { type?: string }).type === "complete")).toBe(false);
+    });
+
+    it("reports canonical consumed samples when rendering at 48 kHz", () => {
     const Processor = loadProcessor(48000);
     const processor = new Processor();
     processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(240).fill(0.2) } });
@@ -137,8 +162,7 @@ describe("output worklet response lifecycle", () => {
     const snapshot = processor.port.messages.filter((item) => (item as { type?: string }).type === "snapshot").at(-1) as {
       consumed?: number;
     };
-    expect(snapshot.consumed).toBeGreaterThanOrEqual(60);
-    expect(snapshot.consumed).toBeLessThanOrEqual(128);
+    expect(snapshot.consumed).toBe(64);
   });
 
   it("keeps canonical continuity across chunks at 44.1 kHz", () => {
@@ -151,7 +175,6 @@ describe("output worklet response lifecycle", () => {
     const snapshot = processor.port.messages.filter((item) => (item as { type?: string }).type === "snapshot").at(-1) as {
       consumed?: number;
     };
-    expect(snapshot.consumed).toBeGreaterThan(0);
-    expect(snapshot.consumed).toBeLessThanOrEqual(960);
+    expect(snapshot.consumed).toBe(Math.floor((256 * 24000) / 44100));
   });
 });

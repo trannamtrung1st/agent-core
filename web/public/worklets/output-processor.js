@@ -18,6 +18,7 @@ class OutputProcessor extends AudioWorkletProcessor {
     this._rendered = {};
     this._maxQueued = 24000 * 2;
     this._flushRequest = undefined;
+    this._deviceRendered = 0;
     this.port.onmessage = (event) => this.onMessage(event.data);
   }
 
@@ -84,6 +85,7 @@ class OutputProcessor extends AudioWorkletProcessor {
     this._device = new Float32Array(0);
     this._resampler = new StreamingResampler(24000, sampleRate);
     this._consumed = 0;
+    this._deviceRendered = 0;
     this._underrun = 0;
     this._responseId = responseId || null;
     this._final = false;
@@ -125,6 +127,18 @@ class OutputProcessor extends AudioWorkletProcessor {
     this.emitSnapshot();
   }
 
+  creditRendered(frames) {
+    if (frames <= 0) {
+      return;
+    }
+
+    this._deviceRendered += frames;
+    this._consumed = Math.floor((this._deviceRendered * 24000) / sampleRate);
+    if (this._responseId) {
+      this._rendered[this._responseId] = this._consumed;
+    }
+  }
+
   fillDevice(needed) {
     while (this._device.length < needed && this._canonical.length > 0) {
       const stillNeed = needed - this._device.length;
@@ -135,10 +149,6 @@ class OutputProcessor extends AudioWorkletProcessor {
       const chunk = this._canonical.subarray(0, take);
       const converted = this._resampler.process(chunk);
       this._canonical = this._canonical.subarray(take);
-      this._consumed += take;
-      if (this._responseId) {
-        this._rendered[this._responseId] = (this._rendered[this._responseId] || 0) + take;
-      }
       if (converted.length === 0) {
         continue;
       }
@@ -175,6 +185,7 @@ class OutputProcessor extends AudioWorkletProcessor {
         channel[index] = applyGain(this._device[index]);
       }
       this._device = this._device.subarray(needed);
+      this.creditRendered(needed);
       this.emitSnapshot();
       this.maybeComplete();
     } else if (this._final && (this._device.length > 0 || this._canonical.length > 0)) {
@@ -184,6 +195,7 @@ class OutputProcessor extends AudioWorkletProcessor {
         channel[index] = applyGain(this._device[index]);
       }
       channel.fill(0, remaining);
+      this.creditRendered(remaining);
       this._device = new Float32Array(0);
       this._canonical = new Float32Array(0);
       this.emitSnapshot();
@@ -212,6 +224,7 @@ class OutputProcessor extends AudioWorkletProcessor {
       this._resampler = new StreamingResampler(24000, sampleRate);
       this._responseId = null;
       this._consumed = 0;
+      this._deviceRendered = 0;
       this._final = false;
       this._closed = true;
       this._epoch += 1;

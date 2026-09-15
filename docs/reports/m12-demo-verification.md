@@ -15,7 +15,7 @@ Recorded 2026-09-15. Synthetic/offline only. No speaker, GPU, or hosted keys. He
 
 ## Observed stage latencies
 
-`TwentyTurnDemoTests` runs 20 scripted text turns per identity (examiner, customer-support) plus voice duplex, interruption, idle or environment initiative, and detach/reattach. Stage durations are `Stopwatch` deltas on `AgentCore.Runtime` (not placeholders). Durable table: [m12-stage-latencies.md](m12-stage-latencies.md). Isolated generator: `AGENTCORE_WRITE_STAGE_LATENCIES=1 dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Twenty_turn_synthetic_demo_records_observed_stage_latencies`. Host sample recorded 2026-09-15, Synthetic profile, in-process FakeTimeProvider, no network:
+`TwentyTurnDemoTests` runs 20 scripted text turns per identity (examiner, customer-support) plus voice duplex, interruption, idle or environment initiative, and detach/reattach. Stage durations are `Stopwatch` deltas on `AgentCore.Runtime` (not placeholders). Durable table: [m12-stage-latencies.md](m12-stage-latencies.md). Isolated generator: `AGENTCORE_WRITE_STAGE_LATENCIES=1 dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Twenty_turn_synthetic_demo_records_observed_stage_latencies`. Host sample recorded 2026-09-15, Synthetic profile, in-process FakeTimeProvider, no network. Browser/device: N/A.
 
 | Stage | Count | p50 (ms) | p95 (ms) | max (ms) |
 | --- | ---: | ---: | ---: | ---: |

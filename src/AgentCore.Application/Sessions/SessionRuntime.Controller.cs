@@ -80,6 +80,16 @@ public sealed partial class SessionRuntime
 
     private async Task HandleDetachAsync(DetachReceived input, CancellationToken cancellationToken)
     {
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        {
+            _input = InputActivity.Idle;
+            _streamId = null;
+            InvalidateSpeechJobs();
+            _ttsCts?.Cancel();
+            await StopRecognitionAsync().ConfigureAwait(false);
+            return;
+        }
+
         if (_activeResponseId is { } live)
         {
             await SupersedeAsync(input.Context, live, cancellationToken, "disconnected").ConfigureAwait(false);

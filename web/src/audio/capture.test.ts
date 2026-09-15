@@ -201,4 +201,59 @@ describe("capture preflight", () => {
     expect(sendAudio).toHaveBeenCalledTimes(2);
     expect(sendAudio.mock.calls[1]?.[0]?.frameSequence).toBe(1);
   });
+
+  it("drops a gated in-flight frame across mute and unmute", async () => {
+    const stop = vi.fn();
+    const sendAudio = vi.fn();
+    let release: ((value: void) => void) | undefined;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getTracks: () => [{ stop }]
+        })
+      }
+    });
+    const inputPort = { onmessage: null as ((event: MessageEvent) => void) | null, postMessage: vi.fn() };
+    const outputPort = { onmessage: null as ((event: MessageEvent) => void) | null, postMessage: vi.fn() };
+    let created = 0;
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      destination = {};
+      resume = vi.fn();
+      close = vi.fn();
+      audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
+      createGain = () => ({ gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() });
+      createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+    });
+    vi.stubGlobal("AudioWorkletNode", class {
+      port = created++ === 0 ? inputPort : outputPort;
+      connect = vi.fn();
+      disconnect = vi.fn();
+    });
+    await capture.preflight();
+    capture.outgoingHold = () => hold;
+    capture.start({
+      sendAudio,
+      speechStarted: vi.fn(),
+      speechEnded: vi.fn()
+    });
+    const pcm = new ArrayBuffer(960);
+    const pending = inputPort.onmessage?.({ data: { pcm, sampleOffset: 0 } } as MessageEvent);
+    await capture.muteInput();
+    capture.start({
+      sendAudio,
+      speechStarted: vi.fn(),
+      speechEnded: vi.fn()
+    });
+    capture.outgoingHold = null;
+    release?.();
+    await pending;
+    expect(sendAudio).not.toHaveBeenCalled();
+    await inputPort.onmessage?.({ data: { pcm, sampleOffset: 0 } } as MessageEvent);
+    expect(sendAudio).toHaveBeenCalledTimes(1);
+    expect(sendAudio.mock.calls[0]?.[0]?.frameSequence).toBe(1);
+  });
 });

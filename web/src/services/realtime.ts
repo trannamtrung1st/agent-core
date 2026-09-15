@@ -28,6 +28,7 @@ const stoppedResponses = new Set<string>();
 const pendingAudio: OutputAudioFrame[] = [];
 const earlyAudio = new Map<string, { frames: OutputAudioFrame[]; timer: number }>();
 const outputGate = new OutputAudioGate();
+const committedText = new Map<string, number>();
 const duckingEnabled = true;
 
 function uuid(): string {
@@ -111,9 +112,6 @@ function handleEvent(raw: ServerEvent): void {
     lastReceiptResponseId = raw.responseId;
     startReceipts(raw.responseId);
   }
-  if ((raw.type === "agent.text.delta" || raw.type === "agent.text.completed") && useChatStore.getState().mode === "text") {
-    void sendReceipt(false);
-  }
   if ((raw.type === "agent.response.completed" || raw.type === "agent.response.interrupted") && raw.responseId) {
     void sendReceipt(true, raw.responseId);
     stopReceipts();
@@ -185,7 +183,10 @@ function handleAudioOutput(dto: {
     isFinal: Boolean(dto.isFinal ?? (dto as { IsFinal?: boolean }).IsFinal)
   };
 
-  const queuedSamples = capture.playbackQueued() + pendingAudio.reduce((sum, item) => sum + Math.floor(item.data.length / 2), 0);
+  const queuedSamples =
+    capture.playbackQueued() +
+    pendingAudio.reduce((sum, item) => sum + Math.floor(item.data.length / 2), 0) +
+    outputGate.queuedBuffered();
   const decision = outputGate.admit(frame, {
     sessionId: state.sessionId,
     attachmentId: state.attachmentId,
@@ -194,8 +195,8 @@ function handleAudioOutput(dto: {
     queuedSamples
   });
   if (decision === "reject") {
-    if (queuedSamples + Math.floor(frame.data.length / 2) > MAX_QUEUED_SAMPLES) {
-      useChatStore.setState({ error: "Audio output exceeded the 2 second queue." });
+    if (queuedSamples + Math.floor(frame.data.length / 2) + outputGate.queuedBuffered() > MAX_QUEUED_SAMPLES) {
+      failOutputOverflow(responseId);
     }
     return;
   }
@@ -241,7 +242,7 @@ function flushEarlyAudio(responseId: string): void {
   earlyAudio.delete(responseId);
   for (const frame of buffered.frames) {
     if (!outputGate.commitBuffered(frame, capture.playbackQueued())) {
-      useChatStore.setState({ error: "Audio output exceeded the 2 second queue." });
+      failOutputOverflow(responseId);
       continue;
     }
 
@@ -261,14 +262,26 @@ function clearEarlyAudio(): void {
   earlyAudio.clear();
 }
 
-function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
-  const pcm = dto.data;
-  const isFinal = Boolean(dto.isFinal);
-  if (pcm.length / 2 > MAX_QUEUED_SAMPLES) {
-    useChatStore.setState({ error: "Audio output exceeded the 2 second queue." });
+function failOutputOverflow(responseId: string): void {
+  useChatStore.setState({ error: "Audio output exceeded the 2 second queue." });
+  if (stoppedResponses.has(responseId) && !playbackStarted) {
     return;
   }
 
+  stoppedResponses.add(responseId);
+  playbackStarted = false;
+  playbackFinal = false;
+  playbackCompletedSent = false;
+  playbackSentSamples = 0;
+  playbackResponseId = null;
+  capture.setPlaybackListener(null);
+  capture.setOverflowListener(null);
+  void interruptPlayback(responseId);
+}
+
+function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
+  const pcm = dto.data;
+  const isFinal = Boolean(dto.isFinal);
   if (!playbackStarted || playbackResponseId !== responseId) {
     playbackStarted = true;
     playbackResponseId = responseId;
@@ -278,17 +291,24 @@ function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
     playbackSentSamples = 0;
     capture.setPlaybackListener((consumed) => {
       playbackConsumed = consumed;
+      playbackSentSamples = consumed + capture.playbackQueued();
       maybeCompletePlayback();
+    });
+    capture.setOverflowListener(() => {
+      if (playbackResponseId) {
+        failOutputOverflow(playbackResponseId);
+      }
     });
     void sendPlayback("PlaybackStarted", "playback.started", responseId, 0);
     startProgress();
   }
 
-  playbackSentSamples += pcm.length / 2;
-  if (pcm.length > 0 || isFinal) {
-    capture.enqueuePlayback(responseId, pcm, isFinal);
+  if (!capture.enqueuePlayback(responseId, pcm, isFinal)) {
+    failOutputOverflow(responseId);
+    return;
   }
 
+  playbackSentSamples = capture.playbackConsumed() + capture.playbackQueued();
   if (isFinal) {
     playbackFinal = true;
     maybeCompletePlayback();
@@ -369,6 +389,7 @@ function startProgress(): void {
 
     const consumed = capture.playbackConsumed();
     playbackConsumed = consumed;
+    playbackSentSamples = consumed + capture.playbackQueued();
     void sendPlayback("PlaybackProgress", "playback.progress", responseId, consumed);
     maybeCompletePlayback();
   }, 100);
@@ -408,8 +429,28 @@ function renderedTextOffset(responseId: string | null): number {
     return 0;
   }
 
-  const entry = useChatStore.getState().entries.find((item) => item.responseId === responseId);
-  return entry?.text.length ?? 0;
+  return committedText.get(responseId) ?? 0;
+}
+
+export function reportCommittedEntries(
+  entries: Array<{ role: string; responseId: string | null; text: string; status: string }>
+): void {
+  for (const entry of entries) {
+    if (entry.role !== "assistant" || !entry.responseId) {
+      continue;
+    }
+
+    const next = entry.text.length;
+    const previous = committedText.get(entry.responseId) ?? 0;
+    if (next > previous) {
+      committedText.set(entry.responseId, next);
+    }
+  }
+
+  const snapshot = useChatStore.getState();
+  if (snapshot.mode === "text") {
+    void sendReceipt(false);
+  }
 }
 
 function startReceipts(responseId: string): void {

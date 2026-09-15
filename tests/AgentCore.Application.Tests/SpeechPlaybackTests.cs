@@ -160,18 +160,56 @@ public sealed class SpeechPlaybackTests
         Assert.DoesNotContain(output.Items, item => item.Payload is AudioFrameOutput audio && audio.IsFinal);
     }
 
+    [Fact]
+    public async Task Voice_playback_received_prefix_survives_reconnect()
+    {
+        var store = new InMemoryMemoryStore();
+        var first = new CapturingSessionOutput();
+        Guid sessionId;
+        await using (var runtime = Create(first, new ScriptedLanguageModel(["There are three points."]), store: store))
+        {
+            await runtime.AttachAsync();
+            await runtime.SetModeAsync(SessionMode.Voice);
+            await first.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+            await runtime.SubmitUserTextAsync("Hello");
+            var final = await first.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+            var responseId = final.ResponseId!.Value;
+            var generated = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text.Length;
+            Assert.True(generated > 0);
+            await runtime.SubmitPlaybackAsync(responseId, "started", 0, generated);
+            await runtime.SubmitPlaybackAsync(responseId, "completed", runtime.SentSamples, generated);
+            await runtime.WaitUntilIdleAsync();
+            var persisted = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(generated, persisted.ReceivedTextEndExclusive);
+            Assert.True(persisted.ReceivedTextEndExclusive >= persisted.HeardTextEndExclusive);
+            sessionId = runtime.SessionId;
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var restoredOutput = new CapturingSessionOutput();
+        var loaded = (await store.LoadAsync(sessionId))!;
+        await using var restored = Create(restoredOutput, new ScriptedLanguageModel(), store: store, snapshot: loaded);
+        await restored.AttachAsync();
+        await restored.WaitUntilMailboxDrainedAsync();
+        var ready = Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.Equal("There are three points.", ready.Ready.History.Last(entry => entry.Role == ConversationRole.Assistant).Text);
+    }
+
     private static SessionRuntime Create(
         ISessionOutput output,
         ILanguageModel model,
-        ISpeechSynthesizer? synthesizer = null)
+        ISpeechSynthesizer? synthesizer = null,
+        IMemoryStore? store = null,
+        SessionSnapshot? snapshot = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 128).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
-        var store = new InMemoryMemoryStore();
+        store ??= new InMemoryMemoryStore();
         var now = time.GetUtcNow();
-        var snapshot = new SessionSnapshot(
+        snapshot ??= new SessionSnapshot(
             1,
             ids.NewSessionId(),
             1,
@@ -186,7 +224,10 @@ public sealed class SpeechPlaybackTests
             null,
             now,
             now);
-        store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
+        {
+            store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        }
         return new SessionRuntime(
             snapshot,
             model,

@@ -17,6 +17,7 @@ export class OutputAudioGate {
   private readonly started = new Set<string>();
   private readonly lastSequence = new Map<string, number>();
   private readonly lastSampleEnd = new Map<string, number>();
+  private bufferedSamples = 0;
 
   markStarted(responseId: string): void {
     this.started.add(responseId);
@@ -26,16 +27,22 @@ export class OutputAudioGate {
     return this.started.has(responseId);
   }
 
+  queuedBuffered(): number {
+    return this.bufferedSamples;
+  }
+
   drop(responseId: string): void {
     this.started.delete(responseId);
     this.lastSequence.delete(responseId);
     this.lastSampleEnd.delete(responseId);
+    this.bufferedSamples = 0;
   }
 
   reset(): void {
     this.started.clear();
     this.lastSequence.clear();
     this.lastSampleEnd.clear();
+    this.bufferedSamples = 0;
   }
 
   admit(
@@ -80,16 +87,17 @@ export class OutputAudioGate {
       return "reject";
     }
 
-    if (expected.queuedSamples + samples > MAX_QUEUED_SAMPLES) {
+    if (expected.queuedSamples + this.bufferedSamples + samples > MAX_QUEUED_SAMPLES) {
       return "reject";
-    }
-
-    if (!this.started.has(responseId)) {
-      return "buffer";
     }
 
     this.lastSequence.set(responseId, frame.frameSequence);
     this.lastSampleEnd.set(responseId, frame.sampleOffset + samples);
+    if (!this.started.has(responseId)) {
+      this.bufferedSamples += samples;
+      return "buffer";
+    }
+
     return "play";
   }
 
@@ -100,22 +108,12 @@ export class OutputAudioGate {
     }
 
     const samples = Math.floor(frame.data.length / 2);
-    if (queuedSamples + samples > MAX_QUEUED_SAMPLES) {
+    const remainingBuffered = Math.max(0, this.bufferedSamples - samples);
+    if (queuedSamples + remainingBuffered + samples > MAX_QUEUED_SAMPLES) {
       return false;
     }
 
-    const previousSequence = this.lastSequence.get(responseId);
-    const previousEnd = this.lastSampleEnd.get(responseId) ?? 0;
-    if (previousSequence !== undefined) {
-      if (frame.frameSequence !== previousSequence + 1 || frame.sampleOffset !== previousEnd) {
-        return false;
-      }
-    } else if (frame.sampleOffset !== 0) {
-      return false;
-    }
-
-    this.lastSequence.set(responseId, frame.frameSequence ?? 0);
-    this.lastSampleEnd.set(responseId, (frame.sampleOffset ?? 0) + samples);
+    this.bufferedSamples = remainingBuffered;
     return true;
   }
 }

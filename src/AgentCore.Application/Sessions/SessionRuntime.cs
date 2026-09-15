@@ -1054,6 +1054,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private long NextSequence() =>
         _snapshot.Entries.Count == 0 ? 1 : _snapshot.Entries[^1].Sequence + 1;
 
+    private static readonly TimeSpan[] PersistRetryDelays =
+        [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
+
     private async Task PersistAsync(SessionSnapshot snapshot, CancellationToken cancellationToken)
     {
         if (snapshot.Entries.Count > 1000)
@@ -1064,9 +1067,32 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         using var activity = RuntimeTelemetry.Activity.StartActivity("persist");
         var started = Stopwatch.GetTimestamp();
         var next = snapshot with { Revision = _snapshot.Revision + 1, UpdatedAt = _time.GetUtcNow() };
-        await _store.SaveAsync(next, _snapshot.Revision, cancellationToken).ConfigureAwait(false);
-        _snapshot = next;
-        RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(started));
+        AgentCoreException? last = null;
+        for (var attempt = 0; attempt <= PersistRetryDelays.Length; attempt++)
+        {
+            try
+            {
+                await _store.SaveAsync(next, _snapshot.Revision, cancellationToken).ConfigureAwait(false);
+                _snapshot = next;
+                RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(started));
+                return;
+            }
+            catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable" && attempt < PersistRetryDelays.Length)
+            {
+                last = ex;
+                await DelayPersistRetryAsync(PersistRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw last ?? AgentCoreErrors.Persistence("Persistent save failed.");
+    }
+
+    private async Task DelayPersistRetryAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        var due = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timer = _time.CreateTimer(_ => due.TrySetResult(), null, delay, Timeout.InfiniteTimeSpan);
+        await using var registration = cancellationToken.Register(() => due.TrySetCanceled(cancellationToken));
+        await due.Task.ConfigureAwait(false);
     }
 
     private async Task CheckpointStreamingAsync(CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Threading.Channels;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
@@ -53,6 +54,9 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public SessionSnapshot? LiveSnapshot(Guid sessionId) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.Snapshot : null;
+
+    internal bool? RuntimeMuted(Guid sessionId) =>
+        _live.TryGetValue(sessionId, out var live) ? live.Runtime.Muted : null;
 
     public bool Admitting => _admitting;
 
@@ -250,6 +254,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return;
         }
 
+        live.StopDispatch();
         await live.Runtime.DetachAsync().ConfigureAwait(false);
         await live.Runtime.WaitUntilMailboxDrainedAsync().ConfigureAwait(false);
         await live.Runtime.DisposeAsync().ConfigureAwait(false);
@@ -257,7 +262,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public async Task TerminateAsync(Guid sessionId, CancellationToken cancellationToken)
     {
-        if (_live.TryGetValue(sessionId, out var live) && live.ConnectionId is { } connectionId)
+        if (_live.TryGetValue(sessionId, out var live))
         {
             var ended = await live.Runtime.RequestEndAsync(cancellationToken).ConfigureAwait(false);
             await live.Runtime.WaitUntilMailboxDrainedAsync(cancellationToken).ConfigureAwait(false);
@@ -265,11 +270,20 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             {
                 throw AgentCoreErrors.Persistence("Failed to persist session end.");
             }
-
-            await DetachAsync(connectionId).ConfigureAwait(false);
         }
 
-        await _sessions.EndAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _sessions.EndAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable")
+        {
+            var snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            if (snapshot.Status != SessionStatus.Ended)
+            {
+                throw;
+            }
+        }
     }
 
     public async Task DrainAsync(CancellationToken cancellationToken = default)
@@ -375,6 +389,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         {
             var mode = raw == "voice" ? SessionMode.Voice : SessionMode.Text;
             await live.Runtime.SetModeAsync(mode, cancellationToken).ConfigureAwait(false);
+            await live.Runtime.WaitUntilMailboxDrainedAsync(cancellationToken).ConfigureAwait(false);
             return Accept(command.EventId);
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -401,7 +416,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return Reject(command.EventId, "Protocol", "ProtocolError", "sessionId is invalid.", true, null);
         }
 
-        return await AdmitControlAsync(connectionId, command, async live =>
+        var ack = await AdmitControlAsync(connectionId, command, async live =>
         {
             _ = live;
             try
@@ -414,6 +429,13 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 return Reject(command.EventId, "Session", ex.Code, ex.Message, false, ex.RetryAfterMs ?? 1000);
             }
         }, cancellationToken).ConfigureAwait(false);
+
+        if (ack.Accepted)
+        {
+            await DetachAsync(connectionId).ConfigureAwait(false);
+        }
+
+        return ack;
     }
 
     public Task<CommandAck> AdmitSpeechStartedAsync(string connectionId, ClientCommand<SpeechStartedPayload> command)
@@ -611,6 +633,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         return await AdmitControlAsync(connectionId, command, async live =>
         {
             await live.Runtime.SetMutedAsync(command.Payload.Muted).ConfigureAwait(false);
+            await live.Runtime.WaitUntilMailboxDrainedAsync().ConfigureAwait(false);
             return Accept(command.EventId);
         }).ConfigureAwait(false);
     }
@@ -758,31 +781,18 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return admission.Reject!;
         }
 
-        var live = admission.Live;
+        var work = admission.Work!;
         if (AfterAdmitHold is not null)
         {
             await AfterAdmitHold().ConfigureAwait(false);
         }
 
-        try
-        {
-            var ack = await action(live).ConfigureAwait(false);
-            await FinishAdmitAsync(live, command, ack, cancellationToken).ConfigureAwait(false);
-            return ack;
-        }
-        catch (Exception)
-        {
-            await FinishAdmitAsync(
-                    live,
-                    command,
-                    Reject(command.EventId, "Session", "Unavailable", "Command failed.", false, 1000),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            throw;
-        }
+        work.Action = action;
+        work.Ready.TrySetResult();
+        return await work.Completed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<(bool Ok, Live Live, CommandAck? Reject)> TryAdmitAsync(
+    private async Task<(bool Ok, Live Live, CommandAck? Reject, DispatchWork? Work)> TryAdmitAsync(
         string connectionId,
         IRealtimeCommand command,
         CancellationToken cancellationToken)
@@ -791,7 +801,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             || !_live.TryGetValue(sessionId, out var found)
             || !string.Equals(command.SessionId, sessionId.ToString(), StringComparison.OrdinalIgnoreCase))
         {
-            return (false, null!, Reject(command.EventId, "Session", "NotFound", "Session is not attached.", false, null));
+            return (false, null!, Reject(command.EventId, "Session", "NotFound", "Session is not attached.", false, null), null);
         }
 
         Task<CommandAck>? inflight = null;
@@ -803,13 +813,13 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 || !_live.TryGetValue(sessionId, out var current)
                 || !ReferenceEquals(current, found))
             {
-                return (false, found, Reject(command.EventId, "Session", "NotFound", "Session is not attached.", false, null));
+                return (false, found, Reject(command.EventId, "Session", "NotFound", "Session is not attached.", false, null), null);
             }
 
             if (string.IsNullOrWhiteSpace(command.AttachmentId)
                 || !string.Equals(command.AttachmentId, found.AttachmentId.ToString(), StringComparison.OrdinalIgnoreCase))
             {
-                return (false, found, Reject(command.EventId, "Session", "StaleCommand", "Attachment lease is invalid.", false, null));
+                return (false, found, Reject(command.EventId, "Session", "StaleCommand", "Attachment lease is invalid.", false, null), null);
             }
 
             var fingerprint = Fingerprint(command);
@@ -823,10 +833,10 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         "ProtocolError",
                         "Repeated eventId with a different payload.",
                         true,
-                        null));
+                        null), null);
                 }
 
-                return (false, found, prior.Ack);
+                return (false, found, prior.Ack, null);
             }
 
             if (found.InFlight.TryGetValue(command.EventId, out var pending))
@@ -839,23 +849,24 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         "ProtocolError",
                         "Repeated eventId with a different payload.",
                         true,
-                        null));
+                        null), null);
                 }
 
                 inflight = pending.Ack.Task;
             }
             else if (command.Sequence <= found.LastSequence)
             {
-                return (false, found, Reject(command.EventId, "Session", "StaleCommand", "Backwards command sequence.", false, null));
+                return (false, found, Reject(command.EventId, "Session", "StaleCommand", "Backwards command sequence.", false, null), null);
             }
             else
             {
                 found.LastSequence = command.Sequence;
                 found.LastEventId = command.EventId;
-                found.InFlight[command.EventId] = new InFlightAdmit(
-                    fingerprint,
-                    new TaskCompletionSource<CommandAck>(TaskCreationOptions.RunContinuationsAsynchronously));
-                return (true, found, null);
+                var completed = new TaskCompletionSource<CommandAck>(TaskCreationOptions.RunContinuationsAsynchronously);
+                found.InFlight[command.EventId] = new InFlightAdmit(fingerprint, completed);
+                var work = new DispatchWork(command, completed);
+                found.Enqueue(work);
+                return (true, found, null, work);
             }
         }
         finally
@@ -865,10 +876,10 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
         if (inflight is not null)
         {
-            return (false, found, await inflight.WaitAsync(cancellationToken).ConfigureAwait(false));
+            return (false, found, await inflight.WaitAsync(cancellationToken).ConfigureAwait(false), null);
         }
 
-        return (false, found, Reject(command.EventId, "Session", "NotFound", "Session is not attached.", false, null));
+        return (false, found, Reject(command.EventId, "Session", "NotFound", "Session is not attached.", false, null), null);
     }
 
     private static async Task FinishAdmitAsync(
@@ -919,9 +930,20 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             }
         };
 
-    private sealed class Live(SessionRuntime runtime)
+    private sealed class Live
     {
-        public SessionRuntime Runtime { get; } = runtime;
+        private readonly Channel<DispatchWork> _dispatch = Channel.CreateUnbounded<DispatchWork>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+        private readonly Queue<string> _dedupeOrder = new();
+        private long _serverSequence;
+
+        public Live(SessionRuntime runtime)
+        {
+            Runtime = runtime;
+            Dispatcher = Task.Run(DispatchAsync);
+        }
+
+        public SessionRuntime Runtime { get; }
         public string? ConnectionId { get; set; }
         public Guid AttachmentId { get; set; } = Guid.NewGuid();
         public string? LastAttachEventId { get; set; }
@@ -932,10 +954,13 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         public SemaphoreSlim Admission { get; } = new(1, 1);
         public Dictionary<string, InFlightAdmit> InFlight { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, DedupeRecord> Dedupe { get; } = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Queue<string> _dedupeOrder = new();
-        private long _serverSequence;
+        public Task Dispatcher { get; }
 
         public long NextSequence() => Interlocked.Increment(ref _serverSequence);
+
+        public void Enqueue(DispatchWork work) => _dispatch.Writer.TryWrite(work);
+
+        public void StopDispatch() => _dispatch.Writer.TryComplete();
 
         public void Remember(string eventId, string fingerprint, CommandAck ack)
         {
@@ -965,6 +990,56 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             _dedupeOrder.Clear();
             _serverSequence = 0;
         }
+
+        private async Task DispatchAsync()
+        {
+            await foreach (var work in _dispatch.Reader.ReadAllAsync().ConfigureAwait(false))
+            {
+                try
+                {
+                    await work.Ready.Task.ConfigureAwait(false);
+                    if (work.Action is null)
+                    {
+                        var skipped = Reject(work.Command.EventId, "Session", "Unavailable", "Command failed.", false, 1000);
+                        await FinishAdmitAsync(this, work.Command, skipped, CancellationToken.None).ConfigureAwait(false);
+                        work.Completed.TrySetResult(skipped);
+                        continue;
+                    }
+
+                    CommandAck ack;
+                    try
+                    {
+                        ack = await work.Action(this).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        ack = Reject(work.Command.EventId, "Session", "Unavailable", "Command failed.", false, 1000);
+                        await FinishAdmitAsync(this, work.Command, ack, CancellationToken.None).ConfigureAwait(false);
+                        work.Completed.TrySetResult(ack);
+                        throw;
+                    }
+
+                    await FinishAdmitAsync(this, work.Command, ack, CancellationToken.None).ConfigureAwait(false);
+                    work.Completed.TrySetResult(ack);
+                }
+                catch (Exception)
+                {
+                    if (!work.Completed.Task.IsCompleted)
+                    {
+                        var failed = Reject(work.Command.EventId, "Session", "Unavailable", "Command failed.", false, 1000);
+                        work.Completed.TrySetResult(failed);
+                    }
+                }
+            }
+        }
+    }
+
+    private sealed class DispatchWork(IRealtimeCommand command, TaskCompletionSource<CommandAck> completed)
+    {
+        public IRealtimeCommand Command { get; } = command;
+        public Func<Live, Task<CommandAck>>? Action { get; set; }
+        public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<CommandAck> Completed { get; } = completed;
     }
 
     public readonly record struct DedupeRecord(string Fingerprint, CommandAck Ack);
