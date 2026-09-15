@@ -1,7 +1,9 @@
 class OutputProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._queue = new Float32Array(0);
+    this._canonical = new Float32Array(0);
+    this._device = new Float32Array(0);
+    this._resampler = new StreamingResampler(24000, sampleRate);
     this._consumed = 0;
     this._underrun = 0;
     this._responseId = null;
@@ -14,6 +16,8 @@ class OutputProcessor extends AudioWorkletProcessor {
     this._rampLeft = 0;
     this._rampTotal = 1;
     this._rendered = {};
+    this._maxQueued = 24000 * 2;
+    this._flushRequest = undefined;
     this.port.onmessage = (event) => this.onMessage(event.data);
   }
 
@@ -35,10 +39,16 @@ class OutputProcessor extends AudioWorkletProcessor {
       if (data.pcm) {
         const incoming = data.pcm instanceof Float32Array ? data.pcm : new Float32Array(data.pcm);
         if (incoming.length > 0) {
-          const merged = new Float32Array(this._queue.length + incoming.length);
-          merged.set(this._queue);
-          merged.set(incoming, this._queue.length);
-          this._queue = merged;
+          if (this._canonical.length + incoming.length > this._maxQueued) {
+            this.port.postMessage({ type: "overflow", queued: this._canonical.length, epoch: this._epoch });
+            this.emitSnapshot();
+            return;
+          }
+
+          const merged = new Float32Array(this._canonical.length + incoming.length);
+          merged.set(this._canonical);
+          merged.set(incoming, this._canonical.length);
+          this._canonical = merged;
         }
       }
 
@@ -60,17 +70,7 @@ class OutputProcessor extends AudioWorkletProcessor {
     }
 
     if (data.type === "flush") {
-      if (!data.responseId || data.responseId === this._responseId) {
-        this._queue = new Float32Array(0);
-        this._responseId = null;
-        this._consumed = 0;
-        this._final = false;
-        this._closed = true;
-        this._epoch += 1;
-      }
-
-      this.port.postMessage({ type: "flushed", consumed: this._consumed, epoch: this._epoch });
-      this.emitSnapshot();
+      this._flushRequest = data.responseId;
       return;
     }
 
@@ -80,7 +80,9 @@ class OutputProcessor extends AudioWorkletProcessor {
   }
 
   beginResponse(responseId) {
-    this._queue = new Float32Array(0);
+    this._canonical = new Float32Array(0);
+    this._device = new Float32Array(0);
+    this._resampler = new StreamingResampler(24000, sampleRate);
     this._consumed = 0;
     this._underrun = 0;
     this._responseId = responseId || null;
@@ -95,7 +97,7 @@ class OutputProcessor extends AudioWorkletProcessor {
     this.port.postMessage({
       type: "snapshot",
       consumed: this._consumed,
-      queued: this._queue.length,
+      queued: this._canonical.length,
       underrun: this._underrun,
       responseId: this._responseId,
       final: this._final,
@@ -106,7 +108,7 @@ class OutputProcessor extends AudioWorkletProcessor {
   }
 
   maybeComplete() {
-    if (this._closed || !this._final || this._queue.length > 0) {
+    if (this._closed || !this._final || this._canonical.length > 0 || this._device.length > 0) {
       return;
     }
 
@@ -121,6 +123,31 @@ class OutputProcessor extends AudioWorkletProcessor {
       epoch: this._epoch
     });
     this.emitSnapshot();
+  }
+
+  fillDevice(needed) {
+    while (this._device.length < needed && this._canonical.length > 0) {
+      const stillNeed = needed - this._device.length;
+      const take = Math.min(
+        this._canonical.length,
+        Math.max(1, Math.ceil((stillNeed * 24000) / sampleRate))
+      );
+      const chunk = this._canonical.subarray(0, take);
+      const converted = this._resampler.process(chunk);
+      this._canonical = this._canonical.subarray(take);
+      this._consumed += take;
+      if (this._responseId) {
+        this._rendered[this._responseId] = (this._rendered[this._responseId] || 0) + take;
+      }
+      if (converted.length === 0) {
+        continue;
+      }
+
+      const merged = new Float32Array(this._device.length + converted.length);
+      merged.set(this._device);
+      merged.set(converted, this._device.length);
+      this._device = merged;
+    }
   }
 
   process(_inputs, outputs) {
@@ -142,28 +169,23 @@ class OutputProcessor extends AudioWorkletProcessor {
       return value * this._gain;
     };
 
-    if (this._queue.length >= needed) {
+    this.fillDevice(needed);
+    if (this._device.length >= needed) {
       for (let index = 0; index < needed; index += 1) {
-        channel[index] = applyGain(this._queue[index]);
+        channel[index] = applyGain(this._device[index]);
       }
-      this._queue = this._queue.subarray(needed);
-      this._consumed += needed;
-      if (this._responseId) {
-        this._rendered[this._responseId] = (this._rendered[this._responseId] || 0) + needed;
-      }
+      this._device = this._device.subarray(needed);
       this.emitSnapshot();
       this.maybeComplete();
-    } else if (this._final && this._queue.length > 0) {
-      const remaining = this._queue.length;
+    } else if (this._final && (this._device.length > 0 || this._canonical.length > 0)) {
+      this.fillDevice(needed);
+      const remaining = Math.min(this._device.length, needed);
       for (let index = 0; index < remaining; index += 1) {
-        channel[index] = applyGain(this._queue[index]);
+        channel[index] = applyGain(this._device[index]);
       }
       channel.fill(0, remaining);
-      this._queue = new Float32Array(0);
-      this._consumed += remaining;
-      if (this._responseId) {
-        this._rendered[this._responseId] = (this._rendered[this._responseId] || 0) + remaining;
-      }
+      this._device = new Float32Array(0);
+      this._canonical = new Float32Array(0);
       this.emitSnapshot();
       this.maybeComplete();
     } else if (this._final) {
@@ -174,7 +196,69 @@ class OutputProcessor extends AudioWorkletProcessor {
       this._underrun += needed;
     }
 
+    this.acknowledgeFlush();
     return true;
+  }
+
+  acknowledgeFlush() {
+    if (this._flushRequest === undefined) {
+      return;
+    }
+
+    const stoppedAt = this._consumed;
+    if (!this._flushRequest || this._flushRequest === this._responseId) {
+      this._canonical = new Float32Array(0);
+      this._device = new Float32Array(0);
+      this._resampler = new StreamingResampler(24000, sampleRate);
+      this._responseId = null;
+      this._consumed = 0;
+      this._final = false;
+      this._closed = true;
+      this._epoch += 1;
+    }
+
+    this._flushRequest = undefined;
+    this.port.postMessage({ type: "flushed", consumed: stoppedAt, epoch: this._epoch });
+    this.emitSnapshot();
+  }
+}
+
+class StreamingResampler {
+  constructor(inputRate, outputRate) {
+    this.step = inputRate / outputRate;
+    this.leftover = new Float32Array(0);
+    this.phase = 0;
+    this.lowpass = 0;
+  }
+
+  process(input) {
+    if (this.step === 1) {
+      const copy = new Float32Array(input.length);
+      copy.set(input);
+      return copy;
+    }
+
+    const merged = new Float32Array(this.leftover.length + input.length);
+    merged.set(this.leftover);
+    merged.set(input, this.leftover.length);
+    const output = [];
+    while (this.phase + 1 < merged.length) {
+      const index = Math.floor(this.phase);
+      const fraction = this.phase - index;
+      const left = merged[index] || 0;
+      const right = merged[index + 1] || left;
+      const interpolated = left * (1 - fraction) + right * fraction;
+      this.lowpass = this.lowpass * 0.2 + interpolated * 0.8;
+      output.push(this.lowpass);
+      this.phase += this.step;
+    }
+
+    const consumed = Math.min(merged.length, Math.floor(this.phase));
+    this.leftover = merged.slice(consumed);
+    this.phase -= consumed;
+    const result = new Float32Array(output.length);
+    result.set(output);
+    return result;
   }
 }
 

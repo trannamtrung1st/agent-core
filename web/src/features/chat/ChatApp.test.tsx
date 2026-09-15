@@ -43,4 +43,30 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "End" })).toBeInTheDocument();
   });
+
+  it("shows Voice after reconnect when durable mode is voice until capture is live", () => {
+    useChatStore.setState({
+      ...emptySession(),
+      sessionId: "s1",
+      connection: "ready",
+      mode: "voice",
+      captureLive: false,
+      voiceAvailable: true,
+      agentName: "Alex",
+      agentRole: "Examiner",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const { rerender } = render(<ChatApp />);
+    expect(screen.getByTestId("connection")).toHaveTextContent("Ready");
+    expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
+
+    act(() => {
+      useChatStore.setState({ captureLive: true, muted: false });
+    });
+    rerender(<ChatApp />);
+    expect(screen.getByTestId("connection")).toHaveTextContent("Listening");
+    expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
+  });
 });

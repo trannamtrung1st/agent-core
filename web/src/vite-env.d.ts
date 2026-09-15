@@ -4,6 +4,7 @@ interface Window {
   __agentCore?: {
     audioFramesSent: () => number;
     disconnect: () => Promise<void>;
+    reconnect?: () => Promise<void>;
     capturePrepared: () => boolean;
     workletLoaded: () => boolean;
     outputWorkletLoaded: () => boolean;
@@ -21,5 +22,6 @@ interface Window {
     };
     audioOutputsReceived: () => number;
     captureStreaming: () => boolean;
+    flushing?: () => boolean;
   };
 }

@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="AgentCore.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AgentCore.Application\AgentCore.Application.csproj" />
     <ProjectReference Include="..\AgentCore.Infrastructure\AgentCore.Infrastructure.csproj" />
     <ProjectReference Include="..\AgentCore.Contracts\AgentCore.Contracts.csproj" />

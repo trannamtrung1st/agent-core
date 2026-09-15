@@ -161,6 +161,24 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Sqlite_migrate_reopens_legacy_ensurecreated_database()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await using var db = await opened.Factory.CreateDbContextAsync();
+            await db.Database.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(First(), 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        var loaded = await reopened.Store.LoadAsync(First().SessionId);
+        Assert.Equal("examiner", loaded!.Definition.Id);
+        Assert.Equal(1, loaded.Revision);
+    }
+
+    [Fact]
     public async Task Sqlite_migrate_reopens_existing_database()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
@@ -269,6 +287,33 @@ public sealed class MemoryStoreContractTests
         var harness = OpenSqlite(path, deleteOnDispose: true);
         await harness.Store.EnsureCreatedAsync();
         return harness;
+    }
+
+    [Fact]
+    public async Task Fresh_sqlite_file_migrates_with_wal_interceptor()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-wal-{Guid.NewGuid():N}.db");
+        var interceptor = new SqlitePragmaInterceptor(5000);
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>()
+            .UseSqlite($"Data Source={path}")
+            .AddInterceptors(interceptor)
+            .Options;
+        var store = new SqliteMemoryStore(new TestFactory(options), new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero)));
+        try
+        {
+            await store.EnsureCreatedAsync();
+            var snapshot = First();
+            await store.SaveAsync(snapshot, 0);
+            var loaded = await store.LoadAsync(snapshot.SessionId);
+            Assert.NotNull(loaded);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            File.Delete(path);
+            File.Delete(path + "-wal");
+            File.Delete(path + "-shm");
+        }
     }
 
     private static SqliteHarness OpenSqlite(string path, bool deleteOnDispose)

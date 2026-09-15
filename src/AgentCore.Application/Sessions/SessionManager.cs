@@ -125,8 +125,22 @@ public sealed class SessionManager
             },
             now);
         LocalUserProfile.Validate(created.Preferences);
-        await _store.SaveProfileAsync(created, 0, cancellationToken).ConfigureAwait(false);
-        return created;
+        try
+        {
+            await _store.SaveProfileAsync(created, 0, cancellationToken).ConfigureAwait(false);
+            return created;
+        }
+        catch (AgentCoreException ex) when (ex.Code == "Conflict")
+        {
+            var raced = await _store.LoadProfileAsync(LocalUserProfile.Id, cancellationToken).ConfigureAwait(false);
+            if (raced is null)
+            {
+                throw;
+            }
+
+            LocalUserProfile.Validate(raced.Preferences);
+            return raced;
+        }
     }
 
     public async Task<IReadOnlyList<PublicAgentDescriptor>> ListAgentsAsync(

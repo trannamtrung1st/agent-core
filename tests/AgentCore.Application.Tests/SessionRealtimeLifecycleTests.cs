@@ -82,11 +82,13 @@ public sealed class SessionRealtimeLifecycleTests
     [Fact]
     public async Task Uncertain_source_event_retry_across_reconstruction_does_not_duplicate_user_turn()
     {
-        var store = new InMemoryMemoryStore();
+        await using var harness = await SqliteTestHarness.CreateMigratedAsync();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var sourceEventId = Guid.Parse("019944af-0000-7000-8000-0000000000ee");
-        await using (var runtime = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store))
+        Guid sessionId;
+        await using (var runtime = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), harness.Store))
         {
+            sessionId = runtime.SessionId;
             await runtime.AttachAsync();
             Assert.True(await runtime.SubmitUserTextAsync("Hello", sourceEventId));
             await runtime.WaitUntilIdleAsync();
@@ -94,8 +96,8 @@ public sealed class SessionRealtimeLifecycleTests
             await runtime.WaitUntilIdleAsync();
         }
 
-        var snapshot = (await store.LoadAsync(Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")))!;
-        await using var restored = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store, snapshot);
+        var snapshot = (await harness.Store.LoadAsync(sessionId))!;
+        await using var restored = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), harness.Store, snapshot);
         await restored.AttachAsync();
         await restored.WaitUntilMailboxDrainedAsync();
         Assert.True(await restored.SubmitUserTextAsync("Hello", sourceEventId));
@@ -128,7 +130,7 @@ public sealed class SessionRealtimeLifecycleTests
         ISessionOutput output,
         FakeTimeProvider time,
         ILanguageModel model,
-        InMemoryMemoryStore? store = null,
+        IMemoryStore? store = null,
         SessionSnapshot? snapshot = null)
     {
         store ??= new InMemoryMemoryStore();

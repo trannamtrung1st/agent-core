@@ -20,6 +20,7 @@ export function ChatApp() {
   }, []);
 
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
+  const voiceLive = state.mode === "voice" && state.captureLive;
   const canSend = state.connection === "ready" && state.draft.trim().length > 0;
 
   return (
@@ -30,7 +31,7 @@ export function ChatApp() {
           <p data-testid="profile">Profile: Synthetic</p>
         </div>
         <p data-testid="connection" className="status">
-          {pendingVoice ? "Starting voice…" : connectionLabel(state.connection, state.mode)}
+          {pendingVoice ? "Starting voice…" : connectionLabel(state.connection, voiceLive && !state.muted)}
         </p>
       </header>
 
@@ -100,7 +101,7 @@ export function ChatApp() {
                   <button type="button" aria-label="Cancel voice" onClick={() => void cancelVoice()}>
                     Cancel
                   </button>
-                ) : state.mode === "voice" ? (
+                ) : voiceLive ? (
                   <button type="button" aria-label={state.muted ? "Unmute" : "Mute"} onClick={() => void setMuted(!state.muted)}>
                     {state.muted ? "Unmute" : "Mute"}
                   </button>
@@ -121,7 +122,7 @@ export function ChatApp() {
   );
 }
 
-function connectionLabel(connection: string, mode: string): string {
+function connectionLabel(connection: string, voiceLive: boolean): string {
   if (connection === "reconnecting") {
     return "Reconnecting";
   }
@@ -131,7 +132,7 @@ function connectionLabel(connection: string, mode: string): string {
   }
 
   if (connection === "ready") {
-    return mode === "voice" ? "Voice" : "Ready";
+    return voiceLive ? "Listening" : "Ready";
   }
 
   return connection;

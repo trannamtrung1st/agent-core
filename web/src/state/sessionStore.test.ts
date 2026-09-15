@@ -131,4 +131,18 @@ describe("applyServerEvent", () => {
     expect(muted.mode).toBe("voice");
     expect(muted.muted).toBe(true);
   });
+
+  it("ready with durable voice does not mark capture live", () => {
+    const state = applyServerEvent(
+      { ...emptySession(), captureLive: false },
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: { mode: "voice", pendingMode: null, status: "attached", agent: { name: "Alex" }, history: [], streamId: "s-1" }
+      })
+    );
+    expect(state.mode).toBe("voice");
+    expect(state.captureLive).toBe(false);
+    expect(state.preflightReady).toBe(false);
+  });
 });

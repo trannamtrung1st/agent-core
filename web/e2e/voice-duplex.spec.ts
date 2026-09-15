@@ -5,7 +5,7 @@ test("voice stays full-duplex; mute is input-only; disconnect releases capture",
   await page.getByRole("button", { name: "Start conversation" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Voice", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Listening", { timeout: 15_000 });
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
 
   await page.getByLabel("Message").fill("Hello");

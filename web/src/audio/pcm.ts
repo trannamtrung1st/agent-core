@@ -36,10 +36,20 @@ export class StreamingResampler {
     this.phase -= consumed;
     return Float32Array.from(output);
   }
+
+  reset(): void {
+    this.leftover = new Float32Array(0);
+    this.phase = 0;
+    this.lowpass = 0;
+  }
 }
 
 export function resampleToCanonical(input: Float32Array, inputRate: number): Float32Array {
   return new StreamingResampler(inputRate).process(input);
+}
+
+export function resampleFromCanonical(input: Float32Array, outputRate: number): Float32Array {
+  return new StreamingResampler(CANONICAL_RATE, outputRate).process(input);
 }
 
 export function encodePcm16Le(samples: Float32Array): Uint8Array {

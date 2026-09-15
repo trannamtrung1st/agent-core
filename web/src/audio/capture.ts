@@ -152,9 +152,14 @@ class MicrophoneCapture {
         rendered?: Record<string, number>;
       }>) => {
         if (event.data.type === "flushed") {
+          const stoppedAt = typeof event.data.consumed === "number" ? event.data.consumed : 0;
+          this.consumedSamples = stoppedAt;
           const waiters = this.flushWaiters;
           this.flushWaiters = [];
-          waiters.forEach((resolve) => resolve());
+          waiters.forEach((resolve) => resolve(stoppedAt));
+        }
+        if (event.data.type === "overflow") {
+          this.queuedSamples = typeof event.data.queued === "number" ? event.data.queued : this.queuedSamples;
         }
         if (event.data.type === "complete" && event.data.responseId) {
           this.completedResponses.push(event.data.responseId);
@@ -196,23 +201,33 @@ class MicrophoneCapture {
     }
 
     this.streaming = false;
+    this.prepared?.worklet.port.postMessage({ type: "pause" });
+    this.prepared?.worklet.port.postMessage({ type: "reset" });
+    this.frameSequence = 1;
+    this.sampleOffset = 0;
+    this.vad.reset();
   }
 
   start(hooks: CaptureHooks): void {
+    if (!this.prepared) {
+      throw new Error("Capture is not prepared.");
+    }
+
     this.hooks = hooks;
     this.streaming = true;
     this.frameSequence = 1;
     this.sampleOffset = 0;
     this.vad.reset();
-    if (this.prepared && this.prepared.source === null) {
+    if (this.prepared.source === null) {
       this.prepared.source = this.prepared.context.createMediaStreamSource(this.prepared.stream);
       this.prepared.source.connect(this.prepared.worklet);
     }
 
-    this.prepared?.worklet.port.postMessage({ type: "emit" });
+    this.prepared.worklet.port.postMessage({ type: "reset" });
+    this.prepared.worklet.port.postMessage({ type: "emit" });
   }
 
-  private flushWaiters: Array<() => void> = [];
+  private flushWaiters: Array<(consumed: number) => void> = [];
 
   setGain(gain: number, rampMs = 20): void {
     this.prepared?.output.port.postMessage({ type: "gain", gain, rampMs });
@@ -226,20 +241,27 @@ class MicrophoneCapture {
     );
   }
 
-  flushPlayback(responseId: string): Promise<void> {
-    const waiter = new Promise<void>((resolve) => {
+  flushPlayback(responseId: string): Promise<number> {
+    if (!this.prepared) {
+      const stoppedAt = this.consumedSamples;
+      this.consumedSamples = 0;
+      this.queuedSamples = 0;
+      this.outputResponseId = null;
+      this.outputClosed = true;
+      return Promise.resolve(stoppedAt);
+    }
+
+    const waiter = new Promise<number>((resolve) => {
       this.flushWaiters.push(resolve);
     });
-    this.prepared?.output.port.postMessage({ type: "flush", responseId });
-    this.consumedSamples = 0;
-    this.queuedSamples = 0;
-    this.outputResponseId = null;
-    this.outputClosed = true;
-    if (!this.prepared) {
-      this.flushWaiters.forEach((resolve) => resolve());
-      this.flushWaiters = [];
-    }
-    return waiter;
+    this.prepared.output.port.postMessage({ type: "flush", responseId });
+    return waiter.then((stoppedAt) => {
+      this.consumedSamples = stoppedAt;
+      this.queuedSamples = 0;
+      this.outputResponseId = null;
+      this.outputClosed = true;
+      return stoppedAt;
+    });
   }
 
   release(): void {
@@ -247,6 +269,7 @@ class MicrophoneCapture {
     this.hooks = null;
     this.workletReady = false;
     this.outputReady = false;
+    const stoppedAt = this.consumedSamples;
     this.consumedSamples = 0;
     this.queuedSamples = 0;
     this.outputResponseId = null;
@@ -256,6 +279,9 @@ class MicrophoneCapture {
     this.completedResponses = [];
     this.onConsumed = null;
     this.utteranceId = null;
+    const waiters = this.flushWaiters;
+    this.flushWaiters = [];
+    waiters.forEach((resolve) => resolve(stoppedAt));
     const prepared = this.prepared;
     this.prepared = null;
     if (!prepared) {

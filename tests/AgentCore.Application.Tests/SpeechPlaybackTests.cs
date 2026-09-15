@@ -110,6 +110,33 @@ public sealed class SpeechPlaybackTests
     }
 
     [Fact]
+    public async Task Playback_started_nonzero_and_backwards_offsets_are_rejected()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new ScriptedLanguageModel(["There are three points."]));
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Hello");
+        var audio = await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
+        var responseId = audio.ResponseId!.Value;
+        Assert.True(runtime.SentSamples > 0);
+        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "started", runtime.SentSamples, 0));
+        Assert.True(await runtime.SubmitPlaybackAsync(responseId, "started", 0, 0));
+        var consumed = Math.Min(480, runtime.SentSamples);
+        Assert.True(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, 0));
+        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", 0, 0));
+        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", runtime.SentSamples + 1, 0));
+        var generated = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text.Length;
+        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated + 1));
+        Assert.True(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated));
+        if (generated > 0)
+        {
+            Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated - 1));
+        }
+    }
+
+    [Fact]
     public async Task Supersede_before_release_starts_no_further_tts_job()
     {
         var output = new CapturingSessionOutput();

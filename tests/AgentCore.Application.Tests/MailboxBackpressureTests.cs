@@ -32,8 +32,9 @@ public sealed class MailboxBackpressureTests
             await runtime.SubmitUserTextAsync($"flood {index}");
         }
 
-        await runtime.RequestEndAsync();
+        var ending = runtime.RequestEndAsync();
         store.Gate.TrySetResult();
+        Assert.True(await ending.WaitAsync(TimeSpan.FromSeconds(10)));
         await blocked;
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Status == SessionStatus.Ended)
             .WaitAsync(TimeSpan.FromSeconds(10));

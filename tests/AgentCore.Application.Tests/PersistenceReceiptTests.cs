@@ -63,8 +63,8 @@ public sealed class PersistenceReceiptTests
     [Fact]
     public async Task Failed_terminal_end_save_does_not_ack_ended_status()
     {
-        var inner = new InMemoryMemoryStore();
-        var store = new FailingEndStore(inner);
+        await using var harness = await SqliteTestHarness.CreateMigratedAsync();
+        var store = new FailingEndStore(harness.Store);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
@@ -85,7 +85,7 @@ public sealed class PersistenceReceiptTests
             null,
             now,
             now);
-        await inner.SaveAsync(snapshot, 0);
+        await harness.Store.SaveAsync(snapshot, 0);
         await using var runtime = new SessionRuntime(
             snapshot,
             new ScriptedLanguageModel(),
@@ -99,7 +99,7 @@ public sealed class PersistenceReceiptTests
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.RequestEndAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
-        var loaded = await inner.LoadAsync(snapshot.SessionId);
+        var loaded = await harness.Store.LoadAsync(snapshot.SessionId);
         Assert.NotEqual(SessionStatus.Ended, loaded!.Status);
         Assert.True(store.Failed);
     }

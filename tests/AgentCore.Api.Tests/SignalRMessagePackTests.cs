@@ -149,5 +149,11 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("speech-boundary-order")]
     [InlineData("older-retry")]
     [InlineData("reconnect-retry")]
+    [InlineData("stale-attachment")]
+    [InlineData("oversized-audio")]
+    [InlineData("playback-invalid")]
+    [InlineData("parallel-controls")]
+    [InlineData("receipt-backwards")]
+    [InlineData("dual-attach")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

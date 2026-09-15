@@ -457,6 +457,221 @@ async function run() {
       await second.stop();
       break;
     }
+    case "stale-attachment": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const denied = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId: uuid() })
+      );
+      if (denied.accepted || denied.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(denied));
+      }
+      await connection.stop();
+      break;
+    }
+    case "oversized-audio": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const mode = await connection.invoke(
+        "SetMode",
+        command(session.sessionId, 1, "session.mode.set", { mode: "voice" }, { attachmentId })
+      );
+      if (!mode.accepted) {
+        throw new Error(JSON.stringify(mode));
+      }
+      const state = await waitForEvent((evt) => evt.type === "session.state.changed" && evt.payload?.mode === "voice");
+      try {
+        await connection.invoke("SendAudio", {
+          protocolVersion: 1,
+          sessionId: session.sessionId,
+          attachmentId,
+          streamId: state.payload.streamId,
+          frameSequence: 1,
+          sampleOffset: 0,
+          data: new Uint8Array(1921)
+        });
+      } catch {
+        // abort may cancel the invoke
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      if (connection.state === "Connected") {
+        throw new Error("oversized PCM must abort the connection");
+      }
+      try {
+        await connection.stop();
+      } catch {
+        // already closed
+      }
+      break;
+    }
+    case "playback-invalid": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const mode = await connection.invoke(
+        "SetMode",
+        command(session.sessionId, 1, "session.mode.set", { mode: "voice" }, { attachmentId })
+      );
+      if (!mode.accepted) {
+        throw new Error(JSON.stringify(mode));
+      }
+      await connection.invoke("SendText", command(session.sessionId, 2, "user.text", { text: "Hello" }, { attachmentId }));
+      const startedEvt = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const started = await connection.invoke(
+        "PlaybackStarted",
+        command(
+          session.sessionId,
+          3,
+          "playback.started",
+          { consumedSamples: 480, textEndExclusive: 0 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (started.accepted || started.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(started));
+      }
+      const zero = await connection.invoke(
+        "PlaybackStarted",
+        command(
+          session.sessionId,
+          4,
+          "playback.started",
+          { consumedSamples: 0, textEndExclusive: 0 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (!zero.accepted) {
+        throw new Error(JSON.stringify(zero));
+      }
+      const backwards = await connection.invoke(
+        "PlaybackProgress",
+        command(
+          session.sessionId,
+          5,
+          "playback.progress",
+          { consumedSamples: 999999, textEndExclusive: 0 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (backwards.accepted || backwards.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(backwards));
+      }
+      const textHigh = await connection.invoke(
+        "PlaybackProgress",
+        command(
+          session.sessionId,
+          6,
+          "playback.progress",
+          { consumedSamples: 0, textEndExclusive: 999999 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (textHigh.accepted || textHigh.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(textHigh));
+      }
+      await connection.stop();
+      break;
+    }
+    case "parallel-controls": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const [first, second] = await Promise.all([
+        connection.invoke("SetMuted", command(session.sessionId, 1, "session.mute", { muted: true }, { attachmentId })),
+        connection.invoke("SetMuted", command(session.sessionId, 2, "session.mute", { muted: false }, { attachmentId }))
+      ]);
+      const accepted = [first, second].filter((ack) => ack.accepted);
+      if (accepted.length < 1) {
+        throw new Error(JSON.stringify({ first, second }));
+      }
+      if (!first.accepted && first.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(first));
+      }
+      if (!second.accepted && second.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(second));
+      }
+      for (const ack of [first, second]) {
+        if (!ack.accepted) {
+          continue;
+        }
+        const sequence = ack === first ? 1 : 2;
+        const muted = ack === first;
+        const retry = await connection.invoke(
+          "SetMuted",
+          command(session.sessionId, sequence, "session.mute", { muted }, { attachmentId, eventId: ack.eventId })
+        );
+        if (!retry.accepted || retry.eventId !== ack.eventId) {
+          throw new Error(JSON.stringify({ ack, retry }));
+        }
+      }
+      await connection.stop();
+      break;
+    }
+    case "receipt-backwards": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      await connection.invoke("SendText", command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId }));
+      await waitFor((evt) => evt.type === "agent.response.completed");
+      const started = events.find((evt) => evt.type === "agent.response.started");
+      const receipt = await connection.invoke(
+        "ResponseReceived",
+        command(session.sessionId, 2, "response.received", { textEndExclusive: 21 }, { attachmentId, responseId: started.responseId })
+      );
+      if (!receipt.accepted) {
+        throw new Error(JSON.stringify(receipt));
+      }
+      const lower = await connection.invoke(
+        "ResponseReceived",
+        command(session.sessionId, 3, "response.received", { textEndExclusive: 0 }, { attachmentId, responseId: started.responseId })
+      );
+      if (lower.accepted || lower.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(lower));
+      }
+      await connection.stop();
+      break;
+    }
+    case "dual-attach": {
+      const firstSession = await createSession();
+      const secondSession = await createSession();
+      const connection = await connect();
+      const first = await connection.invoke(
+        "Attach",
+        command(firstSession.sessionId, 0, "session.attach", { lastServerSequence: null })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      await waitFor((evt) => evt.type === "session.ready");
+      const denied = await connection.invoke(
+        "Attach",
+        command(secondSession.sessionId, 0, "session.attach", { lastServerSequence: null })
+      );
+      if (denied.accepted || denied.error?.code !== "SessionInUse") {
+        throw new Error(JSON.stringify(denied));
+      }
+      const ping = await connection.invoke(
+        "SendText",
+        command(firstSession.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId: events[0].attachmentId })
+      );
+      if (!ping.accepted) {
+        throw new Error(JSON.stringify(ping));
+      }
+      await connection.stop();
+      break;
+    }
     case "capacity": {
       const a = await createSession();
       const b = await createSession();

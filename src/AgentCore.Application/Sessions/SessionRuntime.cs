@@ -215,13 +215,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public Task RequestEndAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> RequestEndAsync(CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        Enqueue(new EndSessionReceived(context), urgent: true);
-        return Task.CompletedTask;
+        if (!Enqueue(new EndSessionReceived(context, persisted), urgent: true))
+        {
+            persisted.TrySetResult(false);
+            return false;
+        }
+
+        return await persisted.Task.ConfigureAwait(false);
     }
 
     public Task SubmitSpeechAsync(
@@ -262,7 +268,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public Task<bool> SubmitPlaybackAsync(
+    public async Task<bool?> SubmitPlaybackAsync(
         Guid responseId,
         string kind,
         long consumedSamples,
@@ -270,29 +276,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
+        var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        return Task.FromResult(Enqueue(
-            new PlaybackReportReceived(context, responseId, kind, consumedSamples, textEndExclusive),
-            urgent: false));
+        if (!Enqueue(new PlaybackReportReceived(context, responseId, kind, consumedSamples, textEndExclusive, admitted), urgent: false))
+        {
+            return null;
+        }
+
+        return await admitted.Task.ConfigureAwait(false);
     }
 
-    public Task<bool?> SubmitReceiptAsync(Guid responseId, int textEndExclusive, CancellationToken cancellationToken = default)
+    public async Task<bool?> SubmitReceiptAsync(Guid responseId, int textEndExclusive, CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
-        if (!TryValidateReceipt(responseId, textEndExclusive))
-        {
-            return Task.FromResult<bool?>(false);
-        }
-
+        var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        if (!Enqueue(new ResponseReceiptReceived(context, responseId, textEndExclusive), urgent: false))
+        if (!Enqueue(new ResponseReceiptReceived(context, responseId, textEndExclusive, admitted), urgent: false))
         {
-            return Task.FromResult<bool?>(null);
+            return null;
         }
 
-        return Task.FromResult<bool?>(true);
+        return await admitted.Task.ConfigureAwait(false);
     }
 
     public Task SubmitTimerElapsedAsync(
@@ -455,6 +461,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         finally
         {
             EndWork();
+            if (input is PlaybackReportReceived playback)
+            {
+                playback.Admitted.TrySetResult(false);
+            }
+
+            if (input is ResponseReceiptReceived receipt)
+            {
+                receipt.Admitted.TrySetResult(false);
+            }
+
+            if (input is EndSessionReceived ended)
+            {
+                ended.Persisted.TrySetResult(false);
+            }
         }
     }
 
@@ -931,45 +951,35 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return entry?.HeardTextEndExclusive ?? 0;
     }
 
-    private bool TryValidateReceipt(Guid responseId, int textEndExclusive)
-    {
-        var generated = _activeResponseId == responseId
-            ? _accumulator.Length
-            : _snapshot.Entries.FirstOrDefault(entry => entry.ResponseId == responseId)?.Text.Length ?? -1;
-        if (generated < 0 || textEndExclusive > generated)
-        {
-            return false;
-        }
-
-        var entry = _snapshot.Entries.FirstOrDefault(item => item.ResponseId == responseId);
-        if (entry is not null && entry.Status == EntryStatus.Interrupted && textEndExclusive > entry.ReceivedTextEndExclusive)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
     private async Task HandleReceiptAsync(ResponseReceiptReceived input, CancellationToken cancellationToken)
     {
         var entry = _snapshot.Entries.FirstOrDefault(item => item.ResponseId == input.ResponseId);
         if (entry is null)
         {
+            input.Admitted.TrySetResult(false);
             return;
         }
 
-        if (entry.Status == EntryStatus.Interrupted)
+        if (entry.Status is EntryStatus.Interrupted or EntryStatus.Failed)
         {
+            input.Admitted.TrySetResult(true);
             return;
         }
 
         var generated = entry.EntryId == _activeEntryId ? _accumulator.Length : entry.Text.Length;
-        var received = Math.Clamp(input.TextEndExclusive, entry.ReceivedTextEndExclusive, generated);
-        if (received == entry.ReceivedTextEndExclusive)
+        if (input.TextEndExclusive > generated || input.TextEndExclusive < entry.ReceivedTextEndExclusive)
         {
+            input.Admitted.TrySetResult(false);
             return;
         }
 
+        if (input.TextEndExclusive == entry.ReceivedTextEndExclusive)
+        {
+            input.Admitted.TrySetResult(true);
+            return;
+        }
+
+        var received = input.TextEndExclusive;
         var heard = entry.DeliveryMode == SessionMode.Text ? received : entry.HeardTextEndExclusive;
         var entries = _snapshot.Entries.Select(item =>
                 item.ResponseId == input.ResponseId
@@ -978,6 +988,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ToArray();
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        input.Admitted.TrySetResult(true);
     }
 
     private void ClearActive()
@@ -1007,11 +1018,27 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _input = InputActivity.Idle;
         await StopRecognitionAsync().ConfigureAwait(false);
-        await PersistAsync(
-                _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() },
-                cancellationToken)
-            .ConfigureAwait(false);
-        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await PersistAsync(
+                    _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() },
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            input.Persisted.TrySetResult(true);
+        }
+        catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable")
+        {
+            _snapshot = _snapshot with { Status = SessionStatus.Ending, PendingMode = null, UpdatedAt = _time.GetUtcNow() };
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new ErrorOutput("Session", ex.Code, ex.Message, false, TimeSpan.FromSeconds(1))),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            input.Persisted.TrySetResult(false);
+        }
     }
 
     private SessionSnapshot Append(ConversationEntry entry)

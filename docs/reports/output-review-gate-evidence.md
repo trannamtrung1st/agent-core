@@ -2,23 +2,30 @@
 
 Date: 2026-09-15
 
-Addresses remaining required members of `family-mandatory-gate-evidence`, `family-persistence-contract-completeness`, `family-realtime-command-admission`, `family-delivery-receipt-integrity`, `family-observed-measurement-evidence`, and `family-completion-snapshot-binding`. Optional `sf-020` (zero `playback.stopped` after flush) is deferred: supersession already preserves last accepted playback progress for heard context.
+Closes remaining required members of dual-attach, realtime command validation, admission concurrency, disconnect-during-playback, reconnect voice preflight, output-rate conversion, `playback.stopped` flushed consumed, mute/unmute input reset, playback text offsets, full-host SQLite recovery, and isolated stage-latency provenance.
 
 ## Commands
 
 | Command | Working directory | Exit status |
 | --- | --- | --- |
-| `dotnet test tests/AgentCore.Domain.Tests --filter FullyQualifiedName~ConversationRecordTests` | repository root | 0 — 3 passed (allowlisted profile validation) |
-| `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~SessionRealtimeLifecycleTests\|IdentityRuntimeTests\|PersistenceReceiptTests\|Twenty_turn` | repository root | 0 — 12 passed |
-| `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~MemoryStoreContractTests` | repository root | 0 — 10 passed (profile bounds, migrate reopen, existing snapshot upsert, successful Failed-status store) |
-| `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~JavaScript_messagepack` | repository root | 0 — 17 Kestrel JS scenarios including `older-retry` and `reconnect-retry` |
-| `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Twenty_turn_synthetic_demo_records_observed_stage_latencies` | repository root | 0 — writes [m12-stage-latencies.md](m12-stage-latencies.md) |
+| `dotnet test AgentCore.sln --nologo` | repository root | 0 — Domain 4, Application 73, Infrastructure 45 passed + 3 skipped live smokes, Api 34 |
+| `pnpm run test --run` | `web/` | 0 — 33 Vitest tests |
+| `pnpm run build` | `web/` | 0 |
+| `CI=1 pnpm run test:e2e` | `web/` | 0 — 8 passed |
+| `./scripts/compose-sqlite-volume.sh` | repository root | 0 — session `c5a5e188-9305-40c5-aa86-63f431d11b53` survived `--force-recreate` |
+| `AGENTCORE_WRITE_STAGE_LATENCIES=1 dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Twenty_turn_synthetic_demo_records_observed_stage_latencies --nologo` | repository root | 0 — 1 passed; rewrote [m12-stage-latencies.md](m12-stage-latencies.md) |
+| `git diff --check` | repository root | 0 |
 
 ## Coverage bound to findings
 
-- `sf-015`: JS matrix now includes older-than-last exact retry after an intervening mute, plus reconnect `user.text` with the original eventId and one user history row.
-- `sf-017`: runtime reconstruction retries the same `sourceEventId` without a second user entry; `Failed_terminal_end_save_does_not_ack_ended_status` still injects a failing Ended `SaveAsync`.
-- `sf-013`/`sf-014`: migrate reopen of an existing SQLite file; both stores validate profile allowlist; restarted runtime prompt memory includes `preferredName`.
-- `sf-005`/`sf-008`/`sf-009`/`sf-011`: typed `response.received`, locked 1,024-entry fingerprint dedupe, per-attachment `Admission` lock, speech sampleOffset deferral, delayed fatal abort — exercised by the expanded JS matrix.
-- `sf-018`: observed count/p50/p95/max table regenerated from Stopwatch samples.
-- `sf-019`: this revision commits remaining run-owned reports/tests; TDP completion (not this file) records the live HEAD to avoid a self-hash loop. `.agents` instructions were not modified.
+- Dual-attach: `SessionHost.AttachAsync` rejects a connection that already owns another session; Kestrel JS `dual-attach` scenario.
+- Realtime command validation: playback `textEndExclusive` monotonic and ≤ generated text; sample bounds; output audio identity/continuity, 60 ms early-audio buffer, cumulative 2 s queue.
+- Admission: `TryAdmitAsync` releases `Admission` before mailbox/persist; in-flight TCS preserves dedupe; `CommandAdmissionTests` barrier retries both accepted event IDs.
+- Disconnect during playback: `capture.release()` resolves flush waiters; `interruptPlayback` clears `flushing` in `finally`; Playwright reconnect-after-disconnect playback.
+- Reconnect voice: no `capture.start()` without prepared resources; durable voice still requires Voice click; Mute/Listening only when capture is live.
+- Output resampling: stateful 24 kHz → device rate; consumed counts are canonical samples; 44.1 kHz and 48 kHz worklet coverage.
+- `playback.stopped`: worklet captures consumed after the extra render quantum, returns it in `flushed`; `flushPlayback` uses the acknowledgement.
+- Mute/unmute: input worklet pause/reset; unmute starts a fresh stream so pre-mute audio cannot enter.
+- Playback text offsets: acknowledgements send the highest rendered text offset; heard credit remains sample/timing based.
+- Full-host SQLite: HTTP/SignalR lost-ack retry after host reconstruction keeps one user entry; failed end save does not accept or persist `Ended`.
+- Isolated latency generation uses `AGENTCORE_WRITE_STAGE_LATENCIES=1`; the default suite does not rewrite the table.

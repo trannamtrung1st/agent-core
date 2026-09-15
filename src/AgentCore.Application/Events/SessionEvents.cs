@@ -77,14 +77,16 @@ public sealed record PlaybackReportReceived(
     Guid ResponseId,
     string Kind,
     long ConsumedSamples,
-    int TextEndExclusive) : SessionInput(Context);
+    int TextEndExclusive,
+    TaskCompletionSource<bool> Admitted) : SessionInput(Context);
 
 public sealed record ResponseReceiptReceived(
     EventContext Context,
     Guid ResponseId,
-    int TextEndExclusive) : SessionInput(Context);
+    int TextEndExclusive,
+    TaskCompletionSource<bool> Admitted) : SessionInput(Context);
 
-public sealed record EndSessionReceived(EventContext Context) : SessionInput(Context);
+public sealed record EndSessionReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
 

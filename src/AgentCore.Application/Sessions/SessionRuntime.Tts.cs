@@ -28,6 +28,7 @@ public sealed partial class SessionRuntime
     private long _outputSampleOffset;
     private long _sentSamples;
     private long _ackedSamples;
+    private int _ackedPlaybackText;
     private long _segmentSampleOrigin;
     private int _segmentTimerGeneration;
     private int _ttsJobsStarted;
@@ -57,6 +58,7 @@ public sealed partial class SessionRuntime
         _outputSampleOffset = 0;
         _sentSamples = 0;
         _ackedSamples = 0;
+        _ackedPlaybackText = 0;
         _ttsJobsStarted = 0;
         _currentSegment = null;
         _spokenUntil.Reset();
@@ -285,15 +287,31 @@ public sealed partial class SessionRuntime
     {
         if (_activeResponseId != input.ResponseId || _responseLifecycle != ResponseLifecycle.Live)
         {
+            input.Admitted.TrySetResult(true);
+            return;
+        }
+
+        if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase) && input.ConsumedSamples != 0)
+        {
+            input.Admitted.TrySetResult(false);
             return;
         }
 
         if (input.ConsumedSamples < _ackedSamples || input.ConsumedSamples > _sentSamples)
         {
+            input.Admitted.TrySetResult(false);
+            return;
+        }
+
+        var generated = _accumulator.Length;
+        if (input.TextEndExclusive > generated || input.TextEndExclusive < _ackedPlaybackText)
+        {
+            input.Admitted.TrySetResult(false);
             return;
         }
 
         _ackedSamples = input.ConsumedSamples;
+        _ackedPlaybackText = input.TextEndExclusive;
         ApplyHeard(_spokenUntil.Credit(_ackedSamples));
         if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase)
             || string.Equals(input.Kind, "progress", StringComparison.OrdinalIgnoreCase)
@@ -328,12 +346,15 @@ public sealed partial class SessionRuntime
         {
             if (_ackedSamples < _sentSamples)
             {
+                input.Admitted.TrySetResult(true);
                 return;
             }
 
             _playbackDone = true;
             await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
         }
+
+        input.Admitted.TrySetResult(true);
     }
 
     private async Task TryCompleteVoiceAsync(EventContext context, bool failed, CancellationToken cancellationToken)

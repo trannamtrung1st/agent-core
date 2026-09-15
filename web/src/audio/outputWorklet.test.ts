@@ -4,13 +4,13 @@ import path from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
-function loadProcessor(): new () => {
+function loadProcessor(sampleRate = 24000): new () => {
   port: { onmessage: ((event: { data: unknown }) => void) | null; postMessage: (data: unknown) => void; messages: unknown[] };
   process: (inputs: unknown, outputs: Float32Array[][]) => boolean;
 } {
   const code = fs.readFileSync(path.resolve(process.cwd(), "public/worklets/output-processor.js"), "utf8");
   const context: vm.Context = {
-    sampleRate: 24000,
+    sampleRate,
     AudioWorkletProcessor: class {
       port = {
         onmessage: null as ((event: { data: unknown }) => void) | null,
@@ -86,17 +86,20 @@ describe("output worklet response lifecycle", () => {
     expect(complete2.responseId).toBe("r2");
   });
 
-  it("flush resets consumed so later acknowledgements stay in the new response range", () => {
+  it("flush reports consumed captured before reset", () => {
     const Processor = loadProcessor();
     const processor = new Processor();
-    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(256).fill(0.4) } });
+    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(128).fill(0.4) } });
     channel(processor, 128);
+    processor.port.messages.length = 0;
     processor.port.onmessage?.({ data: { type: "flush", responseId: "r1" } });
+    expect(processor.port.messages.some((item) => (item as { type?: string }).type === "flushed")).toBe(false);
+    channel(processor, 128);
     const flushed = processor.port.messages.find((item) => (item as { type?: string }).type === "flushed") as {
       consumed?: number;
       epoch?: number;
     };
-    expect(flushed.consumed).toBe(0);
+    expect(flushed.consumed).toBe(128);
     expect(flushed.epoch).toBe(1);
     processor.port.messages.length = 0;
     processor.port.onmessage?.({
@@ -109,5 +112,46 @@ describe("output worklet response lifecycle", () => {
     };
     expect(complete.responseId).toBe("r2");
     expect(complete.consumed).toBe(128);
+  });
+
+  it("includes a render quantum between flush request and acknowledgement in consumed", () => {
+    const Processor = loadProcessor();
+    const processor = new Processor();
+    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(256).fill(0.4) } });
+    channel(processor, 128);
+    processor.port.messages.length = 0;
+    processor.port.onmessage?.({ data: { type: "flush", responseId: "r1" } });
+    expect(processor.port.messages.some((item) => (item as { type?: string }).type === "flushed")).toBe(false);
+    channel(processor, 128);
+    const flushed = processor.port.messages.find((item) => (item as { type?: string }).type === "flushed") as {
+      consumed?: number;
+    };
+    expect(flushed.consumed).toBe(256);
+  });
+
+  it("reports canonical consumed samples when rendering at 48 kHz", () => {
+    const Processor = loadProcessor(48000);
+    const processor = new Processor();
+    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(240).fill(0.2) } });
+    channel(processor, 128);
+    const snapshot = processor.port.messages.filter((item) => (item as { type?: string }).type === "snapshot").at(-1) as {
+      consumed?: number;
+    };
+    expect(snapshot.consumed).toBeGreaterThanOrEqual(60);
+    expect(snapshot.consumed).toBeLessThanOrEqual(128);
+  });
+
+  it("keeps canonical continuity across chunks at 44.1 kHz", () => {
+    const Processor = loadProcessor(44100);
+    const processor = new Processor();
+    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(480).fill(0.2) } });
+    channel(processor, 128);
+    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(480).fill(0.2) } });
+    channel(processor, 128);
+    const snapshot = processor.port.messages.filter((item) => (item as { type?: string }).type === "snapshot").at(-1) as {
+      consumed?: number;
+    };
+    expect(snapshot.consumed).toBeGreaterThan(0);
+    expect(snapshot.consumed).toBeLessThanOrEqual(960);
   });
 });

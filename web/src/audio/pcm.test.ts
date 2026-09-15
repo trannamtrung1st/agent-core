@@ -42,6 +42,23 @@ describe("pcm", () => {
     expect(high).toBeLessThan(low * 0.8);
   });
 
+  it("upsamples 24 kHz to 48 kHz and 44.1 kHz without dropping continuity across chunks", () => {
+    for (const rate of [48000, 44100]) {
+      const resampler = new StreamingResampler(24000, rate);
+      let produced = 0;
+      for (let block = 0; block < 20; block += 1) {
+        const input = new Float32Array(480);
+        for (let index = 0; index < input.length; index += 1) {
+          input[index] = Math.sin((2 * Math.PI * 440 * (block * 480 + index)) / 24000);
+        }
+        produced += resampler.process(input).length;
+      }
+
+      const expected = (20 * 480 * rate) / 24000;
+      expect(Math.abs(produced - expected)).toBeLessThan(4);
+    }
+  });
+
   it("encodes PCM16 little endian", () => {
     const encoded = encodePcm16Le(new Float32Array([0.5, -1]));
     expect(encoded.length).toBe(4);

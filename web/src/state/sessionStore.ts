@@ -47,6 +47,7 @@ export type SessionView = {
   draft: string;
   error: string | null;
   preflightReady: boolean;
+  captureLive: boolean;
 };
 
 export const emptySession = (): SessionView => ({
@@ -67,7 +68,8 @@ export const emptySession = (): SessionView => ({
   muted: false,
   draft: "",
   error: null,
-  preflightReady: false
+  preflightReady: false,
+  captureLive: false
 });
 
 function asString(value: unknown): string {

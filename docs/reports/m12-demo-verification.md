@@ -15,20 +15,20 @@ Recorded 2026-09-15. Synthetic/offline only. No speaker, GPU, or hosted keys. He
 
 ## Observed stage latencies
 
-`TwentyTurnDemoTests` runs 20 scripted text turns per identity (examiner, customer-support) plus voice duplex, interruption, idle or environment initiative, and detach/reattach. Stage durations are `Stopwatch` deltas on `AgentCore.Runtime` (not placeholders). Durable table: [m12-stage-latencies.md](m12-stage-latencies.md). Host sample recorded 2026-09-15, Synthetic profile, in-process FakeTimeProvider, no network:
+`TwentyTurnDemoTests` runs 20 scripted text turns per identity (examiner, customer-support) plus voice duplex, interruption, idle or environment initiative, and detach/reattach. Stage durations are `Stopwatch` deltas on `AgentCore.Runtime` (not placeholders). Durable table: [m12-stage-latencies.md](m12-stage-latencies.md). Isolated generator: `AGENTCORE_WRITE_STAGE_LATENCIES=1 dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Twenty_turn_synthetic_demo_records_observed_stage_latencies`. Host sample recorded 2026-09-15, Synthetic profile, in-process FakeTimeProvider, no network:
 
 | Stage | Count | p50 (ms) | p95 (ms) | max (ms) |
 | --- | ---: | ---: | ---: | ---: |
-| controller | 46 | 0.005 | 0.815 | 1.415 |
-| llm | 50 | 0.001 | 0.030 | 0.959 |
-| persist | 176 | 0.001 | 0.004 | 0.049 |
-| stt | 2 | 0.111 | 2.400 | 2.400 |
-| segmentation | 4 | 0.038 | 3.101 | 3.101 |
-| tts | 4 | 0.024 | 3.945 | 3.945 |
-| transport | 4 | 0.029 | 0.675 | 0.675 |
-| playback | 1 | 10.714 | 10.714 | 10.714 |
+| controller | 46 | 0.006 | 0.673 | 1.045 |
+| llm | 49 | 0.002 | 0.019 | 1.794 |
+| persist | 176 | 0.001 | 0.003 | 0.108 |
+| stt | 2 | 0.036 | 1.970 | 1.970 |
+| segmentation | 4 | 0.031 | 1.171 | 1.171 |
+| tts | 4 | 0.027 | 3.304 | 3.304 |
+| transport | 4 | 0.020 | 0.764 | 0.764 |
+| playback | 2 | 0.024 | 1.430 | 1.430 |
 
-These are measurements, not SLAs. Re-run `dotnet test --filter Twenty_turn_synthetic_demo_records_observed_stage_latencies` to refresh the table file.
+These are measurements, not SLAs. Refresh the committed table with an isolated run: `AGENTCORE_WRITE_STAGE_LATENCIES=1 dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Twenty_turn_synthetic_demo_records_observed_stage_latencies`. The default full suite does not rewrite this file.
 
 ## Generated / received / heard
 

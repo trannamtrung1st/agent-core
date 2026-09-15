@@ -6,7 +6,26 @@ class InputProcessor extends AudioWorkletProcessor {
     this._emit = false;
     this._resampler = new StreamingResampler(sampleRate, 24000);
     this.port.onmessage = (event) => {
-      this._emit = event.data && event.data.type === "emit";
+      if (!event.data || typeof event.data !== "object") {
+        return;
+      }
+
+      if (event.data.type === "emit") {
+        this._emit = true;
+        return;
+      }
+
+      if (event.data.type === "pause") {
+        this._emit = false;
+        return;
+      }
+
+      if (event.data.type === "reset") {
+        this._pending = new Float32Array(0);
+        this._offset = 0;
+        this._resampler = new StreamingResampler(sampleRate, 24000);
+        this._emit = false;
+      }
     };
   }
 

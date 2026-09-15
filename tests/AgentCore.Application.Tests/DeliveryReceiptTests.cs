@@ -35,6 +35,10 @@ public sealed class DeliveryReceiptTests
         Assert.Equal(assistant.Text.Length, assistant.ReceivedTextEndExclusive);
         Assert.Equal(assistant.Text.Length, assistant.HeardTextEndExclusive);
         Assert.False(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length + 1));
+        Assert.False(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length - 1));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(assistant.Text.Length, assistant.ReceivedTextEndExclusive);
     }
 
     [Fact]

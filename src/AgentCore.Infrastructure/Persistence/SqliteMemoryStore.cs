@@ -20,7 +20,50 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     public async ValueTask EnsureCreatedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await StampLegacyEnsureCreatedAsync(db, cancellationToken).ConfigureAwait(false);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task StampLegacyEnsureCreatedAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var tables = connection.CreateCommand();
+        tables.CommandText =
+            """
+            SELECT
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Sessions'),
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '__EFMigrationsHistory')
+            """;
+        await using (var reader = await tables.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            var hasSessions = reader.GetInt64(0) != 0;
+            var hasHistory = reader.GetInt64(1) != 0;
+            if (!hasSessions || hasHistory)
+            {
+                return;
+            }
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                "ProductVersion" TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+            VALUES ('20260915064647_InitialCreate', '10.0.12');
+            """,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask BackupToAsync(string destinationPath, CancellationToken cancellationToken = default)
@@ -154,7 +197,15 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 Revision = profile.Revision,
                 UpdatedAtUtc = profile.UpdatedAt.ToUnixTimeMilliseconds()
             });
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateException)
+            {
+                throw AgentCoreErrors.Conflict("Profile already exists.");
+            }
+
             return;
         }
 
