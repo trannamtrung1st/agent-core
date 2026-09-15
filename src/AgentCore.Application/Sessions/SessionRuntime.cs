@@ -65,6 +65,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private Guid? _streamId;
     private int _pendingVoiceGeneration;
     private bool _muted;
+    private bool _helpOfferedDuringSilence;
+    private DateTimeOffset? _lastInitiativeAt;
+    private DateTimeOffset? _pendingInitiativeExpiresAt;
+    private readonly HashSet<Guid> _environmentIds = [];
+    private readonly Queue<QueuedEnvironment> _environmentQueue = new();
 
     public SessionRuntime(
         SessionSnapshot snapshot,
@@ -254,6 +259,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    public async Task SubmitEnvironmentAsync(EnvironmentEvent input, CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(new EnvironmentReceived(context, input), cancellationToken).ConfigureAwait(false);
+    }
+
     public Task WaitUntilIdleAsync(CancellationToken cancellationToken = default)
     {
         TaskCompletionSource idle;
@@ -340,6 +352,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         case EndSessionReceived ended:
                             await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
                             break;
+                        case EnvironmentReceived environment:
+                            await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
+                            break;
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -383,7 +398,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             input.Text.Length,
             now);
 
-        await PersistAsync(Append(userEntry) with { Status = SessionStatus.Created }, cancellationToken)
+        await PersistAsync(Append(userEntry) with { Status = _snapshot.Status }, cancellationToken)
             .ConfigureAwait(false);
 
         var (summary, through) = ConversationSummary.Refresh(
@@ -399,9 +414,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _timerGeneration++;
+        _environmentQueue.Clear();
         var responseId = _ids.NewId();
         var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.UserTurn, input.Text);
         var turn = ++_turnGeneration;
+        _helpOfferedDuringSilence = false;
         _outputActivity = OutputActivity.WaitingForAgent;
         LaunchBrain(input.Context, trigger, responseId, turn);
     }
@@ -413,10 +430,37 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (input.Decision is not Speak speak)
+        if (input.Decision is Speak
+            && input.Trigger.Kind != TriggerKind.UserTurn
+            && !InitiativeStillEligible(input.Trigger))
         {
+            RecordInitiativeEvaluation();
             _outputActivity = OutputActivity.Idle;
+            ScheduleIdleTimer(Cooldown());
             return;
+        }
+
+        if (input.Decision is not Speak speakable)
+        {
+            RecordInitiativeEvaluation();
+            _outputActivity = OutputActivity.Idle;
+            ScheduleIdleTimer(Cooldown());
+            return;
+        }
+
+        if (input.Trigger.Kind == TriggerKind.LongSilence)
+        {
+            _helpOfferedDuringSilence = true;
+        }
+
+        if (input.Trigger.Kind == TriggerKind.UnfinishedInteraction)
+        {
+            _snapshot = _snapshot with { PendingTopic = null, UpdatedAt = _time.GetUtcNow() };
+        }
+
+        if (input.Trigger.Kind != TriggerKind.UserTurn)
+        {
+            RecordInitiativeEvaluation();
         }
 
         var now = _time.GetUtcNow();
@@ -453,7 +497,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
 
-        var request = speak.Request with { ResponseId = input.ResponseId };
+        var request = speakable.Request with { ResponseId = input.ResponseId };
         BeginWork();
         var responseToken = _responseCts.Token;
         _ = Task.Run(async () =>
@@ -478,7 +522,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             Profile: null,
             _snapshot.Mode,
             _snapshot.PendingTopic,
-            HelpOfferedDuringSilence: false,
+            HelpOfferedDuringSilence: _helpOfferedDuringSilence,
             InterruptedHeardText: LastInterruptedHeardText(),
             trigger);
         BeginWork();
@@ -679,6 +723,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
         ClearActive();
+        await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
+        ScheduleIdleTimer(SilenceThreshold());
         if (_snapshot.PendingMode == SessionMode.Voice)
         {
             await ApplyModeAsync(SessionMode.Voice, cancellationToken).ConfigureAwait(false);

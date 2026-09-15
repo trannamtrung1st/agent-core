@@ -20,7 +20,7 @@ public sealed class AgentCoreOptions
     public int PendingVoiceTimeoutMs { get; set; } = 30_000;
 }
 
-public sealed class SessionHost : ISessionOutput, ISessionAudioOutput
+public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress
 {
     private readonly SessionManager _sessions;
     private readonly SessionRuntimeFactory _factory;
@@ -50,6 +50,16 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput
 
     public SessionSnapshot? LiveSnapshot(Guid sessionId) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.Snapshot : null;
+
+    public async ValueTask PublishAsync(Guid sessionId, EnvironmentEvent input, CancellationToken cancellationToken = default)
+    {
+        if (!_live.TryGetValue(sessionId, out var live))
+        {
+            return;
+        }
+
+        await live.Runtime.SubmitEnvironmentAsync(input, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<CommandAck> AttachAsync(string connectionId, ClientCommand command, CancellationToken cancellationToken)
     {

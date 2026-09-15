@@ -65,6 +65,7 @@ public sealed partial class SessionRuntime
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), cancellationToken)
             .ConfigureAwait(false);
+        ScheduleIdleTimer(SilenceThreshold());
     }
 
     private async Task HandleDetachAsync(DetachReceived input, CancellationToken cancellationToken)
@@ -83,6 +84,8 @@ public sealed partial class SessionRuntime
         _input = InputActivity.Idle;
         _streamId = null;
         _muted = false;
+        _environmentQueue.Clear();
+        _timerGeneration++;
         InvalidateSpeechJobs();
         _ttsCts?.Cancel();
         await StopRecognitionAsync().ConfigureAwait(false);
@@ -390,6 +393,30 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (input.Kind == "idle")
+        {
+            if (!InteractionController.TimerMatches(_timerGeneration, input.Generation))
+            {
+                return;
+            }
+
+            _timerGeneration++;
+            if (CanEvaluateIdle())
+            {
+                var responseId = _ids.NewId();
+                var turn = ++_turnGeneration;
+                _outputActivity = OutputActivity.WaitingForAgent;
+                var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.LongSilence, Text: null);
+                LaunchBrain(input.Context, trigger, responseId, turn);
+            }
+            else if (ShouldRetryIdleAfterCooldown())
+            {
+                ScheduleIdleTimer(RemainingCooldown());
+            }
+
+            return;
+        }
+
         if (!InteractionController.TimerMatches(_timerGeneration, input.Generation))
         {
             return;
@@ -412,20 +439,6 @@ public sealed partial class SessionRuntime
                 await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
                 await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
-
-            return;
-        }
-
-        if (input.Kind == "idle"
-            && _snapshot.Status == SessionStatus.Attached
-            && _input is InputActivity.Idle or InputActivity.Listening
-            && _outputActivity == OutputActivity.Idle
-            && _activeResponseId is null)
-        {
-            var responseId = _ids.NewId();
-            var turn = ++_turnGeneration;
-            var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.LongSilence, Text: null);
-            LaunchBrain(input.Context, trigger, responseId, turn);
         }
     }
 
@@ -474,6 +487,9 @@ public sealed partial class SessionRuntime
         }
 
         _committedUtteranceId = _activeUtteranceId;
+        _helpOfferedDuringSilence = false;
+        _environmentQueue.Clear();
+        _timerGeneration++;
         var now = _time.GetUtcNow();
         var userEntry = new ConversationEntry(
             context.EventId,

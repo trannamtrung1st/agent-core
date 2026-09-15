@@ -322,6 +322,8 @@ public sealed partial class SessionRuntime
                 cancellationToken)
             .ConfigureAwait(false);
         ClearActive();
+        await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
+        ScheduleIdleTimer(SilenceThreshold());
         if (_snapshot.PendingMode == SessionMode.Voice)
         {
             await ApplyModeAsync(SessionMode.Voice, cancellationToken).ConfigureAwait(false);

@@ -112,7 +112,7 @@ public sealed class InteractionControllerTests
         var candidate = runtime.Candidate;
         Assert.NotNull(candidate);
         Assert.Equal(InteractionDecision.RequestInterruptionClassification, runtime.LastControllerDecision);
-        Assert.Equal(1, classifier.Calls);
+        await classifier.Called;
         await runtime.SubmitSpeechAsync(new SpeechPartial(utterance, 2, "something longer still", 0.4), 0.9);
         await runtime.WaitUntilMailboxDrainedAsync();
         var live = runtime.ActiveResponseId;

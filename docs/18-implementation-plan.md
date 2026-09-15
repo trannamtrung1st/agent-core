@@ -113,6 +113,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** Idle trigger, StaySilent cooldown, one hint per silence period, input invalidates pending initiative, environment event during output queued/expired, no initiative while detached.
 - **Acceptance criteria:** Examiner may offer help after silence; support can mention a simulated update; timers do not automatically speak or create repeated nudges.
 - **Explicit non-goals:** Push/SMS/email, background mobile services, arbitrary external-event ingestion or workflows.
+- **Status:** Complete. Idle/environment/unfinished initiative uses `IAgentBrain` with StaySilent cooldown, one hint per silence period, queue/expiry/dedupe, and no speak while detached. In-process `IEnvironmentEventIngress` only. See [Milestone 10 verification](reports/m10-verification.md).
 
 ## Milestone 11 — SQLite persistence and reconnect/resume
 

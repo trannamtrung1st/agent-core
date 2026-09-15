@@ -206,18 +206,25 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
         AgentDecision decision = context.Trigger.Kind switch
         {
             TriggerKind.UserTurn => new Speak(builder.Build(context, responseId)),
-            TriggerKind.LongSilence when CanOfferHelp(context) => new Speak(builder.Build(context, responseId)),
-            TriggerKind.EnvironmentUpdate when IsUsefulEnvironment(context) => new Speak(builder.Build(context, responseId)),
-            TriggerKind.UnfinishedInteraction when !string.IsNullOrEmpty(context.PendingTopic) =>
+            TriggerKind.LongSilence when TriggerEnabled(context, "longSilence") && CanOfferHelp(context) =>
+                new Speak(builder.Build(context, responseId)),
+            TriggerKind.EnvironmentUpdate when TriggerEnabled(context, "environmentUpdate") && IsUsefulEnvironment(context) =>
+                new Speak(builder.Build(context, responseId)),
+            TriggerKind.UnfinishedInteraction when TriggerEnabled(context, "unfinishedInteraction")
+                && !string.IsNullOrEmpty(context.PendingTopic) =>
                 new Speak(builder.Build(context, responseId)),
             _ => new StaySilent("Not useful or not eligible.")
         };
         return ValueTask.FromResult(decision);
     }
 
+    private static bool TriggerEnabled(AgentContext context, string trigger) =>
+        context.Definition.InitiativePolicy.Enabled
+        && context.Definition.InitiativePolicy.Triggers.Contains(trigger, StringComparer.Ordinal);
+
     private static bool CanOfferHelp(AgentContext context)
     {
-        if (!context.Definition.InitiativePolicy.Enabled || context.HelpOfferedDuringSilence)
+        if (context.HelpOfferedDuringSilence)
         {
             return false;
         }
@@ -233,6 +240,31 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
         return text.TrimEnd().EndsWith('?');
     }
 
-    private static bool IsUsefulEnvironment(AgentContext context) =>
-        string.Equals(context.Trigger.EnvironmentKind, "order_status_changed", StringComparison.Ordinal);
+    private static readonly HashSet<string> OrderStatuses = new(StringComparer.Ordinal)
+    {
+        "shipped",
+        "delayed",
+        "delivered"
+    };
+
+    private static bool IsUsefulEnvironment(AgentContext context)
+    {
+        if (!string.Equals(context.Trigger.EnvironmentKind, "order_status_changed", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var text = context.Trigger.Text ?? string.Empty;
+        const string prefix = "status=";
+        var start = text.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return false;
+        }
+
+        start += prefix.Length;
+        var end = text.IndexOf(';', start);
+        var status = end < 0 ? text[start..] : text[start..end];
+        return OrderStatuses.Contains(status);
+    }
 }

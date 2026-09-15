@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
@@ -27,6 +28,7 @@ if (string.IsNullOrEmpty(languageModel.ApiKey))
 builder.Services.AddAgentCoreInfrastructure(agentDirectory, profile, languageModel);
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
 builder.Services.AddSingleton<SessionHost>();
+builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 32 * 1024;
