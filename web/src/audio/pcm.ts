@@ -1,23 +1,45 @@
 export const CANONICAL_RATE = 24000;
 export const FRAME_SAMPLES = 480;
 
+export class StreamingResampler {
+  private readonly step: number;
+  private leftover = new Float32Array(0);
+  private phase = 0;
+  private lowpass = 0;
+
+  constructor(inputRate: number, outputRate: number = CANONICAL_RATE) {
+    this.step = inputRate / outputRate;
+  }
+
+  process(input: Float32Array): Float32Array {
+    if (this.step === 1) {
+      return input;
+    }
+
+    const merged = new Float32Array(this.leftover.length + input.length);
+    merged.set(this.leftover);
+    merged.set(input, this.leftover.length);
+    const output: number[] = [];
+    while (this.phase + 1 < merged.length) {
+      const index = Math.floor(this.phase);
+      const fraction = this.phase - index;
+      const left = merged[index] ?? 0;
+      const right = merged[index + 1] ?? left;
+      const interpolated = left * (1 - fraction) + right * fraction;
+      this.lowpass = this.lowpass * 0.2 + interpolated * 0.8;
+      output.push(this.lowpass);
+      this.phase += this.step;
+    }
+
+    const consumed = Math.min(merged.length, Math.floor(this.phase));
+    this.leftover = merged.slice(consumed);
+    this.phase -= consumed;
+    return Float32Array.from(output);
+  }
+}
+
 export function resampleToCanonical(input: Float32Array, inputRate: number): Float32Array {
-  if (inputRate === CANONICAL_RATE) {
-    return input;
-  }
-
-  const ratio = inputRate / CANONICAL_RATE;
-  const outLength = Math.max(0, Math.floor(input.length / ratio));
-  const output = new Float32Array(outLength);
-  for (let index = 0; index < outLength; index += 1) {
-    const source = index * ratio;
-    const left = Math.floor(source);
-    const right = Math.min(left + 1, input.length - 1);
-    const fraction = source - left;
-    output[index] = input[left] * (1 - fraction) + input[right] * fraction;
-  }
-
-  return output;
+  return new StreamingResampler(inputRate).process(input);
 }
 
 export function encodePcm16Le(samples: Float32Array): Uint8Array {

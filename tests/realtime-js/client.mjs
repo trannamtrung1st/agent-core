@@ -162,6 +162,135 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "exact-retry": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const eventId = uuid();
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const retry = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId })
+      );
+      if (!retry.accepted || retry.eventId !== first.eventId) {
+        throw new Error(JSON.stringify(retry));
+      }
+      await connection.stop();
+      break;
+    }
+    case "eventid-reuse": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const eventId = uuid();
+      await connection.invoke("SendText", command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId }));
+      const changed = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "Other" }, { attachmentId, eventId })
+      );
+      if (changed.accepted || changed.error?.code !== "ProtocolError") {
+        throw new Error(JSON.stringify(changed));
+      }
+      await connection.stop();
+      break;
+    }
+    case "missing-attachment": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const denied = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" })
+      );
+      if (denied.accepted || denied.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(denied));
+      }
+      await connection.stop();
+      break;
+    }
+    case "method-type-mismatch": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const denied = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "session.mute", { muted: true }, { attachmentId })
+      );
+      if (denied.accepted || denied.error?.code !== "ProtocolError" || !denied.error?.fatal) {
+        throw new Error(JSON.stringify(denied));
+      }
+      await connection.stop();
+      break;
+    }
+    case "command-gap": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 3, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      await connection.stop();
+      break;
+    }
+    case "fatal-close": {
+      const session = await createSession();
+      const connection = await connect();
+      const ack = await connection.invoke(
+        "Attach",
+        command(session.sessionId, 0, "session.attach", { lastServerSequence: null }, { protocolVersion: 2 })
+      );
+      if (ack.accepted || ack.error?.code !== "ProtocolVersionMismatch") {
+        throw new Error(JSON.stringify(ack));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      if (connection.state === "Connected") {
+        throw new Error("fatal protocol mismatch must close the connection");
+      }
+      try {
+        await connection.stop();
+      } catch {
+        // already closed
+      }
+      break;
+    }
+    case "response-received": {
+      const session = await createSession();
+      const connection = await connect();
+      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      await connection.invoke("SendText", command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId }));
+      await waitFor((evt) => evt.type === "agent.response.completed");
+      const started = events.find((evt) => evt.type === "agent.response.started");
+      const receipt = await connection.invoke(
+        "ResponseReceived",
+        command(session.sessionId, 2, "response.received", { textEndExclusive: 21 }, { attachmentId, responseId: started.responseId })
+      );
+      if (!receipt.accepted) {
+        throw new Error(JSON.stringify(receipt));
+      }
+      await connection.stop();
+      break;
+    }
     case "capacity": {
       const a = await createSession();
       const b = await createSession();

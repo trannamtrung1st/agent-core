@@ -102,6 +102,14 @@ public sealed class TwentyTurnDemoTests
         var stats = RuntimeTelemetry.SnapshotStats();
         Assert.True(stats.ContainsKey("controller"));
         Assert.True(stats.ContainsKey("llm") || stats.ContainsKey("persist"));
+        foreach (var stage in new[] { "controller", "llm", "persist" })
+        {
+            if (stats.TryGetValue(stage, out var sample))
+            {
+                Assert.True(sample.Count >= 1);
+                Assert.True(sample.MaxMs >= 0.001);
+            }
+        }
         Assert.True(turnDurations.Average() < 5_000);
     }
 

@@ -20,7 +20,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     public async ValueTask EnsureCreatedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        await db.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
+        await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask BackupToAsync(string destinationPath, CancellationToken cancellationToken = default)
@@ -135,6 +135,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
+        LocalUserProfile.Validate(profile.Preferences);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = profile.ProfileId.ToString("D");
         var existing = await db.Profiles.SingleOrDefaultAsync(item => item.ProfileId == key, cancellationToken)

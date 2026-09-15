@@ -46,6 +46,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly Task _loop;
     private readonly object _idleGate = new();
 
+    private UserProfile? _profile;
     private SessionSnapshot _snapshot;
     private Guid _epoch;
     private Guid? _activeResponseId;
@@ -78,6 +79,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
     private bool _recordedLlm;
+    private long _sttMark;
     private bool _recordedStt;
     private bool _recordedSegment;
     private bool _recordedTts;
@@ -123,7 +125,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public SessionSnapshot Snapshot => _snapshot;
 
-    public Task SubmitUserTextAsync(string text, CancellationToken cancellationToken = default)
+    public Task<bool> SubmitUserTextAsync(string text, Guid? sourceEventId = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         if (text.Length > 8000)
@@ -132,10 +134,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _ = cancellationToken;
-        var context = NewContext();
+        var eventId = sourceEventId ?? _ids.NewId();
+        var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(), eventId, null);
         BeginWork();
-        Enqueue(new UserTextReceived(context, text), urgent: false);
-        return Task.CompletedTask;
+        return Task.FromResult(Enqueue(new UserTextReceived(context, text), urgent: false));
     }
 
     public Task CancelActiveResponseAsync(CancellationToken cancellationToken = default)
@@ -148,7 +150,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var context = NewContext();
         BeginWork();
-        Enqueue(new CancelResponseReceived(context, responseId), urgent: true);
+        _ = Enqueue(new CancelResponseReceived(context, responseId), urgent: true);
         return Task.CompletedTask;
     }
 
@@ -257,7 +259,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public Task SubmitPlaybackAsync(
+    public Task<bool> SubmitPlaybackAsync(
         Guid responseId,
         string kind,
         long consumedSamples,
@@ -267,10 +269,27 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        Enqueue(
+        return Task.FromResult(Enqueue(
             new PlaybackReportReceived(context, responseId, kind, consumedSamples, textEndExclusive),
-            urgent: false);
-        return Task.CompletedTask;
+            urgent: false));
+    }
+
+    public Task<bool?> SubmitReceiptAsync(Guid responseId, int textEndExclusive, CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        if (!TryValidateReceipt(responseId, textEndExclusive))
+        {
+            return Task.FromResult<bool?>(false);
+        }
+
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new ResponseReceiptReceived(context, responseId, textEndExclusive), urgent: false))
+        {
+            return Task.FromResult<bool?>(null);
+        }
+
+        return Task.FromResult<bool?>(true);
     }
 
     public Task SubmitTimerElapsedAsync(
@@ -409,6 +428,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case PlaybackReportReceived playback:
                     await HandlePlaybackAsync(playback, cancellationToken).ConfigureAwait(false);
                     break;
+                case ResponseReceiptReceived receipt:
+                    await HandleReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
+                    break;
                 case CancelResponseReceived cancel:
                     await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
                     break;
@@ -433,18 +455,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
-    private void Enqueue(SessionInput input, bool urgent)
+    private bool Enqueue(SessionInput input, bool urgent)
     {
         if (urgent)
         {
             _urgent.Enqueue(input);
             _mailbox.Writer.TryWrite(new PulseReceived(input.Context));
-            return;
+            return true;
         }
 
         if (_mailbox.Writer.TryWrite(input))
         {
-            return;
+            return true;
         }
 
         EndWork();
@@ -455,6 +477,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _urgent.Enqueue(new MailboxSaturatedReceived(input.Context));
             _mailbox.Writer.TryWrite(new PulseReceived(input.Context));
         }
+
+        return false;
     }
 
     private async Task HandleMailboxSaturatedAsync(MailboxSaturatedReceived input, CancellationToken cancellationToken)
@@ -479,6 +503,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         using var activity = RuntimeTelemetry.Activity.StartActivity("user_turn");
         var started = Stopwatch.GetTimestamp();
         _recordedLlm = false;
+        if (_snapshot.Entries.Any(entry => entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User))
+        {
+            return;
+        }
+
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             return;
@@ -631,7 +660,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot.Definition,
             _snapshot.Entries,
             _snapshot.Summary,
-            Profile: null,
+            Profile: _profile,
             _snapshot.Mode,
             _snapshot.PendingTopic,
             HelpOfferedDuringSilence: _helpOfferedDuringSilence,
@@ -732,7 +761,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         new SessionOutput(input.Context, input.ResponseId, new TextDeltaOutput(start, text)),
                         cancellationToken)
                     .ConfigureAwait(false);
-                UpdateStreamingAssistant();
+            UpdateStreamingAssistant();
                 await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
                 if (UsesVoicePlayback)
                 {
@@ -799,7 +828,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!_responseTerminal)
         {
             _responseTerminal = true;
-            UpdateAssistant(EntryStatus.Interrupted, received: _accumulator.Length);
+            UpdateAssistant(EntryStatus.Interrupted);
             await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
             await PublishAsync(
                     new SessionOutput(
@@ -829,22 +858,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
-        var received = _accumulator.Length;
-        UpdateAssistant(status, received);
+        UpdateAssistant(status);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         if (!failed)
         {
             await PublishAsync(
-                    new SessionOutput(context, responseId, new TextCompletedOutput(received)),
+                    new SessionOutput(context, responseId, new TextCompletedOutput(_accumulator.Length)),
                     cancellationToken)
                 .ConfigureAwait(false);
         }
 
+        var heard = CurrentHeard();
         await PublishAsync(
                 new SessionOutput(
                     context,
                     responseId,
-                    new ResponseCompletedOutput(failed, HeardTextEndExclusive: _snapshot.Mode == SessionMode.Text ? received : 0)),
+                    new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
                 cancellationToken)
             .ConfigureAwait(false);
         ClearActive();
@@ -857,9 +886,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
-    private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming, _accumulator.Length);
+    private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming);
 
-    private void UpdateAssistant(EntryStatus status, int received)
+    private void UpdateAssistant(EntryStatus status)
     {
         if (_activeEntryId is not { } entryId)
         {
@@ -871,13 +900,71 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ? entry with
                     {
                         Text = _accumulator.Text,
-                        Status = status,
-                        ReceivedTextEndExclusive = received,
-                        HeardTextEndExclusive = _snapshot.Mode == SessionMode.Text ? received : entry.HeardTextEndExclusive
+                        Status = status
                     }
                     : entry)
             .ToArray();
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
+    }
+
+    private int CurrentHeard()
+    {
+        if (_activeEntryId is not { } entryId)
+        {
+            return 0;
+        }
+
+        var entry = _snapshot.Entries.FirstOrDefault(item => item.EntryId == entryId);
+        return entry?.HeardTextEndExclusive ?? 0;
+    }
+
+    private bool TryValidateReceipt(Guid responseId, int textEndExclusive)
+    {
+        var generated = _activeResponseId == responseId
+            ? _accumulator.Length
+            : _snapshot.Entries.FirstOrDefault(entry => entry.ResponseId == responseId)?.Text.Length ?? -1;
+        if (generated < 0 || textEndExclusive > generated)
+        {
+            return false;
+        }
+
+        var entry = _snapshot.Entries.FirstOrDefault(item => item.ResponseId == responseId);
+        if (entry is not null && entry.Status == EntryStatus.Interrupted && textEndExclusive > entry.ReceivedTextEndExclusive)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task HandleReceiptAsync(ResponseReceiptReceived input, CancellationToken cancellationToken)
+    {
+        var entry = _snapshot.Entries.FirstOrDefault(item => item.ResponseId == input.ResponseId);
+        if (entry is null)
+        {
+            return;
+        }
+
+        if (entry.Status == EntryStatus.Interrupted)
+        {
+            return;
+        }
+
+        var generated = entry.EntryId == _activeEntryId ? _accumulator.Length : entry.Text.Length;
+        var received = Math.Clamp(input.TextEndExclusive, entry.ReceivedTextEndExclusive, generated);
+        if (received == entry.ReceivedTextEndExclusive)
+        {
+            return;
+        }
+
+        var heard = entry.DeliveryMode == SessionMode.Text ? received : entry.HeardTextEndExclusive;
+        var entries = _snapshot.Entries.Select(item =>
+                item.ResponseId == input.ResponseId
+                    ? item with { ReceivedTextEndExclusive = received, HeardTextEndExclusive = heard }
+                    : item)
+            .ToArray();
+        _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
+        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     private void ClearActive()
@@ -905,10 +992,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await SupersedeAsync(input.Context, live, cancellationToken, "ended").ConfigureAwait(false);
         }
 
-        _snapshot = _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() };
         _input = InputActivity.Idle;
         await StopRecognitionAsync().ConfigureAwait(false);
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        await PersistAsync(
+                _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() },
+                cancellationToken)
+            .ConfigureAwait(false);
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
     }
 
@@ -968,7 +1057,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             if (!_recordedTransport)
             {
                 _recordedTransport = true;
-                RuntimeTelemetry.Record("transport", 0);
+                RuntimeTelemetry.Record("transport", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_ttsStartedAt)));
             }
             return;
         }

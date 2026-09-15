@@ -79,6 +79,11 @@ public sealed record PlaybackReportReceived(
     long ConsumedSamples,
     int TextEndExclusive) : SessionInput(Context);
 
+public sealed record ResponseReceiptReceived(
+    EventContext Context,
+    Guid ResponseId,
+    int TextEndExclusive) : SessionInput(Context);
+
 public sealed record EndSessionReceived(EventContext Context) : SessionInput(Context);
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);

@@ -20,7 +20,7 @@ public sealed class AgentCoreOptions
     public int PendingVoiceTimeoutMs { get; set; } = 30_000;
 }
 
-public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress
+public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress
 {
     private readonly SessionManager _sessions;
     private readonly SessionRuntimeFactory _factory;
@@ -64,12 +64,20 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         await live.Runtime.SubmitEnvironmentAsync(input, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<CommandAck> AttachAsync(string connectionId, ClientCommand command, CancellationToken cancellationToken)
+    public async Task<CommandAck> AttachAsync(
+        string connectionId,
+        ClientCommand<AttachPayload> command,
+        CancellationToken cancellationToken)
     {
-        var ack = Validate(command, attach: true);
+        var ack = Validate(command, attach: true, expectedType: "session.attach");
         if (!ack.Accepted)
         {
             return ack;
+        }
+
+        if (!string.IsNullOrEmpty(command.AttachmentId))
+        {
+            return Reject(command.EventId, "Protocol", "ProtocolError", "Attach must omit attachmentId.", true, null);
         }
 
         if (!_admitting)
@@ -78,6 +86,7 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         }
 
         var sessionId = Guid.Parse(command.SessionId);
+        var fingerprint = Fingerprint(command);
         try
         {
             var snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -88,26 +97,44 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
 
             Live live;
             var replay = false;
+            CommandAck? replayAck = null;
             lock (_gate)
             {
                 if (_live.TryGetValue(sessionId, out var existing))
                 {
-                    if (existing.ConnectionId == connectionId && existing.LastAttachEventId == command.EventId)
+                    lock (existing.Admission)
                     {
-                        live = existing;
-                        replay = true;
-                    }
-                    else if (existing.ConnectionId is not null)
-                    {
-                        return Reject(command.EventId, "Session", "SessionInUse", "Session is attached to another connection.", false, null);
-                    }
-                    else
-                    {
-                        live = existing;
-                        live.ConnectionId = connectionId;
-                        live.LastAttachEventId = command.EventId;
-                        live.AttachmentId = Guid.NewGuid();
-                        live.ResetControl();
+                        if (existing.ConnectionId == connectionId
+                            && existing.LastAttachEventId == command.EventId)
+                        {
+                            if (existing.LastAttachFingerprint != fingerprint)
+                            {
+                                return Reject(
+                                    command.EventId,
+                                    "Protocol",
+                                    "ProtocolError",
+                                    "Repeated eventId with a different payload.",
+                                    true,
+                                    null);
+                            }
+
+                            live = existing;
+                            replay = true;
+                            replayAck = existing.LastAttachAck ?? Accept(command.EventId);
+                        }
+                        else if (existing.ConnectionId is not null)
+                        {
+                            return Reject(command.EventId, "Session", "SessionInUse", "Session is attached to another connection.", false, null);
+                        }
+                        else
+                        {
+                            live = existing;
+                            live.ConnectionId = connectionId;
+                            live.LastAttachEventId = command.EventId;
+                            live.LastAttachFingerprint = fingerprint;
+                            live.AttachmentId = Guid.NewGuid();
+                            live.ResetControl();
+                        }
                     }
                 }
                 else
@@ -126,16 +153,27 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
                     live = new Live(_factory.Create(snapshot, this));
                     live.ConnectionId = connectionId;
                     live.LastAttachEventId = command.EventId;
+                    live.LastAttachFingerprint = fingerprint;
                     _live[sessionId] = live;
                 }
 
                 _connections[connectionId] = sessionId;
             }
 
+            if (replay)
+            {
+                return replayAck!;
+            }
+
             await live.Runtime.AttachAsync(cancellationToken).ConfigureAwait(false);
             await live.Runtime.WaitUntilMailboxDrainedAsync(cancellationToken).ConfigureAwait(false);
-            _ = replay;
-            return Accept(command.EventId);
+            var accepted = Accept(command.EventId);
+            lock (live.Admission)
+            {
+                live.LastAttachAck = accepted;
+            }
+
+            return accepted;
         }
         catch (AgentCoreException ex)
         {
@@ -213,20 +251,18 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         }
     }
 
-    public async Task<CommandAck> SendTextAsync(string connectionId, ClientCommand command, CancellationToken cancellationToken)
+    public async Task<CommandAck> SendTextAsync(
+        string connectionId,
+        ClientCommand<UserTextPayload> command,
+        CancellationToken cancellationToken)
     {
-        var ack = Validate(command, attach: false);
-        if (!ack.Accepted)
+        var envelope = Validate(command, attach: false, expectedType: "user.text");
+        if (!envelope.Accepted)
         {
-            return ack;
+            return envelope;
         }
 
-        if (!TryLive(connectionId, command, out var live, out var reject))
-        {
-            return reject!;
-        }
-
-        var text = command.Payload.TryGetValue("text", out var value) ? value?.ToString() : null;
+        var text = command.Payload?.Text;
         if (string.IsNullOrWhiteSpace(text))
         {
             return Reject(command.EventId, "Validation", "ValidationError", "text is required.", false, null);
@@ -237,10 +273,33 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
             return Reject(command.EventId, "Validation", "ValidationError", "Text exceeds 8000 UTF-16 code units.", false, null);
         }
 
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
+        {
+            return reject!;
+        }
+
+        if (!Guid.TryParse(command.EventId, out var sourceEventId))
+        {
+            return Reject(command.EventId, "Protocol", "ProtocolError", "IDs must be UUIDs.", true, null);
+        }
+
         try
         {
-            await live.Runtime.SubmitUserTextAsync(text, cancellationToken).ConfigureAwait(false);
-            return Accept(command.EventId);
+            if (!await live.Runtime.SubmitUserTextAsync(text, sourceEventId, cancellationToken).ConfigureAwait(false))
+            {
+                AbandonAdmit(live, command.EventId);
+                return Reject(
+                    command.EventId,
+                    "Transport",
+                    "Backpressure",
+                    "The session mailbox is full. Stop or retry after the current work drains.",
+                    false,
+                    1000);
+            }
+
+            var accepted = Accept(command.EventId);
+            CommitAdmit(live, accepted);
+            return accepted;
         }
         catch (AgentCoreException ex)
         {
@@ -248,36 +307,50 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         }
     }
 
-    public async Task<CommandAck> SetModeAsync(string connectionId, ClientCommand command, CancellationToken cancellationToken)
+    public async Task<CommandAck> SetModeAsync(
+        string connectionId,
+        ClientCommand<SetModePayload> command,
+        CancellationToken cancellationToken)
     {
-        var ack = Validate(command, attach: false);
-        if (!ack.Accepted)
+        var envelope = Validate(command, attach: false, expectedType: "session.mode.set");
+        if (!envelope.Accepted)
         {
-            return ack;
+            return envelope;
         }
 
-        if (!TryLive(connectionId, command, out var live, out var reject))
-        {
-            return reject!;
-        }
-
-        var raw = command.Payload.TryGetValue("mode", out var value) ? value?.ToString() : null;
+        var raw = command.Payload?.Mode;
         if (raw is not ("text" or "voice"))
         {
             return Reject(command.EventId, "Validation", "ValidationError", "mode must be text or voice.", false, null);
         }
 
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
+        {
+            return reject!;
+        }
+
         var mode = raw == "voice" ? SessionMode.Voice : SessionMode.Text;
         await live.Runtime.SetModeAsync(mode, cancellationToken).ConfigureAwait(false);
-        return Accept(command.EventId);
+        var modeAccepted = Accept(command.EventId);
+        CommitAdmit(live, modeAccepted);
+        return modeAccepted;
     }
 
-    public async Task<CommandAck> EndAsync(string connectionId, ClientCommand command, CancellationToken cancellationToken)
+    public async Task<CommandAck> EndAsync(
+        string connectionId,
+        ClientCommand<EndPayload> command,
+        CancellationToken cancellationToken)
     {
-        var ack = Validate(command, attach: false);
-        if (!ack.Accepted)
+        var envelope = Validate(command, attach: false, expectedType: "session.end");
+        if (!envelope.Accepted)
         {
-            return ack;
+            return envelope;
+        }
+
+        if (string.IsNullOrWhiteSpace(command.Payload?.Reason)
+            || !string.Equals(command.Payload.Reason, "userEnded", StringComparison.Ordinal))
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "reason must be userEnded.", false, null);
         }
 
         if (!Guid.TryParse(command.SessionId, out var sessionId))
@@ -285,124 +358,203 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
             return Reject(command.EventId, "Protocol", "ProtocolError", "sessionId is invalid.", true, null);
         }
 
-        if (!TryLive(connectionId, command, out _, out var reject))
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
         {
             return reject!;
         }
 
         await TerminateAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return Accept(command.EventId);
+        var ended = Accept(command.EventId);
+        CommitAdmit(live, ended);
+        return ended;
     }
 
-    public Task<CommandAck> AdmitSpeechAsync(string connectionId, ClientCommand command, SpeechBoundary boundary)
+    public Task<CommandAck> AdmitSpeechStartedAsync(string connectionId, ClientCommand<SpeechStartedPayload> command)
     {
-        var ack = Validate(command, attach: false);
-        if (!ack.Accepted)
+        var envelope = Validate(command, attach: false, expectedType: "user.speech.started");
+        if (!envelope.Accepted)
         {
-            return Task.FromResult(ack);
+            return Task.FromResult(envelope);
         }
 
-        if (!TryLive(connectionId, command, out var live, out var reject))
+        var payload = command.Payload;
+        if (payload is null
+            || !Guid.TryParse(payload.UtteranceId, out var utteranceId)
+            || !Guid.TryParse(payload.StreamId, out _)
+            || payload.SampleOffset < 0
+            || payload.ActivityScore is < 0 or > 1)
         {
-            return Task.FromResult(reject!);
+            return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "Speech started payload is invalid.", false, null));
         }
 
-        if (live.Runtime.Snapshot.Mode != SessionMode.Voice)
-        {
-            return Task.FromResult(Reject(command.EventId, "Protocol", "ProtocolError", "Speech is not admitted until voice mode is applied.", true, null));
-        }
-
-        if (!Guid.TryParse(AsString(command.Payload, "utteranceId"), out var utteranceId))
-        {
-            return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "utteranceId is required.", false, null));
-        }
-
-        var streamId = AsString(command.Payload, "streamId");
-        if (live.Runtime.StreamId is { } expected
-            && !string.Equals(streamId, expected.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            return Task.FromResult(Reject(command.EventId, "Transport", "AudioDiscontinuity", "Speech streamId does not match.", false, null));
-        }
-
-        var score = AsDouble(command.Payload, "activityScore");
-        if (!live.Runtime.TryAdmitBoundary(utteranceId, boundary, score))
-        {
-            return Task.FromResult(Reject(command.EventId, "Transport", "AudioDiscontinuity", "Speech boundary was dropped.", false, null));
-        }
-
-        return Task.FromResult(Accept(command.EventId));
+        return AdmitSpeechAsync(connectionId, command, utteranceId, payload.StreamId, payload.SampleOffset, payload.ActivityScore, SpeechBoundary.Started, durationMs: 0);
     }
 
-    public async Task AdmitAudioAsync(string connectionId, InputAudioDto dto)
+    public Task<CommandAck> AdmitSpeechEndedAsync(string connectionId, ClientCommand<SpeechEndedPayload> command)
     {
+        var envelope = Validate(command, attach: false, expectedType: "user.speech.ended");
+        if (!envelope.Accepted)
+        {
+            return Task.FromResult(envelope);
+        }
+
+        var payload = command.Payload;
+        if (payload is null
+            || !Guid.TryParse(payload.UtteranceId, out var utteranceId)
+            || !Guid.TryParse(payload.StreamId, out _)
+            || payload.SampleOffset < 0
+            || payload.DurationMs < 0
+            || payload.ActivityScore is < 0 or > 1)
+        {
+            return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "Speech ended payload is invalid.", false, null));
+        }
+
+        return AdmitSpeechAsync(connectionId, command, utteranceId, payload.StreamId, payload.SampleOffset, payload.ActivityScore, SpeechBoundary.Ended, payload.DurationMs);
+    }
+
+    public async Task<bool> AdmitAudioAsync(string connectionId, InputAudioDto dto)
+    {
+        if (dto.ProtocolVersion != 1)
+        {
+            return true;
+        }
+
         if (!_connections.TryGetValue(connectionId, out var sessionId) || !_live.TryGetValue(sessionId, out var live))
         {
-            return;
+            return false;
+        }
+
+        if (!Guid.TryParse(dto.SessionId, out var audioSession) || audioSession != sessionId)
+        {
+            await PublishAudioProtocolErrorAsync(sessionId, "Audio sessionId does not match the attached session.").ConfigureAwait(false);
+            return true;
         }
 
         if (live.Runtime.Snapshot.Mode != SessionMode.Voice
             || !string.Equals(dto.AttachmentId, live.AttachmentId.ToString(), StringComparison.OrdinalIgnoreCase)
             || live.Runtime.StreamId is not { } streamId
-            || !string.Equals(dto.StreamId, streamId.ToString(), StringComparison.OrdinalIgnoreCase)
-            || dto.ProtocolVersion != 1)
+            || !string.Equals(dto.StreamId, streamId.ToString(), StringComparison.OrdinalIgnoreCase))
         {
-            await PublishAsync(
-                    new SessionOutput(
-                        new EventContext(
-                            Guid.NewGuid(),
-                            sessionId,
-                            Guid.Empty,
-                            _time.GetUtcNow(),
-                            Guid.NewGuid(),
-                            null),
-                        null,
-                        new ErrorOutput("Protocol", "ProtocolError", "Do not send PCM until Mode is voice.", true, null)),
-                    CancellationToken.None)
-                .ConfigureAwait(false);
-            return;
+            await PublishAudioProtocolErrorAsync(sessionId, "Do not send PCM until Mode is voice.").ConfigureAwait(false);
+            return true;
         }
 
         var frame = new AudioFrame(dto.FrameSequence, dto.SampleOffset, dto.Data);
         _ = live.Runtime.TryAdmitAudio(frame);
-        await Task.CompletedTask.ConfigureAwait(false);
+        return false;
     }
 
-    public async Task<CommandAck> AcceptControlAsync(string connectionId, ClientCommand command)
+    public async Task<CommandAck> AcceptPlaybackAsync(
+        string connectionId,
+        ClientCommand<PlaybackPayload> command,
+        string expectedType)
     {
-        var ack = Validate(command, attach: false);
-        if (!ack.Accepted)
+        var envelope = Validate(command, attach: false, expectedType);
+        if (!envelope.Accepted)
         {
-            return ack;
+            return envelope;
         }
 
-        if (!TryLive(connectionId, command, out var live, out var reject))
+        if (!Guid.TryParse(command.ResponseId, out var responseId))
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "responseId is required.", false, null);
+        }
+
+        var payload = command.Payload;
+        if (payload is null || payload.ConsumedSamples < 0 || payload.TextEndExclusive < 0)
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "Playback payload is invalid.", false, null);
+        }
+
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
         {
             return reject!;
         }
 
-        if (string.Equals(command.Type, "session.mute", StringComparison.Ordinal))
+        var kind = expectedType switch
         {
-            await live.Runtime.SetMutedAsync(AsBool(command.Payload, "muted") ?? false).ConfigureAwait(false);
-            return Accept(command.EventId);
+            "playback.started" => "started",
+            "playback.progress" => "progress",
+            "playback.completed" => "completed",
+            "playback.stopped" => "stopped",
+            _ => "progress"
+        };
+        if (!await live.Runtime.SubmitPlaybackAsync(responseId, kind, payload.ConsumedSamples, payload.TextEndExclusive)
+                .ConfigureAwait(false))
+        {
+            AbandonAdmit(live, command.EventId);
+            return Reject(command.EventId, "Transport", "Backpressure", "The session mailbox is full.", false, 1000);
         }
 
-        if (command.Type.StartsWith("playback.", StringComparison.Ordinal)
-            && Guid.TryParse(command.ResponseId, out var responseId))
+        var accepted = Accept(command.EventId);
+        CommitAdmit(live, accepted);
+        return accepted;
+    }
+
+    public async Task<CommandAck> AcceptReceiptAsync(string connectionId, ClientCommand<ResponseReceiptPayload> command)
+    {
+        var envelope = Validate(command, attach: false, expectedType: "response.received");
+        if (!envelope.Accepted)
         {
-            var kind = command.Type switch
-            {
-                "playback.started" => "started",
-                "playback.progress" => "progress",
-                "playback.completed" => "completed",
-                "playback.stopped" => "stopped",
-                _ => "progress"
-            };
-            var consumed = AsInt64(command.Payload, "consumedSamples") ?? 0;
-            var textEnd = (int)(AsInt64(command.Payload, "textEndExclusive") ?? 0);
-            await live.Runtime.SubmitPlaybackAsync(responseId, kind, consumed, textEnd).ConfigureAwait(false);
+            return envelope;
         }
 
-        return Accept(command.EventId);
+        if (!Guid.TryParse(command.ResponseId, out var responseId))
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "responseId is required.", false, null);
+        }
+
+        var payload = command.Payload;
+        if (payload is null || payload.TextEndExclusive < 0)
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "textEndExclusive is required.", false, null);
+        }
+
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
+        {
+            return reject!;
+        }
+
+        var admitted = await live.Runtime.SubmitReceiptAsync(responseId, payload.TextEndExclusive).ConfigureAwait(false);
+        if (admitted is null)
+        {
+            AbandonAdmit(live, command.EventId);
+            return Reject(command.EventId, "Transport", "Backpressure", "The session mailbox is full.", false, 1000);
+        }
+
+        if (!admitted.Value)
+        {
+            AbandonAdmit(live, command.EventId);
+            return Reject(command.EventId, "Validation", "ValidationError", "Receipt offset is not monotonic or exceeds emitted text.", false, null);
+        }
+
+        var accepted = Accept(command.EventId);
+        CommitAdmit(live, accepted);
+        return accepted;
+    }
+
+    public async Task<CommandAck> AcceptMuteAsync(string connectionId, ClientCommand<MutePayload> command)
+    {
+        var envelope = Validate(command, attach: false, expectedType: "session.mute");
+        if (!envelope.Accepted)
+        {
+            return envelope;
+        }
+
+        if (command.Payload is null)
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "muted is required.", false, null);
+        }
+
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
+        {
+            return reject!;
+        }
+
+        await live.Runtime.SetMutedAsync(command.Payload.Muted).ConfigureAwait(false);
+        var accepted = Accept(command.EventId);
+        CommitAdmit(live, accepted);
+        return accepted;
     }
 
     public ValueTask PublishAsync(ResponseAudio audio, CancellationToken cancellationToken = default)
@@ -450,7 +602,63 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         return new ValueTask(_hubs.Clients.Client(live.ConnectionId).SendAsync("SessionEvent", evt, cancellationToken));
     }
 
-    private static CommandAck Validate(ClientCommand command, bool attach)
+    private Task<CommandAck> AdmitSpeechAsync(
+        string connectionId,
+        IRealtimeCommand command,
+        Guid utteranceId,
+        string streamId,
+        long sampleOffset,
+        double? activityScore,
+        SpeechBoundary boundary,
+        double durationMs)
+    {
+        if (!TryAdmit(connectionId, command, out var live, out var reject))
+        {
+            return Task.FromResult(reject!);
+        }
+
+        if (live.Runtime.Snapshot.Mode != SessionMode.Voice)
+        {
+            AbandonAdmit(live, command.EventId);
+            return Task.FromResult(Reject(command.EventId, "Protocol", "ProtocolError", "Speech is not admitted until voice mode is applied.", true, null));
+        }
+
+        if (live.Runtime.StreamId is { } expected
+            && !string.Equals(streamId, expected.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            AbandonAdmit(live, command.EventId);
+            return Task.FromResult(Reject(command.EventId, "Transport", "AudioDiscontinuity", "Speech streamId does not match.", false, null));
+        }
+
+        if (!live.Runtime.TryAdmitBoundary(utteranceId, boundary, activityScore, sampleOffset, durationMs))
+        {
+            AbandonAdmit(live, command.EventId);
+            return Task.FromResult(Reject(command.EventId, "Transport", "AudioDiscontinuity", "Speech boundary was dropped.", false, null));
+        }
+
+        var accepted = Accept(command.EventId);
+        CommitAdmit(live, accepted);
+        return Task.FromResult(accepted);
+    }
+
+    private async Task PublishAudioProtocolErrorAsync(Guid sessionId, string message)
+    {
+        await PublishAsync(
+                new SessionOutput(
+                    new EventContext(
+                        Guid.NewGuid(),
+                        sessionId,
+                        Guid.Empty,
+                        _time.GetUtcNow(),
+                        Guid.NewGuid(),
+                        null),
+                    null,
+                    new ErrorOutput("Protocol", "ProtocolError", message, true, null)),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
+    private static CommandAck Validate(IRealtimeCommand command, bool attach, string expectedType)
     {
         if (command.CorrelationId is not null || command.CausationId is not null)
         {
@@ -462,6 +670,11 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
             var mismatch = Reject(command.EventId, "Protocol", "ProtocolVersionMismatch", "Unsupported protocol version.", true, null);
             mismatch.Error!.Extensions = new Dictionary<string, object?> { ["supportedVersions"] = new[] { 1 } };
             return mismatch;
+        }
+
+        if (!string.Equals(command.Type, expectedType, StringComparison.Ordinal))
+        {
+            return Reject(command.EventId, "Protocol", "ProtocolError", "Command type does not match the hub method.", true, null);
         }
 
         if (!Guid.TryParse(command.SessionId, out _) || !Guid.TryParse(command.EventId, out _))
@@ -482,7 +695,7 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         return Accept(command.EventId);
     }
 
-    private bool TryLive(string connectionId, ClientCommand command, out Live live, out CommandAck? reject)
+    private bool TryAdmit(string connectionId, IRealtimeCommand command, out Live live, out CommandAck? reject)
     {
         live = null!;
         reject = null;
@@ -494,92 +707,83 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
             return false;
         }
 
-        if (!string.IsNullOrEmpty(command.AttachmentId)
-            && !string.Equals(command.AttachmentId, found.AttachmentId.ToString(), StringComparison.OrdinalIgnoreCase))
+        lock (found.Admission)
         {
-            reject = Reject(command.EventId, "Session", "StaleCommand", "Attachment lease is invalid.", false, null);
-            return false;
-        }
+            if (string.IsNullOrWhiteSpace(command.AttachmentId)
+                || !string.Equals(command.AttachmentId, found.AttachmentId.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                reject = Reject(command.EventId, "Session", "StaleCommand", "Attachment lease is invalid.", false, null);
+                return false;
+            }
 
-        if (found.LastEventId == command.EventId)
-        {
-            reject = Accept(command.EventId);
+            var fingerprint = Fingerprint(command);
+            if (found.Dedupe.TryGetValue(command.EventId, out var prior))
+            {
+                if (!string.Equals(prior.Fingerprint, fingerprint, StringComparison.Ordinal))
+                {
+                    reject = Reject(
+                        command.EventId,
+                        "Protocol",
+                        "ProtocolError",
+                        "Repeated eventId with a different payload.",
+                        true,
+                        null);
+                    return false;
+                }
+
+                reject = prior.Ack;
+                live = found;
+                return false;
+            }
+
+            if (command.Sequence <= found.LastSequence)
+            {
+                reject = Reject(command.EventId, "Session", "StaleCommand", "Backwards command sequence.", false, null);
+                return false;
+            }
+
+            var previous = found.LastSequence;
+            found.LastSequence = command.Sequence;
+            found.LastEventId = command.EventId;
+            found.Pending = new AdmissionPending(command.EventId, fingerprint, command.Sequence, previous);
             live = found;
-            return false;
+            return true;
         }
-
-        if (command.Sequence <= found.LastSequence)
-        {
-            reject = Reject(command.EventId, "Session", "StaleCommand", "Backwards command sequence.", false, null);
-            return false;
-        }
-
-        found.LastSequence = command.Sequence;
-        found.LastEventId = command.EventId;
-        if (found.ControlCount++ > 1024)
-        {
-            reject = Reject(command.EventId, "Session", "StaleCommand", "Control window exceeded.", false, null);
-            return false;
-        }
-
-        live = found;
-        return true;
     }
 
-    private static string? AsString(Dictionary<string, object?> payload, string key) =>
-        payload.TryGetValue(key, out var value) ? value?.ToString() : null;
-
-    private static long? AsInt64(Dictionary<string, object?> payload, string key)
+    private static void CommitAdmit(Live live, CommandAck ack)
     {
-        if (!payload.TryGetValue(key, out var value) || value is null)
+        lock (live.Admission)
         {
-            return null;
+            if (live.Pending is { } pending && pending.EventId == ack.EventId)
+            {
+                live.Remember(pending.EventId, pending.Fingerprint, ack);
+                live.Pending = null;
+            }
         }
-
-        return value switch
-        {
-            long number => number,
-            int number => number,
-            uint number => number,
-            short number => number,
-            _ => long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-                ? parsed
-                : null
-        };
     }
 
-    private static bool? AsBool(Dictionary<string, object?> payload, string key)
+    private static void AbandonAdmit(Live live, string eventId)
     {
-        if (!payload.TryGetValue(key, out var value) || value is null)
+        lock (live.Admission)
         {
-            return null;
-        }
+            if (live.Pending is { } pending && pending.EventId == eventId)
+            {
+                if (live.LastSequence == pending.Sequence)
+                {
+                    live.LastSequence = pending.PreviousSequence;
+                    live.LastEventId = null;
+                }
 
-        return value switch
-        {
-            bool flag => flag,
-            string text when bool.TryParse(text, out var parsed) => parsed,
-            _ => bool.TryParse(value.ToString(), out var parsed) ? parsed : null
-        };
+                live.Pending = null;
+            }
+        }
     }
 
-    private static double? AsDouble(Dictionary<string, object?> payload, string key)
+    private static string Fingerprint(IRealtimeCommand command)
     {
-        if (!payload.TryGetValue(key, out var value) || value is null)
-        {
-            return null;
-        }
-
-        return value switch
-        {
-            double number => number,
-            float number => number,
-            int number => number,
-            long number => number,
-            _ => double.TryParse(value.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
-                ? parsed
-                : null
-        };
+        var json = System.Text.Json.JsonSerializer.Serialize(command.Payload);
+        return $"{command.Type}|{command.ResponseId}|{json}";
     }
 
     private static CommandAck Accept(string eventId) => new() { EventId = eventId, Accepted = true };
@@ -605,21 +809,46 @@ public sealed class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironm
         public string? ConnectionId { get; set; }
         public Guid AttachmentId { get; set; } = Guid.NewGuid();
         public string? LastAttachEventId { get; set; }
+        public string? LastAttachFingerprint { get; set; }
+        public CommandAck? LastAttachAck { get; set; }
         public long LastSequence { get; set; }
         public string? LastEventId { get; set; }
-        public int ControlCount { get; set; }
+        public object Admission { get; } = new();
+        public AdmissionPending? Pending { get; set; }
+        public Dictionary<string, DedupeRecord> Dedupe { get; } = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Queue<string> _dedupeOrder = new();
         private long _serverSequence;
 
         public long NextSequence() => Interlocked.Increment(ref _serverSequence);
+
+        public void Remember(string eventId, string fingerprint, CommandAck ack)
+        {
+            Dedupe[eventId] = new DedupeRecord(fingerprint, ack);
+            _dedupeOrder.Enqueue(eventId);
+            while (_dedupeOrder.Count > 1024)
+            {
+                var oldest = _dedupeOrder.Dequeue();
+                if (oldest != eventId)
+                {
+                    Dedupe.Remove(oldest);
+                }
+            }
+        }
 
         public void ResetControl()
         {
             LastSequence = 0;
             LastEventId = null;
-            ControlCount = 0;
+            Pending = null;
+            Dedupe.Clear();
+            _dedupeOrder.Clear();
             _serverSequence = 0;
         }
     }
+
+    public readonly record struct DedupeRecord(string Fingerprint, CommandAck Ack);
+
+    public readonly record struct AdmissionPending(string EventId, string Fingerprint, long Sequence, long PreviousSequence);
 }
 
 public static class SessionEventMapper

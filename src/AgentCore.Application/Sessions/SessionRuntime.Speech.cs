@@ -43,11 +43,17 @@ public sealed partial class SessionRuntime
 
             _expectedFrameSequence++;
             _expectedSampleOffset = frame.SampleOffset + PcmCodec.SampleCount(frame.Data);
+            FlushPendingBoundaries();
             return true;
         }
     }
 
-    public bool TryAdmitBoundary(Guid utteranceId, SpeechBoundary boundary, double? activityScore)
+    public bool TryAdmitBoundary(
+        Guid utteranceId,
+        SpeechBoundary boundary,
+        double? activityScore,
+        long sampleOffset = 0,
+        double durationMs = 0)
     {
         lock (_audioGate)
         {
@@ -56,9 +62,47 @@ public sealed partial class SessionRuntime
                 return false;
             }
 
-            return _ingress.TryWrite(new IngressBoundary(utteranceId, boundary, activityScore));
+            if (sampleOffset < 0 || durationMs < 0)
+            {
+                return false;
+            }
+
+            if (sampleOffset > _expectedSampleOffset)
+            {
+                _pendingBoundaries.Add(new PendingBoundary(utteranceId, boundary, activityScore, sampleOffset, durationMs));
+                _pendingBoundaries.Sort((left, right) => left.SampleOffset.CompareTo(right.SampleOffset));
+                return true;
+            }
+
+            return WriteBoundary(utteranceId, boundary, activityScore);
         }
     }
+
+    private bool WriteBoundary(Guid utteranceId, SpeechBoundary boundary, double? activityScore) =>
+        _ingress.TryWrite(new IngressBoundary(utteranceId, boundary, activityScore));
+
+    private void FlushPendingBoundaries()
+    {
+        while (_pendingBoundaries.Count > 0 && _pendingBoundaries[0].SampleOffset <= _expectedSampleOffset)
+        {
+            var pending = _pendingBoundaries[0];
+            if (!WriteBoundary(pending.UtteranceId, pending.Boundary, pending.ActivityScore))
+            {
+                return;
+            }
+
+            _pendingBoundaries.RemoveAt(0);
+        }
+    }
+
+    private readonly List<PendingBoundary> _pendingBoundaries = [];
+
+    private readonly record struct PendingBoundary(
+        Guid UtteranceId,
+        SpeechBoundary Boundary,
+        double? ActivityScore,
+        long SampleOffset,
+        double DurationMs);
 
     private void EnqueueFault(string code, string message)
     {
@@ -95,6 +139,7 @@ public sealed partial class SessionRuntime
         _sttCts = null;
         lock (_audioGate)
         {
+            _pendingBoundaries.Clear();
             _ingress.Complete();
         }
 

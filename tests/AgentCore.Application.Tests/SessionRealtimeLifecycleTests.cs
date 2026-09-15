@@ -54,6 +54,10 @@ public sealed class SessionRealtimeLifecycleTests
             await runtime.AttachAsync();
             await runtime.SubmitUserTextAsync("Hello");
             await runtime.WaitUntilIdleAsync();
+            var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(0, assistant.ReceivedTextEndExclusive);
+            await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length);
+            await runtime.WaitUntilMailboxDrainedAsync();
             await runtime.DetachAsync();
             await runtime.WaitUntilIdleAsync();
         }

@@ -60,6 +60,50 @@ public sealed class PersistenceReceiptTests
         Assert.True(brain.Calls >= 1);
     }
 
+    [Fact]
+    public async Task Failed_terminal_end_save_does_not_ack_ended_status()
+    {
+        var inner = new InMemoryMemoryStore();
+        var store = new FailingEndStore(inner);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var now = time.GetUtcNow();
+        var snapshot = new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now);
+        await inner.SaveAsync(snapshot, 0);
+        await using var runtime = new SessionRuntime(
+            snapshot,
+            new ScriptedLanguageModel(),
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            new CapturingSessionOutput(),
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance);
+        await runtime.AttachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.RequestEndAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var loaded = await inner.LoadAsync(snapshot.SessionId);
+        Assert.NotEqual(SessionStatus.Ended, loaded!.Status);
+        Assert.True(store.Failed);
+    }
+
     private sealed class GatedMemoryStore(TaskCompletionSource gate) : IMemoryStore
     {
         private readonly InMemoryMemoryStore _inner = new();
@@ -102,5 +146,40 @@ public sealed class PersistenceReceiptTests
 
         public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
             _inner.RecoverCrashedSessionsAsync(cancellationToken);
+    }
+
+    private sealed class FailingEndStore(IMemoryStore inner) : IMemoryStore
+    {
+        public bool Failed { get; private set; }
+
+        public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            inner.LoadAsync(sessionId, cancellationToken);
+
+        public ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
+        {
+            if (snapshot.Status == SessionStatus.Ended)
+            {
+                Failed = true;
+                throw AgentCoreErrors.Persistence("forced end save failure");
+            }
+
+            return inner.SaveAsync(snapshot, expectedRevision, cancellationToken);
+        }
+
+        public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+            Guid sessionId,
+            long afterEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+            inner.LoadProfileAsync(profileId, cancellationToken);
+
+        public ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default) =>
+            inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+        public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+            inner.RecoverCrashedSessionsAsync(cancellationToken);
     }
 }

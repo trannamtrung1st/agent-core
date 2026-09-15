@@ -236,7 +236,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
             return false;
         }
 
-        var text = PromptContextBuilder.EligibleAssistantText(lastAssistant);
+        var text = lastAssistant.Text;
         return text.TrimEnd().EndsWith('?');
     }
 

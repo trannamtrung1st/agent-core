@@ -110,6 +110,24 @@ public sealed class SpeechIngressTests
         Assert.DoesNotContain(output.Items, item => item.Payload is TranscriptPartialOutput);
     }
 
+    [Fact]
+    public async Task Speech_boundary_waits_for_preceding_audio_offset()
+    {
+        var output = new CapturingSessionOutput();
+        var recognizer = new SyntheticSpeechRecognizer(["Hello there"]);
+        await using var runtime = Create(output, recognizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000f8");
+        Assert.True(runtime.TryAdmitBoundary(utterance, SpeechBoundary.Started, 0.9, sampleOffset: 480));
+        await Task.Delay(50);
+        Assert.DoesNotContain(output.Items, item => item.Payload is TranscriptPartialOutput or TranscriptFinalOutput);
+        Assert.True(runtime.TryAdmitAudio(Frame(1, 0)));
+        Assert.True(runtime.TryAdmitBoundary(utterance, SpeechBoundary.Ended, 0.2, sampleOffset: 480, durationMs: 40));
+        await output.WaitForAsync(item => item.Payload is TranscriptFinalOutput);
+    }
+
     private static AudioFrame Frame(long sequence, long offset) =>
         new(sequence, offset, new byte[960]);
 

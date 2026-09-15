@@ -87,6 +87,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
 
     public ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default)
     {
+        LocalUserProfile.Validate(profile.Preferences);
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {

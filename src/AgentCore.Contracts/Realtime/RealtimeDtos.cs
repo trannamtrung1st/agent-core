@@ -37,8 +37,23 @@ public sealed class CommandError
     public Dictionary<string, object?>? Extensions { get; set; }
 }
 
+public interface IRealtimeCommand
+{
+    int ProtocolVersion { get; }
+    string SessionId { get; }
+    string EventId { get; }
+    long Sequence { get; }
+    string? Timestamp { get; }
+    string? CorrelationId { get; }
+    string? CausationId { get; }
+    string? ResponseId { get; }
+    string? AttachmentId { get; }
+    string Type { get; }
+    object? Payload { get; }
+}
+
 [MessagePackObject]
-public sealed class ClientCommand
+public sealed class ClientCommand<TPayload> : IRealtimeCommand
 {
     [Key("protocolVersion")]
     public int ProtocolVersion { get; set; }
@@ -71,7 +86,96 @@ public sealed class ClientCommand
     public string Type { get; set; } = "";
 
     [Key("payload")]
-    public Dictionary<string, object?> Payload { get; set; } = [];
+    public TPayload Payload { get; set; } = default!;
+
+    object? IRealtimeCommand.Payload => Payload;
+}
+
+[MessagePackObject]
+public sealed class AttachPayload
+{
+    [Key("lastServerSequence")]
+    public long? LastServerSequence { get; set; }
+}
+
+[MessagePackObject]
+public sealed class UserTextPayload
+{
+    [Key("text")]
+    public string Text { get; set; } = "";
+}
+
+[MessagePackObject]
+public sealed class SetModePayload
+{
+    [Key("mode")]
+    public string Mode { get; set; } = "";
+}
+
+[MessagePackObject]
+public sealed class SpeechStartedPayload
+{
+    [Key("streamId")]
+    public string StreamId { get; set; } = "";
+
+    [Key("utteranceId")]
+    public string UtteranceId { get; set; } = "";
+
+    [Key("sampleOffset")]
+    public long SampleOffset { get; set; }
+
+    [Key("activityScore")]
+    public double ActivityScore { get; set; }
+}
+
+[MessagePackObject]
+public sealed class SpeechEndedPayload
+{
+    [Key("streamId")]
+    public string StreamId { get; set; } = "";
+
+    [Key("utteranceId")]
+    public string UtteranceId { get; set; } = "";
+
+    [Key("sampleOffset")]
+    public long SampleOffset { get; set; }
+
+    [Key("durationMs")]
+    public double DurationMs { get; set; }
+
+    [Key("activityScore")]
+    public double ActivityScore { get; set; }
+}
+
+[MessagePackObject]
+public sealed class PlaybackPayload
+{
+    [Key("consumedSamples")]
+    public long ConsumedSamples { get; set; }
+
+    [Key("textEndExclusive")]
+    public int TextEndExclusive { get; set; }
+}
+
+[MessagePackObject]
+public sealed class ResponseReceiptPayload
+{
+    [Key("textEndExclusive")]
+    public int TextEndExclusive { get; set; }
+}
+
+[MessagePackObject]
+public sealed class MutePayload
+{
+    [Key("muted")]
+    public bool Muted { get; set; }
+}
+
+[MessagePackObject]
+public sealed class EndPayload
+{
+    [Key("reason")]
+    public string Reason { get; set; } = "";
 }
 
 [MessagePackObject]

@@ -41,6 +41,11 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (_snapshot.ProfileId is { } profileId)
+        {
+            _profile = await _store.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
+        }
+
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Attached,
@@ -283,6 +288,8 @@ public sealed partial class SessionRuntime
             _activeUtteranceId = input.Evidence.UtteranceId;
             _utteranceStarted = _time.GetUtcNow();
             _activityScore = input.ActivityScore;
+            _sttMark = Stopwatch.GetTimestamp();
+            _recordedStt = false;
         }
         else if (input.ActivityScore is { } score)
         {
@@ -304,17 +311,12 @@ public sealed partial class SessionRuntime
                 ScheduleCandidateTimer(queued.UtteranceId);
             }
         }
-        if (input.Evidence is SpeechStarted)
-        {
-            _recordedStt = false;
-        }
-
         if (input.Evidence is SpeechPartial partial)
         {
             if (!_recordedStt)
             {
                 _recordedStt = true;
-                RuntimeTelemetry.Record("stt", 0);
+                RuntimeTelemetry.Record("stt", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_sttMark)));
             }
             await PublishAsync(
                     new SessionOutput(

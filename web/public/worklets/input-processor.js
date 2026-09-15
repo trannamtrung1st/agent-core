@@ -4,6 +4,7 @@ class InputProcessor extends AudioWorkletProcessor {
     this._pending = new Float32Array(0);
     this._offset = 0;
     this._emit = false;
+    this._resampler = new StreamingResampler(sampleRate, 24000);
     this.port.onmessage = (event) => {
       this._emit = event.data && event.data.type === "emit";
     };
@@ -16,7 +17,7 @@ class InputProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    const resampled = resample(channel, sampleRate, 24000);
+    const resampled = this._resampler.process(channel);
     const merged = new Float32Array(this._pending.length + resampled.length);
     merged.set(this._pending);
     merged.set(resampled, this._pending.length);
@@ -34,23 +35,41 @@ class InputProcessor extends AudioWorkletProcessor {
   }
 }
 
-function resample(input, inputRate, outputRate) {
-  if (inputRate === outputRate) {
-    return input;
+class StreamingResampler {
+  constructor(inputRate, outputRate) {
+    this.step = inputRate / outputRate;
+    this.leftover = new Float32Array(0);
+    this.phase = 0;
+    this.lowpass = 0;
   }
 
-  const ratio = inputRate / outputRate;
-  const outLength = Math.max(0, Math.floor(input.length / ratio));
-  const output = new Float32Array(outLength);
-  for (let index = 0; index < outLength; index += 1) {
-    const source = index * ratio;
-    const left = Math.floor(source);
-    const right = Math.min(left + 1, input.length - 1);
-    const fraction = source - left;
-    output[index] = input[left] * (1 - fraction) + input[right] * fraction;
-  }
+  process(input) {
+    if (this.step === 1) {
+      return input;
+    }
 
-  return output;
+    const merged = new Float32Array(this.leftover.length + input.length);
+    merged.set(this.leftover);
+    merged.set(input, this.leftover.length);
+    const output = [];
+    while (this.phase + 1 < merged.length) {
+      const index = Math.floor(this.phase);
+      const fraction = this.phase - index;
+      const left = merged[index] || 0;
+      const right = merged[index + 1] || left;
+      const interpolated = left * (1 - fraction) + right * fraction;
+      this.lowpass = this.lowpass * 0.2 + interpolated * 0.8;
+      output.push(this.lowpass);
+      this.phase += this.step;
+    }
+
+    const consumed = Math.min(merged.length, Math.floor(this.phase));
+    this.leftover = merged.slice(consumed);
+    this.phase -= consumed;
+    const result = new Float32Array(output.length);
+    result.set(output);
+    return result;
+  }
 }
 
 function encode(samples) {

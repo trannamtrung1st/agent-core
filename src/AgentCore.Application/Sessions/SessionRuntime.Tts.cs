@@ -101,7 +101,7 @@ public sealed partial class SessionRuntime
         if (segments.Count > 0 && !_recordedSegment)
         {
             _recordedSegment = true;
-            RuntimeTelemetry.Record("segmentation", 0);
+            RuntimeTelemetry.Record("segmentation", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_ttsStartedAt)));
         }
     }
 
@@ -291,7 +291,7 @@ public sealed partial class SessionRuntime
             if (!_recordedPlayback)
             {
                 _recordedPlayback = true;
-                RuntimeTelemetry.Record("playback", 0);
+                RuntimeTelemetry.Record("playback", Math.Max(0.001, RuntimeTelemetry.ElapsedMs(_ttsStartedAt)));
             }
             if (_outputActivity == OutputActivity.AgentGenerating)
             {
@@ -339,7 +339,7 @@ public sealed partial class SessionRuntime
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
-        UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed, _accumulator.Length);
+        UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed);
         var heard = failed ? 0 : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);

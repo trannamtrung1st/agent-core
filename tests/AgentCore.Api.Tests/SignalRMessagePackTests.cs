@@ -138,5 +138,12 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("second-connection")]
     [InlineData("stale-sequence")]
     [InlineData("capacity")]
+    [InlineData("exact-retry")]
+    [InlineData("eventid-reuse")]
+    [InlineData("missing-attachment")]
+    [InlineData("method-type-mismatch")]
+    [InlineData("command-gap")]
+    [InlineData("fatal-close")]
+    [InlineData("response-received")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

@@ -48,6 +48,7 @@ public sealed class SessionManager
         }
 
         var now = _time.GetUtcNow();
+        var profile = await EnsureLocalProfileAsync(now, cancellationToken).ConfigureAwait(false);
         var snapshot = new SessionSnapshot(
             SchemaVersion: 1,
             SessionId: _ids.NewSessionId(),
@@ -60,7 +61,7 @@ public sealed class SessionManager
             Summary: string.Empty,
             SummarizedThroughEntrySequence: 0,
             PendingTopic: null,
-            ProfileId: null,
+            ProfileId: profile.ProfileId,
             now,
             now);
 
@@ -103,6 +104,29 @@ public sealed class SessionManager
             UpdatedAt = _time.GetUtcNow()
         };
         await _store.SaveAsync(ended, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<UserProfile> EnsureLocalProfileAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var existing = await _store.LoadProfileAsync(LocalUserProfile.Id, cancellationToken).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            LocalUserProfile.Validate(existing.Preferences);
+            return existing;
+        }
+
+        var created = new UserProfile(
+            LocalUserProfile.Id,
+            1,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["language"] = "en",
+                ["preferredName"] = "friend"
+            },
+            now);
+        LocalUserProfile.Validate(created.Preferences);
+        await _store.SaveProfileAsync(created, 0, cancellationToken).ConfigureAwait(false);
+        return created;
     }
 
     public async Task<IReadOnlyList<PublicAgentDescriptor>> ListAgentsAsync(

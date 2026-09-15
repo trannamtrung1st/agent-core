@@ -17,6 +17,9 @@ let playbackStarted = false;
 let playbackFinal = false;
 let playbackCompletedSent = false;
 let progressTimer: number | null = null;
+let receiptTimer: number | null = null;
+let lastReceiptOffset = 0;
+let lastReceiptResponseId: string | null = null;
 let disposed = false;
 let duckTimer: number | null = null;
 let flushing = false;
@@ -96,6 +99,18 @@ async function invoke(
 
 function handleEvent(raw: ServerEvent): void {
   useChatStore.setState(applyServerEvent(useChatStore.getState(), raw));
+  if (raw.type === "agent.response.started" && useChatStore.getState().mode === "text" && raw.responseId) {
+    lastReceiptOffset = 0;
+    lastReceiptResponseId = raw.responseId;
+    startReceipts(raw.responseId);
+  }
+  if ((raw.type === "agent.text.delta" || raw.type === "agent.text.completed") && useChatStore.getState().mode === "text") {
+    void sendReceipt(false);
+  }
+  if ((raw.type === "agent.response.completed" || raw.type === "agent.response.interrupted") && raw.responseId) {
+    void sendReceipt(true, raw.responseId);
+    stopReceipts();
+  }
   if (raw.type === "playback.gain") {
     const gain = typeof raw.payload.gain === "number" ? raw.payload.gain : 1;
     const rampMs = typeof raw.payload.rampMs === "number" ? raw.payload.rampMs : 20;
@@ -303,6 +318,51 @@ function stopProgress(): void {
   }
 }
 
+function renderedTextOffset(responseId: string | null): number {
+  if (!responseId) {
+    return 0;
+  }
+
+  const entry = useChatStore.getState().entries.find((item) => item.responseId === responseId);
+  return entry?.text.length ?? 0;
+}
+
+function startReceipts(responseId: string): void {
+  stopReceipts();
+  receiptTimer = window.setInterval(() => {
+    void sendReceipt(false, responseId);
+  }, 100);
+}
+
+function stopReceipts(): void {
+  if (receiptTimer !== null) {
+    window.clearInterval(receiptTimer);
+    receiptTimer = null;
+  }
+}
+
+async function sendReceipt(finalRender: boolean, responseId?: string): Promise<void> {
+  const snapshot = useChatStore.getState();
+  if (snapshot.mode !== "text" || !connection) {
+    return;
+  }
+
+  const id = responseId ?? snapshot.liveResponseId ?? lastReceiptResponseId;
+  if (!id) {
+    return;
+  }
+
+  const offset = renderedTextOffset(id);
+  if (!finalRender && offset === lastReceiptOffset && lastReceiptResponseId === id) {
+    return;
+  }
+
+  lastReceiptOffset = offset;
+  lastReceiptResponseId = id;
+  commandSequence += 1;
+  await invoke("ResponseReceived", "response.received", { textEndExclusive: offset }, commandSequence, id);
+}
+
 async function sendPlayback(method: string, type: string, responseId: string, consumed: number): Promise<void> {
   commandSequence += 1;
   await invoke(method, type, { consumedSamples: consumed, textEndExclusive: 0 }, commandSequence, responseId);
@@ -316,6 +376,7 @@ function stopPlayback(responseId?: string): void {
   }
 
   stopProgress();
+  stopReceipts();
   void capture.flushPlayback("");
   playbackStarted = false;
   playbackFinal = false;
@@ -558,6 +619,7 @@ export async function hangUp(): Promise<void> {
   }
 
   await stopConnection();
+  stopReceipts();
   capture.release();
   useChatStore.setState({
     ...emptySession(),
