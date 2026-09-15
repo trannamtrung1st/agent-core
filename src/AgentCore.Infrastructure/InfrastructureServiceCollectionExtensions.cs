@@ -7,6 +7,7 @@ using AgentCore.Application.Testing;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +39,11 @@ public static class InfrastructureServiceCollectionExtensions
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
         services.TryAddSingleton<ISpeechRecognizer>(_ => new SyntheticSpeechRecognizer());
+        services.TryAddSingleton<ISpeechSynthesizer>(_ => new SyntheticSpeechSynthesizer());
+        services.AddHttpClient(OpenAiSpeechSynthesizer.HttpClientName, client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
         services.TryAddSingleton<ILanguageModel>(provider =>
         {
             var options = languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" };

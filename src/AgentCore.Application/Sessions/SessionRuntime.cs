@@ -4,6 +4,7 @@ using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.Logging;
 
@@ -28,6 +29,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly RecognitionCapabilities _recognition;
     private readonly ISpeechRecognizer? _recognizer;
+    private readonly ISpeechSynthesizer? _synthesizer;
     private readonly InteractionPolicy _policy;
     private readonly object _audioGate = new();
     private AudioIngress _ingress = new();
@@ -43,7 +45,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private Guid _epoch;
     private Guid? _activeResponseId;
     private Guid? _activeEntryId;
-    private string _generated = string.Empty;
+    private readonly ResponseTextAccumulator _accumulator = new();
     private bool _responseTerminal;
     private CancellationTokenSource? _responseCts;
     private int _inflight;
@@ -74,7 +76,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IInterruptionClassifier? classifier = null,
         RecognitionCapabilities? recognition = null,
         InteractionPolicy? policy = null,
-        ISpeechRecognizer? recognizer = null)
+        ISpeechRecognizer? recognizer = null,
+        ISpeechSynthesizer? synthesizer = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
@@ -86,6 +89,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _time = time;
         _logger = logger;
         _recognizer = recognizer;
+        _synthesizer = synthesizer;
         _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
@@ -204,6 +208,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    public async Task SubmitPlaybackAsync(
+        Guid responseId,
+        string kind,
+        long consumedSamples,
+        int textEndExclusive,
+        CancellationToken cancellationToken = default)
+    {
+        var context = NewContext();
+        BeginWork();
+        await _mailbox.Writer.WriteAsync(
+                new PlaybackReportReceived(context, responseId, kind, consumedSamples, textEndExclusive),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task SubmitTimerElapsedAsync(
         string kind,
         int generation,
@@ -242,6 +261,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _responseCts?.Cancel();
+        _ttsCts?.Cancel();
         await StopRecognitionAsync().ConfigureAwait(false);
         _lifetime.Dispose();
         _responseCts?.Dispose();
@@ -287,7 +307,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             break;
                         case ModelResultReceived model:
                             await HandleModelAsync(model, cancellationToken).ConfigureAwait(false);
-                            model.Processed.TrySetResult();
+                            break;
+                        case SynthesisResultReceived synthesis:
+                            await HandleSynthesisAsync(synthesis, cancellationToken).ConfigureAwait(false);
+                            break;
+                        case PlaybackReportReceived playback:
+                            await HandlePlaybackAsync(playback, cancellationToken).ConfigureAwait(false);
                             break;
                         case CancelResponseReceived cancel:
                             await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
@@ -392,7 +417,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _activeResponseId = input.ResponseId;
         _activeEntryId = entryId;
-        _generated = string.Empty;
+        _accumulator.Reset();
+        ResetSpeechOutput();
         _responseTerminal = false;
         _responseLifecycle = ResponseLifecycle.Live;
         _outputActivity = OutputActivity.AgentGenerating;
@@ -508,27 +534,56 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (_activeResponseId != input.ResponseId || _responseTerminal)
         {
+            input.Processed.TrySetResult();
             return;
         }
 
         switch (input.Event)
         {
             case ModelTextDelta delta:
-                var start = _generated.Length;
-                _generated += delta.Text;
+                var (start, text) = _accumulator.Append(delta.Text);
                 await PublishAsync(
-                        new SessionOutput(input.Context, input.ResponseId, new TextDeltaOutput(start, delta.Text)),
+                        new SessionOutput(input.Context, input.ResponseId, new TextDeltaOutput(start, text)),
                         cancellationToken)
                     .ConfigureAwait(false);
                 UpdateStreamingAssistant();
+                if (UsesVoicePlayback)
+                {
+                    EnqueueSegments(_segmenter!.Append(text, _time.GetUtcNow()));
+                    ScheduleSegmentTimer();
+                    KickTts(input.Context);
+                    if (_pendingSegments.Count >= 4)
+                    {
+                        _modelBackpressure = input.Processed;
+                        return;
+                    }
+                }
+
                 break;
             case ModelCompleted:
-                await CompleteAsync(input, failed: false, cancellationToken).ConfigureAwait(false);
+                if (UsesVoicePlayback)
+                {
+                    _modelDone = true;
+                    await PublishAsync(
+                            new SessionOutput(input.Context, input.ResponseId, new TextCompletedOutput(_accumulator.Length)),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    EnqueueSegments(_segmenter!.Complete());
+                    KickTts(input.Context);
+                    await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await CompleteAsync(input.Context, input.ResponseId, failed: false, cancellationToken).ConfigureAwait(false);
+                }
+
                 break;
             case ModelFailed:
-                await CompleteAsync(input, failed: true, cancellationToken).ConfigureAwait(false);
+                await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken).ConfigureAwait(false);
                 break;
         }
+
+        input.Processed.TrySetResult();
     }
 
     private async Task HandleCancelAsync(CancelResponseReceived input, CancellationToken cancellationToken)
@@ -549,10 +604,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
+        InvalidateSpeechJobs();
         if (!_responseTerminal)
         {
             _responseTerminal = true;
-            UpdateAssistant(EntryStatus.Interrupted, received: _generated.Length);
+            UpdateAssistant(EntryStatus.Interrupted, received: _accumulator.Length);
             await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
             await PublishAsync(
                     new SessionOutput(
@@ -564,31 +620,32 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         _responseCts?.Cancel();
+        _ttsCts?.Cancel();
         ClearActive();
         _turnGeneration++;
     }
 
-    private async Task CompleteAsync(ModelResultReceived input, bool failed, CancellationToken cancellationToken)
+    private async Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
     {
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
-        var received = _generated.Length;
+        var received = _accumulator.Length;
         UpdateAssistant(status, received);
         await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
         if (!failed)
         {
             await PublishAsync(
-                    new SessionOutput(input.Context, input.ResponseId, new TextCompletedOutput(received)),
+                    new SessionOutput(context, responseId, new TextCompletedOutput(received)),
                     cancellationToken)
                 .ConfigureAwait(false);
         }
 
         await PublishAsync(
                 new SessionOutput(
-                    input.Context,
-                    input.ResponseId,
+                    context,
+                    responseId,
                     new ResponseCompletedOutput(failed, HeardTextEndExclusive: _snapshot.Mode == SessionMode.Text ? received : 0)),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -596,11 +653,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_snapshot.PendingMode == SessionMode.Voice)
         {
             await ApplyModeAsync(SessionMode.Voice, cancellationToken).ConfigureAwait(false);
-            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming, _generated.Length);
+    private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming, _accumulator.Length);
 
     private void UpdateAssistant(EntryStatus status, int received)
     {
@@ -613,7 +670,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 entry.EntryId == entryId
                     ? entry with
                     {
-                        Text = _generated,
+                        Text = _accumulator.Text,
                         Status = status,
                         ReceivedTextEndExclusive = received,
                         HeardTextEndExclusive = _snapshot.Mode == SessionMode.Text ? received : entry.HeardTextEndExclusive
@@ -629,6 +686,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _activeEntryId = null;
         _responseCts?.Dispose();
         _responseCts = null;
+        _ttsCts?.Dispose();
+        _ttsCts = null;
     }
 
     private async Task HandleEndAsync(EndSessionReceived input, CancellationToken cancellationToken)

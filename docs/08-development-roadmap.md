@@ -11,7 +11,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | 4 | Interaction Controller with synthetic speech/events | Complete: deterministic backchannel, interruption, stale-result and classifier/brain isolation tests |
 | 5 | SignalR realtime protocol + browser connection + minimal Synthetic Compose | Complete: MessagePack browser text slice, leases, identity guards, key-free Compose smoke, GitHub Actions (see [Implementation Plan](18-implementation-plan.md)) |
 | 6 | Microphone + AudioWorklet + streaming STT | Complete: synthetic STT + AudioWorklet preflight/PCM gating (see [Implementation Plan](18-implementation-plan.md)) |
-| 7 | Speech segmentation + streaming TTS + playback | Natural segments and first audio before full response completion |
+| 7 | Speech segmentation + streaming TTS + playback | Complete: synthetic TTS starts before model completion; output worklet acknowledgements; capture stays active (see [Implementation Plan](18-implementation-plan.md)) |
 | 8 | Full-duplex voice | Microphone/STT remain active while agent audio plays |
 | 9 | Semantic barge-in / ducking / supersession / spoken-until | Cancel segments/TTS/LLM; reject late output/playback feedback |
 | 10 | Proactive interaction | Useful trigger or StaySilent with cooldown |

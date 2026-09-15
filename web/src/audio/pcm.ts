@@ -36,6 +36,16 @@ export function readInt16Le(bytes: Uint8Array, sampleIndex: number): number {
   return bytes[sampleIndex * 2]! | (bytes[sampleIndex * 2 + 1]! << 8);
 }
 
+export function decodePcm16Le(bytes: Uint8Array): Float32Array {
+  const samples = new Float32Array(Math.floor(bytes.length / 2));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = view.getInt16(index * 2, true) / 0x8000;
+  }
+
+  return samples;
+}
+
 export class CanonicalFramer {
   private pending = new Float32Array(0);
 

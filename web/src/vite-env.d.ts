@@ -6,5 +6,9 @@ interface Window {
     disconnect: () => Promise<void>;
     capturePrepared: () => boolean;
     workletLoaded: () => boolean;
+    outputWorkletLoaded: () => boolean;
+    playbackConsumed: () => number;
+    audioOutputsReceived: () => number;
+    captureStreaming: () => boolean;
   };
 }

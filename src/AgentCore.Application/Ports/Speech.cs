@@ -46,3 +46,31 @@ public interface ISpeechRecognitionSession : IAsyncDisposable
     ValueTask CompleteInputAsync(CancellationToken cancellationToken = default);
     IAsyncEnumerable<SpeechRecognitionEvent> ReadEventsAsync(CancellationToken cancellationToken = default);
 }
+
+public sealed record SpeechRequest(
+    Guid ResponseId,
+    int SegmentIndex,
+    int TextStart,
+    string Text,
+    string Voice,
+    double SpeakingRate,
+    AudioFormat Format);
+
+public abstract record SpeechSynthesisEvent;
+
+public sealed record SpeechAudio(AudioFrame Frame) : SpeechSynthesisEvent;
+
+public sealed record SpeechTimingMark(int TextEndExclusive, long SampleOffset) : SpeechSynthesisEvent;
+
+public sealed record SpeechSynthesisCompleted(long TotalSamples) : SpeechSynthesisEvent;
+
+public sealed record SpeechSynthesisFailed(ProviderFailure Failure) : SpeechSynthesisEvent;
+
+public interface ISpeechSynthesizer
+{
+    SynthesisCapabilities Capabilities { get; }
+
+    IAsyncEnumerable<SpeechSynthesisEvent> SynthesizeAsync(
+        SpeechRequest request,
+        CancellationToken cancellationToken = default);
+}

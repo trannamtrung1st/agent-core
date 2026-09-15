@@ -59,6 +59,20 @@ public sealed record ModelResultReceived(
 
 public sealed record CancelResponseReceived(EventContext Context, Guid ResponseId) : SessionInput(Context);
 
+public sealed record SynthesisResultReceived(
+    EventContext Context,
+    Guid ResponseId,
+    int SegmentIndex,
+    SpeechSynthesisEvent Event,
+    TaskCompletionSource Processed) : SessionInput(Context);
+
+public sealed record PlaybackReportReceived(
+    EventContext Context,
+    Guid ResponseId,
+    string Kind,
+    long ConsumedSamples,
+    int TextEndExclusive) : SessionInput(Context);
+
 public sealed record EndSessionReceived(EventContext Context) : SessionInput(Context);
 
 public sealed record SessionOutput(EventContext Context, Guid? ResponseId, OutputPayload Payload);
@@ -107,6 +121,12 @@ public sealed record ResponseStartedOutput(Guid EntryId, long EntrySequence, str
 public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload;
 
 public sealed record TextCompletedOutput(int TextLength) : OutputPayload;
+
+public sealed record AudioFrameOutput(
+    long FrameSequence,
+    long SampleOffset,
+    bool IsFinal,
+    byte[] Data) : OutputPayload;
 
 public sealed record ResponseCompletedOutput(
     bool Failed,

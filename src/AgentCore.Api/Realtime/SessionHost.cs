@@ -318,20 +318,36 @@ public sealed class SessionHost : ISessionOutput
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    public Task<CommandAck> AcceptControlAsync(string connectionId, ClientCommand command)
+    public async Task<CommandAck> AcceptControlAsync(string connectionId, ClientCommand command)
     {
         var ack = Validate(command, attach: false);
         if (!ack.Accepted)
         {
-            return Task.FromResult(ack);
+            return ack;
         }
 
-        if (!TryLive(connectionId, command, out _, out var reject))
+        if (!TryLive(connectionId, command, out var live, out var reject))
         {
-            return Task.FromResult(reject!);
+            return reject!;
         }
 
-        return Task.FromResult(Accept(command.EventId));
+        if (command.Type.StartsWith("playback.", StringComparison.Ordinal)
+            && Guid.TryParse(command.ResponseId, out var responseId))
+        {
+            var kind = command.Type switch
+            {
+                "playback.started" => "started",
+                "playback.progress" => "progress",
+                "playback.completed" => "completed",
+                "playback.stopped" => "stopped",
+                _ => "progress"
+            };
+            var consumed = AsInt64(command.Payload, "consumedSamples") ?? 0;
+            var textEnd = (int)(AsInt64(command.Payload, "textEndExclusive") ?? 0);
+            await live.Runtime.SubmitPlaybackAsync(responseId, kind, consumed, textEnd).ConfigureAwait(false);
+        }
+
+        return Accept(command.EventId);
     }
 
     public ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default)
@@ -339,6 +355,22 @@ public sealed class SessionHost : ISessionOutput
         if (!_live.TryGetValue(output.Context.SessionId, out var live) || live.ConnectionId is null)
         {
             return ValueTask.CompletedTask;
+        }
+
+        if (output.Payload is AudioFrameOutput audio)
+        {
+            var dto = new OutputAudioDto
+            {
+                ProtocolVersion = 1,
+                SessionId = output.Context.SessionId.ToString(),
+                AttachmentId = live.AttachmentId.ToString(),
+                ResponseId = output.ResponseId?.ToString() ?? "",
+                FrameSequence = audio.FrameSequence,
+                SampleOffset = audio.SampleOffset,
+                IsFinal = audio.IsFinal,
+                Data = audio.Data
+            };
+            return new ValueTask(_hubs.Clients.Client(live.ConnectionId).SendAsync("AudioOutput", dto, cancellationToken));
         }
 
         var evt = SessionEventMapper.Map(output, live.AttachmentId, live.NextSequence());
@@ -423,6 +455,25 @@ public sealed class SessionHost : ISessionOutput
 
     private static string? AsString(Dictionary<string, object?> payload, string key) =>
         payload.TryGetValue(key, out var value) ? value?.ToString() : null;
+
+    private static long? AsInt64(Dictionary<string, object?> payload, string key)
+    {
+        if (!payload.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            long number => number,
+            int number => number,
+            uint number => number,
+            short number => number,
+            _ => long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null
+        };
+    }
 
     private static double? AsDouble(Dictionary<string, object?> payload, string key)
     {

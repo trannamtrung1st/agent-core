@@ -150,7 +150,8 @@ public sealed class SessionRuntimeFactory(
     Microsoft.Extensions.Logging.ILoggerFactory loggers,
     IInterruptionClassifier classifier,
     InteractionPolicy policy,
-    ISpeechRecognizer recognizer)
+    ISpeechRecognizer recognizer,
+    ISpeechSynthesizer synthesizer)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -165,5 +166,6 @@ public sealed class SessionRuntimeFactory(
             classifier,
             recognition: recognizer.Capabilities,
             policy,
-            recognizer);
+            recognizer,
+            synthesizer);
 }

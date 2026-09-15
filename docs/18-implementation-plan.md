@@ -82,6 +82,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Tests:** Segment/sample continuity, empty final marker, underrun/overflow, cancellation, browser worklet acknowledgement, microphone remains active during output. Automated tests use Synthetic TTS. Real OpenAI TTS integration tests and manual voice verification are explicit opt-in and may wait for `OPENAI_API_KEY`; skip cleanly when it is missing.
 - **Acceptance criteria:** Playback starts before full response completion when capabilities permit; sequence/duration counters are correct; no HTML audio element handles streamed PCM; response completion waits for playback. Default tests never require OpenAI credentials.
 - **Explicit non-goals:** Perfect prosody/phoneme sync, native realtime providers, codecs in Agent Runtime.
+- **Status:** Complete. ResponseTextAccumulator/SpeechSegmenter, SyntheticSpeechSynthesizer, OpenAiSpeechSynthesizer HTTP PCM boundary tests, output worklet playback acknowledgements, and capture-during-output coverage are implemented. Default suites do not require `OPENAI_API_KEY`. See [Milestone 7 verification](reports/m07-verification.md).
 
 ## Milestone 8 — Full-duplex voice and continuous listening
 

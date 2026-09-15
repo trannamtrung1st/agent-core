@@ -1,3 +1,4 @@
+import { decodePcm16Le } from "./pcm";
 import { VoiceActivityObserver } from "./vad";
 
 export type CaptureHooks = {
@@ -10,6 +11,7 @@ type Prepared = {
   context: AudioContext;
   source: MediaStreamAudioSourceNode | null;
   worklet: AudioWorkletNode;
+  output: AudioWorkletNode;
   gain: GainNode;
   stream: MediaStream;
 };
@@ -18,6 +20,9 @@ class MicrophoneCapture {
   private prepared: Prepared | null = null;
   private streaming = false;
   private workletReady = false;
+  private outputReady = false;
+  private consumedSamples = 0;
+  private onConsumed: ((consumed: number) => void) | null = null;
   private frameSequence = 1;
   private sampleOffset = 0;
   private utteranceId: string | null = null;
@@ -33,7 +38,19 @@ class MicrophoneCapture {
   }
 
   workletLoaded(): boolean {
-    return this.workletReady;
+    return this.workletReady && this.outputReady;
+  }
+
+  outputWorkletLoaded(): boolean {
+    return this.outputReady;
+  }
+
+  playbackConsumed(): number {
+    return this.consumedSamples;
+  }
+
+  setPlaybackListener(listener: ((consumed: number) => void) | null): void {
+    this.onConsumed = listener;
   }
 
   async preflight(): Promise<void> {
@@ -69,7 +86,10 @@ class MicrophoneCapture {
 
     try {
       await Promise.race([
-        context.audioWorklet.addModule("/worklets/input-processor.js"),
+        Promise.all([
+          context.audioWorklet.addModule("/worklets/input-processor.js"),
+          context.audioWorklet.addModule("/worklets/output-processor.js")
+        ]),
         new Promise((_, reject) => {
           window.setTimeout(() => reject(new Error("AudioWorklet addModule timed out.")), 4000);
         })
@@ -79,15 +99,28 @@ class MicrophoneCapture {
         numberOfOutputs: 1,
         outputChannelCount: [1]
       });
+      const output = new AudioWorkletNode(context, "output-processor", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1]
+      });
       const gain = context.createGain();
       gain.gain.value = 0;
       worklet.connect(gain);
       gain.connect(context.destination);
+      output.connect(context.destination);
       worklet.port.onmessage = (event: MessageEvent<{ pcm: ArrayBuffer; sampleOffset: number }>) => {
         void this.onFrame(event.data.pcm, event.data.sampleOffset);
       };
-      this.prepared = { context, source: null, worklet, gain, stream };
+      output.port.onmessage = (event: MessageEvent<{ type?: string; consumed?: number }>) => {
+        if (typeof event.data.consumed === "number") {
+          this.consumedSamples = event.data.consumed;
+          this.onConsumed?.(event.data.consumed);
+        }
+      };
+      this.prepared = { context, source: null, worklet, output, gain, stream };
       this.workletReady = true;
+      this.outputReady = true;
     } catch (error) {
       stream.getTracks().forEach((track) => track.stop());
       await context.close();
@@ -109,10 +142,27 @@ class MicrophoneCapture {
     this.prepared?.worklet.port.postMessage({ type: "emit" });
   }
 
+  enqueuePlayback(responseId: string, pcm: Uint8Array): void {
+    const samples = decodePcm16Le(pcm);
+    this.prepared?.output.port.postMessage(
+      { type: "enqueue", responseId, pcm: samples.buffer },
+      [samples.buffer]
+    );
+    this.prepared?.output.port.postMessage({ type: "snapshot" });
+  }
+
+  flushPlayback(responseId: string): void {
+    this.prepared?.output.port.postMessage({ type: "flush", responseId });
+    this.consumedSamples = 0;
+  }
+
   release(): void {
     this.streaming = false;
     this.hooks = null;
     this.workletReady = false;
+    this.outputReady = false;
+    this.consumedSamples = 0;
+    this.onConsumed = null;
     this.utteranceId = null;
     const prepared = this.prepared;
     this.prepared = null;
@@ -122,8 +172,10 @@ class MicrophoneCapture {
 
     try {
       prepared.worklet.port.onmessage = null;
+      prepared.output.port.onmessage = null;
       prepared.source?.disconnect();
       prepared.worklet.disconnect();
+      prepared.output.disconnect();
       prepared.gain.disconnect();
     } catch {
       // ignored

@@ -207,7 +207,7 @@ public sealed partial class SessionRuntime
                 ? _recognition
                 : new RecognitionCapabilities(false, false, false, false),
             voice
-                ? new SynthesisCapabilities(false, false, false, false, false, [])
+                ? _synthesizer?.Capabilities ?? new SynthesisCapabilities(false, false, false, false, false, [])
                 : new SynthesisCapabilities(false, false, false, false, false, []),
             voice ? _policy.BargeInPolicy : "none",
             history.Length == 0 ? 0 : history[^1].Sequence,
@@ -327,6 +327,25 @@ public sealed partial class SessionRuntime
 
     private async Task HandleTimerAsync(TimerElapsedReceived input, CancellationToken cancellationToken)
     {
+        if (input.Kind == "segment")
+        {
+            if (input.Generation != _segmentTimerGeneration || _segmenter is null || !UsesVoicePlayback)
+            {
+                return;
+            }
+
+            _segmentTimerArmed = false;
+            EnqueueSegments(_segmenter.Tick(_time.GetUtcNow()));
+            if (_segmenter.HasBuffered)
+            {
+                ScheduleSegmentTimer();
+            }
+
+            KickTts(input.Context);
+            await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (!InteractionController.TimerMatches(_timerGeneration, input.Generation))
         {
             return;

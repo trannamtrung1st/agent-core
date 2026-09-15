@@ -29,4 +29,17 @@ public static class PcmCodec
 
     public static bool IsContiguous(long previousSampleEnd, AudioFrame next) =>
         next.SampleOffset == previousSampleEnd;
+
+    public static byte[] ToneFrame(int samples, int phase)
+    {
+        var data = new byte[samples * 2];
+        for (var index = 0; index < samples; index++)
+        {
+            var value = (short)(Math.Sin((phase + index) * 2.0 * Math.PI * 440.0 / CanonicalAudio.SampleRateHz) * 8000);
+            data[index * 2] = (byte)(value & 0xff);
+            data[(index * 2) + 1] = (byte)((value >> 8) & 0xff);
+        }
+
+        return data;
+    }
 }
