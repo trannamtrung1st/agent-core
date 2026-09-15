@@ -10,6 +10,19 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "AgentCore__Profile": "Synthetic"
       }
+    },
+    "http-openrouter": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://127.0.0.1:5080",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "AgentCore__Profile": "Real",
+        "Providers__LanguageModels__primary-llm__Adapter": "OpenAICompatible",
+        "Providers__LanguageModels__primary-llm__BaseUrl": "https://openrouter.ai/api/v1/",
+        "Providers__LanguageModels__primary-llm__DefaultModel": "openai/gpt-4o-mini"
+      }
     }
   }
 }

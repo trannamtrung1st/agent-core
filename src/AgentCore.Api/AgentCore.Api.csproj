@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <UserSecretsId>agent-core-api</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\AgentCore.Application\AgentCore.Application.csproj" />
     <ProjectReference Include="..\AgentCore.Infrastructure\AgentCore.Infrastructure.csproj" />
