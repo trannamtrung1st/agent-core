@@ -10,7 +10,67 @@ public sealed class BoundedProcessOutputTests
     [Fact]
     public async Task ReadAsync_stops_at_utf8_byte_limit()
     {
-        using var process = new Process
+        using var process = StartShell(
+            "python3 -c \"import sys; sys.stdout.write('a' * 200000)\"");
+
+        var output = await BoundedProcessOutput.ReadAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
+        Assert.InRange(Encoding.UTF8.GetByteCount(output), 0, SandboxLimits.MaxOutputBytes);
+        Assert.True(process.HasExited);
+    }
+
+    [Fact]
+    public async Task ReadAsync_bounds_concurrent_stdout_and_stderr()
+    {
+        using var process = StartShell(
+            """
+            python3 -c "import sys, threading
+            def flood(stream, ch):
+                stream.write(ch * 100000)
+                stream.flush()
+            t1 = threading.Thread(target=flood, args=(sys.stdout, 'O'))
+            t2 = threading.Thread(target=flood, args=(sys.stderr, 'E'))
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()"
+            """);
+
+        var output = await BoundedProcessOutput.ReadAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
+        Assert.InRange(Encoding.UTF8.GetByteCount(output), 0, SandboxLimits.MaxOutputBytes);
+        Assert.Contains('O', output);
+        Assert.Contains('E', output);
+        Assert.True(process.HasExited);
+    }
+
+    [Fact]
+    public async Task ReadAsync_trims_partial_utf8_before_decoding()
+    {
+        const int maxBytes = 65_536;
+        using var process = StartShell(
+            $"python3 -c \"import sys; sys.stdout.buffer.write(b'a' * {maxBytes - 3} + b'\\xe2\\x82'); sys.stdout.buffer.flush()\"");
+
+        var output = await BoundedProcessOutput.ReadAsync(process, maxBytes, CancellationToken.None);
+        Assert.Equal(maxBytes - 3, output.Length);
+        Assert.Equal(new string('a', maxBytes - 3), output);
+        Assert.InRange(Encoding.UTF8.GetByteCount(output), 0, maxBytes);
+    }
+
+    [Fact]
+    public void ValidUtf8PrefixLength_drops_incomplete_multibyte_suffix()
+    {
+        var bytes = Encoding.UTF8.GetBytes("aé");
+        Assert.Equal(3, BoundedProcessOutput.ValidUtf8PrefixLength(bytes));
+        Assert.Equal(1, BoundedProcessOutput.ValidUtf8PrefixLength(bytes.AsSpan(0, 2)));
+        Assert.Equal(1, BoundedProcessOutput.ValidUtf8PrefixLength(bytes.AsSpan(0, 1)));
+
+        var decoded = BoundedProcessOutput.DecodeBoundedUtf8(bytes.AsSpan(0, 2));
+        Assert.Equal("a", decoded);
+        Assert.Equal(1, Encoding.UTF8.GetByteCount(decoded));
+    }
+
+    private static Process StartShell(string command)
+    {
+        var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
@@ -21,16 +81,13 @@ public sealed class BoundedProcessOutputTests
             }
         };
         process.StartInfo.ArgumentList.Add("-c");
-        process.StartInfo.ArgumentList.Add("python3 -c \"import sys; sys.stdout.write('a' * 200000)\"");
-
+        process.StartInfo.ArgumentList.Add(command);
         if (!process.Start())
         {
             throw new InvalidOperationException("Failed to start shell.");
         }
 
-        var output = await BoundedProcessOutput.ReadAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
-        Assert.InRange(Encoding.UTF8.GetByteCount(output), 0, SandboxLimits.MaxOutputBytes);
-        Assert.True(process.HasExited);
+        return process;
     }
 
     private static string ResolveShell()
