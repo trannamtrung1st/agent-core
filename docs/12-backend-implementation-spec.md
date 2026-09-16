@@ -4,7 +4,7 @@
 
 ## Agent Definition
 
-JSON only, UTF-8, files loaded through IAgentDefinitionStore from a configured agents directory. A file contains one definition; shipped names are `agents/examiner.json` and `agents/customer-support.json`. Store published older versions in version subdirectories if needed; recursively index by (id, version), fail startup on duplicate keys. Versions are immutable positive integers. schemaVersion=1 identifies the format; version identifies that agent's revision. Reject unknown schema versions and unknown fields to catch spelling mistakes. A session pins and persists the validated definition so editing files cannot alter an existing identity. `FileAgentDefinitionStore` validates field rules and that `ProviderPreferences` aliases resolve (`primary-llm`, and when Voice.Enabled `primary-stt` / `primary-tts` in Synthetic). Missing versions return null from `GetAsync`.
+JSON only, UTF-8, files loaded through IAgentDefinitionStore from a configured agents directory. A file contains one definition; shipped names are `agents/examiner.json`, `agents/customer-support.json`, and `agents/compliance.json`. Approved knowledge bodies live beside them under `agents/knowledge/{identity}.md` and are not copied into session workspaces. Store published older versions in version subdirectories if needed; recursively index by (id, version), fail startup on duplicate keys. Versions are immutable positive integers. schemaVersion=1 identifies the format; version identifies that agent's revision. Reject unknown schema versions and unknown fields to catch spelling mistakes. A session pins and persists the validated definition so editing files cannot alter an existing identity. `FileAgentDefinitionStore` validates field rules and that `ProviderPreferences` aliases resolve (`primary-llm`, and when Voice.Enabled `primary-stt` / `primary-tts` in Synthetic). Missing versions return null from `GetAsync`.
 
 Concrete Domain records (camelCase JSON via System.Text.Json):
 
@@ -21,13 +21,23 @@ public sealed record BehaviorPolicy(string InterruptionStyle, bool AcknowledgeIn
 public sealed record ConversationPolicy(string ResponseLength, bool AskOneQuestionAtATime,
     string Language, int MaxOutputTokens);
 public sealed record InitiativePolicy(bool Enabled, int SilenceThresholdMs,
-    int CooldownMs, int MaxPerSilencePeriod, IReadOnlyList<string> Triggers);
+    int CooldownMs, int MaxPerSilencePeriod, IReadOnlyList<string> Triggers,
+    int? MaxConsecutiveProactiveTurns = null, int? MaxSilentEvaluations = null,
+    int? MaxInactivityMs = null);
 public sealed record VoiceConfiguration(bool Enabled, string VoiceId, double SpeakingRate);
 public sealed record ProviderPreferences(string LanguageModel, string? SpeechRecognizer,
     string? SpeechSynthesizer, string InterruptionClassifier = "heuristic");
+public sealed record RoleEnvironment(
+    IReadOnlyList<string>? Harness = null,
+    IReadOnlyList<KnowledgeSourceRef>? KnowledgeSources = null,
+    IReadOnlyList<string>? ToolAllowlist = null,
+    WorkspaceTemplatePolicy? Workspace = null,
+    AttachmentStorePolicy? Attachments = null);
 ```
 
-All fields above required except speech provider aliases. id: lowercase `[a-z0-9-]`, 1..64; version positive; identity strings 1..256 except description up to 1,024; goals 1..10 nonempty strings <=500; systemInstructions <=8,000. InterruptionStyle=`acknowledgeThenContinue|answerNewTurn`; ResponseLength=`concise|balanced`; language is a BCP-47 string; maxOutputTokens 1..4,096; silenceThresholdMs 1,000..120,000; cooldownMs 5,000..600,000; maxPerSilencePeriod=1 for MVP. Triggers are unique values `longSilence|environmentUpdate|unfinishedInteraction`. speakingRate=0.5..2.0. `LanguageModel` is always required and must resolve. When `Voice.Enabled`, `SpeechRecognizer` and `SpeechSynthesizer` are required and must resolve to configured adapters. When `Voice.Enabled` is false, those aliases must be null/omitted; a text-only process must start without STT/TTS. `InterruptionClassifier` defaults to `heuristic` if omitted. Metadata <=16 string pairs, values <=256, never secrets. Every other nullable or optional policy alternative has been removed from this initial schema; startup validation surfaces missing required values.
+Optional `environment` (default empty harness/knowledge/tools, empty workspace template, `allowUnreadUnsupportedTypes=false`) is omitted from historical MVP examples below; shipped fixtures include it. `process`/`shell` remain denied even if listed. Physical template application copies `agents/templates/{templateId}` into `/workspace/working` only (no harness/knowledge corpora). Shipped initiative pins: examiner `maxConsecutiveProactiveTurns=1`, customer-support `2`, compliance `0`.
+
+All fields above required except speech provider aliases, the three optional initiative bounds, and `environment`. id: lowercase `[a-z0-9-]`, 1..64; version positive; identity strings 1..256 except description up to 1,024; goals 1..10 nonempty strings <=500; systemInstructions <=8,000. InterruptionStyle=`acknowledgeThenContinue|answerNewTurn`; ResponseLength=`concise|balanced`; language is a BCP-47 string; maxOutputTokens 1..4,096; silenceThresholdMs 1,000..120,000; cooldownMs 5,000..600,000; maxPerSilencePeriod 1..8 (shipped examiner/compliance 1, customer-support 2). When omitted, `MaxConsecutiveProactiveTurns` defaults to 1, `MaxSilentEvaluations` to 8, `MaxInactivityMs` to 900000. Triggers are unique values `longSilence|environmentUpdate|unfinishedInteraction`. speakingRate=0.5..2.0. `LanguageModel` is always required and must resolve. When `Voice.Enabled`, `SpeechRecognizer` and `SpeechSynthesizer` are required and must resolve to configured adapters. When `Voice.Enabled` is false, those aliases must be null/omitted; a text-only process must start without STT/TTS. `InterruptionClassifier` defaults to `heuristic` if omitted. Metadata <=16 string pairs, values <=256, never secrets. Every other nullable or optional policy alternative has been removed from this initial schema; startup validation surfaces missing required values.
 
 Examiner:
 
@@ -41,7 +51,7 @@ Examiner:
   "systemInstructions": "You are Alex, a practice examiner. Ask one question at a time and wait for the answer. Do not claim to issue an official score or certification. If interrupted, attend to the candidate's new request.",
   "behaviorPolicy": {"interruptionStyle": "acknowledgeThenContinue", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true},
   "conversationPolicy": {"responseLength": "concise", "askOneQuestionAtATime": true, "language": "en", "maxOutputTokens": 256},
-  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 8000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "triggers": ["longSilence", "unfinishedInteraction"]},
+  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 8000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "maxConsecutiveProactiveTurns": 1, "triggers": ["longSilence", "unfinishedInteraction"]},
   "voice": {"enabled": true, "voiceId": "default", "speakingRate": 1.0},
   "providerPreferences": {"languageModel": "primary-llm", "speechRecognizer": "primary-stt", "speechSynthesizer": "primary-tts", "interruptionClassifier": "heuristic"},
   "metadata": {"scenario": "practice-exam", "owner": "demo"}
@@ -60,7 +70,7 @@ Customer Support Representative:
   "systemInstructions": "You are Sam in a support demonstration. Ask for missing context. Treat order updates as supplied simulation data. Never claim that you actually issued a refund, changed an order or accessed a live customer account.",
   "behaviorPolicy": {"interruptionStyle": "answerNewTurn", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true},
   "conversationPolicy": {"responseLength": "balanced", "askOneQuestionAtATime": true, "language": "en", "maxOutputTokens": 512},
-  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 10000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "triggers": ["longSilence", "environmentUpdate", "unfinishedInteraction"]},
+  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 10000, "cooldownMs": 30000, "maxPerSilencePeriod": 2, "maxConsecutiveProactiveTurns": 2, "triggers": ["longSilence", "environmentUpdate", "unfinishedInteraction"]},
   "voice": {"enabled": true, "voiceId": "default", "speakingRate": 1.0},
   "providerPreferences": {"languageModel": "primary-llm", "speechRecognizer": "primary-stt", "speechSynthesizer": "primary-tts", "interruptionClassifier": "heuristic"},
   "metadata": {"scenario": "support", "owner": "demo"}
@@ -76,8 +86,9 @@ Implement a concrete PromptContextBuilder invoked by the default IAgentBrain. Ke
 1. System message: product interaction guardrails, identity, goals, systemInstructions, behavior and conversation policies.
 2. System message: application-owned current mode/state and interrupted-response note. For assistant history, use the entry's deliveryMode: `received` prefix for text-delivered responses, `heard` prefix for voice-delivered responses. Include only that validated prefix; say that the rest of that response was not delivered. Unseen/unheard tails never enter this or later turns, including after a mode switch.
 3. System message: labeled session summary and minimal user preferences, treated as remembered data rather than instructions.
-4. Chronological user/assistant messages from retained history; omit unseen assistant tails and non-turn backchannels. Avoid duplicating the current user entry.
-5. User message containing the current environment event, when applicable, clearly delimited as observed data. For an idle trigger add an application system instruction to respond briefly if useful, after deterministic initiative approval.
+4. System message: approved harness/knowledge identities and tool allowlist. Permission is runtime-enforced and is not granted by model text.
+5. Chronological user/assistant messages from retained history; omit unseen assistant tails and non-turn backchannels. Avoid duplicating the current user entry.
+6. User message containing the current environment event, when applicable, clearly delimited as observed data. For an idle trigger add an application system instruction to respond briefly if useful, after deterministic initiative approval.
 
 History includes the just-committed user turn exactly once. Do not send partial transcripts as completed turns. Do not grant environment/profile/summary text system instruction authority: wrap as quoted data with a fixed application instruction explaining its status. Adapters receive fully formed ModelRequest and only translate it. No adapter constructs identity prompts.
 
@@ -85,7 +96,7 @@ Context budget baseline: retain newest 20 entries, maximum 24,000 UTF-16 charact
 
 MVP summary is a deterministic rolling digest of completed older entries (role-labeled excerpts, bounded to 2,000 characters), refreshed when history rolls over. It is allowed to lose detail and never claims to be semantic memory. Summaries use only context-eligible delivered assistant text. Persist through the last summarized entry sequence to avoid duplication. No extra LLM summarizer, embeddings or vector database is required.
 
-IAgentBrain checks initiative eligibility and contextual usefulness. Default rule: LongSilence speaks only if the last delivered assistant turn ends in a question and no help was offered in that silence period; EnvironmentUpdate speaks only for an allowlisted meaningful status change relevant to this session; UnfinishedInteraction speaks only if a pending topic exists. Otherwise return StaySilent. UserTurn normally returns Speak. The controller rechecks eligibility after asynchronous decisions return.
+IAgentBrain checks initiative eligibility and contextual usefulness. Default rule: LongSilence speaks only if the last delivered assistant turn ends in a question, no help was offered in that silence period, and definition consecutive/silence caps still allow Speak; EnvironmentUpdate speaks only for an allowlisted meaningful status change relevant to this session; UnfinishedInteraction speaks only if a pending topic exists. Zero-cap or exhausted consecutive/silent/inactivity bounds return RequestDeactivate. Otherwise return StaySilent. UserTurn normally returns Speak. The controller rechecks eligibility after asynchronous decisions return. Observed: repeated Speak in one silence period is allowed when `maxPerSilencePeriod` and `MaxConsecutiveProactiveTurns` permit it; tests use stand-in definitions with distinct caps.
 
 ## Text sequence
 
@@ -184,3 +195,9 @@ OpenAICompatibleLanguageModel is the architectural HTTP protocol adapter; OpenRo
 Only text messages and streamed text output are required. Tool calling and structured output are future/secondary; unexpected tool output produces UnsupportedCapability, not a new tool orchestration path. Do not expand ModelRequest into every vendor option. If a chosen model needs a parameter variant, implement a bounded adapter-local configuration mapping and contract test it. The default mapping remains documented above; compatibility does not promise identical behavior across every model family.
 
 OpenRouter uses the configured API root `/api/v1/`; joining `chat/completions` must preserve `/api/`. Keep the existing no-replay rule for partially observed streams, including gateway errors. The default hosted test model is the Free Models Router; model-specific quality tuning is a later operator configuration change, not controller/agent reasoning logic. Speech segmentation remains exclusively the application concern specified in [Voice](06-realtime-voice.md#speech-segmentation). [Tests](16-testing-strategy.md#default-versus-live-provider-verification) owns offline fixtures versus opt-in OpenRouter smoke skips.
+
+## Post-MVP
+
+Observed: owner-capability filter; catalog/lifecycle in the revision stream; `IAttachmentStore` HTTP streamed pending→bound uploads with opaque blobs outside SQLite and outside `local/`; bind after durable user entry; speech-staged pending files; TTL and durable-delete cleanup. Observed `IAttachmentProcessor` runs off the mailbox with 256 KiB / 10 s / 256 MiB / 32 MP fail-closed limits, AttachmentId+version cache, no remote fetch, and typed unsupported results. Production OpenAI-compatible adapters report `Vision` honestly and map normalized image parts or return `UnsupportedCapability`. Observed rich envelope persistence: `ConversationEntries.EnvelopeJson` stores display/speech/blocks and delivery flags atomically with status and heard/received offsets. TTS locks the first non-empty speech-or-text source. Public history projects only the received display prefix and display-delivered blocks. Artifact refs authorize stored ArtifactIds plus `fixture-artifact-1`. Observed `ISessionWorkspace`: lazy provision, logical execution view, 250 MiB `/workspace` writes, template copy without secret/corpus injection, durable-delete cleanup. Observed `IArtifactStore`: binaries under `data/artifacts`, 50 MiB each / 250 MiB per session, explicit attachment materialize with preserved hash and provenance.
+
+Still planned: typed tools; container sandbox. Provider image/tool DTOs stay in Infrastructure.

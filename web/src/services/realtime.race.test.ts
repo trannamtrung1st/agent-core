@@ -691,7 +691,16 @@ describe("realtime race handling", () => {
   });
 
   it("surfaces start conversation failures", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const url = String(input);
+        if (url.includes("owner-capability")) {
+          return { ok: true, json: async () => ({ token: "t" }) };
+        }
+        return { ok: false, status: 503 };
+      })
+    );
     await startConversation();
     expect(useSessionStore.getState().sessionId).toBeNull();
     expect(useSessionStore.getState().error).toContain("Unable to create a session");

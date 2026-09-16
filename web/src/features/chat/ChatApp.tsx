@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { useSessionStore } from "../../state/sessionStore";
 import {
+  beginNewChat,
   bootstrap,
   cancelVoice,
   hangUp,
+  openCatalogSession,
   reportCommittedEntries,
   requestVoice,
   retryConnection,
@@ -16,6 +18,7 @@ import {
 import { Composer } from "./Composer";
 import { Hud } from "./Hud";
 import { IdentityPicker } from "./IdentityPicker";
+import { SessionRail } from "./SessionRail";
 import { conversationStatus, conversationStatusTone } from "./statusLabel";
 import { Transcript } from "./Transcript";
 
@@ -35,7 +38,10 @@ export function ChatApp() {
 
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const voiceLive = state.mode === "voice" && state.captureLive;
-  const canSend = state.connection === "ready" && state.draft.trim().length > 0;
+  const canSend =
+    state.connection === "ready"
+    && (state.draft.trim().length > 0 || state.pendingAttachments.some((item) => item.status === "ready"))
+    && state.pendingAttachments.every((item) => item.status === "ready");
   const inSession = state.sessionId != null;
   const connectionText = conversationStatus({
     connection: state.connection,
@@ -48,45 +54,59 @@ export function ChatApp() {
   });
 
   return (
-    <main className={inSession ? "field field-session" : "field field-picker"}>
-      <div className="field-texture" aria-hidden="true" />
-      <Hud
-        profile={profile}
-        connectionText={connectionText}
-        connectionTone={conversationStatusTone(connectionText)}
-        identity={inSession ? { name: state.agentName, role: state.agentRole } : null}
+    <div className="workspace">
+      <SessionRail
+        items={state.catalogItems}
+        agents={state.agents}
+        activeSessionId={state.sessionId}
+        includeArchived={state.catalogIncludeArchived}
+        hasMore={state.catalogHasMore}
+        capabilityLost={state.catalogCapabilityLost}
+        error={state.catalogError}
+        onNewChat={() => void beginNewChat()}
+        onOpen={(item) => void openCatalogSession(item)}
       />
-      {inSession ? (
-        <>
-          <Transcript agentName={state.agentName} entries={state.entries} />
-          <Composer
-            draft={state.draft}
-            canSend={canSend}
-            ready={state.connection === "ready"}
-            error={state.error}
-            voiceAvailable={state.voiceAvailable}
-            pendingVoice={pendingVoice}
-            voiceLive={voiceLive}
-            muted={state.muted}
-            onDraftChange={setDraft}
-            onSend={() => void sendDraft()}
-            onVoice={() => void requestVoice()}
-            onCancelVoice={() => void cancelVoice()}
-            onMute={(muted) => void setMuted(muted)}
-            canRetry={state.connection === "failed"}
-            onRetry={() => void retryConnection()}
-            onEnd={() => void hangUp()}
-          />
-        </>
-      ) : (
-        <IdentityPicker
-          agents={state.agents}
-          selectedAgentId={state.selectedAgentId}
-          error={state.error}
-          onSelect={selectAgent}
-          onStart={() => void startConversation()}
+      <main className={inSession ? "field field-session" : "field field-picker"}>
+        <div className="field-texture" aria-hidden="true" />
+        <Hud
+          profile={profile}
+          connectionText={connectionText}
+          connectionTone={conversationStatusTone(connectionText)}
+          identity={inSession ? { name: state.agentName, role: state.agentRole } : null}
         />
-      )}
-    </main>
+        {inSession ? (
+          <>
+            <Transcript agentName={state.agentName} sessionId={state.sessionId} entries={state.entries} />
+            <Composer
+              draft={state.draft}
+              canSend={canSend}
+              ready={state.connection === "ready"}
+              error={state.error}
+              pendingAttachments={state.pendingAttachments}
+              voiceAvailable={state.voiceAvailable}
+              pendingVoice={pendingVoice}
+              voiceLive={voiceLive}
+              muted={state.muted}
+              onDraftChange={setDraft}
+              onSend={() => void sendDraft()}
+              onVoice={() => void requestVoice()}
+              onCancelVoice={() => void cancelVoice()}
+              onMute={(muted) => void setMuted(muted)}
+              canRetry={state.connection === "failed"}
+              onRetry={() => void retryConnection()}
+              onEnd={() => void hangUp()}
+            />
+          </>
+        ) : (
+          <IdentityPicker
+            agents={state.agents}
+            selectedAgentId={state.selectedAgentId}
+            error={state.error}
+            onSelect={selectAgent}
+            onStart={() => void startConversation()}
+          />
+        )}
+      </main>
+    </div>
   );
 }

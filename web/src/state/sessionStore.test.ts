@@ -40,6 +40,82 @@ describe("applyServerEvent", () => {
       event({ type: "agent.text.delta", sequence: 3, responseId: "r1", payload: { text: "lo", textStart: 3 } })
     );
     expect(state.entries[0]?.text).toBe("Hello");
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.block.upsert",
+        sequence: 4,
+        responseId: "r1",
+        payload: { blockId: "b1", kind: "markdown", text: "**Hi**", fallbackText: "**Hi**" }
+      })
+    );
+    expect(state.entries[0]?.blocks?.[0]?.kind).toBe("markdown");
+  });
+
+  it("replaces live blocks with session.ready history so reconnect hides unseen tails", () => {
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r1",
+        payload: { entryId: "e1", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.block.upsert",
+        sequence: 2,
+        responseId: "r1",
+        payload: { blockId: "live", kind: "markdown", text: "**unseen**", fallbackText: "**unseen**" }
+      })
+    );
+    expect(state.entries[0]?.blocks?.[0]?.blockId).toBe("live");
+    state = applyServerEvent(
+      state,
+      event({
+        type: "session.ready",
+        sequence: 3,
+        payload: {
+          mode: "text",
+          pendingMode: null,
+          status: "attached",
+          agent: { name: "Alex" },
+          history: [
+            {
+              entryId: "e1",
+              sequence: 1,
+              role: "assistant",
+              text: "Hello",
+              responseId: "r1",
+              status: "completed",
+              deliveryMode: "text",
+              blocks: [
+                {
+                  blockId: "b1",
+                  kind: "markdown",
+                  text: "**shown**",
+                  fallbackText: "**shown**"
+                }
+              ]
+            }
+          ]
+        }
+      })
+    );
+    expect(state.entries[0]?.text).toBe("Hello");
+    expect(state.entries[0]?.blocks).toEqual([
+      {
+        blockId: "b1",
+        kind: "markdown",
+        text: "**shown**",
+        fallbackText: "**shown**",
+        attachmentId: null,
+        artifactId: null
+      }
+    ]);
+    expect(state.entries[0]?.blocks?.some((block) => block.blockId === "live")).toBe(false);
   });
 
   it("rejects late R1 deltas after R2 started", () => {

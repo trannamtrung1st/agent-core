@@ -22,6 +22,83 @@ export type SessionResponse = {
   status: string;
 };
 
+export type CatalogItem = {
+  sessionId: string;
+  title: string;
+  agentId: string;
+  agentVersion: number;
+  status: string;
+  archived: boolean;
+  ended: boolean;
+  workspaceOwned: boolean;
+  runtimeEpoch: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CatalogPage = {
+  items: CatalogItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+export const OWNER_STORAGE_KEY = "agent-core.owner-capability";
+
+export class OwnerCapabilityError extends Error {
+  constructor(message = "Local owner access is unavailable.") {
+    super(message);
+    this.name = "OwnerCapabilityError";
+  }
+}
+
+export function clearOwnerCapability(): void {
+  window.localStorage.removeItem(OWNER_STORAGE_KEY);
+}
+
+export async function ensureOwnerCapability(): Promise<string> {
+  const stored = window.localStorage.getItem(OWNER_STORAGE_KEY);
+  if (stored) {
+    return stored;
+  }
+
+  return issueOwnerCapability();
+}
+
+async function issueOwnerCapability(): Promise<string> {
+  const response = await fetch("/api/v1/local/owner-capability", { method: "POST" });
+  if (!response.ok) {
+    throw new OwnerCapabilityError();
+  }
+
+  const body = (await response.json()) as { token: string };
+  window.localStorage.setItem(OWNER_STORAGE_KEY, body.token);
+  return body.token;
+}
+
+export async function ownerFetch(input: string, init: RequestInit = {}, retried = false): Promise<Response> {
+  const token = await ensureOwnerCapability();
+  const headers = new Headers(init.headers);
+  headers.set("X-AgentCore-Owner-Capability", token);
+  const response = await fetch(input, { ...init, headers });
+  if (response.status === 401 && !retried) {
+    clearOwnerCapability();
+    await issueOwnerCapability();
+    return ownerFetch(input, init, true);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    clearOwnerCapability();
+    throw new OwnerCapabilityError();
+  }
+
+  return response;
+}
+
+export function ownerHeaders(token: string): HeadersInit {
+  return { "X-AgentCore-Owner-Capability": token };
+}
+
 export async function listAgents(): Promise<AgentDescriptor[]> {
   const response = await fetch("/api/v1/agents");
   if (!response.ok) {
@@ -41,11 +118,11 @@ export async function getHealth(): Promise<HealthResponse> {
   return (await response.json()) as HealthResponse;
 }
 
-export async function createSession(agentId: string, mode = "text"): Promise<SessionResponse> {
-  const response = await fetch("/api/v1/sessions", {
+export async function createSession(agentId: string, agentVersion?: number, mode = "text"): Promise<SessionResponse> {
+  const response = await ownerFetch("/api/v2/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ agentId, mode })
+    body: JSON.stringify({ agentId, agentVersion, mode })
   });
   if (!response.ok) {
     throw new Error("Unable to create a session.");
@@ -58,5 +135,83 @@ export async function endSession(sessionId: string): Promise<void> {
   const response = await fetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
   if (!response.ok) {
     throw new Error("Unable to end the session.");
+  }
+}
+
+export async function listCatalog(options?: {
+  cursor?: string | null;
+  includeArchived?: boolean;
+  limit?: number;
+}): Promise<CatalogPage> {
+  const params = new URLSearchParams();
+  if (options?.cursor) {
+    params.set("cursor", options.cursor);
+  }
+  if (options?.includeArchived) {
+    params.set("includeArchived", "true");
+  }
+  if (options?.limit) {
+    params.set("limit", String(options.limit));
+  }
+
+  const query = params.toString();
+  const response = await ownerFetch(`/api/v2/sessions${query ? `?${query}` : ""}`);
+  if (!response.ok) {
+    throw new Error("Unable to load sessions.");
+  }
+
+  return (await response.json()) as CatalogPage;
+}
+
+export async function renameSession(sessionId: string, title: string): Promise<CatalogItem> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/rename`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title })
+  });
+  if (!response.ok) {
+    throw new Error("Unable to rename the session.");
+  }
+
+  return (await response.json()) as CatalogItem;
+}
+
+export async function archiveSession(sessionId: string): Promise<CatalogItem> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/archive`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error("Unable to archive the session.");
+  }
+
+  return (await response.json()) as CatalogItem;
+}
+
+export async function unarchiveSession(sessionId: string): Promise<CatalogItem> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/unarchive`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error("Unable to unarchive the session.");
+  }
+
+  return (await response.json()) as CatalogItem;
+}
+
+export async function reopenSession(sessionId: string): Promise<"reopened" | "in-use"> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/reopen`, { method: "POST" });
+  if (response.status === 409) {
+    return "in-use";
+  }
+  if (!response.ok) {
+    throw new Error("Unable to reopen the session.");
+  }
+
+  return "reopened";
+}
+
+export async function durableDeleteSession(sessionId: string, expectedRevision: number): Promise<void> {
+  const response = await ownerFetch(
+    `/api/v2/sessions/${sessionId}?expectedRevision=${expectedRevision}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw new Error("Unable to delete the session.");
   }
 }

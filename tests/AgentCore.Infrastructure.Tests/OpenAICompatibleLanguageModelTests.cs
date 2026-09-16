@@ -324,6 +324,71 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted or ModelFailed);
     }
 
+    [Fact]
+    public async Task Vision_false_returns_typed_unsupported_without_http()
+    {
+        var handler = new ScriptedHandler(
+            [Encoding.UTF8.GetBytes("data: {\"choices\":[{\"delta\":{\"content\":\"no\"}}]}\n\n")]);
+        var model = Create(handler);
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(
+                    ModelRole.User,
+                    "see",
+                    [new ModelImageContent("image/png", [1, 2, 3], "x.png")])
+            ]);
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(request))
+        {
+            events.Add(item);
+        }
+
+        var failed = Assert.IsType<ModelFailed>(Assert.Single(events));
+        Assert.Equal(ProviderErrorCode.UnsupportedCapability, failed.Failure.Code);
+        Assert.Equal(0, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task Vision_true_maps_normalized_image_parts()
+    {
+        var handler = new ScriptedHandler(
+            [Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: [DONE]\n\n")]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Vision = true
+            });
+        var png = Convert.ToBase64String("img"u8.ToArray());
+        await foreach (var _ in model.GenerateAsync(
+                           new ModelRequest(
+                               Guid.NewGuid(),
+                               [
+                                   new ModelMessage(
+                                       ModelRole.User,
+                                       "see",
+                                       [
+                                           new ModelTextContent("see"),
+                                           new ModelImageContent("image/png", "img"u8.ToArray(), "x.png")
+                                       ])
+                               ])))
+        {
+        }
+
+        Assert.Equal(1, handler.PostCount);
+        Assert.Contains("image_url", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains($"data:image/png;base64,{png}", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenAI.Chat", handler.LastBody, StringComparison.Ordinal);
+    }
+
     private static async Task<List<ModelGenerationEvent>> CollectAsync(HttpMessageHandler handler)
         => await CollectAsync(Create(handler));
 
@@ -405,7 +470,7 @@ public sealed class LiveProviderFactAttribute : FactAttribute
     }
 }
 
-internal sealed class ScriptedHandler : HttpMessageHandler
+internal class ScriptedHandler : HttpMessageHandler
 {
     private readonly IReadOnlyList<byte[]> _chunks;
     private readonly bool _holdOpen;
@@ -418,6 +483,8 @@ internal sealed class ScriptedHandler : HttpMessageHandler
 
     public int PostCount { get; private set; }
 
+    public string LastBody { get; private set; } = "";
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         PostCount++;
@@ -426,6 +493,7 @@ internal sealed class ScriptedHandler : HttpMessageHandler
         Assert.Equal("test-key", request.Headers.Authorization?.Parameter);
         Assert.Contains("/chat/completions", request.RequestUri!.AbsolutePath, StringComparison.Ordinal);
         var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+        LastBody = body;
         Assert.Contains("\"stream\":true", body.Replace(" ", string.Empty), StringComparison.Ordinal);
         Assert.DoesNotContain("test-key", body, StringComparison.Ordinal);
         var stream = new ChunkedStream(_chunks, _holdOpen, cancellationToken);

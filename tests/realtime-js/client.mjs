@@ -9,6 +9,7 @@ if (!base || !scenario) {
 }
 
 const events = [];
+let ownerToken = "";
 
 function uuid() {
   return crypto.randomUUID();
@@ -32,14 +33,32 @@ function command(sessionId, sequence, type, payload, extra = {}) {
   if (extra.causationId !== undefined) {
     body.causationId = extra.causationId;
   }
+  if (type === "session.attach") {
+    body.payload = { ...payload, ownerCapability: ownerToken };
+  }
   return body;
 }
 
+async function ensureOwner() {
+  if (ownerToken) {
+    return ownerToken;
+  }
+  const response = await fetch(`${base}/api/v1/local/owner-capability`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`owner capability failed ${response.status}`);
+  }
+  const body = await response.json();
+  ownerToken = body.token;
+  return ownerToken;
+}
+
 async function connect() {
+  await ensureOwner();
   const connection = new HubConnectionBuilder()
     .withUrl(`${base}/hubs/session`, {
       skipNegotiation: true,
-      transport: HttpTransportType.WebSockets
+      transport: HttpTransportType.WebSockets,
+      headers: { "X-AgentCore-Owner-Capability": ownerToken }
     })
     .withHubProtocol(new MessagePackHubProtocol())
     .build();
@@ -49,6 +68,7 @@ async function connect() {
 }
 
 async function createSession() {
+  await ensureOwner();
   const response = await fetch(`${base}/api/v1/sessions`, {
     method: "POST",
     headers: { "content-type": "application/json" },

@@ -1,3 +1,4 @@
+using AgentCore.Api;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
@@ -53,6 +54,7 @@ var observability = builder.Configuration.GetSection("Observability").Get<Observ
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
+builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>
 {
@@ -86,6 +88,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHub<SessionHub>("/hubs/session");
+SessionCatalogEndpoints.Map(app);
+AttachmentEndpoints.Map(app);
+WorkspaceEndpoints.Map(app);
+ArtifactEndpoints.Map(app);
 
 app.MapGet("/health", (IConfiguration configuration) =>
         Results.Json(new HealthResponse(
@@ -265,6 +271,16 @@ static void MapSpaFallback(WebApplication app, string? index)
 static async Task InitializePersistenceAsync(IServiceProvider services)
 {
     var persistence = services.GetRequiredService<PersistenceOptions>();
+    if (!string.IsNullOrWhiteSpace(persistence.WorkspaceRoot))
+    {
+        Directory.CreateDirectory(persistence.WorkspaceRoot);
+    }
+
+    if (!string.IsNullOrWhiteSpace(persistence.ArtifactRoot))
+    {
+        Directory.CreateDirectory(persistence.ArtifactRoot);
+    }
+
     if (!string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
     {
         return;
@@ -280,6 +296,12 @@ static async Task InitializePersistenceAsync(IServiceProvider services)
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
+        }
+
+        var attachments = persistence.AttachmentRoot;
+        if (!string.IsNullOrWhiteSpace(attachments))
+        {
+            Directory.CreateDirectory(attachments);
         }
     }
 

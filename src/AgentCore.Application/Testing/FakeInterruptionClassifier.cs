@@ -51,6 +51,10 @@ public sealed class RecordingAgentBrain(IAgentBrain inner) : IAgentBrain
 
     public AgentContext? LastContext { get; private set; }
 
+    public IReadOnlyList<AgentContext> Contexts => _contexts;
+
+    private readonly List<AgentContext> _contexts = [];
+
     public async ValueTask<AgentDecision> DecideAsync(
         AgentContext context,
         Guid responseId,
@@ -58,6 +62,7 @@ public sealed class RecordingAgentBrain(IAgentBrain inner) : IAgentBrain
     {
         Calls++;
         LastContext = context;
+        _contexts.Add(context);
         _triggers.Add(context.Trigger.Kind);
         return await inner.DecideAsync(context, responseId, cancellationToken).ConfigureAwait(false);
     }

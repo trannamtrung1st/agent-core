@@ -81,5 +81,15 @@ A created session is inactive until attached. One connection owns a session at a
 - Initiative policy gates every proactive response; StaySilent is valid.
 - Synthetic mode requires no network or AI credentials; the entire composed pipeline is testable offline without a microphone, speaker or GPU.
 - One response is live per session, but historical responses and an in-progress user utterance may coexist.
-- Conversation continuity is per Session, independent of the current text/voice mode. Delivery metadata on each assistant entry selects heard vs received prefix for future context; unseen/unheard tails never enter the model.
+- Conversation continuity is per Session, independent of the current text/voice mode. Delivery metadata on each assistant entry selects heard vs received prefix for future context; unseen/unheard tails never enter the model. Phase C stores an optional response envelope (speech + blocks) with those receipts.
 - No mutable state, transient audio, provider handles or CancellationTokenSource is stored in an Agent Definition.
+
+## Post-MVP planned until verified
+
+Accepted target, not current shipped evidence. See [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified).
+
+- Durable **Session** (catalog row, pin, history, workspace ownership, attachments/artifacts) versus ephemeral **SessionRuntime** (mailbox, epoch, providers, voice). Reopen allocates a new epoch that rejects prior-epoch work.
+- One writable workspace per SessionId; physical directory is lazy (`data/workspaces/{sessionId}`). Domain/Contracts never receive host paths. Archive, reopen, unload, and deactivate keep the same workspace; durable delete removes it.
+- Trusted-local owner capability authorizes catalog, lifecycle, and hub attach; SessionId is not a credential. Connection-lease `attachmentId` is not a user-uploaded Attachment.
+- Attachments are session-owned immutable blobs (`IAttachmentStore`) with off-mailbox processors (`IAttachmentProcessor`); Artifacts are a distinct generated/materialized type (`IArtifactStore`). Runtime deactivation, archive, and durable delete remain three operations.
+- Container sandbox sits behind the same execution capability boundary (Phase H). Phase I WorkItems remain conditional.

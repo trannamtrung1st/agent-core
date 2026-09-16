@@ -17,7 +17,10 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
-                ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents")
+                ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
+                ["Persistence:WorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-ws", Guid.NewGuid().ToString("N")),
+                ["Persistence:TemplateRoot"] = Path.Combine(repo, "agents", "templates"),
+                ["Persistence:ArtifactRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"))
             });
         });
     }

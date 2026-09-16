@@ -1,4 +1,5 @@
 using System.Globalization;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
@@ -32,6 +33,35 @@ public static class HttpMapping
             activeResponseId?.ToString(),
             ProtocolVersion);
 
+    public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
+        new(
+            snapshot.SessionId.ToString(),
+            snapshot.Title,
+            snapshot.Definition.Id,
+            snapshot.Definition.Version,
+            ToStatus(snapshot.Status),
+            snapshot.ArchivedAt is not null,
+            snapshot.Status == SessionStatus.Ended,
+            snapshot.WorkspaceOwned,
+            snapshot.RuntimeEpoch,
+            snapshot.Revision,
+            Format(snapshot.CreatedAt),
+            Format(snapshot.UpdatedAt));
+
+    public static AttachmentResponse ToAttachment(AgentCore.Application.Ports.AttachmentRecord record) =>
+        new(
+            record.AttachmentId.ToString(),
+            record.SessionId.ToString(),
+            record.DisplayName,
+            record.ContentType,
+            record.ByteSize,
+            record.Sha256Hex,
+            record.State == AttachmentState.Bound ? "bound" : "pending",
+            record.Readable,
+            record.EntryId?.ToString(),
+            Format(record.CreatedAt),
+            record.ExpiresAt is { } expires ? Format(expires) : null);
+
     public static AgentDescriptorResponse ToAgent(PublicAgentDescriptor descriptor) =>
         new(
             descriptor.Id,
@@ -40,6 +70,30 @@ public static class HttpMapping
             descriptor.Role,
             descriptor.Description,
             descriptor.VoiceAvailable);
+
+    public static KnowledgeDocumentResponse ToKnowledge(KnowledgeDocument document) =>
+        new(
+            document.Identity,
+            document.Title,
+            document.Citation,
+            document.Content,
+            document.SourceVersion,
+            Format(document.RetrievedAt));
+
+    public static WorkspaceNodeResponse ToWorkspaceNode(AgentCore.Application.Ports.WorkspaceNode node) =>
+        new(node.LogicalPath, node.Directory, node.ByteSize, node.Writable);
+
+    public static ArtifactResponse ToArtifact(AgentCore.Application.Ports.ArtifactRecord record) =>
+        new(
+            record.ArtifactId.ToString(),
+            record.SessionId.ToString(),
+            record.DisplayName,
+            record.ContentType,
+            record.ByteSize,
+            record.Sha256Hex,
+            record.SourceAttachmentId?.ToString(),
+            record.WorkspaceLogicalPath,
+            Format(record.CreatedAt));
 
     public static HistoryItemResponse ToHistoryItem(ConversationEntry entry)
     {
@@ -55,7 +109,14 @@ public static class HttpMapping
             ToMode(projected.DeliveryMode),
             projected.HeardTextEndExclusive,
             projected.ReceivedTextEndExclusive,
-            Format(projected.CreatedAt));
+            Format(projected.CreatedAt),
+            projected.Blocks.Select(block => new HistoryBlockResponse(
+                block.BlockId,
+                block.Kind,
+                block.Text,
+                block.FallbackText,
+                block.AttachmentId,
+                block.ArtifactId)).ToArray());
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

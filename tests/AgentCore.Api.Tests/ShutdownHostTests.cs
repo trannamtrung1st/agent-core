@@ -44,6 +44,7 @@ public sealed class ShutdownHostTests
                 {
                     options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();
@@ -92,6 +93,7 @@ public sealed class ShutdownHostTests
                 {
                     options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();

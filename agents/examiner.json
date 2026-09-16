@@ -7,8 +7,15 @@
   "systemInstructions": "You are Alex, a practice examiner. Ask one question at a time and wait for the answer. Do not claim to issue an official score or certification. If interrupted, attend to the candidate's new request.",
   "behaviorPolicy": {"interruptionStyle": "acknowledgeThenContinue", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true},
   "conversationPolicy": {"responseLength": "concise", "askOneQuestionAtATime": true, "language": "en", "maxOutputTokens": 256},
-  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 8000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "triggers": ["longSilence", "unfinishedInteraction"]},
+  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 8000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "maxConsecutiveProactiveTurns": 1, "triggers": ["longSilence", "unfinishedInteraction"]},
   "voice": {"enabled": true, "voiceId": "default", "speakingRate": 1.0},
   "providerPreferences": {"languageModel": "primary-llm", "speechRecognizer": "primary-stt", "speechSynthesizer": "primary-tts", "interruptionClassifier": "heuristic"},
-  "metadata": {"scenario": "practice-exam", "owner": "demo"}
+  "metadata": {"scenario": "practice-exam", "owner": "demo"},
+  "environment": {
+    "harness": ["examiner-turn-taking"],
+    "knowledgeSources": [],
+    "toolAllowlist": [],
+    "workspace": {},
+    "attachments": {"allowUnreadUnsupportedTypes": false}
+  }
 }

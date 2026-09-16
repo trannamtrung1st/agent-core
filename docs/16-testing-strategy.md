@@ -81,7 +81,7 @@ WebApplicationFactory covers HTTP and in-process integration; additionally start
 
 ## Frontend and end-to-end
 
-Vitest: Zustand reducers, supersession guards, sample-offset accounting, segmentation/resampling math and queue bounds. React Testing Library: user interactions/statuses, keyboard access, safe errors, retained drafts. Playwright: synthetic text, voice fixture, stop/late audio, mute, disconnect/reconnect and history. Use deterministic scenario fixtures and fake media devices; test actual AudioWorklet execution where supported. Assertions observe sample counters and flush acknowledgements, not unreliable “did sound play” timing guesses.
+Vitest: Zustand reducers, supersession guards, sample-offset accounting, segmentation/resampling math and queue bounds. React Testing Library: user interactions/statuses, keyboard access, safe errors, retained drafts. Playwright: synthetic text, attachment picker bind, voice fixture, stop/late audio, mute, disconnect/reconnect and history. Use deterministic scenario fixtures and fake media devices; test actual AudioWorklet execution where supported. Assertions observe sample counters and flush acknowledgements, not unreliable “did sound play” timing guesses.
 
 Opt-in real-provider smoke tests require explicit operator credentials, an explicit opt-in flag, and small bounded requests. They are excluded from default local `dotnet test` / pnpm / Playwright loops. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency and may be deferred without `OPENAI_API_KEY`. Unit gates remain deterministic and do not require real-model phrasing to match.
 
@@ -96,3 +96,7 @@ early milestones: dotnet build/test; frontend install/build/unit tests
 after browser realtime exists: synthetic browser integration
 after synthetic voice exists: synthetic Playwright voice scenarios
 ```
+
+## Post-MVP planned until verified
+
+Accepted additional gates: trusted-local capability fail-closed; catalog pagination/Ended rows; attachment store upload/bind/TTL/delete races; composer HTTP picker bind; attachment processors (text/PDF/images), extraction cache, fail-closed limits, and honest Vision mapping; independent speech/display receipts, envelope parse/fallback, fixture artifact refs, reconnect hidden tails; sanitized Markdown/reference rendering and ready-snapshot block replay; FakeTimeProvider repeated Speak/StaySilent/RequestDeactivate, definition-owned caps (including zero-cap and at-cap deactivate), silent-evaluation bounds, pending-upload/hold, and deactivate ≠ archive/delete; Support/Compliance/examiner fixtures with distinct consecutive caps, pinned-version stability, runtime tool/path denial, and cited knowledge retrieve; workspace isolation (traversal/symlink/other-session/secret denial), lazy provision, lifecycle preserve vs durable delete, and 250 MiB concurrent write cap; artifact store isolation (blobs outside SQLite, 50/250 MiB concurrent quotas, explicit materialize hash/provenance, capability fail-closed download). Still planned: tool deadlines; **real** container sandbox isolation. Default suites stay Synthetic/offline. Missing Docker blocks Phase H rather than substituting unit fakes.

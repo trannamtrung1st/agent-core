@@ -70,6 +70,7 @@ public sealed class SessionCapacityTests : IClassFixture<CapacityOneApiFactory>
                 {
                     options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, _factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();

@@ -21,7 +21,12 @@ public sealed record MailboxSaturatedReceived(EventContext Context) : SessionInp
 public sealed record UserTextReceived(
     EventContext Context,
     string Text,
-    TaskCompletionSource<bool>? Persisted = null) : SessionInput(Context);
+    TaskCompletionSource<bool>? Persisted = null,
+    IReadOnlyList<Guid>? AttachmentIds = null) : SessionInput(Context);
+
+public sealed record AttachmentsStagedReceived(
+    EventContext Context,
+    IReadOnlyList<Guid> AttachmentIds) : SessionInput(Context);
 
 public sealed record SpeechEvidenceReceived(
     EventContext Context,
@@ -38,6 +43,13 @@ public sealed record ClassifierReturned(
     Guid ResponseId,
     int Revision,
     InteractionDecision Decision) : SessionInput(Context);
+
+public sealed record AttachmentsProcessedReceived(
+    EventContext Context,
+    int TurnGeneration,
+    Guid ResponseId,
+    AgentTrigger Trigger,
+    IReadOnlyList<AttachmentProcessResult> Results) : SessionInput(Context);
 
 public sealed record BrainReturned(
     EventContext Context,
@@ -88,9 +100,14 @@ public sealed record ResponseReceiptReceived(
     EventContext Context,
     Guid ResponseId,
     int TextEndExclusive,
-    TaskCompletionSource<bool> Admitted) : SessionInput(Context);
+    TaskCompletionSource<bool> Admitted,
+    IReadOnlyList<string>? BlockIds = null) : SessionInput(Context);
 
 public sealed record EndSessionReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
+
+public sealed record DeactivateReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
+
+public sealed record InitiativeHoldReceived(EventContext Context, bool Held) : SessionInput(Context);
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
 
@@ -106,6 +123,14 @@ public sealed record PublicAgentDescriptor(
     string Description,
     bool VoiceAvailable);
 
+public sealed record PublicResponseBlock(
+    string BlockId,
+    string Kind,
+    string Text,
+    string FallbackText,
+    string? AttachmentId,
+    string? ArtifactId);
+
 public sealed record PublicHistoryEntry(
     Guid EntryId,
     long Sequence,
@@ -117,7 +142,8 @@ public sealed record PublicHistoryEntry(
     int HeardTextEndExclusive,
     int ReceivedTextEndExclusive,
     SessionMode DeliveryMode,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<PublicResponseBlock> Blocks);
 
 public sealed record SessionReadyProjection(
     SessionMode Mode,
@@ -140,6 +166,14 @@ public sealed record ResponseStartedOutput(Guid EntryId, long EntrySequence, str
 public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload;
 
 public sealed record TextCompletedOutput(int TextLength) : OutputPayload;
+
+public sealed record BlockUpsertOutput(
+    string BlockId,
+    string Kind,
+    string Text,
+    string FallbackText,
+    string? AttachmentId,
+    string? ArtifactId) : OutputPayload;
 
 public sealed record AudioFrameOutput(
     long FrameSequence,
@@ -203,8 +237,15 @@ public static class PublicHistory
         var text = entry.Role == ConversationRole.Assistant
             ? entry.Text[..Math.Min(entry.ReceivedTextEndExclusive, entry.Text.Length)]
             : entry.Text;
-        var heard = Math.Min(entry.HeardTextEndExclusive, text.Length);
+        var heardLimit = entry.Envelope?.SpeechText?.Length ?? text.Length;
+        var heard = Math.Min(entry.HeardTextEndExclusive, heardLimit);
         var received = Math.Min(entry.ReceivedTextEndExclusive, text.Length);
+        var blocks = entry.Role == ConversationRole.Assistant && entry.Envelope is { } envelope
+            ? envelope.Blocks
+                .Where(block => block.DisplayDelivered)
+                .Select(ToPublicBlock)
+                .ToArray()
+            : [];
         return new PublicHistoryEntry(
             entry.EntryId,
             entry.Sequence,
@@ -216,8 +257,24 @@ public static class PublicHistory
             heard,
             received,
             entry.DeliveryMode,
-            entry.CreatedAt);
+            entry.CreatedAt,
+            blocks);
     }
+
+    private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>
+        new(
+            block.BlockId,
+            block.Kind switch
+            {
+                ResponseBlockKind.Markdown => "markdown",
+                ResponseBlockKind.AttachmentReference => "attachment",
+                ResponseBlockKind.ArtifactReference => "artifact",
+                _ => "unknown"
+            },
+            string.IsNullOrEmpty(block.DisplayText) ? block.FallbackText : block.DisplayText,
+            block.FallbackText,
+            block.AttachmentId,
+            block.ArtifactId);
 
     public static PublicAgentDescriptor FromDefinition(AgentDefinition definition, bool voiceAvailable) =>
         new(

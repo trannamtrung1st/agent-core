@@ -21,7 +21,8 @@ public sealed record ConversationEntry(
     SessionMode DeliveryMode,
     int HeardTextEndExclusive,
     int ReceivedTextEndExclusive,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    ResponseEnvelope? Envelope = null);
 
 public sealed record UserProfile(
     Guid ProfileId,
@@ -60,6 +61,47 @@ public static class LocalUserProfile
     }
 }
 
+public static class SessionTitles
+{
+    public const string Default = "New chat";
+    public const int MaxLength = 200;
+
+    public static string FromUserText(string text)
+    {
+        var collapsed = string.Join(
+            ' ',
+            text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (collapsed.Length == 0)
+        {
+            return Default;
+        }
+
+        return collapsed.Length <= MaxLength ? collapsed : collapsed[..MaxLength].TrimEnd();
+    }
+
+    public static string FromAttachments(IReadOnlyList<string> displayNames, bool imageOnly)
+    {
+        if (displayNames.Count == 0)
+        {
+            return Default;
+        }
+
+        var first = AttachmentClassification.SanitizeDisplayName(displayNames[0]);
+        if (imageOnly && displayNames.Count > 1)
+        {
+            return "Image conversation";
+        }
+
+        if (displayNames.Count == 1)
+        {
+            return first;
+        }
+
+        var suffix = $"Files: {first} +{displayNames.Count - 1}";
+        return suffix.Length <= MaxLength ? suffix : suffix[..MaxLength].TrimEnd();
+    }
+}
+
 public sealed record SessionSnapshot(
     int SchemaVersion,
     Guid SessionId,
@@ -74,4 +116,9 @@ public sealed record SessionSnapshot(
     string? PendingTopic,
     Guid? ProfileId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string Title = SessionTitles.Default,
+    long RuntimeEpoch = 0,
+    bool WorkspaceOwned = true,
+    DateTimeOffset? ArchivedAt = null,
+    DateTimeOffset? DurablyDeletedAt = null);

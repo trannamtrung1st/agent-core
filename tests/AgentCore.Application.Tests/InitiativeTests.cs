@@ -175,11 +175,253 @@ public sealed class InitiativeTests
         Assert.Null(runtime.Snapshot.PendingTopic);
     }
 
+    [Fact]
+    public async Task Repeated_idle_speaks_three_times_then_deactivates_at_cap()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 3, consecutiveCap: 3);
+        var brain = new ScriptedProactiveBrain(definition);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Need a hint?", "Still there?", "One more?", "Last call."]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello?");
+        await runtime.WaitUntilIdleAsync();
+        for (var i = 0; i < 3; i++)
+        {
+            if (i > 0)
+            {
+                time.Advance(TimeSpan.FromSeconds(5));
+                await runtime.WaitUntilMailboxDrainedAsync();
+            }
+
+            await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+            await runtime.WaitUntilIdleAsync();
+            Assert.Equal(i + 1, CountStarted(output, "LongSilence"));
+        }
+
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(3, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal(1, runtime.Snapshot.RuntimeEpoch);
+    }
+
+    [Fact]
+    public async Task Zero_cap_never_speaks_and_deactivates()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 1, consecutiveCap: 0);
+        await using var runtime = Create(output, new ScriptedLanguageModel(), time, new DefaultAgentBrain(new PromptContextBuilder()), definition);
+        await runtime.AttachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(0, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+    }
+
+    [Fact]
+    public async Task At_cap_denies_speak_and_request_deactivate_is_idempotent()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 1, consecutiveCap: 1);
+        var brain = new ScriptedProactiveBrain(definition);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Need a hint?", "Should not speak."]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello?");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        var epoch = runtime.Snapshot.RuntimeEpoch;
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.True(await runtime.RequestDeactivateAsync());
+        Assert.True(await runtime.RequestDeactivateAsync());
+        Assert.Equal(epoch + 1, runtime.Snapshot.RuntimeEpoch);
+        Assert.NotEmpty(runtime.Snapshot.Entries);
+    }
+
+    [Fact]
+    public async Task User_activity_resets_consecutive_cap()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 1, consecutiveCap: 1);
+        var brain = new ScriptedProactiveBrain(definition);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Need a hint?", "Here.", "Again?"]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello?");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        await runtime.SubmitUserTextAsync("I am back");
+        await runtime.WaitUntilIdleAsync();
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+    }
+
+    [Fact]
+    public async Task Silent_evaluation_cap_deactivates_always_stay_silent()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 3, consecutiveCap: 3, silentEvaluations: 2);
+        var brain = new StaySilentBrain();
+        await using var runtime = Create(output, new ScriptedLanguageModel(), time, brain, definition);
+        await runtime.AttachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(0, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+    }
+
+    [Fact]
+    public async Task Live_response_and_initiative_hold_block_idle_speak()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new GatedThenLiveModel();
+        var definition = RepeatPolicy(maxPerSilence: 3, consecutiveCap: 3);
+        var brain = new ScriptedProactiveBrain(definition);
+        await using var runtime = Create(output, model, time, brain, definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello?");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        var duringLive = CountStarted(output, "LongSilence");
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(duringLive, CountStarted(output, "LongSilence"));
+        model.Gate.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitInitiativeHoldAsync(true);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var calls = brain.Calls;
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(calls, brain.Calls);
+    }
+
+    [Fact]
+    public async Task Pending_upload_holds_idle_initiative()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var attachments = new InMemoryAttachmentStore(time);
+        var definition = RepeatPolicy(maxPerSilence: 3, consecutiveCap: 3);
+        var brain = new ScriptedProactiveBrain(definition);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Need a hint?"]),
+            time,
+            brain,
+            definition,
+            attachments: attachments);
+        await runtime.AttachAsync();
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "notes.txt",
+            "text/plain",
+            new MemoryStream("hi"u8.ToArray()),
+            false);
+        await runtime.StageAttachmentsAsync([uploaded.AttachmentId]);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var calls = brain.Calls;
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(calls, brain.Calls);
+        Assert.Equal(0, CountStarted(output, "LongSilence"));
+    }
+
+    [Fact]
+    public async Task Environment_speak_is_independent_of_silence_cap()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = SampleDefinitions.Support with
+        {
+            InitiativePolicy = new InitiativePolicy(
+                true,
+                10000,
+                5000,
+                1,
+                ["longSilence", "environmentUpdate", "unfinishedInteraction"],
+                MaxConsecutiveProactiveTurns: 1)
+        };
+        var brain = new ScriptedProactiveBrain(definition);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Need a hint?", "Order moved."]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello?");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        await runtime.SubmitEnvironmentAsync(
+            SyntheticEnvironmentDriver.OrderShipped(Guid.Parse("019944af-0000-7000-8000-0000000000aa"), "D-9"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "EnvironmentUpdate"));
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+    }
+
     private static int CountStarted(CapturingSessionOutput output, string trigger) =>
         output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == trigger);
 
     private static FakeTimeProvider Clock() =>
         new(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+
+    private static AgentDefinition RepeatPolicy(int maxPerSilence, int consecutiveCap, int? silentEvaluations = null) =>
+        SampleDefinitions.Examiner with
+        {
+            InitiativePolicy = new InitiativePolicy(
+                true,
+                8000,
+                5000,
+                maxPerSilence,
+                ["longSilence"],
+                MaxConsecutiveProactiveTurns: consecutiveCap,
+                MaxSilentEvaluations: silentEvaluations)
+        };
 
     private static SessionRuntime Create(
         ISessionOutput output,
@@ -187,7 +429,8 @@ public sealed class InitiativeTests
         FakeTimeProvider time,
         IAgentBrain brain,
         AgentDefinition? definition = null,
-        IInterruptionClassifier? classifier = null)
+        IInterruptionClassifier? classifier = null,
+        IAttachmentStore? attachments = null)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
@@ -219,7 +462,69 @@ public sealed class InitiativeTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            classifier);
+            classifier,
+            attachments: attachments);
+    }
+
+    private sealed class StaySilentBrain : IAgentBrain
+    {
+        public ValueTask<AgentDecision> DecideAsync(
+            AgentContext context,
+            Guid responseId,
+            CancellationToken cancellationToken = default)
+        {
+            if (context.Trigger.Kind == TriggerKind.UserTurn)
+            {
+                return ValueTask.FromResult<AgentDecision>(new Speak(new PromptContextBuilder().Build(context, responseId)));
+            }
+
+            if (context.SilentEvaluations >= context.Definition.InitiativePolicy.SilentEvaluationCap
+                || context.InactivityExceeded
+                || context.Definition.InitiativePolicy.ConsecutiveCap == 0)
+            {
+                return ValueTask.FromResult<AgentDecision>(new RequestDeactivate("Silent bound."));
+            }
+
+            return ValueTask.FromResult<AgentDecision>(new StaySilent("scripted"));
+        }
+    }
+
+    private sealed class ScriptedProactiveBrain(AgentDefinition definition) : IAgentBrain
+    {
+        public int Calls { get; private set; }
+
+        public ValueTask<AgentDecision> DecideAsync(
+            AgentContext context,
+            Guid responseId,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            var builder = new PromptContextBuilder();
+            if (context.Trigger.Kind == TriggerKind.UserTurn)
+            {
+                return ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId)));
+            }
+
+            if (context.Trigger.Kind == TriggerKind.LongSilence)
+            {
+                if (definition.InitiativePolicy.ConsecutiveCap == 0
+                    || context.ConsecutiveProactiveSpeaks >= definition.InitiativePolicy.ConsecutiveCap
+                    || context.SilentEvaluations >= definition.InitiativePolicy.SilentEvaluationCap
+                    || context.InactivityExceeded)
+                {
+                    return ValueTask.FromResult<AgentDecision>(new RequestDeactivate("Cap reached."));
+                }
+
+                return ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId)));
+            }
+
+            if (context.Trigger.Kind is TriggerKind.EnvironmentUpdate or TriggerKind.UnfinishedInteraction)
+            {
+                return ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId)));
+            }
+
+            return ValueTask.FromResult<AgentDecision>(new StaySilent("scripted"));
+        }
     }
 
     private sealed class GatedInitiativeBrain(IAgentBrain inner, TaskCompletionSource gate) : IAgentBrain

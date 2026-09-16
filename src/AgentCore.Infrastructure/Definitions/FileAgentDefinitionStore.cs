@@ -28,6 +28,12 @@ public sealed class FileAgentDefinitionStore : IAgentDefinitionStore
         var loaded = new Dictionary<(string, int), AgentDefinition>();
         foreach (var path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
         {
+            var relative = Path.GetRelativePath(directory, path);
+            if (relative.StartsWith("knowledge" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith("knowledge" + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
             var json = File.ReadAllText(path);
             AgentDefinition definition;
             try

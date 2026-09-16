@@ -29,6 +29,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     private readonly IHubContext<SessionHub> _hubs;
     private readonly TimeProvider _time;
     private readonly AgentCoreOptions _options;
+    private readonly IOwnerCapabilityService _capabilities;
     private readonly ConcurrentDictionary<Guid, Live> _live = new();
     private readonly ConcurrentDictionary<string, Guid> _connections = new();
     private readonly HashSet<Guid> _terminating = [];
@@ -46,13 +47,15 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         SessionRuntimeFactory factory,
         IHubContext<SessionHub> hubs,
         TimeProvider time,
-        IOptions<AgentCoreOptions> options)
+        IOptions<AgentCoreOptions> options,
+        IOwnerCapabilityService capabilities)
     {
         _sessions = sessions;
         _factory = factory;
         _hubs = hubs;
         _time = time;
         _options = options.Value;
+        _capabilities = capabilities;
     }
 
     public Guid? ActiveResponseId(Guid sessionId) =>
@@ -90,6 +93,11 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return ack;
         }
 
+        if (!await _capabilities.ValidateAsync(command.Payload?.OwnerCapability, cancellationToken).ConfigureAwait(false))
+        {
+            return Reject(command.EventId, "Session", "Unauthorized", "Owner capability is missing or invalid.", true, null);
+        }
+
         if (!string.IsNullOrEmpty(command.AttachmentId))
         {
             return Reject(command.EventId, "Protocol", "ProtocolError", "Attach must omit attachmentId.", true, null);
@@ -116,6 +124,11 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             if (snapshot.Status == SessionStatus.Ended)
             {
                 return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
+            }
+
+            if (snapshot.ArchivedAt is not null)
+            {
+                return Reject(command.EventId, "Session", "NotFound", "Session is archived.", true, null);
             }
 
             while (true)
@@ -319,6 +332,47 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         {
             return Reject(command.EventId, "Session", ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
         }
+    }
+
+    public bool HasLiveRuntime(Guid sessionId) => _live.ContainsKey(sessionId);
+
+    public Task StageAttachmentsAsync(Guid sessionId, IReadOnlyList<Guid> attachmentIds, CancellationToken cancellationToken)
+    {
+        if (!_live.TryGetValue(sessionId, out var live))
+        {
+            return Task.CompletedTask;
+        }
+
+        return live.Runtime.StageAttachmentsAsync(attachmentIds, cancellationToken);
+    }
+
+    public async Task CancelLiveRuntimeAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        if (!_live.TryGetValue(sessionId, out var live))
+        {
+            return;
+        }
+
+        var extracted = ExtractLive(sessionId, live.ConnectionId);
+        if (extracted is null)
+        {
+            return;
+        }
+
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromSeconds(5));
+        await ShutdownLiveAsync(extracted, sessionId, detachRuntime: true, joinDispatcher: true, budget.Token)
+            .ConfigureAwait(false);
+    }
+
+    public async Task DeactivateAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        if (_live.TryGetValue(sessionId, out var live))
+        {
+            await live.Runtime.RequestDeactivateAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await CancelLiveRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DetachAsync(string connectionId)
@@ -620,8 +674,15 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return envelope;
         }
 
-        var text = command.Payload?.Text;
-        if (string.IsNullOrWhiteSpace(text))
+        var text = command.Payload?.Text ?? "";
+        var attachmentIds = ParseAttachmentIds(command.Payload?.AttachmentIds, command.EventId);
+        if (attachmentIds is { Accepted: false })
+        {
+            return attachmentIds.Reject!;
+        }
+
+        var ids = attachmentIds!.Ids;
+        if (string.IsNullOrWhiteSpace(text) && ids.Count == 0)
         {
             return Reject(command.EventId, "Validation", "ValidationError", "text is required.", false, null);
         }
@@ -640,7 +701,11 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
             try
             {
-                var persisted = await live.Runtime.SubmitPersistedUserTextAsync(text, sourceEventId, cancellationToken)
+                var persisted = await live.Runtime.SubmitPersistedUserTextAsync(
+                        text,
+                        sourceEventId,
+                        cancellationToken,
+                        ids)
                     .ConfigureAwait(false);
                 if (persisted is null)
                 {
@@ -928,7 +993,11 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
         return await AdmitControlAsync(connectionId, command, async live =>
         {
-            var admitted = await live.Runtime.SubmitReceiptAsync(responseId, payload.TextEndExclusive).ConfigureAwait(false);
+            var admitted = await live.Runtime.SubmitReceiptAsync(
+                responseId,
+                payload.TextEndExclusive,
+                blockIds: payload.BlockIds)
+                .ConfigureAwait(false);
             if (admitted is null)
             {
                 return Reject(command.EventId, "Transport", "Backpressure", "The session mailbox is full.", false, 1000);
@@ -1279,6 +1348,48 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         return $"{command.Type}|{command.ResponseId}|{json}";
     }
 
+    private readonly record struct ParsedAttachments(bool Accepted, IReadOnlyList<Guid> Ids, CommandAck? Reject);
+
+    private ParsedAttachments ParseAttachmentIds(string[]? raw, string eventId)
+    {
+        if (raw is null || raw.Length == 0)
+        {
+            return new ParsedAttachments(true, [], null);
+        }
+
+        if (raw.Length > AttachmentLimits.MaxPerMessage)
+        {
+            return new ParsedAttachments(
+                false,
+                [],
+                Reject(eventId, "Validation", "ValidationError", "A message may include at most 10 attachments.", false, null));
+        }
+
+        var ids = new List<Guid>(raw.Length);
+        foreach (var value in raw)
+        {
+            if (!Guid.TryParse(value, out var id))
+            {
+                return new ParsedAttachments(
+                    false,
+                    [],
+                    Reject(eventId, "Validation", "ValidationError", "attachmentIds must be UUIDs.", false, null));
+            }
+
+            ids.Add(id);
+        }
+
+        if (ids.Distinct().Count() != ids.Count)
+        {
+            return new ParsedAttachments(
+                false,
+                [],
+                Reject(eventId, "Validation", "ValidationError", "Attachment ids must be unique.", false, null));
+        }
+
+        return new ParsedAttachments(true, ids, null);
+    }
+
     private static CommandAck Accept(string eventId) => new() { EventId = eventId, Accepted = true };
 
     private static CommandAck Reject(string eventId, string category, string code, string message, bool fatal, int? retry) =>
@@ -1525,6 +1636,15 @@ public static class SessionEventMapper
             {
                 ["textLength"] = completed.TextLength
             }),
+            BlockUpsertOutput block => ("agent.block.upsert", new Dictionary<string, object?>
+            {
+                ["blockId"] = block.BlockId,
+                ["kind"] = block.Kind,
+                ["text"] = block.Text,
+                ["fallbackText"] = block.FallbackText,
+                ["attachmentId"] = block.AttachmentId,
+                ["artifactId"] = block.ArtifactId
+            }),
             ResponseCompletedOutput terminal when terminal.InterruptReason is { } reason =>
                 ("agent.response.interrupted", new Dictionary<string, object?>
                 {
@@ -1617,7 +1737,16 @@ public static class SessionEventMapper
             ["deliveryMode"] = HttpMapping.ToMode(entry.DeliveryMode),
             ["heardTextEndExclusive"] = entry.HeardTextEndExclusive,
             ["receivedTextEndExclusive"] = entry.ReceivedTextEndExclusive,
-            ["createdAt"] = entry.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)
+            ["createdAt"] = entry.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            ["blocks"] = entry.Blocks.Select(block => (object)new Dictionary<string, object?>
+            {
+                ["blockId"] = block.BlockId,
+                ["kind"] = block.Kind,
+                ["text"] = block.Text,
+                ["fallbackText"] = block.FallbackText,
+                ["attachmentId"] = block.AttachmentId,
+                ["artifactId"] = block.ArtifactId
+            }).ToArray()
         }).ToArray();
 
         return new Dictionary<string, object?>
@@ -1689,6 +1818,7 @@ public static class SessionEventMapper
 
     private static string ToOutput(string value) => value switch
     {
+        nameof(OutputActivity.ProcessingAttachments) => "processingAttachments",
         nameof(OutputActivity.WaitingForAgent) => "waitingForAgent",
         nameof(OutputActivity.AgentGenerating) => "agentGenerating",
         nameof(OutputActivity.AgentSpeaking) => "agentSpeaking",

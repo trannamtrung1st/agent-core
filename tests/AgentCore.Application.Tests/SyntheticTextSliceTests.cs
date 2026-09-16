@@ -32,6 +32,7 @@ public sealed class SyntheticTextSliceTests
         Assert.False(output.Terminals[0].Failed);
         Assert.Contains(output.Items, item => item.Payload is TextCompletedOutput);
         Assert.Equal(1, output.Items.Count(item => item.Payload is ResponseCompletedOutput));
+        Assert.Equal("Hello", runtime.Snapshot.Title);
     }
 
     [Fact]

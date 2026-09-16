@@ -156,6 +156,10 @@ On interruption, persist full generated text internally, receivedTextEndExclusiv
 
 When `playback.stop` arrives, tombstone the response before flushing main-thread and worklet queues. The worklet must check response identity itself so posted buffers cannot race a flush. `playback.stopped` confirms local flush for diagnostics; after supersession its late offset is ignored for state/history/context, just like late started/progress/completed. Freeze the last validated pre-supersession Spoken Until; conservatively undercounting is preferable to changing R2 context from stale feedback. [Controller](05-interaction-controller.md#barge-in-and-races) owns the interruption sequence.
 
+## Post-MVP
+
+Observed: optional independent `reply.speech` uses speech-coordinate playback receipts; display receipts stay on `reply.text` and blocks. Do not apply speech offsets to display text. TTS uses text only when speech is absent, once. Binary file upload remains HTTP, never the PCM path. Runtime deactivation tears down voice resources; reopen uses a fresh epoch and streamId.
+
 ## Capability degradation
 
 STT and TTS are independently selected. Streaming hosted STT is OpenAI realtime transcription via `OpenAiSpeechRecognizer`; it is speech-to-text only. Non-streaming batch STT (`OpenAICompatibleBatch`) transcribes at utterance end with **no partials**; barge-in uses `speechAndFinal` or configured `speechActivity`. Do not pretend batch recognition provides streaming semantics. Non-streaming TTS buffers a phrase before normalized PCM output; latency increases. Missing timing marks use the conservative completed-segment credit above, never proportional duration. Missing cancellation support still invokes local supersession and discards provider results. Voice setup fails recoverably with `VoiceUnavailable` if format conversion or a required audio direction is unsupported; the same session remains available in text mode. Native realtime speech-to-speech is a future optional optimization only: no MVP adapter, routing branch or milestone implements it. Hosted, hybrid and local STT/TTS remain the same composed pipeline.

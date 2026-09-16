@@ -86,6 +86,78 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, Next.js or large component framework. No autonomous tools/platform, distributed event bus or generic repository framework. No extra hosted mock or third-party test-only inference service. Reconsider only when actual requirements justify the cost.
 
+## Post-MVP planned until verified
+
+The following accepted target decisions are **planned until verified**. They do not replace historical MVP acceptance and are not evidence of current shipped behavior. Phase implementation later records observed contracts in the same owners and removes this planned label. Do not invent a second numbered specification series.
+
+### Decision: trusted-local owner capability (R1)
+
+**Decision:** One reusable **trusted-local owner capability** authorizes session catalog, lifecycle, hub attach, upload, bind, artifact access, workspace execution-view, and content retrieval. `SessionId` identifies the resource; it is not a credential. This is not tenant isolation, OAuth, or public multi-user hosting. Historical MVP still excludes those.
+
+**Contract:**
+
+- Obtain: `POST /api/v1/local/owner-capability` succeeds only for a trusted-local caller (loopback bind of the API). Response is an opaque token (not a SessionId) plus expiry metadata.
+- Persist: hash the token in SQLite as a single local-owner grant so **API process restart** can still validate a restored token. The browser stores the token in `localStorage` (`agentcore.ownerCapability`) and restores it on reload; if missing, revoked, or hash-mismatch, re-obtain on loopback and fail closed.
+- Present: HTTP header `X-AgentCore-Owner-Capability`. Hub `session.attach` requires the same token (capability field on the attach command, not the connection-lease `attachmentId`).
+- Fail closed: unauthenticated → 401; wrong-owner, revoked, or cross-session → 403 or a uniform 404 that does **not** leak other sessions' existence. Deleted and archived sessions deny upload/bind/content without enumerating foreign ids. Safe errors omit other sessions' titles and ids.
+- Tests: unauthenticated, wrong token, revoked, deleted, archived, cross-session, reload restore, API process restart restore.
+
+Hub **connection lease** (`attachmentId` on SignalR commands) remains a per-connection protocol lease. It is not a user-uploaded **Attachment**. User-uploaded files use `AttachmentId` on HTTP upload/bind/content routes only.
+
+### Decision: independent speech and display receipts (R2)
+
+**Decision:** One parent `ResponseId` owns `reply.text`, optional `reply.speech`, Markdown, and attachment/artifact reference blocks. Speech-coordinate playback progress, display receipts, and block visibility/delivery persist atomically with response status.
+
+**Contract:**
+
+- Display receipts and speech-coordinate consumed samples are independent. Do not apply speech offsets to display text.
+- Heard/voice context uses conservative speech receipts only.
+- When `reply.speech` is absent, TTS synthesizes `reply.text` once. A later speech field on the same response must not duplicate TTS.
+- Disconnect before render leaves display, speech, and block receipts undelivered; reconnect must not treat unseen content as shown.
+- Late receipts/blocks after supersession or disconnect are rejected. Unknown blocks degrade to a safe fallback. Artifact-reference authorization in Phase C uses fixtures, not generated artifacts.
+
+### Decision: bind and catalog mutations use runtime persistence order (R3)
+
+**Decision:** Accepted user messages and attachment binds share the Session Runtime mailbox revision stream: stable command/entry identity, idempotent retries, all-or-nothing validation, and a race-safe pending-to-bound claim. Catalog rename/archive/unarchive/versioned-delete participate in the same revision ordering so a later snapshot cannot resurrect stale titles, archive flags, or deleted rows.
+
+**Failure:** lost acknowledgement retries, duplicate command ids, failed commits, bind-versus-TTL, bind-versus-delete, concurrent quota reservation, and crash recovery must leave no duplicate entries and must not delete a just-bound blob.
+
+### Decision: v1 terminal-end stays; durable delete is additive (R4)
+
+**Decision:** `DELETE /api/v1/sessions/{id}` remains irreversible terminal-end. Existing Ended rows stay labeled Ended in the catalog; they are not archived, not reopenable, and not physically deleted by v1 DELETE. Versioned durable deletion and runtime deactivation are additive routes. Archive preserves data and rejects activation/messages/uploads until unarchive. Deactivation is not archive and is not deletion. Migrations backfill workspace-ownership keyed by SessionId, preserve pins/revisions/receipts, and keep Ended irreversible.
+
+### Decision: finite silent initiative and at-cap deactivation (R5)
+
+**Decision:** `MaxConsecutiveProactiveTurns` is read from the pinned Agent Definition (documented default only when omitted). Visible Speak increments the counter once; StaySilent consumes cooldown without increment; user activity resets to 0. Finite silent-evaluation/backoff and inactivity bounds stop unpaid and paid silent reasoning independently of the visible-speech cap. After a non-zero cap is reached, further Speak is denied and `RequestDeactivate` remains permitted. A zero-cap/passive role never Speaks and still allows eventual `RequestDeactivate`. Environment events remain separately governable. No overlapping Speak. Stale timers/decisions/receipts are rejected. **Observed** in SessionRuntime + FakeTimeProvider tests and `POST /api/v2/sessions/{id}/deactivate`.
+
+### Decision: A–H mandatory; Phase I conditional; concrete sandbox (R6)
+
+**Decision:** Phases A–H are mandatory, including rename and archive/unarchive. Phase H is a concrete container sandbox behind the execution capability boundary (not unit fakes alone). Phase I WorkItems are implemented only if a concrete accepted Support/Compliance/sandbox workflow must survive runtime deactivation; otherwise record not-applicable with a future trigger. Broad process/shell stays disabled until H's sandbox capability.
+
+### Planned resource limits
+
+Unless a later item records a tested change:
+
+| Limit | Value |
+| --- | --- |
+| Attachments per message | 10 |
+| Attachment size | 25 MiB each |
+| Session attachment bytes | 250 MiB |
+| Pending upload TTL | 1 hour |
+| Decoded image pixels | 32 megapixels |
+| Workspace writes | 250 MiB |
+| Artifact size | 50 MiB each |
+| Session artifact bytes | 250 MiB |
+| Extraction output | 256 KiB |
+| Parser timeout | 10 s |
+| Parser memory | 256 MiB |
+| Tool steps | 12 max |
+| Per-tool timeout | 30 s |
+| Overall tool deadline | 120 s |
+| Tool output | 8 MiB |
+
+Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attachment, additive routes); [Persistence](15-persistence-and-configuration.md) (revision/bind/cleanup); [Controller](05-interaction-controller.md) (initiative/receipts); [Implementation Plan](18-implementation-plan.md) (phase gates).
+
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.

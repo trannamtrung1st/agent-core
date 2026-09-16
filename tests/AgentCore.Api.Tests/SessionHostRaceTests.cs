@@ -86,6 +86,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
                 {
                     options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, _factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();

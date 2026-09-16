@@ -34,7 +34,8 @@ public sealed record PublicAgentDescriptor(string Id, int Version, string Name,
 public sealed record PublicHistoryEntry(Guid EntryId, long Sequence,
     Guid? SourceEventId, ConversationRole Role, string Text, Guid? ResponseId,
     EntryStatus Status, int HeardTextEndExclusive, int ReceivedTextEndExclusive,
-    SessionMode DeliveryMode, DateTimeOffset CreatedAt);
+    SessionMode DeliveryMode, DateTimeOffset CreatedAt,
+    IReadOnlyList<PublicResponseBlock> Blocks);
 public sealed record SessionReadyProjection(
     SessionMode Mode, SessionMode? PendingMode, SessionStatus Status,
     PublicAgentDescriptor Agent, Guid? StreamId, AudioFormat? AudioFormat,
@@ -107,3 +108,7 @@ Synthetic environment input is a typed in-process fixture calling `IEnvironmentE
 Every operation captures epoch, responseId/utteranceId and logical generation before starting. A response can transition Live→Completed, Live→Failed or Live→Superseded exactly once. A terminal response cannot transition back. A Superseded Response cannot create new Speech Segments/TTS jobs. Late model text, audio, completions and browser playback events are discarded for state/history/context; diagnostic stop-latency recording never mutates the conversation. Cancellation requests are not terminal evidence by themselves; state is marked first. Late worker terminal events are consumed for cleanup but produce no new visible output. [Architecture](03-system-architecture.md#invariants) is the authoritative invariant list.
 
 Keep a bounded 500-event developer timeline per runtime without raw audio or conversation text by default. It is a diagnostic projection of events, not a broker or persistence requirement.
+
+## Post-MVP planned until verified
+
+Observed: catalog lifecycle; pending/bound attachment bind; off-mailbox extraction with `processingAttachments`; rich envelope parse (`[[speech:]]`, `[[md:]]`, `[[artifact:]]`, unknown fallback), `BlockUpsert` live visibility, independent display vs speech receipts (late receipts after supersession/disconnect do not revise the parent); StaySilent/Speak/RequestDeactivate with definition-owned consecutive/silence/silent-evaluation bounds and runtime deactivation (Paused, new epoch, not archive/delete); lazy session workspace provision with RO `/agent`/`/attachments` and RW `/workspace`; explicit attachment materialize into artifacts with preserved hash. Still planned: tool/sandbox results. Do not log raw attachment bytes.

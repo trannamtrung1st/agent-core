@@ -148,3 +148,7 @@ The audience should come away thinking:
 > This feels like talking to an agent that is present and listening, not sending prompts to a chatbot.
 
 That perception is the actual MVP objective.
+
+## Post-MVP planned until verified
+
+Accepted later demos (not current gates): durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen. Examiner MVP conversational demos above remain.

@@ -1,7 +1,23 @@
 import { create } from "zustand";
-import type { AgentDescriptor } from "../services/api";
+import type { AgentDescriptor, CatalogItem } from "../services/api";
+import type { PendingAttachment } from "../services/attachments";
 
 export type ConnectionStatus = "idle" | "connecting" | "ready" | "reconnecting" | "failed";
+
+export type HistoryAttachment = {
+  attachmentId: string;
+  displayName: string;
+  contentType: string;
+};
+
+export type HistoryBlock = {
+  blockId: string;
+  kind: string;
+  text: string;
+  fallbackText: string;
+  attachmentId: string | null;
+  artifactId: string | null;
+};
 
 export type HistoryEntry = {
   entryId: string;
@@ -15,6 +31,8 @@ export type HistoryEntry = {
   heardTextEndExclusive: number;
   receivedTextEndExclusive: number;
   createdAt: string;
+  attachments?: HistoryAttachment[];
+  blocks?: HistoryBlock[];
 };
 
 export type ServerEvent = {
@@ -50,6 +68,7 @@ export type SessionView = {
   streamId: string | null;
   muted: boolean;
   draft: string;
+  pendingAttachments: PendingAttachment[];
   error: string | null;
   errorFatal: boolean;
   errorHoldSequence: number;
@@ -76,6 +95,7 @@ export const emptySession = (): SessionView => ({
   streamId: null,
   muted: false,
   draft: "",
+  pendingAttachments: [],
   error: null,
   errorFatal: false,
   errorHoldSequence: 0,
@@ -109,7 +129,42 @@ function asHistory(raw: unknown): HistoryEntry[] {
       deliveryMode: asString(row.deliveryMode) === "voice" ? "voice" : "text",
       heardTextEndExclusive: asNumber(row.heardTextEndExclusive),
       receivedTextEndExclusive: asNumber(row.receivedTextEndExclusive),
-      createdAt: asString(row.createdAt)
+      createdAt: asString(row.createdAt),
+      attachments: asAttachments(row.attachments),
+      blocks: asBlocks(row.blocks)
+    };
+  });
+}
+
+function asBlocks(raw: unknown): HistoryBlock[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+
+  return raw.map((item) => {
+    const row = item as Record<string, unknown>;
+    return {
+      blockId: asString(row.blockId),
+      kind: asString(row.kind),
+      text: asString(row.text),
+      fallbackText: asString(row.fallbackText),
+      attachmentId: row.attachmentId == null ? null : asString(row.attachmentId),
+      artifactId: row.artifactId == null ? null : asString(row.artifactId)
+    };
+  });
+}
+
+function asAttachments(raw: unknown): HistoryAttachment[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+
+  return raw.map((item) => {
+    const row = item as Record<string, unknown>;
+    return {
+      attachmentId: asString(row.attachmentId),
+      displayName: asString(row.displayName),
+      contentType: asString(row.contentType)
     };
   });
 }
@@ -149,7 +204,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
     };
   }
 
-    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "playback.gain")) {
+    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain")) {
     return { ...state, lastServerSequence: event.sequence };
   }
 
@@ -225,15 +280,43 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
           const nextText = entry.text + text;
           return {
             ...entry,
-            text: nextText,
-            receivedTextEndExclusive: nextText.length,
-            heardTextEndExclusive: state.mode === "text" ? nextText.length : entry.heardTextEndExclusive
+            text: nextText
           };
         })
       };
     }
     case "agent.text.completed":
       return { ...state, lastServerSequence: event.sequence };
+    case "agent.block.upsert": {
+      if (!event.responseId || event.responseId !== state.liveResponseId) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      const block: HistoryBlock = {
+        blockId: asString(event.payload.blockId),
+        kind: asString(event.payload.kind),
+        text: asString(event.payload.text),
+        fallbackText: asString(event.payload.fallbackText),
+        attachmentId: event.payload.attachmentId == null ? null : asString(event.payload.attachmentId),
+        artifactId: event.payload.artifactId == null ? null : asString(event.payload.artifactId)
+      };
+      return {
+        ...state,
+        lastServerSequence: event.sequence,
+        entries: state.entries.map((entry) => {
+          if (entry.responseId !== event.responseId) {
+            return entry;
+          }
+
+          const blocks = entry.blocks ?? [];
+          if (blocks.some((item) => item.blockId === block.blockId)) {
+            return entry;
+          }
+
+          return { ...entry, blocks: [...blocks, block] };
+        })
+      };
+    }
     case "agent.response.interrupted":
     case "agent.response.completed": {
       const status = event.type === "agent.response.interrupted"
@@ -315,10 +398,26 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
 export type SessionStore = SessionView & {
   agents: AgentDescriptor[];
   selectedAgentId: string;
+  catalogItems: CatalogItem[];
+  catalogNextCursor: string | null;
+  catalogHasMore: boolean;
+  catalogIncludeArchived: boolean;
+  catalogCapabilityLost: boolean;
+  catalogError: string | null;
 };
+
+export const emptyCatalog = () => ({
+  catalogItems: [] as CatalogItem[],
+  catalogNextCursor: null as string | null,
+  catalogHasMore: false,
+  catalogIncludeArchived: false,
+  catalogCapabilityLost: false,
+  catalogError: null as string | null
+});
 
 export const useSessionStore = create<SessionStore>(() => ({
   ...emptySession(),
   agents: [],
-  selectedAgentId: "examiner"
+  selectedAgentId: "examiner",
+  ...emptyCatalog()
 }));

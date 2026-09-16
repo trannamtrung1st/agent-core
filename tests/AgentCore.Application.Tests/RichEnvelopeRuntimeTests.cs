@@ -1,0 +1,211 @@
+using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Application.Testing;
+using AgentCore.Domain.Conversation;
+using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.Synthetic;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+
+namespace AgentCore.Application.Tests;
+
+public sealed class RichEnvelopeRuntimeTests
+{
+    [Fact]
+    public async Task Display_receipt_does_not_mark_speech_heard_and_hides_undelivered_blocks()
+    {
+        var output = new CapturingSessionOutput();
+        var store = new InMemoryMemoryStore();
+        var model = new ScriptedLanguageModel(
+            ["Hello[[speech:Spoken hello]][[md:**Hi**]][[artifact:fixture-artifact-1]][[xyz:nope]]"]);
+        await using var runtime = Create(output, store, model);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("Hello", assistant.Text);
+        Assert.Equal("Spoken hello", assistant.Envelope!.SpeechText);
+        Assert.Equal(3, assistant.Envelope.Blocks.Count);
+        Assert.Contains(assistant.Envelope.Blocks, block => block.Kind == ResponseBlockKind.Unknown);
+        Assert.Equal(0, assistant.HeardTextEndExclusive);
+        Assert.Equal(0, assistant.ReceivedTextEndExclusive);
+        Assert.Empty(PublicHistory.FromEntry(assistant).Blocks);
+        Assert.Equal(string.Empty, PublicHistory.FromEntry(assistant).Text);
+
+        Assert.True(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("Hello", PublicHistory.FromEntry(assistant).Text);
+        Assert.Equal(0, assistant.HeardTextEndExclusive);
+        Assert.Empty(PublicHistory.FromEntry(assistant).Blocks);
+
+        var blockIds = assistant.Envelope!.Blocks.Select(block => block.BlockId).ToArray();
+        Assert.True(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length, blockIds: blockIds));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var publicEntry = PublicHistory.FromEntry(
+            runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant));
+        Assert.Equal(3, publicEntry.Blocks.Count);
+        Assert.Contains(publicEntry.Blocks, block => block.Kind == "artifact" && block.ArtifactId == "fixture-artifact-1");
+        Assert.Contains(publicEntry.Blocks, block => block.Kind == "unknown");
+    }
+
+    [Fact]
+    public async Task Unauthorized_artifact_and_unknown_blocks_fallback_without_exposing_id()
+    {
+        var output = new CapturingSessionOutput();
+        var model = new ScriptedLanguageModel(["See [[artifact:secret-id]]"]);
+        await using var runtime = Create(output, new InMemoryMemoryStore(), model);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var block = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Envelope!.Blocks.Single();
+        Assert.Equal(ResponseBlockKind.Unknown, block.Kind);
+        Assert.Null(block.ArtifactId);
+        Assert.Equal(ResponseEnvelopeParser.UnauthorizedArtifactFallback, block.FallbackText);
+    }
+
+    [Fact]
+    public async Task Disconnect_before_display_receipt_hides_generated_tail_on_reconnect()
+    {
+        var store = new InMemoryMemoryStore();
+        var first = new CapturingSessionOutput();
+        Guid sessionId;
+        await using (var runtime = Create(first, store, new ScriptedLanguageModel()))
+        {
+            await runtime.AttachAsync();
+            await runtime.SubmitUserTextAsync("Hello");
+            await runtime.WaitUntilIdleAsync();
+            sessionId = runtime.SessionId;
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var restoredOutput = new CapturingSessionOutput();
+        var loaded = (await store.LoadAsync(sessionId))!;
+        await using var restored = Create(restoredOutput, store, new ScriptedLanguageModel(), loaded);
+        await restored.AttachAsync();
+        await restored.WaitUntilMailboxDrainedAsync();
+        var ready = Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.Equal(string.Empty, ready.Ready.History.Last(entry => entry.Role == ConversationRole.Assistant).Text);
+    }
+
+    [Fact]
+    public async Task Late_speech_after_tts_lock_does_not_start_a_second_source()
+    {
+        var output = new CapturingSessionOutput();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new ScriptedLanguageModel(
+            ["There are three points. ", "[[speech:Different spoken line]]"],
+            releaseAfterFirstChunk: release);
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = Create(
+            output,
+            new InMemoryMemoryStore(),
+            model,
+            synthesizer: synthesizer,
+            voice: true);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
+        Assert.True(synthesizer.Texts.Count >= 1);
+        Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("Different spoken line", text, StringComparison.Ordinal));
+        release.TrySetResult();
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("Different spoken line", text, StringComparison.Ordinal));
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("There are three points. ", assistant.Text);
+        Assert.Equal("Different spoken line", assistant.Envelope!.SpeechText);
+    }
+
+    [Fact]
+    public async Task Late_receipt_after_supersession_is_ignored()
+    {
+        var output = new CapturingSessionOutput();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new ScriptedLanguageModel(
+            ["Hello from synthetic.", " more"],
+            releaseAfterFirstChunk: release);
+        await using var runtime = Create(output, new InMemoryMemoryStore(), model);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        var started = await output.WaitForAsync(item => item.Payload is ResponseStartedOutput);
+        var firstId = started.ResponseId!.Value;
+        await runtime.SubmitUserTextAsync("Next");
+        release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        var first = runtime.Snapshot.Entries.Single(entry => entry.ResponseId == firstId);
+        Assert.Equal(EntryStatus.Interrupted, first.Status);
+        Assert.True(await runtime.SubmitReceiptAsync(firstId, first.Text.Length));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(0, runtime.Snapshot.Entries.Single(entry => entry.ResponseId == firstId).ReceivedTextEndExclusive);
+    }
+
+    private static SessionRuntime Create(
+        ISessionOutput output,
+        InMemoryMemoryStore store,
+        ILanguageModel model,
+        SessionSnapshot? snapshot = null,
+        ISpeechSynthesizer? synthesizer = null,
+        bool voice = false)
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var now = time.GetUtcNow();
+        snapshot ??= new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            SampleDefinitions.Examiner,
+            voice ? SessionMode.Text : SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            LocalUserProfile.Id,
+            now,
+            now);
+        if (store.LoadAsync(snapshot.SessionId).AsTask().GetAwaiter().GetResult() is null)
+        {
+            store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        }
+
+        return new SessionRuntime(
+            snapshot,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            output,
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance,
+            recognizer: synthesizer is null ? null : new SyntheticSpeechRecognizer(),
+            synthesizer: synthesizer);
+    }
+
+    private sealed class RecordingSynthesizer : ISpeechSynthesizer
+    {
+        private readonly SyntheticSpeechSynthesizer _inner = new();
+        public List<string> Texts { get; } = [];
+        public SynthesisCapabilities Capabilities => _inner.Capabilities;
+
+        public IAsyncEnumerable<SpeechSynthesisEvent> SynthesizeAsync(
+            SpeechRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Texts.Add(request.Text);
+            return _inner.SynthesizeAsync(request, cancellationToken);
+        }
+    }
+}

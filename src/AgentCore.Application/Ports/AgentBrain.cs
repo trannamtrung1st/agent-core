@@ -15,13 +15,21 @@ public sealed record AgentContext(
     string? PendingTopic,
     bool HelpOfferedDuringSilence,
     string? InterruptedHeardText,
-    AgentTrigger Trigger);
+    AgentTrigger Trigger,
+    IReadOnlyList<AttachmentProcessResult>? AttachmentContents = null,
+    int ConsecutiveProactiveSpeaks = 0,
+    int SilentEvaluations = 0,
+    int SpeaksThisSilencePeriod = 0,
+    bool InitiativeHeld = false,
+    bool InactivityExceeded = false);
 
 public abstract record AgentDecision;
 
 public sealed record StaySilent(string Reason) : AgentDecision;
 
 public sealed record Speak(ModelRequest Request) : AgentDecision;
+
+public sealed record RequestDeactivate(string Reason) : AgentDecision;
 
 public interface IAgentBrain
 {

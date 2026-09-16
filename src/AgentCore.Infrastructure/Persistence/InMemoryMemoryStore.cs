@@ -126,6 +126,19 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask<SessionCatalogPage> ListCatalogAsync(
+        string? cursor,
+        int limit,
+        bool includeArchived,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            return ValueTask.FromResult(CatalogCursor.Page(_sessions.Values, cursor, limit, includeArchived));
+        }
+    }
+
     private static SessionSnapshot Clone(SessionSnapshot snapshot) =>
         snapshot with { Entries = snapshot.Entries.ToArray() };
 

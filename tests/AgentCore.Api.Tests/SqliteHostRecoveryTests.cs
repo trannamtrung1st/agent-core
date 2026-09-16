@@ -196,6 +196,7 @@ public sealed class SqliteHostRecoveryTests
                 {
                     options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();
@@ -240,6 +241,7 @@ public sealed class SqliteHostRecoveryTests
                 {
                     options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();
@@ -296,6 +298,7 @@ public sealed class SqliteHostRecoveryTests
                         {
                             options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                             options.Transports = HttpTransportType.LongPolling;
+                            TestOwnerCapability.Apply(options, factory.Services);
                         })
                     .AddMessagePackProtocol()
                     .Build();
@@ -352,6 +355,7 @@ public sealed class SqliteHostRecoveryTests
                 {
                     options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                     options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, factory.Services);
                 })
             .AddMessagePackProtocol()
             .Build();
@@ -366,11 +370,20 @@ public sealed class SqliteHostRecoveryTests
             {
                 options.Transports = HttpTransportType.WebSockets;
                 options.SkipNegotiation = true;
+                options.Headers[OwnerCapabilityHeaders.Name] = IssueOwnerHttp(baseAddress);
             })
             .AddMessagePackProtocol()
             .Build();
         await connection.StartAsync();
         return connection;
+    }
+
+    private static string IssueOwnerHttp(string baseAddress)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        var issued = http.PostAsync("/api/v1/local/owner-capability", null).GetAwaiter().GetResult();
+        issued.EnsureSuccessStatusCode();
+        return issued.Content.ReadFromJsonAsync<OwnerCapabilityResponse>().GetAwaiter().GetResult()!.Token;
     }
 
     private static async Task<string> CreateSessionAsync(string baseAddress)

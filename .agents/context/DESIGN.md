@@ -185,7 +185,7 @@ The conversation sits in `.app-shell`, a one-column grid that fills the viewport
 
 HUD is two columns: copy | presence plate. Copy stacks wordmark, then a 16px-gap meta block (profile/ready, then identity in session). Status and identity share a `{spacing.marker}` (16px) marker column and 16px gap. Presence is in-flow in that row (`max-width` 20rem / 36vw, `max-height` 12rem; 7.5rem ≤879px; 5.5rem ≤639px) so it does not overlap the transcript.
 
-Transcript is the stretching mid band. Entries reuse the HUD row grid (16px marker, 16px gap, copy). List gap is 16px; well padding is 16px chrome. Dock stacks optional error then composer. Composer is `1fr + auto` on desktop (field | equal keys); one column below 880px with keys in a 2-up grid and End spanning full width. Control height 56px (44px ≤879px). Key width 7.5rem (7rem ≤879px).
+Transcript is the stretching mid band. Entries reuse the HUD row grid (16px marker, 16px gap, copy). List gap is 16px; well padding is 16px chrome. Dock stacks optional error then composer. Composer is `1fr + auto` on desktop (field | equal keys); one column below 880px with keys in a 2-up grid and End spanning full width. Pending attachment chips sit in the message stack under the textarea. Control height 56px (44px ≤879px). Key width 7.5rem (7rem ≤879px).
 
 Breakpoints are structural, not fluid type:
 
@@ -224,7 +224,7 @@ Selection is mint on obsidian. Caret is mint. Scrollbar track `#071016`, thumb m
 
 Focus-visible: 3px `{colors.mint}` outline, 2px offset, on every operable control.
 
-**The Labeled Key Rule.** Send, Voice, Cancel, Mute, Unmute, End, and Start conversation are visible text with those accessible names. Markers may accompany HUD copy; they are never the sole label.
+**The Labeled Key Rule.** Attach, Send, Voice, Cancel, Mute, Unmute, End, and Start conversation are visible text with those accessible names. Markers may accompany HUD copy; they are never the sole label. Pending files are chips inside the message stack, not a second dock.
 
 ## Components
 
@@ -262,7 +262,7 @@ Beveled obsidian keys. Letter-spacing 0.06em, weight 700, 4px radius, 56×7.5rem
 
 ### Navigation
 
-None. Do not invent a session sidebar.
+Sessions rail: beveled mint-stroked `{colors.panel}` column (`nav[aria-label=Sessions]`), uppercase chrome bar, compact New chat key, title + agent name/role lines, Ended/Archived labels in steel. Not a bubble inbox. Empty copy: “No sessions yet.”
 
 ### HUD
 
@@ -270,7 +270,7 @@ Wordmark, profile (`data-testid="profile"`), connection (`data-testid="connectio
 
 ### Transcript entries
 
-Semantic list on the HUD row grid: 16px marker column, 16px gap, then one copy column. Same line grammar for both roles: marker, speaker (4ch min), 2px em-dash, bone body. Wrapped lines stay in the copy column. User is the plus marker with `You` and dash in bone; agent is the diamond with `{agent}` and dash in mint. Interrupted/failed as uppercase persimmon `<em>` at 13px label size, not color-only. Empty: “Send a message or start voice.” in steel, inset to the copy column.
+Semantic list on the HUD row grid: 16px marker column, 16px gap, then one copy column. Same line grammar for both roles: marker, speaker (4ch min), 2px em-dash, bone body. Wrapped lines stay in the copy column. User is the plus marker with `You` and dash in bone; agent is the diamond with `{agent}` and dash in mint. Interrupted/failed as uppercase persimmon `<em>` at 13px label size, not color-only. Empty: “Send a message or start voice.” in steel, inset to the copy column. Rich blocks stay in the copy column as additional mint-labeled lines (Markdown, artifact `Artifact · id`, unknown fallback)—not nested cards or a second dock.
 
 ### Error banner
 
@@ -286,9 +286,9 @@ Decorative ordered-dither plate in the HUD trailing column. 2.8s `steps(4)` cont
 
 - **Do** keep HUD, transcript, picker, and dock on the shared inset/gap scale (40/16 desktop, 16/24 ≤879px).
 - **Do** self-host Martian Mono; honor `prefers-reduced-motion`; keep body contrast ≥ 4.5:1 on field/panel.
-- **Do** preserve testids `connection` and `profile`, and the accessible names Identity, Start conversation, Send, Voice, Cancel voice, Mute, Unmute, End.
+- **Do** preserve testids `connection` and `profile`, and the accessible names Identity, Start conversation, Attach, Send, Voice, Cancel voice, Mute, Unmute, End.
 - **Do** keep the labeled composer visible while voice is live until `/docs` and tests change together.
-- **Do** render escaped plain text; mark interrupted/failed in type.
+- **Do** render escaped main reply text; sanitize Markdown/reference blocks (no HTML injection); mark interrupted/failed in type.
 - **Do** use the custom themed select for identity choice; keep the Identity legend as a sibling of the listbox; keep value text left-aligned and keys centered.
 
 ### Don't:
@@ -297,7 +297,7 @@ Decorative ordered-dither plate in the HUD trailing column. 2.8s `steps(4)` cont
 - **Don't** use drop shadows, glass blur, smooth gradients, or a second type family.
 - **Don't** fill keys or panels with mint; mint is the live line.
 - **Don't** replace Voice / Mute / End with icon-only or emoji controls.
-- **Don't** draw a fake inbox, session list, attachment dock, or in-chat agent switcher.
+- **Don't** draw a fake inbox, attachment dock, or in-chat agent switcher.
 - **Don't** hide status in animation or a color dot alone.
 - **Don't** ship Google Fonts or a raster wordmark when the live type is Martian Mono.
 - **Don't** use native browser select menus, wrapping `<label>` listboxes, or icon-only chevrons for identity pickers.

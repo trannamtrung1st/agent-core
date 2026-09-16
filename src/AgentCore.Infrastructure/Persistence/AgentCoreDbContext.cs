@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
@@ -14,6 +15,11 @@ public sealed class SessionRecord
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public long Revision { get; set; }
+    public string Title { get; set; } = SessionTitles.Default;
+    public long RuntimeEpoch { get; set; }
+    public bool WorkspaceOwned { get; set; } = true;
+    public long? ArchivedAtUtc { get; set; }
+    public long? DurablyDeletedAtUtc { get; set; }
     public SnapshotRecord? Snapshot { get; set; }
     public List<EntryRecord> Entries { get; set; } = [];
 }
@@ -44,6 +50,7 @@ public sealed class EntryRecord
     public string DeliveryMode { get; set; } = "";
     public int HeardTextEndExclusive { get; set; }
     public int ReceivedTextEndExclusive { get; set; }
+    public string? EnvelopeJson { get; set; }
     public long CreatedAtUtc { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
@@ -56,12 +63,22 @@ public sealed class ProfileRecord
     public long UpdatedAtUtc { get; set; }
 }
 
+public sealed class OwnerCapabilityRecord
+{
+    public string TokenHash { get; set; } = "";
+    public long CreatedAtUtc { get; set; }
+}
+
 public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> options) : DbContext(options)
 {
     public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
     public DbSet<SnapshotRecord> Snapshots => Set<SnapshotRecord>();
     public DbSet<EntryRecord> Entries => Set<EntryRecord>();
     public DbSet<ProfileRecord> Profiles => Set<ProfileRecord>();
+    public DbSet<OwnerCapabilityRecord> OwnerCapabilities => Set<OwnerCapabilityRecord>();
+    public DbSet<AttachmentRecordRow> Attachments => Set<AttachmentRecordRow>();
+    public DbSet<MessageAttachmentRow> MessageAttachments => Set<MessageAttachmentRow>();
+    public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +96,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
                 .WithOne(row => row.Session)
                 .HasForeignKey(row => row.SessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(row => row.Title).HasMaxLength(200).IsRequired();
+            entity.Property(row => row.WorkspaceOwned).HasDefaultValue(true);
+            entity.HasIndex(row => new { row.DurablyDeletedAtUtc, row.ArchivedAtUtc, row.UpdatedAtUtc, row.SessionId });
         });
         modelBuilder.Entity<SnapshotRecord>(entity =>
         {
@@ -98,6 +118,41 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("UserProfiles");
             entity.HasKey(row => row.ProfileId);
+        });
+        modelBuilder.Entity<OwnerCapabilityRecord>(entity =>
+        {
+            entity.ToTable("OwnerCapabilities");
+            entity.HasKey(row => row.TokenHash);
+            entity.Property(row => row.TokenHash).HasMaxLength(64);
+        });
+        modelBuilder.Entity<AttachmentRecordRow>(entity =>
+        {
+            entity.ToTable("Attachments");
+            entity.HasKey(row => row.AttachmentId);
+            entity.Property(row => row.AttachmentId).HasMaxLength(36);
+            entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.BlobKey).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
+            entity.HasIndex(row => row.SessionId);
+            entity.HasIndex(row => new { row.State, row.ExpiresAtUtc });
+        });
+        modelBuilder.Entity<MessageAttachmentRow>(entity =>
+        {
+            entity.ToTable("MessageAttachments");
+            entity.HasKey(row => new { row.EntryId, row.AttachmentId });
+            entity.HasIndex(row => row.SessionId);
+        });
+        modelBuilder.Entity<ArtifactRecordRow>(entity =>
+        {
+            entity.ToTable("Artifacts");
+            entity.HasKey(row => row.ArtifactId);
+            entity.Property(row => row.ArtifactId).HasMaxLength(36);
+            entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.BlobKey).HasMaxLength(80).IsRequired();
+            entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
+            entity.HasIndex(row => row.SessionId);
         });
     }
 }

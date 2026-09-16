@@ -14,6 +14,11 @@ internal static class MemoryStoreSemantics
         && left.ProfileId == right.ProfileId
         && left.Definition.Id == right.Definition.Id
         && left.Definition.Version == right.Definition.Version
+        && left.Title == right.Title
+        && left.RuntimeEpoch == right.RuntimeEpoch
+        && left.WorkspaceOwned == right.WorkspaceOwned
+        && left.ArchivedAt == right.ArchivedAt
+        && left.DurablyDeletedAt == right.DurablyDeletedAt
         && left.Entries.Count == right.Entries.Count
         && left.Entries.Zip(right.Entries).All(pair => pair.First == pair.Second);
 

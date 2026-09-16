@@ -141,6 +141,13 @@ public sealed class SessionManagerConcurrencyTests
 
         public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
             inner.RecoverCrashedSessionsAsync(cancellationToken);
+
+        public ValueTask<SessionCatalogPage> ListCatalogAsync(
+            string? cursor,
+            int limit,
+            bool includeArchived,
+            CancellationToken cancellationToken = default) =>
+            inner.ListCatalogAsync(cursor, limit, includeArchived, cancellationToken);
     }
 
     private sealed class BarrierEndStore(IMemoryStore inner) : IMemoryStore
@@ -191,5 +198,12 @@ public sealed class SessionManagerConcurrencyTests
 
         public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
             inner.RecoverCrashedSessionsAsync(cancellationToken);
+
+        public ValueTask<SessionCatalogPage> ListCatalogAsync(
+            string? cursor,
+            int limit,
+            bool includeArchived,
+            CancellationToken cancellationToken = default) =>
+            inner.ListCatalogAsync(cursor, limit, includeArchived, cancellationToken);
     }
 }

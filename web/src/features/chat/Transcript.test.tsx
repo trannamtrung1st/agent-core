@@ -19,7 +19,7 @@ function entry(partial: Partial<HistoryEntry> & Pick<HistoryEntry, "entryId" | "
 
 describe("Transcript", () => {
   it("shows the empty prompt when there are no entries", () => {
-    render(<Transcript agentName="Alex" entries={[]} />);
+    render(<Transcript agentName="Alex" sessionId="s1" entries={[]} />);
     expect(screen.getByRole("listitem")).toHaveClass("entry-empty");
     expect(screen.getByText("Send a message or start voice.")).toBeInTheDocument();
     expect(screen.getByText(/Transcript · 0 entries/)).toBeInTheDocument();
@@ -29,6 +29,7 @@ describe("Transcript", () => {
     render(
       <Transcript
         agentName="Alex"
+        sessionId="s1"
         entries={[
           entry({ entryId: "u1", role: "user", text: "Hello" }),
           entry({
@@ -58,5 +59,69 @@ describe("Transcript", () => {
     expect(screen.getByText("interrupted")).toBeInTheDocument();
     expect(screen.getByText("failed")).toBeInTheDocument();
     expect(screen.getByText(/Transcript · 3 entries/)).toBeInTheDocument();
+  });
+
+  it("renders unknown blocks as sanitized fallback text", () => {
+    render(
+      <Transcript
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Hello",
+            blocks: [
+              {
+                blockId: "b1",
+                kind: "unknown",
+                text: "",
+                fallbackText: "[Unsupported content]",
+                attachmentId: null,
+                artifactId: null
+              }
+            ]
+          })
+        ]}
+      />
+    );
+    expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
+  });
+
+  it("renders sanitized markdown, artifact labels, and rejects script links as text", () => {
+    render(
+      <Transcript
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Hello",
+            blocks: [
+              {
+                blockId: "b1",
+                kind: "markdown",
+                text: "**Hi** [x](javascript:alert(1))",
+                fallbackText: "**Hi**",
+                attachmentId: null,
+                artifactId: null
+              },
+              {
+                blockId: "b2",
+                kind: "artifact",
+                text: "fixture-artifact-1",
+                fallbackText: "fixture-artifact-1",
+                attachmentId: null,
+                artifactId: "fixture-artifact-1"
+              }
+            ]
+          })
+        ]}
+      />
+    );
+    expect(screen.getByText("Hi")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "x" })).not.toBeInTheDocument();
+    expect(screen.getByText("Artifact · fixture-artifact-1")).toBeInTheDocument();
   });
 });

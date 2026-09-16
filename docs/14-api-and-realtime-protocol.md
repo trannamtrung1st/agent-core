@@ -19,7 +19,7 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 Agent list (GET detail returns one item with the same fields):
 
 ```json
-{"agents":[{"id":"examiner","version":1,"name":"Alex","role":"Speaking examiner","description":"Practice a speaking examination.","voiceAvailable":true},{"id":"customer-support","version":1,"name":"Sam","role":"Customer support representative","description":"Resolve a simulated support issue.","voiceAvailable":true}]}
+{"agents":[{"id":"compliance","version":1,"name":"Jordan","role":"Compliance reviewer","description":"Review simulated policy questions without changing live records.","voiceAvailable":true},{"id":"customer-support","version":1,"name":"Sam","role":"Customer support representative","description":"Resolve a simulated support issue.","voiceAvailable":true},{"id":"examiner","version":1,"name":"Alex","role":"Speaking examiner","description":"Practice a speaking examination.","voiceAvailable":true}]}
 ```
 
 Expose only descriptors, not systemInstructions, full definitions, provider configuration or credentials. `voiceAvailable` is the public formula in [Interfaces](04-backend-interfaces.md#independent-speech-ports): Voice.Enabled and resolved STT/TTS adapters whose effective capabilities support the canonical format. Synthetic voice counts as available. Text-only definitions return false without failing backend startup.
@@ -114,7 +114,7 @@ Every control uses metadata above plus payload below. Empty payload is `{}`.
 | --- | --- | --- |
 | session.attach | Attach | lastServerSequence: integer\|null (diagnostic) |
 | session.mode.set | SetMode | mode: text\|voice |
-| user.text | SendText | text: nonblank string <=8,000 |
+| user.text | SendText | text: string <=8,000 (blank allowed only with bindable `attachmentIds`); attachmentIds?: UUID[] max 10 |
 | user.speech.started | SpeechStarted | streamId: UUID, utteranceId: UUID, sampleOffset: integer, activityScore: number 0..1 |
 | user.speech.ended | SpeechEnded | streamId, utteranceId, sampleOffset: integer, durationMs: nonnegative number |
 | audio.input | SendAudio | Dedicated InputAudioDto, no envelope |
@@ -122,11 +122,11 @@ Every control uses metadata above plus payload below. Empty payload is `{}`.
 | playback.progress | PlaybackProgress | consumedSamples: integer, textEndExclusive: integer |
 | playback.completed | PlaybackCompleted | consumedSamples: total, textEndExclusive: integer |
 | playback.stopped | PlaybackStopped | consumedSamples: final actual position, textEndExclusive: integer |
-| response.received | ResponseReceived | textEndExclusive: highest rendered UTF-16 text offset (text mode) |
+| response.received | ResponseReceived | textEndExclusive: highest rendered UTF-16 **display** offset; blockIds?: string[] |
 | session.mute | SetMuted | muted: boolean |
 | session.end | EndSession | reason: userEnded |
 
-Playback textEndExclusive acknowledges rendered text, not heard text; server computes heard offsets from samples/timing. For voice context use heard offset only. Receipt/progress values must be <= emitted text/samples and monotonic. Ignore playback.started/progress/completed/stopped and text receipts after response supersession for state/history/context. A stopped acknowledgement may record diagnostic stop latency only. Completed successful responses may still accept a final text receipt to acknowledge already delivered text; this cannot authorize more output. When muting, client sends ended boundary before mute; unmute produces session.ready-like stream data via session.state.changed with a fresh streamId before accepting PCM. Stream IDs are server-issued on ready/unmute/recovery and after a max-utterance restart.
+Playback textEndExclusive is the speech-coordinate offset of synthesized speech (display text when `reply.speech` is absent). Display receipts stay on `reply.text` and must not be copied onto heard. Receipt/progress values must be <= emitted display/speech/samples and monotonic. Ignore playback.started/progress/completed/stopped and text receipts after response supersession or disconnect for state/history/context. A stopped acknowledgement may record diagnostic stop latency only. Completed successful responses may still accept a final text receipt to acknowledge already delivered text; this cannot authorize more output. When muting, client sends ended boundary before mute; unmute produces session.ready-like stream data via session.state.changed with a fresh streamId before accepting PCM. Stream IDs are server-issued on ready/unmute/recovery and after a max-utterance restart.
 
 Speech boundaries include sampleOffset in the same stream coordinate as audio. Audio ingress defers a boundary until preceding samples are admitted; application receives speech observation promptly but recognizer flush waits for the ordered marker. This avoids separate hub invocation ordering corrupting STT buffering. One browser audio producer sends ordered frames; duplicates are ignored, gaps fail the stream.
 
@@ -138,8 +138,9 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | transcript.partial | utteranceId, revision: integer, text |
 | transcript.final | utteranceId, text, entryId: UUID\|null, entrySequence: integer\|null |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
-| agent.text.delta | text, textStart: UTF-16 offset |
-| agent.text.completed | textLength: integer |
+| agent.text.delta | text, textStart: UTF-16 offset of **display** text |
+| agent.text.completed | textLength: integer (display) |
+| agent.block.upsert | blockId, kind: markdown\|attachment\|artifact\|unknown, text, fallbackText, attachmentId?, artifactId? |
 | audio.output | Dedicated OutputAudioDto |
 | playback.gain | gain: 0.2\|1.0, rampMs: 20, candidateId: UUID |
 | playback.stop | reason: interrupted\|disconnected\|ended\|providerFailed\|audioFailed\|modeChange |
@@ -162,7 +163,7 @@ Terminal interruption uses `agent.response.interrupted`, never a later `agent.re
 
 ## Connection lifecycle
 
-Session IDs act as local/demo bearer capabilities: use cryptographically random UUIDv4 session IDs (122 random bits), never sequential IDs. Production event/response IDs use UUIDv7. `IIdGenerator.NewSessionId()` and `NewId()` are specified in the C# port so deterministic tests cover both. Do not log session URLs publicly. This is not a full authentication system.
+Session IDs act as local/demo bearer capabilities: use cryptographically random UUIDv4 session IDs (122 random bits), never sequential IDs. Production event/response IDs use UUIDv7. `IIdGenerator.NewSessionId()` and `NewId()` are specified in the C# port so deterministic tests cover both. Do not log session URLs publicly. This is not a full authentication system. **Planned until verified:** post-MVP trusted-local owner capability replaces SessionId-as-credential for catalog, attach, upload, bind, artifacts, and content ([R1](10-technology-decisions.md#decision-trusted-local-owner-capability-r1)); historical MVP still uses session IDs as demo bearers until that phase is verified.
 
 Attach atomically acquires a fresh attachmentId lease, activating an in-memory runtime. If `MaxActiveSessions` would be exceeded, reject with recoverable `SessionCapacityExceeded` and `retryAfterMs` defaulting to 5000; the durable session remains and may be retried. An exact repeated Attach eventId on the same connection returns the original acknowledgement/ready snapshot and lease; it never creates a second owner. A new Attach on an already attached connection is rejected until it disconnects. A still-attached session rejects a second connection with SessionInUse; no silent takeover. Disconnect invalidates the old lease, supersedes output, closes STT, clears `pendingMode` (do not carry `PendingMode=Voice` into reconnect), and pauses initiative. If the server hasn't detected disconnect yet, reconnect retries SessionInUse with bounded backoff rather than stealing the session. Configure SignalR keepalive 10 seconds/client timeout 30 seconds. Grace retention is 60 seconds after disconnect is observed.
 
@@ -190,4 +191,38 @@ sequenceDiagram
 
 ## Error policy
 
-Categories: Provider, Session, Protocol, Audio, Validation, Connection, Transport. User-safe code/message/fatal are required. Authentication, RateLimited, Timeout, Cancelled, InvalidRequest, Unavailable, UnsupportedCapability and Unknown are provider codes normalized by the adapter. Session codes include SessionBusy, SessionInUse, SessionPersistenceUnavailable, SessionCapacityExceeded, VoiceUnavailable and StaleCommand. Transport codes include recoverable `AudioDiscontinuity` (sequence/offset/queue gap; recognition restarts on a new streamId) and recoverable `MaxUtterance` (forced end after `Voice.MaxUtteranceSeconds`, default 30; recognition restarts on a new streamId). Expected user cancellation emits interruption, not an alarming error toast. A midstream provider failure keeps the partial entry marked failed, stops TTS/playback, and permits a new user turn; never auto-replay the request. STT/TTS failure disables voice input/output for that session until explicit reconnect or a mode reset to text; the same session's text mode remains usable. Session storage corruption/ownership failure is fatal; temporary provider/connection errors are recoverable. No automatic Real→Synthetic fallback that would mislead the user.
+Categories: Provider, Session, Protocol, Audio, Validation, Connection, Transport. User-safe code/message/fatal are required. Authentication, RateLimited, Timeout, Cancelled, InvalidRequest, Unavailable, UnsupportedCapability and Unknown are provider codes normalized by the adapter. Session codes include SessionBusy, SessionInUse, SessionPersistenceUnavailable, SessionCapacityExceeded, VoiceUnavailable and StaleCommand. Transport codes include recoverable `AudioDiscontinuity` (sequence/offset/gap; recognition restarts on a new streamId) and recoverable `MaxUtterance` (forced end after `Voice.MaxUtteranceSeconds`, default 30; recognition restarts on a new streamId). Expected user cancellation emits interruption, not an alarming error toast. A midstream provider failure keeps the partial entry marked failed, stops TTS/playback, and permits a new user turn; never auto-replay the request. STT/TTS failure disables voice input/output for that session until explicit reconnect or a mode reset to text; the same session's text mode remains usable. Session storage corruption/ownership failure is fatal; temporary provider/connection errors are recoverable. No automatic Real→Synthetic fallback that would mislead the user.
+
+## Post-MVP planned until verified
+
+Accepted target, not current shipped evidence for Phases G–I. Full R1–R6 text is in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Phase D initiative/deactivation and Phase F workspace execution view are observed above.
+
+**Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
+
+**Trusted-local owner capability.** Catalog, lifecycle, attach, upload, bind, artifact, and content routes require `X-AgentCore-Owner-Capability` (hub attach includes the same token). `SessionId` is not a credential. Loopback `POST /api/v1/local/owner-capability`; browser restore from `localStorage`; hashed grant survives API restart. Fail closed without leaking other sessions.
+
+**Additive lifecycle (keep v1 DELETE).** Versioned routes:
+
+| Method | Meaning |
+| --- | --- |
+| GET /api/v2/sessions | Catalog, `UpdatedAt` descending, stable cursor pagination; includes labeled Ended rows |
+| POST /api/v2/sessions | Create with chosen `agentId`/`agentVersion`; pin; workspace-ownership record |
+| POST /api/v2/sessions/{id}/rename \| archive \| unarchive | Persist catalog mutation in the runtime revision stream |
+| POST /api/v2/sessions/{id}/reopen | New runtime epoch if no live runtime; not the same as attaching an already-active session |
+| POST /api/v2/sessions/{id}/deactivate | Runtime deactivation: cancel live output, persist Paused, increment RuntimeEpoch; not archive and not v1 end; idempotent |
+| GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
+| GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query, default `/`); owner capability |
+| GET /api/v2/sessions/{id}/workspace/content?path= | Read logical path (`/agent`, `/attachments`, `/workspace`); host paths never returned |
+| PUT /api/v2/sessions/{id}/workspace/content?path= | Write under `/workspace/working|artifacts|state` only; 250 MiB session cap; 403 for RO overlays, secrets, traversal, symlinks |
+| POST /api/v2/sessions/{id}/attachments/{attachmentId}/materialize | Explicit working copy plus Artifact metadata; originals unchanged; SHA-256 preserved; deterministic `name-2` collisions |
+| GET /api/v2/sessions/{id}/artifacts | List session-owned artifacts; owner capability |
+| GET /api/v2/sessions/{id}/artifacts/{artifactId} | Artifact metadata; cross-session 404 |
+| GET /api/v2/sessions/{id}/artifacts/{artifactId}/content | Authorized download; SessionId is not a credential |
+| DELETE /api/v2/sessions/{id} | Versioned durable deletion of session-owned data including workspace files and artifact blobs |
+| DELETE /api/v1/sessions/{id} | Unchanged terminal-end |
+
+Ended rows: reopen/rename/archive/unarchive/versioned-delete fail closed or no-op without resurrecting a runtime.
+
+**Rich envelope (observed).** Parent `ResponseId` carries `reply.text`, optional `reply.speech`, Markdown, attachment/artifact reference blocks, independent display and speech receipts. Unknown blocks fallback. Artifact refs in C use fixtures (`fixture-artifact-1`). Reconnect history is the received display prefix plus display-delivered blocks only.
+
+**Uploads (observed store).** HTTP multipart/streaming only under `/api/v2/sessions/{id}/attachments` (POST pending, GET collection, GET metadata, GET `/content`, DELETE pending, POST `/stage` for the next speech turn). Unread storage of types outside the supported processor set follows the pinned role `environment.attachments.allowUnreadUnsupportedTypes` (shipped fixtures reject-at-upload). Client headers cannot widen that policy. `user.text` may include `attachmentIds` (UUIDs, max 10); empty text is allowed only with at least one bindable id. Bind runs in the runtime persist callback after the user entry is durable. Processors then extract off the mailbox; `session.state.changed` may emit `outputState=processingAttachments` while that work runs. Caps in the [resource table](10-technology-decisions.md#planned-resource-limits). OCR and Office readers remain out of scope.

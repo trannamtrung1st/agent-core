@@ -2,8 +2,20 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microso
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, useSessionStore, type ServerEvent } from "../state/sessionStore";
-import { createSession, endSession, getHealth, listAgents } from "./api";
+import { applyServerEvent, emptySession, hasControlSequenceGap, useSessionStore, type HistoryAttachment, type ServerEvent } from "../state/sessionStore";
+import { createSession, endSession, ensureOwnerCapability, getHealth, listAgents, reopenSession } from "./api";
+import {
+  abortPendingAttachment,
+  listAttachments,
+  pendingFile,
+  releaseAllPendingFiles,
+  releasePendingFile,
+  retainPendingFile,
+  stageAttachments,
+  uploadAttachment,
+  type PendingAttachment
+} from "./attachments";
+import { catalogShell, refreshCatalog } from "./catalog";
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
@@ -29,6 +41,7 @@ const pendingAudio: OutputAudioFrame[] = [];
 const earlyAudio = new Map<string, { frames: OutputAudioFrame[]; timer: number }>();
 const outputGate = new OutputAudioGate();
 const committedText = new Map<string, number>();
+const committedBlocks = new Map<string, string[]>();
 const duckingEnabled = true;
 let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
@@ -81,6 +94,10 @@ function command(
   eventId: string = uuid()
 ) {
   const snapshot = useSessionStore.getState();
+  const payloadWithOwner =
+    type === "session.attach"
+      ? { ...payload, ownerCapability: window.localStorage.getItem("agent-core.owner-capability") }
+      : payload;
   return {
     protocolVersion: 1,
     sessionId: snapshot.sessionId,
@@ -90,7 +107,7 @@ function command(
     responseId,
     attachmentId: type === "session.attach" ? undefined : snapshot.attachmentId,
     type,
-    payload
+    payload: payloadWithOwner
   };
 }
 
@@ -117,7 +134,7 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
-let pendingUserText: { eventId: string; text: string } | null = null;
+let pendingUserText: { eventId: string; text: string; attachmentIds: string[] } | null = null;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -265,6 +282,10 @@ function handleEvent(raw: ServerEvent): void {
   useSessionStore.setState(next);
   if (raw.type === "session.ready") {
     reconcilePendingUserText(next.entries);
+    void hydrateBoundAttachments(next.sessionId);
+  }
+  if (raw.type === "transcript.final") {
+    void hydrateBoundAttachments(next.sessionId);
   }
   if (raw.type === "agent.response.started" && raw.responseId) {
     outputGate.markStarted(raw.responseId);
@@ -599,6 +620,14 @@ function stopProgress(): void {
   }
 }
 
+function renderedBlockIds(responseId: string | null): string[] {
+  if (!responseId) {
+    return [];
+  }
+
+  return committedBlocks.get(responseId) ?? [];
+}
+
 function renderedTextOffset(responseId: string | null): number {
   if (!responseId) {
     return 0;
@@ -608,7 +637,13 @@ function renderedTextOffset(responseId: string | null): number {
 }
 
 export function reportCommittedEntries(
-  entries: Array<{ role: string; responseId: string | null; text: string; status: string }>
+  entries: Array<{
+    role: string;
+    responseId: string | null;
+    text: string;
+    status: string;
+    blocks?: Array<{ blockId: string }>;
+  }>
 ): void {
   for (const entry of entries) {
     if (entry.role !== "assistant" || !entry.responseId) {
@@ -619,6 +654,13 @@ export function reportCommittedEntries(
     const previous = committedText.get(entry.responseId) ?? 0;
     if (next > previous) {
       committedText.set(entry.responseId, next);
+    }
+
+    if (entry.blocks && entry.blocks.length > 0) {
+      committedBlocks.set(
+        entry.responseId,
+        entry.blocks.map((block) => block.blockId)
+      );
     }
   }
 
@@ -661,7 +703,13 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
   lastReceiptOffset = offset;
   lastReceiptResponseId = id;
   commandSequence += 1;
-  await invoke("ResponseReceived", "response.received", { textEndExclusive: offset }, commandSequence, id);
+  await invoke(
+    "ResponseReceived",
+    "response.received",
+    { textEndExclusive: offset, blockIds: renderedBlockIds(id) },
+    commandSequence,
+    id
+  );
 }
 
 async function sendPlayback(method: string, type: string, responseId: string, consumed: number): Promise<void> {
@@ -856,10 +904,12 @@ async function startConnection(sessionId: string): Promise<void> {
   audioFramesSent = 0;
   audioOutputsReceived = 0;
   const epoch = ++connectionEpoch;
+  const ownerCapability = await ensureOwnerCapability();
   connection = new HubConnectionBuilder()
     .withUrl("/hubs/session", {
       skipNegotiation: true,
-      transport: HttpTransportType.WebSockets
+      transport: HttpTransportType.WebSockets,
+      headers: { "X-AgentCore-Owner-Capability": ownerCapability }
     })
     .withHubProtocol(new MessagePackHubProtocol())
     .withAutomaticReconnect({
@@ -953,16 +1003,61 @@ export async function bootstrap(): Promise<string> {
     agents,
     selectedAgentId: agents[0]?.id ?? "examiner"
   });
+  await refreshCatalog(true);
   return health.profile;
 }
 
 export async function startConversation(): Promise<void> {
   try {
-    const created = await createSession(useSessionStore.getState().selectedAgentId, "text");
+    const snapshot = useSessionStore.getState();
+    const agent = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
+    if (!agent) {
+      throw new Error("Unable to create a session.");
+    }
+
+    const created = await createSession(agent.id, agent.version, "text");
+    await refreshCatalog(true);
     await startConnection(created.sessionId);
   } catch (error) {
     useSessionStore.setState({
       error: error instanceof Error ? error.message : "Unable to start a conversation.",
+      errorFatal: false
+    });
+  }
+}
+
+export async function beginNewChat(): Promise<void> {
+  disposed = true;
+  await stopConnection();
+  stopReceipts();
+  capture.release();
+  releaseAllPendingFiles();
+  useSessionStore.setState({
+    ...emptySession(),
+    ...catalogShell()
+  });
+  disposed = false;
+}
+
+export async function openCatalogSession(item: {
+  sessionId: string;
+  status: string;
+  archived: boolean;
+  ended: boolean;
+}): Promise<void> {
+  if (item.ended || item.archived) {
+    return;
+  }
+
+  try {
+    if (item.status !== "attached") {
+      await reopenSession(item.sessionId);
+    }
+    await startConnection(item.sessionId);
+    await refreshCatalog(true);
+  } catch (error) {
+    useSessionStore.setState({
+      error: error instanceof Error ? error.message : "Unable to open the session.",
       errorFatal: false
     });
   }
@@ -984,6 +1079,179 @@ function restoreDraft(text: string, error: string): void {
     error,
     errorFatal: false
   });
+}
+
+function composerCanSend(draft: string, pending: PendingAttachment[], connection: string): boolean {
+  if (connection !== "ready") {
+    return false;
+  }
+
+  const hasText = draft.trim().length > 0;
+  const complete = pending.filter((item) => item.status === "ready" && item.attachmentId);
+  const blocked = pending.some((item) => item.status !== "ready");
+  if (blocked) {
+    return false;
+  }
+
+  return hasText || complete.length > 0;
+}
+
+async function hydrateBoundAttachments(sessionId: string | null): Promise<void> {
+  if (!sessionId) {
+    return;
+  }
+
+  try {
+    const records = await listAttachments(sessionId);
+    const bound = records.filter((item) => item.state === "bound" && item.entryId);
+    const byEntry = new Map<string, HistoryAttachment[]>();
+    for (const record of bound) {
+      const list = byEntry.get(record.entryId!) ?? [];
+      list.push({
+        attachmentId: record.attachmentId,
+        displayName: record.displayName,
+        contentType: record.contentType
+      });
+      byEntry.set(record.entryId!, list);
+    }
+
+    const latest = useSessionStore.getState();
+    if (latest.sessionId !== sessionId) {
+      return;
+    }
+
+    useSessionStore.setState({
+      entries: latest.entries.map((entry) => {
+        const attachments = byEntry.get(entry.entryId);
+        return attachments ? { ...entry, attachments } : entry;
+      })
+    });
+  } catch {
+    // History still shows text; attachment chips hydrate on the next ready snapshot.
+  }
+}
+
+async function syncVoiceStage(): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (snapshot.connection !== "ready" || snapshot.mode !== "voice" || !snapshot.sessionId) {
+    return;
+  }
+
+  const ids = snapshot.pendingAttachments
+    .filter((item) => item.status === "ready" && item.attachmentId)
+    .map((item) => item.attachmentId!) ;
+  if (ids.length === 0) {
+    return;
+  }
+
+  try {
+    await stageAttachments(snapshot.sessionId, ids);
+  } catch (error) {
+    useSessionStore.setState({
+      error: error instanceof Error ? error.message : "Unable to stage attachments.",
+      errorFatal: false
+    });
+  }
+}
+
+export function composerSendEnabled(): boolean {
+  const snapshot = useSessionStore.getState();
+  return composerCanSend(snapshot.draft, snapshot.pendingAttachments, snapshot.connection);
+}
+
+export async function queueComposerFiles(fileList: File[]): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId || snapshot.connection !== "ready") {
+    return;
+  }
+
+  const remaining = 10 - snapshot.pendingAttachments.length;
+  const selected = fileList.slice(0, Math.max(0, remaining));
+  const added: PendingAttachment[] = selected.map((file) => {
+    const localId = uuid();
+    retainPendingFile(localId, file);
+    return {
+      localId,
+      displayName: file.name,
+      contentType: file.type || "application/octet-stream",
+      byteSize: file.size,
+      status: "uploading",
+      progress: 0,
+      attachmentId: null,
+      error: null
+    };
+  });
+  if (added.length === 0) {
+    return;
+  }
+
+  useSessionStore.setState({ pendingAttachments: [...snapshot.pendingAttachments, ...added] });
+  await Promise.all(added.map((item) => uploadQueued(snapshot.sessionId!, item.localId)));
+}
+
+async function uploadQueued(sessionId: string, localId: string): Promise<void> {
+  const file = pendingFile(localId);
+  if (!file) {
+    return;
+  }
+
+  patchPending(localId, { status: "uploading", progress: 0, error: null });
+  try {
+    const uploaded = await uploadAttachment(sessionId, localId, file, (progress) => {
+      patchPending(localId, { progress });
+    });
+    patchPending(localId, {
+      status: "ready",
+      progress: 100,
+      attachmentId: uploaded.attachmentId,
+      displayName: uploaded.displayName,
+      contentType: uploaded.contentType,
+      error: null
+    });
+    await syncVoiceStage();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return;
+    }
+
+    patchPending(localId, {
+      status: "error",
+      error: error instanceof Error ? error.message : "Upload failed."
+    });
+  }
+}
+
+function patchPending(localId: string, patch: Partial<PendingAttachment>): void {
+  const latest = useSessionStore.getState();
+  useSessionStore.setState({
+    pendingAttachments: latest.pendingAttachments.map((item) =>
+      item.localId === localId ? { ...item, ...patch } : item)
+  });
+}
+
+export async function retryComposerFile(localId: string): Promise<void> {
+  const sessionId = useSessionStore.getState().sessionId;
+  if (!sessionId) {
+    return;
+  }
+
+  await uploadQueued(sessionId, localId);
+}
+
+export async function removeComposerFile(localId: string): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  const item = snapshot.pendingAttachments.find((pending) => pending.localId === localId);
+  if (item?.attachmentId && snapshot.sessionId && item.status !== "ready") {
+    await abortPendingAttachment(snapshot.sessionId, item.attachmentId).catch(() => undefined);
+  } else if (item?.attachmentId && snapshot.sessionId && item.status === "ready") {
+    await abortPendingAttachment(snapshot.sessionId, item.attachmentId).catch(() => undefined);
+  }
+
+  releasePendingFile(localId);
+  useSessionStore.setState({
+    pendingAttachments: snapshot.pendingAttachments.filter((pending) => pending.localId !== localId)
+  });
+  await syncVoiceStage();
 }
 
 function historyHasUserEvent(entries: { sourceEventId: string | null; role: string }[], eventId: string): boolean {
@@ -1018,12 +1286,21 @@ export async function sendDraft(): Promise<void> {
   const snapshot = useSessionStore.getState();
   const draft = snapshot.draft.trim();
   const text = draft || pendingUserText?.text || "";
-  if (!text || snapshot.connection !== "ready") {
+  const readyFiles = snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId);
+  const attachmentIds = pendingUserText?.attachmentIds ?? readyFiles.map((item) => item.attachmentId!);
+  if (snapshot.connection !== "ready" || snapshot.pendingAttachments.some((item) => item.status !== "ready")) {
     return;
   }
 
-  const eventId = pendingUserText && pendingUserText.text === text ? pendingUserText.eventId : uuid();
-  pendingUserText = { eventId, text };
+  if (!text && attachmentIds.length === 0) {
+    return;
+  }
+
+  const eventId =
+    pendingUserText && pendingUserText.text === text && pendingUserText.attachmentIds.join() === attachmentIds.join()
+      ? pendingUserText.eventId
+      : uuid();
+  pendingUserText = { eventId, text, attachmentIds };
   if (draft) {
     useSessionStore.setState({ draft: "" });
   }
@@ -1031,7 +1308,14 @@ export async function sendDraft(): Promise<void> {
   commandSequence += 1;
   sendRequest = (async () => {
     try {
-      const ack = await invoke("SendText", "user.text", { text }, commandSequence, null, eventId);
+      const ack = await invoke(
+        "SendText",
+        "user.text",
+        { text, attachmentIds },
+        commandSequence,
+        null,
+        eventId
+      );
       if (!ack?.accepted) {
         pendingUserText = null;
         restoreDraft(text, ack?.error?.message ?? "Message was not accepted.");
@@ -1039,16 +1323,27 @@ export async function sendDraft(): Promise<void> {
       }
 
       pendingUserText = null;
+      const refs: HistoryAttachment[] = readyFiles.map((item) => ({
+        attachmentId: item.attachmentId!,
+        displayName: item.displayName,
+        contentType: item.contentType
+      }));
+      for (const item of snapshot.pendingAttachments) {
+        releasePendingFile(item.localId);
+      }
+
       const latest = useSessionStore.getState();
       if (historyHasUserEvent(latest.entries, eventId)) {
         useSessionStore.setState({
-          error: latest.errorFatal ? latest.error : null
+          error: latest.errorFatal ? latest.error : null,
+          pendingAttachments: []
         });
         return;
       }
 
       useSessionStore.setState({
         error: latest.errorFatal ? latest.error : null,
+        pendingAttachments: [],
         entries: [
           ...latest.entries,
           {
@@ -1062,7 +1357,8 @@ export async function sendDraft(): Promise<void> {
             deliveryMode: latest.mode,
             heardTextEndExclusive: text.length,
             receivedTextEndExclusive: text.length,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            attachments: refs.length > 0 ? refs : undefined
           }
         ]
       });
@@ -1252,9 +1548,9 @@ export async function hangUp(): Promise<void> {
   capture.release();
   useSessionStore.setState({
     ...emptySession(),
-    agents: snapshot.agents,
-    selectedAgentId: snapshot.selectedAgentId
+    ...catalogShell()
   });
+  void refreshCatalog(true);
   disposed = false;
 }
 

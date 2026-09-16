@@ -21,3 +21,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-duplex operation and Milestone 9 completes semantic interruption/audio races. Milestone 10 adds restrained idle and environment initiative. Milestone 11 restores pinned identity from SQLite or the in-memory store after pause/crash without replaying audio. Protocol attach/reconnect starts in memory at Milestone 5, which also introduces the first key-free Compose path; Milestone 11 adds durable recovery. Instrumentation hooks begin early; Milestone 12 completes measured tuning and container/operations hardening. Do not interpret dependency order as permission to defer fundamental invariants.
 
 [Testing Strategy](16-testing-strategy.md) defines offline fixtures and suites. [Demo Scenarios](09-demo-scenarios.md) defines the product demonstration. [Operations](17-observability-and-operations.md) defines latency measurements and future run/deployment instructions.
+
+## Post-MVP planned until verified
+
+Phases A–H (mandatory) and conditional Phase I follow Milestones 0–12. Index only; gates live in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). These rows are not complete.

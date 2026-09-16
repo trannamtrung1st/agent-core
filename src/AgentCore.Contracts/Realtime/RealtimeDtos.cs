@@ -96,6 +96,9 @@ public sealed class AttachPayload
 {
     [Key("lastServerSequence")]
     public long? LastServerSequence { get; set; }
+
+    [Key("ownerCapability")]
+    public string? OwnerCapability { get; set; }
 }
 
 [MessagePackObject]
@@ -103,6 +106,9 @@ public sealed class UserTextPayload
 {
     [Key("text")]
     public string Text { get; set; } = "";
+
+    [Key("attachmentIds")]
+    public string[]? AttachmentIds { get; set; }
 }
 
 [MessagePackObject]
@@ -162,6 +168,9 @@ public sealed class ResponseReceiptPayload
 {
     [Key("textEndExclusive")]
     public int TextEndExclusive { get; set; }
+
+    [Key("blockIds")]
+    public string[]? BlockIds { get; set; }
 }
 
 [MessagePackObject]

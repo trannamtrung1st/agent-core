@@ -35,6 +35,7 @@ describe("ChatApp accessibility", () => {
     });
     const view = await act(async () => render(<ChatApp />));
     expect(screen.getByLabelText("Identity")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Sessions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start conversation" })).toBeInTheDocument();
 
     await act(async () => {
@@ -54,6 +55,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByTestId("connection")).toHaveTextContent("Connection failed");
     expect(screen.getByRole("alert")).toHaveTextContent("Microphone permission was denied");
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "End" })).toBeInTheDocument();
@@ -176,5 +178,87 @@ describe("ChatApp accessibility", () => {
       view.rerender(<ChatApp />);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("User speaking");
+  });
+
+  it("blocks send while uploads are pending and allows attachment-only send", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [],
+        selectedAgentId: "examiner",
+        pendingAttachments: [
+          {
+            localId: "l1",
+            displayName: "notes.txt",
+            contentType: "text/plain",
+            byteSize: 4,
+            status: "uploading",
+            progress: 40,
+            attachmentId: null,
+            error: null
+          }
+        ]
+      });
+    });
+    const view = await act(async () => render(<ChatApp />));
+    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.getByText(/40%/)).toBeInTheDocument();
+
+    await act(async () => {
+      useSessionStore.setState({
+        pendingAttachments: [
+          {
+            localId: "l1",
+            displayName: "notes.txt",
+            contentType: "text/plain",
+            byteSize: 4,
+            status: "ready",
+            progress: 100,
+            attachmentId: "a1",
+            error: null
+          }
+        ]
+      });
+      view.rerender(<ChatApp />);
+    });
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  it("renders history attachment names", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [],
+        selectedAgentId: "examiner",
+        entries: [
+          {
+            entryId: "e1",
+            sequence: 1,
+            sourceEventId: "e1",
+            role: "user",
+            text: "",
+            responseId: null,
+            status: "completed",
+            deliveryMode: "text",
+            heardTextEndExclusive: 0,
+            receivedTextEndExclusive: 0,
+            createdAt: "2026-09-16T00:00:00.000Z",
+            attachments: [{ attachmentId: "a1", displayName: "notes.txt", contentType: "text/plain" }]
+          }
+        ]
+      });
+    });
+    await act(async () => render(<ChatApp />));
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
   });
 });

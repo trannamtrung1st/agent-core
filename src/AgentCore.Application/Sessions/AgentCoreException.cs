@@ -50,4 +50,19 @@ public static class AgentCoreErrors
 
     public static AgentCoreException ShuttingDown() =>
         new("ServiceUnavailable", "The host is shutting down.", 503) { RetryAfterMs = 1000 };
+
+    public static AgentCoreException Unauthorized() =>
+        new("Unauthorized", "Owner capability is missing or invalid.", 401);
+
+    public static AgentCoreException Forbidden(string detail) =>
+        new("Forbidden", detail, 403);
+
+    public static AgentCoreException SessionArchived() =>
+        new("SessionArchived", "Archived sessions cannot use attachments until unarchive.", 409);
+
+    public static AgentCoreException WorkspaceQuotaExceeded() =>
+        new("WorkspaceQuotaExceeded", "Workspace writes cannot exceed 250 MiB.", 413);
+
+    public static AgentCoreException ArtifactQuotaExceeded() =>
+        new("ArtifactQuotaExceeded", "Artifact writes cannot exceed 50 MiB each or 250 MiB per session.", 413);
 }

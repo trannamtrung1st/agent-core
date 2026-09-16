@@ -139,7 +139,7 @@ Ordering is mark superseded, invalidate pending segments/output, queue high-prio
 
 ## Timers and initiative
 
-Timers use TimeProvider and enqueue events containing a timer generation. User activity, detach/end and response starts invalidate old generations. Fire only while attached, input quiet and output idle. Defaults: idle threshold from Agent Definition (8 seconds), minimum evaluation interval/cooldown 30 seconds, one idle intervention per uninterrupted silence period. StaySilent also consumes evaluation cooldown to prevent timer storms. New user activity rearms the silence period. Environment events are deduplicated by EventId and expire after 30 seconds.
+Timers use TimeProvider and enqueue events containing a timer generation. User activity, detach/end and response starts invalidate old generations. Fire only while attached, input quiet and output idle. Defaults: idle threshold from Agent Definition (8 seconds), minimum evaluation interval/cooldown 30 seconds. StaySilent consumes evaluation cooldown to prevent timer storms. New user activity rearms the silence period. Environment events are deduplicated by EventId and expire after 30 seconds. Repeated Speak/StaySilent/RequestDeactivate and definition-owned caps are in [Observed Phase D initiative](#observed-phase-d-initiative).
 
 ```mermaid
 sequenceDiagram
@@ -149,9 +149,15 @@ sequenceDiagram
     T->>C: Eligible trigger
     C->>C: Check attachment, silence, cooldown and dedupe
     C->>A: RequestAgentDecision → IAgentBrain(snapshot)
-    A-->>C: StaySilent or Speak(request)
+    A-->>C: StaySilent, Speak(request), or RequestDeactivate
     C->>C: Recheck turn generation and initiative policy
     C-->>T: Record evaluation outcome
 ```
 
 Initiative supports LongSilence, EnvironmentUpdate, UnfinishedInteraction only during an active attached application session. No push, email, SMS, agent automation platform or background notification service. Queue expires instead of interrupting a user to deliver a stale proactive update.
+
+## Observed Phase D initiative
+
+Timers use TimeProvider generations. User activity, pending upload, parsing/tool hold, detach/end/deactivate, and response starts invalidate old generations. Fire only while attached, input quiet, output idle, and no live assistant response. Defaults when omitted on the pinned Agent Definition: idle threshold 8 seconds, cooldown 30 seconds, `MaxConsecutiveProactiveTurns=1`, `MaxSilentEvaluations=8`, `MaxInactivityMs=900000`. `maxPerSilencePeriod` is 1..8 (shipped examiner/compliance 1, customer-support 2). Visible LongSilence Speak increments the consecutive counter once; StaySilent consumes cooldown/backoff without increment; user text, speech commit, or pending-upload staging resets the counter to 0. Environment/unfinished Speak does not consume the silence consecutive cap. Zero cap never Speaks; a reached non-zero cap denies further LongSilence Speak and still permits RequestDeactivate. Always-StaySilent cannot loop forever: silent-evaluation backoff plus inactivity stop unpaid checks, then RequestDeactivate. `POST /api/v2/sessions/{id}/deactivate` and brain RequestDeactivate cancel live output, release STT/TTS, rotate runtime epoch, persist Paused, and keep Session/history/ownership/receipts/bound attachments. They are not archive and not v1 end. Repeated deactivate is idempotent. Historical MVP “one idle intervention per uninterrupted silence period” remains true for shipped examiner JSON (`maxPerSilencePeriod=1` plus CanOfferHelp).
+
+**R2 receipts (observed):** speech-coordinate playback progress is independent of display receipts. Conservative heard context uses speech receipts only. Display receipts do not copy onto heard. When `reply.speech` is absent, TTS synthesizes `reply.text` once; a later speech field on the same response does not start a second TTS source.

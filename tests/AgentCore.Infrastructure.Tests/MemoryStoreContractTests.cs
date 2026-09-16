@@ -35,6 +35,43 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Catalog_pagination_excludes_deleted_and_archived_by_default()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        foreach (var store in stores)
+        {
+            var newer = First() with
+            {
+                SessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b801"),
+                UpdatedAt = new DateTimeOffset(2026, 9, 16, 0, 0, 2, TimeSpan.Zero),
+                Title = "Newer"
+            };
+            var archived = First() with
+            {
+                SessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b802"),
+                UpdatedAt = new DateTimeOffset(2026, 9, 16, 0, 0, 1, TimeSpan.Zero),
+                Title = "Archived",
+                ArchivedAt = new DateTimeOffset(2026, 9, 16, 0, 0, 3, TimeSpan.Zero)
+            };
+            var deleted = First() with
+            {
+                SessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b803"),
+                Title = "Gone",
+                DurablyDeletedAt = new DateTimeOffset(2026, 9, 16, 0, 0, 4, TimeSpan.Zero)
+            };
+            await store.SaveAsync(newer, 0);
+            await store.SaveAsync(archived, 0);
+            await store.SaveAsync(deleted, 0);
+            var page = await store.ListCatalogAsync(null, 50, includeArchived: false);
+            Assert.Single(page.Items);
+            Assert.Equal(newer.SessionId, page.Items[0].SessionId);
+            var withArchived = await store.ListCatalogAsync(null, 50, includeArchived: true);
+            Assert.Equal(2, withArchived.Items.Count);
+        }
+    }
+
+    [Fact]
     public async Task Sqlite_transaction_rollback_does_not_keep_session()
     {
         await using var harness = await SqliteAsync();
@@ -517,6 +554,33 @@ public sealed class MemoryStoreContractTests
             null,
             new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+
+    [Fact]
+    public async Task Envelope_and_block_delivery_round_trip_sqlite()
+    {
+        await using var harness = await SqliteAsync();
+        var envelope = new ResponseEnvelope(
+            "Hello",
+            "Spoken",
+            [
+                new ResponseBlock("b1", ResponseBlockKind.Markdown, "**Hi**", "**Hi**", null, null, true)
+            ]);
+        var entry = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Hello") with
+        {
+            Envelope = envelope,
+            HeardTextEndExclusive = 3,
+            ReceivedTextEndExclusive = 5
+        };
+        var snapshot = First() with { Entries = [entry] };
+        await harness.Store.SaveAsync(snapshot, 0);
+        var loaded = await harness.Store.LoadAsync(snapshot.SessionId);
+        var restored = Assert.Single(loaded!.Entries);
+        Assert.Equal("Hello", restored.Text);
+        Assert.Equal("Spoken", restored.Envelope!.SpeechText);
+        Assert.True(Assert.Single(restored.Envelope.Blocks).DisplayDelivered);
+        Assert.Equal(3, restored.HeardTextEndExclusive);
+        Assert.Equal(5, restored.ReceivedTextEndExclusive);
+    }
 
     private static ConversationEntry Entry(Guid id, long sequence, EntryStatus status, string text) =>
         new(

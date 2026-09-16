@@ -28,6 +28,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("EnvelopeJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("EntrySequence")
                         .HasColumnType("INTEGER");
 
@@ -71,6 +74,155 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("ConversationEntries", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.OwnerCapabilityRecord", b =>
+                {
+                    b.Property<string>("TokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TokenHash");
+
+                    b.ToTable("OwnerCapabilities", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AttachmentRecordRow", b =>
+                {
+                    b.Property<string>("AttachmentId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BlobKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ByteSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sha256Hex")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Readable")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("StageForNextTurn")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("ExpiresAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("BoundAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AttachmentId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("State", "ExpiresAtUtc");
+
+                    b.ToTable("Attachments", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.MessageAttachmentRow", b =>
+                {
+                    b.Property<string>("EntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AttachmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("EntryId", "AttachmentId");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("MessageAttachments", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ArtifactRecordRow", b =>
+                {
+                    b.Property<string>("ArtifactId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BlobKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ByteSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sha256Hex")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceAttachmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WorkspaceLogicalPath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("ArtifactId");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("Artifacts", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ProfileRecord", b =>
                 {
                     b.Property<string>("ProfileId")
@@ -104,12 +256,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("AgentVersion")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long?>("ArchivedAtUtc")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("DefinitionJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<long?>("DurablyDeletedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Mode")
                         .IsRequired()
@@ -121,14 +279,29 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("Revision")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long>("RuntimeEpoch")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("WorkspaceOwned")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
                     b.HasKey("SessionId");
+
+                    b.HasIndex("DurablyDeletedAtUtc", "ArchivedAtUtc", "UpdatedAtUtc", "SessionId");
 
                     b.ToTable("Sessions", (string)null);
                 });

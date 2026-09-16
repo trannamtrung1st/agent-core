@@ -361,11 +361,12 @@ public sealed partial class SessionRuntime
             _activityScore = score;
         }
 
+        var duration = input.Evidence is SpeechStarted ? TimeSpan.Zero : UtteranceDuration();
         var evaluation = InteractionController.EvaluateSpeech(
             SnapshotController(),
             input.Evidence,
             _activityScore,
-            UtteranceDuration(),
+            duration,
             _ids.NewId());
         await ApplyEvaluationAsync(input.Context, evaluation, cancellationToken).ConfigureAwait(false);
         if (input.Evidence is SpeechStarted && _utteranceStarted is not null)
@@ -512,6 +513,7 @@ public sealed partial class SessionRuntime
             _timerGeneration++;
             if (CanEvaluateIdle())
             {
+                _silentEvaluations++;
                 var responseId = _ids.NewId();
                 var turn = ++_turnGeneration;
                 _outputActivity = OutputActivity.WaitingForAgent;
@@ -626,11 +628,22 @@ public sealed partial class SessionRuntime
         }
 
         _committedUtteranceId = _activeUtteranceId;
-        _helpOfferedDuringSilence = false;
+        NoteUserActivity();
         _environmentQueue.Clear();
         _timerGeneration++;
         var turn = ++_turnGeneration;
         var now = _time.GetUtcNow();
+        IReadOnlyList<Guid> staged = [];
+        if (_attachments is not null)
+        {
+            var pending = await _attachments.ListStagedPendingAsync(SessionId, cancellationToken).ConfigureAwait(false);
+            staged = pending.Select(item => item.AttachmentId).ToArray();
+            if (staged.Count > 0)
+            {
+                await _attachments.ValidateBindableAsync(SessionId, staged, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         var userEntry = new ConversationEntry(
             context.EventId,
             NextSequence(),
@@ -643,17 +656,23 @@ public sealed partial class SessionRuntime
             text.Length,
             text.Length,
             now);
-        _snapshot = Append(userEntry) with { Status = _snapshot.Status };
+        var titleHints = await AttachmentTitleHintsAsync(staged, cancellationToken).ConfigureAwait(false);
+        _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
         var cause = context;
         RequestPersist(
             _snapshot,
-            then: _ =>
+            then: async _ =>
             {
+                if (staged.Count > 0 && _attachments is not null)
+                {
+                    await _attachments.BindToEntryAsync(SessionId, userEntry.EntryId, staged, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+
                 var responseId = _ids.NewId();
                 var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
                 _outputActivity = OutputActivity.WaitingForAgent;
-                LaunchBrain(cause, trigger, responseId, turn);
-                return Task.CompletedTask;
+                LaunchPreparedTurn(cause, trigger, responseId, turn, staged);
             });
     }
 

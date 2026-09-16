@@ -17,7 +17,7 @@ public sealed partial class SessionRuntime
 
     private async Task HandleEnvironmentAsync(EnvironmentReceived input, CancellationToken cancellationToken)
     {
-        if (_snapshot.Status != SessionStatus.Attached)
+        if (_deactivated || _snapshot.Status != SessionStatus.Attached)
         {
             return;
         }
@@ -85,7 +85,7 @@ public sealed partial class SessionRuntime
 
     private void LaunchQueuedEnvironment(EventContext context, QueuedEnvironment queued)
     {
-        if (IsExpired(queued) || !HasTrigger(TriggerName(queued.Kind)))
+        if (IsExpired(queued) || !HasTrigger(TriggerName(queued.Kind)) || _activeResponseId is not null)
         {
             return;
         }
@@ -97,6 +97,101 @@ public sealed partial class SessionRuntime
         var trigger = new AgentTrigger(context.EventId, queued.Kind, queued.Text, queued.Event.Kind);
         LaunchBrain(context, trigger, responseId, turn);
     }
+
+    private async Task HandleDeactivateAsync(DeactivateReceived input, CancellationToken cancellationToken)
+    {
+        await ApplyDeactivateAsync(input.Context, cancellationToken, input.Persisted).ConfigureAwait(false);
+    }
+
+    private void HandleInitiativeHold(InitiativeHoldReceived input)
+    {
+        _initiativeHeld = input.Held;
+        if (!_initiativeHeld && CanEvaluateIdle())
+        {
+            ScheduleIdleTimer(SilenceThreshold());
+        }
+    }
+
+    private async Task ApplyDeactivateAsync(
+        EventContext context,
+        CancellationToken cancellationToken,
+        TaskCompletionSource<bool>? persisted = null)
+    {
+        if (_deactivated)
+        {
+            persisted?.TrySetResult(true);
+            return;
+        }
+
+        _deactivated = true;
+        _timerGeneration++;
+        _turnGeneration++;
+        _epoch = _ids.NewId();
+        _environmentQueue.Clear();
+        AbandonLiveSpeech(rotateEpoch: true);
+        _input = InputActivity.Idle;
+        await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+        InvalidateSpeechJobs();
+        _ttsCts?.Cancel();
+        if (_activeResponseId is { } live)
+        {
+            await SupersedeAsync(context, live, cancellationToken, "deactivated").ConfigureAwait(false);
+        }
+
+        _outputActivity = OutputActivity.Idle;
+        _snapshot = _snapshot with
+        {
+            Status = SessionStatus.Paused,
+            PendingMode = null,
+            RuntimeEpoch = _snapshot.RuntimeEpoch + 1,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        RequestPersist(
+            _snapshot,
+            PersistKind.Pause,
+            then: async ct =>
+            {
+                await PublishStateAsync(context, ct).ConfigureAwait(false);
+                persisted?.TrySetResult(true);
+            },
+            ended: persisted);
+    }
+
+    private void NoteUserActivity()
+    {
+        _helpOfferedDuringSilence = false;
+        _consecutiveProactiveSpeaks = 0;
+        _proactiveSpeaksThisSilence = 0;
+        _silentEvaluations = 0;
+        _lastMeaningfulActivityAt = _time.GetUtcNow();
+        _timerGeneration++;
+    }
+
+    private bool CanAcceptProactiveSpeak(AgentTrigger trigger)
+    {
+        if (trigger.Kind != TriggerKind.LongSilence)
+        {
+            return true;
+        }
+
+        var policy = _snapshot.Definition.InitiativePolicy;
+        return !_initiativeHeld
+            && !_pendingUploadHold
+            && policy.ConsecutiveCap > 0
+            && _consecutiveProactiveSpeaks < policy.ConsecutiveCap
+            && _proactiveSpeaksThisSilence < policy.MaxPerSilencePeriod;
+    }
+
+    private bool InactivityExceeded() =>
+        (_time.GetUtcNow() - _lastMeaningfulActivityAt).TotalMilliseconds
+        > _snapshot.Definition.InitiativePolicy.InactivityLimitMs;
+
+    private bool NeedsTerminalDeactivate() =>
+        !_deactivated
+        && (_snapshot.Definition.InitiativePolicy.ConsecutiveCap == 0
+            || _consecutiveProactiveSpeaks >= _snapshot.Definition.InitiativePolicy.ConsecutiveCap
+            || _silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
+            || InactivityExceeded());
 
     private void ScheduleIdleTimer(TimeSpan delay)
     {
@@ -136,9 +231,17 @@ public sealed partial class SessionRuntime
         _pendingInitiativeExpiresAt = null;
     }
 
+    private TimeSpan IdleBackoff()
+    {
+        var factor = Math.Clamp(_silentEvaluations, 1, 4);
+        return TimeSpan.FromMilliseconds(Cooldown().TotalMilliseconds * factor);
+    }
+
     private bool CanEvaluateIdle() =>
         CanArmIdleTimer()
         && IsOutputQuiet()
+        && !_initiativeHeld
+        && !_pendingUploadHold
         && _input is InputActivity.Idle or InputActivity.Listening
         && RemainingCooldown() == TimeSpan.Zero;
 
@@ -148,14 +251,18 @@ public sealed partial class SessionRuntime
         && RemainingCooldown() > TimeSpan.Zero;
 
     private bool CanArmIdleTimer() =>
-        _snapshot.Status == SessionStatus.Attached
+        !_deactivated
+        && _snapshot.Status == SessionStatus.Attached
         && _snapshot.Definition.InitiativePolicy.Enabled
         && HasTrigger("longSilence")
-        && !_helpOfferedDuringSilence;
+        && !_initiativeHeld
+        && !_pendingUploadHold
+        && (_silentEvaluations < _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
+            || NeedsTerminalDeactivate());
 
     private bool InitiativeStillEligible(AgentTrigger trigger)
     {
-        if (_snapshot.Status != SessionStatus.Attached || _activeResponseId is not null)
+        if (_deactivated || _snapshot.Status != SessionStatus.Attached || _activeResponseId is not null)
         {
             return false;
         }
@@ -167,9 +274,10 @@ public sealed partial class SessionRuntime
 
         return trigger.Kind switch
         {
-            TriggerKind.LongSilence => !_helpOfferedDuringSilence
-                && HasTrigger("longSilence")
-                && _snapshot.Definition.InitiativePolicy.Enabled,
+            TriggerKind.LongSilence => HasTrigger("longSilence")
+                && _snapshot.Definition.InitiativePolicy.Enabled
+                && !_initiativeHeld
+                && !_pendingUploadHold,
             TriggerKind.EnvironmentUpdate => HasTrigger("environmentUpdate") && !InitiativeExpired(),
             TriggerKind.UnfinishedInteraction => HasTrigger("unfinishedInteraction")
                 && !string.IsNullOrEmpty(_snapshot.PendingTopic)

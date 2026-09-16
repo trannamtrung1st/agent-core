@@ -16,6 +16,35 @@ namespace AgentCore.Application.Tests;
 public sealed class InteractionControllerTests
 {
     [Fact]
+    public void Speech_started_clock_jitter_is_not_treated_as_short_noise()
+    {
+        var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000a9");
+        var snapshot = new ControllerSnapshot(
+            SessionStatus.Attached,
+            SessionMode.Voice,
+            InputActivity.Listening,
+            OutputActivity.Idle,
+            Candidate: null,
+            LiveResponseId: null,
+            ResponseStatus: null,
+            TimerGeneration: 1,
+            TurnGeneration: 1,
+            new RecognitionCapabilities(true, true, true, true),
+            new InteractionPolicy(),
+            CommittedUtteranceId: null,
+            LastActivityScore: null,
+            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        var evaluation = InteractionController.EvaluateSpeech(
+            snapshot,
+            new SpeechStarted(utterance),
+            activityScore: 0.9,
+            TimeSpan.FromMilliseconds(0.712),
+            Guid.Parse("019944af-0000-7000-8000-0000000001a9"));
+        Assert.Equal(InteractionDecision.InjectEvent, evaluation.Decision);
+        Assert.False(evaluation.DiscardUtterance);
+    }
+
+    [Fact]
     public void Mhm_is_a_backchannel_and_wait_is_an_interrupt()
     {
         Assert.True(HeuristicPhrases.IsBackchannel("mhm"));

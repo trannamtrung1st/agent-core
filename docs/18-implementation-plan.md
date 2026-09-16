@@ -135,6 +135,24 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 - **Status:** Complete. Measurement/demo and Compose SQLite volume/restart plus the MVP handoff report are recorded. Headset/speaker pass stays optional and key-gated. See [Milestone 12 demo verification](reports/m12-demo-verification.md) and [MVP handoff](reports/m12-mvp-handoff.md).
 - **Explicit non-goals:** Kubernetes, horizontal scaling, extra application services, generic autonomous-agent functionality, elaborate avatars or analytics dashboards.
 
+## Post-MVP phases (planned until verified)
+
+Milestones 0–12 above remain the historical MVP record and stay **Complete**. The accepted proposal pack adds Phases A–H as mandatory follow-on gates and Phase I as conditional. These rows are **planned until verified** except where a cell records observed evidence. Apply acceptance only to the phase that supplies the capability. Workspace **ownership** is Phase A; physical provisioning is Phase F. Phase C may prove artifact-reference rendering with fixtures; complete generated-artifact workflow is F/G. Concrete numeric quotas live in [Technology Decisions](10-technology-decisions.md#planned-resource-limits).
+
+| Phase | Production behavior | Evidence |
+| --- | --- | --- |
+| A — Sessions | Multi-chat catalog, picker, pinned AgentId+AgentVersion, deterministic titles, rename, archive/unarchive, versioned durable delete, new epoch on reopen, trusted-local capability, workspace-ownership record | **Observed:** list order/pagination; Ended rows stay terminal; v1 DELETE unchanged; capability fail-closed; migrations backfill ownership |
+| B — Attachments | HTTP streamed pending→bound attachments; immutable originals outside SQLite; authorized content. OCR/Office still out of scope. | **Observed:** store/upload/bind/cleanup, composer picker, processors/vision mapping |
+| C — Rich responses | reply.text, optional reply.speech, Markdown, attachment/artifact refs, independent receipts | **Observed:** conservative heard; no unseen tails on reconnect; fixture artifact refs; sanitized Markdown/reference UI |
+| D — Initiative | Repeated StaySilent/Speak/RequestDeactivate; definition-owned cap; finite silent bounds; deactivation ≠ archive/delete | **Observed:** FakeTimeProvider 1st/2nd/3rd Speak; at-cap and zero-cap RequestDeactivate; HTTP deactivate idempotent |
+| E — Role environments | Versioned Support and Compliance plus preserved examiner; allowlists; initiative pins | **Observed:** distinct MaxConsecutiveProactiveTurns 1/2/0; pin stable across file version bump; knowledge citation retrieve; process/shell denied |
+| F — Workspace | Lazy provision; /agent and /attachments read-only; /workspace 250 MiB; artifacts distinct | **Observed:** isolation/traversal/symlink/other-session/secret denial; lazy empty workspace; template without corpus copy; archive/reopen/deactivate preserve files; durable delete cleans up; 250 MiB concurrent workspace writes; artifact store 50 MiB each / 250 MiB per session; explicit materialize with hash/provenance |
+| G — Bounded work | Typed tools, Support/Compliance workflows, step/time/output caps | Late results rejected; uploads never execute |
+| H — Sandbox | Concrete container behind the execution boundary | Real isolation/resource tests; missing Docker is a blocker |
+| I — WorkItems | Conditional | Not-applicable unless a G/H workflow must survive deactivation |
+
+Rename and archive/unarchive are in scope for A (R6). Do not treat a sandbox interface-only as H.
+
 ## Handoff rule
 
 Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter uses `openrouter/free` for **opt-in adapter smoke only**; the Real/demo profile uses a fixed model ID; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).

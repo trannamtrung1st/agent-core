@@ -108,7 +108,7 @@ public static class InteractionController
         Guid newCandidateId)
     {
         var noisy = activityScore is { } score && score < state.Policy.ActivityThreshold
-                    || duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < state.Policy.MinSpeechMs;
+                    || duration.TotalMilliseconds >= 1 && duration.TotalMilliseconds < state.Policy.MinSpeechMs;
         if (noisy && !HasLiveOutput(state))
         {
             return new ControllerEvaluation(InteractionDecision.Ignore, state.Input, null, false, null, true, null);

@@ -33,7 +33,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = JoinCompletions(options.BaseUrl);
-        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true);
+        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true, Vision: options.Vision);
     }
 
     public ModelCapabilities Capabilities { get; }
@@ -51,6 +51,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         if (string.IsNullOrWhiteSpace(_options.DefaultModel))
         {
             yield return Fail(ProviderErrorCode.InvalidRequest, "DefaultModel is required.");
+            yield break;
+        }
+
+        if (HasImageParts(request) && !Capabilities.Vision)
+        {
+            yield return Fail(ProviderErrorCode.UnsupportedCapability, "This language model does not support vision.");
             yield break;
         }
 
@@ -231,16 +237,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
     private HttpRequestMessage BuildRequest(ModelRequest request)
     {
-        var messages = request.Messages.Select(message => new Dictionary<string, string>
-        {
-            ["role"] = message.Role switch
-            {
-                ModelRole.System => "system",
-                ModelRole.Assistant => "assistant",
-                _ => "user"
-            },
-            ["content"] = message.Text
-        }).ToArray();
+        var messages = request.Messages.Select(MapMessage).ToArray();
 
         var body = new Dictionary<string, object?>
         {
@@ -276,6 +273,52 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
         return message;
     }
+
+    private static bool HasImageParts(ModelRequest request) =>
+        request.Messages.Any(message => message.Parts?.OfType<ModelImageContent>().Any() == true);
+
+    private static Dictionary<string, object?> MapMessage(ModelMessage message)
+    {
+        var role = message.Role switch
+        {
+            ModelRole.System => "system",
+            ModelRole.Assistant => "assistant",
+            _ => "user"
+        };
+        if (message.Parts is { Count: > 0 } parts)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["role"] = role,
+                ["content"] = parts.Select(MapPart).ToArray()
+            };
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["role"] = role,
+            ["content"] = message.Text
+        };
+    }
+
+    private static object MapPart(ModelContentPart part) =>
+        part switch
+        {
+            ModelTextContent text => new Dictionary<string, string>
+            {
+                ["type"] = "text",
+                ["text"] = text.Text
+            },
+            ModelImageContent image => new Dictionary<string, object?>
+            {
+                ["type"] = "image_url",
+                ["image_url"] = new Dictionary<string, string>
+                {
+                    ["url"] = $"data:{image.ContentType};base64,{Convert.ToBase64String(image.Bytes)}"
+                }
+            },
+            _ => new Dictionary<string, string> { ["type"] = "text", ["text"] = "" }
+        };
 
     private static ModelGenerationEvent? MapPayload(
         string payload,

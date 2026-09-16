@@ -158,10 +158,15 @@ public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text,
 public sealed record AgentContext(AgentDefinition Definition,
     IReadOnlyList<ConversationEntry> History, string Summary,
     UserProfile? Profile, SessionMode Mode, string? PendingTopic,
-    bool HelpOfferedDuringSilence, string? InterruptedHeardText, AgentTrigger Trigger);
+    bool HelpOfferedDuringSilence, string? InterruptedHeardText, AgentTrigger Trigger,
+    IReadOnlyList<AttachmentProcessResult>? AttachmentContents = null,
+    int ConsecutiveProactiveSpeaks = 0, int SilentEvaluations = 0,
+    int SpeaksThisSilencePeriod = 0, bool InitiativeHeld = false,
+    bool InactivityExceeded = false);
 public abstract record AgentDecision;
 public sealed record StaySilent(string Reason) : AgentDecision;
 public sealed record Speak(ModelRequest Request) : AgentDecision;
+public sealed record RequestDeactivate(string Reason) : AgentDecision;
 public interface IAgentBrain
 {
     ValueTask<AgentDecision> DecideAsync(AgentContext context, Guid responseId,
@@ -174,7 +179,7 @@ public interface IIdGenerator
 }
 ```
 
-`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. The default brain deterministically gates initiative and builds a normalized ModelRequest; Session Runtime then enumerates ILanguageModel. It does not run a second conversational LLM call just to decide every user turn. Optional future model-assisted initiative is behind this port; its result must pass the same policy recheck. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
+`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. The default brain deterministically gates initiative and builds a normalized ModelRequest; Session Runtime then enumerates ILanguageModel. It does not run a second conversational LLM call just to decide every user turn. Optional future model-assisted initiative is behind this port; its result must pass the same policy recheck. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. RequestDeactivate cancels live output, rotates the runtime epoch, persists Paused, and is not archive or v1 end. Role `environment.toolAllowlist` is runtime-enforced (`RolePermissions`); `process`/`shell` stay denied. Approved knowledge retrieval returns identity, title, citation, and current file body under the pinned source identity (`GET /api/v2/sessions/{id}/knowledge/{identity}`). Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
 
 Use injected `TimeProvider` for UTC timestamps, monotonic elapsed time, and timers (`Task.Delay(delay, timeProvider, token)` or `CreateTimer`). Do not define IClock. Production NewId calls `Guid.CreateVersion7(timeProvider.GetUtcNow())`; NewSessionId calls `Guid.NewGuid()` for cryptographically random UUIDv4 local/demo bearer session IDs. Tests use reproducible sequences for both. IDs are serialized as strings at browser boundaries.
 
@@ -251,3 +256,17 @@ public interface INativeRealtimeSession : IAsyncDisposable
 ```
 
 Native audio goes directly to this session without decomposing it into STT/LLM/TTS. The adapter maps vendor response IDs to application-issued ResponseIds. Native turn detection suggests a turn; the runtime authorizes BeginTurnAsync. An adapter unable to gate autonomous output must buffer until authorization or advertise UnsupportedCapability. Interrupt must retain identity filtering even if the provider cannot cancel promptly. Native events normalize into the same internal and wire semantics; native implementation, extension detection and protocol negotiation are all deferred beyond MVP.
+
+## Post-MVP
+
+Observed owner capability and session catalog/lifecycle are in Application ports (`IOwnerCapabilityService`, `IMemoryStore.ListCatalogAsync`). Observed `IAttachmentStore` covers pending upload, pending-to-bound claim, staged-next-turn bind for speech, authorized content streams, TTL sweep, and session-delete blob cleanup. Observed `IAttachmentProcessor` extracts bounded text (plain/Markdown/JSON/CSV/PDF with page provenance), validates PNG/JPEG/WebP/GIF with 32 MP decoded-pixel checks and stripped provider-facing metadata, caches by AttachmentId+processor version, never fetches remote URLs, and returns a typed unsupported result for unread or out-of-reader files. Extraction runs off the mailbox against immutable blobs. `ILanguageModel.Capabilities.Vision` is truthful: production OpenAI-compatible adapters map normalized image parts when Vision is true, otherwise return `UnsupportedCapability`.
+
+Observed `ISessionWorkspace` uses logical paths only (`/agent`, `/attachments`, `/workspace`). Infrastructure `FileSessionWorkspace` maps `/workspace` onto `data/workspaces/{sessionId}/workspace/{working,artifacts,state}`, overlays read-only `/agent` (pinned identity, harness names, knowledge citations—not corpora) and `/attachments` (immutable originals), applies an optional role template from `agents/templates/{templateId}` into `working` without copying harness/knowledge trees or secret files, enforces 250 MiB writable quota under concurrency, rejects traversal/absolute/symlink/other-session paths, and deletes on versioned durable delete only. Application never sees host paths.
+
+Observed `IArtifactStore` keeps metadata in SQLite (or the in-memory equivalent) and binaries under `data/artifacts/{sessionId}` outside row payloads and outside `local/`. Artifacts are a distinct type from Attachments. Explicit `materialize` copies an attachment into `/workspace/working` with sanitized deterministic collision names, preserves SHA-256, and records `SourceAttachmentId`. Caps are 50 MiB each and 250 MiB per session under concurrency. Envelope authorization accepts stored ArtifactIds plus the Phase C fixture `fixture-artifact-1`. Export/download uses the trusted-local owner capability.
+
+Still planned until verified: typed tools; container sandbox.
+
+Observed rich envelope: parent `ResponseId` owns `reply.text` (stored as entry `Text` after marker strip), optional `reply.speech`, Markdown/attachment/artifact/unknown blocks, independent display vs speech-coordinate receipts, and fixture-only artifact authorization (`fixture-artifact-1`). Unknown and unauthorized artifact refs persist a safe fallback without leaking the id.
+
+Quota numbers: [resource table](10-technology-decisions.md#planned-resource-limits).

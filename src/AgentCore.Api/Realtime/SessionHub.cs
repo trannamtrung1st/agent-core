@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Contracts.Http;
 using AgentCore.Contracts.Realtime;
 using Microsoft.AspNetCore.SignalR;
 
@@ -6,8 +7,18 @@ namespace AgentCore.Api.Realtime;
 
 public sealed class SessionHub(SessionHost host) : Hub
 {
-    public Task<CommandAck> Attach(ClientCommand<AttachPayload> command) =>
-        Complete(host.AttachAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+    public Task<CommandAck> Attach(ClientCommand<AttachPayload> command)
+    {
+        command.Payload ??= new AttachPayload();
+        if (string.IsNullOrEmpty(command.Payload.OwnerCapability))
+        {
+            command.Payload.OwnerCapability = Context.GetHttpContext()?
+                .Request.Headers[OwnerCapabilityHeaders.Name]
+                .ToString();
+        }
+
+        return Complete(host.AttachAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+    }
 
     public Task<CommandAck> SendText(ClientCommand<UserTextPayload> command) =>
         Complete(host.SendTextAsync(Context.ConnectionId, command, Context.ConnectionAborted));

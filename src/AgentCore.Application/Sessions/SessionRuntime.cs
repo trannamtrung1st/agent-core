@@ -37,6 +37,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly ISpeechRecognizer? _recognizer;
     private readonly ISpeechSynthesizer? _synthesizer;
     private readonly ISessionAudioOutput? _audioOutput;
+    private readonly IAttachmentStore? _attachments;
+    private readonly IAttachmentProcessor? _processor;
+    private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly InteractionPolicy _policy;
     private readonly object _audioGate = new();
     private AudioIngress _ingress = new();
@@ -63,6 +66,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private Guid? _activeResponseId;
     private Guid? _activeEntryId;
     private readonly ResponseTextAccumulator _accumulator = new();
+    private ResponseEnvelope? _envelope;
+    private int _publishedDisplayLength;
+    private readonly HashSet<string> _publishedBlockIds = new(StringComparer.Ordinal);
+    private bool _ttsSourceLocked;
+    private bool _ttsUsesSpeech;
+    private int _ttsFedLength;
     private bool _responseTerminal;
     private CancellationTokenSource? _responseCts;
     private DateTimeOffset _lastCheckpoint = DateTimeOffset.MinValue;
@@ -85,6 +94,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private int _pendingVoiceGeneration;
     private bool _muted;
     private bool _helpOfferedDuringSilence;
+    private int _consecutiveProactiveSpeaks;
+    private int _proactiveSpeaksThisSilence;
+    private int _silentEvaluations;
+    private DateTimeOffset _lastMeaningfulActivityAt;
+    private bool _initiativeHeld;
+    private bool _pendingUploadHold;
+    private bool _deactivated;
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private readonly HashSet<Guid> _environmentIds = [];
@@ -116,7 +132,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         InteractionPolicy? policy = null,
         ISpeechRecognizer? recognizer = null,
         ISpeechSynthesizer? synthesizer = null,
-        ISessionAudioOutput? audioOutput = null)
+        ISessionAudioOutput? audioOutput = null,
+        IAttachmentStore? attachments = null,
+        IAttachmentProcessor? processor = null,
+        IArtifactReferenceAuthorizer? artifacts = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
@@ -130,9 +149,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _recognizer = recognizer;
         _synthesizer = synthesizer;
         _audioOutput = audioOutput ?? output as ISessionAudioOutput;
+        _attachments = attachments;
+        _processor = processor;
+        _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
+        _lastMeaningfulActivityAt = snapshot.UpdatedAt;
         _epoch = _ids.NewId();
         _durableRevision = snapshot.Revision;
         _durableSnapshot = snapshot;
@@ -144,42 +167,60 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public SessionSnapshot Snapshot => _snapshot;
 
-    public Task<bool> SubmitUserTextAsync(string text, Guid? sourceEventId = null, CancellationToken cancellationToken = default)
+    public Task<bool> SubmitUserTextAsync(
+        string text,
+        Guid? sourceEventId = null,
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<Guid>? attachmentIds = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(text);
-        if (text.Length > 8000)
-        {
-            throw AgentCoreErrors.Validation("Text exceeds 8000 UTF-16 code units.");
-        }
-
+        ValidateUserTurn(text, attachmentIds);
         _ = cancellationToken;
         var eventId = sourceEventId ?? _ids.NewId();
         var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(), eventId, null);
         BeginWork();
-        return Task.FromResult(Enqueue(new UserTextReceived(context, text), urgent: false));
+        return Task.FromResult(Enqueue(new UserTextReceived(context, text, AttachmentIds: attachmentIds), urgent: false));
     }
 
     public async Task<bool?> SubmitPersistedUserTextAsync(
         string text,
         Guid sourceEventId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<Guid>? attachmentIds = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(text);
-        if (text.Length > 8000)
-        {
-            throw AgentCoreErrors.Validation("Text exceeds 8000 UTF-16 code units.");
-        }
-
+        ValidateUserTurn(text, attachmentIds);
         var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = new EventContext(sourceEventId, SessionId, _epoch, _time.GetUtcNow(), sourceEventId, null);
         BeginWork();
-        if (!Enqueue(new UserTextReceived(context, text, persisted), urgent: false))
+        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds), urgent: false))
         {
             persisted.TrySetResult(false);
             return null;
         }
 
         return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<bool> StageAttachmentsAsync(IReadOnlyList<Guid> attachmentIds, CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        var context = NewContext();
+        BeginWork();
+        return Task.FromResult(Enqueue(new AttachmentsStagedReceived(context, attachmentIds), urgent: true));
+    }
+
+    private void ValidateUserTurn(string text, IReadOnlyList<Guid>? attachmentIds)
+    {
+        text ??= "";
+        var hasAttachments = attachmentIds is { Count: > 0 };
+        if (string.IsNullOrWhiteSpace(text) && !hasAttachments)
+        {
+            throw AgentCoreErrors.Validation("text is required.");
+        }
+
+        if (text.Length > 8000)
+        {
+            throw AgentCoreErrors.Validation("Text exceeds 8000 UTF-16 code units.");
+        }
     }
 
     public Task CancelActiveResponseAsync(CancellationToken cancellationToken = default)
@@ -279,6 +320,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> RequestDeactivateAsync(CancellationToken cancellationToken = default)
+    {
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new DeactivateReceived(context, persisted), urgent: true))
+        {
+            persisted.TrySetResult(false);
+            return false;
+        }
+
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task SubmitInitiativeHoldAsync(bool held, CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        var context = NewContext();
+        BeginWork();
+        Enqueue(new InitiativeHoldReceived(context, held), urgent: true);
+        return Task.CompletedTask;
+    }
+
     public Task SubmitSpeechAsync(
         SpeechRecognitionEvent evidence,
         double? activityScore = null,
@@ -335,12 +399,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await WaitOrCancelAsync(admitted, false, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<bool?> SubmitReceiptAsync(Guid responseId, int textEndExclusive, CancellationToken cancellationToken = default)
+    public async Task<bool?> SubmitReceiptAsync(
+        Guid responseId,
+        int textEndExclusive,
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<string>? blockIds = null)
     {
         var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        if (!Enqueue(new ResponseReceiptReceived(context, responseId, textEndExclusive, admitted), urgent: false))
+        if (!Enqueue(new ResponseReceiptReceived(context, responseId, textEndExclusive, admitted, blockIds), urgent: false))
         {
             return null;
         }
@@ -511,6 +579,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case UserTextReceived user:
                     await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);
                     break;
+                case AttachmentsStagedReceived staged:
+                    await HandleAttachmentsStagedAsync(staged, cancellationToken).ConfigureAwait(false);
+                    break;
                 case SpeechEvidenceReceived speech:
                     await HandleSpeechAsync(speech, cancellationToken).ConfigureAwait(false);
                     break;
@@ -519,6 +590,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case ClassifierReturned classified:
                     await HandleClassifierAsync(classified, cancellationToken).ConfigureAwait(false);
+                    break;
+                case AttachmentsProcessedReceived processed:
+                    await HandleAttachmentsProcessedAsync(processed, cancellationToken).ConfigureAwait(false);
                     break;
                 case BrainReturned brain:
                     await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
@@ -557,6 +631,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case EndSessionReceived ended:
                     await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
                     break;
+                case DeactivateReceived deactivate:
+                    await HandleDeactivateAsync(deactivate, cancellationToken).ConfigureAwait(false);
+                    break;
+                case InitiativeHoldReceived hold:
+                    HandleInitiativeHold(hold);
+                    break;
                 case EnvironmentReceived environment:
                     await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
                     break;
@@ -571,7 +651,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-            if (input is AttachReceived or EndSessionReceived or DetachReceived)
+            if (input is AttachReceived or EndSessionReceived or DeactivateReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
             }
@@ -663,6 +743,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             case EndSessionReceived ended:
                 ended.Persisted.TrySetResult(value);
                 break;
+            case DeactivateReceived deactivate:
+                deactivate.Persisted.TrySetResult(value);
+                break;
             case AttachReceived attach:
                 attach.Attached.TrySetResult(value);
                 break;
@@ -704,18 +787,64 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Interlocked.Exchange(ref _mailboxPressureSignaled, 0);
     }
 
+    private async Task HandleAttachmentsStagedAsync(AttachmentsStagedReceived input, CancellationToken cancellationToken)
+    {
+        if (_attachments is null)
+        {
+            return;
+        }
+
+        await _attachments.StageForNextTurnAsync(SessionId, input.AttachmentIds, cancellationToken).ConfigureAwait(false);
+        _pendingUploadHold = true;
+        NoteUserActivity();
+    }
+
     private async Task HandleUserTextAsync(UserTextReceived input, CancellationToken cancellationToken)
     {
         using var activity = RuntimeTelemetry.Activity.StartActivity("user_turn");
         var started = Stopwatch.GetTimestamp();
         _recordedLlm = false;
+        var attachmentIds = NormalizeAttachmentIds(input.AttachmentIds);
         if (_snapshot.Entries.Any(entry => entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User))
         {
+            if (attachmentIds.Count > 0 && _attachments is not null)
+            {
+                var existing = _snapshot.Entries.First(entry =>
+                    entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User);
+                await _attachments.BindToEntryAsync(SessionId, existing.EntryId, attachmentIds, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             input.Persisted?.TrySetResult(true);
             return;
         }
 
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        {
+            input.Persisted?.TrySetResult(false);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(input.Text) && attachmentIds.Count == 0)
+        {
+            input.Persisted?.TrySetResult(false);
+            return;
+        }
+
+        try
+        {
+            if (attachmentIds.Count > 0)
+            {
+                if (_attachments is null)
+                {
+                    throw AgentCoreErrors.Validation("Attachments are not available.");
+                }
+
+                await _attachments.ValidateBindableAsync(SessionId, attachmentIds, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (AgentCoreException)
         {
             input.Persisted?.TrySetResult(false);
             return;
@@ -727,20 +856,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var now = _time.GetUtcNow();
+        var text = input.Text ?? "";
         var userEntry = new ConversationEntry(
             input.Context.EventId,
             NextSequence(),
             input.Context.EventId,
             ConversationRole.User,
-            input.Text,
+            text,
             ResponseId: null,
             EntryStatus.Completed,
             _snapshot.Mode,
-            input.Text.Length,
-            input.Text.Length,
+            text.Length,
+            text.Length,
             now);
 
-        _snapshot = Append(userEntry) with { Status = _snapshot.Status };
+        var titleHints = await AttachmentTitleHintsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
+        _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
         var (summary, through) = ConversationSummary.Refresh(
             _snapshot.Entries,
             _snapshot.Summary,
@@ -753,18 +884,31 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _timerGeneration++;
         _environmentQueue.Clear();
         var cause = input.Context;
-        var text = input.Text;
         var turn = ++_turnGeneration;
         try
         {
             RequestPersist(
                 _snapshot,
                 PersistKind.Normal,
-                then: _ =>
+                then: async _ =>
                 {
+                    if (attachmentIds.Count > 0 && _attachments is not null)
+                    {
+                        try
+                        {
+                            await _attachments.BindToEntryAsync(SessionId, userEntry.EntryId, attachmentIds, CancellationToken.None)
+                                .ConfigureAwait(false);
+                        }
+                        catch (AgentCoreException)
+                        {
+                            return;
+                        }
+                    }
+
                     var responseId = _ids.NewId();
                     var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
-                    _helpOfferedDuringSilence = false;
+                    _pendingUploadHold = false;
+                    NoteUserActivity();
                     _outputActivity = OutputActivity.WaitingForAgent;
                     RuntimeTelemetry.Record("controller", RuntimeTelemetry.ElapsedMs(started));
                     _logger.LogInformation(
@@ -772,32 +916,37 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         SessionId,
                         cause.EventId,
                         text.Length);
-                    LaunchBrain(cause, trigger, responseId, turn);
-                    return Task.CompletedTask;
+                    LaunchPreparedTurn(cause, trigger, responseId, turn, attachmentIds);
                 },
                 ended: input.Persisted);
         }
-        catch
+        catch (AgentCoreException)
         {
             input.Persisted?.TrySetResult(false);
-            throw;
+            return;
         }
     }
 
     private async Task HandleBrainAsync(BrainReturned input, CancellationToken cancellationToken)
     {
-        if (input.TurnGeneration != _turnGeneration)
+        if (_deactivated || input.TurnGeneration != _turnGeneration)
         {
+            return;
+        }
+
+        if (input.Decision is RequestDeactivate)
+        {
+            await ApplyDeactivateAsync(input.Context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (input.Decision is Speak
             && input.Trigger.Kind != TriggerKind.UserTurn
-            && !InitiativeStillEligible(input.Trigger))
+            && (_activeResponseId is not null || !InitiativeStillEligible(input.Trigger) || !CanAcceptProactiveSpeak(input.Trigger)))
         {
             RecordInitiativeEvaluation();
             _outputActivity = OutputActivity.Idle;
-            ScheduleIdleTimer(Cooldown());
+            ScheduleIdleTimer(IdleBackoff());
             return;
         }
 
@@ -805,13 +954,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             RecordInitiativeEvaluation();
             _outputActivity = OutputActivity.Idle;
-            ScheduleIdleTimer(Cooldown());
+            ScheduleIdleTimer(IdleBackoff());
             return;
         }
 
         if (input.Trigger.Kind == TriggerKind.LongSilence)
         {
             _helpOfferedDuringSilence = true;
+            _consecutiveProactiveSpeaks++;
+            _proactiveSpeaksThisSilence++;
         }
 
         if (input.Trigger.Kind == TriggerKind.UnfinishedInteraction)
@@ -843,6 +994,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _activeResponseId = input.ResponseId;
         _activeEntryId = entryId;
         _accumulator.Reset();
+        _envelope = null;
+        _publishedDisplayLength = 0;
+        _publishedBlockIds.Clear();
         ResetSpeechOutput();
         _responseTerminal = false;
         _responseLifecycle = ResponseLifecycle.Live;
@@ -875,7 +1029,77 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }, CancellationToken.None);
     }
 
-    private void LaunchBrain(EventContext cause, AgentTrigger trigger, Guid responseId, int turn)
+    private void LaunchPreparedTurn(
+        EventContext cause,
+        AgentTrigger trigger,
+        Guid responseId,
+        int turn,
+        IReadOnlyList<Guid> attachmentIds)
+    {
+        if (_processor is null || attachmentIds.Count == 0)
+        {
+            LaunchBrain(cause, trigger, responseId, turn);
+            return;
+        }
+
+        _outputActivity = OutputActivity.ProcessingAttachments;
+        var inbound = NewContext(cause.EventId);
+        BeginWork();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await PublishStateAsync(inbound, CancellationToken.None).ConfigureAwait(false);
+                IReadOnlyList<AttachmentProcessResult> results;
+                try
+                {
+                    results = await _processor.ProcessTurnAsync(SessionId, attachmentIds, _lifetime.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    EndWork();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Attachment processing failed for {SessionId}", SessionId);
+                    results = [];
+                }
+
+                if (!TryMailbox(new AttachmentsProcessedReceived(inbound, turn, responseId, trigger, results)))
+                {
+                    EndWork();
+                }
+            }
+            catch
+            {
+                EndWork();
+                throw;
+            }
+        }, CancellationToken.None);
+    }
+
+    private async Task HandleAttachmentsProcessedAsync(AttachmentsProcessedReceived input, CancellationToken cancellationToken)
+    {
+        if (input.TurnGeneration != _turnGeneration)
+        {
+            EndWork();
+            return;
+        }
+
+        _outputActivity = OutputActivity.WaitingForAgent;
+        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        LaunchBrain(input.Context, input.Trigger, input.ResponseId, input.TurnGeneration, input.Results, workHeld: true);
+    }
+
+    private void LaunchBrain(
+        EventContext cause,
+        AgentTrigger trigger,
+        Guid responseId,
+        int turn,
+        IReadOnlyList<AttachmentProcessResult>? attachments = null,
+        bool workHeld = false)
     {
         var context = new AgentContext(
             _snapshot.Definition,
@@ -886,8 +1110,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot.PendingTopic,
             HelpOfferedDuringSilence: _helpOfferedDuringSilence,
             InterruptedHeardText: LastInterruptedHeardText(),
-            trigger);
-        BeginWork();
+            trigger,
+            attachments,
+            ConsecutiveProactiveSpeaks: _consecutiveProactiveSpeaks,
+            SilentEvaluations: _silentEvaluations,
+            SpeaksThisSilencePeriod: _proactiveSpeaksThisSilence,
+            InitiativeHeld: _initiativeHeld || _pendingUploadHold,
+            InactivityExceeded: InactivityExceeded());
+        if (_deactivated || (trigger.Kind != TriggerKind.UserTurn && _activeResponseId is not null))
+        {
+            _outputActivity = OutputActivity.Idle;
+            return;
+        }
+
+        if (!workHeld)
+        {
+            BeginWork();
+        }
+
         _ = Task.Run(async () =>
         {
             try
@@ -977,12 +1217,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         switch (input.Event)
         {
             case ModelTextDelta delta:
-                var (start, text) = _accumulator.Append(delta.Text);
-                await PublishAsync(
-                        new SessionOutput(input.Context, input.ResponseId, new TextDeltaOutput(start, text)),
-                        cancellationToken)
+                _accumulator.Append(delta.Text);
+                await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: false, cancellationToken)
                     .ConfigureAwait(false);
-            UpdateStreamingAssistant();
+                UpdateStreamingAssistant();
                 await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
                 if (UsesVoicePlayback)
                 {
@@ -991,7 +1229,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         _segmentPipelineStarted = Stopwatch.GetTimestamp();
                     }
 
-                    EnqueueSegments(_segmenter!.Append(text, _time.GetUtcNow()));
+                    FeedTtsFromLockedSource();
                     ScheduleSegmentTimer();
                     KickTts(input.Context);
                     if (_pendingSegments.Count >= 4)
@@ -1003,6 +1241,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 break;
             case ModelCompleted:
+                await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: true, cancellationToken)
+                    .ConfigureAwait(false);
+                UpdateStreamingAssistant();
                 if (UsesVoicePlayback)
                 {
                     _modelDone = true;
@@ -1011,6 +1252,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         _segmentPipelineStarted = Stopwatch.GetTimestamp();
                     }
 
+                    FeedTtsFromLockedSource();
                     EnqueueSegments(_segmenter!.Complete());
                     KickTts(input.Context);
                     await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
@@ -1098,7 +1340,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         UpdateAssistant(status);
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;
-        var textLength = _accumulator.Length;
+        var textLength = DisplayLength();
         var heard = CurrentHeard();
         RequestPersist(
             _snapshot,
@@ -1145,8 +1387,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 entry.EntryId == entryId
                     ? entry with
                     {
-                        Text = _accumulator.Text,
-                        Status = status
+                        Text = DisplayText(),
+                        Status = status,
+                        Envelope = CurrentEnvelope(status != EntryStatus.Streaming)
                     }
                     : entry)
             .ToArray();
@@ -1167,7 +1410,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private async Task HandleReceiptAsync(ResponseReceiptReceived input, CancellationToken cancellationToken)
     {
         var entry = _snapshot.Entries.FirstOrDefault(item => item.ResponseId == input.ResponseId);
-        if (entry is null)
+        if (entry is null
+            || _snapshot.Status is SessionStatus.Paused or SessionStatus.Ending or SessionStatus.Ended)
         {
             input.Admitted.TrySetResult(false);
             return;
@@ -1179,30 +1423,179 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        var generated = entry.EntryId == _activeEntryId ? _accumulator.Length : entry.Text.Length;
+        var generated = DisplayLength(entry);
         if (input.TextEndExclusive > generated || input.TextEndExclusive < entry.ReceivedTextEndExclusive)
         {
             input.Admitted.TrySetResult(false);
             return;
         }
 
-        if (input.TextEndExclusive == entry.ReceivedTextEndExclusive)
+        var blockIds = input.BlockIds ?? [];
+        if (blockIds.Count > 0)
+        {
+            var known = entry.Envelope?.Blocks.Select(block => block.BlockId).ToHashSet(StringComparer.Ordinal)
+                ?? [];
+            if (blockIds.Any(id => !known.Contains(id)))
+            {
+                input.Admitted.TrySetResult(false);
+                return;
+            }
+        }
+
+        if (input.TextEndExclusive == entry.ReceivedTextEndExclusive && blockIds.Count == 0)
         {
             input.Admitted.TrySetResult(true);
             return;
         }
 
         var received = input.TextEndExclusive;
-        var heard = entry.DeliveryMode == SessionMode.Text ? received : entry.HeardTextEndExclusive;
+        var envelope = MarkBlocksDelivered(entry.Envelope, blockIds);
         var entries = _snapshot.Entries.Select(item =>
                 item.ResponseId == input.ResponseId
-                    ? item with { ReceivedTextEndExclusive = received, HeardTextEndExclusive = heard }
+                    ? item with { ReceivedTextEndExclusive = received, Envelope = envelope }
                     : item)
             .ToArray();
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
         RequestPersist(_snapshot);
         input.Admitted.TrySetResult(true);
+        _ = cancellationToken;
     }
+
+    private async Task PublishEnvelopeProgressAsync(
+        EventContext context,
+        Guid responseId,
+        bool finalize,
+        CancellationToken cancellationToken)
+    {
+        _envelope = ResponseEnvelopeParser.Parse(
+            _accumulator.Text,
+            id => _artifacts.IsAuthorized(_snapshot.SessionId, id),
+            finalize);
+        var display = _envelope.DisplayText;
+        if (display.Length > _publishedDisplayLength)
+        {
+            var chunk = display[_publishedDisplayLength..];
+            await PublishAsync(
+                    new SessionOutput(context, responseId, new TextDeltaOutput(_publishedDisplayLength, chunk)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            _publishedDisplayLength = display.Length;
+        }
+
+        foreach (var block in _envelope.Blocks)
+        {
+            if (!_publishedBlockIds.Add(block.BlockId))
+            {
+                continue;
+            }
+
+            await PublishAsync(
+                    new SessionOutput(
+                        context,
+                        responseId,
+                        new BlockUpsertOutput(
+                            block.BlockId,
+                            BlockKindName(block.Kind),
+                            string.IsNullOrEmpty(block.DisplayText) ? block.FallbackText : block.DisplayText,
+                            block.FallbackText,
+                            block.AttachmentId,
+                            block.ArtifactId)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private string CurrentTtsSource()
+    {
+        var parsed = _envelope
+            ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize: false);
+        if (!_ttsSourceLocked)
+        {
+            if (!string.IsNullOrEmpty(parsed.SpeechText))
+            {
+                _ttsUsesSpeech = true;
+                _ttsSourceLocked = true;
+            }
+            else if (parsed.DisplayText.Length > 0)
+            {
+                _ttsUsesSpeech = false;
+                _ttsSourceLocked = true;
+            }
+            else
+            {
+                return string.Empty;
+            }
+        }
+
+        if (_ttsUsesSpeech)
+        {
+            return parsed.SpeechText ?? string.Empty;
+        }
+
+        return parsed.DisplayText;
+    }
+
+    private void FeedTtsFromLockedSource()
+    {
+        if (_segmenter is null)
+        {
+            return;
+        }
+
+        var source = CurrentTtsSource();
+        if (source.Length > _ttsFedLength)
+        {
+            EnqueueSegments(_segmenter.Append(source[_ttsFedLength..], _time.GetUtcNow()));
+            _ttsFedLength = source.Length;
+        }
+    }
+
+    private string DisplayText() => _envelope?.DisplayText ?? _accumulator.Text;
+
+    private int DisplayLength() => DisplayText().Length;
+
+    private int DisplayLength(ConversationEntry entry) =>
+        entry.EntryId == _activeEntryId ? DisplayLength() : entry.Text.Length;
+
+    private int SpeechCoordinateLength()
+    {
+        var source = CurrentTtsSource();
+        return source.Length == 0 ? DisplayLength() : source.Length;
+    }
+
+    private ResponseEnvelope CurrentEnvelope(bool finalize)
+    {
+        var parsed = _envelope
+            ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize);
+        var existing = _snapshot.Entries.FirstOrDefault(item => item.EntryId == _activeEntryId)?.Envelope;
+        return ResponseEnvelopeParser.MergeDelivery(existing, parsed);
+    }
+
+    private static ResponseEnvelope? MarkBlocksDelivered(
+        ResponseEnvelope? envelope,
+        IReadOnlyList<string> blockIds)
+    {
+        if (envelope is null || blockIds.Count == 0)
+        {
+            return envelope;
+        }
+
+        var selected = blockIds.ToHashSet(StringComparer.Ordinal);
+        return envelope with
+        {
+            Blocks = envelope.Blocks
+                .Select(block => selected.Contains(block.BlockId) ? block with { DisplayDelivered = true } : block)
+                .ToArray()
+        };
+    }
+
+    private static string BlockKindName(ResponseBlockKind kind) => kind switch
+    {
+        ResponseBlockKind.Markdown => "markdown",
+        ResponseBlockKind.AttachmentReference => "attachment",
+        ResponseBlockKind.ArtifactReference => "artifact",
+        _ => "unknown"
+    };
 
     private void ClearActive()
     {
@@ -1218,6 +1611,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         "disconnected" => "disconnected",
         "ended" => "ended",
+        "deactivated" => "interrupted",
         "modeChange" => "modeChange",
         _ => "interrupted"
     };
@@ -1251,15 +1645,60 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ended: input.Persisted);
     }
 
-    private SessionSnapshot Append(ConversationEntry entry)
+    private SessionSnapshot Append(ConversationEntry entry, AttachmentTitleHints? attachments = null)
     {
         var entries = _snapshot.Entries.Concat([entry]).ToArray();
+        var title = _snapshot.Title;
+        if (entry.Role == ConversationRole.User
+            && string.Equals(title, SessionTitles.Default, StringComparison.Ordinal)
+            && !_snapshot.Entries.Any(item => item.Role == ConversationRole.User))
+        {
+            title = string.IsNullOrWhiteSpace(entry.Text) && attachments is { Names.Count: > 0 }
+                ? SessionTitles.FromAttachments(attachments.Names, attachments.ImageOnly)
+                : SessionTitles.FromUserText(entry.Text);
+        }
+
         return _snapshot with
         {
             Entries = entries,
+            Title = title,
             UpdatedAt = _time.GetUtcNow()
         };
     }
+
+    private static IReadOnlyList<Guid> NormalizeAttachmentIds(IReadOnlyList<Guid>? ids) =>
+        ids is null || ids.Count == 0 ? [] : ids;
+
+    private async Task<AttachmentTitleHints?> AttachmentTitleHintsAsync(
+        IReadOnlyList<Guid> attachmentIds,
+        CancellationToken cancellationToken)
+    {
+        if (attachmentIds.Count == 0 || _attachments is null)
+        {
+            return null;
+        }
+
+        var names = new List<string>(attachmentIds.Count);
+        var imageOnly = true;
+        foreach (var id in attachmentIds)
+        {
+            var record = await _attachments.GetAsync(SessionId, id, cancellationToken).ConfigureAwait(false);
+            if (record is null)
+            {
+                continue;
+            }
+
+            names.Add(record.DisplayName);
+            if (!AttachmentMedia.IsImage(record.ContentType))
+            {
+                imageOnly = false;
+            }
+        }
+
+        return names.Count == 0 ? null : new AttachmentTitleHints(names, imageOnly);
+    }
+
+    private sealed record AttachmentTitleHints(IReadOnlyList<string> Names, bool ImageOnly);
 
     private long NextSequence() =>
         _snapshot.Entries.Count == 0 ? 1 : _snapshot.Entries[^1].Sequence + 1;
@@ -1677,7 +2116,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 Text = current.Text.Length > durable.Text.Length ? current.Text : durable.Text,
                 Status = current.Status == EntryStatus.Streaming ? current.Status : durable.Status,
                 ReceivedTextEndExclusive = Math.Max(durable.ReceivedTextEndExclusive, current.ReceivedTextEndExclusive),
-                HeardTextEndExclusive = Math.Max(durable.HeardTextEndExclusive, current.HeardTextEndExclusive)
+                HeardTextEndExclusive = Math.Max(durable.HeardTextEndExclusive, current.HeardTextEndExclusive),
+                Envelope = ResponseEnvelopeParser.MergeDelivery(durable.Envelope, current.Envelope)
             };
         }
 

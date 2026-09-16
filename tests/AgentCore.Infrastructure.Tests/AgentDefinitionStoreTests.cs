@@ -14,6 +14,13 @@ public sealed class AgentDefinitionStoreTests
         var missing = await store.GetAsync("examiner", 99);
         Assert.NotNull(examiner);
         Assert.Equal("Alex", examiner!.Identity.Name);
+        var support = await store.GetAsync("customer-support", 1);
+        var compliance = await store.GetAsync("compliance", 1);
+        Assert.NotNull(support);
+        Assert.NotNull(compliance);
+        Assert.Equal(1, examiner.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(0, compliance!.InitiativePolicy.ConsecutiveCap);
         Assert.Null(missing);
     }
 

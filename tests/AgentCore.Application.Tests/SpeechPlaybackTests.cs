@@ -183,8 +183,13 @@ public sealed class SpeechPlaybackTests
             await runtime.SubmitPlaybackAsync(responseId, "completed", runtime.SentSamples, generated);
             await runtime.WaitUntilIdleAsync();
             var persisted = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+            Assert.Equal(0, persisted.ReceivedTextEndExclusive);
+            Assert.True(persisted.HeardTextEndExclusive > 0);
+            Assert.True(await runtime.SubmitReceiptAsync(responseId, generated));
+            await runtime.WaitUntilMailboxDrainedAsync();
+            persisted = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
             Assert.Equal(generated, persisted.ReceivedTextEndExclusive);
-            Assert.True(persisted.ReceivedTextEndExclusive >= persisted.HeardTextEndExclusive);
+            Assert.True(persisted.HeardTextEndExclusive > 0);
             sessionId = runtime.SessionId;
             await runtime.DetachAsync();
             await runtime.WaitUntilIdleAsync();

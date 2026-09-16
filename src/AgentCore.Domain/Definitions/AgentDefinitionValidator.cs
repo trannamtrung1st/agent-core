@@ -5,6 +5,7 @@ namespace AgentCore.Domain.Definitions;
 public static class AgentDefinitionValidator
 {
     private static readonly Regex IdPattern = new("^[a-z0-9-]{1,64}$", RegexOptions.Compiled);
+    private static readonly Regex ToolPattern = new("^[a-z][a-z0-9.]{0,63}$", RegexOptions.Compiled);
     private static readonly HashSet<string> InterruptionStyles =
         ["acknowledgeThenContinue", "answerNewTurn"];
     private static readonly HashSet<string> ResponseLengths = ["concise", "balanced"];
@@ -69,9 +70,24 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("cooldownMs is out of range.");
         }
 
-        if (definition.InitiativePolicy.MaxPerSilencePeriod != 1)
+        if (definition.InitiativePolicy.MaxPerSilencePeriod is < 1 or > 8)
         {
-            throw new ArgumentException("maxPerSilencePeriod must be 1.");
+            throw new ArgumentException("maxPerSilencePeriod must be 1..8.");
+        }
+
+        if (definition.InitiativePolicy.MaxConsecutiveProactiveTurns is < 0 or > 32)
+        {
+            throw new ArgumentException("maxConsecutiveProactiveTurns must be 0..32 when set.");
+        }
+
+        if (definition.InitiativePolicy.MaxSilentEvaluations is < 1 or > 64)
+        {
+            throw new ArgumentException("maxSilentEvaluations must be 1..64 when set.");
+        }
+
+        if (definition.InitiativePolicy.MaxInactivityMs is < 60_000 or > 86_400_000)
+        {
+            throw new ArgumentException("maxInactivityMs must be 60000..86400000 when set.");
         }
 
         if (definition.InitiativePolicy.Triggers.Count != definition.InitiativePolicy.Triggers.Distinct(StringComparer.Ordinal).Count()
@@ -107,6 +123,48 @@ public static class AgentDefinitionValidator
         if (definition.Metadata.Count > 16 || definition.Metadata.Values.Any(value => value.Length > 256))
         {
             throw new ArgumentException("metadata exceeds allowed size.");
+        }
+
+        ValidateEnvironment(RoleEnvironments.Of(definition));
+    }
+
+    private static void ValidateEnvironment(RoleEnvironment environment)
+    {
+        if (environment.HarnessList.Count > 8
+            || environment.HarnessList.Any(item => !IdPattern.IsMatch(item))
+            || environment.HarnessList.Count != environment.HarnessList.Distinct(StringComparer.Ordinal).Count())
+        {
+            throw new ArgumentException("harness entries are invalid.");
+        }
+
+        if (environment.KnowledgeList.Count > 8
+            || environment.KnowledgeList.Select(item => item.Identity).Distinct(StringComparer.Ordinal).Count()
+                != environment.KnowledgeList.Count)
+        {
+            throw new ArgumentException("knowledgeSources are invalid.");
+        }
+
+        foreach (var source in environment.KnowledgeList)
+        {
+            if (!IdPattern.IsMatch(source.Identity)
+                || source.Title.Length is < 1 or > 256
+                || source.Citation.Length is < 1 or > 256)
+            {
+                throw new ArgumentException("knowledge source identity/title/citation is invalid.");
+            }
+        }
+
+        if (environment.ToolList.Count > 16
+            || environment.ToolList.Count != environment.ToolList.Distinct(StringComparer.Ordinal).Count()
+            || environment.ToolList.Any(tool => !ToolPattern.IsMatch(tool)))
+        {
+            throw new ArgumentException("toolAllowlist is invalid.");
+        }
+
+        var template = environment.WorkspacePolicy.TemplateId;
+        if (template is not null && !IdPattern.IsMatch(template))
+        {
+            throw new ArgumentException("workspace templateId is invalid.");
         }
     }
 

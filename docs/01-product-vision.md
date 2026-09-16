@@ -116,3 +116,7 @@ For this reason, implementation priority should be:
 5. proactive behavior;
 6. conversation continuity.
 
+## Post-MVP planned until verified
+
+Accepted product behavior beyond historical MVP: multiple persistent chats with agent selection; file/image attachments; rich replies; versioned role environments (Support, Compliance, examiner); durable isolated session workspaces; session-owned artifacts with explicit attachment materialization. Still planned: bounded tools; concrete sandbox. Details: [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified) and [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified).
+

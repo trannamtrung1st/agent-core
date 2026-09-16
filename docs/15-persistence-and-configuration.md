@@ -7,7 +7,7 @@ EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore
 | Entity | Key and fields | Rules |
 | --- | --- | --- |
 | Session | SessionId UUID string PK; AgentId, AgentVersion, DefinitionJson, Mode, PendingMode nullable, Status, CreatedAtUtc, UpdatedAtUtc, Revision | Store pinned validated definition; terminal Ended is irreversible |
-| ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text; ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive; ReceivedTextEndExclusive; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry |
+| ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text (display); ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive (speech coordinate); ReceivedTextEndExclusive (display); EnvelopeJson nullable; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry |
 | SessionSnapshot | SessionId PK/FK; SchemaVersion=1; Summary; SummarizedThroughEntrySequence; PendingTopic nullable; ProfileId nullable; LastEntrySequence; UpdatedAtUtc | Persist coarse semantic continuity, never tasks/timers/active provider streams |
 | UserProfile | ProfileId UUID PK; PreferencesJson; Revision; UpdatedAtUtc | <=16 allowlisted preferences, <=2,000 total characters; MVP uses one local profile |
 
@@ -24,7 +24,7 @@ public sealed record ConversationEntry(Guid EntryId, long Sequence,
     Guid? SourceEventId, ConversationRole Role, string Text, Guid? ResponseId,
     EntryStatus Status, SessionMode DeliveryMode,
     int HeardTextEndExclusive, int ReceivedTextEndExclusive,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt, ResponseEnvelope? Envelope = null);
 public sealed record UserProfile(Guid ProfileId, long Revision,
     IReadOnlyDictionary<string, string> Preferences, DateTimeOffset UpdatedAt);
 public sealed record SessionSnapshot(int SchemaVersion, Guid SessionId,
@@ -49,6 +49,18 @@ A crash may lose up to the last checkpoint interval of streaming text/progress, 
 
 Memory categories: ephemeral working state; persistent conversation history; persistent session summary; minimal persistent user profile. Initially only language and preferredName are allowed profile keys, populated by local demo setup through IMemoryStore, not inferred freely from conversation. No profile CRUD UI/API, embeddings, vector search or Redis.
 
+## Post-MVP planned until verified
+
+Accepted target, not current shipped evidence. MVP Session.Status `Ended` remains irreversible terminal-end.
+
+- **Owner capability grant:** hashed trusted-local token in SQLite; validate HTTP/hub callers; survive process restart.
+- **Catalog fields:** Title, ArchivedAt, DeletedAt/pending-cleanup, WorkspaceOwnership (SessionId key), pinned AgentId+AgentVersion. Rename/archive/deactivate/delete take the same revision-checked save path as snapshots so they cannot be overwritten by a concurrent runtime checkpoint. Deactivate persists `Paused` and increments `RuntimeEpoch` without setting `ArchivedAt` or clearing history.
+- **Attachments (observed store):** metadata and MessageAttachment relation in SQLite; bytes in `IAttachmentStore` opaque blob keys **outside** row payloads and outside developer `local/` scratch (`data/attachments` by default). Pending TTL 1 hour; bound originals immutable; SHA-256 unchanged after bind. Durable session delete removes that session's blobs and metadata. Derived extraction cache is keyed by AttachmentId plus processor version and is not conversation history.
+- **Session workspace (observed):** lazy physical tree under `data/workspaces/{sessionId}` (never under `local/` or `local/tdp-workspace`). Logical `/workspace` writes cap at 250 MiB. `/agent` and `/attachments` are overlays, not copies. Optional templates come from `agents/templates/{templateId}` into `working` only. Archive/reopen/deactivate keep files; durable delete removes them. Do not persist CTS, provider streams, sockets, leases, timer handles, DbContext, live queues, or process handles.
+- **Rich receipts (observed):** persist display, speech-coordinate, and block delivery atomically with response status (R2) in `EnvelopeJson` plus heard/received offsets. Do not store a single offset that is applied to both text and speech.
+- **Artifacts (observed store):** distinct metadata/blobs from Attachments under `data/artifacts/{sessionId}` (never under `local/`). 50 MiB each / 250 MiB per session, concurrent fail-closed. Explicit attachment materialize copies into `/workspace/working` with provenance (`SourceAttachmentId`) and matching SHA-256. Archive/deactivate keep blobs; durable delete cancels writers and removes them. Envelope authorization includes stored ids and `fixture-artifact-1`.
+- **Migrations:** backfill workspace-ownership; preserve pins, revisions, receipts, and irreversible Ended rows on populated fixtures and fresh databases.
+
 PostgreSQL migration later replaces EF provider, revisits GUID/time conversions, migrations and concurrency tests; business interfaces stay stable. Provider change alone does not magically make SQLite-specific SQL portable, so avoid provider SQL outside Infrastructure and test migration data explicitly.
 
 ## Strongly typed options
@@ -61,7 +73,7 @@ Bind/validate on startup with standard .NET options and ValidateOnStart. These o
 | ProvidersOptions / Providers | LanguageModels, SpeechRecognizers, SpeechSynthesizers maps keyed by logical aliases; each has Adapter and capability-specific configuration |
 | InteractionOptions / Interaction | Candidate thresholds, classifier deadline, ducking, degraded policy, `PendingVoiceTimeoutMs` (default 30000) |
 | VoiceOptions / Voice | Canonical format, frame size, queue budgets, utterance limit, playback progress |
-| PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout |
+| PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout, attachment blob root (`data/attachments`), workspace root (`data/workspaces`), template root (`agents/templates`), artifact blob root (`data/artifacts`); never under `local/` |
 | ObservabilityOptions / Observability | Logging level, timeline limit, content logging opt-in, OTLP enable/endpoint |
 | HostingOptions / Hosting | Same-origin/default local binding, allowed development origins, development proxy behavior |
 
@@ -140,7 +152,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
     },
     "Segmentation": {"MinCharacters": 20, "ClauseMinCharacters": 40, "MaxDelayMs": 300, "SoftMaxCharacters": 120, "HardMaxCharacters": 240, "MaxPendingSegments": 4}
   },
-  "Persistence": {"Provider": "InMemory", "ConnectionString": "Data Source=data/agent-core.db", "CheckpointMs": 1000, "BusyTimeoutMs": 5000},
+  "Persistence": {"Provider": "InMemory", "ConnectionString": "Data Source=data/agent-core.db", "CheckpointMs": 1000, "BusyTimeoutMs": 5000, "AttachmentRoot": "data/attachments", "WorkspaceRoot": "data/workspaces", "TemplateRoot": "agents/templates", "ArtifactRoot": "data/artifacts"},
   "Observability": {"LogLevel": "Information", "TimelineCapacity": 500, "LogConversationContent": false, "OtlpEnabled": false, "OtlpEndpoint": "http://localhost:4317"},
   "Hosting": {"BindUrl": "http://localhost:5080", "AllowedOrigins": ["http://localhost:5173"], "UseViteProxy": true}
 }

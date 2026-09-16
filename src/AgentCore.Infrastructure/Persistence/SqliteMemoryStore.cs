@@ -55,21 +55,70 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
         }
 
-        if (!await HasCompleteLegacySchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        if (await HasCompleteLegacySchemaAsync(connection, cancellationToken).ConfigureAwait(false))
         {
-            throw AgentCoreErrors.Persistence("Legacy SQLite schema is incomplete.");
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                    "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                    "ProductVersion" TEXT NOT NULL
+                );
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260915064647_InitialCreate', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+            return;
         }
 
-        await db.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
-                "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
-                "ProductVersion" TEXT NOT NULL
-            );
-            INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-            VALUES ('20260915064647_InitialCreate', '10.0.12');
-            """,
-            cancellationToken).ConfigureAwait(false);
+        if (await HasEnsureCreatedCurrentSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            var attachments = await TableExistsAsync(connection, "Attachments", cancellationToken).ConfigureAwait(false);
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                    "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                    "ProductVersion" TEXT NOT NULL
+                );
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260915064647_InitialCreate', '10.0.12');
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260916104118_SessionCatalogAndOwnerCapability', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+            if (attachments)
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260916120000_Attachments', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (await ColumnExistsAsync(connection, "ConversationEntries", "EnvelopeJson", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260916180000_ResponseEnvelope', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260916210000_Artifacts', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        throw AgentCoreErrors.Persistence("Legacy SQLite schema is incomplete.");
     }
 
     public async ValueTask BackupToAsync(string destinationPath, CancellationToken cancellationToken = default)
@@ -250,6 +299,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         var now = time.GetUtcNow();
         foreach (var row in rows)
         {
+            if (row.DurablyDeletedAtUtc is not null)
+            {
+                continue;
+            }
+
             var recovered = MemoryStoreSemantics.Recover(ToSnapshot(row), now);
             if (recovered.Revision == row.Revision)
             {
@@ -261,6 +315,48 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         }
 
         await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<SessionCatalogPage> ListCatalogAsync(
+        string? cursor,
+        int limit,
+        bool includeArchived,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100)
+        {
+            throw AgentCoreErrors.Validation("Catalog limit must be between 1 and 100.");
+        }
+
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var query = db.Sessions.AsNoTracking().Include(item => item.Snapshot)
+            .Where(row => row.DurablyDeletedAtUtc == null);
+        if (!includeArchived)
+        {
+            query = query.Where(row => row.ArchivedAtUtc == null);
+        }
+
+        if (!string.IsNullOrEmpty(cursor))
+        {
+            var (ms, id) = CatalogCursor.Decode(cursor);
+            var key = id.ToString("D");
+            query = query.Where(row =>
+                row.UpdatedAtUtc < ms
+                || (row.UpdatedAtUtc == ms && string.CompareOrdinal(row.SessionId, key) < 0));
+        }
+
+        var rows = await query
+            .OrderByDescending(row => row.UpdatedAtUtc)
+            .ThenByDescending(row => row.SessionId)
+            .Take(limit + 1)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var hasMore = rows.Length > limit;
+        var page = (hasMore ? rows.Take(limit) : rows)
+            .Select(ToSnapshot)
+            .ToArray();
+        var next = hasMore ? CatalogCursor.Encode(page[^1].UpdatedAt, page[^1].SessionId) : null;
+        return new SessionCatalogPage(page, next, hasMore);
     }
 
     private void UpsertEntries(AgentCoreDbContext db, SessionRecord session, SessionSnapshot snapshot)
@@ -291,6 +387,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.Status == entry.Status.ToString()
         && row.HeardTextEndExclusive == entry.HeardTextEndExclusive
         && row.ReceivedTextEndExclusive == entry.ReceivedTextEndExclusive
+        && row.EnvelopeJson == SerializeEnvelope(entry.Envelope)
         && row.Role == entry.Role.ToString()
         && row.DeliveryMode == entry.DeliveryMode.ToString()
         && row.ResponseId == entry.ResponseId?.ToString("D")
@@ -305,6 +402,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
         row.Status = snapshot.Status.ToString();
+        row.Title = snapshot.Title;
+        row.RuntimeEpoch = snapshot.RuntimeEpoch;
+        row.WorkspaceOwned = snapshot.WorkspaceOwned;
+        row.ArchivedAtUtc = snapshot.ArchivedAt?.ToUnixTimeMilliseconds();
+        row.DurablyDeletedAtUtc = snapshot.DurablyDeletedAt?.ToUnixTimeMilliseconds();
         row.UpdatedAtUtc = snapshot.UpdatedAt.ToUnixTimeMilliseconds();
         row.Revision = snapshot.Revision;
         row.Snapshot ??= new SnapshotRecord { SessionId = row.SessionId };
@@ -348,6 +450,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.DeliveryMode = entry.DeliveryMode.ToString();
         row.HeardTextEndExclusive = entry.HeardTextEndExclusive;
         row.ReceivedTextEndExclusive = entry.ReceivedTextEndExclusive;
+        row.EnvelopeJson = SerializeEnvelope(entry.Envelope);
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
 
@@ -371,7 +474,12 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             snapshot.PendingTopic,
             string.IsNullOrEmpty(snapshot.ProfileId) ? null : Guid.Parse(snapshot.ProfileId),
             FromUnix(row.CreatedAtUtc),
-            FromUnix(row.UpdatedAtUtc));
+            FromUnix(row.UpdatedAtUtc),
+            string.IsNullOrEmpty(row.Title) ? SessionTitles.Default : row.Title,
+            row.RuntimeEpoch,
+            row.WorkspaceOwned,
+            row.ArchivedAtUtc is { } archived ? FromUnix(archived) : null,
+            row.DurablyDeletedAtUtc is { } deleted ? FromUnix(deleted) : null);
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>
@@ -386,7 +494,14 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             Enum.Parse<SessionMode>(row.DeliveryMode),
             row.HeardTextEndExclusive,
             row.ReceivedTextEndExclusive,
-            FromUnix(row.CreatedAtUtc));
+            FromUnix(row.CreatedAtUtc),
+            DeserializeEnvelope(row.EnvelopeJson));
+
+    private static string? SerializeEnvelope(ResponseEnvelope? envelope) =>
+        envelope is null ? null : JsonSerializer.Serialize(envelope, Json);
+
+    private static ResponseEnvelope? DeserializeEnvelope(string? json) =>
+        string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<ResponseEnvelope>(json, Json);
 
     private static DateTimeOffset FromUnix(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
@@ -480,6 +595,32 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 partialPredicate: "SourceEventId IS NOT NULL",
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private static async Task<bool> HasEnsureCreatedCurrentSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await TableExistsAsync(connection, "OwnerCapabilities", cancellationToken).ConfigureAwait(false)
+        && await ColumnExistsAsync(connection, "Sessions", "Title", cancellationToken).ConfigureAwait(false);
+
+    private static async Task<bool> ColumnExistsAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        string column,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{table}\")";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private readonly record struct ColumnSpec(string Name, string Type, bool NotNull, bool Pk);
