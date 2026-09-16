@@ -9,3 +9,5 @@
 
 - [ ] Full harness: validation, runtime, identity, tools, memory, plugins
 - [ ] Allow background research, scheduled tasks, etc.
+- [ ] Opensandbox for future sandbox providers
+- [ ] STT/TTS using browser APIs for demo, cheap alternative to cloud services, LLMs.
