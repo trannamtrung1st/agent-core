@@ -3,7 +3,7 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
 #
-# Matches the native http-openrouter launch profile: hosted OpenRouter text.
+# Matches the native http-openrouter launch profile: hosted OpenRouter text + vision.
 # Copy `.env.example` to a gitignored `.env` and set OPENROUTER_API_KEY.
 # Compose loads `.env` from the repo root for interpolation. Override the text
 # model with AGENTCORE_LLM_MODEL (do not use openrouter/free). Hosted STT/TTS
@@ -17,4 +17,5 @@ services:
       Providers__LanguageModels__primary-llm__Adapter: OpenAICompatible
       Providers__LanguageModels__primary-llm__BaseUrl: https://openrouter.ai/api/v1/
       Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-openai/gpt-4o-mini}
+      Providers__LanguageModels__primary-llm__Vision: "true"
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

@@ -24,11 +24,11 @@ public sealed class BoundedProcessOutputTests
         using var process = StartShell(
             """
             python3 -c "import sys, threading
-            def flood(stream, ch):
+            def work(stream, ch):
                 stream.write(ch * 100000)
                 stream.flush()
-            t1 = threading.Thread(target=flood, args=(sys.stdout, 'O'))
-            t2 = threading.Thread(target=flood, args=(sys.stderr, 'E'))
+            t1 = threading.Thread(target=work, args=(sys.stdout, 'O'))
+            t2 = threading.Thread(target=work, args=(sys.stderr, 'E'))
             t1.start()
             t2.start()
             t1.join()
@@ -37,6 +37,17 @@ public sealed class BoundedProcessOutputTests
 
         var output = await BoundedProcessOutput.ReadAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
         Assert.InRange(Encoding.UTF8.GetByteCount(output), 0, SandboxLimits.MaxOutputBytes);
+        Assert.NotEmpty(output);
+        Assert.True(process.HasExited);
+    }
+
+    [Fact]
+    public async Task ReadAsync_includes_both_streams_when_budget_allows()
+    {
+        using var process = StartShell(
+            "python3 -c \"import sys; sys.stderr.write('E' * 64); sys.stderr.flush(); sys.stdout.write('O' * 64); sys.stdout.flush()\"");
+
+        var output = await BoundedProcessOutput.ReadAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
         Assert.Contains('O', output);
         Assert.Contains('E', output);
         Assert.True(process.HasExited);

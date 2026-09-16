@@ -375,6 +375,24 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         await CancelLiveRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<SessionSnapshot> RenameAsync(
+        Guid sessionId,
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        if (_live.TryGetValue(sessionId, out var live))
+        {
+            if (!await live.Runtime.RequestRenameAsync(title, cancellationToken).ConfigureAwait(false))
+            {
+                throw AgentCoreErrors.Persistence("Rename failed.");
+            }
+
+            return live.Runtime.Snapshot;
+        }
+
+        return await _sessions.RenameAsync(sessionId, title, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task DetachAsync(string connectionId)
     {
         if (!_connections.TryGetValue(connectionId, out var sessionId))

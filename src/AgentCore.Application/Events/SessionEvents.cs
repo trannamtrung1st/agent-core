@@ -115,6 +115,11 @@ public sealed record EndSessionReceived(EventContext Context, TaskCompletionSour
 
 public sealed record DeactivateReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
+public sealed record RenameReceived(
+    EventContext Context,
+    string Title,
+    TaskCompletionSource<bool> Persisted) : SessionInput(Context);
+
 public sealed record InitiativeHoldReceived(EventContext Context, bool Held) : SessionInput(Context);
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);

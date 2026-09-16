@@ -103,6 +103,30 @@ public sealed partial class SessionRuntime
         await ApplyDeactivateAsync(input.Context, cancellationToken, input.Persisted).ConfigureAwait(false);
     }
 
+    private Task HandleRenameAsync(RenameReceived input, CancellationToken cancellationToken)
+    {
+        if (string.Equals(_snapshot.Title, input.Title, StringComparison.Ordinal))
+        {
+            input.Persisted.TrySetResult(true);
+            return Task.CompletedTask;
+        }
+
+        _snapshot = _snapshot with
+        {
+            Title = input.Title,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        RequestPersist(
+            _snapshot,
+            then: _ =>
+            {
+                input.Persisted.TrySetResult(true);
+                return Task.CompletedTask;
+            },
+            ended: input.Persisted);
+        return Task.CompletedTask;
+    }
+
     private void HandleInitiativeHold(InitiativeHoldReceived input)
     {
         _initiativeHeld = input.Held;

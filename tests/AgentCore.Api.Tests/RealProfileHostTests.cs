@@ -34,6 +34,7 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["Providers__LanguageModels__primary-llm__Adapter"] = "OpenAICompatible";
         start.Environment["Providers__LanguageModels__primary-llm__BaseUrl"] = "https://openrouter.ai/api/v1/";
         start.Environment["Providers__LanguageModels__primary-llm__DefaultModel"] = "openai/gpt-4o-mini";
+        start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "true";
         start.Environment["OPENROUTER_API_KEY"] = "test-key-not-for-live-calls";
         _process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start API.");
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

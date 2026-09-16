@@ -116,7 +116,7 @@ public static class SessionCatalogEndpoints
         group.MapPost("{sessionId:guid}/rename", async (
             Guid sessionId,
             RenameSessionRequest? body,
-            SessionManager sessions,
+            SessionHost host,
             CancellationToken cancellationToken) =>
         {
             try
@@ -126,7 +126,7 @@ public static class SessionCatalogEndpoints
                     throw AgentCoreErrors.Validation("title is required.");
                 }
 
-                var snapshot = await sessions.RenameAsync(sessionId, body.Title, cancellationToken).ConfigureAwait(false);
+                var snapshot = await host.RenameAsync(sessionId, body.Title, cancellationToken).ConfigureAwait(false);
                 return Results.Json(HttpMapping.ToCatalogItem(snapshot));
             }
             catch (AgentCoreException ex)

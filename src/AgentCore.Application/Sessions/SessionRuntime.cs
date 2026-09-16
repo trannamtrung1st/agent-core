@@ -339,6 +339,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> RequestRenameAsync(string title, CancellationToken cancellationToken = default)
+    {
+        var trimmed = title.Trim();
+        if (trimmed.Length is 0 or > SessionTitles.MaxLength)
+        {
+            throw AgentCoreErrors.Validation("Title must be between 1 and 200 characters.");
+        }
+
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new RenameReceived(context, trimmed, persisted), urgent: true))
+        {
+            persisted.TrySetResult(false);
+            return false;
+        }
+
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+    }
+
     public Task SubmitInitiativeHoldAsync(bool held, CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
@@ -642,6 +662,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case DeactivateReceived deactivate:
                     await HandleDeactivateAsync(deactivate, cancellationToken).ConfigureAwait(false);
                     break;
+                case RenameReceived rename:
+                    await HandleRenameAsync(rename, cancellationToken).ConfigureAwait(false);
+                    break;
                 case InitiativeHoldReceived hold:
                     HandleInitiativeHold(hold);
                     break;
@@ -659,7 +682,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-            if (input is AttachReceived or EndSessionReceived or DeactivateReceived or DetachReceived)
+            if (input is AttachReceived or EndSessionReceived or DeactivateReceived or RenameReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
             }
@@ -753,6 +776,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case DeactivateReceived deactivate:
                 deactivate.Persisted.TrySetResult(value);
+                break;
+            case RenameReceived rename:
+                rename.Persisted.TrySetResult(value);
                 break;
             case AttachReceived attach:
                 attach.Attached.TrySetResult(value);
