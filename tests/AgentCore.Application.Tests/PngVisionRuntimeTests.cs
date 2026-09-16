@@ -31,9 +31,10 @@ public sealed class PngVisionRuntimeTests
             {
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/",
-                DefaultModel = "openai/gpt-4o-mini",
+                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
                 ApiKey = "test-key",
-                Vision = true
+                Vision = true,
+                Tools = true
             },
             TimeProvider.System);
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);

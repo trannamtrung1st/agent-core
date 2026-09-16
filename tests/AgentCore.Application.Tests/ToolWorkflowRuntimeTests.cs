@@ -49,7 +49,13 @@ public sealed class ToolWorkflowRuntimeTests
         Assert.Contains("demonstration session", assistant.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("compliance-retention@demo", assistant.Text, StringComparison.Ordinal);
         Assert.Contains(assistant.Envelope!.Blocks, block => block.Kind == ResponseBlockKind.Markdown);
-        Assert.Contains(assistant.Envelope.Blocks, block => block.Kind == ResponseBlockKind.ArtifactReference);
+        var artifactBlock = Assert.Single(assistant.Envelope.Blocks, block => block.Kind == ResponseBlockKind.ArtifactReference);
+        Assert.True(Guid.TryParse(artifactBlock.ArtifactId, out var artifactId));
+        await using var stream = await runtime.Artifacts.OpenContentAsync(runtime.Runtime.SessionId, artifactId);
+        using var reader = new StreamReader(stream);
+        var artifactText = await reader.ReadToEndAsync();
+        Assert.Contains("demonstration session", artifactText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("compliance-retention@demo", artifactText, StringComparison.Ordinal);
     }
 
     [Fact]

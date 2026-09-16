@@ -33,7 +33,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = JoinCompletions(options.BaseUrl);
-        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true, Vision: options.Vision, Tools: true);
+        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true, Vision: options.Vision, Tools: options.Tools);
     }
 
     public ModelCapabilities Capabilities { get; }

@@ -124,12 +124,28 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     {
         if (TryReadKnowledgeTool(lastTool, out var knowledge))
         {
-            return knowledge.Content.Split('\n')[0].TrimEnd('.');
+            return SummarizeKnowledgeContent(knowledge.Content);
         }
 
         return lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
             ? "Retention applies to the current demonstration session."
             : "Order 91 is delayed under the simulated policy.";
+    }
+
+    private static string SummarizeKnowledgeContent(string content)
+    {
+        foreach (var line in content.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#'))
+            {
+                continue;
+            }
+
+            return trimmed.TrimEnd('.');
+        }
+
+        return content.Trim();
     }
 
     private static string BuildFinalAnswer(

@@ -16,6 +16,7 @@ services:
       AgentCore__Profile: Real
       Providers__LanguageModels__primary-llm__Adapter: OpenAICompatible
       Providers__LanguageModels__primary-llm__BaseUrl: https://openrouter.ai/api/v1/
-      Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-openai/gpt-4o-mini}
+      Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-openai/gpt-4o-mini-2024-07-18}
       Providers__LanguageModels__primary-llm__Vision: "true"
+      Providers__LanguageModels__primary-llm__Tools: "true"
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

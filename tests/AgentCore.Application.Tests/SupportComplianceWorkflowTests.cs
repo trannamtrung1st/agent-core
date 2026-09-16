@@ -63,6 +63,11 @@ public sealed class SupportComplianceWorkflowTests
             {
                 Assert.Contains("demonstration session", assistant.Text, StringComparison.OrdinalIgnoreCase);
                 Assert.Contains("compliance-retention@demo", assistant.Text, StringComparison.Ordinal);
+                await using var artifactStream = await artifacts.OpenContentAsync(created.SessionId, toolArtifactId);
+                using var artifactReader = new StreamReader(artifactStream);
+                var artifactText = await artifactReader.ReadToEndAsync();
+                Assert.Contains("demonstration session", artifactText, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("compliance-retention@demo", artifactText, StringComparison.Ordinal);
             }
             else
             {

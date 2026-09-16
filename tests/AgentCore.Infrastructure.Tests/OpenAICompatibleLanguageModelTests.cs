@@ -134,7 +134,16 @@ public sealed class OpenAICompatibleLanguageModelTests
             "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
             "data: [DONE]\n\n";
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
-        var model = Create(handler);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = true
+            });
         var tools = new[]
         {
             new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
@@ -391,6 +400,33 @@ public sealed class OpenAICompatibleLanguageModelTests
             ]);
         var events = new List<ModelGenerationEvent>();
         await foreach (var item in model.GenerateAsync(request))
+        {
+            events.Add(item);
+        }
+
+        var failed = Assert.IsType<ModelFailed>(Assert.Single(events));
+        Assert.Equal(ProviderErrorCode.UnsupportedCapability, failed.Failure.Code);
+        Assert.Equal(0, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task Tools_false_returns_typed_unsupported_without_http()
+    {
+        var handler = new ScriptedHandler(
+            [Encoding.UTF8.GetBytes("data: {\"choices\":[{\"delta\":{\"content\":\"no\"}}]}\n\n")]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = false
+            });
+        var tools = new[] { new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""") };
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools)))
         {
             events.Add(item);
         }

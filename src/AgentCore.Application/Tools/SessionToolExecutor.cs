@@ -5,6 +5,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
@@ -124,6 +125,45 @@ public sealed class SessionToolExecutor(
         if (record is null)
         {
             return Error("notFound", "Attachment was not found.");
+        }
+
+        if (AttachmentMedia.IsImage(record.ContentType))
+        {
+            return JsonSerializer.Serialize(new
+            {
+                attachmentId = record.AttachmentId,
+                displayName = record.DisplayName,
+                contentType = record.ContentType,
+                byteSize = record.ByteSize,
+                kind = "image",
+                note = "Binary image bytes are already attached on the user turn for vision. Use that multimodal content; do not treat raw bytes as text."
+            });
+        }
+
+        if (string.Equals(record.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return JsonSerializer.Serialize(new
+            {
+                attachmentId = record.AttachmentId,
+                displayName = record.DisplayName,
+                contentType = record.ContentType,
+                byteSize = record.ByteSize,
+                kind = "pdf",
+                note = "PDF content is extracted during attachment processing on the user turn. attachments.read returns text only for supported text attachments."
+            });
+        }
+
+        if (record.ContentType is not ("text/plain" or "text/markdown" or "application/json" or "text/csv"))
+        {
+            return JsonSerializer.Serialize(new
+            {
+                attachmentId = record.AttachmentId,
+                displayName = record.DisplayName,
+                contentType = record.ContentType,
+                byteSize = record.ByteSize,
+                kind = "binary",
+                note = "This attachment type is not readable as UTF-8 text through attachments.read."
+            });
         }
 
         await using var stream = await attachments.OpenContentAsync(sessionId, attachmentId, cancellationToken)

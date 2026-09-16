@@ -7,6 +7,7 @@ public sealed class LanguageModelProviderOptions
     public string? ApiKey { get; set; }
     public string? DefaultModel { get; set; }
     public bool Vision { get; set; }
+    public bool Tools { get; set; }
     public Dictionary<string, string> AdditionalHeaders { get; set; } = [];
     public ProviderTimeoutOptions Timeouts { get; set; } = new();
 }

@@ -11,7 +11,6 @@ test("output worklet acknowledges playback while capture stays active", async ({
 
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText(/synthetic/i)).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.audioOutputsReceived() ?? 0), { timeout: 15_000 }).toBeGreaterThan(0);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);

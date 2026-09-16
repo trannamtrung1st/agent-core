@@ -2,11 +2,36 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Application.Tests;
 
 public sealed class SessionToolExecutorTests
 {
+    [Fact]
+    public async Task Attachments_read_returns_image_metadata_without_utf8_garbage()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var executor = new SessionToolExecutor(attachments: attachments);
+        var sessionId = Guid.NewGuid();
+        var uploaded = await attachments.UploadPendingAsync(
+            sessionId,
+            "photo.png",
+            "image/png",
+            new MemoryStream(PngBytes()),
+            false);
+        var result = await executor.ExecuteAsync(
+            Support(),
+            sessionId,
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
+            ToolLimits.MaxOutputBytes);
+        Assert.Contains("\"kind\":\"image\"", result, StringComparison.Ordinal);
+        Assert.Contains("image/png", result, StringComparison.Ordinal);
+        Assert.Contains("vision", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\uFFFD", result, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Host_paths_and_session_mutation_arguments_are_denied()
     {
@@ -123,6 +148,14 @@ public sealed class SessionToolExecutorTests
         Assert.Contains("unavailable", unavailable, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static byte[] PngBytes()
+    {
+        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
+        using var buffer = new MemoryStream();
+        image.SaveAsPng(buffer);
+        return buffer.ToArray();
+    }
+
     private static AgentDefinition Support() => new(
         1,
         "customer-support",
@@ -140,6 +173,7 @@ public sealed class SessionToolExecutorTests
             ToolAllowlist:
             [
                 ToolCatalog.KnowledgeRetrieve,
+                ToolCatalog.AttachmentsRead,
                 ToolCatalog.WorkspaceWrite
             ]));
 
