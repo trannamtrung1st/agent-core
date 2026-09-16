@@ -55,11 +55,11 @@ Explicitly out of this UI foundation and out of MVP product UI:
 - persistent multi-session UI, session sidebar, chat history management;
 - file/image attachments, rich assistant blocks, artifact panels, markdown HTML injection;
 - agent workspaces, autonomous tools, sandboxing, post-MVP proactive changes;
-- authentication, WebRTC, native speech-to-speech, large component frameworks.
+- authentication, WebRTC, native speech-to-speech, Ant Design Pro/ProComponents/X, or a second UI framework.
 
 Layout may later accommodate `session navigation | conversation` without implementing that navigation now.
 
-Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, strict TypeScript, Zustand, plain CSS/CSS Modules, `@microsoft/signalr` + MessagePack. No SSR, Next.js, or large UI kit.
+Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, strict TypeScript, Zustand, Ant Design v6 imported directly in product components, minimal `app.css`, `@microsoft/signalr` + MessagePack. No SSR or Next.js.
 
 ## Brand Commitments
 
@@ -72,7 +72,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 ## Evidence on Hand
 
 - Official docs under `/docs` (source of truth).
-- Implemented SPA in `web/` ships the Pixel Dialogue Field / Obsidian Mint world recorded in DESIGN.md.
+- Implemented SPA in `web/` uses Ant Design v6 plus the short policy in DESIGN.md. `/docs` still owns behavior.
 - Demo narratives in `docs/09-demo-scenarios.md`.
 - No brand illustration pack, logo lockup, or photography set. Do not invent them.
 
@@ -86,4 +86,4 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 
 ## Accessibility & Inclusion
 
-Labeled controls, keyboard access, visible focus, and actionable errors are required ([docs/13-frontend-implementation-spec.md](../../docs/13-frontend-implementation-spec.md)). Status must not rely on color or animation alone. Honor `prefers-reduced-motion`. Body-text contrast follows DESIGN.md (at least 4.5:1 on field and panel). Primary supported demo browser is Chromium desktop; do not depend on Chromium-only APIs when standard APIs suffice.
+Labeled controls, keyboard access, visible focus, and actionable errors are required ([docs/13-frontend-implementation-spec.md](../../docs/13-frontend-implementation-spec.md)). Status must not rely on color or animation alone. Honor `prefers-reduced-motion`. Contrast follows Ant Design defaults and DESIGN.md. Primary supported demo browser is Chromium desktop; do not depend on Chromium-only APIs when standard APIs suffice.
