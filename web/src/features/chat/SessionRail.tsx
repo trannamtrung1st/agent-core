@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Alert, Button, Checkbox, Flex, Input, Typography } from "antd";
 import type { AgentDescriptor, CatalogItem } from "../../services/api";
 import {
   archiveCatalogItem,
@@ -59,30 +60,22 @@ export function SessionRail({
 
   return (
     <nav className="session-rail" aria-label="Sessions" data-testid="session-rail">
-      <div className="session-rail-bar">
-        <span>Sessions</span>
-        <button type="button" className="key key-compact" aria-label="Start a new chat" onClick={onNewChat}>
+      <Flex justify="space-between" align="center" gap={8}>
+        <Typography.Text strong>Sessions</Typography.Text>
+        <Button type="primary" aria-label="Start a new chat" onClick={onNewChat}>
           New chat
-        </button>
-      </div>
+        </Button>
+      </Flex>
       {capabilityLost ? (
-        <p className="error session-rail-alert" role="alert">
-          {error ?? "Local owner access is unavailable."}
-        </p>
+        <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />
       ) : null}
-      {!capabilityLost && error ? (
-        <p className="error session-rail-alert" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <label className="session-rail-filter">
-        <input
-          type="checkbox"
-          checked={includeArchived}
-          onChange={(event) => void setIncludeArchived(event.target.checked)}
-        />
+      {!capabilityLost && error ? <Alert type="error" showIcon title={error} /> : null}
+      <Checkbox
+        checked={includeArchived}
+        onChange={(event) => void setIncludeArchived(event.target.checked)}
+      >
         Show archived
-      </label>
+      </Checkbox>
       <ul className="session-rail-list">
         {items.length === 0 && !capabilityLost ? (
           <li className="session-rail-empty">No sessions yet.</li>
@@ -105,7 +98,7 @@ export function SessionRail({
                     void renameCatalogItem(item.sessionId, draftTitle).then(() => setRenamingId(null));
                   }}
                 >
-                  <input
+                  <Input
                     aria-label="Session title"
                     value={draftTitle}
                     onChange={(event) => setDraftTitle(event.target.value)}
@@ -115,57 +108,64 @@ export function SessionRail({
                       }
                     }}
                   />
-                  <button type="submit">Save</button>
+                  <Button htmlType="submit">Save</Button>
                 </form>
               ) : (
-                <button
-                  type="button"
-                  className="session-row-main"
+                <Button
+                  type="text"
+                  block
                   disabled={inactive}
                   onClick={() => onOpen(item)}
+                  style={{ height: "auto", textAlign: "start", whiteSpace: "normal" }}
                 >
-                  <span className="session-row-title">{item.title}</span>
-                  <span className="session-row-meta">
-                    {agentLabel(agents, item)}
-                    <span className="session-row-state"> · {rowState(item)}</span>
-                  </span>
-                </button>
+                  <Flex vertical align="flex-start" gap={0}>
+                    <Typography.Text>{item.title}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {agentLabel(agents, item)}
+                      <span> · {rowState(item)}</span>
+                    </Typography.Text>
+                  </Flex>
+                </Button>
               )}
               {locked ? null : (
                 <div className="session-row-actions">
                   {item.archived ? (
-                    <button type="button" onClick={() => void unarchiveCatalogItem(item.sessionId)}>
+                    <Button size="small" onClick={() => void unarchiveCatalogItem(item.sessionId)}>
                       Unarchive
-                    </button>
+                    </Button>
                   ) : (
                     <>
-                      <button
-                        type="button"
+                      <Button
+                        size="small"
                         onClick={() => {
                           setRenamingId(item.sessionId);
                           setDraftTitle(item.title);
                         }}
                       >
                         Rename
-                      </button>
-                      <button type="button" onClick={() => void archiveCatalogItem(item.sessionId)}>
+                      </Button>
+                      <Button size="small" onClick={() => void archiveCatalogItem(item.sessionId)}>
                         Archive
-                      </button>
+                      </Button>
                     </>
                   )}
                   {confirmDeleteId === item.sessionId ? (
                     <>
-                      <button type="button" onClick={() => void deleteCatalogItem(item).then(() => setConfirmDeleteId(null))}>
+                      <Button
+                        size="small"
+                        danger
+                        onClick={() => void deleteCatalogItem(item).then(() => setConfirmDeleteId(null))}
+                      >
                         Confirm delete
-                      </button>
-                      <button type="button" onClick={() => setConfirmDeleteId(null)}>
+                      </Button>
+                      <Button size="small" onClick={() => setConfirmDeleteId(null)}>
                         Cancel
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button type="button" onClick={() => setConfirmDeleteId(item.sessionId)}>
+                    <Button size="small" danger onClick={() => setConfirmDeleteId(item.sessionId)}>
                       Delete
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -174,9 +174,7 @@ export function SessionRail({
         })}
       </ul>
       {hasMore ? (
-        <button type="button" className="session-rail-more" onClick={() => void refreshCatalog(false)}>
-          Load more
-        </button>
+        <Button onClick={() => void refreshCatalog(false)}>Load more</Button>
       ) : null}
     </nav>
   );

@@ -4,7 +4,106 @@ body,
   height: 100%;
 }
 
-.antd-root {
+.antd-root,
+.app-shell,
+.app-layout {
   height: 100%;
   min-height: 100%;
+}
+
+.app-sider {
+  overflow: auto;
+  border-inline-end: 1px solid #f0f0f0;
+}
+
+.app-sider-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  gap: 12px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  height: auto !important;
+  line-height: 1.4 !important;
+  padding: 12px 16px !important;
+  background: #fff !important;
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.app-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.conversation-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.conversation-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.conversation-composer {
+  flex: 0 0 auto;
+}
+
+.picker-pane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.session-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+.session-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.session-row-active {
+  background: #f5f5f5;
+  margin-inline: -8px;
+  padding-inline: 8px;
+}
+
+.session-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.session-rename {
+  display: flex;
+  gap: 8px;
 }

@@ -262,3 +262,69 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
   });
 });
+
+describe("ChatApp narrow session drawer", () => {
+  const matchMedia = window.matchMedia;
+
+  afterEach(() => {
+    window.matchMedia = matchMedia;
+    act(() => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+  });
+
+  it("exposes the same session catalog from a drawer", async () => {
+    window.matchMedia = ((query: string) => ({
+      matches: /max-width:\s*767px/i.test(query),
+      media: query,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent() {
+        return false;
+      }
+    })) as typeof window.matchMedia;
+
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner",
+        catalogItems: [
+          {
+            sessionId: "s1",
+            title: "Planning notes",
+            agentId: "examiner",
+            agentVersion: 1,
+            status: "paused",
+            archived: false,
+            ended: false,
+            workspaceOwned: true,
+            runtimeEpoch: 0,
+            revision: 2,
+            createdAt: "2026-09-16T00:00:00.000Z",
+            updatedAt: "2026-09-16T00:01:00.000Z"
+          }
+        ]
+      });
+    });
+
+    await act(async () => render(<ChatApp />));
+    expect(screen.getByRole("button", { name: "Open sessions" })).toBeInTheDocument();
+    expect(screen.queryByTestId("session-rail")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open sessions" }));
+    expect(screen.getByTestId("session-rail")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Planning notes/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+});
