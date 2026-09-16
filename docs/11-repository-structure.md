@@ -16,7 +16,7 @@ tests/
   AgentCore.Application.Tests/
   AgentCore.Infrastructure.Tests/
   AgentCore.Api.Tests/
-web/                        # React/Vite SPA and its frontend tests
+web/                        # React/Vite SPA (Ant Design v6, minimal app.css) and its frontend tests
 agents/                     # versioned JSON definitions, created during implementation
 .agents/skills/             # shared agent skills (develop, document, specialists, impeccable)
 .agents/context/            # Impeccable PRODUCT.md and DESIGN.md; /docs remains canonical

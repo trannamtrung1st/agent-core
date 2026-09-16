@@ -12,7 +12,7 @@ Read [README.md](README.md) before substantial work.
 - Testing: [Testing Strategy](docs/16-testing-strategy.md)
 - Implementation order: [Implementation Plan](docs/18-implementation-plan.md)
 
-Follow [Technology Decisions](docs/10-technology-decisions.md) and [Repository Structure](docs/11-repository-structure.md) for technology and project boundaries. Product/design documents are authoritative; skills guide execution. Do not introduce alternative architecture or MVP non-goals without an explicit user requirement.
+Follow [Technology Decisions](docs/10-technology-decisions.md) and [Repository Structure](docs/11-repository-structure.md) for technology and project boundaries. The verified MVP generic UI is Ant Design v6, consumed directly in product components; do not add a second UI kit. Product/design documents are authoritative; skills guide execution. Do not introduce alternative architecture or MVP non-goals without an explicit user requirement.
 
 ## Working modes
 

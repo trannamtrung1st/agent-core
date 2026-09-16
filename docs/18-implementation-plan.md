@@ -2,6 +2,8 @@
 
 This is the ordered implementation handoff. Each milestone must satisfy its acceptance criteria before dependent work begins. Scope remains conversational presence, not a general autonomous-agent platform. [Roadmap](08-development-roadmap.md) is the short index; this document owns the detailed gates. Observability hooks, cancellation and tests begin with the first slice, although full instrumentation/tuning is Milestone 12.
 
+The verified MVP generic UI is Ant Design v6 ([Technology Decisions](10-technology-decisions.md#decision-ant-design-v6-as-mvp-generic-ui-system)). That presentation change is not a new numbered milestone and does not reopen historical Milestone 1–12 status. Evidence: [antd-migration-handoff](reports/antd-migration-handoff.md).
+
 ## Milestone 0 — Documentation/contracts finalized
 
 - **Goal:** Make implementation decisions explicit and coherent.
