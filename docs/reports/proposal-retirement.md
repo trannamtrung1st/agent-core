@@ -1,6 +1,6 @@
 # Original proposal files retired
 
-The four original proposal documents (`local/proposals/00-post-mvp-proposal-index.md` through `03-implementation-plan-and-handoff.md`) are retired from product use. They are not present in the committed tree (`local/` is gitignored personal scratch). Immutable TDP snapshots remain at `local/tdp-workspace/inputs/proposals/` and must not be deleted.
+The four original proposal documents (`local/proposals/00-post-mvp-proposal-index.md` through `03-implementation-plan-and-handoff.md`) are retired from product use. They are not present in the committed tree (`local/` is gitignored personal scratch). The active TDP workspace keeps only the current Ant Design migration proposal snapshot at `local/tdp-workspace/inputs/proposals/antd-migration-proposal.md`.
 
 | Original | Canonical owners |
 | --- | --- |
