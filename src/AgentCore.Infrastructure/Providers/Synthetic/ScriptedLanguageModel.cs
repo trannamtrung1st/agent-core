@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -99,13 +100,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         if (toolRounds == 1 && Offers(request, ToolCatalog.ArtifactsCreate))
         {
-            var summary = lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
-                ? "Retention window is 90 days for simulated cases."
-                : "Order 91 is delayed under the simulated policy.";
+            var summary = BuildArtifactSummary(lastUser, lastTool);
             yield return new ModelToolCallEvent(new ModelToolCall(
                 "call-2",
                 ToolCatalog.ArtifactsCreate,
-                $"{{\"displayName\":\"case-note.md\",\"contentType\":\"text/markdown\",\"content\":\"{summary}\"}}"));
+                $"{{\"displayName\":\"case-note.md\",\"contentType\":\"text/markdown\",\"content\":\"{EscapeJson(summary)}\"}}"));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
@@ -116,12 +115,82 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         var artifactId = ExtractArtifactId(lastTool);
-        var body = lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
-            ? $"Cite 90-day retention. [[md:**90 days**]] [[artifact:{artifactId}]]"
-            : $"Order 91 is delayed. [[md:**Delayed**]] [[artifact:{artifactId}]]";
+        var body = BuildFinalAnswer(lastUser, request.Messages, artifactId);
         yield return new ModelTextDelta(body);
         yield return new ModelCompleted(ModelStopReason.Completed);
     }
+
+    private static string BuildArtifactSummary(string lastUser, string lastTool)
+    {
+        if (TryReadKnowledgeTool(lastTool, out var knowledge))
+        {
+            return knowledge.Content.Split('\n')[0].TrimEnd('.');
+        }
+
+        return lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
+            ? "Retention applies to the current demonstration session."
+            : "Order 91 is delayed under the simulated policy.";
+    }
+
+    private static string BuildFinalAnswer(
+        string lastUser,
+        IReadOnlyList<ModelMessage> messages,
+        string artifactId)
+    {
+        var knowledgeJson = messages
+            .LastOrDefault(message => message.Role == ModelRole.Tool && TryReadKnowledgeTool(message.Text, out _))
+            ?.Text;
+        if (knowledgeJson is not null && TryReadKnowledgeTool(knowledgeJson, out var document))
+        {
+            if (document.Identity.Contains("compliance-retention", StringComparison.Ordinal))
+            {
+                return
+                    $"Transcripts are kept for the current demonstration session. [[md:**demonstration session**]] Cite {document.Citation}. [[artifact:{artifactId}]]";
+            }
+
+            return $"Order 91 is delayed. [[md:**Delayed**]] [[artifact:{artifactId}]]";
+        }
+
+        return lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
+            ? $"Transcripts are kept for the current demonstration session. [[artifact:{artifactId}]]"
+            : $"Order 91 is delayed. [[md:**Delayed**]] [[artifact:{artifactId}]]";
+    }
+
+    private static bool TryReadKnowledgeTool(string toolJson, out KnowledgeToolPayload document)
+    {
+        document = default!;
+        if (string.IsNullOrWhiteSpace(toolJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var json = JsonDocument.Parse(toolJson);
+            var root = json.RootElement;
+            if (!root.TryGetProperty("identity", out var identity)
+                || !root.TryGetProperty("citation", out var citation)
+                || !root.TryGetProperty("content", out var content))
+            {
+                return false;
+            }
+
+            document = new KnowledgeToolPayload(
+                identity.GetString() ?? string.Empty,
+                citation.GetString() ?? string.Empty,
+                content.GetString() ?? string.Empty);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string EscapeJson(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+    private sealed record KnowledgeToolPayload(string Identity, string Citation, string Content);
 
     private static bool ShouldScriptTools(ModelRequest request)
     {

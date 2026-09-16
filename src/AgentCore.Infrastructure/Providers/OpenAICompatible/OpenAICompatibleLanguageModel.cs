@@ -240,7 +240,10 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                         yield break;
                     }
 
-                    yield return new ModelToolCallEvent(new ModelToolCall(draft.Id, draft.Name, draft.Arguments.ToString()));
+                    yield return new ModelToolCallEvent(new ModelToolCall(
+                        draft.Id,
+                        OpenAiCompatibleToolNames.ToCanonicalName(draft.Name),
+                        draft.Arguments.ToString()));
                 }
 
                 yield return new ModelCompleted(ModelStopReason.ToolCalls, inputTokens, outputTokens);
@@ -346,7 +349,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     ["type"] = "function",
                     ["function"] = new Dictionary<string, string>
                     {
-                        ["name"] = call.Name,
+                        ["name"] = OpenAiCompatibleToolNames.ToWireName(call.Name),
                         ["arguments"] = call.ArgumentsJson
                     }
                 }).ToArray()
@@ -386,7 +389,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             ["type"] = "function",
             ["function"] = new Dictionary<string, object?>
             {
-                ["name"] = tool.Name,
+                ["name"] = OpenAiCompatibleToolNames.ToWireName(tool.Name),
                 ["description"] = tool.Description,
                 ["parameters"] = parameters
             }

@@ -5,6 +5,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure;
@@ -128,7 +129,7 @@ public sealed class OpenAICompatibleLanguageModelTests
     public async Task Maps_tool_call_fragments_when_tools_are_offered()
     {
         var body =
-            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge.retrieve\",\"arguments\":\"\"}}]}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge_retrieve\",\"arguments\":\"\"}}]}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"identity\\\":\\\"support-order-policy\\\"}\"}}]}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
             "data: [DONE]\n\n";
@@ -136,16 +137,30 @@ public sealed class OpenAICompatibleLanguageModelTests
         var model = Create(handler);
         var tools = new[]
         {
-            new ModelToolDefinition("knowledge.retrieve", "Retrieve knowledge.", """{"type":"object"}""")
+            new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
         };
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools));
         Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("knowledge_retrieve", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("knowledge.retrieve", handler.LastBody, StringComparison.Ordinal);
         var call = Assert.IsType<ModelToolCallEvent>(events[0]).Call;
         Assert.Equal("call_1", call.Id);
-        Assert.Equal("knowledge.retrieve", call.Name);
+        Assert.Equal(ToolCatalog.KnowledgeRetrieve, call.Name);
         Assert.Contains("support-order-policy", call.ArgumentsJson, StringComparison.Ordinal);
         Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
         Assert.Equal(1, handler.PostCount);
+    }
+
+    [Fact]
+    public void ToolCatalog_wire_names_are_openai_compatible()
+    {
+        foreach (var name in ToolCatalog.AllKnownNames())
+        {
+            var wire = OpenAiCompatibleToolNames.ToWireName(name);
+            Assert.True(OpenAiCompatibleToolNames.IsWireSafe(wire), wire);
+            Assert.Equal(name, OpenAiCompatibleToolNames.ToCanonicalName(wire));
+            Assert.DoesNotContain(".", wire, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

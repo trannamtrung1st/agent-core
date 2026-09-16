@@ -111,7 +111,7 @@ public sealed class RoleEnvironmentTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
-        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
     }
 
     [Fact]

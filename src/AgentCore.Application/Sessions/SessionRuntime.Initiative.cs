@@ -213,8 +213,8 @@ public sealed partial class SessionRuntime
 
     private bool NeedsTerminalDeactivate() =>
         !_deactivated
-        && (_snapshot.Definition.InitiativePolicy.ConsecutiveCap == 0
-            || _consecutiveProactiveSpeaks >= _snapshot.Definition.InitiativePolicy.ConsecutiveCap
+        && (_consecutiveProactiveSpeaks >= _snapshot.Definition.InitiativePolicy.ConsecutiveCap
+            && _snapshot.Definition.InitiativePolicy.ConsecutiveCap > 0
             || _silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
             || InactivityExceeded());
 

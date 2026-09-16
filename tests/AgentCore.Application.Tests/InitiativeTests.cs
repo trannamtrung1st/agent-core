@@ -214,7 +214,7 @@ public sealed class InitiativeTests
     }
 
     [Fact]
-    public async Task Zero_cap_never_speaks_and_deactivates()
+    public async Task Zero_cap_never_speaks_and_stays_attached_until_silent_bounds()
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
@@ -225,7 +225,7 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));
-        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
     }
 
     [Fact]
@@ -479,8 +479,7 @@ public sealed class InitiativeTests
             }
 
             if (context.SilentEvaluations >= context.Definition.InitiativePolicy.SilentEvaluationCap
-                || context.InactivityExceeded
-                || context.Definition.InitiativePolicy.ConsecutiveCap == 0)
+                || context.InactivityExceeded)
             {
                 return ValueTask.FromResult<AgentDecision>(new RequestDeactivate("Silent bound."));
             }
@@ -507,8 +506,8 @@ public sealed class InitiativeTests
 
             if (context.Trigger.Kind == TriggerKind.LongSilence)
             {
-                if (definition.InitiativePolicy.ConsecutiveCap == 0
-                    || context.ConsecutiveProactiveSpeaks >= definition.InitiativePolicy.ConsecutiveCap
+                if ((definition.InitiativePolicy.ConsecutiveCap > 0
+                        && context.ConsecutiveProactiveSpeaks >= definition.InitiativePolicy.ConsecutiveCap)
                     || context.SilentEvaluations >= definition.InitiativePolicy.SilentEvaluationCap
                     || context.InactivityExceeded)
                 {

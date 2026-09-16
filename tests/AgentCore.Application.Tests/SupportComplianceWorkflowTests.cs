@@ -59,6 +59,15 @@ public sealed class SupportComplianceWorkflowTests
             var artifactBlock = Assert.Single(assistant.Envelope.Blocks, block => block.Kind == ResponseBlockKind.ArtifactReference);
             Assert.True(Guid.TryParse(artifactBlock.ArtifactId, out var toolArtifactId));
             Assert.NotNull(await artifacts.GetAsync(created.SessionId, toolArtifactId));
+            if (agentId == "compliance")
+            {
+                Assert.Contains("demonstration session", assistant.Text, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("compliance-retention@demo", assistant.Text, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.Contains("Delayed", assistant.Text, StringComparison.OrdinalIgnoreCase);
+            }
             Assert.Equal(AttachmentState.Bound, (await attachments.GetAsync(created.SessionId, uploaded.AttachmentId))!.State);
 
             await manager.DeactivateAsync(created.SessionId);

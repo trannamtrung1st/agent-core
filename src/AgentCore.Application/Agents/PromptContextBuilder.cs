@@ -331,8 +331,8 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
     private static bool ShouldDeactivate(AgentContext context)
     {
         var policy = context.Definition.InitiativePolicy;
-        return policy.ConsecutiveCap == 0
-            || context.ConsecutiveProactiveSpeaks >= policy.ConsecutiveCap
+        return policy.ConsecutiveCap > 0
+            && context.ConsecutiveProactiveSpeaks >= policy.ConsecutiveCap
             || context.SilentEvaluations >= policy.SilentEvaluationCap
             || context.InactivityExceeded;
     }

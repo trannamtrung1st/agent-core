@@ -36,7 +36,7 @@ public static class ToolCatalog
             [ArtifactsCreate] = new(
                 ArtifactsCreate,
                 "Create a session-owned artifact from UTF-8 content.",
-                """{"type":"object","properties":{"displayName":{"type":"string"},"contentType":{"type":"string"},"content":{"type":"string"},"sourceAttachmentId":{"type":"string"}},"required":["displayName","content"]}"""),
+                """{"type":"object","properties":{"displayName":{"type":"string"},"contentType":{"type":"string"},"content":{"type":"string"}},"required":["displayName","content"]}"""),
             [ArtifactsVerify] = new(
                 ArtifactsVerify,
                 "Verify a session-owned artifact id.",
@@ -60,4 +60,6 @@ public static class ToolCatalog
 
         return offered;
     }
+
+    public static IEnumerable<string> AllKnownNames() => Known.Keys;
 }
