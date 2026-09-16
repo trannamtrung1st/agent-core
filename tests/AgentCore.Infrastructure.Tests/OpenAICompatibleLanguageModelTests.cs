@@ -476,6 +476,49 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.DoesNotContain("OpenAI.Chat", handler.LastBody, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Multipart_user_message_preserves_instruction_and_attachment_on_wire()
+    {
+        var handler = new ScriptedHandler(
+            [Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: [DONE]\n\n")]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Vision = true,
+                Tools = true
+            });
+        var message = PromptContextBuilder.BuildCurrentUserMessage(
+            "Summarize the attachment",
+            [
+                new AttachmentProcessResult(
+                    Guid.NewGuid(),
+                    AttachmentLimits.ProcessorVersion,
+                    AttachmentProcessKind.ExtractedText,
+                    "policy.md",
+                    "text/markdown",
+                    "Retention policy details for the current session.",
+                    null,
+                    null,
+                    null)
+            ],
+            attachmentsReadAvailable: false);
+        await foreach (var _ in model.GenerateAsync(new ModelRequest(Guid.NewGuid(), [message])))
+        {
+        }
+
+        Assert.Equal(1, handler.PostCount);
+        Assert.Contains("Summarize the attachment", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("Retention policy details", handler.LastBody, StringComparison.Ordinal);
+    }
+
     private static async Task<List<ModelGenerationEvent>> CollectAsync(HttpMessageHandler handler)
         => await CollectAsync(Create(handler));
 

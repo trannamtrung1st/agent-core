@@ -18,6 +18,7 @@ public sealed class PromptContextBuilder
     public const int MaxHistoryCharacters = 24000;
     public const int MaxSummaryCharacters = 2000;
     public const int MaxAttachmentContextCharacters = 16384;
+    public const int MinAttachmentContextCharactersPerFile = 2048;
 
     public PromptSections BuildSections(AgentContext context)
     {
@@ -214,7 +215,12 @@ public sealed class PromptContextBuilder
         }
 
         var parts = new List<ModelContentPart>();
-        var remaining = MaxAttachmentContextCharacters;
+        if (!string.IsNullOrEmpty(userText))
+        {
+            parts.Add(new ModelTextContent(userText));
+        }
+
+        var allocations = AllocateAttachmentTextBudget(attachments);
         foreach (var item in attachments)
         {
             var header =
@@ -242,9 +248,9 @@ public sealed class PromptContextBuilder
                 continue;
             }
 
-            var take = Math.Min(item.Text.Length, remaining);
+            var budget = allocations.GetValueOrDefault(item.AttachmentId);
+            var take = Math.Min(item.Text.Length, budget);
             var extract = take > 0 ? item.Text[..take] : string.Empty;
-            remaining -= extract.Length;
             var omitted = item.Text.Length > extract.Length;
             var more = omitted switch
             {
@@ -260,6 +266,47 @@ public sealed class PromptContextBuilder
 
         var text = string.Join("\n\n", blocks);
         return new ModelMessage(ModelRole.User, text, parts);
+    }
+
+    internal static IReadOnlyDictionary<Guid, int> AllocateAttachmentTextBudget(
+        IReadOnlyList<AttachmentProcessResult> attachments)
+    {
+        var textAttachments = attachments
+            .Where(item => item.Kind == AttachmentProcessKind.ExtractedText && item.Text.Length > 0)
+            .ToArray();
+        if (textAttachments.Length == 0)
+        {
+            return new Dictionary<Guid, int>();
+        }
+
+        var allocations = textAttachments.ToDictionary(item => item.AttachmentId, _ => 0);
+        var remaining = MaxAttachmentContextCharacters;
+        var minSlice = Math.Min(
+            MinAttachmentContextCharactersPerFile,
+            Math.Max(1, MaxAttachmentContextCharacters / textAttachments.Length));
+        foreach (var item in textAttachments)
+        {
+            var reserve = Math.Min(item.Text.Length, Math.Min(minSlice, remaining));
+            allocations[item.AttachmentId] = reserve;
+            remaining -= reserve;
+        }
+
+        while (remaining > 0)
+        {
+            var needy = textAttachments
+                .OrderByDescending(item => item.Text.Length - allocations[item.AttachmentId])
+                .FirstOrDefault(item => allocations[item.AttachmentId] < item.Text.Length);
+            if (needy is null)
+            {
+                break;
+            }
+
+            var extra = Math.Min(remaining, needy.Text.Length - allocations[needy.AttachmentId]);
+            allocations[needy.AttachmentId] += extra;
+            remaining -= extra;
+        }
+
+        return allocations;
     }
 }
 

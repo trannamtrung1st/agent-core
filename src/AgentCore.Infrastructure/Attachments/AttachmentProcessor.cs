@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -302,8 +303,7 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
             return text;
         }
 
-        var buffer = Encoding.UTF8.GetBytes(text);
-        return Encoding.UTF8.GetString(buffer, 0, AttachmentLimits.MaxExtractionOutputBytes);
+        return ToolJsonResults.ClipUtf8Prefix(text, AttachmentLimits.MaxExtractionOutputBytes);
     }
 
     private static AttachmentProcessResult Unsupported(AttachmentRecord record, string code) =>

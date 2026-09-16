@@ -81,6 +81,64 @@ public sealed class AttachmentProcessingRuntimeTests
     }
 
     [Fact]
+    public void BuildCurrentUserMessage_puts_user_instruction_first_in_parts()
+    {
+        var attachments = new[]
+        {
+            new AttachmentProcessResult(
+                Guid.NewGuid(),
+                AttachmentLimits.ProcessorVersion,
+                AttachmentProcessKind.ExtractedText,
+                "policy.md",
+                "text/markdown",
+                "Retention policy details.",
+                null,
+                null,
+                null)
+        };
+
+        var message = PromptContextBuilder.BuildCurrentUserMessage("Summarize the attachment", attachments, false);
+        Assert.NotNull(message.Parts);
+        var first = Assert.IsType<ModelTextContent>(message.Parts![0]);
+        Assert.Equal("Summarize the attachment", first.Text);
+    }
+
+    [Fact]
+    public void BuildCurrentUserMessage_gives_each_text_attachment_a_minimum_slice()
+    {
+        var bigId = Guid.NewGuid();
+        var smallId = Guid.NewGuid();
+        var attachments = new[]
+        {
+            new AttachmentProcessResult(
+                bigId,
+                AttachmentLimits.ProcessorVersion,
+                AttachmentProcessKind.ExtractedText,
+                "big.md",
+                "text/markdown",
+                new string('a', PromptContextBuilder.MaxAttachmentContextCharacters + 512),
+                null,
+                null,
+                null),
+            new AttachmentProcessResult(
+                smallId,
+                AttachmentLimits.ProcessorVersion,
+                AttachmentProcessKind.ExtractedText,
+                "small.md",
+                "text/markdown",
+                "second-file-content",
+                null,
+                null,
+                null)
+        };
+
+        var message = PromptContextBuilder.BuildCurrentUserMessage("Compare these files", attachments, false);
+        var combined = string.Join('\n', message.Parts!.OfType<ModelTextContent>().Select(part => part.Text));
+        Assert.Contains("second-file-content", combined, StringComparison.Ordinal);
+        Assert.Contains(new string('a', PromptContextBuilder.MinAttachmentContextCharactersPerFile), combined, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildCurrentUserMessage_omits_tool_hint_when_attachments_read_is_unavailable()
     {
         var longText = new string('a', PromptContextBuilder.MaxAttachmentContextCharacters + 128);

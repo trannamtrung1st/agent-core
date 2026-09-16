@@ -2,7 +2,7 @@ using System.Text;
 
 namespace AgentCore.Application.Tools;
 
-internal static class ToolJsonResults
+public static class ToolJsonResults
 {
     public static string FitJsonWithContentField(int budget, string content, Func<string, bool, string> buildJson)
     {
@@ -20,11 +20,28 @@ internal static class ToolJsonResults
             truncated = true;
             if (current.Length == 0)
             {
-                return json;
+                return FitToBudget(maxBytes, buildJson(string.Empty, true));
             }
 
             current = ClipUtf8Prefix(current, Math.Max(0, current.Length - Math.Max(1, current.Length / 8)));
         }
+    }
+
+    public static string FitToBudget(int budget, string json)
+    {
+        var maxBytes = Math.Max(0, budget);
+        if (Encoding.UTF8.GetByteCount(json) <= maxBytes)
+        {
+            return json;
+        }
+
+        const string fallback = """{"truncated":true,"error":"output_limit"}""";
+        if (Encoding.UTF8.GetByteCount(fallback) <= maxBytes)
+        {
+            return fallback;
+        }
+
+        return ClipUtf8Prefix(fallback, maxBytes);
     }
 
     public static string ClipUtf8Prefix(string text, int maxBytes)

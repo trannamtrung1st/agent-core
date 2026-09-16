@@ -660,6 +660,36 @@ describe("realtime race handling", () => {
     vi.useRealTimers();
   });
 
+  it("restores pending attachments after ambiguous SendText failure", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      pendingAttachments: [
+        {
+          localId: "local-1",
+          displayName: "notes.md",
+          contentType: "text/markdown",
+          byteSize: 12,
+          status: "ready",
+          progress: 100,
+          attachmentId: "att-1",
+          error: null
+        }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await sendDraft();
+    expect(useSessionStore.getState().pendingAttachments).toHaveLength(1);
+    expect(useSessionStore.getState().pendingAttachments[0]?.attachmentId).toBe("att-1");
+    expect(useSessionStore.getState().entries[0]?.status).toBe("sending");
+  });
+
   it("retries unacked text with the original eventId after reconnect", async () => {
     const invoke = vi
       .fn()

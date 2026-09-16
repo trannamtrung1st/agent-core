@@ -100,11 +100,6 @@ public static class AttachmentClassification
             "txt" => "text/plain",
             "json" => "application/json",
             "csv" => "text/csv",
-            "pdf" => "application/pdf",
-            "png" => "image/png",
-            "jpg" or "jpeg" => "image/jpeg",
-            "webp" => "image/webp",
-            "gif" => "image/gif",
             _ => null
         };
     }
@@ -141,7 +136,7 @@ public static class AttachmentClassification
             return inferred;
         }
 
-        return inferred;
+        return null;
     }
 
     private static AttachmentInspectResult Reject(string message) =>

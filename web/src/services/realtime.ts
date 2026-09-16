@@ -134,7 +134,12 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
-let pendingUserText: { eventId: string; text: string; attachmentIds: string[] } | null = null;
+let pendingUserText: {
+  eventId: string;
+  text: string;
+  attachmentIds: string[];
+  pendingAttachments: PendingAttachment[];
+} | null = null;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -1086,6 +1091,10 @@ function composerCanSend(draft: string, pending: PendingAttachment[], connection
     return false;
   }
 
+  if (pendingUserText && (pendingUserText.text.trim().length > 0 || pendingUserText.attachmentIds.length > 0)) {
+    return !pending.some((item) => item.status !== "ready");
+  }
+
   const hasText = draft.trim().length > 0;
   const complete = pending.filter((item) => item.status === "ready" && item.attachmentId);
   const blocked = pending.some((item) => item.status !== "ready");
@@ -1362,8 +1371,8 @@ export async function sendDraft(): Promise<void> {
     pendingUserText && pendingUserText.text === text && pendingUserText.attachmentIds.join() === attachmentIds.join()
       ? pendingUserText.eventId
       : uuid();
-  pendingUserText = { eventId, text, attachmentIds };
   const pendingAttachmentSnapshot = snapshot.pendingAttachments.slice();
+  pendingUserText = { eventId, text, attachmentIds, pendingAttachments: pendingAttachmentSnapshot };
   const refs: HistoryAttachment[] = readyFiles.map((item) => ({
     attachmentId: item.attachmentId!,
     displayName: item.displayName,
@@ -1408,6 +1417,7 @@ export async function sendDraft(): Promise<void> {
       }
     } catch (error) {
       useSessionStore.setState({
+        pendingAttachments: pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot,
         error: error instanceof Error ? error.message : "Message was not accepted.",
         errorFatal: false
       });

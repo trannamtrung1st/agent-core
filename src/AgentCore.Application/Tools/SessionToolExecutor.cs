@@ -60,7 +60,7 @@ public sealed class SessionToolExecutor(
 
         try
         {
-            return call.Name switch
+            var raw = call.Name switch
             {
                 ToolCatalog.KnowledgeRetrieve => await RetrieveKnowledgeAsync(definition, args, remainingOutputBytes, cancellationToken)
                     .ConfigureAwait(false),
@@ -78,6 +78,7 @@ public sealed class SessionToolExecutor(
                     .ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
+            return ToolJsonResults.FitToBudget(remainingOutputBytes, raw);
         }
         catch (OperationCanceledException)
         {
@@ -85,7 +86,7 @@ public sealed class SessionToolExecutor(
         }
         catch (AgentCoreException ex)
         {
-            return Error(ex.Code, ex.Message);
+            return ToolJsonResults.FitToBudget(remainingOutputBytes, Error(ex.Code, ex.Message));
         }
     }
 

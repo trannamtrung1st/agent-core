@@ -60,4 +60,18 @@ public sealed class AttachmentClassificationTests
         Assert.True(result.Readable);
         Assert.Equal("text/plain", result.ContentType);
     }
+
+    [Fact]
+    public void Pdf_extension_without_signature_is_rejected()
+    {
+        var bytes = new byte[] { 0x00, 0x01, 0x02, 0x03 };
+        var result = AttachmentClassification.Inspect(
+            bytes,
+            bytes,
+            bytes.Length,
+            "application/octet-stream",
+            "fake.pdf",
+            allowStoreUnread: false);
+        Assert.False(result.Accepted);
+    }
 }

@@ -188,6 +188,28 @@ public sealed class SessionToolExecutorTests
         Assert.Equal("compliance-retention@demo", json.RootElement.GetProperty("citation").GetString());
     }
 
+    [Fact]
+    public async Task Image_metadata_is_bounded_to_remaining_output_bytes()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var executor = new SessionToolExecutor(attachments: attachments);
+        var sessionId = Guid.NewGuid();
+        var uploaded = await attachments.UploadPendingAsync(
+            sessionId,
+            "photo.png",
+            "image/png",
+            new MemoryStream(PngBytes()),
+            false);
+        var result = await executor.ExecuteAsync(
+            Support(),
+            sessionId,
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
+            48);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(result) <= 48);
+        using var json = JsonDocument.Parse(result);
+        Assert.True(json.RootElement.TryGetProperty("truncated", out _) || json.RootElement.TryGetProperty("kind", out _));
+    }
+
     private static byte[] PngBytes()
     {
         using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
