@@ -48,6 +48,8 @@ export function conversationStatus(source: StatusSource): string {
   if (
     source.outputState === "waitingForAgent" ||
     source.outputState === "agentGenerating" ||
+    source.outputState === "processingAttachments" ||
+    source.outputState === "runningTools" ||
     source.liveResponseId != null
   ) {
     return "Thinking";

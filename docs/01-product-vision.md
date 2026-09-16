@@ -118,5 +118,5 @@ For this reason, implementation priority should be:
 
 ## Post-MVP planned until verified
 
-Accepted product behavior beyond historical MVP: multiple persistent chats with agent selection; file/image attachments; rich replies; versioned role environments (Support, Compliance, examiner); durable isolated session workspaces; session-owned artifacts with explicit attachment materialization. Still planned: bounded tools; concrete sandbox. Details: [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified) and [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified).
+Accepted product behavior beyond historical MVP: multiple persistent chats with agent selection; file/image attachments; rich replies; versioned role environments (Support, Compliance, examiner); durable isolated session workspaces; session-owned artifacts with explicit attachment materialization; bounded typed tools for Support/Compliance. Still planned: concrete sandbox. Details: [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified) and [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified).
 

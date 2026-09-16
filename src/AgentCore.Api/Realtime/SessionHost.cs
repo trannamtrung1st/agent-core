@@ -1819,6 +1819,7 @@ public static class SessionEventMapper
     private static string ToOutput(string value) => value switch
     {
         nameof(OutputActivity.ProcessingAttachments) => "processingAttachments",
+        nameof(OutputActivity.RunningTools) => "runningTools",
         nameof(OutputActivity.WaitingForAgent) => "waitingForAgent",
         nameof(OutputActivity.AgentGenerating) => "agentGenerating",
         nameof(OutputActivity.AgentSpeaking) => "agentSpeaking",

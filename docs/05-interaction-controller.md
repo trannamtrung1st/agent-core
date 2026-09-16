@@ -11,7 +11,7 @@ Avoid a single enum that incorrectly forbids simultaneous user input and agent o
 | Lifecycle | Created, Attached, Paused, Ending, Ended |
 | Mode | Text, Voice (one conversation; mode may transition) |
 | Input | Idle, Listening, UserSpeaking, Finalizing |
-| Output | Idle, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted |
+| Output | Idle, ProcessingAttachments, RunningTools, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted |
 | Candidate | None or (candidateId, utteranceId, responseId, revision, deadline) |
 | Response | responseId, status (Live, Superseded, Completed, Failed), modelDone, audioDone, playbackDone |
 | PendingMode | None or requested Text/Voice while waiting for a safe transition; Voice pending is cleared on disconnect, crash recovery, cancel, or timeout |

@@ -51,6 +51,14 @@ public sealed record AttachmentsProcessedReceived(
     AgentTrigger Trigger,
     IReadOnlyList<AttachmentProcessResult> Results) : SessionInput(Context);
 
+public sealed record ToolActivityReceived(
+    EventContext Context,
+    OutputActivity Activity,
+    bool Hold,
+    Guid ResponseId,
+    Guid Epoch,
+    TaskCompletionSource<bool> Admitted) : SessionInput(Context);
+
 public sealed record BrainReturned(
     EventContext Context,
     int TurnGeneration,

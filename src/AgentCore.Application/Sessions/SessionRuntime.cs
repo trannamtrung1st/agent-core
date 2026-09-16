@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
@@ -8,6 +9,7 @@ using AgentCore.Application.Interaction;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.Logging;
 
@@ -40,6 +42,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IAttachmentStore? _attachments;
     private readonly IAttachmentProcessor? _processor;
     private readonly IArtifactReferenceAuthorizer _artifacts;
+    private readonly SessionToolExecutor _tools;
     private readonly InteractionPolicy _policy;
     private readonly object _audioGate = new();
     private AudioIngress _ingress = new();
@@ -135,7 +138,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ISessionAudioOutput? audioOutput = null,
         IAttachmentStore? attachments = null,
         IAttachmentProcessor? processor = null,
-        IArtifactReferenceAuthorizer? artifacts = null)
+        IArtifactReferenceAuthorizer? artifacts = null,
+        SessionToolExecutor? tools = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
@@ -152,6 +156,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _attachments = attachments;
         _processor = processor;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
+        _tools = tools ?? new SessionToolExecutor();
         _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
@@ -594,6 +599,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case AttachmentsProcessedReceived processed:
                     await HandleAttachmentsProcessedAsync(processed, cancellationToken).ConfigureAwait(false);
                     break;
+                case ToolActivityReceived tools:
+                    await HandleToolActivityAsync(tools, cancellationToken).ConfigureAwait(false);
+                    break;
                 case BrainReturned brain:
                     await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
                     brain.Processed.TrySetResult();
@@ -763,6 +771,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case ModelResultReceived model:
                 model.Processed.TrySetResult();
+                break;
+            case ToolActivityReceived tools:
+                tools.Admitted.TrySetResult(false);
                 break;
             case SynthesisResultReceived synthesis:
                 synthesis.Processed.TrySetResult();
@@ -1158,53 +1169,249 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
+        var messages = request.Messages.ToList();
+        var steps = 0;
+        var outputBytes = 0;
+        using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var overallTimer = ScheduleCancel(_time, overallCts, ToolLimits.Overall);
         try
         {
-            await foreach (var evt in _languageModel.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            while (!overallCts.IsCancellationRequested)
             {
-                if (!_recordedLlm && evt is ModelTextDelta)
+                var pending = new List<ModelToolCall>();
+                var finished = false;
+                var working = request with { Messages = messages };
+                await foreach (var evt in _languageModel.GenerateAsync(working, overallCts.Token).ConfigureAwait(false))
                 {
-                    _recordedLlm = true;
-                    RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
-                }
-                var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                var context = NewContext(cause.EventId);
-                BeginWork();
-                var admitted = TryMailbox(new ModelResultReceived(context, request.ResponseId, evt, processed));
-                if (!admitted)
-                {
-                    EndWork();
-                    processed.TrySetResult();
-                    break;
+                    switch (evt)
+                    {
+                        case ModelToolCallEvent tool:
+                            pending.Add(tool.Call);
+                            continue;
+                        case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls:
+                            continue;
+                        default:
+                            if (!_recordedLlm && evt is ModelTextDelta)
+                            {
+                                _recordedLlm = true;
+                                RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
+                            }
+
+                            if (!await MailboxModelAsync(cause, request.ResponseId, evt, overallCts.Token)
+                                    .ConfigureAwait(false))
+                            {
+                                return;
+                            }
+
+                            if (evt is ModelCompleted or ModelFailed)
+                            {
+                                finished = true;
+                            }
+
+                            break;
+                    }
                 }
 
-                await processed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (finished || pending.Count == 0)
+                {
+                    return;
+                }
+
+                if (steps + pending.Count > ToolLimits.MaxSteps)
+                {
+                    await MailboxModelAsync(
+                            cause,
+                            request.ResponseId,
+                            new ModelFailed(new ProviderFailure(
+                                ProviderErrorCode.InvalidRequest,
+                                "Tool step limit reached.")),
+                            overallCts.Token)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                if (!await AdmitToolActivityAsync(
+                            cause,
+                            request.ResponseId,
+                            OutputActivity.RunningTools,
+                            hold: true,
+                            overallCts.Token)
+                        .ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
+                foreach (var call in pending)
+                {
+                    using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
+                    using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
+                    if (!await AdmitToolActivityAsync(
+                                cause,
+                                request.ResponseId,
+                                OutputActivity.RunningTools,
+                                hold: true,
+                                toolCts.Token)
+                            .ConfigureAwait(false))
+                    {
+                        return;
+                    }
+
+                    string result;
+                    try
+                    {
+                        result = await _tools.ExecuteAsync(
+                                _snapshot.Definition,
+                                SessionId,
+                                call,
+                                ToolLimits.MaxOutputBytes - outputBytes,
+                                toolCts.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        await MailboxModelAsync(
+                                cause,
+                                request.ResponseId,
+                                new ModelFailed(new ProviderFailure(
+                                    ProviderErrorCode.Cancelled,
+                                    "Tool execution cancelled.")),
+                                CancellationToken.None)
+                            .ConfigureAwait(false);
+                        return;
+                    }
+
+                    outputBytes += Encoding.UTF8.GetByteCount(result);
+                    if (outputBytes > ToolLimits.MaxOutputBytes)
+                    {
+                        await MailboxModelAsync(
+                                cause,
+                                request.ResponseId,
+                                new ModelFailed(new ProviderFailure(
+                                    ProviderErrorCode.InvalidRequest,
+                                    "Tool output limit reached.")),
+                                overallCts.Token)
+                            .ConfigureAwait(false);
+                        return;
+                    }
+
+                    messages.Add(new ModelMessage(ModelRole.Tool, result, ToolCallId: call.Id, Name: call.Name));
+                    steps++;
+                }
+
+                if (!await AdmitToolActivityAsync(
+                            cause,
+                            request.ResponseId,
+                            OutputActivity.AgentGenerating,
+                            hold: true,
+                            overallCts.Token)
+                        .ConfigureAwait(false))
+                {
+                    return;
+                }
             }
+
+            await MailboxModelAsync(
+                    cause,
+                    request.ResponseId,
+                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Timeout, "Tool deadline reached.")),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var failed = new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled."));
-            var context = NewContext(cause.EventId);
-            BeginWork();
-            if (!TryMailbox(new ModelResultReceived(context, request.ResponseId, failed, processed)))
-            {
-                EndWork();
-            }
+            await MailboxModelAsync(
+                    cause,
+                    request.ResponseId,
+                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled.")),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Language model pump failed for {ResponseId}", request.ResponseId);
-            var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var failed = new ModelFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Generation failed."));
-            BeginWork();
-            if (!TryMailbox(
-                    new ModelResultReceived(NewContext(cause.EventId), request.ResponseId, failed, processed)))
-            {
-                EndWork();
-            }
+            await MailboxModelAsync(
+                    cause,
+                    request.ResponseId,
+                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Generation failed.")),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
         }
     }
+
+    private async Task<bool> MailboxModelAsync(
+        EventContext cause,
+        Guid responseId,
+        ModelGenerationEvent evt,
+        CancellationToken cancellationToken)
+    {
+        var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        BeginWork();
+        var admitted = TryMailbox(new ModelResultReceived(NewContext(cause.EventId), responseId, evt, processed));
+        if (!admitted)
+        {
+            EndWork();
+            processed.TrySetResult();
+            return false;
+        }
+
+        try
+        {
+            await processed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<bool> AdmitToolActivityAsync(
+        EventContext cause,
+        Guid responseId,
+        OutputActivity activity,
+        bool hold,
+        CancellationToken cancellationToken)
+    {
+        var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BeginWork();
+        if (!TryMailbox(new ToolActivityReceived(NewContext(cause.EventId), activity, hold, responseId, _epoch, admitted)))
+        {
+            EndWork();
+            return false;
+        }
+
+        try
+        {
+            return await admitted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private async Task HandleToolActivityAsync(ToolActivityReceived input, CancellationToken cancellationToken)
+    {
+        if (_deactivated
+            || _responseTerminal
+            || _activeResponseId != input.ResponseId
+            || _epoch != input.Epoch)
+        {
+            input.Admitted.TrySetResult(false);
+            return;
+        }
+
+        _outputActivity = input.Activity;
+        _initiativeHeld = input.Hold;
+        _lastMeaningfulActivityAt = _time.GetUtcNow();
+        input.Admitted.TrySetResult(true);
+        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static ITimer ScheduleCancel(TimeProvider time, CancellationTokenSource cts, TimeSpan delay) =>
+        time.CreateTimer(static state => ((CancellationTokenSource)state!).Cancel(), cts, delay, Timeout.InfiniteTimeSpan);
 
     private async Task HandleModelAsync(ModelResultReceived input, CancellationToken cancellationToken)
     {
@@ -1239,6 +1446,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                 }
 
+                break;
+            case ModelToolCallEvent:
+                break;
+            case ModelCompleted { Reason: ModelStopReason.ToolCalls }:
                 break;
             case ModelCompleted:
                 await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: true, cancellationToken)
@@ -1291,6 +1502,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
+        _initiativeHeld = false;
         var heard = _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         InvalidateSpeechJobs();
@@ -1336,6 +1548,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
+        _initiativeHeld = false;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
         UpdateAssistant(status);
         var capturedResponseId = responseId;
@@ -1467,10 +1680,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         bool finalize,
         CancellationToken cancellationToken)
     {
-        _envelope = ResponseEnvelopeParser.Parse(
+        var parsed = ResponseEnvelopeParser.Parse(
             _accumulator.Text,
             id => _artifacts.IsAuthorized(_snapshot.SessionId, id),
             finalize);
+        _envelope = _ttsSourceLocked && _ttsUsesSpeech && !string.IsNullOrEmpty(_envelope?.SpeechText)
+            ? parsed with { SpeechText = _envelope.SpeechText }
+            : parsed;
         var display = _envelope.DisplayText;
         if (display.Length > _publishedDisplayLength)
         {
@@ -1509,27 +1725,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var parsed = _envelope
             ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize: false);
+        var playback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
         if (!_ttsSourceLocked)
         {
-            if (!string.IsNullOrEmpty(parsed.SpeechText))
-            {
-                _ttsUsesSpeech = true;
-                _ttsSourceLocked = true;
-            }
-            else if (parsed.DisplayText.Length > 0)
-            {
-                _ttsUsesSpeech = false;
-                _ttsSourceLocked = true;
-            }
-            else
+            if (playback.Length == 0)
             {
                 return string.Empty;
+            }
+
+            _ttsUsesSpeech = !string.IsNullOrEmpty(parsed.SpeechText)
+                || !string.Equals(playback, parsed.DisplayText, StringComparison.Ordinal);
+            _ttsSourceLocked = true;
+            if (_ttsUsesSpeech)
+            {
+                _envelope = parsed with { SpeechText = playback };
             }
         }
 
         if (_ttsUsesSpeech)
         {
-            return parsed.SpeechText ?? string.Empty;
+            return _envelope?.SpeechText ?? playback;
         }
 
         return parsed.DisplayText;

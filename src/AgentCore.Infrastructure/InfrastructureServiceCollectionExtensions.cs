@@ -4,6 +4,7 @@ using AgentCore.Application.Interaction;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
+using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
@@ -119,6 +120,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
+        services.TryAddSingleton<SessionToolExecutor>();
         services.TryAddSingleton<SessionRuntimeFactory>();
         return services;
     }

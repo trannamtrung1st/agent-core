@@ -125,6 +125,42 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
+    public async Task Maps_tool_call_fragments_when_tools_are_offered()
+    {
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge.retrieve\",\"arguments\":\"\"}}]}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"identity\\\":\\\"support-order-policy\\\"}\"}}]}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = Create(handler);
+        var tools = new[]
+        {
+            new ModelToolDefinition("knowledge.retrieve", "Retrieve knowledge.", """{"type":"object"}""")
+        };
+        var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools));
+        Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
+        var call = Assert.IsType<ModelToolCallEvent>(events[0]).Call;
+        Assert.Equal("call_1", call.Id);
+        Assert.Equal("knowledge.retrieve", call.Name);
+        Assert.Contains("support-order-policy", call.ArgumentsJson, StringComparison.Ordinal);
+        Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
+        Assert.Equal(1, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task Unexpected_tool_calls_without_offered_tools_are_unsupported()
+    {
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"process\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var events = await CollectAsync(handler);
+        var failed = Assert.IsType<ModelFailed>(events[0]);
+        Assert.Equal(ProviderErrorCode.UnsupportedCapability, failed.Failure.Code);
+    }
+
+    [Fact]
     public void Factory_selects_scripted_or_openai_compatible_by_adapter()
     {
         var scripted = LanguageModelAdapterFactory.Create(new LanguageModelProviderOptions { Adapter = "Scripted" }, handler: null);
@@ -392,10 +428,10 @@ public sealed class OpenAICompatibleLanguageModelTests
     private static async Task<List<ModelGenerationEvent>> CollectAsync(HttpMessageHandler handler)
         => await CollectAsync(Create(handler));
 
-    private static async Task<List<ModelGenerationEvent>> CollectAsync(ILanguageModel model)
+    private static async Task<List<ModelGenerationEvent>> CollectAsync(ILanguageModel model, ModelRequest? request = null)
     {
         var events = new List<ModelGenerationEvent>();
-        await foreach (var item in model.GenerateAsync(Request()))
+        await foreach (var item in model.GenerateAsync(request ?? Request()))
         {
             events.Add(item);
         }

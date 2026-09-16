@@ -147,7 +147,7 @@ Milestones 0–12 above remain the historical MVP record and stay **Complete**. 
 | D — Initiative | Repeated StaySilent/Speak/RequestDeactivate; definition-owned cap; finite silent bounds; deactivation ≠ archive/delete | **Observed:** FakeTimeProvider 1st/2nd/3rd Speak; at-cap and zero-cap RequestDeactivate; HTTP deactivate idempotent |
 | E — Role environments | Versioned Support and Compliance plus preserved examiner; allowlists; initiative pins | **Observed:** distinct MaxConsecutiveProactiveTurns 1/2/0; pin stable across file version bump; knowledge citation retrieve; process/shell denied |
 | F — Workspace | Lazy provision; /agent and /attachments read-only; /workspace 250 MiB; artifacts distinct | **Observed:** isolation/traversal/symlink/other-session/secret denial; lazy empty workspace; template without corpus copy; archive/reopen/deactivate preserve files; durable delete cleans up; 250 MiB concurrent workspace writes; artifact store 50 MiB each / 250 MiB per session; explicit materialize with hash/provenance |
-| G — Bounded work | Typed tools, Support/Compliance workflows, step/time/output caps | Late results rejected; uploads never execute |
+| G — Bounded work | Typed tools, Support/Compliance workflows, step/time/output caps | **Observed:** OpenAI-compatible tool_calls mapping; Scripted Support/Compliance multi-step replies with Markdown and artifact refs; 12 / 30 s / 120 s / 8 MiB caps; host-path and Session-mutation denial; late tool results rejected; uploads never execute |
 | H — Sandbox | Concrete container behind the execution boundary | Real isolation/resource tests; missing Docker is a blocker |
 | I — WorkItems | Conditional | Not-applicable unless a G/H workflow must survive deactivation |
 

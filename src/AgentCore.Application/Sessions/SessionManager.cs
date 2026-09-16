@@ -1,6 +1,7 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
@@ -560,7 +561,8 @@ public sealed class SessionRuntimeFactory(
     ISpeechSynthesizer synthesizer,
     IAttachmentStore attachments,
     IAttachmentProcessor processor,
-    IArtifactReferenceAuthorizer artifacts)
+    IArtifactReferenceAuthorizer artifacts,
+    SessionToolExecutor tools)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -579,5 +581,6 @@ public sealed class SessionRuntimeFactory(
             synthesizer,
             attachments: attachments,
             processor: processor,
-            artifacts: artifacts);
+            artifacts: artifacts,
+            tools: tools);
 }

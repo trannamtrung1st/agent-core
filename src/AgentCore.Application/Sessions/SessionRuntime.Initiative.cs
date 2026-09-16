@@ -139,6 +139,7 @@ public sealed partial class SessionRuntime
         }
 
         _outputActivity = OutputActivity.Idle;
+        _initiativeHeld = false;
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Paused,

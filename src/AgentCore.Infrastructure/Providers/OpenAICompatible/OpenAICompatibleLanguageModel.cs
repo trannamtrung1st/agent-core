@@ -33,7 +33,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = JoinCompletions(options.BaseUrl);
-        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true, Vision: options.Vision);
+        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true, Vision: options.Vision, Tools: true);
     }
 
     public ModelCapabilities Capabilities { get; }
@@ -57,6 +57,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         if (HasImageParts(request) && !Capabilities.Vision)
         {
             yield return Fail(ProviderErrorCode.UnsupportedCapability, "This language model does not support vision.");
+            yield break;
+        }
+
+        if (request.Tools is { Count: > 0 } && !Capabilities.Tools)
+        {
+            yield return Fail(ProviderErrorCode.UnsupportedCapability, "This language model does not support tools.");
             yield break;
         }
 
@@ -121,6 +127,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             var sawChoice = false;
             var sawDone = false;
             var emittedText = false;
+            var toolsOffered = request.Tools is { Count: > 0 };
+            var drafts = new Dictionary<int, ToolCallDraft>();
             var idle = TimeSpan.FromSeconds(Math.Max(1, _options.Timeouts.StreamIdleSeconds));
 
             await using var enumerator = parser.ReadDataPayloadsAsync(stream, totalCts.Token)
@@ -183,7 +191,14 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 ModelFailed? parseFailed = null;
                 try
                 {
-                    mapped = MapPayload(payload, ref stop, ref inputTokens, ref outputTokens, ref sawChoice);
+                    mapped = MapPayload(
+                        payload,
+                        toolsOffered,
+                        drafts,
+                        ref stop,
+                        ref inputTokens,
+                        ref outputTokens,
+                        ref sawChoice);
                 }
                 catch (JsonException)
                 {
@@ -212,6 +227,24 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                         yield return delta;
                         break;
                 }
+            }
+
+            if (stop == ModelStopReason.ToolCalls)
+            {
+                _breaker.RecordSuccess();
+                foreach (var draft in drafts.OrderBy(pair => pair.Key).Select(pair => pair.Value))
+                {
+                    if (string.IsNullOrWhiteSpace(draft.Id) || string.IsNullOrWhiteSpace(draft.Name))
+                    {
+                        yield return Fail(ProviderErrorCode.Unavailable, "Language model tool call was incomplete.");
+                        yield break;
+                    }
+
+                    yield return new ModelToolCallEvent(new ModelToolCall(draft.Id, draft.Name, draft.Arguments.ToString()));
+                }
+
+                yield return new ModelCompleted(ModelStopReason.ToolCalls, inputTokens, outputTokens);
+                yield break;
             }
 
             if (sawDone && stop is null && sawChoice)
@@ -251,6 +284,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             body["temperature"] = temperature;
         }
 
+        if (request.Tools is { Count: > 0 })
+        {
+            body["tools"] = request.Tools.Select(MapTool).ToArray();
+            body["tool_choice"] = "auto";
+        }
+
         var json = JsonSerializer.Serialize(body);
         var message = new HttpRequestMessage(HttpMethod.Post, _completions)
         {
@@ -279,12 +318,41 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
     private static Dictionary<string, object?> MapMessage(ModelMessage message)
     {
+        if (message.Role == ModelRole.Tool)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["role"] = "tool",
+                ["tool_call_id"] = message.ToolCallId ?? "",
+                ["content"] = message.Text
+            };
+        }
+
         var role = message.Role switch
         {
             ModelRole.System => "system",
             ModelRole.Assistant => "assistant",
             _ => "user"
         };
+        if (message.ToolCalls is { Count: > 0 } calls)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["role"] = role,
+                ["content"] = string.IsNullOrEmpty(message.Text) ? null : message.Text,
+                ["tool_calls"] = calls.Select(call => new Dictionary<string, object?>
+                {
+                    ["id"] = call.Id,
+                    ["type"] = "function",
+                    ["function"] = new Dictionary<string, string>
+                    {
+                        ["name"] = call.Name,
+                        ["arguments"] = call.ArgumentsJson
+                    }
+                }).ToArray()
+            };
+        }
+
         if (message.Parts is { Count: > 0 } parts)
         {
             return new Dictionary<string, object?>
@@ -298,6 +366,30 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             ["role"] = role,
             ["content"] = message.Text
+        };
+    }
+
+    private static Dictionary<string, object?> MapTool(ModelToolDefinition tool)
+    {
+        object parameters;
+        try
+        {
+            parameters = JsonSerializer.Deserialize<JsonElement>(tool.ParametersJson);
+        }
+        catch (JsonException)
+        {
+            parameters = new Dictionary<string, string> { ["type"] = "object" };
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "function",
+            ["function"] = new Dictionary<string, object?>
+            {
+                ["name"] = tool.Name,
+                ["description"] = tool.Description,
+                ["parameters"] = parameters
+            }
         };
     }
 
@@ -322,6 +414,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
     private static ModelGenerationEvent? MapPayload(
         string payload,
+        bool toolsOffered,
+        Dictionary<int, ToolCallDraft> drafts,
         ref ModelStopReason? stop,
         ref int? inputTokens,
         ref int? outputTokens,
@@ -369,30 +463,85 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             var reason = finish.GetString();
             if (reason is "tool_calls" or "function_call")
             {
-                return Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.");
-            }
+                if (!toolsOffered)
+                {
+                    return Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.");
+                }
 
-            stop = reason switch
+                stop = ModelStopReason.ToolCalls;
+            }
+            else
             {
-                "stop" => ModelStopReason.Completed,
-                "length" => ModelStopReason.LengthLimit,
-                "content_filter" => ModelStopReason.ContentFiltered,
-                _ => stop
-            };
+                stop = reason switch
+                {
+                    "stop" => ModelStopReason.Completed,
+                    "length" => ModelStopReason.LengthLimit,
+                    "content_filter" => ModelStopReason.ContentFiltered,
+                    _ => stop
+                };
+            }
         }
 
-        if (choice.TryGetProperty("delta", out var delta)
-            && delta.TryGetProperty("content", out var content)
-            && content.ValueKind == JsonValueKind.String)
+        if (choice.TryGetProperty("delta", out var delta))
         {
-            var text = content.GetString() ?? string.Empty;
-            if (text.Length > 0)
+            if (delta.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.ValueKind == JsonValueKind.Array)
             {
-                return new ModelTextDelta(text);
+                if (!toolsOffered)
+                {
+                    return Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.");
+                }
+
+                MergeToolCalls(toolCalls, drafts);
+            }
+
+            if (delta.TryGetProperty("content", out var content)
+                && content.ValueKind == JsonValueKind.String)
+            {
+                var text = content.GetString() ?? string.Empty;
+                if (text.Length > 0)
+                {
+                    return new ModelTextDelta(text);
+                }
             }
         }
 
         return null;
+    }
+
+    private static void MergeToolCalls(JsonElement toolCalls, Dictionary<int, ToolCallDraft> drafts)
+    {
+        foreach (var item in toolCalls.EnumerateArray())
+        {
+            var index = 0;
+            if (item.TryGetProperty("index", out var indexElement) && indexElement.TryGetInt32(out var parsed))
+            {
+                index = parsed;
+            }
+
+            if (!drafts.TryGetValue(index, out var draft))
+            {
+                draft = new ToolCallDraft();
+                drafts[index] = draft;
+            }
+
+            if (item.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+            {
+                draft.Id = id.GetString() ?? draft.Id;
+            }
+
+            if (item.TryGetProperty("function", out var function) && function.ValueKind == JsonValueKind.Object)
+            {
+                if (function.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String)
+                {
+                    draft.Name = name.GetString() ?? draft.Name;
+                }
+
+                if (function.TryGetProperty("arguments", out var arguments) && arguments.ValueKind == JsonValueKind.String)
+                {
+                    draft.Arguments.Append(arguments.GetString());
+                }
+            }
+        }
     }
 
     private static ITimer ScheduleCancel(TimeProvider time, CancellationTokenSource cts, TimeSpan delay) =>
@@ -429,6 +578,13 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         }
 
         return new Uri(uri.AbsoluteUri.TrimEnd('/') + "/chat/completions", UriKind.Absolute);
+    }
+
+    private sealed class ToolCallDraft
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public StringBuilder Arguments { get; } = new();
     }
 }
 

@@ -158,7 +158,7 @@ When `playback.stop` arrives, tombstone the response before flushing main-thread
 
 ## Post-MVP
 
-Observed: optional independent `reply.speech` uses speech-coordinate playback receipts; display receipts stay on `reply.text` and blocks. Do not apply speech offsets to display text. TTS uses text only when speech is absent, once. Binary file upload remains HTTP, never the PCM path. Runtime deactivation tears down voice resources; reopen uses a fresh epoch and streamId.
+Observed: optional independent `reply.speech` uses speech-coordinate playback receipts; display receipts stay on `reply.text` and blocks. Do not apply speech offsets to display text. TTS uses `[[speech:]]` when present, otherwise display text once, and never narrates attachment bytes, AttachmentId dumps, or long extracts; those stay on display/blocks while speech remains a short summary. Binary file upload remains HTTP, never the PCM path. Runtime deactivation tears down voice resources; reopen uses a fresh epoch and streamId. Text/voice mode switches keep the same Session identity, attachment/artifact refs, and response/epoch guards for late tool results.
 
 ## Capability degradation
 

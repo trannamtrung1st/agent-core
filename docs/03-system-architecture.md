@@ -92,4 +92,4 @@ Accepted target, not current shipped evidence. See [Technology Decisions](10-tec
 - One writable workspace per SessionId; physical directory is lazy (`data/workspaces/{sessionId}`). Domain/Contracts never receive host paths. Archive, reopen, unload, and deactivate keep the same workspace; durable delete removes it.
 - Trusted-local owner capability authorizes catalog, lifecycle, and hub attach; SessionId is not a credential. Connection-lease `attachmentId` is not a user-uploaded Attachment.
 - Attachments are session-owned immutable blobs (`IAttachmentStore`) with off-mailbox processors (`IAttachmentProcessor`); Artifacts are a distinct generated/materialized type (`IArtifactStore`). Runtime deactivation, archive, and durable delete remain three operations.
-- Container sandbox sits behind the same execution capability boundary (Phase H). Phase I WorkItems remain conditional.
+- Typed tools execute through scoped session capabilities (not host paths or `IMemoryStore`); Session Runtime owns the bounded loop. Container sandbox sits behind the same execution capability boundary (Phase H). Phase I WorkItems remain conditional.

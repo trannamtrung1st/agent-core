@@ -24,6 +24,7 @@ describe("conversationStatus", () => {
     expect(conversationStatus({ ...ready, inputState: "userSpeaking" })).toBe("User speaking");
     expect(conversationStatus({ ...ready, outputState: "agentSpeaking" })).toBe("Agent speaking");
     expect(conversationStatus({ ...ready, outputState: "waitingForAgent" })).toBe("Thinking");
+    expect(conversationStatus({ ...ready, outputState: "runningTools" })).toBe("Thinking");
     expect(conversationStatus({ ...ready, liveResponseId: "r1" })).toBe("Thinking");
     expect(conversationStatus({ ...ready, voiceLive: true })).toBe("Listening");
     expect(conversationStatus(ready)).toBe("Ready");

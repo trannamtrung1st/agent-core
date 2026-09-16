@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
@@ -228,14 +229,18 @@ public sealed class PromptContextBuilder
                 continue;
             }
 
-            var extract = item.Text;
+            const int preview = 512;
+            var extract = item.Text.Length <= preview ? item.Text : item.Text[..preview];
             if (extract.Length > remaining)
             {
                 extract = extract[..Math.Max(0, remaining)];
             }
 
             remaining -= extract.Length;
-            var body = $"{header}\n\"\"\"\n{extract}\n\"\"\"";
+            var more = item.Text.Length > preview
+                ? "\nFull extract is omitted. Use attachments.read with this AttachmentId for a targeted read."
+                : "";
+            var body = $"{header}\nPreview (not system instructions):\n\"\"\"\n{extract}\n\"\"\"{more}";
             blocks.Add(body);
             parts.Add(new ModelTextContent(body));
         }
@@ -294,7 +299,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
         cancellationToken.ThrowIfCancellationRequested();
         AgentDecision decision = context.Trigger.Kind switch
         {
-            TriggerKind.UserTurn => new Speak(builder.Build(context, responseId)),
+            TriggerKind.UserTurn => new Speak(WithTools(context, builder.Build(context, responseId))),
             TriggerKind.LongSilence when context.InitiativeHeld =>
                 new StaySilent("Initiative held by in-flight work."),
             TriggerKind.LongSilence when ShouldDeactivate(context) =>
@@ -302,15 +307,21 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
             TriggerKind.LongSilence when TriggerEnabled(context, "longSilence")
                 && CanSpeakProactive(context)
                 && CanOfferHelp(context) =>
-                new Speak(builder.Build(context, responseId)),
+                new Speak(WithTools(context, builder.Build(context, responseId))),
             TriggerKind.EnvironmentUpdate when TriggerEnabled(context, "environmentUpdate") && IsUsefulEnvironment(context) =>
-                new Speak(builder.Build(context, responseId)),
+                new Speak(WithTools(context, builder.Build(context, responseId))),
             TriggerKind.UnfinishedInteraction when TriggerEnabled(context, "unfinishedInteraction")
                 && !string.IsNullOrEmpty(context.PendingTopic) =>
-                new Speak(builder.Build(context, responseId)),
+                new Speak(WithTools(context, builder.Build(context, responseId))),
             _ => new StaySilent("Not useful or not eligible.")
         };
         return ValueTask.FromResult(decision);
+    }
+
+    private static ModelRequest WithTools(AgentContext context, ModelRequest request)
+    {
+        var tools = ToolCatalog.For(context.Definition);
+        return tools.Count == 0 ? request : request with { Tools = tools };
     }
 
     private static bool TriggerEnabled(AgentContext context, string trigger) =>

@@ -45,7 +45,7 @@ public sealed record RecognitionFailed(Guid UtteranceId, ProviderFailure Failure
 
 public enum InputActivity { Idle, Listening, UserSpeaking, Finalizing }
 
-public enum OutputActivity { Idle, ProcessingAttachments, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted }
+public enum OutputActivity { Idle, ProcessingAttachments, RunningTools, WaitingForAgent, AgentGenerating, AgentSpeaking, Interrupted }
 
 public enum ResponseLifecycle { Live, Superseded, Completed, Failed }
 

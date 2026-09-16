@@ -31,6 +31,8 @@ public sealed partial class SessionRuntime
         _responseLifecycle is ResponseLifecycle.Live
         || _outputActivity is OutputActivity.AgentGenerating
             or OutputActivity.WaitingForAgent
+            or OutputActivity.RunningTools
+            or OutputActivity.ProcessingAttachments
             or OutputActivity.AgentSpeaking
         || _activeResponseId is not null && !_responseTerminal;
 

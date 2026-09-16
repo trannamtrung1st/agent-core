@@ -32,15 +32,24 @@ public enum ProviderErrorCode
 }
 public sealed record ProviderFailure(
     ProviderErrorCode Code, string SafeMessage, TimeSpan? RetryAfter = null);
-public enum ModelRole { System, User, Assistant }
-public enum ModelStopReason { Completed, LengthLimit, ContentFiltered }
-public sealed record ModelMessage(ModelRole Role, string Text);
-public sealed record ModelCapabilities(bool StreamingText, bool Cancellation);
+public enum ModelRole { System, User, Assistant, Tool }
+public enum ModelStopReason { Completed, LengthLimit, ContentFiltered, ToolCalls }
+public sealed record ModelToolCall(string Id, string Name, string ArgumentsJson);
+public sealed record ModelToolDefinition(string Name, string Description, string ParametersJson);
+public sealed record ModelMessage(
+    ModelRole Role, string Text,
+    IReadOnlyList<ModelContentPart>? Parts = null,
+    string? ToolCallId = null, string? Name = null,
+    IReadOnlyList<ModelToolCall>? ToolCalls = null);
+public sealed record ModelCapabilities(
+    bool StreamingText, bool Cancellation, bool Vision = false, bool Tools = false);
 public sealed record ModelRequest(
     Guid ResponseId, IReadOnlyList<ModelMessage> Messages,
-    int MaxOutputTokens = 512, double? Temperature = null);
+    int MaxOutputTokens = 512, double? Temperature = null,
+    IReadOnlyList<ModelToolDefinition>? Tools = null);
 public abstract record ModelGenerationEvent;
 public sealed record ModelTextDelta(string Text) : ModelGenerationEvent;
+public sealed record ModelToolCallEvent(ModelToolCall Call) : ModelGenerationEvent;
 public sealed record ModelCompleted(ModelStopReason Reason,
     int? InputTokens = null, int? OutputTokens = null) : ModelGenerationEvent;
 public sealed record ModelFailed(ProviderFailure Failure) : ModelGenerationEvent;
@@ -265,7 +274,9 @@ Observed `ISessionWorkspace` uses logical paths only (`/agent`, `/attachments`, 
 
 Observed `IArtifactStore` keeps metadata in SQLite (or the in-memory equivalent) and binaries under `data/artifacts/{sessionId}` outside row payloads and outside `local/`. Artifacts are a distinct type from Attachments. Explicit `materialize` copies an attachment into `/workspace/working` with sanitized deterministic collision names, preserves SHA-256, and records `SourceAttachmentId`. Caps are 50 MiB each and 250 MiB per session under concurrency. Envelope authorization accepts stored ArtifactIds plus the Phase C fixture `fixture-artifact-1`. Export/download uses the trusted-local owner capability.
 
-Still planned until verified: typed tools; container sandbox.
+Still planned until verified: container sandbox.
+
+Observed typed tools: Application-normalized `ModelToolCall` / `ModelStopReason.ToolCalls` / `ModelCapabilities.Tools`. Session Runtime runs an off-mailbox tool loop (max 12 steps, 30 s per tool, 120 s overall, 8 MiB tool output) with epoch/response guards; `outputState=runningTools` holds initiative like in-flight extraction. Scoped capabilities are `knowledge.retrieve`, `attachments.read` by AttachmentId, logical workspace paths, and `artifacts.create`/`verify`. Host paths, `process`/`shell`, and Session/history mutation arguments fail closed. Production OpenAI-compatible adapters map `tools` / `tool_calls` when tools are offered and still return `UnsupportedCapability` for unexpected tool_calls. ScriptedLanguageModel is not a substitute for that adapter mapping. Large-document turns send attachment identity plus a short preview; targeted reads use `attachments.read`. Uploads are never executed. No durable WorkItems.
 
 Observed rich envelope: parent `ResponseId` owns `reply.text` (stored as entry `Text` after marker strip), optional `reply.speech`, Markdown/attachment/artifact/unknown blocks, independent display vs speech-coordinate receipts, and fixture-only artifact authorization (`fixture-artifact-1`). Unknown and unauthorized artifact refs persist a safe fallback without leaking the id.
 
