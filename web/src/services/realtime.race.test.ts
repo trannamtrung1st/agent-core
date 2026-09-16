@@ -238,6 +238,92 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().error).toContain("Mailbox saturated");
   });
 
+  it("shows the user entry before SendText ack and keeps user before assistant when response starts first", async () => {
+    let resolveAck: (value: { accepted: boolean }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(
+      () => new Promise<{ accepted: boolean }>((resolve) => {
+        resolveAck = resolve;
+      })
+    );
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const sending = sendDraft();
+    await Promise.resolve();
+    const optimistic = useSessionStore.getState().entries;
+    expect(optimistic).toHaveLength(1);
+    expect(optimistic[0]?.role).toBe("user");
+    expect(optimistic[0]?.text).toBe("Hello");
+    expect(optimistic[0]?.status).toBe("sending");
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "assistant-started",
+      sequence: 2,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r1",
+      type: "agent.response.started",
+      payload: { entryId: "a-entry", entrySequence: 2 }
+    });
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "assistant-delta",
+      sequence: 3,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r1",
+      type: "agent.text.delta",
+      payload: { text: "Hi there", textStart: 0 }
+    });
+    const raced = useSessionStore.getState().entries;
+    expect(raced.map((entry) => entry.role)).toEqual(["user", "assistant"]);
+    resolveAck({ accepted: true });
+    await sending;
+    const finalEntries = useSessionStore.getState().entries;
+    expect(finalEntries.map((entry) => entry.role)).toEqual(["user", "assistant"]);
+    expect(finalEntries[0]?.status).toBe("completed");
+    expect(finalEntries[1]?.text).toBe("Hi there");
+  });
+
+  it("removes the optimistic user entry when SendText is rejected after optimistic insert", async () => {
+    let rejectAck: (value: { accepted: boolean; error: { message: string } }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(
+      () => new Promise((resolve) => {
+        rejectAck = resolve;
+      })
+    );
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const sending = sendDraft();
+    await Promise.resolve();
+    expect(useSessionStore.getState().entries).toHaveLength(1);
+    rejectAck({ accepted: false, error: { message: "Mailbox saturated." } });
+    await sending;
+    expect(useSessionStore.getState().entries).toHaveLength(0);
+    expect(useSessionStore.getState().draft).toBe("Hello");
+  });
+
   it("does not restore a rejected draft over text typed while sending", async () => {
     let rejectAck: (value: { accepted: boolean; error: { message: string } }) => void = () => undefined;
     const invoke = vi.fn().mockImplementation(
@@ -285,6 +371,7 @@ describe("realtime race handling", () => {
     await Promise.resolve();
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().draft).toBe("");
+    expect(useSessionStore.getState().entries).toHaveLength(1);
     resolveAck({ accepted: true });
     await Promise.all([first, second]);
     expect(invoke).toHaveBeenCalledTimes(1);
@@ -589,10 +676,12 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     await sendDraft();
-    expect(useSessionStore.getState().draft).toBe("Hello");
+    expect(useSessionStore.getState().draft).toBe("");
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Hello");
+    expect(useSessionStore.getState().entries[0]?.status).toBe("sending");
     const firstId = (invoke.mock.calls[0]?.[1] as { eventId?: string })?.eventId;
     expect(firstId).toBeTruthy();
-    useSessionStore.setState({ draft: "Hello" });
+    useSessionStore.setState({ draft: "" });
     hooks.handleEvent({
       protocolVersion: 1,
       sessionId: "s1",
@@ -632,7 +721,8 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     await sendDraft();
-    expect(useSessionStore.getState().draft).toBe("Hello");
+    expect(useSessionStore.getState().draft).toBe("");
+    expect(useSessionStore.getState().entries[0]?.status).toBe("sending");
     hooks.handleEvent({
       protocolVersion: 1,
       sessionId: "s1",

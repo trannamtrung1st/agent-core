@@ -60,9 +60,9 @@ public sealed class SessionToolExecutor(
 
         try
         {
-            var raw = call.Name switch
+            return call.Name switch
             {
-                ToolCatalog.KnowledgeRetrieve => await RetrieveKnowledgeAsync(definition, args, cancellationToken)
+                ToolCatalog.KnowledgeRetrieve => await RetrieveKnowledgeAsync(definition, args, remainingOutputBytes, cancellationToken)
                     .ConfigureAwait(false),
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
                     .ConfigureAwait(false),
@@ -78,7 +78,6 @@ public sealed class SessionToolExecutor(
                     .ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
-            return Clip(raw, remainingOutputBytes);
         }
         catch (OperationCanceledException)
         {
@@ -93,6 +92,7 @@ public sealed class SessionToolExecutor(
     private async Task<string> RetrieveKnowledgeAsync(
         AgentDefinition definition,
         JsonElement args,
+        int remainingOutputBytes,
         CancellationToken cancellationToken)
     {
         if (knowledge is null || !TryString(args, "identity", out var identity))
@@ -101,13 +101,17 @@ public sealed class SessionToolExecutor(
         }
 
         var document = await knowledge.RetrieveAsync(definition, identity, cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Serialize(new
-        {
-            identity = document.Identity,
-            title = document.Title,
-            citation = document.Citation,
-            content = document.Content
-        });
+        return ToolJsonResults.FitJsonWithContentField(
+            remainingOutputBytes,
+            document.Content,
+            (content, truncated) => JsonSerializer.Serialize(new
+            {
+                identity = document.Identity,
+                title = document.Title,
+                citation = document.Citation,
+                content,
+                truncated
+            }));
     }
 
     private async Task<string> ReadAttachmentAsync(
@@ -140,7 +144,7 @@ public sealed class SessionToolExecutor(
             });
         }
 
-        if (string.Equals(record.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(AttachmentMedia.NormalizeContentType(record.ContentType), "application/pdf", StringComparison.OrdinalIgnoreCase))
         {
             return JsonSerializer.Serialize(new
             {
@@ -153,7 +157,7 @@ public sealed class SessionToolExecutor(
             });
         }
 
-        if (record.ContentType is not ("text/plain" or "text/markdown" or "application/json" or "text/csv"))
+        if (!AttachmentMedia.IsReadableText(record.ContentType))
         {
             return JsonSerializer.Serialize(new
             {
@@ -184,14 +188,18 @@ public sealed class SessionToolExecutor(
         }
 
         var text = DecodeText(buffer.ToArray());
-        return JsonSerializer.Serialize(new
-        {
-            attachmentId = record.AttachmentId,
-            displayName = record.DisplayName,
-            contentType = record.ContentType,
-            truncated = buffer.Length < record.ByteSize,
-            content = text
-        });
+        var byteTruncated = buffer.Length < record.ByteSize;
+        return ToolJsonResults.FitJsonWithContentField(
+            remainingOutputBytes,
+            text,
+            (content, truncated) => JsonSerializer.Serialize(new
+            {
+                attachmentId = record.AttachmentId,
+                displayName = record.DisplayName,
+                contentType = record.ContentType,
+                truncated = byteTruncated || truncated,
+                content
+            }));
     }
 
     private async Task<string> ReadWorkspaceAsync(
@@ -210,13 +218,18 @@ public sealed class SessionToolExecutor(
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var content = await workspace.ReadAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var take = Math.Min(content.Bytes.Length, Math.Max(0, remainingOutputBytes));
-        return JsonSerializer.Serialize(new
-        {
-            path = content.LogicalPath,
-            contentType = content.ContentType,
-            truncated = take < content.Bytes.Length,
-            content = DecodeText(content.Bytes.AsSpan(0, take).ToArray())
-        });
+        var decoded = DecodeText(content.Bytes.AsSpan(0, take).ToArray());
+        var byteTruncated = take < content.Bytes.Length;
+        return ToolJsonResults.FitJsonWithContentField(
+            remainingOutputBytes,
+            decoded,
+            (body, truncated) => JsonSerializer.Serialize(new
+            {
+                path = content.LogicalPath,
+                contentType = content.ContentType,
+                truncated = byteTruncated || truncated,
+                content = body
+            }));
     }
 
     private async Task<string> WriteWorkspaceAsync(
@@ -338,16 +351,18 @@ public sealed class SessionToolExecutor(
                 cancellationToken)
             .ConfigureAwait(false);
         RuntimeTelemetry.Record("sandbox", RuntimeTelemetry.ElapsedMs(started), verb);
-        return Clip(
-            JsonSerializer.Serialize(new
+        return ToolJsonResults.FitJsonWithContentField(
+            remainingOutputBytes,
+            result.Output,
+            (output, truncated) => JsonSerializer.Serialize(new
             {
                 ok = result.Succeeded,
                 exitCode = result.ExitCode,
-                output = result.Output,
+                output,
+                truncated,
                 artifactId = result.ArtifactId,
                 message = result.SafeMessage
-            }),
-            remainingOutputBytes);
+            }));
     }
 
     private static bool LooksLikeSessionMutation(JsonElement args)
@@ -411,18 +426,6 @@ public sealed class SessionToolExecutor(
         {
             return Convert.ToBase64String(bytes);
         }
-    }
-
-    private static string Clip(string value, int remainingOutputBytes)
-    {
-        var budget = Math.Max(0, remainingOutputBytes);
-        var utf8 = Encoding.UTF8.GetBytes(value);
-        if (utf8.Length <= budget)
-        {
-            return value;
-        }
-
-        return Encoding.UTF8.GetString(utf8.AsSpan(0, budget));
     }
 
     private static string Error(string code, string message) =>

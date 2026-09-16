@@ -2,7 +2,7 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microso
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, useSessionStore, type HistoryAttachment, type ServerEvent } from "../state/sessionStore";
+import { applyServerEvent, emptySession, hasControlSequenceGap, useSessionStore, type HistoryAttachment, type HistoryEntry, type ServerEvent } from "../state/sessionStore";
 import { createSession, endSession, ensureOwnerCapability, getHealth, listAgents, reopenSession } from "./api";
 import {
   abortPendingAttachment,
@@ -1258,6 +1258,68 @@ function historyHasUserEvent(entries: { sourceEventId: string | null; role: stri
   return entries.some((entry) => entry.role === "user" && entry.sourceEventId === eventId);
 }
 
+function upsertHistoryEntry(entries: HistoryEntry[], next: HistoryEntry): HistoryEntry[] {
+  const index = entries.findIndex((entry) => entry.entryId === next.entryId);
+  if (index === -1) {
+    return [...entries, next].sort((left, right) => left.sequence - right.sequence);
+  }
+
+  const copy = entries.slice();
+  copy[index] = next;
+  return copy;
+}
+
+function nextOptimisticUserSequence(entries: HistoryEntry[]): number {
+  return entries.reduce((max, entry) => Math.max(max, entry.sequence), 0) + 0.5;
+}
+
+function appendOptimisticUserEntry(
+  eventId: string,
+  text: string,
+  attachments: HistoryAttachment[],
+  mode: "text" | "voice"
+): void {
+  const latest = useSessionStore.getState();
+  if (historyHasUserEvent(latest.entries, eventId)) {
+    return;
+  }
+
+  useSessionStore.setState({
+    pendingAttachments: [],
+    entries: upsertHistoryEntry(latest.entries, {
+      entryId: eventId,
+      sequence: nextOptimisticUserSequence(latest.entries),
+      sourceEventId: eventId,
+      role: "user",
+      text,
+      responseId: null,
+      status: "sending",
+      deliveryMode: mode,
+      heardTextEndExclusive: text.length,
+      receivedTextEndExclusive: text.length,
+      createdAt: new Date().toISOString(),
+      attachments: attachments.length > 0 ? attachments : undefined
+    })
+  });
+}
+
+function removeOptimisticUserEntry(eventId: string): void {
+  useSessionStore.setState({
+    entries: useSessionStore.getState().entries.filter(
+      (entry) => !(entry.role === "user" && entry.sourceEventId === eventId && entry.status === "sending")
+    )
+  });
+}
+
+function commitOptimisticUserEntry(eventId: string): void {
+  useSessionStore.setState({
+    entries: useSessionStore.getState().entries.map((entry) =>
+      entry.role === "user" && entry.sourceEventId === eventId && entry.status === "sending"
+        ? { ...entry, status: "completed" }
+        : entry)
+  });
+}
+
 function reconcilePendingUserText(entries: { sourceEventId: string | null; role: string }[]): void {
   if (!pendingUserText) {
     return;
@@ -1301,9 +1363,16 @@ export async function sendDraft(): Promise<void> {
       ? pendingUserText.eventId
       : uuid();
   pendingUserText = { eventId, text, attachmentIds };
+  const pendingAttachmentSnapshot = snapshot.pendingAttachments.slice();
+  const refs: HistoryAttachment[] = readyFiles.map((item) => ({
+    attachmentId: item.attachmentId!,
+    displayName: item.displayName,
+    contentType: item.contentType
+  }));
   if (draft) {
     useSessionStore.setState({ draft: "" });
   }
+  appendOptimisticUserEntry(eventId, text, refs, snapshot.mode);
 
   commandSequence += 1;
   sendRequest = (async () => {
@@ -1318,55 +1387,30 @@ export async function sendDraft(): Promise<void> {
       );
       if (!ack?.accepted) {
         pendingUserText = null;
+        removeOptimisticUserEntry(eventId);
+        useSessionStore.setState({ pendingAttachments: pendingAttachmentSnapshot });
         restoreDraft(text, ack?.error?.message ?? "Message was not accepted.");
         return;
       }
 
       pendingUserText = null;
-      const refs: HistoryAttachment[] = readyFiles.map((item) => ({
-        attachmentId: item.attachmentId!,
-        displayName: item.displayName,
-        contentType: item.contentType
-      }));
-      for (const item of snapshot.pendingAttachments) {
+      for (const item of pendingAttachmentSnapshot) {
         releasePendingFile(item.localId);
       }
 
       const latest = useSessionStore.getState();
-      if (historyHasUserEvent(latest.entries, eventId)) {
-        useSessionStore.setState({
-          error: latest.errorFatal ? latest.error : null,
-          pendingAttachments: []
-        });
-        return;
-      }
-
       useSessionStore.setState({
         error: latest.errorFatal ? latest.error : null,
-        pendingAttachments: [],
-        entries: [
-          ...latest.entries,
-          {
-            entryId: eventId,
-            sequence: (latest.entries.at(-1)?.sequence ?? 0) + 0.5,
-            sourceEventId: eventId,
-            role: "user",
-            text,
-            responseId: null,
-            status: "completed",
-            deliveryMode: latest.mode,
-            heardTextEndExclusive: text.length,
-            receivedTextEndExclusive: text.length,
-            createdAt: new Date().toISOString(),
-            attachments: refs.length > 0 ? refs : undefined
-          }
-        ]
+        pendingAttachments: []
       });
+      if (historyHasUserEvent(latest.entries, eventId)) {
+        commitOptimisticUserEntry(eventId);
+      }
     } catch (error) {
-      restoreDraft(
-        text,
-        error instanceof Error ? error.message : "Message was not accepted."
-      );
+      useSessionStore.setState({
+        error: error instanceof Error ? error.message : "Message was not accepted.",
+        errorFatal: false
+      });
     }
   })();
 

@@ -35,7 +35,20 @@ public static class AttachmentMedia
     };
 
     public static bool IsImage(string contentType) =>
-        contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+        NormalizeContentType(contentType).StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+    public static string NormalizeContentType(string contentType)
+    {
+        var trimmed = contentType.Trim();
+        var semicolon = trimmed.IndexOf(';');
+        return semicolon >= 0 ? trimmed[..semicolon].Trim() : trimmed;
+    }
+
+    public static bool IsReadableText(string contentType)
+    {
+        var normalized = NormalizeContentType(contentType);
+        return normalized is "text/plain" or "text/markdown" or "application/json" or "text/csv";
+    }
 }
 
 public sealed record AttachmentInspectResult(

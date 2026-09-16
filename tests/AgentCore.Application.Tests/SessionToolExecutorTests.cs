@@ -1,6 +1,9 @@
+using System.Text.Json;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -148,6 +151,43 @@ public sealed class SessionToolExecutorTests
         Assert.Contains("unavailable", unavailable, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Attachments_read_accepts_text_plain_with_charset_parameter()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var executor = new SessionToolExecutor(attachments: attachments);
+        var sessionId = Guid.NewGuid();
+        var uploaded = await attachments.UploadPendingAsync(
+            sessionId,
+            "note.txt",
+            "text/plain; charset=utf-8",
+            new MemoryStream("Retention policy excerpt."u8.ToArray()),
+            false);
+        var result = await executor.ExecuteAsync(
+            Support(),
+            sessionId,
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
+            ToolLimits.MaxOutputBytes);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal("Retention policy excerpt.", json.RootElement.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Knowledge_retrieve_returns_valid_json_when_output_is_truncated()
+    {
+        var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var executor = new SessionToolExecutor(knowledge);
+        var result = await executor.ExecuteAsync(
+            Compliance(),
+            Guid.NewGuid(),
+            new ModelToolCall("c1", ToolCatalog.KnowledgeRetrieve, """{"identity":"compliance-retention"}"""),
+            220);
+        using var json = JsonDocument.Parse(result);
+        Assert.True(json.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("content").GetString()));
+        Assert.Equal("compliance-retention@demo", json.RootElement.GetProperty("citation").GetString());
+    }
+
     private static byte[] PngBytes()
     {
         using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 20, 30));
@@ -155,6 +195,34 @@ public sealed class SessionToolExecutorTests
         image.SaveAsPng(buffer);
         return buffer.ToArray();
     }
+
+    private static string FindAgents()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var agents = Path.Combine(dir.FullName, "agents");
+            if (Directory.Exists(agents))
+            {
+                return agents;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("agents directory was not found.");
+    }
+
+    private static AgentDefinition Compliance() => Support() with
+    {
+        Id = "compliance",
+        Environment = new RoleEnvironment(
+            ToolAllowlist: [ToolCatalog.KnowledgeRetrieve],
+            KnowledgeSources:
+            [
+                new KnowledgeSourceRef("compliance-retention", "Simulated retention policy", "compliance-retention@demo")
+            ])
+    };
 
     private static AgentDefinition Support() => new(
         1,
