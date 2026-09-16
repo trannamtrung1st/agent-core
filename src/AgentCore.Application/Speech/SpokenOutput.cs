@@ -49,7 +49,7 @@ public static class SpokenOutput
             return true;
         }
 
-        return Base64Like.IsMatch(text);
+        return text.IndexOfAny(['+', '/', '=']) >= 0 && Base64Like.IsMatch(text);
     }
 
     private static string StripDump(string text)
@@ -58,7 +58,9 @@ public static class SpokenOutput
         var kept = new StringBuilder();
         foreach (var line in lines)
         {
-            if (LooksLikeFileDump(line) || line.Trim() is "\"\"\"" or "```")
+            if (LooksLikeFileDump(line)
+                || line.Trim() is "\"\"\"" or "```"
+                || (line.Length > 80 && !line.Contains(' ')))
             {
                 continue;
             }

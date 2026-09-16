@@ -132,7 +132,7 @@ Hub **connection lease** (`attachmentId` on SignalR commands) remains a per-conn
 
 ### Decision: A–H mandatory; Phase I conditional; concrete sandbox (R6)
 
-**Decision:** Phases A–H are mandatory, including rename and archive/unarchive. Phase H is a concrete container sandbox behind the execution capability boundary (not unit fakes alone). Phase I WorkItems are implemented only if a concrete accepted Support/Compliance/sandbox workflow must survive runtime deactivation; otherwise record not-applicable with a future trigger. Broad process/shell stays disabled until H's sandbox capability.
+**Decision:** Phases A–H are mandatory, including rename and archive/unarchive. Phase H is a concrete container sandbox behind the execution capability boundary (not unit fakes alone). **Observed:** `sandbox.run` via `DockerSandboxExecutor` (`busybox:1.36`, network none, read-only root, dropped capabilities, 64 MiB / 0.5 CPU / 32 PIDs / 8 s, session working-dir bind only, kill/reap, bounded output, `IArtifactStore` export). Broad `process`/`shell` remain disabled and are not granted by H. Phase I WorkItems are implemented only if a concrete accepted Support/Compliance/sandbox workflow must survive runtime deactivation; otherwise record not-applicable with a future trigger.
 
 ### Planned resource limits
 
@@ -155,6 +155,11 @@ Unless a later item records a tested change:
 | Per-tool timeout | 30 s |
 | Overall tool deadline | 120 s |
 | Tool output | 8 MiB |
+| Sandbox memory | 64 MiB |
+| Sandbox CPUs | 0.5 |
+| Sandbox PIDs | 32 |
+| Sandbox timeout | 8 s |
+| Sandbox output | 64 KiB |
 
 Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attachment, additive routes); [Persistence](15-persistence-and-configuration.md) (revision/bind/cleanup); [Controller](05-interaction-controller.md) (initiative/receipts); [Implementation Plan](18-implementation-plan.md) (phase gates).
 

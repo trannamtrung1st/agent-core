@@ -9,6 +9,7 @@ using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Sandbox;
 using AgentCore.Infrastructure.Workspaces;
 using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
@@ -121,6 +122,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         services.TryAddSingleton<SessionToolExecutor>();
+        services.TryAddSingleton<ISandboxExecutor>(provider =>
+            new DockerSandboxExecutor(
+                provider.GetRequiredService<ISessionWorkspace>(),
+                provider.GetService<IArtifactStore>()));
         services.TryAddSingleton<SessionRuntimeFactory>();
         return services;
     }

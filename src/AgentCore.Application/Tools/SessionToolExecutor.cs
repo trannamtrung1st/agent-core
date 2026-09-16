@@ -11,7 +11,8 @@ public sealed class SessionToolExecutor(
     RoleKnowledgeService? knowledge = null,
     IAttachmentStore? attachments = null,
     ISessionWorkspace? workspace = null,
-    IArtifactStore? artifacts = null)
+    IArtifactStore? artifacts = null,
+    ISandboxExecutor? sandbox = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -69,6 +70,8 @@ public sealed class SessionToolExecutor(
                 ToolCatalog.ArtifactsCreate => await CreateArtifactAsync(sessionId, args, cancellationToken)
                     .ConfigureAwait(false),
                 ToolCatalog.ArtifactsVerify => await VerifyArtifactAsync(sessionId, args, cancellationToken)
+                    .ConfigureAwait(false),
+                ToolCatalog.SandboxRun => await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken)
                     .ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
@@ -252,6 +255,60 @@ public sealed class SessionToolExecutor(
             sha256Hex = record.Sha256Hex,
             sourceAttachmentId = record.SourceAttachmentId
         });
+    }
+
+    private async Task<string> RunSandboxAsync(
+        AgentDefinition definition,
+        Guid sessionId,
+        JsonElement args,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken)
+    {
+        if (sandbox is null)
+        {
+            return Error("unavailable", "Container sandbox is unavailable.");
+        }
+
+        if (!TryString(args, "verb", out var verb))
+        {
+            return Error("invalid", "verb is required.");
+        }
+
+        var arguments = new List<string>();
+        if (args.TryGetProperty("arguments", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                {
+                    return Error("invalid", "arguments must be strings.");
+                }
+
+                arguments.Add(item.GetString() ?? "");
+            }
+        }
+
+        TryString(args, "exportPath", out var export);
+        var result = await sandbox.RunAsync(
+                new SandboxRequest(
+                    sessionId,
+                    Guid.CreateVersion7(),
+                    definition,
+                    verb,
+                    arguments,
+                    string.IsNullOrWhiteSpace(export) ? null : export),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return Clip(
+            JsonSerializer.Serialize(new
+            {
+                ok = result.Succeeded,
+                exitCode = result.ExitCode,
+                output = result.Output,
+                artifactId = result.ArtifactId,
+                message = result.SafeMessage
+            }),
+            remainingOutputBytes);
     }
 
     private static bool LooksLikeSessionMutation(JsonElement args)

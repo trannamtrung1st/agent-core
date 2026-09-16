@@ -151,4 +151,4 @@ That perception is the actual MVP objective.
 
 ## Post-MVP planned until verified
 
-Accepted later demos (not current gates): durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen. Examiner MVP conversational demos above remain.
+Accepted later demos (not current gates): durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen. Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.

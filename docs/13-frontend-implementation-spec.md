@@ -85,7 +85,8 @@ Live `agent.block.upsert` and reconnect `session.ready` history may include Mark
 
 ## Post-MVP planned until verified
 
-Workspace physical provisioning and generated artifacts are observed. Typed tools are observed on the runtime; a concrete sandbox remains a later phase.
+Workspace physical provisioning and generated artifacts are observed. Typed tools and `sandbox.run` are observed on the runtime; shipped Support/Compliance allowlists still omit process/shell and sandbox. No extra sandbox chrome is required in the composer.
+
 ## Synthetic playback simulation
 
 Synthetic Mode can use a browser service implementation that advances canonical sample counters with controlled time and emits the same Playback Progress/stop acknowledgements without an AudioContext, microphone or speaker. When /health reports profile=Synthetic, default the demo audio service to simulation; a developer-only toggle can opt into fake/real worklet transport testing. The simulation sends silent PCM and scripted boundaries through SignalR on controlled scenario time, while the server synthetic driver supplies matching transcripts. Scripted input thus crosses the same connection/session boundaries. Keep this simulation confined to the Synthetic/test profile; it does not replace production AudioWorklet playback. Separate Playwright media tests exercise real worklet execution with fake devices. See [Testing](16-testing-strategy.md#synthetic-full-stack-mode).

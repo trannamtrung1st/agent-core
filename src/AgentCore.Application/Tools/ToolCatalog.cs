@@ -12,6 +12,7 @@ public static class ToolCatalog
     public const string WorkspaceWrite = "workspace.write";
     public const string ArtifactsCreate = "artifacts.create";
     public const string ArtifactsVerify = "artifacts.verify";
+    public const string SandboxRun = "sandbox.run";
 
     private static readonly IReadOnlyDictionary<string, ModelToolDefinition> Known =
         new Dictionary<string, ModelToolDefinition>(StringComparer.Ordinal)
@@ -39,7 +40,11 @@ public static class ToolCatalog
             [ArtifactsVerify] = new(
                 ArtifactsVerify,
                 "Verify a session-owned artifact id.",
-                """{"type":"object","properties":{"artifactId":{"type":"string"}},"required":["artifactId"]}""")
+                """{"type":"object","properties":{"artifactId":{"type":"string"}},"required":["artifactId"]}"""),
+            [SandboxRun] = new(
+                SandboxRun,
+                "Run a least-privilege sandbox command (echo, true, cat of /workspace/working files). Not a host process or shell.",
+                """{"type":"object","properties":{"verb":{"type":"string"},"arguments":{"type":"array","items":{"type":"string"}},"exportPath":{"type":"string"}},"required":["verb"]}""")
         };
 
     public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition)

@@ -1172,16 +1172,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var messages = request.Messages.ToList();
         var steps = 0;
         var outputBytes = 0;
+        var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var overallTimer = ScheduleCancel(_time, overallCts, ToolLimits.Overall);
+        using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, ToolLimits.Overall) : null;
+        var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         try
         {
-            while (!overallCts.IsCancellationRequested)
+            while (!generateToken.IsCancellationRequested)
             {
                 var pending = new List<ModelToolCall>();
                 var finished = false;
                 var working = request with { Messages = messages };
-                await foreach (var evt in _languageModel.GenerateAsync(working, overallCts.Token).ConfigureAwait(false))
+                await foreach (var evt in _languageModel.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
                     switch (evt)
                     {
@@ -1197,7 +1199,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
                             }
 
-                            if (!await MailboxModelAsync(cause, request.ResponseId, evt, overallCts.Token)
+                            if (!await MailboxModelAsync(cause, request.ResponseId, evt, generateToken)
                                     .ConfigureAwait(false))
                             {
                                 return;
@@ -1311,12 +1313,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
             }
 
-            await MailboxModelAsync(
-                    cause,
-                    request.ResponseId,
-                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Timeout, "Tool deadline reached.")),
-                    CancellationToken.None)
-                .ConfigureAwait(false);
+            if (toolDeadline)
+            {
+                await MailboxModelAsync(
+                        cause,
+                        request.ResponseId,
+                        new ModelFailed(new ProviderFailure(ProviderErrorCode.Timeout, "Tool deadline reached.")),
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException)
         {

@@ -543,6 +543,12 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
 
     private string SessionRoot(Guid sessionId) => Path.Combine(_root, sessionId.ToString("N"));
 
+    public string PhysicalWorkingDirectory(Guid sessionId)
+    {
+        ThrowIfDeleted(sessionId);
+        return Path.Combine(SessionRoot(sessionId), "workspace", "working");
+    }
+
     private string SessionWorkspaceDir(Guid sessionId) => Path.Combine(SessionRoot(sessionId), "workspace");
 
     private SemaphoreSlim Gate(Guid sessionId) => _locks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));

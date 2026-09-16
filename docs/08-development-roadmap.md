@@ -24,4 +24,4 @@ Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-
 
 ## Post-MVP planned until verified
 
-Phases A–H (mandatory) and conditional Phase I follow Milestones 0–12. Index only; gates live in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). These rows are not complete.
+Phases A–H are observed in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). Phase I remains conditional.

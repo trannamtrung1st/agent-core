@@ -60,4 +60,4 @@ OpenAICompatibleLanguageModel lives in Infrastructure and accepts OpenRouter/dir
 
 ## Post-MVP observed layout
 
-Infrastructure-only physical layout for session workspaces (`data/workspaces/{sessionId}/workspace/{working,artifacts,state}`), attachment blobs (`data/attachments`), and artifact blobs (`data/artifacts`). Domain/Contracts never receive host paths. Application data stays outside developer `local/` scratch, including `local/tdp-workspace`. Container sandbox remains planned.
+Infrastructure-only physical layout for session workspaces (`data/workspaces/{sessionId}/workspace/{working,artifacts,state}`), attachment blobs (`data/attachments`), and artifact blobs (`data/artifacts`). Domain/Contracts never receive host paths. Application data stays outside developer `local/` scratch, including `local/tdp-workspace`. Observed sandbox: Infrastructure `DockerSandboxExecutor` bind-mounts only that session working directory into `/workspace/working`; leftover labeled `acsbx-*` containers are removed after success, failure, and cancellation.

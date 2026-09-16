@@ -53,6 +53,51 @@ public sealed class SessionToolExecutorTests
             new ModelToolCall("c2", ToolCatalog.KnowledgeRetrieve, "{"),
             ToolLimits.MaxOutputBytes);
         Assert.Contains("invalid", malformed, StringComparison.OrdinalIgnoreCase);
+
+        var sandbox = new RecordingSandbox();
+        var withSandbox = new SessionToolExecutor(sandbox: sandbox);
+        foreach (var name in new[] { "process", "shell", "bash", "cmd", "powershell", "exec" })
+        {
+            var denied = await withSandbox.ExecuteAsync(
+                Support(),
+                Guid.NewGuid(),
+                new ModelToolCall("c3", name, """{"cmd":"ls"}"""),
+                ToolLimits.MaxOutputBytes);
+            Assert.Contains("forbidden", denied, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Null(sandbox.Last);
+    }
+
+    [Fact]
+    public async Task Sandbox_run_requires_allowlist_and_uses_the_executor()
+    {
+        var sandbox = new RecordingSandbox();
+        var executor = new SessionToolExecutor(sandbox: sandbox);
+        var forbidden = await executor.ExecuteAsync(
+            Support(),
+            Guid.NewGuid(),
+            new ModelToolCall("c1", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""),
+            ToolLimits.MaxOutputBytes);
+        Assert.Contains("forbidden", forbidden, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(sandbox.Last);
+
+        var allowed = await executor.ExecuteAsync(
+            Sandboxed(),
+            Guid.NewGuid(),
+            new ModelToolCall("c2", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""),
+            ToolLimits.MaxOutputBytes);
+        Assert.Contains("\"ok\":true", allowed, StringComparison.Ordinal);
+        Assert.NotNull(sandbox.Last);
+        Assert.Equal("echo", sandbox.Last!.Verb);
+
+        var missing = new SessionToolExecutor();
+        var unavailable = await missing.ExecuteAsync(
+            Sandboxed(),
+            Guid.NewGuid(),
+            new ModelToolCall("c3", ToolCatalog.SandboxRun, """{"verb":"echo"}"""),
+            ToolLimits.MaxOutputBytes);
+        Assert.Contains("unavailable", unavailable, StringComparison.OrdinalIgnoreCase);
     }
 
     private static AgentDefinition Support() => new(
@@ -74,6 +119,22 @@ public sealed class SessionToolExecutorTests
                 ToolCatalog.KnowledgeRetrieve,
                 ToolCatalog.WorkspaceWrite
             ]));
+
+    private static AgentDefinition Sandboxed() => Support() with
+    {
+        Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.SandboxRun])
+    };
+
+    private sealed class RecordingSandbox : ISandboxExecutor
+    {
+        public SandboxRequest? Last { get; private set; }
+
+        public ValueTask<SandboxResult> RunAsync(SandboxRequest request, CancellationToken cancellationToken = default)
+        {
+            Last = request;
+            return ValueTask.FromResult(new SandboxResult(true, 0, "hi", null, "ok"));
+        }
+    }
 
     private sealed class RecordingWorkspace : ISessionWorkspace
     {
