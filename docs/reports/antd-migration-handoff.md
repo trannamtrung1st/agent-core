@@ -13,7 +13,7 @@ Canonical UI decision: [Technology Decisions — Ant Design v6](../10-technology
 | batch-03 | item-40aac7bafca5 | `bc9f77d6fd5a2ca1abbac34f24a3fc8b891dcc0a` | Unit 109; build; text-conversation E2E; MCP desktop catalog + 390px drawer. |
 | batch-04 | item-0faca7b0ae47, item-fd7331b90119 | `b720b978eca3a88e7c715bc8a8b790be7fc5118b` | Unit 112; build; CI=1 e2e 8 including fake-device voice; MCP Hello → Hello from synthetic. |
 | batch-05 | item-cf45d8b6ad35 | `2940a19ba0f656e886a8762fc5d8b211c5bd5613` | Unit 112; build; CI=1 e2e 8; MCP send/narrow; fonts/plates gone. |
-| batch-06 | item-5f342d4db1e6 | this commit | Frozen-lockfile; unit 112; build; CI=1 e2e 8; MCP catalog/composer/attach/pending-voice/End/narrow. |
+| batch-06 | item-5f342d4db1e6 | `23032593dca5ed8e4d669a5deb2925c7f7f9aaa3` | Frozen-lockfile; unit 112; build; CI=1 e2e 8; MCP catalog/composer/attach/pending-voice/End/narrow. |
 
 ## Final commands (batch-06)
 
@@ -59,7 +59,7 @@ Frontend edits are product-component presentation plus `app.css` / `main.tsx` co
 | AC-01 | Pass | `web/package.json` `antd` ^6.6.4; `main.tsx` ConfigProvider |
 | AC-02 | Pass | IdentityPicker, ChatApp, SessionRail, Hud, Transcript, Composer import `antd` |
 | AC-03 | Pass | Layout sider desktop; Drawer `Open sessions` at 390px |
-| AC-04 | Pass | Unit 112 + e2e 8 + MCP catalog/send/attach |
+| AC-04 | Pass | Unit 112 + e2e 8 + MCP catalog/send/attach; batch-07 live paused delete and drop/paste |
 | AC-05 | Pass | Protected-path audit empty vs baseline |
 | AC-06 | Pass | No `web/src/components/Select.tsx` |
 | AC-07 | Pass | `web/src/styles.css` deleted |
@@ -88,7 +88,7 @@ Prefer Playwright MCP on isolated Synthetic `http` profile (`/health` `Synthetic
 | Archive / unarchive | MCP | Archive then Show archived then Unarchive |
 | Ended locked | MCP | After End, row `Support notes … · Ended` disabled (no reopen actions) |
 | Delete cancel | MCP | Delete then Cancel; row remained |
-| Delete confirm | MCP | Confirm delete while session still Open returned 409 `Unable to delete the session` (revision/live conflict). Not a presentation regression. Ended rows stay non-deletable per docs/13. Paused-row delete covered by `SessionRail.test.tsx`. |
+| Delete confirm | MCP (batch-07, isolated Synthetic InMemory) | Started conversation (Alex), queued attachments, **New chat** left catalog row `New chat … · Paused` with identity picker visible. First Confirm delete while catalog still held revision 1 after two attachment POSTs returned 409 `Unable to delete the session` — not counted as success. Toggled **Show archived** to refresh the catalog, then **Delete → Confirm delete** issued `DELETE /api/v2/sessions/0828f1b3-…?expectedRevision=3` **204**. Rail text: `Sessions / New chat / Show archived / No sessions yet.` Zero `.session-row` nodes. Ended rows remain non-deletable per docs/13. Unit tests and the Open/stale-revision 409 are not used as pass evidence. |
 | Load more | Skipped with data rationale | Catalog fetch `limit: 50`. Isolated InMemory MCP catalog stayed well under one page (`hasMore` false; Load more control not shown). Button exists when `hasMore` (`SessionRail.tsx`). Creating 51 sessions is catalog-capacity work, not UI-system proof. |
 | Send text / stream | MCP + e2e | You — Hello / Sam — Hello from synthetic. |
 | Enter send | MCP | `line1` sent via Enter |
@@ -96,7 +96,7 @@ Prefer Playwright MCP on isolated Synthetic `http` profile (`/health` `Synthetic
 | Disabled until ready | MCP | Send disabled with empty composer; enabled after file ready |
 | Transcript + composer | MCP desktop and 390px | Composer Message/Attach/Send/Voice/End remain |
 | File select | MCP | Attach chooser → `antd-notes.txt` chip |
-| Drag/drop / paste | Unit + existing composer tests | `Composer.test.tsx` queue/drop/paste; not re-done in MCP (no drag payload in this pass) |
+| Drag/drop / paste | MCP (batch-07) on running Synthetic composer | Playwright MCP `drop` of `drop-notes.txt` onto `form.composer` produced pending chip **drop-notes.txt** (`Remove drop-notes.txt`) and `POST …/attachments` 201. File paste into **Message**: in-page `paste` with `clipboardData.files` (`paste-notes.txt`) joined the same queue (chips `drop-notes.txt`, `paste-notes.txt`; second `POST …/attachments` 201). Native Playwright `dispatchEvent('paste')` without `clipboardData.files` did not queue a file and is not cited as the pass. Composer unit tests are extra coverage, not the matrix close. |
 | Upload retry/remove | Unit + MCP remove in batch-04/e2e | e2e `Remove notes.txt`; retry in Composer tests |
 | Attachment-only send | MCP + e2e | Transcript link `antd-notes.txt` / `notes.txt` |
 | Historical file access | MCP + e2e | Authenticated chip/link, not public Image URL |
@@ -109,13 +109,23 @@ Prefer Playwright MCP on isolated Synthetic `http` profile (`/health` `Synthetic
 
 **Narrow 390×844:** `Open sessions` drawer (Close works); Start conversation; Hello → Hello from synthetic.; Message still visible.
 
-**Console:** pre-existing `favicon.ico` 404; 409 on live-session durable delete as above. No plates/fonts requests.
+**Console (batch-07):** pre-existing `favicon.ico` 404; one stale-revision delete 409 then successful 204; a TypeError from the failed clipboard-less paste dispatch (handler read `clipboardData.files`). No plates/fonts requests.
+
+## Whole-output review revision (batch-07)
+
+Findings `wo-001` / `wo-002` / `wo-003` (`review-whole-output-01-fs-01`). Host: `dotnet run --launch-profile http` with `Persistence__Provider=InMemory` and disposable `/tmp` attachment/workspace/artifact roots; Vite `127.0.0.1:5173`; `/health` `{"profile":"Synthetic"}`. Playwright MCP against that app.
+
+- **Paused delete:** catalog empty after Confirm delete (204, revision 3).
+- **Drop/paste:** both files in `Pending attachments` and both upload POSTs 201.
+- **Commit mapping:** batch-06 cell is `23032593dca5ed8e4d669a5deb2925c7f7f9aaa3` (matches prior `batch-06/commit-mapping.md`). This evidence-revision commit is mapped in run evidence `batch-07/commit-mapping.md` after `git commit` so the report does not embed a pre-commit placeholder.
+
+Skills this revision: develop, document, frontend, testing.
 
 **MCP Voice gap:** no fake-device; capture/playback/interrupt/reconnect proven by `CI=1` Playwright, not MCP audio.
 
 ## Proposal §15 checklist
 
-Covered in the matrix table. Load more skipped with the page-size rationale above.
+Covered in the matrix table. Load more skipped with the page-size rationale above. Attachment drag/drop and paste rows are closed by batch-07 MCP on the running Synthetic composer, not by `Composer.test.tsx`.
 
 ## Retirement-match dispositions (final)
 
