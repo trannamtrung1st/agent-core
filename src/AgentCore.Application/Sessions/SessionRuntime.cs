@@ -19,9 +19,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         new BoundedChannelOptions(256)
         {
             SingleReader = true,
-            FullMode = BoundedChannelFullMode.DropWrite
+            FullMode = BoundedChannelFullMode.Wait
         });
-    private readonly ConcurrentQueue<SessionInput> _urgent = new();
+    private readonly Channel<SessionInput> _urgent = Channel.CreateUnbounded<SessionInput>(
+        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly SemaphoreSlim _wake = new(0);
 
     private readonly ILanguageModel _languageModel;
     private readonly IAgentBrain _brain;
@@ -44,7 +46,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private long _expectedSampleOffset;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Task _loop;
+    private readonly Task _persistLoop;
+    private readonly Channel<PersistJob> _persistJobs = Channel.CreateUnbounded<PersistJob>(
+        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly ConcurrentDictionary<long, PersistJob> _pendingPersist = new();
     private readonly object _idleGate = new();
+    private TaskCompletionSource _abandonPersist = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private long _persistToken;
+    private long _terminalFence;
+    private long _durableRevision;
+    private SessionSnapshot _durableSnapshot;
 
     private UserProfile? _profile;
     private SessionSnapshot _snapshot;
@@ -63,6 +74,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private InterruptionCandidate? _candidate;
     private ResponseLifecycle? _responseLifecycle;
     private int _timerGeneration = 1;
+    private int _speechEpoch;
+    private int _maxUtteranceGeneration;
     private int _turnGeneration;
     private Guid? _committedUtteranceId;
     private Guid? _activeUtteranceId;
@@ -121,7 +134,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         _epoch = _ids.NewId();
+        _durableRevision = snapshot.Revision;
+        _durableSnapshot = snapshot;
         _loop = Task.Run(() => RunAsync(_lifetime.Token));
+        _persistLoop = Task.Run(() => RunPersistAsync(_lifetime.Token));
     }
 
     public Guid SessionId => _snapshot.SessionId;
@@ -141,6 +157,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(), eventId, null);
         BeginWork();
         return Task.FromResult(Enqueue(new UserTextReceived(context, text), urgent: false));
+    }
+
+    public async Task<bool?> SubmitPersistedUserTextAsync(
+        string text,
+        Guid sourceEventId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        if (text.Length > 8000)
+        {
+            throw AgentCoreErrors.Validation("Text exceeds 8000 UTF-16 code units.");
+        }
+
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = new EventContext(sourceEventId, SessionId, _epoch, _time.GetUtcNow(), sourceEventId, null);
+        BeginWork();
+        if (!Enqueue(new UserTextReceived(context, text, persisted), urgent: false))
+        {
+            persisted.TrySetResult(false);
+            return null;
+        }
+
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
     }
 
     public Task CancelActiveResponseAsync(CancellationToken cancellationToken = default)
@@ -174,6 +213,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public int TimerGeneration => _timerGeneration;
 
+    public int MaxUtteranceGeneration => _maxUtteranceGeneration;
+
     public int TurnGeneration => _turnGeneration;
 
     public Guid? ActiveResponseId => _activeResponseId;
@@ -188,13 +229,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public InteractionDecision? LastControllerDecision { get; private set; }
 
-    public Task DetachAsync(CancellationToken cancellationToken = default)
+    public async Task DetachAsync(CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken;
+        var detached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        Enqueue(new DetachReceived(context), urgent: true);
-        return Task.CompletedTask;
+        if (!Enqueue(new DetachReceived(context, detached), urgent: true))
+        {
+            return;
+        }
+
+        await detached.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public Task SetModeAsync(SessionMode mode, CancellationToken cancellationToken = default)
@@ -206,18 +251,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public Task AttachAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> AttachAsync(CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken;
+        var attached = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        Enqueue(new AttachReceived(context), urgent: false);
-        return Task.CompletedTask;
+        if (!Enqueue(new AttachReceived(context, attached), urgent: false))
+        {
+            attached.TrySetResult(false);
+            return false;
+        }
+
+        return await WaitOrCancelAsync(attached, false, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> RequestEndAsync(CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken;
         var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
@@ -227,7 +276,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return false;
         }
 
-        return await persisted.Task.ConfigureAwait(false);
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
     }
 
     public Task SubmitSpeechAsync(
@@ -238,7 +287,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _ = cancellationToken;
         var context = NewContext();
         BeginWork();
-        Enqueue(new SpeechEvidenceReceived(context, evidence, activityScore), urgent: false);
+        Enqueue(new SpeechEvidenceReceived(context, evidence, activityScore, _speechEpoch), urgent: false);
         return Task.CompletedTask;
     }
 
@@ -275,7 +324,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         int textEndExclusive,
         CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken;
         var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
@@ -284,12 +332,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return null;
         }
 
-        return await admitted.Task.ConfigureAwait(false);
+        return await WaitOrCancelAsync(admitted, false, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool?> SubmitReceiptAsync(Guid responseId, int textEndExclusive, CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken;
         var admitted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
@@ -298,7 +345,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return null;
         }
 
-        return await admitted.Task.ConfigureAwait(false);
+        return await WaitOrCancelAsync(admitted, false, cancellationToken).ConfigureAwait(false);
     }
 
     public Task SubmitTimerElapsedAsync(
@@ -334,13 +381,58 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return idle.Task.WaitAsync(cancellationToken);
     }
 
+    private static async Task<T> WaitOrCancelAsync<T>(
+        TaskCompletionSource<T> waiter,
+        T cancelled,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await waiter.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return cancelled;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        _persistJobs.Writer.TryComplete();
+        foreach (var pair in _pendingPersist)
+        {
+            if (!_pendingPersist.TryRemove(pair.Key, out var job))
+            {
+                continue;
+            }
+
+            job.Then = null;
+            job.Ended?.TrySetResult(false);
+            job.Applied.TrySetResult();
+        }
+
         _mailbox.Writer.TryComplete();
+        _urgent.Writer.TryComplete();
+        try
+        {
+            _wake.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         await _lifetime.CancelAsync().ConfigureAwait(false);
         try
         {
             await _loop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        try
+        {
+            await _persistLoop.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -351,15 +443,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await StopRecognitionAsync().ConfigureAwait(false);
         _lifetime.Dispose();
         _responseCts?.Dispose();
+        _wake.Dispose();
     }
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
         try
         {
-            while (await _mailbox.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            while (!cancellationToken.IsCancellationRequested)
             {
-                while (_urgent.TryDequeue(out var urgent))
+                while (_urgent.Reader.TryRead(out var urgent))
                 {
                     await DispatchAsync(urgent, cancellationToken).ConfigureAwait(false);
                 }
@@ -372,18 +465,36 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
 
                     await DispatchAsync(input, cancellationToken).ConfigureAwait(false);
-                    while (_urgent.TryDequeue(out var nested))
+                    while (_urgent.Reader.TryRead(out var nested))
                     {
                         await DispatchAsync(nested, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
                 TrySignalIdle();
+                try
+                {
+                    await _wake.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
             }
 
-            while (_urgent.TryDequeue(out var rest))
+            while (_urgent.Reader.TryRead(out var rest))
             {
                 await DispatchAsync(rest, cancellationToken).ConfigureAwait(false);
+            }
+
+            while (_mailbox.Reader.TryRead(out var leftover))
+            {
+                if (leftover is PulseReceived)
+                {
+                    continue;
+                }
+
+                await DispatchAsync(leftover, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -420,7 +531,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await HandleAttachAsync(attach, cancellationToken).ConfigureAwait(false);
                     break;
                 case DetachReceived detach:
-                    await HandleDetachAsync(detach, cancellationToken).ConfigureAwait(false);
+                    await HandleDetachAsync(detach, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case SetModeReceived mode:
                     await HandleSetModeAsync(mode, cancellationToken).ConfigureAwait(false);
@@ -452,15 +563,30 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case MailboxSaturatedReceived saturated:
                     await HandleMailboxSaturatedAsync(saturated, cancellationToken).ConfigureAwait(false);
                     break;
+                case PersistCompletedReceived persist:
+                    await HandlePersistCompletedAsync(persist, cancellationToken).ConfigureAwait(false);
+                    break;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
+            if (input is AttachReceived or EndSessionReceived or DetachReceived)
+            {
+                CompleteInputWaiters(input, false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            CompleteInputWaiters(input, false);
         }
         finally
         {
             EndWork();
+            if (input is DetachReceived detach)
+            {
+                detach.Detached.TrySetResult();
+            }
             if (input is PlaybackReportReceived playback)
             {
                 playback.Admitted.TrySetResult(false);
@@ -470,11 +596,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 receipt.Admitted.TrySetResult(false);
             }
-
-            if (input is EndSessionReceived ended)
-            {
-                ended.Persisted.TrySetResult(false);
-            }
         }
     }
 
@@ -482,26 +603,88 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (urgent)
         {
-            _urgent.Enqueue(input);
-            _mailbox.Writer.TryWrite(new PulseReceived(input.Context));
+            if (!_urgent.Writer.TryWrite(input))
+            {
+                EndWork();
+                CompleteInputWaiters(input, false);
+                return false;
+            }
+
+            Pulse();
             return true;
         }
 
-        if (_mailbox.Writer.TryWrite(input))
+        if (TryMailbox(input))
         {
             return true;
         }
 
         EndWork();
+        CompleteInputWaiters(input, false);
         RuntimeTelemetry.RecordDropped("mailbox");
         if (Interlocked.Exchange(ref _mailboxPressureSignaled, 1) == 0)
         {
             BeginWork();
-            _urgent.Enqueue(new MailboxSaturatedReceived(input.Context));
-            _mailbox.Writer.TryWrite(new PulseReceived(input.Context));
+            _ = Enqueue(new MailboxSaturatedReceived(input.Context), urgent: true);
         }
 
         return false;
+    }
+
+    private bool TryMailbox(SessionInput input)
+    {
+        if (!_mailbox.Writer.TryWrite(input))
+        {
+            return false;
+        }
+
+        Pulse();
+        return true;
+    }
+
+    private void Pulse()
+    {
+        try
+        {
+            _wake.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (SemaphoreFullException)
+        {
+        }
+    }
+
+    private static void CompleteInputWaiters(SessionInput input, bool value)
+    {
+        switch (input)
+        {
+            case EndSessionReceived ended:
+                ended.Persisted.TrySetResult(value);
+                break;
+            case AttachReceived attach:
+                attach.Attached.TrySetResult(value);
+                break;
+            case DetachReceived detach:
+                detach.Detached.TrySetResult();
+                break;
+            case PlaybackReportReceived playback:
+                playback.Admitted.TrySetResult(value);
+                break;
+            case ResponseReceiptReceived receipt:
+                receipt.Admitted.TrySetResult(value);
+                break;
+            case BrainReturned brain:
+                brain.Processed.TrySetResult();
+                break;
+            case ModelResultReceived model:
+                model.Processed.TrySetResult();
+                break;
+            case SynthesisResultReceived synthesis:
+                synthesis.Processed.TrySetResult();
+                break;
+        }
     }
 
     private async Task HandleMailboxSaturatedAsync(MailboxSaturatedReceived input, CancellationToken cancellationToken)
@@ -528,11 +711,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _recordedLlm = false;
         if (_snapshot.Entries.Any(entry => entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User))
         {
+            input.Persisted?.TrySetResult(true);
             return;
         }
 
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
+            input.Persisted?.TrySetResult(false);
             return;
         }
 
@@ -555,35 +740,48 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             input.Text.Length,
             now);
 
-        await PersistAsync(Append(userEntry) with { Status = _snapshot.Status }, cancellationToken)
-            .ConfigureAwait(false);
-
+        _snapshot = Append(userEntry) with { Status = _snapshot.Status };
         var (summary, through) = ConversationSummary.Refresh(
             _snapshot.Entries,
             _snapshot.Summary,
             _snapshot.SummarizedThroughEntrySequence);
         if (summary != _snapshot.Summary || through != _snapshot.SummarizedThroughEntrySequence)
         {
-            await PersistAsync(
-                    _snapshot with { Summary = summary, SummarizedThroughEntrySequence = through },
-                    cancellationToken)
-                .ConfigureAwait(false);
+            _snapshot = _snapshot with { Summary = summary, SummarizedThroughEntrySequence = through };
         }
 
         _timerGeneration++;
         _environmentQueue.Clear();
-        var responseId = _ids.NewId();
-        var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.UserTurn, input.Text);
+        var cause = input.Context;
+        var text = input.Text;
         var turn = ++_turnGeneration;
-        _helpOfferedDuringSilence = false;
-        _outputActivity = OutputActivity.WaitingForAgent;
-        RuntimeTelemetry.Record("controller", RuntimeTelemetry.ElapsedMs(started));
-        _logger.LogInformation(
-            "User turn accepted {SessionId} {EventId} chars {CharCount}",
-            SessionId,
-            input.Context.EventId,
-            input.Text.Length);
-        LaunchBrain(input.Context, trigger, responseId, turn);
+        try
+        {
+            RequestPersist(
+                _snapshot,
+                PersistKind.Normal,
+                then: _ =>
+                {
+                    var responseId = _ids.NewId();
+                    var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
+                    _helpOfferedDuringSilence = false;
+                    _outputActivity = OutputActivity.WaitingForAgent;
+                    RuntimeTelemetry.Record("controller", RuntimeTelemetry.ElapsedMs(started));
+                    _logger.LogInformation(
+                        "User turn accepted {SessionId} {EventId} chars {CharCount}",
+                        SessionId,
+                        cause.EventId,
+                        text.Length);
+                    LaunchBrain(cause, trigger, responseId, turn);
+                    return Task.CompletedTask;
+                },
+                ended: input.Persisted);
+        }
+        catch
+        {
+            input.Persisted?.TrySetResult(false);
+            throw;
+        }
     }
 
     private async Task HandleBrainAsync(BrainReturned input, CancellationToken cancellationToken)
@@ -651,8 +849,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _outputActivity = OutputActivity.AgentGenerating;
         _responseCts = new CancellationTokenSource();
         _lastCheckpoint = _time.GetUtcNow();
-        await PersistAsync(Append(assistant), cancellationToken).ConfigureAwait(false);
-
+        _snapshot = Append(assistant);
+        RequestPersist(_snapshot);
         await PublishAsync(
                 new SessionOutput(
                     input.Context,
@@ -701,7 +899,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var inbound = NewContext(cause.EventId);
                 BeginWork();
-                if (!_mailbox.Writer.TryWrite(new BrainReturned(inbound, turn, responseId, trigger, decision, processed)))
+                if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed)))
                 {
                     EndWork();
                     return;
@@ -732,7 +930,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var context = NewContext(cause.EventId);
                 BeginWork();
-                var admitted = _mailbox.Writer.TryWrite(new ModelResultReceived(context, request.ResponseId, evt, processed));
+                var admitted = TryMailbox(new ModelResultReceived(context, request.ResponseId, evt, processed));
                 if (!admitted)
                 {
                     EndWork();
@@ -749,7 +947,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             var failed = new ModelFailed(new ProviderFailure(ProviderErrorCode.Cancelled, "Generation cancelled."));
             var context = NewContext(cause.EventId);
             BeginWork();
-            if (!_mailbox.Writer.TryWrite(new ModelResultReceived(context, request.ResponseId, failed, processed)))
+            if (!TryMailbox(new ModelResultReceived(context, request.ResponseId, failed, processed)))
             {
                 EndWork();
             }
@@ -760,7 +958,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var failed = new ModelFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Generation failed."));
             BeginWork();
-            if (!_mailbox.Writer.TryWrite(
+            if (!TryMailbox(
                     new ModelResultReceived(NewContext(cause.EventId), request.ResponseId, failed, processed)))
             {
                 EndWork();
@@ -808,10 +1006,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (UsesVoicePlayback)
                 {
                     _modelDone = true;
-                    await PublishAsync(
-                            new SessionOutput(input.Context, input.ResponseId, new TextCompletedOutput(_accumulator.Length)),
-                            cancellationToken)
-                        .ConfigureAwait(false);
                     if (_segmentPipelineStarted == 0)
                     {
                         _segmentPipelineStarted = Stopwatch.GetTimestamp();
@@ -862,7 +1056,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             _responseTerminal = true;
             UpdateAssistant(EntryStatus.Interrupted);
-            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
             await PublishAsync(
                     new SessionOutput(
                         context,
@@ -874,49 +1067,69 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     new SessionOutput(
                         context,
                         responseId,
-                        new ResponseCompletedOutput(true, HeardTextEndExclusive: heard, InterruptReason: reason)),
+                        new ResponseCompletedOutput(
+                            true,
+                            HeardTextEndExclusive: heard,
+                            InterruptReason: reason)),
                     cancellationToken)
                 .ConfigureAwait(false);
+            if (_snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
+            {
+                RequestPersist(_snapshot);
+            }
         }
 
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
         ClearActive();
         _turnGeneration++;
+        if (reason is "userBargeIn" or "newText")
+        {
+            await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        }
     }
 
-    private async Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
+    private Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
     {
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _outputActivity = OutputActivity.Idle;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
         UpdateAssistant(status);
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-        if (!failed)
-        {
-            await PublishAsync(
-                    new SessionOutput(context, responseId, new TextCompletedOutput(_accumulator.Length)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-
+        var capturedResponseId = responseId;
+        var capturedEntryId = _activeEntryId;
+        var textLength = _accumulator.Length;
         var heard = CurrentHeard();
-        await PublishAsync(
-                new SessionOutput(
-                    context,
-                    responseId,
-                    new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
-                cancellationToken)
-            .ConfigureAwait(false);
-        ClearActive();
-        await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
-        ScheduleIdleTimer(SilenceThreshold());
-        if (_snapshot.PendingMode == SessionMode.Voice)
-        {
-            await ApplyModeAsync(SessionMode.Voice, cancellationToken).ConfigureAwait(false);
-            await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
-        }
+        RequestPersist(
+            _snapshot,
+            then: async ct =>
+            {
+                if (_activeResponseId != capturedResponseId || _activeEntryId != capturedEntryId)
+                {
+                    return;
+                }
+
+                if (!failed)
+                {
+                    await PublishAsync(
+                            new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
+                            ct)
+                        .ConfigureAwait(false);
+                }
+
+                await PublishAsync(
+                        new SessionOutput(
+                            context,
+                            capturedResponseId,
+                            new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
+                        ct)
+                    .ConfigureAwait(false);
+                ClearActive();
+                await DrainEnvironmentAsync(context, ct).ConfigureAwait(false);
+                ScheduleIdleTimer(SilenceThreshold());
+                await ApplyPendingVoiceIfIdleAsync(context, ct).ConfigureAwait(false);
+            });
+        return Task.CompletedTask;
     }
 
     private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming);
@@ -987,7 +1200,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     : item)
             .ToArray();
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        RequestPersist(_snapshot);
         input.Admitted.TrySetResult(true);
     }
 
@@ -1011,34 +1224,31 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleEndAsync(EndSessionReceived input, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _terminalFence);
+        _snapshot = _snapshot with
+        {
+            Status = SessionStatus.Ending,
+            PendingMode = null,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        AbandonLiveSpeech(rotateEpoch: true);
+        _input = InputActivity.Idle;
+        await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
         if (_activeResponseId is { } live)
         {
             await SupersedeAsync(input.Context, live, cancellationToken, "ended").ConfigureAwait(false);
         }
 
-        _input = InputActivity.Idle;
-        await StopRecognitionAsync().ConfigureAwait(false);
-        try
-        {
-            await PersistAsync(
-                    _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() },
-                    cancellationToken)
-                .ConfigureAwait(false);
-            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
-            input.Persisted.TrySetResult(true);
-        }
-        catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable")
-        {
-            _snapshot = _snapshot with { Status = SessionStatus.Ending, PendingMode = null, UpdatedAt = _time.GetUtcNow() };
-            await PublishAsync(
-                    new SessionOutput(
-                        input.Context,
-                        null,
-                        new ErrorOutput("Session", ex.Code, ex.Message, false, TimeSpan.FromSeconds(1))),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            input.Persisted.TrySetResult(false);
-        }
+        Signal(ref _abandonPersist);
+        RequestPersist(
+            _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() },
+            PersistKind.TerminalEnd,
+            then: async ct =>
+            {
+                await PublishStateAsync(input.Context, ct).ConfigureAwait(false);
+                input.Persisted.TrySetResult(true);
+            },
+            ended: input.Persisted);
     }
 
     private SessionSnapshot Append(ConversationEntry entry)
@@ -1057,42 +1267,438 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private static readonly TimeSpan[] PersistRetryDelays =
         [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
 
-    private async Task PersistAsync(SessionSnapshot snapshot, CancellationToken cancellationToken)
+    private enum PersistKind
+    {
+        Normal,
+        Checkpoint,
+        Pause,
+        TerminalEnd
+    }
+
+    private sealed class PersistJob(
+        SessionSnapshot proposed,
+        PersistKind kind,
+        long token,
+        long terminalFence,
+        Func<CancellationToken, Task>? then,
+        TaskCompletionSource<bool>? ended,
+        long started)
+    {
+        public SessionSnapshot Proposed { get; } = proposed;
+        public PersistKind Kind { get; } = kind;
+        public long Token { get; } = token;
+        public long TerminalFence { get; } = terminalFence;
+        public Func<CancellationToken, Task>? Then { get; set; } = then;
+        public TaskCompletionSource<bool>? Ended { get; } = ended;
+        public long Started { get; } = started;
+        public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private sealed record PersistCompletedReceived(
+        EventContext Context,
+        PersistJob Job,
+        SessionSnapshot? Saved,
+        Exception? Error,
+        bool Superseded) : SessionInput(Context);
+
+    private static void Signal(ref TaskCompletionSource source)
+    {
+        var next = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prior = Interlocked.Exchange(ref source, next);
+        prior.TrySetResult();
+    }
+
+    private void RequestPersist(
+        SessionSnapshot snapshot,
+        PersistKind kind = PersistKind.Normal,
+        Func<CancellationToken, Task>? then = null,
+        TaskCompletionSource<bool>? ended = null)
     {
         if (snapshot.Entries.Count > 1000)
         {
+            ended?.TrySetResult(false);
             throw AgentCoreErrors.Validation("Session entry limit of 1000 was reached.");
         }
 
-        using var activity = RuntimeTelemetry.Activity.StartActivity("persist");
         var started = Stopwatch.GetTimestamp();
-        var next = snapshot with { Revision = _snapshot.Revision + 1, UpdatedAt = _time.GetUtcNow() };
+        var token = Interlocked.Increment(ref _persistToken);
+        var fence = Volatile.Read(ref _terminalFence);
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started);
+        BeginWork();
+        _pendingPersist[token] = job;
+        if (!_persistJobs.Writer.TryWrite(job))
+        {
+            _pendingPersist.TryRemove(token, out _);
+            ended?.TrySetResult(false);
+            job.Applied.TrySetResult();
+            EndWork();
+            throw AgentCoreErrors.Persistence("Persistent save failed.");
+        }
+    }
+
+    private async Task HandlePersistCompletedAsync(PersistCompletedReceived input, CancellationToken cancellationToken)
+    {
+        var job = input.Job;
+        try
+        {
+            if (!_pendingPersist.TryRemove(job.Token, out _))
+            {
+                return;
+            }
+
+            RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(job.Started));
+            if (input.Superseded)
+            {
+                job.Ended?.TrySetResult(false);
+                return;
+            }
+
+            if (input.Error is not null)
+            {
+                if (job.Kind is PersistKind.TerminalEnd)
+                {
+                    _snapshot = _snapshot with
+                    {
+                        Status = SessionStatus.Ending,
+                        PendingMode = null,
+                        UpdatedAt = _time.GetUtcNow()
+                    };
+                    await PublishAsync(
+                            new SessionOutput(
+                                NewContext(),
+                                null,
+                                new ErrorOutput(
+                                    "Session",
+                                    "SessionPersistenceUnavailable",
+                                    input.Error.Message,
+                                    false,
+                                    TimeSpan.FromSeconds(1))),
+                                cancellationToken)
+                        .ConfigureAwait(false);
+                    job.Ended?.TrySetResult(false);
+                    return;
+                }
+
+                if (_snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending)
+                {
+                    await FailPersistenceAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                job.Ended?.TrySetResult(false);
+                return;
+            }
+
+            if (input.Saved is { } saved)
+            {
+                _durableRevision = saved.Revision;
+                _durableSnapshot = saved;
+                AdoptPersisted(job.Proposed, saved, job.Kind);
+            }
+
+            try
+            {
+                if (job.Then is { } then && ShouldRunPersistThen(job.Kind))
+                {
+                    await then(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                job.Ended?.TrySetResult(job.Kind is not PersistKind.TerminalEnd || _snapshot.Status is SessionStatus.Ended);
+            }
+        }
+        finally
+        {
+            job.Applied.TrySetResult();
+        }
+    }
+
+    private bool ShouldRunPersistThen(PersistKind kind) =>
+        kind switch
+        {
+            PersistKind.TerminalEnd => true,
+            PersistKind.Pause => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
+            PersistKind.Checkpoint => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created,
+            _ => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created
+        };
+
+    private async Task FailPersistenceAsync(CancellationToken cancellationToken)
+    {
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        {
+            return;
+        }
+
+        if (_activeResponseId is { } live)
+        {
+            await SupersedeAsync(NewContext(), live, cancellationToken, "disconnected").ConfigureAwait(false);
+        }
+
+        _snapshot = _durableSnapshot with
+        {
+            Status = SessionStatus.Paused,
+            PendingMode = null,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        await PublishAsync(
+                new SessionOutput(
+                    NewContext(),
+                    null,
+                    new ErrorOutput(
+                        "Session",
+                        "SessionPersistenceUnavailable",
+                        "Persistent save failed.",
+                        false,
+                        TimeSpan.FromSeconds(1))),
+                cancellationToken)
+            .ConfigureAwait(false);
+        await PublishStateAsync(NewContext(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunPersistAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var first in _persistJobs.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var job = await CoalesceQueuedCheckpointsAsync(first, cancellationToken).ConfigureAwait(false);
+                SessionSnapshot? saved = null;
+                Exception? error = null;
+                try
+                {
+                    saved = await SaveWithRetriesAsync(job, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    error = ex;
+                }
+
+                await CompletePersistJobAsync(job, saved, error, superseded: false, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private static bool IsCoalescableCheckpoint(PersistJob job) =>
+        job.Kind == PersistKind.Checkpoint && job.Then is null && job.Ended is null;
+
+    private async Task<PersistJob> CoalesceQueuedCheckpointsAsync(PersistJob job, CancellationToken cancellationToken)
+    {
+        if (!IsCoalescableCheckpoint(job))
+        {
+            return job;
+        }
+
+        while (_persistJobs.Reader.TryPeek(out var next) && IsCoalescableCheckpoint(next))
+        {
+            if (!_persistJobs.Reader.TryRead(out next))
+            {
+                break;
+            }
+
+            await CompletePersistJobAsync(job, saved: null, error: null, superseded: true, cancellationToken)
+                .ConfigureAwait(false);
+            job = next;
+        }
+
+        return job;
+    }
+
+    private async Task CompletePersistJobAsync(
+        PersistJob job,
+        SessionSnapshot? saved,
+        Exception? error,
+        bool superseded,
+        CancellationToken cancellationToken)
+    {
+        if (Enqueue(new PersistCompletedReceived(NewContext(), job, saved, error, superseded), urgent: true))
+        {
+            await job.Applied.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        job.Ended?.TrySetResult(false);
+        job.Applied.TrySetResult();
+    }
+
+    private async Task<SessionSnapshot> SaveWithRetriesAsync(PersistJob job, CancellationToken cancellationToken)
+    {
+        var abandon = _abandonPersist.Task;
         AgentCoreException? last = null;
         for (var attempt = 0; attempt <= PersistRetryDelays.Length; attempt++)
         {
+            if (job.Kind != PersistKind.TerminalEnd && abandon.IsCompleted)
+            {
+                throw last ?? AgentCoreErrors.Persistence("Persistent save superseded by a terminal command.");
+            }
+
             try
             {
-                await _store.SaveAsync(next, _snapshot.Revision, cancellationToken).ConfigureAwait(false);
-                _snapshot = next;
-                RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(started));
-                return;
+                return await WriteSnapshotAsync(job, cancellationToken).ConfigureAwait(false);
+            }
+            catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable"
+                                               && ex.Message.Contains("superseded", StringComparison.OrdinalIgnoreCase))
+            {
+                throw;
             }
             catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable" && attempt < PersistRetryDelays.Length)
             {
                 last = ex;
-                await DelayPersistRetryAsync(PersistRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+                var waitAbandon = job.Kind == PersistKind.TerminalEnd
+                    ? new TaskCompletionSource().Task
+                    : abandon;
+                await DelayPersistRetryAsync(PersistRetryDelays[attempt], waitAbandon, cancellationToken).ConfigureAwait(false);
             }
         }
 
         throw last ?? AgentCoreErrors.Persistence("Persistent save failed.");
     }
 
-    private async Task DelayPersistRetryAsync(TimeSpan delay, CancellationToken cancellationToken)
+    private async Task<SessionSnapshot> WriteSnapshotAsync(PersistJob job, CancellationToken cancellationToken)
     {
-        var due = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var timer = _time.CreateTimer(_ => due.TrySetResult(), null, delay, Timeout.InfiniteTimeSpan);
-        await using var registration = cancellationToken.Register(() => due.TrySetCanceled(cancellationToken));
-        await due.Task.ConfigureAwait(false);
+        var now = _time.GetUtcNow();
+        if (job.Kind != PersistKind.TerminalEnd && job.TerminalFence < Volatile.Read(ref _terminalFence))
+        {
+            throw AgentCoreErrors.Persistence("Persistent save superseded by a terminal command.");
+        }
+
+        if (job.Kind == PersistKind.Pause && _durableSnapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        {
+            return _durableSnapshot;
+        }
+
+        var toSave = job.Kind switch
+        {
+            PersistKind.TerminalEnd => RebaseForPersist(job.Proposed, SessionStatus.Ended, now),
+            PersistKind.Pause => RebaseForPersist(job.Proposed, SessionStatus.Paused, now),
+            _ => job.Proposed with { Revision = _durableRevision + 1, UpdatedAt = now }
+        };
+
+        await _store.SaveAsync(toSave, _durableRevision, cancellationToken).ConfigureAwait(false);
+        return toSave;
+    }
+
+    private SessionSnapshot RebaseForPersist(SessionSnapshot proposed, SessionStatus status, DateTimeOffset now)
+    {
+        var entries = proposed.Entries.Count >= _durableSnapshot.Entries.Count
+            ? proposed.Entries
+            : _durableSnapshot.Entries;
+        return proposed with
+        {
+            Entries = entries,
+            Status = status,
+            PendingMode = null,
+            UpdatedAt = now,
+            Revision = _durableRevision + 1
+        };
+    }
+
+    private void AdoptPersisted(SessionSnapshot proposed, SessionSnapshot saved, PersistKind kind)
+    {
+        if (kind is PersistKind.TerminalEnd)
+        {
+            _snapshot = MergePersisted(saved, _snapshot) with
+            {
+                Status = SessionStatus.Ended,
+                PendingMode = null
+            };
+            return;
+        }
+
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        {
+            return;
+        }
+
+        if (kind is PersistKind.Pause)
+        {
+            _snapshot = MergePersisted(saved, _snapshot);
+            return;
+        }
+
+        if (_snapshot.Status is SessionStatus.Paused)
+        {
+            return;
+        }
+
+        if (_snapshot.Entries.Count > saved.Entries.Count)
+        {
+            return;
+        }
+
+        if (_snapshot.Entries.Count < saved.Entries.Count
+            || EntriesEqual(_snapshot.Entries, saved.Entries)
+            || EntriesEqual(_snapshot.Entries, proposed.Entries))
+        {
+            _snapshot = MergePersisted(saved, _snapshot);
+        }
+    }
+
+    private static SessionSnapshot MergePersisted(SessionSnapshot saved, SessionSnapshot live) =>
+        saved with
+        {
+            Mode = live.Mode,
+            PendingMode = live.PendingMode,
+            PendingTopic = live.PendingTopic,
+            Summary = live.SummarizedThroughEntrySequence >= saved.SummarizedThroughEntrySequence
+                ? live.Summary
+                : saved.Summary,
+            SummarizedThroughEntrySequence = Math.Max(saved.SummarizedThroughEntrySequence, live.SummarizedThroughEntrySequence),
+            Entries = MergeEntryOffsets(saved.Entries, live.Entries),
+            Status = live.Status is SessionStatus.Ending or SessionStatus.Ended or SessionStatus.Attached
+                ? live.Status
+                : saved.Status
+        };
+
+    private static ConversationEntry[] MergeEntryOffsets(
+        IReadOnlyList<ConversationEntry> saved,
+        IReadOnlyList<ConversationEntry> live)
+    {
+        if (saved.Count != live.Count)
+        {
+            return saved.Count > live.Count ? saved.ToArray() : live.ToArray();
+        }
+
+        var merged = new ConversationEntry[saved.Count];
+        for (var index = 0; index < saved.Count; index++)
+        {
+            var durable = saved[index];
+            var current = live[index];
+            if (durable.EntryId != current.EntryId)
+            {
+                merged[index] = durable;
+                continue;
+            }
+
+            merged[index] = durable with
+            {
+                Text = current.Text.Length > durable.Text.Length ? current.Text : durable.Text,
+                Status = current.Status == EntryStatus.Streaming ? current.Status : durable.Status,
+                ReceivedTextEndExclusive = Math.Max(durable.ReceivedTextEndExclusive, current.ReceivedTextEndExclusive),
+                HeardTextEndExclusive = Math.Max(durable.HeardTextEndExclusive, current.HeardTextEndExclusive)
+            };
+        }
+
+        return merged;
+    }
+
+    private static bool EntriesEqual(
+        IReadOnlyList<ConversationEntry> left,
+        IReadOnlyList<ConversationEntry> right) =>
+        left.Count == right.Count && left.Zip(right).All(pair => pair.First == pair.Second);
+
+    private async Task DelayPersistRetryAsync(TimeSpan delay, Task abandon, CancellationToken cancellationToken)
+    {
+        var delayTask = Task.Delay(delay, _time, cancellationToken);
+        var completed = await Task.WhenAny(delayTask, abandon).ConfigureAwait(false);
+        if (completed == abandon)
+        {
+            throw AgentCoreErrors.Persistence("Persistent save superseded by a terminal command.");
+        }
+
+        await delayTask.ConfigureAwait(false);
     }
 
     private async Task CheckpointStreamingAsync(CancellationToken cancellationToken)
@@ -1102,7 +1708,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+        RequestPersist(_snapshot, PersistKind.Checkpoint);
         _lastCheckpoint = _time.GetUtcNow();
     }
 

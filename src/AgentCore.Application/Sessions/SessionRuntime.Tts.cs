@@ -127,7 +127,7 @@ public sealed partial class SessionRuntime
             {
                 await Task.Delay(SpeechSegmenter.Latency, _time, _lifetime.Token).ConfigureAwait(false);
                 BeginWork();
-                if (!_mailbox.Writer.TryWrite(new TimerElapsedReceived(NewContext(), "segment", generation, null)))
+                if (!TryMailbox(new TimerElapsedReceived(NewContext(), "segment", generation, null)))
                 {
                     EndWork();
                 }
@@ -184,7 +184,7 @@ public sealed partial class SessionRuntime
                 {
                     var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     BeginWork();
-                    if (!_mailbox.Writer.TryWrite(
+                    if (!TryMailbox(
                             new SynthesisResultReceived(NewContext(cause.EventId), responseId, segment.SegmentIndex, evt, processed)))
                     {
                         EndWork();
@@ -203,7 +203,7 @@ public sealed partial class SessionRuntime
                 _logger.LogError(ex, "TTS pump failed for {ResponseId} segment {Segment}", responseId, segment.SegmentIndex);
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 BeginWork();
-                if (!_mailbox.Writer.TryWrite(
+                if (!TryMailbox(
                         new SynthesisResultReceived(
                             NewContext(cause.EventId),
                             responseId,
@@ -384,22 +384,34 @@ public sealed partial class SessionRuntime
         ApplyReceived(_ackedPlaybackText);
         var heard = failed ? 0 : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-        await PublishAsync(
-                new SessionOutput(
-                    context,
-                    responseId,
-                    new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
-                cancellationToken)
-            .ConfigureAwait(false);
-        ClearActive();
-        await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
-        ScheduleIdleTimer(SilenceThreshold());
-        if (_snapshot.PendingMode == SessionMode.Voice)
-        {
-            await ApplyModeAsync(SessionMode.Voice, cancellationToken).ConfigureAwait(false);
-            await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
-        }
+        var capturedResponseId = responseId;
+        var capturedEntryId = _activeEntryId;
+        var textLength = _accumulator.Length;
+        RequestPersist(
+            _snapshot,
+            then: async ct =>
+            {
+                if (_activeResponseId != capturedResponseId || _activeEntryId != capturedEntryId)
+                {
+                    return;
+                }
+
+                await PublishAsync(
+                        new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
+                        ct)
+                    .ConfigureAwait(false);
+                await PublishAsync(
+                        new SessionOutput(
+                            context,
+                            capturedResponseId,
+                            new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
+                        ct)
+                    .ConfigureAwait(false);
+                ClearActive();
+                await DrainEnvironmentAsync(context, ct).ConfigureAwait(false);
+                ScheduleIdleTimer(SilenceThreshold());
+                await ApplyPendingVoiceIfIdleAsync(context, ct).ConfigureAwait(false);
+            });
     }
 
     private async Task FinishAudioIfReadyAsync(EventContext context, Guid responseId, CancellationToken cancellationToken)

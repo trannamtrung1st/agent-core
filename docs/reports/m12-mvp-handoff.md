@@ -59,7 +59,7 @@ Whole-output findings for receipts, parallel admission, EF migrate reopen, profi
 
 ## Files by concern (packaging)
 
-- One container + SQLite volume: `Dockerfile`, `docker-compose.yml`, `scripts/compose-sqlite-volume.sh`
+- One container + SQLite volume: `Dockerfile`, `docker-compose.yml`, `docker-compose.real.yml`, `scripts/compose-sqlite-volume.sh`
 - Shutdown drain: `SessionHost.DrainAsync`, `SessionShutdownHostedService`
 - Backup/restore: `SqliteMemoryStore.BackupToAsync`, `MemoryStoreContractTests.Backup_restore_reopens_the_session`
 
@@ -67,7 +67,7 @@ Whole-output findings for receipts, parallel admission, EF migrate reopen, profi
 
 - Live OpenRouter/OpenAI adapter smokes (`AGENTCORE_LIVE_PROVIDER_TESTS`, `AGENTCORE_LIVE_OPENAI_TTS`) — skip without keys
 - Manual headset/speaker pass — deferred without `OPENAI_API_KEY`
-- Real/hosted Compose — documented environment overrides only; default compose remains Synthetic/scripted
+- Real/hosted Compose overlay (`docker-compose.real.yml`) interpolates gitignored `.env` / host `OPENROUTER_API_KEY` for OpenRouter text; default `docker compose up` remains Synthetic/scripted
 
 ## Limitations
 

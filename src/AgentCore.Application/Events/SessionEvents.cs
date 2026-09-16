@@ -18,12 +18,16 @@ public sealed record PulseReceived(EventContext Context) : SessionInput(Context)
 
 public sealed record MailboxSaturatedReceived(EventContext Context) : SessionInput(Context);
 
-public sealed record UserTextReceived(EventContext Context, string Text) : SessionInput(Context);
+public sealed record UserTextReceived(
+    EventContext Context,
+    string Text,
+    TaskCompletionSource<bool>? Persisted = null) : SessionInput(Context);
 
 public sealed record SpeechEvidenceReceived(
     EventContext Context,
     SpeechRecognitionEvent Evidence,
-    double? ActivityScore) : SessionInput(Context);
+    double? ActivityScore,
+    int Epoch) : SessionInput(Context);
 
 public sealed record AudioIngressFaultReceived(EventContext Context, string Code, string Message) : SessionInput(Context);
 
@@ -49,9 +53,9 @@ public sealed record TimerElapsedReceived(
     int Generation,
     Guid? UtteranceId) : SessionInput(Context);
 
-public sealed record AttachReceived(EventContext Context) : SessionInput(Context);
+public sealed record AttachReceived(EventContext Context, TaskCompletionSource<bool> Attached) : SessionInput(Context);
 
-public sealed record DetachReceived(EventContext Context) : SessionInput(Context);
+public sealed record DetachReceived(EventContext Context, TaskCompletionSource Detached) : SessionInput(Context);
 
 public sealed record SetModeReceived(EventContext Context, SessionMode Mode) : SessionInput(Context);
 

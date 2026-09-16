@@ -46,13 +46,13 @@ describe("output audio admission", () => {
         },
         expected
       )
-    ).toBe("reject");
+    ).toBe("overflow");
     gate.markStarted("r1");
     expect(gate.commitBuffered(first, 0)).toBe(true);
     expect(gate.commitBuffered(second, 480)).toBe(true);
   });
 
-  it("rejects stale identity, sequence gaps, and cumulative queue overflow", () => {
+  it("rejects stale identity, sequence gaps, and reports overflow separately", () => {
     const gate = new OutputAudioGate();
     gate.markStarted("r1");
     const expected = {
@@ -85,6 +85,55 @@ describe("output audio admission", () => {
         { sessionId: "s1", attachmentId: "a1", responseId: "r1", frameSequence: 2, sampleOffset: 480, data: empty },
         { ...expected, queuedSamples: MAX_QUEUED_SAMPLES }
       )
+    ).toBe("overflow");
+  });
+
+  it("expiry drops gate state so a later prefix-skipping frame is rejected", () => {
+    const gate = new OutputAudioGate();
+    const expected = {
+      sessionId: "s1",
+      attachmentId: "a1",
+      tombstones: {},
+      stopped: new Set<string>(),
+      queuedSamples: 0
+    };
+    expect(
+      gate.admit(
+        { sessionId: "s1", attachmentId: "a1", responseId: "r1", frameSequence: 1, sampleOffset: 0, data: empty },
+        expected
+      )
+    ).toBe("buffer");
+    expect(gate.queuedBuffered()).toBe(480);
+    gate.drop("r1");
+    expect(gate.queuedBuffered()).toBe(0);
+    expect(
+      gate.admit(
+        { sessionId: "s1", attachmentId: "a1", responseId: "r1", frameSequence: 2, sampleOffset: 480, data: empty },
+        expected
+      )
     ).toBe("reject");
+  });
+
+  it("does not count buffered samples twice when enforcing the queue limit", () => {
+    const gate = new OutputAudioGate();
+    const expected = {
+      sessionId: "s1",
+      attachmentId: "a1",
+      tombstones: {},
+      stopped: new Set<string>(),
+      queuedSamples: MAX_QUEUED_SAMPLES - 960
+    };
+    expect(
+      gate.admit(
+        { sessionId: "s1", attachmentId: "a1", responseId: "r1", frameSequence: 1, sampleOffset: 0, data: empty },
+        expected
+      )
+    ).toBe("buffer");
+    expect(
+      gate.admit(
+        { sessionId: "s1", attachmentId: "a1", responseId: "r1", frameSequence: 2, sampleOffset: 480, data: empty },
+        expected
+      )
+    ).toBe("buffer");
   });
 });

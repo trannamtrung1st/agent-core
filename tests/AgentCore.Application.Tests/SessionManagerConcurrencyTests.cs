@@ -40,6 +40,36 @@ public sealed class SessionManagerConcurrencyTests
         Assert.NotNull(profile);
     }
 
+    [Fact]
+    public async Task End_of_already_ended_session_does_not_write_another_revision()
+    {
+        var store = new InMemoryMemoryStore();
+        var manager = CreateManager(store);
+        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        await manager.EndAsync(created.SessionId);
+        var ended = await store.LoadAsync(created.SessionId);
+        Assert.Equal(SessionStatus.Ended, ended!.Status);
+        var revision = ended.Revision;
+        await manager.EndAsync(created.SessionId);
+        var again = await store.LoadAsync(created.SessionId);
+        Assert.Equal(revision, again!.Revision);
+        Assert.Equal(SessionStatus.Ended, again.Status);
+    }
+
+    [Fact]
+    public async Task Concurrent_end_of_the_same_session_does_not_throw_conflict()
+    {
+        var inner = new InMemoryMemoryStore();
+        var store = new BarrierEndStore(inner);
+        var manager = CreateManager(store);
+        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        await Task.WhenAll(
+            manager.EndAsync(created.SessionId),
+            manager.EndAsync(created.SessionId));
+        var ended = await inner.LoadAsync(created.SessionId);
+        Assert.Equal(SessionStatus.Ended, ended!.Status);
+    }
+
     private static SessionManager CreateManager(IMemoryStore store)
     {
         var ids = new DeterministicIdGenerator(
@@ -102,6 +132,56 @@ public sealed class SessionManagerConcurrencyTests
 
             return await inner.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
         }
+
+        public ValueTask SaveProfileAsync(
+            UserProfile profile,
+            long expectedRevision,
+            CancellationToken cancellationToken = default) =>
+            inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+        public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+            inner.RecoverCrashedSessionsAsync(cancellationToken);
+    }
+
+    private sealed class BarrierEndStore(IMemoryStore inner) : IMemoryStore
+    {
+        private readonly TaskCompletionSource _bothReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _endSaves;
+
+        public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            inner.LoadAsync(sessionId, cancellationToken);
+
+        public async ValueTask SaveAsync(
+            SessionSnapshot snapshot,
+            long expectedRevision,
+            CancellationToken cancellationToken = default)
+        {
+            if (snapshot.Status == SessionStatus.Ended)
+            {
+                if (Interlocked.Increment(ref _endSaves) == 1)
+                {
+                    await _bothReady.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    _bothReady.TrySetResult();
+                }
+            }
+
+            await inner.SaveAsync(snapshot, expectedRevision, cancellationToken).ConfigureAwait(false);
+        }
+
+        public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+            Guid sessionId,
+            long afterEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<UserProfile?> LoadProfileAsync(
+            Guid profileId,
+            CancellationToken cancellationToken = default) =>
+            inner.LoadProfileAsync(profileId, cancellationToken);
 
         public ValueTask SaveProfileAsync(
             UserProfile profile,

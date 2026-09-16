@@ -7,6 +7,12 @@ export type AgentDescriptor = {
   voiceAvailable: boolean;
 };
 
+export type HealthResponse = {
+  status: string;
+  profile: string;
+  protocolVersion: number;
+};
+
 export type SessionResponse = {
   sessionId: string;
   agentId: string;
@@ -26,6 +32,15 @@ export async function listAgents(): Promise<AgentDescriptor[]> {
   return body.agents;
 }
 
+export async function getHealth(): Promise<HealthResponse> {
+  const response = await fetch("/health");
+  if (!response.ok) {
+    throw new Error("Unable to read health.");
+  }
+
+  return (await response.json()) as HealthResponse;
+}
+
 export async function createSession(agentId: string, mode = "text"): Promise<SessionResponse> {
   const response = await fetch("/api/v1/sessions", {
     method: "POST",
@@ -40,5 +55,8 @@ export async function createSession(agentId: string, mode = "text"): Promise<Ses
 }
 
 export async function endSession(sessionId: string): Promise<void> {
-  await fetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
+  const response = await fetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error("Unable to end the session.");
+  }
 }

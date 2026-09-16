@@ -5,7 +5,12 @@ import { VoiceActivityObserver } from "./vad";
 export type CaptureHooks = {
   sendAudio: (frame: { frameSequence: number; sampleOffset: number; data: Uint8Array }) => Promise<void> | void;
   speechStarted: (utteranceId: string, sampleOffset: number, activityScore: number) => Promise<void> | void;
-  speechEnded: (utteranceId: string, sampleOffset: number, activityScore: number) => Promise<void> | void;
+  speechEnded: (
+    utteranceId: string,
+    sampleOffset: number,
+    activityScore: number,
+    closing?: boolean
+  ) => Promise<void> | void;
 };
 
 type Prepared = {
@@ -30,13 +35,17 @@ class MicrophoneCapture {
   private renderedByResponse: Record<string, number> = {};
   private completedResponses: string[] = [];
   private onConsumed: ((consumed: number) => void) | null = null;
+  private onPlaybackComplete: ((responseId: string, consumed: number) => void) | null = null;
   private onOverflow: (() => void) | null = null;
   private frameSequence = 1;
   private sampleOffset = 0;
   private streamGeneration = 0;
+  private transmittedByGeneration = new Map<number, number>();
   private utteranceId: string | null = null;
   private readonly vad = new VoiceActivityObserver();
   private hooks: CaptureHooks | null = null;
+  private outbound: Promise<void> = Promise.resolve();
+  private startChain: Promise<void> = Promise.resolve();
   outgoingHold: (() => Promise<void>) | null = null;
 
   isPrepared(): boolean {
@@ -85,6 +94,10 @@ class MicrophoneCapture {
 
   setPlaybackListener(listener: ((consumed: number) => void) | null): void {
     this.onConsumed = listener;
+  }
+
+  setPlaybackCompleteListener(listener: ((responseId: string, consumed: number) => void) | null): void {
+    this.onPlaybackComplete = listener;
   }
 
   setOverflowListener(listener: (() => void) | null): void {
@@ -148,7 +161,7 @@ class MicrophoneCapture {
       gain.connect(context.destination);
       output.connect(context.destination);
       worklet.port.onmessage = (event: MessageEvent<{ pcm: ArrayBuffer; sampleOffset: number }>) => {
-        void this.onFrame(event.data.pcm, event.data.sampleOffset);
+        return this.onFrame(event.data.pcm, event.data.sampleOffset);
       };
       output.port.onmessage = (event: MessageEvent<{
         type?: string;
@@ -162,19 +175,24 @@ class MicrophoneCapture {
         if (event.data.type === "flushed") {
           const stoppedAt = typeof event.data.consumed === "number" ? event.data.consumed : 0;
           this.consumedSamples = stoppedAt;
-          const waiters = this.flushWaiters;
-          this.flushWaiters = [];
-          waiters.forEach((resolve) => resolve(stoppedAt));
+          const responseId = typeof event.data.responseId === "string" ? event.data.responseId : "";
+          const epoch = typeof event.data.epoch === "number" ? event.data.epoch : this.outputEpoch;
+          const waiters = this.flushWaiters.filter((waiter) => waiter.responseId === responseId && waiter.epoch === epoch);
+          this.flushWaiters = this.flushWaiters.filter((waiter) => waiter.responseId !== responseId || waiter.epoch !== epoch);
+          waiters.forEach((waiter) => waiter.resolve(stoppedAt));
         }
         if (event.data.type === "overflow") {
           this.queuedSamples = typeof event.data.queued === "number" ? event.data.queued : this.queuedSamples;
           this.onOverflow?.();
         }
-        if (event.data.type === "complete" && event.data.responseId) {
-          this.completedResponses.push(event.data.responseId);
-        }
         if (typeof event.data.queued === "number") {
           this.queuedSamples = event.data.queued;
+        }
+        if (event.data.type === "complete" && event.data.responseId) {
+          this.completedResponses.push(event.data.responseId);
+          const consumed = typeof event.data.consumed === "number" ? event.data.consumed : this.consumedSamples;
+          this.consumedSamples = consumed;
+          this.onPlaybackComplete?.(event.data.responseId, consumed);
         }
         if (typeof event.data.epoch === "number") {
           this.outputEpoch = event.data.epoch;
@@ -204,42 +222,66 @@ class MicrophoneCapture {
   }
 
   async muteInput(): Promise<void> {
-    this.streamGeneration += 1;
-    this.streaming = false;
-    this.prepared?.worklet.port.postMessage({ type: "pause" });
-    this.prepared?.worklet.port.postMessage({ type: "reset" });
-    this.frameSequence = 1;
-    this.sampleOffset = 0;
-    this.vad.reset();
+    const run = async () => {
+      const mutedGeneration = this.streamGeneration;
+      this.streamGeneration += 1;
+      this.streaming = false;
+      this.prepared?.worklet.port.postMessage({ type: "pause" });
+      this.prepared?.worklet.port.postMessage({ type: "reset" });
+      this.frameSequence = 1;
+      this.sampleOffset = 0;
+      this.vad.reset();
+      await this.closeOpenUtterance(mutedGeneration);
+    };
+
+    const pending = this.startChain.then(run, run);
+    this.startChain = pending.catch(() => undefined);
+    return pending;
+  }
+
+  async start(hooks: CaptureHooks): Promise<void> {
+    const run = async () => {
+      if (!this.prepared) {
+        throw new Error("Capture is not prepared.");
+      }
+
+      const rotatedGeneration = this.streamGeneration;
+      this.streamGeneration += 1;
+      this.streaming = false;
+      await this.closeOpenUtterance(rotatedGeneration);
+      this.hooks = hooks;
+      this.streaming = true;
+      this.frameSequence = 1;
+      this.sampleOffset = 0;
+      this.transmittedByGeneration.clear();
+      this.vad.reset();
+      if (this.prepared.source === null) {
+        this.prepared.source = this.prepared.context.createMediaStreamSource(this.prepared.stream);
+        this.prepared.source.connect(this.prepared.worklet);
+      }
+
+      this.prepared.worklet.port.postMessage({ type: "reset" });
+      this.prepared.worklet.port.postMessage({ type: "emit" });
+    };
+
+    const pending = this.startChain.then(run, run);
+    this.startChain = pending.catch(() => undefined);
+    return pending;
+  }
+
+  private async closeOpenUtterance(generation: number): Promise<void> {
     const utteranceId = this.utteranceId;
     const hooks = this.hooks;
     this.utteranceId = null;
+    await this.outbound.catch(() => undefined);
+    const endedOffset = this.transmittedByGeneration.get(generation) ?? 0;
+    this.transmittedByGeneration.delete(generation);
     if (utteranceId && hooks) {
-      await hooks.speechEnded(utteranceId, this.sampleOffset, 0);
+      await hooks.speechEnded(utteranceId, endedOffset, 0, true);
     }
   }
 
-  start(hooks: CaptureHooks): void {
-    if (!this.prepared) {
-      throw new Error("Capture is not prepared.");
-    }
-
-    this.hooks = hooks;
-    this.streamGeneration += 1;
-    this.streaming = true;
-    this.frameSequence = 1;
-    this.sampleOffset = 0;
-    this.vad.reset();
-    if (this.prepared.source === null) {
-      this.prepared.source = this.prepared.context.createMediaStreamSource(this.prepared.stream);
-      this.prepared.source.connect(this.prepared.worklet);
-    }
-
-    this.prepared.worklet.port.postMessage({ type: "reset" });
-    this.prepared.worklet.port.postMessage({ type: "emit" });
-  }
-
-  private flushWaiters: Array<(consumed: number) => void> = [];
+  private flushWaiters: Array<{ responseId: string; epoch: number; resolve: (consumed: number) => void }> = [];
 
   setGain(gain: number, rampMs = 20): void {
     this.prepared?.output.port.postMessage({ type: "gain", gain, rampMs });
@@ -269,10 +311,11 @@ class MicrophoneCapture {
       return Promise.resolve(stoppedAt);
     }
 
+    const epoch = this.outputEpoch;
     const waiter = new Promise<number>((resolve) => {
-      this.flushWaiters.push(resolve);
+      this.flushWaiters.push({ responseId, epoch, resolve });
     });
-    this.prepared.output.port.postMessage({ type: "flush", responseId });
+    this.prepared.output.port.postMessage({ type: "flush", responseId, epoch });
     return waiter.then((stoppedAt) => {
       this.consumedSamples = stoppedAt;
       this.queuedSamples = 0;
@@ -296,11 +339,12 @@ class MicrophoneCapture {
     this.renderedByResponse = {};
     this.completedResponses = [];
     this.onConsumed = null;
+    this.onPlaybackComplete = null;
     this.onOverflow = null;
     this.utteranceId = null;
     const waiters = this.flushWaiters;
     this.flushWaiters = [];
-    waiters.forEach((resolve) => resolve(stoppedAt));
+    waiters.forEach((waiter) => waiter.resolve(stoppedAt));
     const prepared = this.prepared;
     this.prepared = null;
     if (!prepared) {
@@ -337,35 +381,66 @@ class MicrophoneCapture {
     }
 
     const activity = this.vad.observe(floats);
+    const startOffset = this.sampleOffset;
+    const sequence = this.frameSequence;
+    this.frameSequence += 1;
+    this.sampleOffset += floats.length;
+    const endOffset = this.sampleOffset;
     if (activity.event?.type === "started") {
       this.utteranceId = crypto.randomUUID();
-      await this.hooks.speechStarted(this.utteranceId, this.sampleOffset, activity.activityScore);
+      await this.enqueueOutbound(generation, () => {
+        if (this.streamGeneration !== generation || !this.streaming || !this.hooks) {
+          return;
+        }
+
+        return this.hooks.speechStarted(this.utteranceId!, startOffset, activity.activityScore);
+      });
     }
 
     if (this.outgoingHold) {
       await this.outgoingHold();
     }
 
-    if (this.streamGeneration !== generation || !this.streaming || !this.hooks) {
-      return;
-    }
+    await this.enqueueOutbound(generation, async () => {
+      if (this.streamGeneration !== generation || !this.streaming || !this.hooks) {
+        return;
+      }
 
-    await this.hooks.sendAudio({
-      frameSequence: this.frameSequence,
-      sampleOffset: this.sampleOffset,
-      data: bytes
+      await this.hooks.sendAudio({
+        frameSequence: sequence,
+        sampleOffset: startOffset,
+        data: bytes
+      });
+      if (this.streamGeneration !== generation || !this.streaming) {
+        return;
+      }
+
+      this.transmittedByGeneration.set(generation, endOffset);
     });
-    this.frameSequence += 1;
-    this.sampleOffset += floats.length;
-
-    if (this.streamGeneration !== generation || !this.streaming) {
-      return;
-    }
 
     if (activity.event?.type === "ended" && this.utteranceId) {
-      await this.hooks.speechEnded(this.utteranceId, this.sampleOffset, activity.activityScore);
+      const utteranceId = this.utteranceId;
       this.utteranceId = null;
+      await this.enqueueOutbound(generation, () => {
+        if (this.streamGeneration !== generation || !this.streaming || !this.hooks) {
+          return;
+        }
+
+        return this.hooks.speechEnded(utteranceId, endOffset, activity.activityScore);
+      });
     }
+  }
+
+  private enqueueOutbound(generation: number, work: () => Promise<void> | void): Promise<void> {
+    const next = this.outbound.then(async () => {
+      if (this.streamGeneration !== generation || !this.streaming || !this.hooks) {
+        return;
+      }
+
+      await work();
+    });
+    this.outbound = next.catch(() => undefined);
+    return next;
   }
 }
 

@@ -152,6 +152,8 @@ public sealed class IdentityRuntimeTests
         await supportRuntime.SubmitUserTextAsync("thanks");
         await examinerRuntime.WaitUntilIdleAsync();
         await supportRuntime.WaitUntilIdleAsync();
+        Assert.Equal(examinerRuntime.Snapshot.Revision, (await store.LoadAsync(examiner.SessionId))!.Revision);
+        Assert.Equal(supportRuntime.Snapshot.Revision, (await store.LoadAsync(support.SessionId))!.Revision);
 
         var examinerSnap = await store.LoadAsync(examiner.SessionId);
         var supportSnap = await store.LoadAsync(support.SessionId);

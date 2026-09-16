@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-15T17:15:00.000Z",
+  "title": "Design System: Agent Core",
+  "extensions": {
+    "colorMeta": {
+      "mint": {
+        "role": "primary",
+        "displayName": "Mint phosphor",
+        "canonical": "#58e6c2",
+        "tonalRamp": ["#093e31", "#106a54", "#179776", "#1fcca0", "#45e3bb", "#7aebce", "#aff3e2", "#e4fbf5"]
+      },
+      "persimmon": {
+        "role": "secondary",
+        "displayName": "Persimmon",
+        "canonical": "#ff6b3d",
+        "tonalRamp": ["#471100", "#7a1d00", "#ad2900", "#eb3800", "#ff5c29", "#ff8a66", "#ffb9a3", "#ffe8e0"]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field",
+        "canonical": "#08090f",
+        "tonalRamp": ["#191c2f", "#2b3050", "#3c4471", "#525c99", "#737db4", "#9ba2ca", "#c3c7df", "#ebecf4"]
+      },
+      "obsidian": {
+        "role": "neutral",
+        "displayName": "Obsidian",
+        "canonical": "#071116",
+        "tonalRamp": ["#112a36", "#1e485d", "#2a6684", "#398ab2", "#5da6cb", "#8bc0da", "#b9d9e9", "#e8f2f8"]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#0d2024",
+        "tonalRamp": ["#132f34", "#20505a", "#2e717f", "#3e99ac", "#62b5c6", "#8fcad6", "#bcdfe7", "#e9f4f7"]
+      },
+      "bone": {
+        "role": "neutral",
+        "displayName": "Bone",
+        "canonical": "#f2eadf",
+        "tonalRamp": ["#332615", "#574123", "#7b5c32", "#a77d44", "#c19b67", "#d3b892", "#e4d4be", "#f6f1e9"]
+      },
+      "steel": {
+        "role": "neutral",
+        "displayName": "Steel",
+        "canonical": "#7699a8",
+        "tonalRamp": ["#1c272c", "#30434b", "#435e6a", "#5b808f", "#7c9dac", "#a1b9c4", "#c7d5db", "#ecf1f3"]
+      },
+      "mint-chrome": {
+        "role": "neutral",
+        "displayName": "Mint chrome",
+        "canonical": "#64a08c",
+        "tonalRamp": ["#1b2c27", "#2f4c42", "#426c5e", "#59917f", "#7aae9c", "#a0c5b9", "#c6dcd5", "#ecf3f1"]
+      },
+      "mint-deep": {
+        "role": "neutral",
+        "displayName": "Mint deep",
+        "canonical": "#2a6f62",
+        "tonalRamp": ["#14342e", "#22594e", "#307e6f", "#40aa96", "#64c4b2", "#90d5c8", "#bce6de", "#e9f7f4"]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Input well",
+        "canonical": "#08141a",
+        "tonalRamp": ["#112a37", "#1d485e", "#296685", "#378ab3", "#5ba7cd", "#8ac0db", "#b9d9e9", "#e8f2f8"]
+      },
+      "disabled": {
+        "role": "neutral",
+        "displayName": "Disabled well",
+        "canonical": "#081014",
+        "tonalRamp": ["#142933", "#234657", "#32637c", "#4386a8", "#66a3c2", "#92bdd3", "#bdd8e5", "#e9f2f6"]
+      },
+      "key-hover": {
+        "role": "neutral",
+        "displayName": "Key hover",
+        "canonical": "#123036",
+        "tonalRamp": ["#123036", "#1f525c", "#2b7482", "#3b9cb0", "#5eb8c9", "#8cccd9", "#bae0e8", "#e8f5f7"]
+      },
+      "danger-well": {
+        "role": "neutral",
+        "displayName": "Danger well",
+        "canonical": "#1a0c0a",
+        "tonalRamp": ["#341814", "#582922", "#7d3a30", "#a94e41", "#c37064", "#d49990", "#e6c2bd", "#f6ebe9"]
+      },
+      "bevel-hi": {
+        "role": "neutral",
+        "displayName": "Bevel highlight",
+        "canonical": "#3d7a70",
+        "tonalRamp": ["#18302c", "#29524b", "#3a746a", "#4e9c90", "#70b8ac", "#99ccc4", "#c2e0db", "#ebf5f3"]
+      },
+      "bevel-lo": {
+        "role": "neutral",
+        "displayName": "Bevel shade",
+        "canonical": "#0a1c20",
+        "tonalRamp": ["#113036", "#1d525d", "#297484", "#389cb3", "#5cb8cc", "#8accdb", "#b9e0e9", "#e8f5f8"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Wordmark Agent Core only; uppercase, stretch 75%." },
+      "title": { "displayName": "Title", "purpose": "HUD profile, Ready/Listening, identity line." },
+      "body": { "displayName": "Body", "purpose": "Transcript copy; 72ch measure; user speaker bone, agent speaker mint." },
+      "label": { "displayName": "Label", "purpose": "Window chrome, legends, and key type; uppercase tracking." }
+    },
+    "shadows": [
+      {
+        "name": "bevel",
+        "value": "inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20",
+        "purpose": "Window, field, and key depth. No drop shadows."
+      },
+      {
+        "name": "phosphor-glow",
+        "value": "0 0 8px color-mix(in srgb, #58e6c2 55%, transparent)",
+        "purpose": "Ready and Live text only, stepped, off under reduced motion."
+      }
+    ],
+    "motion": [
+      {
+        "name": "phosphor",
+        "value": "2.8s steps(4, end) infinite",
+        "purpose": "Presence plate contrast pulse when motion is allowed."
+      },
+      {
+        "name": "mint-glow",
+        "value": "2.4s steps(2, end) infinite",
+        "purpose": "Ready and Live phosphor flicker when motion is allowed."
+      },
+      {
+        "name": "select-chevron",
+        "value": "120ms steps(2)",
+        "purpose": "Identity select chevron flip when open; off under reduced motion."
+      }
+    ],
+    "breakpoints": [
+      { "name": "desktop", "value": "880px" },
+      { "name": "compact", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Key",
+      "kind": "button",
+      "refersTo": "button-key",
+      "description": "Beveled obsidian control for Send, Voice, Mute, End, and Start conversation.",
+      "html": "<button class=\"ds-key\" type=\"button\">Send</button>",
+      "css": ".ds-key { min-height: 56px; min-width: 7.5rem; padding: 0 24px; border: 1px solid #58e6c2; border-radius: 4px; background: #071116; color: #f2eadf; font-family: \"Martian Mono\", ui-monospace, monospace; font-weight: 700; letter-spacing: 0.06em; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; cursor: pointer; } .ds-key:hover { background: #123036; color: #58e6c2; } .ds-key:focus-visible { outline: 3px solid #58e6c2; outline-offset: 2px; } .ds-key:disabled { cursor: not-allowed; color: #2a6f62; background: #081014; }"
+    },
+    {
+      "name": "Message field",
+      "kind": "input",
+      "refersTo": "input-message",
+      "description": "Labeled composer textarea with a legend sitting on the mint stroke.",
+      "html": "<label class=\"ds-message\"><span class=\"ds-message-label\">Message</span><textarea class=\"ds-message-field\" rows=\"2\" placeholder=\"Type your message here...\"></textarea></label>",
+      "css": ".ds-message { position: relative; display: grid; padding-top: 8px; font-family: \"Martian Mono\", ui-monospace, monospace; } .ds-message-label { position: absolute; left: 16px; top: 0; padding: 0 8px; background: #0d2024; color: #64a08c; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; } .ds-message-field { width: 100%; min-height: 56px; padding: 16px; border: 1px solid #58e6c2; border-radius: 4px; background: #08141a; color: #f2eadf; resize: none; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; caret-color: #58e6c2; } .ds-message-field::placeholder { color: #6e9a96; } .ds-message-field:focus-visible { outline: 3px solid #58e6c2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Transcript window",
+      "kind": "card",
+      "refersTo": "window-panel",
+      "description": "Beveled panel for the conversation well, with uppercase chrome and a 32px cell grid.",
+      "html": "<section class=\"ds-window\"><div class=\"ds-window-bar\"><span>Transcript · 2 entries</span><span>Agent Core · Live</span></div><ol class=\"ds-transcript\"><li class=\"ds-entry\" data-role=\"user\"><span class=\"ds-mark ds-plus\" aria-hidden=\"true\"></span><p class=\"ds-copy\"><strong>You</strong><span class=\"ds-dash\" aria-hidden=\"true\"></span> Hello</p></li><li class=\"ds-entry\" data-role=\"assistant\"><span class=\"ds-mark ds-diamond\" aria-hidden=\"true\"></span><p class=\"ds-copy\"><strong>Alex</strong><span class=\"ds-dash\" aria-hidden=\"true\"></span> Ready when you are.</p></li></ol></section>",
+      "css": ".ds-window { border: 1px solid #58e6c2; background: #0d2024; border-radius: 4px; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; color: #f2eadf; font-family: \"Martian Mono\", ui-monospace, monospace; overflow: hidden; } .ds-window-bar { display: flex; justify-content: space-between; align-items: center; min-height: 48px; padding: 0 16px; border-bottom: 1px solid #58e6c2; color: #64a08c; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; font-weight: 700; } .ds-transcript { list-style: none; margin: 0; padding: 16px; display: grid; gap: 16px; } .ds-entry { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 16px; align-items: start; font-size: 16px; font-weight: 500; line-height: 1.45; } .ds-mark { justify-self: center; margin-top: 0.35em; background: #58e6c2; } .ds-plus { width: 12px; height: 12px; background: linear-gradient(#58e6c2, #58e6c2) center / 100% 2px no-repeat, linear-gradient(#58e6c2, #58e6c2) center / 2px 100% no-repeat; } .ds-diamond { width: 10px; height: 10px; transform: rotate(45deg); } .ds-copy { margin: 0; min-width: 0; } .ds-copy strong { display: inline-block; min-width: 4ch; font-weight: 700; } .ds-entry[data-role=\"assistant\"] strong { color: #58e6c2; } .ds-dash { display: inline-block; width: 1.1em; height: 2px; margin: 0 8px; background: #f2eadf; vertical-align: middle; } .ds-entry[data-role=\"assistant\"] .ds-dash { background: #58e6c2; }"
+    },
+    {
+      "name": "Identity select",
+      "kind": "input",
+      "refersTo": "input-select",
+      "description": "Custom listbox for identity choice: sibling legend, left-aligned value, pointer-down commit, themed overlay.",
+      "html": "<div class=\"ds-select\"><button class=\"ds-select-trigger\" type=\"button\" aria-label=\"Identity\" aria-haspopup=\"listbox\" aria-expanded=\"true\"><span class=\"ds-select-value\">Alex — Speaking examiner</span><span class=\"ds-select-chevron\" aria-hidden=\"true\"></span></button><ul class=\"ds-select-list\" role=\"listbox\" aria-label=\"Identity\"><li class=\"ds-select-option is-selected\" role=\"option\" aria-selected=\"true\"><span class=\"ds-select-marker\"></span><span>Alex — Speaking examiner</span></li><li class=\"ds-select-option\" role=\"option\" aria-selected=\"false\"><span class=\"ds-select-marker\"></span><span>Sam — Customer support representative</span></li></ul></div>",
+      "css": ".ds-select { position: relative; width: 100%; font-family: \"Martian Mono\", ui-monospace, monospace; } .ds-select-trigger { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 56px; padding: 0; border: 1px solid #58e6c2; border-radius: 4px; background: #08141a; color: #f2eadf; text-align: left; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; cursor: pointer; } .ds-select-trigger:hover { background: #0a1820; } .ds-select-trigger:focus-visible { outline: 3px solid #58e6c2; outline-offset: 2px; } .ds-select-value { padding: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 500; } .ds-select-chevron { display: grid; place-items: center; width: 3rem; min-height: 54px; border-left: 1px solid color-mix(in srgb, #58e6c2 35%, transparent); } .ds-select-chevron::before { content: \"\"; width: 10px; height: 6px; background: #64a08c; clip-path: polygon(50% 100%, 0 0, 100% 0); } .ds-select-list { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 30; margin: 0; padding: 8px; list-style: none; border: 1px solid #58e6c2; border-radius: 4px; background: #0d2024; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; } .ds-select-option { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; padding: 16px; border-radius: 2px; cursor: pointer; font-size: 16px; font-weight: 500; color: #f2eadf; } .ds-select-option.is-selected { color: #58e6c2; } .ds-select-option:hover { background: #123036; color: #58e6c2; } .ds-select-marker { width: 8px; height: 8px; } .ds-select-option.is-selected .ds-select-marker { background: #58e6c2; }"
+    },
+    {
+      "name": "Identity picker",
+      "kind": "custom",
+      "refersTo": "window-panel",
+      "description": "Entry-only identity window: mint sibling legend, custom select, full-width start key.",
+      "html": "<section class=\"ds-picker\"><div class=\"ds-picker-field\"><span class=\"ds-picker-legend\">Identity</span><div class=\"ds-select\"><button class=\"ds-select-trigger\" type=\"button\" aria-label=\"Identity\" aria-haspopup=\"listbox\" aria-expanded=\"false\"><span class=\"ds-select-value\">Alex — Speaking examiner</span><span class=\"ds-select-chevron\" aria-hidden=\"true\"></span></button></div></div><button class=\"ds-key ds-picker-start\" type=\"button\">Start conversation</button></section>",
+      "css": ".ds-picker { display: grid; gap: 16px; width: min(36rem, 100%); padding: 16px; border: 1px solid #58e6c2; background: #0d2024; border-radius: 4px; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; font-family: \"Martian Mono\", ui-monospace, monospace; } .ds-picker-field { display: grid; gap: 8px; } .ds-picker-legend { color: #58e6c2; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; } .ds-select { position: relative; width: 100%; } .ds-select-trigger { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 56px; padding: 0; border: 1px solid #58e6c2; border-radius: 4px; background: #08141a; color: #f2eadf; text-align: left; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; cursor: pointer; } .ds-select-value { padding: 16px; font-size: 16px; font-weight: 500; } .ds-select-chevron { display: grid; place-items: center; width: 3rem; min-height: 54px; border-left: 1px solid color-mix(in srgb, #58e6c2 35%, transparent); } .ds-select-chevron::before { content: \"\"; width: 10px; height: 6px; background: #64a08c; clip-path: polygon(50% 100%, 0 0, 100% 0); } .ds-picker-start { width: 100%; } .ds-key { min-height: 56px; padding: 0 24px; border: 1px solid #58e6c2; border-radius: 4px; background: #071116; color: #f2eadf; font-weight: 700; letter-spacing: 0.06em; box-shadow: inset 1px 1px 0 #3d7a70, inset -1px -1px 0 #0a1c20; } .ds-key:hover { background: #123036; color: #58e6c2; } .ds-key:focus-visible { outline: 3px solid #58e6c2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Error banner",
+      "kind": "custom",
+      "refersTo": "error-banner",
+      "description": "Recoverable alert: persimmon type and stroke on a dark well, always with readable copy.",
+      "html": "<p class=\"ds-error\" role=\"alert\">Microphone permission was denied. Enable the microphone or continue in text.</p>",
+      "css": ".ds-error { margin: 0; padding: 16px; border: 1px solid #ff6b3d; color: #ff6b3d; background: #1a0c0a; font-family: \"Martian Mono\", ui-monospace, monospace; font-size: 16px; font-weight: 500; line-height: 1.35; } .ds-error:focus-visible { outline: 3px solid #58e6c2; outline-offset: 2px; }"
+    },
+    {
+      "name": "HUD status",
+      "kind": "custom",
+      "refersTo": "button-key",
+      "description": "Profile plus the single derived status (Ready, Thinking, Listening, and the rest); mint type is extra, never the only cue.",
+      "html": "<div class=\"ds-hud\"><span class=\"ds-mark\" aria-hidden=\"true\"></span><div><p class=\"ds-profile\">Profile: Synthetic</p><p class=\"ds-ready\">Ready</p></div></div>",
+      "css": ".ds-hud { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 16px; align-items: start; font-family: \"Martian Mono\", ui-monospace, monospace; color: #f2eadf; } .ds-mark { width: 12px; height: 12px; margin-top: 0.35em; justify-self: center; background: linear-gradient(#58e6c2, #58e6c2) center / 100% 2px no-repeat, linear-gradient(#58e6c2, #58e6c2) center / 2px 100% no-repeat; } .ds-profile, .ds-ready { margin: 0; font-size: 16px; font-weight: 500; line-height: 1.35; } .ds-ready { color: #58e6c2; }"
+    },
+    {
+      "name": "Wordmark",
+      "kind": "custom",
+      "refersTo": "button-key",
+      "description": "AGENT CORE display line with a dashed mint underline.",
+      "html": "<h1 class=\"ds-wordmark\">Agent Core</h1>",
+      "css": ".ds-wordmark { margin: 0; font-family: \"Martian Mono\", ui-monospace, monospace; font-size: 44px; font-weight: 500; font-stretch: 75%; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; color: #f2eadf; } .ds-wordmark::after { content: \"\"; display: block; width: 17.5rem; max-width: 100%; height: 2px; margin-top: 16px; background-image: repeating-linear-gradient(to right, #58e6c2 0 8px, transparent 8px 16px); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Pixel Dialogue Field",
+    "overview": "Agent Core is a sixteen-color dialogue field: a near-black Bayer-dithered plane, beveled mint windows, and one self-hosted mono. Presence is ordered-dither light in the HUD, talk docks as a bordered transcript, and Voice is the same session lighting mint. It is an operate surface for one identity and one conversation — personal and live, not an admin dashboard and not a marketing page.\n\nDensity is HUD-tight, then generous empty field. Status is labeled in type (Ready, Starting voice…, Listening, Reconnecting). Synthetic stays named. Motion is stepped phosphor, off under `prefers-reduced-motion`.\n\nConfirmed rejections: cream-paper messengers, Fraunces/Source Sans pairings, bubble columns, fake inboxes, nested cards, Inter-on-white chat clones, smooth gradients, drop-shadow elevation, and native OS select menus.",
+    "keyCharacteristics": [
+      "Full-bleed field with a 256px repeating dither tile; no centered paper column",
+      "1px mint stroke plus inset bevel on every window and key",
+      "One face (Martian Mono) at four sizes; no second family",
+      "HUD (wordmark, profile, ready, identity) + presence plate + transcript + key dock",
+      "Mint for live connection and focus; persimmon only for interrupt, fail, and error"
+    ],
+    "rules": [
+      { "name": "The Mint Is Live Rule", "body": "Mint is connection, focus, and phosphor. Do not flood panels or keys with mint fill.", "section": "colors" },
+      { "name": "The Persimmon Alarm Rule", "body": "Persimmon appears only for interrupt, fail, and recoverable error — never as decoration or as the default Send key.", "section": "colors" },
+      { "name": "The One Voice Rule", "body": "One self-hosted mono for wordmark, HUD, messages, and keys. Do not introduce a serif display or a sans UI face.", "section": "typography" },
+      { "name": "The Shared Inset Rule", "body": "HUD, transcript, picker, and dock share one inset and one region gap. Do not mix percentage-absolute boxes with the token grid.", "section": "layout" },
+      { "name": "The Shared Marker Column Rule", "body": "HUD rows and transcript entries use a 16px marker column and 16px gap. Do not introduce a second icon family.", "section": "layout" },
+      { "name": "The Bevel Not Drop Rule", "body": "Surfaces sit in the field. Do not add offset drop shadows or glass blur.", "section": "elevation" },
+      { "name": "The Labeled Key Rule", "body": "Send, Voice, Cancel, Mute, Unmute, End, and Start conversation are visible text with those accessible names. Markers may accompany HUD copy; they are never the sole label.", "section": "typography" },
+      { "name": "The Themed Listbox Rule", "body": "Identity choice uses a custom listbox with field chrome and a panel overlay. The legend is a sibling of the control. Do not wrap the listbox in a native <label> and do not fall back to native browser select menus.", "section": "components" }
+    ],
+    "dos": [
+      "Do keep HUD, transcript, picker, and dock on the shared inset/gap scale (40/16 desktop, 16/24 ≤879px).",
+      "Do self-host Martian Mono; honor `prefers-reduced-motion`; keep body contrast ≥ 4.5:1 on field/panel.",
+      "Do preserve testids `connection` and `profile`, and the accessible names Identity, Start conversation, Send, Voice, Cancel voice, Mute, Unmute, End.",
+      "Do keep the labeled composer visible while voice is live until `/docs` and tests change together.",
+      "Do render escaped plain text; mark interrupted/failed in type.",
+      "Do use the custom themed select for identity choice; keep the Identity legend as a sibling of the listbox; keep value text left-aligned and keys centered."
+    ],
+    "donts": [
+      "Don't return to cream paper, Fraunces, Source Sans, or message bubbles.",
+      "Don't use drop shadows, glass blur, smooth gradients, or a second type family.",
+      "Don't fill keys or panels with mint; mint is the live line.",
+      "Don't replace Voice / Mute / End with icon-only or emoji controls.",
+      "Don't draw a fake inbox, session list, attachment dock, or in-chat agent switcher.",
+      "Don't hide status in animation or a color dot alone.",
+      "Don't ship Google Fonts or a raster wordmark when the live type is Martian Mono.",
+      "Don't use native browser select menus, wrapping `<label>` listboxes, or icon-only chevrons for identity pickers."
+    ]
+  }
+}

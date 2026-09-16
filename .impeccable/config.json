@@ -1,0 +1,15 @@
+{
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "martian mono",
+        "createdAt": "2026-09-15T15:30:37.446Z",
+        "reason": "Martian Mono is the committed Pixel Dialogue Field display and body face."
+      }
+    ]
+  }
+}

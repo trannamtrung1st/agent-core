@@ -16,7 +16,7 @@ public sealed class AudioIngress
         {
             SingleReader = true,
             SingleWriter = false,
-            FullMode = BoundedChannelFullMode.DropWrite
+            FullMode = BoundedChannelFullMode.Wait
         });
 
     public bool TryWrite(IngressMessage message) => _channel.Writer.TryWrite(message);

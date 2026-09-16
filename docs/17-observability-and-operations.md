@@ -78,7 +78,17 @@ curl -sS http://127.0.0.1:5080/health
 ./scripts/compose-sqlite-volume.sh
 ```
 
-Real/hosted Compose is the same one-container image with operator environment overrides (never committed secrets), for example:
+Real/hosted Compose is the same `agent-core` service and image with `docker-compose.real.yml` overlaid. It does not replace the default file: `docker compose up` stays Synthetic and key-free so CI and local smoke need no credentials. Use two `-f` flags so Compose does not also load an unrelated override file:
+
+```text
+# once: cp .env.example .env  && edit OPENROUTER_API_KEY
+docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
+curl -sS http://127.0.0.1:5080/health
+```
+
+`/health` reports `"profile":"Real"`. Compose interpolates a gitignored root `.env` (copy from `.env.example`) or the same variables from the host environment. Do not commit `.env`. Never put secrets in the Compose files. `OPENROUTER_API_KEY` is required to start the Real overlay. `AGENTCORE_LLM_MODEL` defaults to `openai/gpt-4o-mini` (the same fixed id as `http-openrouter`); do not set it to `openrouter/free`. Stop with the same files: `docker compose -f docker-compose.yml -f docker-compose.real.yml down`. Synthetic and Real share volume `agent-core-data`. `.env` is not an application `IConfiguration` source; native `dotnet run` does not load it unless you export those variables into the process environment.
+
+The overlay matches the native `http-openrouter` launch profile: hosted OpenRouter text (`Adapter=OpenAICompatible`). Hosted STT/TTS are not selected in this file; Real voice stays unavailable until those adapters are resolved at startup (`voiceAvailable` is false and Voice create returns 409). Native processes can pass the same text environment without Compose:
 
 ```text
 AgentCore__Profile=Real
@@ -86,10 +96,9 @@ Providers__LanguageModels__primary-llm__Adapter=OpenAICompatible
 Providers__LanguageModels__primary-llm__BaseUrl=https://openrouter.ai/api/v1/
 Providers__LanguageModels__primary-llm__DefaultModel=<operator-fixed-openrouter-model-id>
 OPENROUTER_API_KEY=<backend-secret>
-Providers__SpeechRecognizers__primary-stt__Adapter=OpenAI
-Providers__SpeechSynthesizers__primary-tts__Adapter=OpenAI
-OPENAI_API_KEY=<backend-secret-when-using-openai-speech>
 ```
+
+Speech adapter overrides remain in [Configuration](15-persistence-and-configuration.md#hosted-and-on-prem-provider-configurations); they do not change Real Compose until DI selects them.
 
 Default `docker compose` smoke stays Synthetic/scripted and key-free. Hybrid/on-prem keeps the same `agent-core` service and points STT/LLM/TTS BaseUrl values at local inference processes.
 
@@ -101,7 +110,8 @@ Docker Compose
     └── SQLite file in a mounted persistent volume
 
 Hosted services outside Compose:
-OpenAI STT · OpenRouter text model · OpenAI TTS
+OpenRouter text (selected by docker-compose.real.yml)
+OpenAI STT · OpenAI TTS (not selected until hosted speech adapters are resolved)
 ```
 
 Do not split frontend and backend into separate production runtime containers. Vite is a build stage in this artifact, not a production server. The SQLite volume must survive application container recreation; the container's writable layer is not durable storage. Compose should expose the application locally, pass backend configuration/secrets, and use /health for readiness. No additional reverse proxy, Redis, broker, service mesh or Kubernetes is required.

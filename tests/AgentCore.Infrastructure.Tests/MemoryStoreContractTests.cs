@@ -179,6 +179,181 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Sqlite_rejects_partial_and_older_legacy_schema()
+    {
+        var partial = Path.Combine(Path.GetTempPath(), $"agent-core-partial-{Guid.NewGuid():N}.db");
+        var older = Path.Combine(Path.GetTempPath(), $"agent-core-older-{Guid.NewGuid():N}.db");
+        var missingIndex = Path.Combine(Path.GetTempPath(), $"agent-core-noidx-{Guid.NewGuid():N}.db");
+        try
+        {
+            await using (var connection = new SqliteConnection($"Data Source={partial}"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "CREATE TABLE Sessions (SessionId TEXT PRIMARY KEY);";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using (var opened = OpenSqlite(partial, deleteOnDispose: false))
+            {
+                var error = await Assert.ThrowsAsync<AgentCoreException>(() => opened.Store.EnsureCreatedAsync().AsTask());
+                Assert.Equal("SessionPersistenceUnavailable", error.Code);
+            }
+
+            await using (var connection = new SqliteConnection($"Data Source={older}"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    CREATE TABLE Sessions (
+                        SessionId TEXT PRIMARY KEY,
+                        AgentId TEXT NOT NULL,
+                        Status TEXT NOT NULL
+                    );
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using (var opened = OpenSqlite(older, deleteOnDispose: false))
+            {
+                var error = await Assert.ThrowsAsync<AgentCoreException>(() => opened.Store.EnsureCreatedAsync().AsTask());
+                Assert.Equal("SessionPersistenceUnavailable", error.Code);
+            }
+
+            await using (var connection = new SqliteConnection($"Data Source={missingIndex}"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    CREATE TABLE Sessions (
+                        SessionId TEXT NOT NULL PRIMARY KEY,
+                        AgentId TEXT NOT NULL,
+                        AgentVersion INTEGER NOT NULL,
+                        DefinitionJson TEXT NOT NULL,
+                        Mode TEXT NOT NULL,
+                        PendingMode TEXT,
+                        Status TEXT NOT NULL,
+                        CreatedAtUtc INTEGER NOT NULL,
+                        UpdatedAtUtc INTEGER NOT NULL,
+                        Revision INTEGER NOT NULL
+                    );
+                    CREATE TABLE UserProfiles (
+                        ProfileId TEXT NOT NULL PRIMARY KEY,
+                        PreferencesJson TEXT NOT NULL,
+                        Revision INTEGER NOT NULL,
+                        UpdatedAtUtc INTEGER NOT NULL
+                    );
+                    CREATE TABLE ConversationEntries (
+                        EntryId TEXT NOT NULL PRIMARY KEY,
+                        SessionId TEXT NOT NULL,
+                        EntrySequence INTEGER NOT NULL,
+                        SourceEventId TEXT,
+                        Role TEXT NOT NULL,
+                        Text TEXT NOT NULL,
+                        ResponseId TEXT,
+                        Status TEXT NOT NULL,
+                        DeliveryMode TEXT NOT NULL,
+                        HeardTextEndExclusive INTEGER NOT NULL,
+                        ReceivedTextEndExclusive INTEGER NOT NULL,
+                        CreatedAtUtc INTEGER NOT NULL,
+                        FOREIGN KEY (SessionId) REFERENCES Sessions(SessionId) ON DELETE CASCADE
+                    );
+                    CREATE TABLE SessionSnapshots (
+                        SessionId TEXT NOT NULL PRIMARY KEY,
+                        SchemaVersion INTEGER NOT NULL,
+                        Summary TEXT NOT NULL,
+                        SummarizedThroughEntrySequence INTEGER NOT NULL,
+                        PendingTopic TEXT,
+                        ProfileId TEXT,
+                        LastEntrySequence INTEGER NOT NULL,
+                        UpdatedAtUtc INTEGER NOT NULL,
+                        FOREIGN KEY (SessionId) REFERENCES Sessions(SessionId) ON DELETE CASCADE
+                    );
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using (var opened = OpenSqlite(missingIndex, deleteOnDispose: false))
+            {
+                var error = await Assert.ThrowsAsync<AgentCoreException>(() => opened.Store.EnsureCreatedAsync().AsTask());
+                Assert.Equal("SessionPersistenceUnavailable", error.Code);
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var path in new[] { partial, older, missingIndex })
+            {
+                try
+                {
+                    File.Delete(path);
+                    File.Delete(path + "-wal");
+                    File.Delete(path + "-shm");
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Profile_unique_key_is_conflict_and_other_update_errors_are_unavailable()
+    {
+        await using var harness = await SqliteAsync();
+        var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
+        var profile = new UserProfile(
+            LocalUserProfile.Id,
+            1,
+            new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+            now);
+        var first = harness.Store.SaveProfileAsync(profile, 0).AsTask();
+        var second = harness.Store.SaveProfileAsync(profile, 0).AsTask();
+        var results = await Task.WhenAll(
+            first.ContinueWith(task => task.Exception?.GetBaseException() as AgentCoreException),
+            second.ContinueWith(task => task.Exception?.GetBaseException() as AgentCoreException));
+        var conflict = results.Single(item => item is not null);
+        Assert.Equal("Conflict", conflict!.Code);
+
+        await using var db = await harness.Factory.CreateDbContextAsync();
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TRIGGER profile_io AFTER UPDATE ON UserProfiles
+            BEGIN
+                SELECT RAISE(ABORT, 'disk I/O error');
+            END;
+            """);
+        var unavailable = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            harness.Store.SaveProfileAsync(
+                profile with { Revision = 2, Preferences = new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Sam" } },
+                1).AsTask());
+        Assert.Equal("SessionPersistenceUnavailable", unavailable.Code);
+    }
+
+    [Fact]
+    public async Task Session_unique_key_is_conflict_and_other_update_errors_are_unavailable()
+    {
+        await using var harness = await SqliteAsync();
+        var snapshot = First();
+        await harness.Store.SaveAsync(snapshot, 0);
+        await using var db = await harness.Factory.CreateDbContextAsync();
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TRIGGER session_io AFTER UPDATE ON Sessions
+            BEGIN
+                SELECT RAISE(ABORT, 'disk I/O error');
+            END;
+            """);
+        var unavailable = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            harness.Store.SaveAsync(
+                snapshot with { Revision = 2, Status = SessionStatus.Attached },
+                1).AsTask());
+        Assert.Equal("SessionPersistenceUnavailable", unavailable.Code);
+    }
+
+    [Fact]
     public async Task Sqlite_migrate_reopens_existing_database()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");

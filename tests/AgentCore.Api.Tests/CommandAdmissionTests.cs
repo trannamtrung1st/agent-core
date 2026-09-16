@@ -90,6 +90,67 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         }
     }
 
+    [Fact]
+    public async Task Detach_completes_queued_and_in_flight_commands()
+    {
+        var host = _factory.Services.GetRequiredService<SessionHost>();
+        var admitted = 0;
+        var bothAdmitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var client = _factory.CreateClient();
+            var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+            created.EnsureSuccessStatusCode();
+            var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+            await using var hub = await ConnectAsync();
+            var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            hub.On<ServerEvent>("SessionEvent", evt =>
+            {
+                if (evt.Type == "session.ready" && evt.AttachmentId is not null)
+                {
+                    ready.TrySetResult(evt.AttachmentId);
+                }
+            });
+            var attached = await hub.InvokeAsync<CommandAck>("Attach", Command(session.SessionId, 0, "session.attach", new AttachPayload()));
+            Assert.True(attached.Accepted, attached.Error?.Message);
+            var attachment = await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var mode = await hub.InvokeAsync<CommandAck>(
+                "SetMode",
+                Command(session.SessionId, 1, "session.mode.set", new SetModePayload { Mode = "voice" }, attachment));
+            Assert.True(mode.Accepted, mode.Error?.Message);
+            host.AfterAdmitHold = async () =>
+            {
+                if (Interlocked.Increment(ref admitted) == 2)
+                {
+                    bothAdmitted.TrySetResult();
+                }
+
+                await release.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            };
+            var firstTask = hub.InvokeAsync<CommandAck>(
+                "SetMuted",
+                Command(session.SessionId, 2, "session.mute", new MutePayload { Muted = true }, attachment));
+            var secondTask = hub.InvokeAsync<CommandAck>(
+                "SetMuted",
+                Command(session.SessionId, 3, "session.mute", new MutePayload { Muted = false }, attachment));
+            await bothAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await host.DetachAsync(hub.ConnectionId!);
+            release.TrySetResult();
+            var first = await firstTask.WaitAsync(TimeSpan.FromSeconds(10));
+            var second = await secondTask.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(first.Accepted);
+            Assert.False(second.Accepted);
+            Assert.Equal("NotFound", first.Error?.Code);
+            Assert.Equal("NotFound", second.Error?.Code);
+            Assert.Null(host.LiveSnapshot(Guid.Parse(session.SessionId)));
+        }
+        finally
+        {
+            host.AfterAdmitHold = null;
+        }
+    }
+
     private async Task<HubConnection> ConnectAsync()
     {
         var connection = new HubConnectionBuilder()

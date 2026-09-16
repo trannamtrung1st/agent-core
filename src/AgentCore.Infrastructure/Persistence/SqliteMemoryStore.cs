@@ -55,6 +55,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
         }
 
+        if (!await HasCompleteLegacySchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            throw AgentCoreErrors.Persistence("Legacy SQLite schema is incomplete.");
+        }
+
         await db.Database.ExecuteSqlRawAsync(
             """
             CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
@@ -118,7 +123,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
 
             db.Sessions.Add(ToRecord(snapshot));
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -137,7 +142,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
         ApplySession(existing, snapshot);
         UpsertEntries(db, existing, snapshot);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -206,6 +211,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             {
                 throw AgentCoreErrors.Conflict("Profile already exists.");
             }
+            catch (DbUpdateException)
+            {
+                throw AgentCoreErrors.Persistence("Persistent profile save failed.");
+            }
 
             return;
         }
@@ -218,7 +227,18 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         existing.PreferencesJson = JsonSerializer.Serialize(profile.Preferences, Json);
         existing.Revision = profile.Revision;
         existing.UpdatedAtUtc = profile.UpdatedAt.ToUnixTimeMilliseconds();
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (IsUniqueKeyViolation(ex))
+        {
+            throw AgentCoreErrors.Conflict("Profile revision conflict.");
+        }
+        catch (DbUpdateException)
+        {
+            throw AgentCoreErrors.Persistence("Persistent profile save failed.");
+        }
     }
 
     public async ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default)
@@ -240,7 +260,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             UpsertEntries(db, row, recovered);
         }
 
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
     }
 
     private void UpsertEntries(AgentCoreDbContext db, SessionRecord session, SessionSnapshot snapshot)
@@ -370,6 +390,265 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     private static DateTimeOffset FromUnix(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+
+    private static async Task<bool> HasCompleteLegacySchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var tables = new Dictionary<string, ColumnSpec[]>(StringComparer.Ordinal)
+        {
+            ["Sessions"] =
+            [
+                new("SessionId", "TEXT", NotNull: true, Pk: true),
+                new("AgentId", "TEXT", NotNull: true, Pk: false),
+                new("AgentVersion", "INTEGER", NotNull: true, Pk: false),
+                new("DefinitionJson", "TEXT", NotNull: true, Pk: false),
+                new("Mode", "TEXT", NotNull: true, Pk: false),
+                new("PendingMode", "TEXT", NotNull: false, Pk: false),
+                new("Status", "TEXT", NotNull: true, Pk: false),
+                new("CreatedAtUtc", "INTEGER", NotNull: true, Pk: false),
+                new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false),
+                new("Revision", "INTEGER", NotNull: true, Pk: false)
+            ],
+            ["UserProfiles"] =
+            [
+                new("ProfileId", "TEXT", NotNull: true, Pk: true),
+                new("PreferencesJson", "TEXT", NotNull: true, Pk: false),
+                new("Revision", "INTEGER", NotNull: true, Pk: false),
+                new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
+            ],
+            ["ConversationEntries"] =
+            [
+                new("EntryId", "TEXT", NotNull: true, Pk: true),
+                new("SessionId", "TEXT", NotNull: true, Pk: false),
+                new("EntrySequence", "INTEGER", NotNull: true, Pk: false),
+                new("SourceEventId", "TEXT", NotNull: false, Pk: false),
+                new("Role", "TEXT", NotNull: true, Pk: false),
+                new("Text", "TEXT", NotNull: true, Pk: false),
+                new("ResponseId", "TEXT", NotNull: false, Pk: false),
+                new("Status", "TEXT", NotNull: true, Pk: false),
+                new("DeliveryMode", "TEXT", NotNull: true, Pk: false),
+                new("HeardTextEndExclusive", "INTEGER", NotNull: true, Pk: false),
+                new("ReceivedTextEndExclusive", "INTEGER", NotNull: true, Pk: false),
+                new("CreatedAtUtc", "INTEGER", NotNull: true, Pk: false)
+            ],
+            ["SessionSnapshots"] =
+            [
+                new("SessionId", "TEXT", NotNull: true, Pk: true),
+                new("SchemaVersion", "INTEGER", NotNull: true, Pk: false),
+                new("Summary", "TEXT", NotNull: true, Pk: false),
+                new("SummarizedThroughEntrySequence", "INTEGER", NotNull: true, Pk: false),
+                new("PendingTopic", "TEXT", NotNull: false, Pk: false),
+                new("ProfileId", "TEXT", NotNull: false, Pk: false),
+                new("LastEntrySequence", "INTEGER", NotNull: true, Pk: false),
+                new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
+            ]
+        };
+
+        foreach (var (table, columns) in tables)
+        {
+            if (!await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
+            {
+                return false;
+            }
+
+            if (!await ColumnsMatchAsync(connection, table, columns, cancellationToken).ConfigureAwait(false))
+            {
+                return false;
+            }
+        }
+
+        if (!await HasForeignKeyAsync(connection, "SessionSnapshots", "SessionId", "Sessions", "SessionId", "CASCADE", cancellationToken).ConfigureAwait(false)
+            || !await HasForeignKeyAsync(connection, "ConversationEntries", "SessionId", "Sessions", "SessionId", "CASCADE", cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        return await HasUniqueIndexAsync(
+                connection,
+                "ConversationEntries",
+                ["SessionId", "EntrySequence"],
+                partial: false,
+                partialPredicate: null,
+                cancellationToken)
+            .ConfigureAwait(false)
+            && await HasUniqueIndexAsync(
+                connection,
+                "ConversationEntries",
+                ["SessionId", "SourceEventId"],
+                partial: true,
+                partialPredicate: "SourceEventId IS NOT NULL",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private readonly record struct ColumnSpec(string Name, string Type, bool NotNull, bool Pk);
+
+    private static async Task<bool> TableExistsAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name);";
+        var name = command.CreateParameter();
+        name.ParameterName = "$name";
+        name.Value = table;
+        command.Parameters.Add(name);
+        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) ?? 0) != 0;
+    }
+
+    private static async Task<bool> ColumnsMatchAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        ColumnSpec[] expected,
+        CancellationToken cancellationToken)
+    {
+        await using var info = connection.CreateCommand();
+        info.CommandText = $"PRAGMA table_info(\"{table}\");";
+        var found = new Dictionary<string, ColumnSpec>(StringComparer.Ordinal);
+        await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var name = reader.GetString(1);
+            var type = reader.GetString(2);
+            var notNull = reader.GetInt64(3) != 0;
+            var pk = reader.GetInt64(5) > 0;
+            found[name] = new ColumnSpec(name, type, notNull, pk);
+        }
+
+        foreach (var column in expected)
+        {
+            if (!found.TryGetValue(column.Name, out var actual)
+                || !string.Equals(actual.Type, column.Type, StringComparison.OrdinalIgnoreCase)
+                || actual.NotNull != column.NotNull
+                || actual.Pk != column.Pk)
+            {
+                return false;
+            }
+        }
+
+        return found.Count == expected.Length;
+    }
+
+    private static async Task<bool> HasForeignKeyAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        string from,
+        string toTable,
+        string to,
+        string onDelete,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA foreign_key_list(\"{table}\");";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (string.Equals(reader.GetString(2), toTable, StringComparison.Ordinal)
+                && string.Equals(reader.GetString(3), from, StringComparison.Ordinal)
+                && string.Equals(reader.GetString(4), to, StringComparison.Ordinal)
+                && string.Equals(reader.GetString(6), onDelete, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> HasUniqueIndexAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        string[] columns,
+        bool partial,
+        string? partialPredicate,
+        CancellationToken cancellationToken)
+    {
+        await using var list = connection.CreateCommand();
+        list.CommandText = $"PRAGMA index_list(\"{table}\");";
+        var indexes = new List<(string Name, bool Unique, bool Partial)>();
+        await using (var reader = await list.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                indexes.Add((reader.GetString(1), reader.GetInt64(2) != 0, reader.GetInt64(4) != 0));
+            }
+        }
+
+        foreach (var index in indexes.Where(item => item.Unique && item.Partial == partial))
+        {
+            if (partialPredicate is not null
+                && !await IndexPredicateMatchesAsync(connection, index.Name, partialPredicate, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            await using var info = connection.CreateCommand();
+            info.CommandText = $"PRAGMA index_info(\"{index.Name}\");";
+            var actual = new List<string>();
+            await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                actual.Add(reader.GetString(2));
+            }
+
+            if (actual.Count == columns.Length && actual.Zip(columns).All(pair => pair.First == pair.Second))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> IndexPredicateMatchesAsync(
+        System.Data.Common.DbConnection connection,
+        string indexName,
+        string expectedPredicate,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = $name;";
+        var name = command.CreateParameter();
+        name.ParameterName = "$name";
+        name.Value = indexName;
+        command.Parameters.Add(name);
+        var sql = Convert.ToString(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return false;
+        }
+
+        var whereIndex = sql.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase);
+        if (whereIndex < 0)
+        {
+            return false;
+        }
+
+        var predicate = sql[(whereIndex + " WHERE ".Length)..].Trim();
+        return string.Equals(NormalizeSql(predicate), NormalizeSql(expectedPredicate), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeSql(string value) =>
+        string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static async Task SaveChangesOrThrowAsync(AgentCoreDbContext db, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (IsUniqueKeyViolation(ex))
+        {
+            throw AgentCoreErrors.Conflict("Session revision conflict.");
+        }
+        catch (DbUpdateException)
+        {
+            throw AgentCoreErrors.Persistence("Persistent save failed.");
+        }
+    }
 
     private static bool IsUniqueKeyViolation(DbUpdateException exception)
     {

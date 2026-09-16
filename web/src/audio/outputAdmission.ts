@@ -11,13 +11,13 @@ export type OutputAudioFrame = {
   isFinal?: boolean;
 };
 
-export type OutputAdmitDecision = "play" | "buffer" | "reject";
+export type OutputAdmitDecision = "play" | "buffer" | "reject" | "overflow";
 
 export class OutputAudioGate {
   private readonly started = new Set<string>();
   private readonly lastSequence = new Map<string, number>();
   private readonly lastSampleEnd = new Map<string, number>();
-  private bufferedSamples = 0;
+  private readonly bufferedByResponse = new Map<string, number>();
 
   markStarted(responseId: string): void {
     this.started.add(responseId);
@@ -28,21 +28,26 @@ export class OutputAudioGate {
   }
 
   queuedBuffered(): number {
-    return this.bufferedSamples;
+    let total = 0;
+    for (const samples of this.bufferedByResponse.values()) {
+      total += samples;
+    }
+
+    return total;
   }
 
   drop(responseId: string): void {
     this.started.delete(responseId);
     this.lastSequence.delete(responseId);
     this.lastSampleEnd.delete(responseId);
-    this.bufferedSamples = 0;
+    this.bufferedByResponse.delete(responseId);
   }
 
   reset(): void {
     this.started.clear();
     this.lastSequence.clear();
     this.lastSampleEnd.clear();
-    this.bufferedSamples = 0;
+    this.bufferedByResponse.clear();
   }
 
   admit(
@@ -87,14 +92,14 @@ export class OutputAudioGate {
       return "reject";
     }
 
-    if (expected.queuedSamples + this.bufferedSamples + samples > MAX_QUEUED_SAMPLES) {
-      return "reject";
+    if (expected.queuedSamples + this.queuedBuffered() + samples > MAX_QUEUED_SAMPLES) {
+      return "overflow";
     }
 
     this.lastSequence.set(responseId, frame.frameSequence);
     this.lastSampleEnd.set(responseId, frame.sampleOffset + samples);
     if (!this.started.has(responseId)) {
-      this.bufferedSamples += samples;
+      this.bufferedByResponse.set(responseId, (this.bufferedByResponse.get(responseId) ?? 0) + samples);
       return "buffer";
     }
 
@@ -108,12 +113,19 @@ export class OutputAudioGate {
     }
 
     const samples = Math.floor(frame.data.length / 2);
-    const remainingBuffered = Math.max(0, this.bufferedSamples - samples);
+    const remainingBuffered = Math.max(0, this.queuedBuffered() - samples);
     if (queuedSamples + remainingBuffered + samples > MAX_QUEUED_SAMPLES) {
       return false;
     }
 
-    this.bufferedSamples = remainingBuffered;
+    const current = this.bufferedByResponse.get(responseId) ?? 0;
+    const next = Math.max(0, current - samples);
+    if (next === 0) {
+      this.bufferedByResponse.delete(responseId);
+    } else {
+      this.bufferedByResponse.set(responseId, next);
+    }
+
     return true;
   }
 }

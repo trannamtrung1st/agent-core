@@ -1,0 +1,20 @@
+# Real/hosted overlay for the same one-container image and SQLite volume.
+# Default `docker compose up` stays Synthetic and key-free.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
+#
+# Matches the native http-openrouter launch profile: hosted OpenRouter text.
+# Copy `.env.example` to a gitignored `.env` and set OPENROUTER_API_KEY.
+# Compose loads `.env` from the repo root for interpolation. Override the text
+# model with AGENTCORE_LLM_MODEL (do not use openrouter/free). Hosted STT/TTS
+# are not selected here; Real voice stays unavailable until those adapters are
+# resolved at startup. Never commit secrets.
+
+services:
+  agent-core:
+    environment:
+      AgentCore__Profile: Real
+      Providers__LanguageModels__primary-llm__Adapter: OpenAICompatible
+      Providers__LanguageModels__primary-llm__BaseUrl: https://openrouter.ai/api/v1/
+      Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

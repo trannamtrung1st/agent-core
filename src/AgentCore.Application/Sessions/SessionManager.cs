@@ -91,6 +91,11 @@ public sealed class SessionManager
     public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (snapshot.Status == SessionStatus.Ended)
+        {
+            return;
+        }
+
         var ended = snapshot with
         {
             Status = SessionStatus.Ended,
@@ -102,7 +107,7 @@ public sealed class SessionManager
         {
             await _store.SaveAsync(ended, snapshot.Revision, cancellationToken).ConfigureAwait(false);
         }
-        catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable")
+        catch (AgentCoreException ex) when (ex.Code is "SessionPersistenceUnavailable" or "Conflict")
         {
             var loaded = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
             if (loaded.Status != SessionStatus.Ended)

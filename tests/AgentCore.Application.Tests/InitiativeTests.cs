@@ -74,6 +74,7 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await brain.InitiativeCalled.Task;
         await runtime.SubmitUserTextAsync("I am here");
+        await runtime.WaitUntilMailboxDrainedAsync();
         gate.TrySetResult();
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));

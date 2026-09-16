@@ -86,6 +86,42 @@ describe("output worklet response lifecycle", () => {
     expect(complete2.responseId).toBe("r2");
   });
 
+  it("resolves overlapping flush requests by response id and epoch", () => {
+    const Processor = loadProcessor();
+    const processor = new Processor();
+    processor.port.onmessage?.({ data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(128).fill(0.4) } });
+    channel(processor, 128);
+    processor.port.messages.length = 0;
+    processor.port.onmessage?.({ data: { type: "flush", responseId: "r1", epoch: 0 } });
+    processor.port.onmessage?.({ data: { type: "flush", responseId: "r2", epoch: 0 } });
+    channel(processor, 128);
+    const flushed = processor.port.messages.filter((item) => (item as { type?: string }).type === "flushed") as Array<{
+      responseId?: string;
+      consumed?: number;
+      epoch?: number;
+    }>;
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0].responseId).toBe("r1");
+    expect(flushed[0].consumed).toBe(128);
+    expect(flushed[0].epoch).toBe(0);
+    processor.port.messages.length = 0;
+    channel(processor, 128);
+    const second = processor.port.messages.filter((item) => (item as { type?: string }).type === "flushed") as Array<{
+      responseId?: string;
+    }>;
+    expect(second).toHaveLength(1);
+    expect(second[0].responseId).toBe("r2");
+    processor.port.messages.length = 0;
+    processor.port.onmessage?.({
+      data: { type: "enqueue", responseId: "r3", pcm: new Float32Array(128).fill(0.1), isFinal: true }
+    });
+    channel(processor, 128);
+    const complete = processor.port.messages.find((item) => (item as { type?: string }).type === "complete") as {
+      responseId?: string;
+    };
+    expect(complete.responseId).toBe("r3");
+  });
+
   it("flush reports consumed captured before reset", () => {
     const Processor = loadProcessor();
     const processor = new Processor();
@@ -100,7 +136,7 @@ describe("output worklet response lifecycle", () => {
       epoch?: number;
     };
     expect(flushed.consumed).toBe(128);
-    expect(flushed.epoch).toBe(1);
+    expect(flushed.epoch).toBe(0);
     processor.port.messages.length = 0;
     processor.port.onmessage?.({
       data: { type: "enqueue", responseId: "r2", pcm: new Float32Array(128).fill(0.1), isFinal: true }
@@ -176,5 +212,58 @@ describe("output worklet response lifecycle", () => {
       consumed?: number;
     };
     expect(snapshot.consumed).toBe(Math.floor((256 * 24000) / 44100));
+  });
+
+  it("consumes a final 480-sample frame exactly at 44.1 kHz and 48 kHz", () => {
+    for (const rate of [44100, 48000]) {
+      const Processor = loadProcessor(rate);
+      const processor = new Processor();
+      processor.port.onmessage?.({
+        data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(480).fill(0.2), isFinal: true }
+      });
+      let consumed = 0;
+      for (let attempt = 0; attempt < 16; attempt += 1) {
+        channel(processor, 128);
+        const snapshot = processor.port.messages.filter((item) => (item as { type?: string }).type === "snapshot").at(-1) as {
+          consumed?: number;
+        };
+        consumed = snapshot.consumed ?? 0;
+        if (processor.port.messages.some((item) => (item as { type?: string }).type === "complete")) {
+          break;
+        }
+      }
+
+      expect(consumed).toBe(480);
+      const complete = processor.port.messages.find((item) => (item as { type?: string }).type === "complete") as {
+        consumed?: number;
+      };
+      expect(complete.consumed).toBe(480);
+    }
+  });
+
+  it("completes short final buffers at 44.1 kHz and 48 kHz including leftover resampler tails", () => {
+    for (const rate of [44100, 48000]) {
+      for (const length of [1, 65, 479, 481]) {
+        const Processor = loadProcessor(rate);
+        const processor = new Processor();
+        processor.port.onmessage?.({
+          data: { type: "enqueue", responseId: "r1", pcm: new Float32Array(length).fill(0.2), isFinal: true }
+        });
+        let complete: { type?: string; queued?: number; consumed?: number } | undefined;
+        for (let attempt = 0; attempt < 64; attempt += 1) {
+          channel(processor, 128);
+          complete = processor.port.messages.find((item) => (item as { type?: string }).type === "complete") as
+            | { type?: string; queued?: number; consumed?: number }
+            | undefined;
+          if (complete) {
+            break;
+          }
+        }
+
+        expect(complete, `complete missing for ${length} samples at ${rate} Hz`).toBeTruthy();
+        expect(complete?.queued ?? 0).toBe(0);
+        expect(complete?.consumed).toBe(length);
+      }
+    }
   });
 });

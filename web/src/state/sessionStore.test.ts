@@ -87,8 +87,13 @@ describe("applyServerEvent", () => {
         payload: { mode: "text", pendingMode: null, status: "attached", agent: { name: "Alex" }, history: [] }
       })
     );
-    const gapped = applyServerEvent(ready, event({ type: "agent.text.completed", sequence: 4, payload: { textLength: 1 } }));
+    const gapped = applyServerEvent(
+      { ...ready, error: "Protocol error.", errorFatal: true },
+      event({ type: "agent.text.completed", sequence: 4, payload: { textLength: 1 } })
+    );
     expect(gapped.connection).toBe("failed");
+    expect(gapped.errorFatal).toBe(false);
+    expect(gapped.error).toContain("Control sequence gap");
   });
 
   it("replaces history from ready and clears pendingMode", () => {
@@ -132,6 +137,33 @@ describe("applyServerEvent", () => {
     expect(muted.muted).toBe(true);
   });
 
+  it("records input and output activity from session.state.changed", () => {
+    const ready = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: { mode: "text", pendingMode: null, status: "attached", agent: { name: "Alex" }, history: [] }
+      })
+    );
+    const thinking = applyServerEvent(
+      ready,
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: {
+          status: "attached",
+          mode: "text",
+          pendingMode: null,
+          muted: false,
+          inputState: "idle",
+          outputState: "agentGenerating"
+        }
+      })
+    );
+    expect(thinking.outputState).toBe("agentGenerating");
+  });
+
   it("ready with durable voice does not mark capture live", () => {
     const state = applyServerEvent(
       { ...emptySession(), captureLive: false },
@@ -144,5 +176,73 @@ describe("applyServerEvent", () => {
     expect(state.mode).toBe("voice");
     expect(state.captureLive).toBe(false);
     expect(state.preflightReady).toBe(false);
+  });
+
+  it("clears a recoverable error on the next state change", () => {
+    const base = { ...emptySession(), attachmentId: "a1" };
+    const discontinuity = applyServerEvent(
+      base,
+      event({
+        type: "error",
+        sequence: 1,
+        payload: { message: "Input audio sequence or sample offset gap.", code: "AudioDiscontinuity", fatal: false }
+      })
+    );
+    expect(discontinuity.error).toContain("sample offset gap");
+    const recovered = applyServerEvent(
+      discontinuity,
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: {
+          status: "attached",
+          mode: "voice",
+          pendingMode: null,
+          muted: false,
+          inputState: "listening",
+          outputState: "agentSpeaking",
+          streamId: "s-2"
+        }
+      })
+    );
+    expect(recovered.error).toContain("sample offset gap");
+    expect(recovered.inputState).toBe("listening");
+    const later = applyServerEvent(
+      recovered,
+      event({
+        type: "session.state.changed",
+        sequence: 3,
+        payload: {
+          status: "attached",
+          mode: "voice",
+          pendingMode: null,
+          muted: false,
+          inputState: "userSpeaking",
+          outputState: "idle"
+        }
+      })
+    );
+    expect(later.error).toBeNull();
+  });
+
+  it("keeps a fatal error through a recovered state change", () => {
+    const base = { ...emptySession(), attachmentId: "a1" };
+    const fatal = applyServerEvent(
+      base,
+      event({
+        type: "error",
+        sequence: 1,
+        payload: { message: "Protocol error.", fatal: true }
+      })
+    );
+    const next = applyServerEvent(
+      fatal,
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: { status: "attached", mode: "text", pendingMode: null, muted: false, inputState: "idle", outputState: "idle" }
+      })
+    );
+    expect(next.error).toBe("Protocol error.");
   });
 });

@@ -39,7 +39,7 @@ public sealed partial class SessionRuntime
                 PendingTopic = string.IsNullOrEmpty(topic) ? null : topic,
                 UpdatedAt = _time.GetUtcNow()
             };
-            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
+            RequestPersist(_snapshot);
             if (string.IsNullOrEmpty(topic))
             {
                 return;
@@ -120,7 +120,7 @@ public sealed partial class SessionRuntime
         {
             await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
             BeginWork();
-            if (!_mailbox.Writer.TryWrite(new TimerElapsedReceived(NewContext(), "idle", generation, null)))
+            if (!TryMailbox(new TimerElapsedReceived(NewContext(), "idle", generation, null)))
             {
                 EndWork();
             }

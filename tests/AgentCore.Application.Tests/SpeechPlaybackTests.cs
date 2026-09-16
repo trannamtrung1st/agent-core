@@ -113,7 +113,8 @@ public sealed class SpeechPlaybackTests
     public async Task Playback_started_nonzero_and_backwards_offsets_are_rejected()
     {
         var output = new CapturingSessionOutput();
-        await using var runtime = Create(output, new ScriptedLanguageModel(["There are three points."]));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var runtime = Create(output, new ScriptedLanguageModel(["There are three points."], releaseAfterFirstChunk: release));
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
@@ -134,6 +135,8 @@ public sealed class SpeechPlaybackTests
         {
             Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated - 1));
         }
+
+        release.TrySetResult();
     }
 
     [Fact]

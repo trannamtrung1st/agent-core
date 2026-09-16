@@ -27,6 +27,13 @@ public sealed partial class SessionRuntime
             _activityScore,
             _time.GetUtcNow());
 
+    private bool HasLiveAssistantOutput =>
+        _responseLifecycle is ResponseLifecycle.Live
+        || _outputActivity is OutputActivity.AgentGenerating
+            or OutputActivity.WaitingForAgent
+            or OutputActivity.AgentSpeaking
+        || _activeResponseId is not null && !_responseTerminal;
+
     private TimeSpan UtteranceDuration() =>
         _utteranceStarted is { } started
             ? _time.GetUtcNow() - started
@@ -38,6 +45,7 @@ public sealed partial class SessionRuntime
         var started = Stopwatch.GetTimestamp();
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
+            input.Attached.TrySetResult(false);
             return;
         }
 
@@ -55,7 +63,11 @@ public sealed partial class SessionRuntime
         _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         if (_snapshot.Mode == SessionMode.Voice)
         {
-            _streamId ??= _ids.NewId();
+            lock (_audioGate)
+            {
+                _streamId ??= _ids.NewId();
+            }
+
             try
             {
                 await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
@@ -67,26 +79,32 @@ public sealed partial class SessionRuntime
             catch (Exception)
             {
                 await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false);
+                input.Attached.TrySetResult(false);
                 return;
             }
         }
 
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-        await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), cancellationToken)
-            .ConfigureAwait(false);
-        RuntimeTelemetry.Record("attach", RuntimeTelemetry.ElapsedMs(started));
-        ScheduleIdleTimer(SilenceThreshold());
+        RequestPersist(
+            _snapshot,
+            then: async ct =>
+            {
+                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
+                    .ConfigureAwait(false);
+                RuntimeTelemetry.Record("attach", RuntimeTelemetry.ElapsedMs(started));
+                ScheduleIdleTimer(SilenceThreshold());
+            },
+            ended: input.Attached);
     }
 
     private async Task HandleDetachAsync(DetachReceived input, CancellationToken cancellationToken)
     {
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
+            AbandonLiveSpeech(rotateEpoch: true);
             _input = InputActivity.Idle;
-            _streamId = null;
+            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
             InvalidateSpeechJobs();
             _ttsCts?.Cancel();
-            await StopRecognitionAsync().ConfigureAwait(false);
             return;
         }
 
@@ -102,15 +120,17 @@ public sealed partial class SessionRuntime
             UpdatedAt = _time.GetUtcNow()
         };
         _input = InputActivity.Idle;
-        _streamId = null;
         _muted = false;
         _environmentQueue.Clear();
-        _timerGeneration++;
+        AbandonLiveSpeech(rotateEpoch: true);
+        _input = InputActivity.Idle;
         InvalidateSpeechJobs();
         _ttsCts?.Cancel();
-        await StopRecognitionAsync().ConfigureAwait(false);
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+        RequestPersist(
+            _snapshot,
+            PersistKind.Pause,
+            then: ct => PublishStateAsync(input.Context, ct));
     }
 
     private async Task HandleMuteAsync(MuteReceived input, CancellationToken cancellationToken)
@@ -129,13 +149,13 @@ public sealed partial class SessionRuntime
         _muted = input.Muted;
         if (_muted)
         {
-            _input = _input == InputActivity.UserSpeaking ? InputActivity.Listening : _input;
+            AbandonLiveSpeech(rotateEpoch: false);
         }
         else
         {
-            _streamId = _ids.NewId();
             lock (_audioGate)
             {
+                SetStreamId(_ids.NewId());
                 _expectedFrameSequence = 1;
                 _expectedSampleOffset = 0;
             }
@@ -146,6 +166,26 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSetModeAsync(SetModeReceived input, CancellationToken cancellationToken)
     {
+        if (_snapshot.Status is SessionStatus.Paused)
+        {
+            if (input.Mode == SessionMode.Voice)
+            {
+                _snapshot = _snapshot with { PendingMode = SessionMode.Voice, UpdatedAt = _time.GetUtcNow() };
+            }
+            else
+            {
+                _snapshot = _snapshot with
+                {
+                    Mode = SessionMode.Text,
+                    PendingMode = null,
+                    UpdatedAt = _time.GetUtcNow()
+                };
+            }
+
+            RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
+            return;
+        }
+
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             await PublishAsync(
@@ -174,17 +214,15 @@ public sealed partial class SessionRuntime
         {
             _timerGeneration++;
             _snapshot = _snapshot with { PendingMode = null, UpdatedAt = _time.GetUtcNow() };
-            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
             return;
         }
 
-        if (input.Mode == SessionMode.Voice && _activeResponseId is not null)
+        if (input.Mode == SessionMode.Voice && HasLiveAssistantOutput)
         {
             _snapshot = _snapshot with { PendingMode = SessionMode.Voice, UpdatedAt = _time.GetUtcNow() };
             _pendingVoiceGeneration = ++_timerGeneration;
-            await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
             var generation = _pendingVoiceGeneration;
             _ = Task.Run(async () =>
             {
@@ -193,7 +231,7 @@ public sealed partial class SessionRuntime
                     await Task.Delay(TimeSpan.FromMilliseconds(_policy.PendingVoiceTimeoutMs), _time, _lifetime.Token)
                         .ConfigureAwait(false);
                     BeginWork();
-                    if (!_mailbox.Writer.TryWrite(new TimerElapsedReceived(NewContext(), "pendingVoice", generation, null)))
+                    if (!TryMailbox(new TimerElapsedReceived(NewContext(), "pendingVoice", generation, null)))
                     {
                         EndWork();
                     }
@@ -211,7 +249,7 @@ public sealed partial class SessionRuntime
         }
 
         await ApplyModeAsync(input.Mode, cancellationToken).ConfigureAwait(false);
-        await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
     }
 
     private async Task ApplyModeAsync(SessionMode mode, CancellationToken cancellationToken)
@@ -222,13 +260,17 @@ public sealed partial class SessionRuntime
             PendingMode = null,
             UpdatedAt = _time.GetUtcNow()
         };
+        if (_snapshot.Status is SessionStatus.Paused)
+        {
+            return;
+        }
+
         if (mode == SessionMode.Voice)
         {
-            _input = InputActivity.Listening;
-            _streamId = _ids.NewId();
+            AbandonLiveSpeech(rotateEpoch: true);
             try
             {
-                await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
+                await StartRecognitionAsync(cancellationToken, _ids.NewId()).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -242,13 +284,10 @@ public sealed partial class SessionRuntime
         }
         else
         {
-            _input = InputActivity.Idle;
-            _streamId = null;
+            AbandonLiveSpeech(rotateEpoch: true);
             _muted = false;
-            await StopRecognitionAsync().ConfigureAwait(false);
+            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
         }
-
-        await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     private SessionReadyProjection BuildReady()
@@ -292,6 +331,22 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSpeechAsync(SpeechEvidenceReceived input, CancellationToken cancellationToken)
     {
+        if (_snapshot.Status != SessionStatus.Attached || _snapshot.Mode != SessionMode.Voice)
+        {
+            return;
+        }
+
+        if (input.Epoch != _speechEpoch)
+        {
+            return;
+        }
+
+        if (input.Evidence is not SpeechStarted
+            && input.Evidence.UtteranceId != _activeUtteranceId)
+        {
+            return;
+        }
+
         _timerGeneration++;
         if (input.Evidence is SpeechStarted)
         {
@@ -313,6 +368,10 @@ public sealed partial class SessionRuntime
             UtteranceDuration(),
             _ids.NewId());
         await ApplyEvaluationAsync(input.Context, evaluation, cancellationToken).ConfigureAwait(false);
+        if (input.Evidence is SpeechStarted && _utteranceStarted is not null)
+        {
+            ScheduleMaxUtteranceTimer(input.Evidence.UtteranceId);
+        }
         if (input.Evidence is SpeechStarted && evaluation.Decision is InteractionDecision.Queue && evaluation.Candidate is { } queued)
         {
             await PublishGainAsync(input.Context, 0.2, queued.CandidateId, cancellationToken).ConfigureAwait(false);
@@ -425,6 +484,24 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (input.Kind == "pendingVoice")
+        {
+            if (input.Generation != _pendingVoiceGeneration)
+            {
+                return;
+            }
+
+            if (_snapshot.PendingMode == SessionMode.Voice)
+            {
+                _snapshot = _snapshot with { PendingMode = null, Mode = SessionMode.Text, UpdatedAt = _time.GetUtcNow() };
+                SetStreamId(null);
+                _input = InputActivity.Idle;
+                RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
+            }
+
+            return;
+        }
+
         if (input.Kind == "idle")
         {
             if (!InteractionController.TimerMatches(_timerGeneration, input.Generation))
@@ -449,6 +526,49 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (input.Kind == "maxUtterance")
+        {
+            if (input.Generation != _maxUtteranceGeneration
+                || input.UtteranceId is null
+                || input.UtteranceId != _activeUtteranceId)
+            {
+                return;
+            }
+
+            var utteranceId = input.UtteranceId.Value;
+            TryAdmitBoundary(utteranceId, SpeechBoundary.Ended, 0);
+            AbandonLiveSpeech(rotateEpoch: true);
+            await StopRecognitionAsync(_ids.NewId(), assignStreamId: true).ConfigureAwait(false);
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new ErrorOutput(
+                            "Transport",
+                            "MaxUtterance",
+                            "Utterance exceeded 30 seconds and was closed.",
+                            false,
+                            null)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            try
+            {
+                await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (!InteractionController.TimerMatches(_timerGeneration, input.Generation))
         {
             return;
@@ -458,19 +578,6 @@ public sealed partial class SessionRuntime
         {
             var evaluation = InteractionController.EvaluateCandidateTimer(SnapshotController(), UtteranceDuration());
             await ApplyEvaluationAsync(input.Context, evaluation, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (input.Kind == "pendingVoice")
-        {
-            if (_snapshot.PendingMode == SessionMode.Voice)
-            {
-                _snapshot = _snapshot with { PendingMode = null, Mode = SessionMode.Text, UpdatedAt = _time.GetUtcNow() };
-                _streamId = null;
-                _input = InputActivity.Idle;
-                await PersistAsync(_snapshot, cancellationToken).ConfigureAwait(false);
-                await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
-            }
         }
     }
 
@@ -522,6 +629,7 @@ public sealed partial class SessionRuntime
         _helpOfferedDuringSilence = false;
         _environmentQueue.Clear();
         _timerGeneration++;
+        var turn = ++_turnGeneration;
         var now = _time.GetUtcNow();
         var userEntry = new ConversationEntry(
             context.EventId,
@@ -535,13 +643,18 @@ public sealed partial class SessionRuntime
             text.Length,
             text.Length,
             now);
-        await PersistAsync(Append(userEntry) with { Status = _snapshot.Status }, cancellationToken)
-            .ConfigureAwait(false);
-        var responseId = _ids.NewId();
-        var trigger = new AgentTrigger(context.EventId, TriggerKind.UserTurn, text);
-        var turn = ++_turnGeneration;
-        _outputActivity = OutputActivity.WaitingForAgent;
-        LaunchBrain(context, trigger, responseId, turn);
+        _snapshot = Append(userEntry) with { Status = _snapshot.Status };
+        var cause = context;
+        RequestPersist(
+            _snapshot,
+            then: _ =>
+            {
+                var responseId = _ids.NewId();
+                var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
+                _outputActivity = OutputActivity.WaitingForAgent;
+                LaunchBrain(cause, trigger, responseId, turn);
+                return Task.CompletedTask;
+            });
     }
 
     private string? LastInterruptedHeardText()
@@ -569,7 +682,28 @@ public sealed partial class SessionRuntime
             {
                 await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
                 BeginWork();
-                if (!_mailbox.Writer.TryWrite(new TimerElapsedReceived(NewContext(), "candidate", generation, utteranceId)))
+                if (!TryMailbox(new TimerElapsedReceived(NewContext(), "candidate", generation, utteranceId)))
+                {
+                    EndWork();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, CancellationToken.None);
+    }
+
+    private void ScheduleMaxUtteranceTimer(Guid utteranceId)
+    {
+        var generation = ++_maxUtteranceGeneration;
+        var delay = TimeSpan.FromSeconds(Math.Max(1, _policy.MaxUtteranceSeconds));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
+                BeginWork();
+                if (!TryMailbox(new TimerElapsedReceived(NewContext(), "maxUtterance", generation, utteranceId)))
                 {
                     EndWork();
                 }
@@ -610,7 +744,7 @@ public sealed partial class SessionRuntime
             {
                 var decision = await _classifier.ClassifyAsync(context, _lifetime.Token).ConfigureAwait(false);
                 BeginWork();
-                if (!_mailbox.Writer.TryWrite(
+                if (!TryMailbox(
                         new ClassifierReturned(
                             NewContext(cause.EventId),
                             captured.CandidateId,

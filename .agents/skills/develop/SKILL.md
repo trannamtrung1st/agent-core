@@ -20,6 +20,7 @@ Read root [AGENTS.md](../../../AGENTS.md) and [README.md](../../../README.md). I
 | Memory store, SQLite/EF, snapshots or recovery | [persistence](../persistence/SKILL.md) |
 | Deployment, configuration, logging or measurements | [operations](../operations/SKILL.md) |
 | Verification for every code change or review | [testing](../testing/SKILL.md) |
+| Visual presentation only | [impeccable](../impeccable/SKILL.md) with [.agents/context](../../context); `/docs` still wins on behavior |
 
 3. Implement the smallest complete vertical change within the requested scope and milestone non-goals. For review, trace behavior and report actionable findings with file/line evidence instead of silently fixing it.
 4. Run applicable testing checks and milestone gates. Check acceptance against observed behavior, including offline synthetic behavior where relevant. Default suites must pass without hosted keys; do not treat missing `OPENROUTER_API_KEY` / `OPENAI_API_KEY` as a test failure. A small bug fix need not implement its entire containing milestone.

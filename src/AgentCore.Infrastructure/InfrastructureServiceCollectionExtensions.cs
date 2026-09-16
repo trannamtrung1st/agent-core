@@ -23,7 +23,8 @@ public static class InfrastructureServiceCollectionExtensions
         string agentDirectory,
         string profile = "Synthetic",
         LanguageModelProviderOptions? languageModel = null,
-        PersistenceOptions? persistence = null)
+        PersistenceOptions? persistence = null,
+        InteractionPolicy? interaction = null)
     {
         persistence ??= new PersistenceOptions();
         services.TryAddSingleton(persistence);
@@ -83,7 +84,7 @@ public static class InfrastructureServiceCollectionExtensions
         {
             SpeechAdaptersResolved = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
         });
-        services.TryAddSingleton(new InteractionPolicy());
+        services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<SessionRuntimeFactory>();
         return services;

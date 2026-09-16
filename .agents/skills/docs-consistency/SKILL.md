@@ -22,8 +22,9 @@ Use the owning document for each fact. Update related summaries only when that f
 | Test fixtures / scenarios | [Testing](../../../docs/16-testing-strategy.md) |
 | Run/deploy commands / observability | [Operations](../../../docs/17-observability-and-operations.md) |
 | Milestone order, gates, non-goals | [Implementation Plan](../../../docs/18-implementation-plan.md) |
+| Visual tokens and presentation system | [.agents/context/DESIGN.md](../../../.agents/context/DESIGN.md); screens and behavior stay in [Frontend](../../../docs/13-frontend-implementation-spec.md) |
 
-README is the overview/index. AGENTS.md owns shared task rules; .agents/skills/ owns workflows/playbooks for both editors. Do not duplicate them into editor-specific files.
+README is the overview/index. AGENTS.md owns shared task rules; .agents/skills/ owns workflows/playbooks for both editors. Do not duplicate them into editor-specific files. [.agents/context/PRODUCT.md](../../../.agents/context/PRODUCT.md) is Impeccable tooling context only; it must not become a second product spec.
 
 1. Search affected terms across README, docs and instructions: interface/provider names, response/attachment identity, PCM, state transitions, receipts, storage/profile defaults. Read context rather than mechanically replacing names.
 2. Compare statements to their owner. Preserve generated/received/heard distinctions, provider/storage independence, planned/implemented commands and future native realtime versus the composed MVP.

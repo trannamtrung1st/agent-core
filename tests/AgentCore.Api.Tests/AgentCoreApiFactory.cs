@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class AgentCoreApiFactory : WebApplicationFactory<Program>
+public class AgentCoreApiFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

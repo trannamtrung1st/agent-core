@@ -67,3 +67,21 @@ test-results/
 
 # Playwright MCP profile, snapshots, downloads, and other output
 .playwright-mcp/
+
+# Impeccable: local workflow, review captures, and downloaded engines.
+# Committed skill: .agents/skills/impeccable. Installer copies under .cursor/ are local-only.
+# Do not commit PRODUCT.md at repo root.
+.impeccable/config.local.json
+.impeccable/mocks/
+.impeccable/tmp/
+.impeccable/questions/
+.impeccable/*-round.json
+.impeccable/chatapp-brief.md
+.impeccable/hook.cache.json
+.impeccable/review/
+.impeccable/build/
+.impeccable/live/
+.agents/skills/impeccable/scripts/bin/
+.cursor/skills/impeccable/
+.cursor/agents/impeccable-*.md
+layout-fix*.png

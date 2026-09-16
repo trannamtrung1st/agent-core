@@ -1,3 +1,6 @@
+import { create } from "zustand";
+import type { AgentDescriptor } from "../services/api";
+
 export type ConnectionStatus = "idle" | "connecting" | "ready" | "reconnecting" | "failed";
 
 export type HistoryEntry = {
@@ -38,6 +41,8 @@ export type SessionView = {
   mode: "text" | "voice";
   pendingMode: "text" | "voice" | null;
   status: string;
+  inputState: string;
+  outputState: string;
   entries: HistoryEntry[];
   liveResponseId: string | null;
   tombstones: Record<string, "interrupted" | "completed" | "failed">;
@@ -46,6 +51,8 @@ export type SessionView = {
   muted: boolean;
   draft: string;
   error: string | null;
+  errorFatal: boolean;
+  errorHoldSequence: number;
   preflightReady: boolean;
   captureLive: boolean;
 };
@@ -60,6 +67,8 @@ export const emptySession = (): SessionView => ({
   mode: "text",
   pendingMode: null,
   status: "created",
+  inputState: "idle",
+  outputState: "idle",
   entries: [],
   liveResponseId: null,
   tombstones: {},
@@ -68,6 +77,8 @@ export const emptySession = (): SessionView => ({
   muted: false,
   draft: "",
   error: null,
+  errorFatal: false,
+  errorHoldSequence: 0,
   preflightReady: false,
   captureLive: false
 });
@@ -114,6 +125,12 @@ function upsert(entries: HistoryEntry[], next: HistoryEntry): HistoryEntry[] {
   return copy;
 }
 
+export function hasControlSequenceGap(state: SessionView, event: ServerEvent): boolean {
+  return event.type !== "session.ready"
+    && state.lastServerSequence > 0
+    && event.sequence > state.lastServerSequence + 1;
+}
+
 export function applyServerEvent(state: SessionView, event: ServerEvent): SessionView {
   if (state.attachmentId && event.attachmentId && event.attachmentId !== state.attachmentId && event.type !== "session.ready") {
     return state;
@@ -123,8 +140,13 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
     return state;
   }
 
-  if (event.type !== "session.ready" && state.lastServerSequence > 0 && event.sequence > state.lastServerSequence + 1) {
-    return { ...state, error: "Control sequence gap. Reconnect required.", connection: "failed" };
+  if (hasControlSequenceGap(state, event)) {
+    return {
+      ...state,
+      error: "Control sequence gap. Reconnect required.",
+      errorFatal: false,
+      connection: "failed"
+    };
   }
 
     if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "playback.gain")) {
@@ -146,6 +168,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",
         status: asString(payload.status),
+        inputState: asString(payload.inputState) || "idle",
+        outputState: asString(payload.outputState) || "idle",
         entries: asHistory(payload.history),
         liveResponseId: payload.activeResponseId == null ? null : asString(payload.activeResponseId),
         tombstones: {},
@@ -153,6 +177,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         streamId: payload.streamId == null ? null : asString(payload.streamId),
         muted: Boolean(payload.muted),
         error: null,
+        errorFatal: false,
+        errorHoldSequence: 0,
         preflightReady: false
       };
     }
@@ -234,11 +260,18 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         ...state,
         lastServerSequence: event.sequence,
         status: asString(event.payload.status) || state.status,
+        inputState: asString(event.payload.inputState) || state.inputState,
+        outputState: asString(event.payload.outputState) || state.outputState,
         mode,
         pendingMode,
         streamId: event.payload.streamId == null ? null : asString(event.payload.streamId),
         muted: Boolean(event.payload.muted),
-        preflightReady: mode === "voice" ? false : pendingMode === "voice" ? state.preflightReady : false
+        preflightReady: mode === "voice" ? false : pendingMode === "voice" ? state.preflightReady : false,
+        error: state.errorFatal
+          ? state.error
+          : event.sequence === state.errorHoldSequence + 1
+            ? state.error
+            : null
       };
     }
     case "transcript.final": {
@@ -264,13 +297,28 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       };
       return { ...state, lastServerSequence: event.sequence, entries: upsert(state.entries, entry) };
     }
-    case "error":
+    case "error": {
+      const fatal = event.payload.fatal === true;
       return {
         ...state,
         lastServerSequence: event.sequence,
-        error: asString(event.payload.message)
+        error: asString(event.payload.message),
+        errorFatal: fatal,
+        errorHoldSequence: fatal ? 0 : event.sequence
       };
+    }
     default:
       return { ...state, lastServerSequence: event.sequence };
   }
 }
+
+export type SessionStore = SessionView & {
+  agents: AgentDescriptor[];
+  selectedAgentId: string;
+};
+
+export const useSessionStore = create<SessionStore>(() => ({
+  ...emptySession(),
+  agents: [],
+  selectedAgentId: "examiner"
+}));

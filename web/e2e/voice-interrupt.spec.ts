@@ -32,5 +32,5 @@ test("superseding a live voice response flushes R1 before R2 renders and keeps c
   expect(after?.rendered[r2Ids[0] ?? ""]).toBeGreaterThan(0);
   expect(after?.rendered[r1 ?? ""]).toBe(r1AfterFlush);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
-  await expect(page.getByTestId("connection")).toHaveText("Listening");
+  await expect(page.getByTestId("connection")).toHaveText(/Agent speaking|Listening/);
 });

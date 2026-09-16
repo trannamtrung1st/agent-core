@@ -1,23 +1,32 @@
-import { useEffect, useLayoutEffect } from "react";
-import { useChatStore } from "../../state/chatStore";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { useSessionStore } from "../../state/sessionStore";
 import {
   bootstrap,
   cancelVoice,
   hangUp,
   reportCommittedEntries,
   requestVoice,
+  retryConnection,
   selectAgent,
   sendDraft,
   setDraft,
   setMuted,
   startConversation
 } from "../../services/realtime";
+import { Composer } from "./Composer";
+import { Hud } from "./Hud";
+import { IdentityPicker } from "./IdentityPicker";
+import { conversationStatus, conversationStatusTone } from "./statusLabel";
+import { Transcript } from "./Transcript";
 
 export function ChatApp() {
-  const state = useChatStore();
+  const state = useSessionStore();
+  const [profile, setProfile] = useState("");
 
   useEffect(() => {
-    void bootstrap().catch(() => undefined);
+    void bootstrap()
+      .then(setProfile)
+      .catch(() => undefined);
   }, []);
 
   useLayoutEffect(() => {
@@ -27,118 +36,57 @@ export function ChatApp() {
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const voiceLive = state.mode === "voice" && state.captureLive;
   const canSend = state.connection === "ready" && state.draft.trim().length > 0;
+  const inSession = state.sessionId != null;
+  const connectionText = conversationStatus({
+    connection: state.connection,
+    pendingVoice,
+    voiceLive,
+    sessionStatus: state.status,
+    inputState: state.inputState,
+    outputState: state.outputState,
+    liveResponseId: state.liveResponseId
+  });
 
   return (
-    <main>
-      <header className="app-header">
-        <div>
-          <h1>Agent Core</h1>
-          <p data-testid="profile">Profile: Synthetic</p>
-        </div>
-        <p data-testid="connection" className="status">
-          {pendingVoice ? "Starting voice…" : connectionLabel(state.connection, voiceLive && !state.muted)}
-        </p>
-      </header>
-
-      {state.sessionId == null ? (
-        <section className="picker">
-          <label>
-            Identity
-            <select
-              value={state.selectedAgentId}
-              onChange={(event) => selectAgent(event.target.value)}
-              aria-label="Identity"
-            >
-              {state.agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name} — {agent.role}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" aria-label="Start conversation" onClick={() => void startConversation()}>
-            Start conversation
-          </button>
-        </section>
-      ) : (
+    <main className={inSession ? "field field-session" : "field field-picker"}>
+      <div className="field-texture" aria-hidden="true" />
+      <Hud
+        profile={profile}
+        connectionText={connectionText}
+        connectionTone={conversationStatusTone(connectionText)}
+        identity={inSession ? { name: state.agentName, role: state.agentRole } : null}
+      />
+      {inSession ? (
         <>
-          <p className="agent-line">
-            {state.agentName} · {state.agentRole}
-          </p>
-          <ol className="transcript" aria-live="polite">
-            {state.entries.map((entry) => (
-              <li key={entry.entryId} data-role={entry.role}>
-                <strong>{entry.role === "user" ? "You" : state.agentName || "Agent"}</strong>
-                <span>{entry.text}</span>
-                {entry.status === "interrupted" || entry.status === "failed" ? (
-                  <em>{entry.status}</em>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-          {state.error ? (
-            <p className="error" role="alert">
-              {state.error}
-            </p>
-          ) : null}
-          <form
-            className="composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void sendDraft();
-            }}
-          >
-            <label>
-              Message
-              <textarea
-                value={state.draft}
-                onChange={(event) => setDraft(event.target.value)}
-                disabled={state.connection !== "ready"}
-                rows={3}
-              />
-            </label>
-            <div className="actions">
-              <button type="submit" aria-label="Send" disabled={!canSend}>
-                Send
-              </button>
-              {state.voiceAvailable ? (
-                pendingVoice ? (
-                  <button type="button" aria-label="Cancel voice" onClick={() => void cancelVoice()}>
-                    Cancel
-                  </button>
-                ) : voiceLive ? (
-                  <button type="button" aria-label={state.muted ? "Unmute" : "Mute"} onClick={() => void setMuted(!state.muted)}>
-                    {state.muted ? "Unmute" : "Mute"}
-                  </button>
-                ) : (
-                  <button type="button" aria-label="Voice" onClick={() => void requestVoice()}>
-                    Voice
-                  </button>
-                )
-              ) : null}
-              <button type="button" aria-label="End" onClick={() => void hangUp()}>
-                End
-              </button>
-            </div>
-          </form>
+          <Transcript agentName={state.agentName} entries={state.entries} />
+          <Composer
+            draft={state.draft}
+            canSend={canSend}
+            ready={state.connection === "ready"}
+            error={state.error}
+            voiceAvailable={state.voiceAvailable}
+            pendingVoice={pendingVoice}
+            voiceLive={voiceLive}
+            muted={state.muted}
+            onDraftChange={setDraft}
+            onSend={() => void sendDraft()}
+            onVoice={() => void requestVoice()}
+            onCancelVoice={() => void cancelVoice()}
+            onMute={(muted) => void setMuted(muted)}
+            canRetry={state.connection === "failed"}
+            onRetry={() => void retryConnection()}
+            onEnd={() => void hangUp()}
+          />
         </>
+      ) : (
+        <IdentityPicker
+          agents={state.agents}
+          selectedAgentId={state.selectedAgentId}
+          error={state.error}
+          onSelect={selectAgent}
+          onStart={() => void startConversation()}
+        />
       )}
     </main>
   );
-}
-
-function connectionLabel(connection: string, voiceLive: boolean): string {
-  if (connection === "reconnecting") {
-    return "Reconnecting";
-  }
-
-  if (connection === "failed") {
-    return "Connection failed. Check the network and try again.";
-  }
-
-  if (connection === "ready") {
-    return voiceLive ? "Listening" : "Ready";
-  }
-
-  return connection;
 }

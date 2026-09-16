@@ -48,6 +48,7 @@ public sealed class InteractionControllerTests
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000ab");
         await harness.Runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.95);
         await harness.Runtime.SubmitSpeechAsync(new SpeechPartial(utterance, 1, "wait", 0.9), 0.95);
+        await harness.Output.WaitForAsync(item => item.Payload is ResponseCompletedOutput);
         await harness.Runtime.WaitUntilMailboxDrainedAsync();
         Assert.Null(harness.Runtime.ActiveResponseId);
         Assert.Contains(harness.Snapshot.Entries, entry => entry.ResponseId == r1 && entry.Status == EntryStatus.Interrupted);
@@ -224,6 +225,7 @@ public sealed class InteractionControllerTests
         time.Advance(TimeSpan.FromMilliseconds(250));
         var generation = runtime.TimerGeneration;
         await runtime.SubmitTimerElapsedAsync("candidate", generation, utterance);
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput);
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Null(runtime.ActiveResponseId);
         Assert.Equal(0, classifier.Calls);

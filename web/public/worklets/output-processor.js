@@ -17,7 +17,7 @@ class OutputProcessor extends AudioWorkletProcessor {
     this._rampTotal = 1;
     this._rendered = {};
     this._maxQueued = 24000 * 2;
-    this._flushRequest = undefined;
+    this._flushRequests = [];
     this._deviceRendered = 0;
     this.port.onmessage = (event) => this.onMessage(event.data);
   }
@@ -71,7 +71,10 @@ class OutputProcessor extends AudioWorkletProcessor {
     }
 
     if (data.type === "flush") {
-      this._flushRequest = data.responseId;
+      this._flushRequests.push({
+        responseId: data.responseId,
+        epoch: typeof data.epoch === "number" ? data.epoch : this._epoch
+      });
       return;
     }
 
@@ -110,7 +113,13 @@ class OutputProcessor extends AudioWorkletProcessor {
   }
 
   maybeComplete() {
-    if (this._closed || !this._final || this._canonical.length > 0 || this._device.length > 0) {
+    if (
+      this._closed
+      || !this._final
+      || this._canonical.length > 0
+      || this._device.length > 0
+      || this._resampler.pending() > 0
+    ) {
       return;
     }
 
@@ -157,6 +166,16 @@ class OutputProcessor extends AudioWorkletProcessor {
       merged.set(this._device);
       merged.set(converted, this._device.length);
       this._device = merged;
+    }
+
+    if (this._final && this._canonical.length === 0) {
+      const flushed = this._resampler.process(new Float32Array(0), true);
+      if (flushed.length > 0) {
+        const merged = new Float32Array(this._device.length + flushed.length);
+        merged.set(this._device);
+        merged.set(flushed, this._device.length);
+        this._device = merged;
+      }
     }
   }
 
@@ -213,12 +232,22 @@ class OutputProcessor extends AudioWorkletProcessor {
   }
 
   acknowledgeFlush() {
-    if (this._flushRequest === undefined) {
-      return;
-    }
+    while (this._flushRequests.length > 0) {
+      const request = this._flushRequests[0];
+      const matchesResponse = !request.responseId || request.responseId === this._responseId;
+      const matchesEpoch = request.epoch === this._epoch;
+      if (!matchesResponse || !matchesEpoch) {
+        this._flushRequests.shift();
+        this.port.postMessage({
+          type: "flushed",
+          consumed: this._consumed,
+          epoch: request.epoch,
+          responseId: request.responseId
+        });
+        continue;
+      }
 
-    const stoppedAt = this._consumed;
-    if (!this._flushRequest || this._flushRequest === this._responseId) {
+      const stoppedAt = this._consumed;
       this._canonical = new Float32Array(0);
       this._device = new Float32Array(0);
       this._resampler = new StreamingResampler(24000, sampleRate);
@@ -228,11 +257,16 @@ class OutputProcessor extends AudioWorkletProcessor {
       this._final = false;
       this._closed = true;
       this._epoch += 1;
+      this._flushRequests.shift();
+      this.port.postMessage({
+        type: "flushed",
+        consumed: stoppedAt,
+        epoch: request.epoch,
+        responseId: request.responseId
+      });
+      this.emitSnapshot();
+      break;
     }
-
-    this._flushRequest = undefined;
-    this.port.postMessage({ type: "flushed", consumed: stoppedAt, epoch: this._epoch });
-    this.emitSnapshot();
   }
 }
 
@@ -244,7 +278,11 @@ class StreamingResampler {
     this.lowpass = 0;
   }
 
-  process(input) {
+  pending() {
+    return this.leftover.length;
+  }
+
+  process(input, flush = false) {
     if (this.step === 1) {
       const copy = new Float32Array(input.length);
       copy.set(input);
@@ -254,21 +292,35 @@ class StreamingResampler {
     const merged = new Float32Array(this.leftover.length + input.length);
     merged.set(this.leftover);
     merged.set(input, this.leftover.length);
+    const source = flush && merged.length > 0
+      ? (() => {
+          const padded = new Float32Array(merged.length + 1);
+          padded.set(merged);
+          padded[merged.length] = merged[merged.length - 1];
+          return padded;
+        })()
+      : merged;
     const output = [];
-    while (this.phase + 1 < merged.length) {
+    while (this.phase + 1 < source.length) {
       const index = Math.floor(this.phase);
       const fraction = this.phase - index;
-      const left = merged[index] || 0;
-      const right = merged[index + 1] || left;
+      const left = source[index] || 0;
+      const right = source[index + 1] || left;
       const interpolated = left * (1 - fraction) + right * fraction;
       this.lowpass = this.lowpass * 0.2 + interpolated * 0.8;
       output.push(this.lowpass);
       this.phase += this.step;
     }
 
-    const consumed = Math.min(merged.length, Math.floor(this.phase));
-    this.leftover = merged.slice(consumed);
-    this.phase -= consumed;
+    if (flush) {
+      this.leftover = new Float32Array(0);
+      this.phase = 0;
+    } else {
+      const consumed = Math.min(merged.length, Math.floor(this.phase));
+      this.leftover = merged.slice(consumed);
+      this.phase -= consumed;
+    }
+
     const result = new Float32Array(output.length);
     result.set(output);
     return result;

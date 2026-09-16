@@ -18,6 +18,7 @@ Follow [Technology Decisions](docs/10-technology-decisions.md) and [Repository S
 
 - For code implementation, fixes, planning or review, read [develop](.agents/skills/develop/SKILL.md).
 - For specifications, documentation, decisions or consistency reviews, read [document](.agents/skills/document/SKILL.md).
+- For visual UI quality (layout, typography, accessibility of presentation), use [impeccable](.agents/skills/impeccable/SKILL.md) with context in [.agents/context](.agents/context). That context is not the product specification: if it conflicts with `/docs`, `/docs` wins.
 - Load only the specialist skills relevant to the task. These shared files apply to both Codex and Cursor; do not maintain editor-specific copies.
 - Documentation work stays docs-only unless implementation is explicitly requested. Repository agent instructions and skills do not start an application milestone.
 

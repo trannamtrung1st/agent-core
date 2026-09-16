@@ -1,10 +1,9 @@
 import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
-import { EARLY_AUDIO_MS, MAX_QUEUED_SAMPLES, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { useChatStore } from "../state/chatStore";
-import { applyServerEvent, emptySession, type ServerEvent } from "../state/sessionStore";
-import { createSession, endSession, listAgents } from "./api";
+import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
+import { applyServerEvent, emptySession, hasControlSequenceGap, useSessionStore, type ServerEvent } from "../state/sessionStore";
+import { createSession, endSession, getHealth, listAgents } from "./api";
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
@@ -12,10 +11,10 @@ let commandSequence = 0;
 let audioFramesSent = 0;
 let audioOutputsReceived = 0;
 let playbackConsumed = 0;
-let playbackSentSamples = 0;
 let playbackResponseId: string | null = null;
 let playbackStarted = false;
 let playbackFinal = false;
+let playbackWorkletComplete = false;
 let playbackCompletedSent = false;
 let progressTimer: number | null = null;
 let receiptTimer: number | null = null;
@@ -24,12 +23,17 @@ let lastReceiptResponseId: string | null = null;
 let disposed = false;
 let duckTimer: number | null = null;
 let flushing = false;
+let playbackInterrupt = Promise.resolve();
 const stoppedResponses = new Set<string>();
 const pendingAudio: OutputAudioFrame[] = [];
 const earlyAudio = new Map<string, { frames: OutputAudioFrame[]; timer: number }>();
 const outputGate = new OutputAudioGate();
 const committedText = new Map<string, number>();
 const duckingEnabled = true;
+let captureStreamId: string | null = null;
+let voiceRequest: Promise<void> | null = null;
+let voiceEpoch = 0;
+let sendRequest: Promise<void> | null = null;
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -62,19 +66,25 @@ export function audioOutputsReceivedCount(): number {
 }
 
 export function setDraft(draft: string): void {
-  useChatStore.setState({ draft });
+  useSessionStore.setState({ draft });
 }
 
 export function selectAgent(agentId: string): void {
-  useChatStore.setState({ selectedAgentId: agentId });
+  useSessionStore.setState({ selectedAgentId: agentId });
 }
 
-function command(type: string, payload: Record<string, unknown>, sequence: number, responseId: string | null = null) {
-  const snapshot = useChatStore.getState();
+function command(
+  type: string,
+  payload: Record<string, unknown>,
+  sequence: number,
+  responseId: string | null = null,
+  eventId: string = uuid()
+) {
+  const snapshot = useSessionStore.getState();
   return {
     protocolVersion: 1,
     sessionId: snapshot.sessionId,
-    eventId: uuid(),
+    eventId,
     sequence,
     timestamp: new Date().toISOString(),
     responseId,
@@ -89,25 +99,178 @@ async function invoke(
   type: string,
   payload: Record<string, unknown>,
   sequence: number,
-  responseId: string | null = null
+  responseId: string | null = null,
+  eventId?: string
 ) {
   if (!connection) {
     throw new Error("Not connected.");
   }
 
-  return connection.invoke(method, command(type, payload, sequence, responseId)) as Promise<{
+  return connection.invoke(method, command(type, payload, sequence, responseId, eventId)) as Promise<{
     accepted?: boolean;
-    error?: { message?: string };
+    error?: { code?: string; message?: string; retryAfterMs?: number };
   }>;
 }
 
+const RECONNECT_BUDGET_MS = 60_000;
+const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
+
+let reconnectBudgetStarted = 0;
+let attachLoop = 0;
+let pendingUserText: { eventId: string; text: string } | null = null;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function beginReconnectBudget(): void {
+  reconnectBudgetStarted = Date.now();
+}
+
+function reconnectBudgetRemaining(): number {
+  if (reconnectBudgetStarted === 0) {
+    return RECONNECT_BUDGET_MS;
+  }
+
+  return RECONNECT_BUDGET_MS - (Date.now() - reconnectBudgetStarted);
+}
+
+function dropLiveTransport(connection: "reconnecting" | "failed"): void {
+  abortPlayback();
+  capture.release();
+  useSessionStore.setState({
+    connection,
+    pendingMode: null,
+    preflightReady: false,
+    captureLive: false,
+    attachmentId: null
+  });
+}
+
+function markConnectionFailed(message: string): void {
+  const latest = useSessionStore.getState();
+  abortPlayback();
+  capture.release();
+  useSessionStore.setState({
+    error: message,
+    errorFatal: false,
+    errorHoldSequence: latest.lastServerSequence,
+    connection: "failed",
+    pendingMode: null,
+    preflightReady: false,
+    captureLive: false,
+    attachmentId: null
+  });
+}
+
+function isTransientAttachError(ack: { error?: { code?: string } } | null | undefined): boolean {
+  const code = ack?.error?.code;
+  return code === "SessionInUse" || code === "SessionBusy";
+}
+
+async function attachWithBusyRetry(lastServerSequence: number | null): Promise<boolean> {
+  const loop = attachLoop;
+  let delayIndex = 0;
+  while (loop === attachLoop && connection) {
+    try {
+      commandSequence = 0;
+      const ack = await invoke(
+        "Attach",
+        "session.attach",
+        { lastServerSequence: lastServerSequence || null },
+        0
+      );
+      if (loop !== attachLoop) {
+        return false;
+      }
+
+      if (ack?.accepted) {
+        return true;
+      }
+
+      if (!isTransientAttachError(ack) || reconnectBudgetRemaining() <= 0) {
+        markConnectionFailed(ack?.error?.message ?? "Reconnect failed.");
+        return false;
+      }
+
+      dropLiveTransport("reconnecting");
+      const wait = Math.min(
+        ack?.error?.retryAfterMs ?? RECONNECT_DELAYS_MS[Math.min(delayIndex, RECONNECT_DELAYS_MS.length - 1)],
+        Math.max(0, reconnectBudgetRemaining())
+      );
+      delayIndex += 1;
+      if (wait > 0) {
+        await delay(wait);
+      }
+    } catch (error) {
+      if (loop !== attachLoop) {
+        return false;
+      }
+
+      markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.");
+      return false;
+    }
+  }
+
+  return false;
+}
+
+function handleHubClosed(): void {
+  attachLoop += 1;
+  if (disposed) {
+    return;
+  }
+
+  markConnectionFailed("Connection lost. Retry to continue.");
+}
+
+async function recoverFromSequenceGap(): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (!connection || !snapshot.sessionId) {
+    return;
+  }
+
+  beginReconnectBudget();
+  dropLiveTransport("reconnecting");
+  try {
+    await connection.stop();
+  } catch {
+    // ignored
+  }
+
+  try {
+    await connection.start();
+    await attachWithBusyRetry(snapshot.lastServerSequence || null);
+  } catch (error) {
+    markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.");
+  }
+}
+
 function handleEvent(raw: ServerEvent): void {
-  useChatStore.setState(applyServerEvent(useChatStore.getState(), raw));
+  const prior = useSessionStore.getState();
+  if (hasControlSequenceGap(prior, raw)) {
+    abortPlayback();
+    useSessionStore.setState(applyServerEvent(prior, raw));
+    void recoverFromSequenceGap();
+    return;
+  }
+
+  const next = applyServerEvent(prior, raw);
+  if (next === prior) {
+    return;
+  }
+
+  useSessionStore.setState(next);
+  if (raw.type === "session.ready") {
+    reconcilePendingUserText(next.entries);
+  }
   if (raw.type === "agent.response.started" && raw.responseId) {
     outputGate.markStarted(raw.responseId);
     flushEarlyAudio(raw.responseId);
   }
-  if (raw.type === "agent.response.started" && useChatStore.getState().mode === "text" && raw.responseId) {
+  if (raw.type === "agent.response.started" && useSessionStore.getState().mode === "text" && raw.responseId) {
     lastReceiptOffset = 0;
     lastReceiptResponseId = raw.responseId;
     startReceipts(raw.responseId);
@@ -172,7 +335,7 @@ function handleAudioOutput(dto: {
     return;
   }
 
-  const state = useChatStore.getState();
+  const state = useSessionStore.getState();
   const frame: OutputAudioFrame = {
     sessionId: dto.sessionId ?? (dto as { SessionId?: string }).SessionId,
     attachmentId: dto.attachmentId ?? (dto as { AttachmentId?: string }).AttachmentId,
@@ -185,8 +348,7 @@ function handleAudioOutput(dto: {
 
   const queuedSamples =
     capture.playbackQueued() +
-    pendingAudio.reduce((sum, item) => sum + Math.floor(item.data.length / 2), 0) +
-    outputGate.queuedBuffered();
+    pendingAudio.reduce((sum, item) => sum + Math.floor(item.data.length / 2), 0);
   const decision = outputGate.admit(frame, {
     sessionId: state.sessionId,
     attachmentId: state.attachmentId,
@@ -194,10 +356,12 @@ function handleAudioOutput(dto: {
     stopped: stoppedResponses,
     queuedSamples
   });
+  if (decision === "overflow") {
+    failOutputOverflow(responseId);
+    return;
+  }
+
   if (decision === "reject") {
-    if (queuedSamples + Math.floor(frame.data.length / 2) + outputGate.queuedBuffered() > MAX_QUEUED_SAMPLES) {
-      failOutputOverflow(responseId);
-    }
     return;
   }
 
@@ -227,6 +391,7 @@ function bufferEarlyAudio(frame: OutputAudioFrame): void {
   }
 
   const timer = window.setTimeout(() => {
+    stoppedResponses.add(responseId);
     earlyAudio.delete(responseId);
   }, EARLY_AUDIO_MS);
   earlyAudio.set(responseId, { frames: [frame], timer });
@@ -243,7 +408,7 @@ function flushEarlyAudio(responseId: string): void {
   for (const frame of buffered.frames) {
     if (!outputGate.commitBuffered(frame, capture.playbackQueued())) {
       failOutputOverflow(responseId);
-      continue;
+      break;
     }
 
     if (flushing) {
@@ -263,18 +428,24 @@ function clearEarlyAudio(): void {
 }
 
 function failOutputOverflow(responseId: string): void {
-  useChatStore.setState({ error: "Audio output exceeded the 2 second queue." });
+  const latest = useSessionStore.getState();
+  useSessionStore.setState({
+    error: "Audio output exceeded the 2 second queue.",
+    errorFatal: false,
+    errorHoldSequence: latest.lastServerSequence
+  });
   if (stoppedResponses.has(responseId) && !playbackStarted) {
     return;
   }
 
   stoppedResponses.add(responseId);
-  playbackStarted = false;
-  playbackFinal = false;
-  playbackCompletedSent = false;
-  playbackSentSamples = 0;
-  playbackResponseId = null;
-  capture.setPlaybackListener(null);
+  outputGate.drop(responseId);
+  const buffered = earlyAudio.get(responseId);
+  if (buffered) {
+    window.clearTimeout(buffered.timer);
+    earlyAudio.delete(responseId);
+  }
+
   capture.setOverflowListener(null);
   void interruptPlayback(responseId);
 }
@@ -286,12 +457,19 @@ function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
     playbackStarted = true;
     playbackResponseId = responseId;
     playbackFinal = false;
+    playbackWorkletComplete = false;
     playbackCompletedSent = false;
     playbackConsumed = 0;
-    playbackSentSamples = 0;
     capture.setPlaybackListener((consumed) => {
       playbackConsumed = consumed;
-      playbackSentSamples = consumed + capture.playbackQueued();
+    });
+    capture.setPlaybackCompleteListener((completedResponseId, consumed) => {
+      if (playbackResponseId !== completedResponseId) {
+        return;
+      }
+
+      playbackWorkletComplete = true;
+      playbackConsumed = consumed;
       maybeCompletePlayback();
     });
     capture.setOverflowListener(() => {
@@ -308,7 +486,7 @@ function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
     return;
   }
 
-  playbackSentSamples = capture.playbackConsumed() + capture.playbackQueued();
+  playbackConsumed = capture.playbackConsumed();
   if (isFinal) {
     playbackFinal = true;
     maybeCompletePlayback();
@@ -341,42 +519,44 @@ function duckLocally(): void {
 }
 
 async function interruptPlayback(responseId: string): Promise<void> {
-  if (stoppedResponses.has(responseId) && !playbackStarted) {
-    return;
-  }
-
-  stoppedResponses.add(responseId);
-  flushing = true;
-  stopProgress();
-  if (duckTimer !== null) {
-    window.clearTimeout(duckTimer);
-    duckTimer = null;
-  }
-
-  try {
-    const stoppedAt = await capture.flushPlayback(responseId);
-    if (playbackResponseId === responseId) {
-      playbackStarted = false;
-      playbackFinal = false;
-      playbackCompletedSent = false;
-      playbackResponseId = null;
-      playbackConsumed = stoppedAt;
-      playbackSentSamples = 0;
-      capture.setPlaybackListener(null);
-      void sendPlayback("PlaybackStopped", "playback.stopped", responseId, stoppedAt);
+  const run = async () => {
+    stoppedResponses.add(responseId);
+    flushing = true;
+    stopProgress();
+    if (duckTimer !== null) {
+      window.clearTimeout(duckTimer);
+      duckTimer = null;
     }
-  } finally {
-    flushing = false;
-    const queued = pendingAudio.splice(0, pendingAudio.length);
-    for (const item of queued) {
-      const id = item.responseId;
-      if (!id || stoppedResponses.has(id) || useChatStore.getState().tombstones[id]) {
-        continue;
+
+    try {
+      const stoppedAt = await capture.flushPlayback(responseId);
+      if (playbackResponseId === responseId) {
+        playbackStarted = false;
+        playbackFinal = false;
+        playbackWorkletComplete = false;
+        playbackCompletedSent = false;
+        playbackResponseId = null;
+        playbackConsumed = stoppedAt;
+        capture.setPlaybackListener(null);
+        capture.setPlaybackCompleteListener(null);
+        void sendPlayback("PlaybackStopped", "playback.stopped", responseId, stoppedAt);
       }
+    } finally {
+      flushing = false;
+      const queued = pendingAudio.splice(0, pendingAudio.length);
+      for (const item of queued) {
+        const id = item.responseId;
+        if (!id || stoppedResponses.has(id) || useSessionStore.getState().tombstones[id]) {
+          continue;
+        }
 
-      enqueueLiveAudio(item, id);
+        enqueueLiveAudio(item, id);
+      }
     }
-  }
+  };
+
+  playbackInterrupt = playbackInterrupt.then(run, run);
+  return playbackInterrupt;
 }
 
 function startProgress(): void {
@@ -389,19 +569,13 @@ function startProgress(): void {
 
     const consumed = capture.playbackConsumed();
     playbackConsumed = consumed;
-    playbackSentSamples = consumed + capture.playbackQueued();
     void sendPlayback("PlaybackProgress", "playback.progress", responseId, consumed);
-    maybeCompletePlayback();
   }, 100);
 }
 
 function maybeCompletePlayback(): void {
   const responseId = playbackResponseId;
-  if (!responseId || !playbackFinal || playbackCompletedSent) {
-    return;
-  }
-
-  if (capture.playbackQueued() > 0 || capture.playbackConsumed() < playbackSentSamples) {
+  if (!responseId || !playbackFinal || !playbackWorkletComplete || playbackCompletedSent) {
     return;
   }
 
@@ -412,9 +586,10 @@ function maybeCompletePlayback(): void {
   stopProgress();
   playbackStarted = false;
   playbackFinal = false;
+  playbackWorkletComplete = false;
   playbackResponseId = null;
-  playbackSentSamples = 0;
   capture.setPlaybackListener(null);
+  capture.setPlaybackCompleteListener(null);
 }
 
 function stopProgress(): void {
@@ -447,7 +622,7 @@ export function reportCommittedEntries(
     }
   }
 
-  const snapshot = useChatStore.getState();
+  const snapshot = useSessionStore.getState();
   if (snapshot.mode === "text") {
     void sendReceipt(false);
   }
@@ -468,7 +643,7 @@ function stopReceipts(): void {
 }
 
 async function sendReceipt(finalRender: boolean, responseId?: string): Promise<void> {
-  const snapshot = useChatStore.getState();
+  const snapshot = useSessionStore.getState();
   if (snapshot.mode !== "text" || !connection) {
     return;
   }
@@ -497,18 +672,29 @@ async function sendPlayback(method: string, type: string, responseId: string, co
 function abortPlayback(): void {
   stopProgress();
   stopReceipts();
-  flushing = false;
+  flushing = true;
   pendingAudio.length = 0;
   clearEarlyAudio();
   outputGate.reset();
+  captureStreamId = null;
   playbackStarted = false;
   playbackFinal = false;
+  playbackWorkletComplete = false;
   playbackCompletedSent = false;
   playbackResponseId = null;
-  playbackSentSamples = 0;
   playbackConsumed = 0;
   capture.setPlaybackListener(null);
-  void capture.flushPlayback("");
+  capture.setPlaybackCompleteListener(null);
+  playbackInterrupt = playbackInterrupt.then(
+    async () => {
+      await capture.flushPlayback("");
+    },
+    async () => {
+      await capture.flushPlayback("");
+    }
+  ).finally(() => {
+    flushing = false;
+  });
 }
 
 function stopPlayback(responseId?: string): void {
@@ -522,16 +708,17 @@ function stopPlayback(responseId?: string): void {
 }
 
 function publishCaptureLive(): void {
-  const state = useChatStore.getState();
-  const live = capture.isPrepared() && (capture.isStreaming() || state.muted);
+  const state = useSessionStore.getState();
+  const live = capture.isPrepared() && (capture.isStreaming() || state.muted || state.mode === "voice");
   if (state.captureLive !== live) {
-    useChatStore.setState({ captureLive: live });
+    useSessionStore.setState({ captureLive: live });
   }
 }
 
 function syncCapture(): void {
-  const state = useChatStore.getState();
+  const state = useSessionStore.getState();
   if (state.connection !== "ready") {
+    captureStreamId = null;
     capture.release();
     publishCaptureLive();
     return;
@@ -552,14 +739,15 @@ function syncCapture(): void {
       return;
     }
 
-    if (!capture.isStreaming()) {
+    if (!capture.isStreaming() || captureStreamId !== state.streamId) {
       const hub = connection;
       const sessionId = state.sessionId;
       const attachmentId = state.attachmentId;
-      const streamId = state.streamId;
-      capture.start({
+      const startedStreamId = state.streamId;
+      captureStreamId = startedStreamId;
+      void capture.start({
         sendAudio: async (frame) => {
-          if (!hub || !sessionId || !attachmentId || !streamId) {
+          if (captureStreamId !== startedStreamId || !hub || !sessionId || !attachmentId) {
             return;
           }
 
@@ -568,33 +756,46 @@ function syncCapture(): void {
             protocolVersion: 1,
             sessionId,
             attachmentId,
-            streamId,
+            streamId: startedStreamId,
             frameSequence: frame.frameSequence,
             sampleOffset: frame.sampleOffset,
             data: frame.data
           });
         },
         speechStarted: async (utteranceId, sampleOffset, activityScore) => {
+          if (captureStreamId !== startedStreamId || !hub || !sessionId || !attachmentId) {
+            return;
+          }
+
           duckLocally();
           commandSequence += 1;
           await invoke("SpeechStarted", "user.speech.started", {
-            streamId,
+            streamId: startedStreamId,
             utteranceId,
             sampleOffset,
             activityScore
           }, commandSequence);
         },
-        speechEnded: async (utteranceId, sampleOffset, activityScore) => {
+        speechEnded: async (utteranceId, sampleOffset, activityScore, _closing) => {
+          if (!hub || !sessionId || !attachmentId) {
+            return;
+          }
+
+          if (captureStreamId !== startedStreamId) {
+            return;
+          }
+
           commandSequence += 1;
           await invoke("SpeechEnded", "user.speech.ended", {
-            streamId,
+            streamId: startedStreamId,
             utteranceId,
             sampleOffset,
             durationMs: 0,
             activityScore
           }, commandSequence);
         }
-      });
+      }).then(() => publishCaptureLive());
+      return;
     }
 
     publishCaptureLive();
@@ -606,9 +807,48 @@ function syncCapture(): void {
     return;
   }
 
+  captureStreamId = null;
   capture.release();
   publishCaptureLive();
 }
+
+export const realtimeTestHooks =
+  import.meta.env.MODE === "test"
+    ? {
+        setConnection(hub: HubConnection | null) {
+          connection = hub;
+        },
+        handleAudioOutput,
+        handleEvent,
+        syncCapture,
+        attachAfterReconnect,
+        handleHubClosed,
+        markOutputStarted(responseId: string) {
+          outputGate.markStarted(responseId);
+        },
+        resetOutput() {
+          attachLoop += 1;
+          reconnectBudgetStarted = 0;
+          pendingUserText = null;
+          voiceEpoch = 0;
+          stoppedResponses.clear();
+          flushing = false;
+          playbackInterrupt = Promise.resolve();
+          pendingAudio.length = 0;
+          clearEarlyAudio();
+          outputGate.reset();
+          playbackStarted = false;
+          playbackFinal = false;
+          playbackWorkletComplete = false;
+          playbackCompletedSent = false;
+          playbackResponseId = null;
+          playbackConsumed = 0;
+          capture.setOverflowListener(null);
+          capture.setPlaybackListener(null);
+          capture.setPlaybackCompleteListener(null);
+        }
+      }
+    : null;
 
 async function startConnection(sessionId: string): Promise<void> {
   await stopConnection();
@@ -622,7 +862,16 @@ async function startConnection(sessionId: string): Promise<void> {
       transport: HttpTransportType.WebSockets
     })
     .withHubProtocol(new MessagePackHubProtocol())
-    .withAutomaticReconnect([0, 2000, 5000, 10000])
+    .withAutomaticReconnect({
+      nextRetryDelayInMilliseconds(retryContext) {
+        if (retryContext.elapsedMilliseconds >= RECONNECT_BUDGET_MS) {
+          return null;
+        }
+
+        const delayMs = RECONNECT_DELAYS_MS[Math.min(retryContext.previousRetryCount, RECONNECT_DELAYS_MS.length - 1)];
+        return Math.min(delayMs, RECONNECT_BUDGET_MS - retryContext.elapsedMilliseconds);
+      }
+    })
     .build();
   connection.on("SessionEvent", handleEvent);
   connection.on("AudioOutput", handleAudioOutput);
@@ -631,62 +880,58 @@ async function startConnection(sessionId: string): Promise<void> {
       return;
     }
 
-    abortPlayback();
-    capture.release();
-    useChatStore.setState({
-      connection: "reconnecting",
-      pendingMode: null,
-      preflightReady: false,
-      captureLive: false,
-      attachmentId: null
-    });
+    beginReconnectBudget();
+    dropLiveTransport("reconnecting");
   });
-  connection.onreconnected(async () => {
+  connection.onreconnected(() => {
     if (epoch !== connectionEpoch) {
       return;
     }
 
-    commandSequence = 0;
-    await invoke("Attach", "session.attach", { lastServerSequence: useChatStore.getState().lastServerSequence || null }, 0);
+    void attachAfterReconnect();
   });
   connection.onclose(() => {
     if (epoch !== connectionEpoch) {
       return;
     }
 
-    abortPlayback();
-    capture.release();
-    if (!disposed) {
-      useChatStore.setState({
-        connection: "reconnecting",
-        pendingMode: null,
-        preflightReady: false,
-        captureLive: false,
-        attachmentId: null
-      });
-    }
+    handleHubClosed();
   });
-  useChatStore.setState({
+  useSessionStore.setState({
     connection: "connecting",
     sessionId,
     attachmentId: null,
     pendingMode: null,
     preflightReady: false,
     captureLive: false,
-    lastServerSequence: 0
+    lastServerSequence: 0,
+    error: null,
+    errorFatal: false
   });
-  await connection.start();
-  const ack = await invoke("Attach", "session.attach", { lastServerSequence: null }, 0);
-  if (!ack?.accepted) {
-    useChatStore.setState({ error: ack?.error?.message ?? "Attach failed.", connection: "failed" });
+  beginReconnectBudget();
+  try {
+    await connection.start();
+    await attachWithBusyRetry(null);
+  } catch (error) {
+    markConnectionFailed(error instanceof Error ? error.message : "Attach failed.");
   }
 }
 
+async function attachAfterReconnect(): Promise<void> {
+  if (reconnectBudgetStarted === 0) {
+    beginReconnectBudget();
+  }
+
+  dropLiveTransport("reconnecting");
+  await attachWithBusyRetry(useSessionStore.getState().lastServerSequence || null);
+}
+
 async function stopConnection(): Promise<void> {
+  attachLoop += 1;
   abortPlayback();
   capture.release();
   connectionEpoch += 1;
-  useChatStore.setState({ captureLive: false });
+  useSessionStore.setState({ captureLive: false });
   if (!connection) {
     return;
   }
@@ -702,84 +947,244 @@ async function stopConnection(): Promise<void> {
   }
 }
 
-export async function bootstrap(): Promise<void> {
-  const agents = await listAgents();
-  useChatStore.setState({ agents, selectedAgentId: agents[0]?.id ?? "examiner" });
+export async function bootstrap(): Promise<string> {
+  const [agents, health] = await Promise.all([listAgents(), getHealth()]);
+  useSessionStore.setState({
+    agents,
+    selectedAgentId: agents[0]?.id ?? "examiner"
+  });
+  return health.profile;
 }
 
 export async function startConversation(): Promise<void> {
-  const created = await createSession(useChatStore.getState().selectedAgentId, "text");
-  await startConnection(created.sessionId);
+  try {
+    const created = await createSession(useSessionStore.getState().selectedAgentId, "text");
+    await startConnection(created.sessionId);
+  } catch (error) {
+    useSessionStore.setState({
+      error: error instanceof Error ? error.message : "Unable to start a conversation.",
+      errorFatal: false
+    });
+  }
+}
+
+export async function retryConnection(): Promise<void> {
+  const sessionId = useSessionStore.getState().sessionId;
+  if (!sessionId) {
+    return;
+  }
+
+  await startConnection(sessionId);
+}
+
+function restoreDraft(text: string, error: string): void {
+  const latest = useSessionStore.getState();
+  useSessionStore.setState({
+    draft: latest.draft === "" ? text : latest.draft,
+    error,
+    errorFatal: false
+  });
+}
+
+function historyHasUserEvent(entries: { sourceEventId: string | null; role: string }[], eventId: string): boolean {
+  return entries.some((entry) => entry.role === "user" && entry.sourceEventId === eventId);
+}
+
+function reconcilePendingUserText(entries: { sourceEventId: string | null; role: string }[]): void {
+  if (!pendingUserText) {
+    return;
+  }
+
+  if (historyHasUserEvent(entries, pendingUserText.eventId)) {
+    const text = pendingUserText.text;
+    pendingUserText = null;
+    const latest = useSessionStore.getState();
+    if (latest.draft === text) {
+      useSessionStore.setState({ draft: "" });
+    }
+    return;
+  }
+
+  if (!sendRequest && useSessionStore.getState().connection === "ready") {
+    void sendDraft();
+  }
 }
 
 export async function sendDraft(): Promise<void> {
-  const snapshot = useChatStore.getState();
-  const text = snapshot.draft.trim();
+  if (sendRequest) {
+    return sendRequest;
+  }
+
+  const snapshot = useSessionStore.getState();
+  const draft = snapshot.draft.trim();
+  const text = draft || pendingUserText?.text || "";
   if (!text || snapshot.connection !== "ready") {
     return;
   }
 
-  useChatStore.setState({
-    draft: "",
-    entries: [
-      ...snapshot.entries,
-      {
-        entryId: uuid(),
-        sequence: (snapshot.entries.at(-1)?.sequence ?? 0) + 0.5,
-        sourceEventId: null,
-        role: "user",
-        text,
-        responseId: null,
-        status: "completed",
-        deliveryMode: snapshot.mode,
-        heardTextEndExclusive: text.length,
-        receivedTextEndExclusive: text.length,
-        createdAt: new Date().toISOString()
-      }
-    ]
-  });
+  const eventId = pendingUserText && pendingUserText.text === text ? pendingUserText.eventId : uuid();
+  pendingUserText = { eventId, text };
+  if (draft) {
+    useSessionStore.setState({ draft: "" });
+  }
+
   commandSequence += 1;
-  await invoke("SendText", "user.text", { text }, commandSequence);
+  sendRequest = (async () => {
+    try {
+      const ack = await invoke("SendText", "user.text", { text }, commandSequence, null, eventId);
+      if (!ack?.accepted) {
+        pendingUserText = null;
+        restoreDraft(text, ack?.error?.message ?? "Message was not accepted.");
+        return;
+      }
+
+      pendingUserText = null;
+      const latest = useSessionStore.getState();
+      if (historyHasUserEvent(latest.entries, eventId)) {
+        useSessionStore.setState({
+          error: latest.errorFatal ? latest.error : null
+        });
+        return;
+      }
+
+      useSessionStore.setState({
+        error: latest.errorFatal ? latest.error : null,
+        entries: [
+          ...latest.entries,
+          {
+            entryId: eventId,
+            sequence: (latest.entries.at(-1)?.sequence ?? 0) + 0.5,
+            sourceEventId: eventId,
+            role: "user",
+            text,
+            responseId: null,
+            status: "completed",
+            deliveryMode: latest.mode,
+            heardTextEndExclusive: text.length,
+            receivedTextEndExclusive: text.length,
+            createdAt: new Date().toISOString()
+          }
+        ]
+      });
+    } catch (error) {
+      restoreDraft(
+        text,
+        error instanceof Error ? error.message : "Message was not accepted."
+      );
+    }
+  })();
+
+  try {
+    await sendRequest;
+  } finally {
+    sendRequest = null;
+  }
 }
 
 export async function requestVoice(): Promise<void> {
-  const snapshot = useChatStore.getState();
+  if (voiceRequest) {
+    return voiceRequest;
+  }
+
+  const snapshot = useSessionStore.getState();
   if (!snapshot.voiceAvailable || snapshot.connection !== "ready") {
     return;
   }
 
-  useChatStore.setState({ preflightReady: true, error: null });
-  try {
-    await capture.preflight();
-  } catch (error) {
-    capture.release();
-    useChatStore.setState({
-      preflightReady: false,
-      error: microphoneError(error)
-    });
+  if (snapshot.mode === "voice" && capture.isPrepared()) {
     return;
   }
-  commandSequence += 1;
-  try {
-    const ack = await invoke("SetMode", "session.mode.set", { mode: "voice" }, commandSequence);
-    if (!ack?.accepted) {
+
+  voiceRequest = (async () => {
+    const epoch = ++voiceEpoch;
+    useSessionStore.setState({ preflightReady: true, error: null, errorFatal: false });
+    try {
+      if (!capture.isPrepared()) {
+        await capture.preflight();
+      }
+    } catch (error) {
+      if (epoch !== voiceEpoch) {
+        return;
+      }
+
       capture.release();
-      useChatStore.setState({ preflightReady: false, error: ack?.error?.message ?? "Voice mode was rejected." });
+      useSessionStore.setState({
+        preflightReady: false,
+        error: microphoneError(error),
+        errorFatal: false
+      });
+      return;
     }
-  } catch (error) {
-    capture.release();
-    useChatStore.setState({
-      preflightReady: false,
-      error: error instanceof Error ? error.message : "Voice mode failed."
-    });
+    if (epoch !== voiceEpoch) {
+      capture.release();
+      useSessionStore.setState({ preflightReady: false });
+      return;
+    }
+
+    commandSequence += 1;
+    try {
+      const ack = await invoke("SetMode", "session.mode.set", { mode: "voice" }, commandSequence);
+      if (epoch !== voiceEpoch) {
+        return;
+      }
+
+      if (!ack?.accepted) {
+        capture.release();
+        useSessionStore.setState({
+          preflightReady: false,
+          error: ack?.error?.message ?? "Voice mode was rejected.",
+          errorFatal: false
+        });
+      }
+    } catch (error) {
+      if (epoch !== voiceEpoch) {
+        return;
+      }
+
+      capture.release();
+      useSessionStore.setState({
+        preflightReady: false,
+        error: error instanceof Error ? error.message : "Voice mode failed.",
+        errorFatal: false
+      });
+    }
+  })();
+
+  try {
+    await voiceRequest;
+  } finally {
+    voiceRequest = null;
   }
 }
 
 export async function cancelVoice(): Promise<void> {
-  capture.release();
-  useChatStore.setState({ preflightReady: false, muted: false });
+  voiceEpoch += 1;
   commandSequence += 1;
-  await invoke("SetMode", "session.mode.set", { mode: "text" }, commandSequence);
+  try {
+    const ack = await invoke("SetMode", "session.mode.set", { mode: "text" }, commandSequence);
+    if (!ack?.accepted) {
+      capture.release();
+      useSessionStore.setState({
+        preflightReady: false,
+        muted: false,
+        error: ack?.error?.message ?? "Unable to cancel voice.",
+        errorFatal: false
+      });
+      return;
+    }
+  } catch (error) {
+    capture.release();
+    useSessionStore.setState({
+      preflightReady: false,
+      muted: false,
+      error: error instanceof Error ? error.message : "Unable to cancel voice.",
+      errorFatal: false
+    });
+    return;
+  }
+
+  capture.release();
+  useSessionStore.setState({ preflightReady: false, muted: false, error: null, errorFatal: false });
 }
 
 export async function setMuted(muted: boolean): Promise<void> {
@@ -789,9 +1194,23 @@ export async function setMuted(muted: boolean): Promise<void> {
   }
 
   commandSequence += 1;
-  const ack = await invoke("SetMuted", "session.mute", { muted }, commandSequence);
-  if (!ack?.accepted) {
-    useChatStore.setState({ error: ack?.error?.message ?? "Mute failed." });
+  try {
+    const ack = await invoke("SetMuted", "session.mute", { muted }, commandSequence);
+    if (!ack?.accepted) {
+      useSessionStore.setState({ error: ack?.error?.message ?? "Mute failed.", errorFatal: false });
+      if (muted) {
+        syncCapture();
+      }
+      return;
+    }
+  } catch (error) {
+    useSessionStore.setState({
+      error: error instanceof Error ? error.message : "Mute failed.",
+      errorFatal: false
+    });
+    if (muted) {
+      syncCapture();
+    }
     return;
   }
 
@@ -801,21 +1220,37 @@ export async function setMuted(muted: boolean): Promise<void> {
 }
 
 export async function hangUp(): Promise<void> {
-  disposed = true;
-  const snapshot = useChatStore.getState();
+  const snapshot = useSessionStore.getState();
   if (snapshot.sessionId) {
     commandSequence += 1;
+    let ended = false;
     try {
-      await invoke("EndSession", "session.end", { reason: "userEnded" }, commandSequence);
+      const ack = await invoke("EndSession", "session.end", { reason: "userEnded" }, commandSequence);
+      ended = Boolean(ack?.accepted);
     } catch {
-      await endSession(snapshot.sessionId);
+      ended = false;
+    }
+
+    if (!ended) {
+      try {
+        await endSession(snapshot.sessionId);
+      } catch (error) {
+        const latest = useSessionStore.getState();
+        useSessionStore.setState({
+          error: error instanceof Error ? error.message : "Unable to end the session.",
+          errorFatal: false,
+          errorHoldSequence: latest.lastServerSequence
+        });
+        return;
+      }
     }
   }
 
+  disposed = true;
   await stopConnection();
   stopReceipts();
   capture.release();
-  useChatStore.setState({
+  useSessionStore.setState({
     ...emptySession(),
     agents: snapshot.agents,
     selectedAgentId: snapshot.selectedAgentId
@@ -842,7 +1277,7 @@ if (typeof window !== "undefined") {
       abortPlayback();
       capture.release();
       await stopConnection();
-      useChatStore.setState({
+      useSessionStore.setState({
         connection: "reconnecting",
         pendingMode: null,
         preflightReady: false,
@@ -851,7 +1286,7 @@ if (typeof window !== "undefined") {
       });
     },
     reconnect: async () => {
-      const sessionId = useChatStore.getState().sessionId;
+      const sessionId = useSessionStore.getState().sessionId;
       if (sessionId) {
         await startConnection(sessionId);
       }

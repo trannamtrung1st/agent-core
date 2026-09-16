@@ -23,6 +23,7 @@ public sealed class BargeInTests
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000c1");
         await harness.Runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.95);
         await harness.Runtime.SubmitSpeechAsync(new SpeechPartial(utterance, 1, "wait", 0.95), 0.95);
+        await harness.Output.WaitForAsync(item => item.Payload is ResponseCompletedOutput);
         await harness.Runtime.WaitUntilMailboxDrainedAsync();
         var payloads = harness.Output.Items.Select(item => item.Payload).ToArray();
         var stop = Array.FindIndex(payloads, item => item is PlaybackStopOutput);
@@ -117,6 +118,7 @@ public sealed class BargeInTests
         await runtime.WaitUntilMailboxDrainedAsync();
         time.Advance(TimeSpan.FromMilliseconds(250));
         await runtime.SubmitTimerElapsedAsync("candidate", runtime.TimerGeneration, utterance);
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput);
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Null(runtime.ActiveResponseId);
         model.Gate.TrySetResult();
@@ -144,6 +146,35 @@ public sealed class BargeInTests
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.DoesNotContain(output.TextDeltas, delta => delta.Text.Contains("hidden", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task Sequence_gap_during_tts_does_not_barge_in()
+    {
+        var harness = await LiveVoiceAsync();
+        await harness.Output.WaitForAsync(item => item.Payload is AudioFrameOutput);
+        var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000c6");
+        await harness.Runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.95);
+        await harness.Runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(InputActivity.UserSpeaking, harness.Runtime.Input);
+        var scheduled = harness.Runtime.TimerGeneration;
+        Assert.True(harness.Runtime.TryAdmitAudio(Frame(1, 0)));
+        Assert.False(harness.Runtime.TryAdmitAudio(Frame(3, 960)));
+        await harness.Output.WaitForAsync(item => item.Payload is ErrorOutput error && error.Code == "AudioDiscontinuity");
+        await harness.Runtime.WaitUntilIdleAsync();
+        Assert.Equal(InputActivity.Listening, harness.Runtime.Input);
+        Assert.Null(harness.Runtime.Candidate);
+        harness.Time.Advance(TimeSpan.FromMilliseconds(500));
+        await harness.Runtime.SubmitTimerElapsedAsync("candidate", scheduled, utterance);
+        await harness.Runtime.WaitUntilMailboxDrainedAsync();
+        Assert.NotNull(harness.Runtime.ActiveResponseId);
+        Assert.DoesNotContain(
+            harness.Output.Items,
+            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason is not null);
+        await harness.Runtime.DisposeAsync();
+    }
+
+    private static AudioFrame Frame(long sequence, long offset) =>
+        new(sequence, offset, new byte[960]);
 
     private static async Task<VoiceHarness> LiveVoiceAsync()
     {

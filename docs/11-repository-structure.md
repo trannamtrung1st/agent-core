@@ -1,8 +1,8 @@
 # Repository Structure
 
-The repository contains the Milestone 1 solution (`AgentCore.sln`), versioned demo definitions under `agents/`, a strict React/Vite skeleton in `web/`, README, docs, shared agent instructions in [AGENTS.md](../AGENTS.md), and eleven skills in [.agents/skills](../.agents/skills) used by both Codex and Cursor. The two composition skills, develop and document, load the relevant specialist playbooks. `.agents/` contains development-agent instructions; `agents/` holds product Agent Definitions. Existing editor-specific files configure Playwright MCP only.
+The repository contains the Milestone 1 solution (`AgentCore.sln`), versioned demo definitions under `agents/`, a strict React/Vite skeleton in `web/`, a `Dockerfile` with `docker-compose.yml` (Synthetic) and `docker-compose.real.yml` (hosted overlay), README, docs, shared agent instructions in [AGENTS.md](../AGENTS.md), and twelve skills in [.agents/skills](../.agents/skills) used by both Codex and Cursor. The two composition skills, develop and document, load the relevant specialist playbooks. Impeccable is a UI-design skill, not a composition entry; its product/visual adapters live in [.agents/context](../.agents/context) and are not canonical product specification. `.agents/` contains development-agent instructions and tooling context; `agents/` holds product Agent Definitions. Existing editor-specific files configure Playwright MCP and Impeccable hooks. `npx impeccable install` may also write a Cursor-local copy under `.cursor/skills/impeccable` and `.cursor/agents/`; those paths are gitignored. The committed skill is `.agents/skills/impeccable`. Hooks in `.cursor/hooks.json` and `.codex/hooks.json` call that shared launcher so both editors stay in sync without duplicated skill trees.
 
-The application layout matches the project boundaries below. Root `local/` is a gitignored personal scratch folder (notes, temp files); it is not an application project, not a configuration source, and is never committed. [Persistence and Configuration](15-persistence-and-configuration.md#local-personal-workspace) owns secret-handling rules (environment / user-secrets only).
+The application layout matches the project boundaries below. Root `local/` is a gitignored personal scratch folder (notes, temp files); it is not an application project, not a configuration source, and is never committed. [Persistence and Configuration](15-persistence-and-configuration.md#local-personal-workspace) owns secret-handling rules (process environment, `dotnet user-secrets`, and gitignored Compose `.env`).
 
 ```text
 src/
@@ -18,8 +18,14 @@ tests/
   AgentCore.Api.Tests/
 web/                        # React/Vite SPA and its frontend tests
 agents/                     # versioned JSON definitions, created during implementation
+.agents/skills/             # shared agent skills (develop, document, specialists, impeccable)
+.agents/context/            # Impeccable PRODUCT.md and DESIGN.md; /docs remains canonical
 docs/                       # this specification
 local/                      # gitignored personal workspace; never committed
+Dockerfile                  # one application container (API + SignalR + built SPA)
+docker-compose.yml          # default key-free Synthetic Compose
+docker-compose.real.yml     # Real/hosted overlay; interpolates gitignored .env
+.env.example                # Compose key template; copy to gitignored .env
 ```
 
 Arrows below mean “references,” not data flow:

@@ -18,7 +18,8 @@ services:
     # optional key-free Synthetic demo path (one app container + built SPA +
     # persistent SQLite volume). `docker compose down` keeps the volume;
     # `docker compose down -v` destroys it.
-    # Real/hosted providers stay documented in docs/17; do not put keys here.
+    # Real/hosted: docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
+    # Do not put provider keys in this file.
 
 volumes:
   agent-core-data:

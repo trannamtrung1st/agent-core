@@ -31,7 +31,12 @@ builder.Services.AddAgentCoreInfrastructure(
     agentDirectory,
     profile,
     languageModel,
-    builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions());
+    builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions(),
+    new InteractionPolicy(
+        DegradedInterruptMs: builder.Configuration.GetValue("Interaction:DegradedInterruptMs", 250),
+        PendingVoiceTimeoutMs: builder.Configuration.GetValue("Interaction:PendingVoiceTimeoutMs", 30_000),
+        BackchannelMaxMs: builder.Configuration.GetValue("Interaction:BackchannelMaxMs", 700),
+        MaxUtteranceSeconds: Math.Clamp(builder.Configuration.GetValue("Voice:MaxUtteranceSeconds", 30), 1, 120)));
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
 builder.Services.AddOptions<ObservabilityOptions>()
     .Bind(builder.Configuration.GetSection("Observability"))
