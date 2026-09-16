@@ -15,7 +15,7 @@ These decisions are the implementation baseline. Resolve package patches at impl
 | Time/IDs | TimeProvider, injectable IIdGenerator; UUIDv7 event/response IDs, random UUIDv4 session IDs | Deterministic tests; session IDs retain random bearer entropy | Keep wire UUID strings stable |
 | Speech | Independent STT/TTS, canonical PCM16 mono 24 kHz | Canonical composed text-first pipeline; format conversion at adapters | Future-only INativeRealtimeProvider optimization |
 | Definitions | Versioned JSON files via store | No YAML dependency; immutable identities | Alternative store preserving schema/version semantics |
-| Frontend | React SPA, Vite, pnpm, strict TypeScript, plain CSS/CSS Modules | Simple personal chat; client-only audio | Expand UI only for product needs |
+| Frontend | React SPA, Vite, pnpm, strict TypeScript, Ant Design v6 (planned until verified), minimal app-specific CSS | Simple personal chat; client-only audio; generic controls come from AntD rather than a custom visual system | Expand UI only for product needs; do not add a second UI kit |
 | Client state/API | Zustand; fetch wrapper; @microsoft/signalr + @microsoft/signalr-protocol-msgpack | Small active state store, few HTTP endpoints | Add data caching only with evidence |
 | Observability | Microsoft.Extensions.Logging, OpenTelemetry via ActivitySource/Meter | Correlate conversational latency with privacy defaults | Optional OTLP export |
 | Tests | xUnit, WebApplicationFactory; Vitest, React Testing Library, Playwright | Offline deterministic behavior and boundary tests | Explicit opt-in live-provider smokes; skip when keys are missing |
@@ -82,9 +82,19 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Consequence:** Add the first usable key-free Compose environment at Milestone 5 (after the synthetic browser text path). Milestone 12 hardens containers, SQLite volume/restart, real-provider configuration, hybrid topology and operations. Default `docker compose up` remains Synthetic. Real/hosted Compose is `docker-compose.real.yml` overlaid on that file; secrets stay in the host environment. Hosted, hybrid and on-prem topologies keep the same runtime semantics. Docker is deployment tooling, not an Agent Core dependency. [Operations](17-observability-and-operations.md#docker-compose-integration-and-demo) owns topology and workflow details.
 
+## Decision: Ant Design v6 as MVP generic UI system (planned until verified)
+
+**Decision:** The MVP generic UI system is **Ant Design v6** (`antd`), consumed directly by product components, with ConfigProvider and Ant Design `App` at the application root and near-default theming. App-specific CSS is limited to sizing, overflow, product layout/content, preview sizing, and necessary accessibility fixes. Do not add AppButton/AppInput/AppSelect or other generic wrappers, Ant Design Pro/ProComponents/X, another component or CSS framework, or a replacement custom design system.
+
+**Status:** **Planned until verified.** The live SPA still uses the custom presentation until the migration implementation, retirement, and final gates succeed. Do not treat this decision as implemented.
+
+**Rationale:** The custom Pixel Dialogue Field visual system is unnecessary cost for validating Agent Core product behavior. Ant Design is an explicit UI-system change only; session, realtime, voice, attachment, and catalog contracts stay with their existing owners.
+
+**Consequence:** [Frontend Implementation](13-frontend-implementation-spec.md) owns screens and behavior. `.agents/context/DESIGN.md` may hold only lightweight visual guidance; if it conflicts with `/docs`, `/docs` wins. Mark this decision **verified** only after the migrated surfaces, old-system retirement, and acceptance gates succeed.
+
 ## Explicit non-goals
 
-No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, Next.js or large component framework. No autonomous tools/platform, distributed event bus or generic repository framework. No extra hosted mock or third-party test-only inference service. Reconsider only when actual requirements justify the cost.
+No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, or Next.js. Ant Design v6 is the planned MVP generic UI system (see the decision above); do not add another component or CSS framework, Ant Design Pro/ProComponents/X, or a replacement custom design system. No autonomous tools/platform, distributed event bus or generic repository framework. No extra hosted mock or third-party test-only inference service. Reconsider only when actual requirements justify the cost.
 
 ## Post-MVP planned until verified
 
