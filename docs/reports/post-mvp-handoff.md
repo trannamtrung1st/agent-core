@@ -35,12 +35,14 @@ Canonical product and architecture live in [README](../../README.md) and [docs/0
 | --- | --- |
 | `dotnet test AgentCore.sln` | Domain 12; Application 151; Infrastructure 67 passed / 8 skipped in that testhost (3 live + 5 sandbox PATH skip); Api 58 |
 | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~DockerSandbox` | 6 passed / 0 skipped (`busybox:1.36`) |
-| `pnpm run test --run` (web) | 103 passed |
+| `pnpm run test --run` (web) | 107 passed (whole-output revision: SessionRail rename/archive/unarchive/delete clicks; Composer drop and paste-image staging) |
 | `pnpm exec tsc --noEmit && pnpm run build` | passed |
 | `CI=1 pnpm exec playwright test` | 8 passed |
-| Isolated `docker compose -p agent-core-tdp-gates-2dca up --build` | Synthetic health; session survived recreate; SPA 200; missing API 404; `down -v` only on that project; operator volume `agent-core_agent-core-data` retained |
+| Isolated `docker compose -p agent-core-tdp-gates-2dca up --build` | Re-run 2026-09-16. Synthetic health JSON; session `a46076d4-22b9-4b47-be6c-dba472a721bb` survived `--force-recreate`; SPA 200; missing API 404; `down -v` only on that project; operator volume `agent-core_agent-core-data` retained. Transcripts: `local/tdp-workspace/evidence/item-2dcab2b2a46c/commands/` |
 
 Hosted OpenAI/OpenRouter smokes and headset checks were not opted in.
+
+Checkout baseline (`local/tdp-workspace/evidence/item-4bba904fe742/checkout-baseline.md`) recorded a clean working tree (no staged/unstaged user diffs). Remaining tracked product files match HEAD after whole-output revision commits. An uncommitted `TODO.md` Opensandbox line that appeared after baseline was reverted; it was not a preserved user change.
 
 ## Migrations
 
