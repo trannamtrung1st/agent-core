@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { queueComposerFiles } from "../../services/realtime";
+import { queueComposerFiles, removeComposerFile, retryComposerFile } from "../../services/realtime";
 import { Composer } from "./Composer";
 
 vi.mock("../../services/realtime", () => ({
@@ -72,5 +72,44 @@ describe("Composer attachment staging", () => {
     expect(staged).toHaveLength(1);
     expect(staged[0].name).toBe("clip.png");
     expect(staged[0].type).toBe("image/png");
+  });
+
+  it("sends on Enter and inserts a newline on Shift+Enter", () => {
+    const onSend = vi.fn();
+    render(<Composer {...emptyComposerProps()} canSend onSend={onSend} draft="Hello" />);
+    const field = screen.getByPlaceholderText("Type your message here...");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(field, { key: "Enter", shiftKey: true });
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps send disabled until ready and surfaces upload errors on the existing queue", () => {
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        ready={false}
+        canSend={false}
+        pendingAttachments={[
+          {
+            localId: "l1",
+            displayName: "notes.txt",
+            contentType: "text/plain",
+            byteSize: 4,
+            status: "error",
+            progress: 0,
+            attachmentId: null,
+            error: "Upload failed"
+          }
+        ]}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+    expect(screen.getByText("Upload failed")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry notes.txt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove notes.txt" }));
+    expect(retryComposerFile).toHaveBeenCalledWith("l1");
+    expect(removeComposerFile).toHaveBeenCalledWith("l1");
   });
 });

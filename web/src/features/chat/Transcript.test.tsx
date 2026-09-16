@@ -61,6 +61,13 @@ describe("Transcript", () => {
     expect(screen.getByText(/Transcript · 3 entries/)).toBeInTheDocument();
   });
 
+  it("shows connecting as conversation loading, distinct from interrupted entries", () => {
+    render(<Transcript agentName="Alex" sessionId="s1" entries={[]} connection="connecting" />);
+    expect(screen.getByText("Send a message or start voice.")).toBeInTheDocument();
+    expect(screen.getByText("Loading conversation")).toBeInTheDocument();
+    expect(screen.queryByText("interrupted")).not.toBeInTheDocument();
+  });
+
   it("renders unknown blocks as sanitized fallback text", () => {
     render(
       <Transcript

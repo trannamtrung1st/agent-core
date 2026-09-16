@@ -124,7 +124,12 @@ export function ChatApp() {
           {inSession ? (
             <div className="conversation-pane">
               <div className="conversation-scroll">
-                <Transcript agentName={state.agentName} sessionId={state.sessionId} entries={state.entries} />
+                <Transcript
+                  agentName={state.agentName}
+                  sessionId={state.sessionId}
+                  entries={state.entries}
+                  connection={state.connection}
+                />
               </div>
               <div className="conversation-composer">
                 <Composer

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Empty, Flex, Spin, Tag, Typography } from "antd";
 import { fetchAttachmentBlob } from "../../services/attachments";
 import type { HistoryAttachment, HistoryBlock, HistoryEntry } from "../../state/sessionStore";
 import { parseSanitizedMarkdown } from "./sanitizedMarkdown";
@@ -6,43 +7,46 @@ import { parseSanitizedMarkdown } from "./sanitizedMarkdown";
 export function Transcript({
   agentName,
   sessionId,
-  entries
+  entries,
+  connection = "ready"
 }: {
   agentName: string;
   sessionId: string | null;
   entries: HistoryEntry[];
+  connection?: string;
 }) {
   const entryCount = entries.length;
+  const loading = connection === "connecting" || connection === "reconnecting";
 
   return (
     <section className="transcript-window" aria-label="Transcript">
-      <div className="transcript-bar">
-        <p className="transcript-title">
-          <span className="marker marker-square" aria-hidden="true" />
+      <Flex justify="space-between" align="center" gap={8} wrap="wrap" className="transcript-bar">
+        <Typography.Text strong>
           Transcript · {entryCount} {entryCount === 1 ? "entry" : "entries"}
-        </p>
-        <p className="live">
-          Agent Core · Live
-          <span className="marker marker-square" aria-hidden="true" />
-        </p>
-      </div>
-      <div className="transcript-well">
-        <div className="transcript-grid" aria-hidden="true" />
+        </Typography.Text>
+        <Typography.Text type="secondary">Agent Core · Live</Typography.Text>
+      </Flex>
+      <Spin spinning={loading} description="Loading conversation">
         <ol className="transcript" aria-live="polite">
           {entries.length === 0 ? (
-            <li className="entry entry-empty">Send a message or start voice.</li>
+            <li className="entry entry-empty">
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Send a message or start voice." />
+            </li>
           ) : (
             entries.map((entry) => {
               const isUser = entry.role === "user";
               const speaker = isUser ? "You" : agentName || "Agent";
               return (
                 <li key={entry.entryId} data-role={entry.role} className="entry">
-                  <span className={`marker ${isUser ? "marker-plus" : "marker-diamond"}`} aria-hidden="true" />
-                  <p className="entry-copy">
-                    <strong>{speaker}</strong>
-                    <span className="emdash" aria-hidden="true" />
-                    {entry.text}
-                    {entry.status === "interrupted" || entry.status === "failed" ? <em>{entry.status}</em> : null}
+                  <Typography.Paragraph style={{ marginBottom: 0 }}>
+                    <Typography.Text strong>{speaker}</Typography.Text>
+                    <Typography.Text type="secondary"> — </Typography.Text>
+                    <Typography.Text>{entry.text}</Typography.Text>
+                    {entry.status === "interrupted" || entry.status === "failed" ? (
+                      <Tag color={entry.status === "failed" ? "error" : "warning"} style={{ marginInlineStart: 8 }}>
+                        {entry.status}
+                      </Tag>
+                    ) : null}
                     {entry.blocks && entry.blocks.length > 0 ? (
                       <span className="entry-blocks">
                         {entry.blocks.map((block) => (
@@ -57,13 +61,13 @@ export function Transcript({
                         ))}
                       </span>
                     ) : null}
-                  </p>
+                  </Typography.Paragraph>
                 </li>
               );
             })
           )}
         </ol>
-      </div>
+      </Spin>
     </section>
   );
 }
@@ -173,7 +177,7 @@ function HistoryFile({ sessionId, file }: { sessionId: string; file: HistoryAtta
   }, [sessionId, file.attachmentId]);
 
   if (!href) {
-    return <span className="entry-file">{file.displayName}</span>;
+    return <Typography.Text>{file.displayName}</Typography.Text>;
   }
 
   if (file.contentType.startsWith("image/")) {

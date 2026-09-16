@@ -1,4 +1,5 @@
-import { useRef, type DragEvent, type ClipboardEvent } from "react";
+import { useRef, type ClipboardEvent, type DragEvent } from "react";
+import { Alert, Button, Flex, Input, Progress, Typography } from "antd";
 import {
   queueComposerFiles,
   removeComposerFile,
@@ -73,11 +74,7 @@ export function Composer({
 
   return (
     <div className="dock">
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <Alert type="error" showIcon title={error} /> : null}
 
       <form
         className="composer"
@@ -88,10 +85,10 @@ export function Composer({
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
       >
-        <div className="message-stack">
-          <label className="message-field-wrap">
-            <span className="message-label">Message</span>
-            <textarea
+        <Flex vertical gap={8}>
+          <label>
+            <Typography.Text>Message</Typography.Text>
+            <Input.TextArea
               className="message-field"
               value={draft}
               onChange={(event) => onDraftChange(event.target.value)}
@@ -105,99 +102,87 @@ export function Composer({
               disabled={!ready}
               rows={2}
               placeholder="Type your message here..."
+              aria-label="Message"
             />
           </label>
           {pendingAttachments.length > 0 ? (
             <ul className="attach-list" aria-label="Pending attachments">
               {pendingAttachments.map((item) => (
                 <li key={item.localId} className="attach-chip">
-                  {item.contentType.startsWith("image/") && pendingPreviewUrl(item.localId) ? (
-                    <img className="attach-preview" src={pendingPreviewUrl(item.localId)!} alt="" />
-                  ) : (
-                    <span className="marker marker-square" aria-hidden="true" />
-                  )}
-                  <span className="attach-copy">
-                    <strong>{item.displayName}</strong>
-                    {item.status === "uploading" ? <em> {item.progress}%</em> : null}
-                    {item.status === "error" && item.error ? <em> {item.error}</em> : null}
-                  </span>
-                  {item.status === "error" ? (
-                    <button
-                      className="attach-action"
-                      type="button"
-                      aria-label={`Retry ${item.displayName}`}
-                      onClick={() => void retryComposerFile(item.localId)}
+                  <Flex align="center" gap={8} wrap="wrap">
+                    {item.contentType.startsWith("image/") && pendingPreviewUrl(item.localId) ? (
+                      <img className="attach-preview" src={pendingPreviewUrl(item.localId)!} alt="" />
+                    ) : null}
+                    <Typography.Text strong>{item.displayName}</Typography.Text>
+                    {item.status === "uploading" ? <Progress percent={item.progress} size="small" style={{ width: 120 }} /> : null}
+                    {item.status === "error" && item.error ? (
+                      <Typography.Text type="danger">{item.error}</Typography.Text>
+                    ) : null}
+                    {item.status === "error" ? (
+                      <Button
+                        size="small"
+                        aria-label={`Retry ${item.displayName}`}
+                        onClick={() => void retryComposerFile(item.localId)}
+                      >
+                        Retry
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="small"
+                      aria-label={`Remove ${item.displayName}`}
+                      onClick={() => void removeComposerFile(item.localId)}
                     >
-                      Retry
-                    </button>
-                  ) : null}
-                  <button
-                    className="attach-action"
-                    type="button"
-                    aria-label={`Remove ${item.displayName}`}
-                    onClick={() => void removeComposerFile(item.localId)}
-                  >
-                    Remove
-                  </button>
+                      Remove
+                    </Button>
+                  </Flex>
                 </li>
               ))}
             </ul>
           ) : null}
-        </div>
-        <div className="actions">
-          <input
-            ref={fileInput}
-            className="attach-input"
-            type="file"
-            multiple
-            aria-hidden="true"
-            tabIndex={-1}
-            onChange={(event) => {
-              takeFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
-          <button
-            className="key"
-            type="button"
-            aria-label="Attach"
-            disabled={!ready}
-            onClick={() => fileInput.current?.click()}
-          >
-            Attach
-          </button>
-          <button className="key" type="submit" aria-label="Send" disabled={!canSend}>
-            Send
-          </button>
-          {voiceAvailable ? (
-            pendingVoice ? (
-              <button className="key" type="button" aria-label="Cancel voice" onClick={onCancelVoice}>
-                Cancel
-              </button>
-            ) : voiceLive ? (
-              <button
-                className="key"
-                type="button"
-                aria-label={muted ? "Unmute" : "Mute"}
-                onClick={() => onMute(!muted)}
-              >
-                {muted ? "Unmute" : "Mute"}
-              </button>
-            ) : (
-              <button className="key" type="button" aria-label="Voice" onClick={onVoice}>
-                Voice
-              </button>
-            )
-          ) : null}
-          {canRetry ? (
-            <button className="key" type="button" aria-label="Retry" onClick={onRetry}>
-              Retry
-            </button>
-          ) : null}
-          <button className="key" type="button" aria-label="End" onClick={onEnd}>
-            End
-          </button>
-        </div>
+          <Flex gap={8} wrap="wrap">
+            <input
+              ref={fileInput}
+              className="attach-input"
+              type="file"
+              multiple
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={(event) => {
+                takeFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            <Button aria-label="Attach" disabled={!ready} onClick={() => fileInput.current?.click()}>
+              Attach
+            </Button>
+            <Button type="primary" htmlType="submit" aria-label="Send" disabled={!canSend}>
+              Send
+            </Button>
+            {voiceAvailable ? (
+              pendingVoice ? (
+                <Button aria-label="Cancel voice" onClick={onCancelVoice}>
+                  Cancel
+                </Button>
+              ) : voiceLive ? (
+                <Button aria-label={muted ? "Unmute" : "Mute"} onClick={() => onMute(!muted)}>
+                  {muted ? "Unmute" : "Mute"}
+                </Button>
+              ) : (
+                <Button aria-label="Voice" onClick={onVoice}>
+                  Voice
+                </Button>
+              )
+            ) : null}
+            {canRetry ? (
+              <Button aria-label="Retry" onClick={onRetry}>
+                Retry
+              </Button>
+            ) : null}
+            <Button danger aria-label="End" onClick={onEnd}>
+              End
+            </Button>
+          </Flex>
+        </Flex>
       </form>
     </div>
   );
