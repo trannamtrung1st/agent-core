@@ -64,6 +64,7 @@ public sealed class SqliteAttachmentStore(
                     intake.Suffix,
                     intake.Length,
                     declaredContentType,
+                    displayName,
                     allowStoreUnread);
                 if (!inspect.Accepted)
                 {

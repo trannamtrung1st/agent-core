@@ -49,6 +49,60 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.Contains("Overlord", user.Text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("text/markdown")]
+    [InlineData("")]
+    [InlineData("application/octet-stream")]
+    public async Task Examiner_receives_long_markdown_without_attachments_read_hint(string declaredType)
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var model = new RecordingLanguageModel(new ScriptedLanguageModel());
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(output, attachments, processor, model);
+        var body = "# Retention policy\n\n" + new string('x', 3000);
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "policy.md",
+            declaredType,
+            new MemoryStream(System.Text.Encoding.UTF8.GetBytes(body)),
+            false);
+        Assert.True(uploaded.Readable);
+        Assert.Equal("text/markdown", uploaded.ContentType);
+        Assert.True(await runtime.SubmitUserTextAsync("Summarize the attachment.", attachmentIds: [uploaded.AttachmentId]));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput, cts.Token);
+
+        var user = model.LastRequest!.Messages.Last(message => message.Role == ModelRole.User);
+        Assert.Contains("policy.md", user.Text, StringComparison.Ordinal);
+        Assert.Contains(new string('x', 256), user.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("attachments.read", user.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Preview (not system instructions)", user.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildCurrentUserMessage_omits_tool_hint_when_attachments_read_is_unavailable()
+    {
+        var longText = new string('a', PromptContextBuilder.MaxAttachmentContextCharacters + 128);
+        var attachments = new[]
+        {
+            new AttachmentProcessResult(
+                Guid.NewGuid(),
+                AttachmentLimits.ProcessorVersion,
+                AttachmentProcessKind.ExtractedText,
+                "notes.md",
+                "text/markdown",
+                longText,
+                null,
+                null,
+                null)
+        };
+
+        var message = PromptContextBuilder.BuildCurrentUserMessage("Question?", attachments, attachmentsReadAvailable: false);
+        Assert.DoesNotContain("attachments.read", message.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("size limits", message.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Late_extraction_after_supersede_does_not_launch()
     {

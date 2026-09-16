@@ -109,6 +109,24 @@ public sealed class AttachmentProcessorTests
         Assert.Equal(first.Text, again.Text);
     }
 
+    [Fact]
+    public async Task Markdown_with_octet_stream_declared_type_extracts()
+    {
+        var store = new InMemoryAttachmentStore(TimeProvider.System);
+        var session = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        var processor = new AttachmentProcessor(store);
+        var uploaded = await store.UploadPendingAsync(
+            session,
+            "notes.md",
+            "application/octet-stream",
+            new MemoryStream("Retention policy details without markdown markers."u8.ToArray()),
+            allowStoreUnread: false);
+        Assert.Equal("text/markdown", uploaded.ContentType);
+        var result = (await processor.ProcessTurnAsync(session, [uploaded.AttachmentId]))[0];
+        Assert.Equal(AttachmentProcessKind.ExtractedText, result.Kind);
+        Assert.Contains("Retention policy", result.Text, StringComparison.Ordinal);
+    }
+
     private static async Task<AttachmentRecord> Upload(
         InMemoryAttachmentStore store,
         Guid sessionId,

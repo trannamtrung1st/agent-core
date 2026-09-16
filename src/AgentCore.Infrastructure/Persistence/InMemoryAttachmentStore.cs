@@ -147,6 +147,7 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
                     intake.Suffix,
                     intake.Length,
                     declaredContentType,
+                    displayName,
                     allowStoreUnread);
                 if (!inspect.Accepted)
                 {

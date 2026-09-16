@@ -25,7 +25,39 @@ public sealed class AttachmentClassificationTests
     public void Executables_and_archives_are_rejected()
     {
         var zip = "PK\u0003\u0004"u8.ToArray();
-        var result = AttachmentClassification.Inspect(zip, zip, zip.Length, "application/zip", allowStoreUnread: true);
+        var result = AttachmentClassification.Inspect(zip, zip, zip.Length, "application/zip", "archive.zip", allowStoreUnread: true);
         Assert.False(result.Accepted);
+    }
+
+    [Theory]
+    [InlineData("text/markdown", "notes.md", "Plain markdown body without hash headings.")]
+    [InlineData("", "notes.md", "Plain markdown body without hash headings.")]
+    [InlineData("application/octet-stream", "notes.md", "Plain markdown body without hash headings.")]
+    public void Markdown_uploads_are_readable_when_extension_or_sniff_identifies_them(
+        string declaredType,
+        string displayName,
+        string body)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+        var result = AttachmentClassification.Inspect(bytes, bytes, bytes.Length, declaredType, displayName, allowStoreUnread: false);
+        Assert.True(result.Accepted);
+        Assert.True(result.Readable);
+        Assert.Equal("text/markdown", result.ContentType);
+    }
+
+    [Fact]
+    public void Text_plain_with_charset_parameter_is_readable()
+    {
+        var bytes = "hello"u8.ToArray();
+        var result = AttachmentClassification.Inspect(
+            bytes,
+            bytes,
+            bytes.Length,
+            "text/plain; charset=utf-8",
+            "notes.txt",
+            allowStoreUnread: false);
+        Assert.True(result.Accepted);
+        Assert.True(result.Readable);
+        Assert.Equal("text/plain", result.ContentType);
     }
 }

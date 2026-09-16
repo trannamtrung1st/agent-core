@@ -115,18 +115,18 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
             return Unsupported(record, "unread");
         }
 
-        var type = record.ContentType;
+        var type = AttachmentMedia.NormalizeContentType(record.ContentType);
         if (AttachmentMedia.IsImage(type))
         {
             return ProcessImage(record, bytes);
         }
 
-        if (string.Equals(type, "application/pdf", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(AttachmentMedia.NormalizeContentType(type), "application/pdf", StringComparison.OrdinalIgnoreCase))
         {
             return ProcessPdf(record, bytes);
         }
 
-        if (type is "text/plain" or "text/markdown" or "application/json" or "text/csv")
+        if (AttachmentMedia.IsReadableText(type))
         {
             return ProcessText(record, bytes);
         }

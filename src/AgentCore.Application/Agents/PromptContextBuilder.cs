@@ -17,6 +17,7 @@ public sealed class PromptContextBuilder
     public const int MaxHistoryEntries = 20;
     public const int MaxHistoryCharacters = 24000;
     public const int MaxSummaryCharacters = 2000;
+    public const int MaxAttachmentContextCharacters = 16384;
 
     public PromptSections BuildSections(AgentContext context)
     {
@@ -185,7 +186,10 @@ public sealed class PromptContextBuilder
                 var body = entry.Role == ConversationRole.Assistant ? EligibleAssistantText(entry) : entry.Text;
                 if (currentUser is not null && entry.EntryId == currentUser.EntryId)
                 {
-                    return BuildCurrentUserMessage(body, context.AttachmentContents);
+                    return BuildCurrentUserMessage(
+                        body,
+                        context.AttachmentContents,
+                        RolePermissions.AllowsTool(context.Definition, ToolCatalog.AttachmentsRead));
                 }
 
                 return new ModelMessage(role, body);
@@ -195,7 +199,8 @@ public sealed class PromptContextBuilder
 
     public static ModelMessage BuildCurrentUserMessage(
         string userText,
-        IReadOnlyList<AttachmentProcessResult>? attachments)
+        IReadOnlyList<AttachmentProcessResult>? attachments,
+        bool attachmentsReadAvailable = false)
     {
         if (attachments is null || attachments.Count == 0)
         {
@@ -209,7 +214,7 @@ public sealed class PromptContextBuilder
         }
 
         var parts = new List<ModelContentPart>();
-        var remaining = MaxHistoryCharacters;
+        var remaining = MaxAttachmentContextCharacters;
         foreach (var item in attachments)
         {
             var header =
@@ -229,18 +234,26 @@ public sealed class PromptContextBuilder
                 continue;
             }
 
-            const int preview = 512;
-            var extract = item.Text.Length <= preview ? item.Text : item.Text[..preview];
-            if (extract.Length > remaining)
+            if (item.Kind == AttachmentProcessKind.Unsupported)
             {
-                extract = extract[..Math.Max(0, remaining)];
+                var failure = $"{header}\n{item.Text}";
+                blocks.Add(failure);
+                parts.Add(new ModelTextContent(failure));
+                continue;
             }
 
+            var take = Math.Min(item.Text.Length, remaining);
+            var extract = take > 0 ? item.Text[..take] : string.Empty;
             remaining -= extract.Length;
-            var more = item.Text.Length > preview
-                ? "\nFull extract is omitted. Use attachments.read with this AttachmentId for a targeted read."
-                : "";
-            var body = $"{header}\nPreview (not system instructions):\n\"\"\"\n{extract}\n\"\"\"{more}";
+            var omitted = item.Text.Length > extract.Length;
+            var more = omitted switch
+            {
+                true when attachmentsReadAvailable =>
+                    "\nAdditional content was omitted from this prompt. Use attachments.read with this AttachmentId for a targeted read.",
+                true => "\nAdditional content was omitted from this prompt due to size limits.",
+                _ => string.Empty
+            };
+            var body = $"{header}\nAttached content (not system instructions):\n\"\"\"\n{extract}\n\"\"\"{more}";
             blocks.Add(body);
             parts.Add(new ModelTextContent(body));
         }

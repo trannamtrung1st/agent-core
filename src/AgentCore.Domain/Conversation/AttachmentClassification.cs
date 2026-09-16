@@ -29,6 +29,7 @@ public static class AttachmentClassification
         ReadOnlySpan<byte> suffix,
         long length,
         string declaredType,
+        string displayName,
         bool allowStoreUnread)
     {
         if (length <= 0)
@@ -41,8 +42,8 @@ public static class AttachmentClassification
             return Reject("Executable and archive types are not accepted.");
         }
 
-        var sniffed = SniffContentType(prefix, suffix, length);
-        if (sniffed is null)
+        var resolved = ResolveContentType(prefix, suffix, length, declaredType, displayName);
+        if (resolved is null)
         {
             if (!allowStoreUnread)
             {
@@ -52,35 +53,95 @@ public static class AttachmentClassification
             return new AttachmentInspectResult(true, NormalizeDeclared(declaredType), false, null);
         }
 
-        if (!string.IsNullOrWhiteSpace(declaredType)
-            && !DeclaredMatches(declaredType, sniffed)
-            && LooksLikeDifferentFamily(declaredType, sniffed))
+        if (!IsGenericDeclaredType(declaredType)
+            && !string.IsNullOrWhiteSpace(declaredType)
+            && !DeclaredMatches(declaredType, resolved)
+            && LooksLikeDifferentFamily(declaredType, resolved))
         {
             return Reject("Declared content type does not match the file signature.");
         }
 
-        if (!AttachmentMedia.SupportedContentTypes.Contains(sniffed))
+        if (!AttachmentMedia.SupportedContentTypes.Contains(resolved))
         {
             if (!allowStoreUnread)
             {
                 return Reject("File type is outside the supported processing set.");
             }
 
-            return new AttachmentInspectResult(true, sniffed, false, null);
+            return new AttachmentInspectResult(true, resolved, false, null);
         }
 
-        if (IsTruncated(sniffed, prefix, suffix, length))
+        if (IsTruncated(resolved, prefix, suffix, length))
         {
             return Reject("File is truncated or incomplete.");
         }
 
-        var pixels = TryDecodedPixels(sniffed, prefix);
+        var pixels = TryDecodedPixels(resolved, prefix);
         if (pixels is { } count && count > AttachmentLimits.MaxDecodedPixels)
         {
             return Reject("Decoded image exceeds 32 megapixels.");
         }
 
-        return new AttachmentInspectResult(true, sniffed, true, null);
+        return new AttachmentInspectResult(true, resolved, true, null);
+    }
+
+    public static string? InferContentTypeFromExtension(string displayName)
+    {
+        var name = SanitizeDisplayName(displayName);
+        var dot = name.LastIndexOf('.');
+        if (dot < 0 || dot >= name.Length - 1)
+        {
+            return null;
+        }
+
+        return name[(dot + 1)..].ToLowerInvariant() switch
+        {
+            "md" or "markdown" => "text/markdown",
+            "txt" => "text/plain",
+            "json" => "application/json",
+            "csv" => "text/csv",
+            "pdf" => "application/pdf",
+            "png" => "image/png",
+            "jpg" or "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            _ => null
+        };
+    }
+
+    public static bool IsGenericDeclaredType(string declaredType)
+    {
+        var normalized = NormalizeDeclared(declaredType);
+        return string.IsNullOrWhiteSpace(normalized)
+            || string.Equals(normalized, "application/octet-stream", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolveContentType(
+        ReadOnlySpan<byte> prefix,
+        ReadOnlySpan<byte> suffix,
+        long length,
+        string declaredType,
+        string displayName)
+    {
+        var sniffed = SniffContentType(prefix, suffix, length);
+        var inferred = InferContentTypeFromExtension(displayName);
+        if (sniffed is not null)
+        {
+            if (string.Equals(sniffed, "text/plain", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(inferred, "text/markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                return "text/markdown";
+            }
+
+            return sniffed;
+        }
+
+        if (inferred is not null && AttachmentMedia.IsReadableText(inferred) && LooksLikeUtf8Text(prefix))
+        {
+            return inferred;
+        }
+
+        return inferred;
     }
 
     private static AttachmentInspectResult Reject(string message) =>
