@@ -137,7 +137,7 @@ This is the ordered implementation handoff. Each milestone must satisfy its acce
 
 ## Post-MVP phases (planned until verified)
 
-Milestones 0–12 above remain the historical MVP record and stay **Complete**. The accepted proposal pack adds Phases A–H as mandatory follow-on gates and Phase I as conditional. These rows are **planned until verified** except where a cell records observed evidence. Apply acceptance only to the phase that supplies the capability. Workspace **ownership** is Phase A; physical provisioning is Phase F. Phase C may prove artifact-reference rendering with fixtures; complete generated-artifact workflow is F/G. Concrete numeric quotas live in [Technology Decisions](10-technology-decisions.md#planned-resource-limits).
+Milestones 0–12 above remain the historical MVP record and stay **Complete**. Phases A–H are mandatory follow-on gates and are **observed** in the table; Phase I is recorded not-applicable with a future trigger. The section heading is retained for stable fragment links. Apply acceptance only to the phase that supplies the capability. Workspace **ownership** is Phase A; physical provisioning is Phase F. Phase C may prove artifact-reference rendering with fixtures; complete generated-artifact workflow is F/G. Concrete numeric quotas live in [Technology Decisions](10-technology-decisions.md#planned-resource-limits).
 
 | Phase | Production behavior | Evidence |
 | --- | --- | --- |
@@ -151,7 +151,7 @@ Milestones 0–12 above remain the historical MVP record and stay **Complete**. 
 | H — Sandbox | Concrete container behind the execution boundary | **Observed:** Docker `sandbox.run` isolation/resource/cleanup/export tests on `busybox:1.36`; process/shell still denied; Support/Compliance allowlists unchanged |
 | I — WorkItems | Conditional | **Observed not-applicable:** Support/Compliance tool steps and `sandbox.run` complete on the live Session Runtime (or are rejected after deactivation). Durable attachments/workspace/artifacts already survive via D/F. **Future trigger:** a later accepted Support, Compliance, or `sandbox.run` workflow that must continue or resume after `RequestDeactivate` (Paused + new epoch) without repeating the user turn. |
 
-Rename and archive/unarchive are in scope for A (R6). Do not treat a sandbox interface-only as H.
+Rename and archive/unarchive are in scope for A (R6). Do not treat a sandbox interface-only as H. Integrated Support/Compliance durable multi-chat (attachments, bounded work, artifacts, rich blocks, deactivate/reopen, idempotent cleanup) is observed in `SupportComplianceWorkflowTests` plus catalog API dual-create. Requirement matrix, migrations, operating notes, and permitted omissions: [post-MVP handoff](reports/post-mvp-handoff.md). Original proposal files: [proposal retirement](reports/proposal-retirement.md).
 
 ## Handoff rule
 

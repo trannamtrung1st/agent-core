@@ -91,6 +91,7 @@ public sealed class SessionCatalogTests
             () => manager.DurablyDeleteAsync(created.SessionId, created.Revision + 1));
         Assert.Equal("Conflict", stale.Code);
         await manager.DurablyDeleteAsync(created.SessionId, created.Revision);
+        await manager.DurablyDeleteAsync(created.SessionId, created.Revision);
         var missing = await Assert.ThrowsAsync<AgentCoreException>(() => manager.GetAsync(created.SessionId));
         Assert.Equal("NotFound", missing.Code);
         var page = await manager.ListCatalogAsync(null, 50, true);

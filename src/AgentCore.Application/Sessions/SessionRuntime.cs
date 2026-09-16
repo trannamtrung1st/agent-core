@@ -1062,13 +1062,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 await PublishStateAsync(inbound, CancellationToken.None).ConfigureAwait(false);
                 IReadOnlyList<AttachmentProcessResult> results;
+                var extractionStarted = Stopwatch.GetTimestamp();
                 try
                 {
                     results = await _processor.ProcessTurnAsync(SessionId, attachmentIds, _lifetime.Token)
                         .ConfigureAwait(false);
+                    RuntimeTelemetry.Record("extraction", RuntimeTelemetry.ElapsedMs(extractionStarted));
                 }
                 catch (OperationCanceledException)
                 {
+                    RuntimeTelemetry.Record("extraction", RuntimeTelemetry.ElapsedMs(extractionStarted));
                     EndWork();
                     return;
                 }
@@ -1260,6 +1263,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
 
                     string result;
+                    var toolStarted = Stopwatch.GetTimestamp();
                     try
                     {
                         result = await _tools.ExecuteAsync(
@@ -1272,6 +1276,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                     catch (OperationCanceledException)
                     {
+                        RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
+                        RuntimeTelemetry.RecordDropped("tools");
                         await MailboxModelAsync(
                                 cause,
                                 request.ResponseId,
@@ -1282,6 +1288,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             .ConfigureAwait(false);
                         return;
                     }
+
+                    RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     outputBytes += Encoding.UTF8.GetByteCount(result);
                     if (outputBytes > ToolLimits.MaxOutputBytes)

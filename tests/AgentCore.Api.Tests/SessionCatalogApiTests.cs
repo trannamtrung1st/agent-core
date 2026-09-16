@@ -72,8 +72,27 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
 
         var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={epoch.Revision}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        var again = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={epoch.Revision}");
+        Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
         var missing = await client.GetAsync($"/api/v2/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task Support_and_compliance_sessions_are_distinct_catalog_rows()
+    {
+        var client = OwnerClient();
+        var support = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("customer-support", 1, "text"));
+        var compliance = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("compliance", 1, "text"));
+        support.EnsureSuccessStatusCode();
+        compliance.EnsureSuccessStatusCode();
+        var supportView = await support.Content.ReadFromJsonAsync<SessionViewResponse>();
+        var complianceView = await compliance.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.Equal("customer-support", supportView!.AgentId);
+        Assert.Equal("compliance", complianceView!.AgentId);
+        var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        Assert.Contains(listed!.Items, row => row.SessionId == supportView.SessionId && row.AgentId == "customer-support");
+        Assert.Contains(listed.Items, row => row.SessionId == complianceView.SessionId && row.AgentId == "compliance");
     }
 
     [Fact]

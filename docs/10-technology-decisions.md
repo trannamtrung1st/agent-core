@@ -88,7 +88,7 @@ No native speech-to-speech/realtime model in MVP. No microservices, Kafka, Rabbi
 
 ## Post-MVP planned until verified
 
-The following accepted target decisions are **planned until verified**. They do not replace historical MVP acceptance and are not evidence of current shipped behavior. Phase implementation later records observed contracts in the same owners and removes this planned label. Do not invent a second numbered specification series.
+Historical MVP acceptance is unchanged. Phases A–H and the Phase I decision are **observed** in the decisions below (and in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified)). The heading is retained as a stable fragment. Do not invent a second numbered specification series. Product behavior is described here and in docs/01–18; the original proposal pack is not required to understand the system.
 
 ### Decision: trusted-local owner capability (R1)
 

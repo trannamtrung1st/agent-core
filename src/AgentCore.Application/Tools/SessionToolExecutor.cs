@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -289,6 +291,7 @@ public sealed class SessionToolExecutor(
         }
 
         TryString(args, "exportPath", out var export);
+        var started = Stopwatch.GetTimestamp();
         var result = await sandbox.RunAsync(
                 new SandboxRequest(
                     sessionId,
@@ -299,6 +302,7 @@ public sealed class SessionToolExecutor(
                     string.IsNullOrWhiteSpace(export) ? null : export),
                 cancellationToken)
             .ConfigureAwait(false);
+        RuntimeTelemetry.Record("sandbox", RuntimeTelemetry.ElapsedMs(started), verb);
         return Clip(
             JsonSerializer.Serialize(new
             {

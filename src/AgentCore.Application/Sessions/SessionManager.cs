@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -166,7 +168,8 @@ public sealed class SessionManager
 
     public async Task<SessionSnapshot> DeactivateAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        return await MutateAsync(
+        var started = Stopwatch.GetTimestamp();
+        var result = await MutateAsync(
                 sessionId,
                 snapshot =>
                 {
@@ -194,26 +197,34 @@ public sealed class SessionManager
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+        RuntimeTelemetry.Record("initiative", RuntimeTelemetry.ElapsedMs(started));
+        return result;
     }
 
     public async Task DurablyDeleteAsync(Guid sessionId, long expectedRevision, CancellationToken cancellationToken = default)
     {
-        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (snapshot.Revision != expectedRevision)
+        var started = Stopwatch.GetTimestamp();
+        var snapshot = await _store.LoadAsync(sessionId, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Session was not found.");
+        if (snapshot.DurablyDeletedAt is null)
         {
-            throw AgentCoreErrors.Conflict("Stale session revision.");
+            if (snapshot.Revision != expectedRevision)
+            {
+                throw AgentCoreErrors.Conflict("Stale session revision.");
+            }
+
+            var deleted = snapshot with
+            {
+                Entries = [],
+                Summary = string.Empty,
+                PendingTopic = null,
+                DurablyDeletedAt = _time.GetUtcNow(),
+                Revision = snapshot.Revision + 1,
+                UpdatedAt = _time.GetUtcNow()
+            };
+            await _store.SaveAsync(deleted, snapshot.Revision, cancellationToken).ConfigureAwait(false);
         }
 
-        var deleted = snapshot with
-        {
-            Entries = [],
-            Summary = string.Empty,
-            PendingTopic = null,
-            DurablyDeletedAt = _time.GetUtcNow(),
-            Revision = snapshot.Revision + 1,
-            UpdatedAt = _time.GetUtcNow()
-        };
-        await _store.SaveAsync(deleted, snapshot.Revision, cancellationToken).ConfigureAwait(false);
         if (_attachments is not null)
         {
             await _attachments.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -228,6 +239,8 @@ public sealed class SessionManager
         {
             await _artifacts.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
         }
+
+        RuntimeTelemetry.Record("cleanup", RuntimeTelemetry.ElapsedMs(started));
     }
 
     public async Task EnsureAttachmentsAllowedAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -438,8 +451,10 @@ public sealed class SessionManager
 
         var workspace = RequireWorkspace();
         RolePermissions.EnsureLogicalPathAllowed(logicalPath, sessionId);
+        var started = Stopwatch.GetTimestamp();
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
         await workspace.WriteAsync(sessionId, logicalPath, bytes, cancellationToken).ConfigureAwait(false);
+        RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));
     }
 
     public async Task<ArtifactRecord> MaterializeAttachmentAsync(
@@ -482,7 +497,9 @@ public sealed class SessionManager
             .ToHashSet(StringComparer.Ordinal);
         var fileName = WorkspaceFileNames.Deduplicate(WorkspaceFileNames.Sanitize(source.DisplayName), taken);
         var logical = "/workspace/working/" + fileName;
+        var started = Stopwatch.GetTimestamp();
         await workspace.WriteAsync(sessionId, logical, bytes, cancellationToken).ConfigureAwait(false);
+        RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));
         var artifact = await artifacts.CreateAsync(
                 sessionId,
                 fileName,

@@ -35,7 +35,7 @@ public sealed class DockerSandboxExecutorTests
         var session = Guid.CreateVersion7();
         var runId = Guid.CreateVersion7();
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
-        var executor = new DockerSandboxExecutor(workspace);
+        var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         var result = await executor.RunAsync(new SandboxRequest(session, runId, Examiner(), "echo", ["sandbox-ok"]));
         Assert.True(result.Succeeded);
         Assert.Equal(0, result.ExitCode);
@@ -79,7 +79,7 @@ public sealed class DockerSandboxExecutorTests
         await workspace.WriteAsync(sessionA, "/workspace/working/secret.txt", "SESSION_A"u8.ToArray());
         await workspace.EnsureAsync(sessionB, Examiner());
 
-        var executor = new DockerSandboxExecutor(workspace);
+        var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         var denied = await executor.RunAsync(
             new SandboxRequest(sessionA, Guid.CreateVersion7(), Examiner(), "cat", [hostSecret.Replace('\\', '/')]));
         Assert.False(denied.Succeeded);
@@ -103,7 +103,7 @@ public sealed class DockerSandboxExecutorTests
         var session = Guid.CreateVersion7();
         var runId = Guid.CreateVersion7();
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
-        var executor = new DockerSandboxExecutor(workspace);
+        var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             executor.RunAsync(new SandboxRequest(session, runId, Examiner(), "sleep", ["5"]), cts.Token).AsTask());
@@ -118,7 +118,7 @@ public sealed class DockerSandboxExecutorTests
         var other = Guid.CreateVersion7();
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var executor = new DockerSandboxExecutor(workspace, artifacts);
+        var executor = new DockerSandboxExecutor(workspace, artifacts, dockerPath: DockerSandboxProbe.Path ?? "docker");
         await workspace.EnsureAsync(session, Examiner());
         await workspace.WriteAsync(session, "/workspace/working/note.txt", "exported"u8.ToArray());
 
@@ -156,7 +156,7 @@ public sealed class DockerSandboxExecutorTests
         var session = Guid.CreateVersion7();
         var runId = Guid.CreateVersion7();
         var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
-        var executor = new DockerSandboxExecutor(workspace);
+        var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
         await workspace.EnsureAsync(session, Examiner());
         var result = await executor.RunAsync(
             new SandboxRequest(session, runId, Examiner(), "cat", ["/workspace/working/missing.txt"]));
@@ -171,7 +171,7 @@ public sealed class DockerSandboxExecutorTests
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = "docker",
+                FileName = DockerSandboxProbe.Path ?? "docker",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false
@@ -251,13 +251,20 @@ internal static class DockerSandboxProbe
     {
         try
         {
-            if (Run("docker", "version") != 0)
+            Path = Resolve();
+            if (Path is null)
             {
                 Reason = "Docker CLI is not available.";
                 return;
             }
 
-            if (Run("docker", "image", "inspect", SandboxLimits.Image) != 0)
+            if (Run(Path, "version") != 0)
+            {
+                Reason = "Docker CLI is not available.";
+                return;
+            }
+
+            if (Run(Path, "image", "inspect", SandboxLimits.Image) != 0)
             {
                 Reason = $"{SandboxLimits.Image} is not present.";
                 return;
@@ -274,6 +281,32 @@ internal static class DockerSandboxProbe
 
     public static bool Ready { get; }
     public static string Reason { get; } = "Docker CLI is not available.";
+    public static string? Path { get; }
+
+    private static string? Resolve()
+    {
+        foreach (var candidate in new[]
+                 {
+                     "docker",
+                     "/usr/local/bin/docker",
+                     "/opt/homebrew/bin/docker",
+                     "/usr/bin/docker"
+                 })
+        {
+            try
+            {
+                if (Run(candidate, "version") == 0)
+                {
+                    return candidate;
+                }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        return null;
+    }
 
     private static int Run(string file, params string[] arguments)
     {
