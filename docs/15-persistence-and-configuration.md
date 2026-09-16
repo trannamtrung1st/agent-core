@@ -51,7 +51,7 @@ Memory categories: ephemeral working state; persistent conversation history; per
 
 ## Post-MVP planned until verified
 
-Observed A–H persistence/layout; Phase I remains unimplemented. MVP Session.Status `Ended` remains irreversible terminal-end.
+Observed A–H persistence/layout; Phase I WorkItems are not-applicable (no extra durable job schema). MVP Session.Status `Ended` remains irreversible terminal-end.
 
 - **Owner capability grant:** hashed trusted-local token in SQLite; validate HTTP/hub callers; survive process restart.
 - **Catalog fields:** Title, ArchivedAt, DeletedAt/pending-cleanup, WorkspaceOwnership (SessionId key), pinned AgentId+AgentVersion. Rename/archive/deactivate/delete take the same revision-checked save path as snapshots so they cannot be overwritten by a concurrent runtime checkpoint. Deactivate persists `Paused` and increments `RuntimeEpoch` without setting `ArchivedAt` or clearing history.

@@ -85,7 +85,7 @@ Live `agent.block.upsert` and reconnect `session.ready` history may include Mark
 
 ## Post-MVP planned until verified
 
-Workspace physical provisioning and generated artifacts are observed. Typed tools and `sandbox.run` are observed on the runtime; shipped Support/Compliance allowlists still omit process/shell and sandbox. No extra sandbox chrome is required in the composer.
+Workspace physical provisioning and generated artifacts are observed. Typed tools and `sandbox.run` are observed on the runtime; shipped Support/Compliance allowlists still omit process/shell and sandbox. No extra sandbox chrome is required in the composer. Phase I adds no WorkItem UI.
 
 ## Synthetic playback simulation
 

@@ -195,7 +195,7 @@ Categories: Provider, Session, Protocol, Audio, Validation, Connection, Transpor
 
 ## Post-MVP planned until verified
 
-Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase I WorkItems remain unimplemented/conditional. Full R1–R6 text is in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Phase D initiative/deactivation and Phase F workspace execution view are observed above.
+Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase I WorkItems are not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
 
 **Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
 
