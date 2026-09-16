@@ -1,4 +1,4 @@
-import { Select } from "../../components/Select";
+import { Button, Select } from "antd";
 import type { AgentDescriptor } from "../../services/api";
 
 export function IdentityPicker({
@@ -14,6 +14,8 @@ export function IdentityPicker({
   onSelect: (agentId: string) => void;
   onStart: () => void;
 }) {
+  const hasAgents = agents.length > 0;
+
   return (
     <section className="picker">
       {error ? (
@@ -25,17 +27,20 @@ export function IdentityPicker({
         <span className="picker-legend">Identity</span>
         <Select
           aria-label="Identity"
-          value={selectedAgentId}
+          value={hasAgents ? selectedAgentId : undefined}
+          placeholder="Select identity"
+          disabled={!hasAgents}
           options={agents.map((agent) => ({
             value: agent.id,
             label: `${agent.name} — ${agent.role}`
           }))}
-          onChange={onSelect}
+          onChange={(agentId) => onSelect(agentId)}
+          style={{ width: "100%" }}
         />
       </div>
-      <button type="button" aria-label="Start conversation" onClick={onStart}>
+      <Button type="primary" aria-label="Start conversation" onClick={onStart}>
         Start conversation
-      </button>
+      </Button>
     </section>
   );
 }
