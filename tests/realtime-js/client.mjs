@@ -67,11 +67,16 @@ async function connect() {
   return connection;
 }
 
+async function ownerHeaders(extra = {}) {
+  await ensureOwner();
+  return { ...extra, "X-AgentCore-Owner-Capability": ownerToken };
+}
+
 async function createSession() {
   await ensureOwner();
   const response = await fetch(`${base}/api/v1/sessions`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: await ownerHeaders({ "content-type": "application/json" }),
     body: JSON.stringify({ agentId: "examiner", mode: "text" })
   });
   if (!response.ok) {
@@ -465,7 +470,9 @@ async function run() {
       if (!retry.accepted) {
         throw new Error(JSON.stringify(retry));
       }
-      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`);
+      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`, {
+        headers: await ownerHeaders()
+      });
       if (!page.ok) {
         throw new Error(`history ${page.status}`);
       }
@@ -697,7 +704,7 @@ async function run() {
       const b = await createSession();
       const extra = await fetch(`${base}/api/v1/sessions`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: await ownerHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({ agentId: "examiner", mode: "text" })
       });
       if (!extra.ok) {

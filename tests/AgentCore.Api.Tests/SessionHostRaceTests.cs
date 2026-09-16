@@ -21,7 +21,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
     [Fact]
     public async Task Concurrent_delete_and_reattach_rejects_ended_session()
     {
-        var client = _factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -49,7 +49,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
     public async Task Stale_disconnect_does_not_evict_replacement_owner()
     {
         var host = _factory.Services.GetRequiredService<SessionHost>();
-        var client = _factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;

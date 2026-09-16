@@ -25,7 +25,7 @@ public sealed class SessionCapacityTests : IClassFixture<CapacityOneApiFactory>
     public async Task Http_delete_releases_live_capacity_and_rejects_reattach()
     {
         var host = _factory.Services.GetRequiredService<SessionHost>();
-        var client = _factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var firstCreated = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         firstCreated.EnsureSuccessStatusCode();
         var first = (await firstCreated.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -120,6 +120,7 @@ public sealed class CapacityOneApiFactory : WebApplicationFactory<Program>
                 ["AgentCore:MaxActiveSessions"] = "1"
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     private static string FindRepoRoot()

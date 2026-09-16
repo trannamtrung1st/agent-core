@@ -33,7 +33,7 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     [Fact]
     public async Task Session_lifecycle_create_get_history_end()
     {
-        var client = _factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.NotNull(created.Headers.Location);
@@ -61,7 +61,7 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     [Fact]
     public async Task Synthetic_voice_create_is_available()
     {
-        var client = _factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
@@ -72,7 +72,7 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     [Fact]
     public async Task There_is_no_public_text_chat_http_endpoint()
     {
-        var client = _factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", null, "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         var chat = await client.PostAsJsonAsync($"/api/v1/sessions/{view!.SessionId}/messages", new { text = "hi" });

@@ -26,7 +26,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
-            var client = _factory.CreateClient();
+            var client = TestOwnerCapability.CreateOwnerClient(_factory);
             var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
             created.EnsureSuccessStatusCode();
             var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -99,7 +99,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
-            var client = _factory.CreateClient();
+            var client = TestOwnerCapability.CreateOwnerClient(_factory);
             var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
             created.EnsureSuccessStatusCode();
             var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;

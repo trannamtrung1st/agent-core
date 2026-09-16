@@ -1,4 +1,3 @@
-using AgentCore.Api.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +22,7 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
                 ["Persistence:ArtifactRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"))
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     private static string FindRepoRoot()

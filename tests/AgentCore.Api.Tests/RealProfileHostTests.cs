@@ -121,6 +121,9 @@ public sealed class RealComposeHostTests : IClassFixture<RealComposeHostFixture>
     public async Task Health_reports_real_and_text_is_available_without_voice()
     {
         using var client = new HttpClient { BaseAddress = new Uri(_fixture.BaseAddress) };
+        client.DefaultRequestHeaders.TryAddWithoutValidation(
+            OwnerCapabilityHeaders.Name,
+            IssueOwnerCapability(client.BaseAddress!.ToString()));
         var health = await client.GetFromJsonAsync<HealthResponse>("/health");
         Assert.Equal("healthy", health!.Status);
         Assert.Equal("Real", health.Profile);
@@ -135,5 +138,13 @@ public sealed class RealComposeHostTests : IClassFixture<RealComposeHostFixture>
 
         var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
         Assert.Equal(HttpStatusCode.Conflict, voice.StatusCode);
+    }
+
+    private static string IssueOwnerCapability(string baseAddress)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        var issued = http.PostAsync("/api/v1/local/owner-capability", null).GetAwaiter().GetResult();
+        issued.EnsureSuccessStatusCode();
+        return issued.Content.ReadFromJsonAsync<OwnerCapabilityResponse>().GetAwaiter().GetResult()!.Token;
     }
 }

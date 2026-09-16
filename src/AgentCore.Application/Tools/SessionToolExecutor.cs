@@ -210,18 +210,13 @@ public sealed class SessionToolExecutor(
         }
 
         TryString(args, "contentType", out var contentType);
-        Guid? source = null;
-        if (TryString(args, "sourceAttachmentId", out var sourceRaw) && Guid.TryParse(sourceRaw, out var parsed))
-        {
-            source = parsed;
-        }
 
         var created = await artifacts.CreateAsync(
                 sessionId,
                 displayName,
                 string.IsNullOrWhiteSpace(contentType) ? "text/markdown" : contentType,
                 Encoding.UTF8.GetBytes(content),
-                source,
+                sourceAttachmentId: null,
                 workspaceLogicalPath: null,
                 cancellationToken)
             .ConfigureAwait(false);

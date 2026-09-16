@@ -132,7 +132,7 @@ export async function createSession(agentId: string, agentVersion?: number, mode
 }
 
 export async function endSession(sessionId: string): Promise<void> {
-  const response = await fetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
+  const response = await ownerFetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
   if (!response.ok) {
     throw new Error("Unable to end the session.");
   }

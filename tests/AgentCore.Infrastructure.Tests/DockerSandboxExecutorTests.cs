@@ -164,6 +164,22 @@ public sealed class DockerSandboxExecutorTests
         Assert.Empty(Leftover(runId));
     }
 
+    [DockerSandboxFact]
+    public async Task Cat_output_is_bounded_to_max_bytes()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var executor = new DockerSandboxExecutor(workspace, dockerPath: DockerSandboxProbe.Path ?? "docker");
+        await workspace.EnsureAsync(session, Examiner());
+        await workspace.WriteAsync(session, "/workspace/working/large.txt", Encoding.UTF8.GetBytes(new string('a', 200_000)));
+
+        var result = await executor.RunAsync(
+            new SandboxRequest(session, Guid.CreateVersion7(), Examiner(), "cat", ["/workspace/working/large.txt"]));
+        Assert.True(result.Succeeded);
+        Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(result.Output), 0, SandboxLimits.MaxOutputBytes);
+    }
+
     private static string[] Leftover(Guid runId)
     {
         var name = $"acsbx-{runId:N}";

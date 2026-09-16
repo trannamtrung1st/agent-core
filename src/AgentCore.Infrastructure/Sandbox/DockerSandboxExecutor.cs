@@ -162,29 +162,25 @@ public sealed class DockerSandboxExecutor(
             throw new InvalidOperationException("Failed to start docker.");
         }
 
-        var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+        string combined;
         try
         {
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            combined = await BoundedProcessOutput.ReadAsync(process, maxOutput, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             try
             {
-                process.Kill(entireProcessTree: true);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
             }
             catch (Exception)
             {
             }
 
             throw;
-        }
-
-        var combined = (await stdout.ConfigureAwait(false)) + (await stderr.ConfigureAwait(false));
-        if (combined.Length > maxOutput)
-        {
-            combined = combined[..maxOutput];
         }
 
         if (process.ExitCode != 0 && arguments.Count > 0 && arguments[0] is "create" or "inspect")

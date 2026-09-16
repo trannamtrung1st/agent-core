@@ -22,7 +22,7 @@ public sealed class ShutdownHostTests
         var host = factory.Services.GetRequiredService<SessionHost>();
         Assert.True(host.Admitting);
         await host.DrainAsync();
-        var client = factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, created.StatusCode);
         Assert.False(host.Admitting);
@@ -33,7 +33,7 @@ public sealed class ShutdownHostTests
     {
         await using var factory = new AgentCoreApiFactory();
         var host = factory.Services.GetRequiredService<SessionHost>();
-        var client = factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -82,7 +82,7 @@ public sealed class ShutdownHostTests
     {
         await using var factory = new HungDisposeApiFactory();
         var host = factory.Services.GetRequiredService<SessionHost>();
-        var client = factory.CreateClient();
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;

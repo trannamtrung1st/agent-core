@@ -65,6 +65,7 @@ public sealed class SqliteArtifactStore(
         var gate = Gate(sessionId);
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         var tempPath = Path.Combine(blobRoot, $".partial-{Guid.NewGuid():N}");
+        string? finalPath = null;
         try
         {
             ThrowIfDeleted(sessionId);
@@ -82,10 +83,11 @@ public sealed class SqliteArtifactStore(
 
             var id = Guid.CreateVersion7();
             var key = AttachmentBlobKeys.For(sessionId, id);
-            var finalPath = ResolvePath(key);
+            finalPath = ResolvePath(key);
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
             await File.WriteAllBytesAsync(tempPath, bytes.ToArray(), linked.Token).ConfigureAwait(false);
             File.Move(tempPath, finalPath, overwrite: false);
+            tempPath = "";
             var record = new ArtifactRecord(
                 id,
                 sessionId,
@@ -96,13 +98,26 @@ public sealed class SqliteArtifactStore(
                 sourceAttachmentId,
                 workspaceLogicalPath,
                 time.GetUtcNow());
-            db.Artifacts.Add(ToRow(record, key));
-            await db.SaveChangesAsync(linked.Token).ConfigureAwait(false);
+            try
+            {
+                db.Artifacts.Add(ToRow(record, key));
+                await db.SaveChangesAsync(linked.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                TryDelete(finalPath);
+                throw;
+            }
+
             return record;
         }
         catch
         {
-            TryDelete(tempPath);
+            if (!string.IsNullOrEmpty(tempPath))
+            {
+                TryDelete(tempPath);
+            }
+
             throw;
         }
         finally

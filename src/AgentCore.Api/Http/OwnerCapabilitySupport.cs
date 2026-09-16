@@ -12,7 +12,7 @@ public static class TrustedLocalCaller
         var ip = http.Connection.RemoteIpAddress;
         if (ip is null)
         {
-            return true;
+            return false;
         }
 
         if (ip.IsIPv4MappedToIPv6)

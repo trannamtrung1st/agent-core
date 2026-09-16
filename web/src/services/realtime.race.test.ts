@@ -15,6 +15,7 @@ describe("realtime race handling", () => {
     capture.release();
     hooks.resetOutput();
     hooks.setConnection(null);
+    window.localStorage.clear();
     useSessionStore.setState({
       ...emptySession(),
       agents: [],
@@ -336,7 +337,8 @@ describe("realtime race handling", () => {
   });
 
   it("falls back to HTTP end when EndSession is rejected", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    window.localStorage.setItem("agent-core.owner-capability", "tok");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", fetchMock);
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Persistent save failed." } });
     const stop = vi.fn().mockResolvedValue(undefined);
@@ -350,11 +352,20 @@ describe("realtime race handling", () => {
       selectedAgentId: "examiner"
     });
     await hangUp();
-    expect(fetchMock).toHaveBeenCalledWith("/api/v1/sessions/s1", { method: "DELETE" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/s1",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.any(Headers)
+      })
+    );
+    const deleteHeaders = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(deleteHeaders.get("X-AgentCore-Owner-Capability")).toBe("tok");
     expect(useSessionStore.getState().sessionId).toBeNull();
   });
 
   it("keeps the session when EndSession and HTTP end both fail", async () => {
+    window.localStorage.setItem("agent-core.owner-capability", "tok");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Persistent save failed." } });
     hooks.setConnection({ invoke, send: vi.fn(), stop: vi.fn() } as never);

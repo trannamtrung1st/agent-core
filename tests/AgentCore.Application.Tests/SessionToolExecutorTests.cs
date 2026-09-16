@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Application.Tests;
 
@@ -70,6 +71,28 @@ public sealed class SessionToolExecutorTests
     }
 
     [Fact]
+    public async Task Generated_artifact_create_ignores_fabricated_source_attachment()
+    {
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var executor = new SessionToolExecutor(artifacts: artifacts);
+        var sessionId = Guid.NewGuid();
+        var fabricated = Guid.NewGuid();
+        var result = await executor.ExecuteAsync(
+            Artifacts(),
+            sessionId,
+            new ModelToolCall(
+                "c1",
+                ToolCatalog.ArtifactsCreate,
+                $$"""{"displayName":"note.md","content":"hello","sourceAttachmentId":"{{fabricated:D}}"}"""),
+            ToolLimits.MaxOutputBytes);
+        Assert.Contains("\"artifactId\"", result, StringComparison.Ordinal);
+        Assert.DoesNotContain(fabricated.ToString("D"), result, StringComparison.Ordinal);
+        var listed = await artifacts.ListAsync(sessionId);
+        Assert.Single(listed);
+        Assert.Null(listed[0].SourceAttachmentId);
+    }
+
+    [Fact]
     public async Task Sandbox_run_requires_allowlist_and_uses_the_executor()
     {
         var sandbox = new RecordingSandbox();
@@ -123,6 +146,11 @@ public sealed class SessionToolExecutorTests
     private static AgentDefinition Sandboxed() => Support() with
     {
         Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.SandboxRun])
+    };
+
+    private static AgentDefinition Artifacts() => Support() with
+    {
+        Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.ArtifactsCreate])
     };
 
     private sealed class RecordingSandbox : ISandboxExecutor

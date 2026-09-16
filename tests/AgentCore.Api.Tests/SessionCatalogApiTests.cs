@@ -146,8 +146,8 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     [Fact]
     public async Task Attach_without_owner_capability_is_rejected()
     {
-        var client = _factory.CreateClient();
-        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var client = OwnerClient();
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         await using var hub = new HubConnectionBuilder()
             .WithUrl(

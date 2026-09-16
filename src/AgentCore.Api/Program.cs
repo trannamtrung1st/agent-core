@@ -89,6 +89,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHub<SessionHub>("/hubs/session");
 SessionCatalogEndpoints.Map(app);
+LegacySessionEndpoints.Map(app);
 AttachmentEndpoints.Map(app);
 WorkspaceEndpoints.Map(app);
 ArtifactEndpoints.Map(app);
@@ -112,95 +113,6 @@ app.MapGet("/api/v1/agents/{agentId}", async (string agentId, int? version, Sess
     {
         var agent = await sessions.GetAgentAsync(agentId, version, cancellationToken).ConfigureAwait(false);
         return Results.Json(HttpMapping.ToAgent(agent));
-    }
-    catch (AgentCoreException ex)
-    {
-        return ProblemResults.From(ex);
-    }
-});
-
-app.MapPost("/api/v1/sessions", async (CreateSessionRequest? body, SessionManager sessions, SessionHost host, HttpContext http, CancellationToken cancellationToken) =>
-{
-    try
-    {
-        if (!host.Admitting)
-        {
-            throw AgentCoreErrors.ShuttingDown();
-        }
-
-        if (body is null || string.IsNullOrWhiteSpace(body.AgentId))
-        {
-            throw AgentCoreErrors.Validation("agentId is required.");
-        }
-
-        var snapshot = await sessions.CreateAsync(
-                body.AgentId,
-                body.AgentVersion,
-                HttpMapping.ParseMode(body.Mode),
-                cancellationToken)
-            .ConfigureAwait(false);
-        var view = HttpMapping.ToView(snapshot, activeResponseId: null);
-        var location = $"/api/v1/sessions/{view.SessionId}";
-        http.Response.Headers.Location = location;
-        return Results.Json(view, statusCode: StatusCodes.Status201Created);
-    }
-    catch (AgentCoreException ex)
-    {
-        return ProblemResults.From(ex);
-    }
-});
-
-app.MapGet("/api/v1/sessions/{sessionId:guid}", async (
-    Guid sessionId,
-    SessionManager sessions,
-    SessionHost host,
-    CancellationToken cancellationToken) =>
-{
-    try
-    {
-        var snapshot = host.LiveSnapshot(sessionId)
-            ?? await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return Results.Json(HttpMapping.ToView(snapshot, host.ActiveResponseId(sessionId)));
-    }
-    catch (AgentCoreException ex)
-    {
-        return ProblemResults.From(ex);
-    }
-});
-
-app.MapGet("/api/v1/sessions/{sessionId:guid}/messages", async (
-    Guid sessionId,
-    SessionManager sessions,
-    long after,
-    int? limit,
-    CancellationToken cancellationToken) =>
-{
-    try
-    {
-        var pageLimit = limit ?? 50;
-        var items = await sessions.ReadHistoryAsync(sessionId, after, pageLimit, cancellationToken)
-            .ConfigureAwait(false);
-        var next = items.Count == 0 ? after : items[^1].Sequence;
-        return Results.Json(new HistoryPageResponse(
-            items.Select(HttpMapping.ToHistoryItem).ToArray(),
-            next,
-            HasMore: items.Count == pageLimit));
-    }
-    catch (AgentCoreException ex)
-    {
-        return ProblemResults.From(ex);
-    }
-});
-
-app.MapDelete("/api/v1/sessions/{sessionId:guid}", async (
-    Guid sessionId,
-    SessionHost host,
-    CancellationToken cancellationToken) =>
-{
-    try
-    {
-        await host.TerminateAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return Results.NoContent();
     }
     catch (AgentCoreException ex)
     {

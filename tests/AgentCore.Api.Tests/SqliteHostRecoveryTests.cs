@@ -34,6 +34,7 @@ public sealed class SqliteHostRecoveryTests
                 var host = first.Services.GetRequiredService<SessionHost>();
                 host.AfterUserTextPersisted = ct => Task.Delay(Timeout.InfiniteTimeSpan, ct);
                 var client = first.CreateClient();
+                TestOwnerCapability.Apply(client, first.Services);
                 var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -68,6 +69,7 @@ public sealed class SqliteHostRecoveryTests
 
             await using var second = new DurableSqliteHostFactory(backup);
             var retryClient = second.CreateClient();
+            TestOwnerCapability.Apply(retryClient, second.Services);
             await using var retryHub = await ConnectFactoryAsync(second);
             var retryReady = ReadyWaiter(retryHub);
             var retriedAttach = await retryHub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
@@ -109,6 +111,7 @@ public sealed class SqliteHostRecoveryTests
             await using (var first = new GatedUserTurnSqliteFactory(db))
             {
                 var client = first.CreateClient();
+                TestOwnerCapability.Apply(client, first.Services);
                 var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -125,6 +128,7 @@ public sealed class SqliteHostRecoveryTests
 
             await using var second = new DurableSqliteHostFactory(db);
             var retryClient = second.CreateClient();
+            TestOwnerCapability.Apply(retryClient, second.Services);
             await using var retryHub = await ConnectFactoryAsync(second);
             var retryReady = ReadyWaiter(retryHub);
             var retriedAttach = await retryHub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
@@ -163,6 +167,7 @@ public sealed class SqliteHostRecoveryTests
         await using var factory = new GatedEndSqliteFactory();
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = factory.CreateClient();
+        TestOwnerCapability.Apply(client, factory.Services);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -186,6 +191,7 @@ public sealed class SqliteHostRecoveryTests
     {
         await using var factory = new FailingEndSqliteFactory();
         var client = factory.CreateClient();
+        TestOwnerCapability.Apply(client, factory.Services);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -230,6 +236,7 @@ public sealed class SqliteHostRecoveryTests
         await using var factory = new FailingUserTurnSqliteFactory();
         var host = factory.Services.GetRequiredService<SessionHost>();
         var client = factory.CreateClient();
+        TestOwnerCapability.Apply(client, factory.Services);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -287,6 +294,7 @@ public sealed class SqliteHostRecoveryTests
             await using (var factory = new PauseAfterEndSqliteFactory(db))
             {
                 var client = factory.CreateClient();
+                TestOwnerCapability.Apply(client, factory.Services);
                 var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
                 created.EnsureSuccessStatusCode();
                 var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
@@ -389,6 +397,7 @@ public sealed class SqliteHostRecoveryTests
     private static async Task<string> CreateSessionAsync(string baseAddress)
     {
         using var http = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        http.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, IssueOwnerHttp(baseAddress));
         var created = await http.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         created.EnsureSuccessStatusCode();
         var session = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
@@ -501,6 +510,7 @@ internal sealed class DurableSqliteHostFactory(string dbPath) : WebApplicationFa
                 return sqlite;
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     private static string FindRepoRoot()
@@ -572,6 +582,7 @@ internal sealed class GatedUserTurnSqliteFactory(string dbPath) : WebApplication
                 return Store;
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     private static string FindRepoRoot()
@@ -688,6 +699,7 @@ internal sealed class GatedEndSqliteFactory : WebApplicationFactory<Program>
                 return Store;
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     protected override void Dispose(bool disposing)
@@ -826,6 +838,7 @@ internal sealed class PauseAfterEndSqliteFactory : WebApplicationFactory<Program
                 return Store;
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     protected override void Dispose(bool disposing)
@@ -961,6 +974,7 @@ internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
                 return new FailingEndStore(inner);
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     protected override void Dispose(bool disposing)
@@ -1076,6 +1090,7 @@ internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Progr
                 return new FailingUserTurnStore(inner);
             });
         });
+        TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
     protected override void Dispose(bool disposing)
