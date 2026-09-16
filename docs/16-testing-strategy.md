@@ -10,6 +10,12 @@ Default verification is fully offline and deterministic: Synthetic/scripted adap
 
 OpenRouter live smoke, when opted in, may use `openrouter/free`. Do not use that router as the Real/demo DefaultModel. Do not assert catalog quality, exact phrasing or structured-output correctness. OpenAI STT/TTS live integration and manual headset/speaker verification may wait until `OPENAI_API_KEY` is supplied; missing that key must not fail normal build/test. Prioritize verifying the text-conversation path with Synthetic and, optionally, OpenRouter.
 
+## Runtime evidence for development and review
+
+Frontend and backend behavior changes should be verified by executing a representative affected use case when the environment supports it, alongside applicable unit/build and milestone gates. Behavior reviews should also reproduce or exercise the relevant path where practical. Frontend verification interacts with the running Synthetic app and observes the resulting UI state; backend verification uses an integration fixture or a local Synthetic host to assert observable outputs and relevant state effects. Cover a relevant failure/recovery or boundary case when the changed behavior warrants it. An existing scenario suffices if it exercises the change; add or extend regression coverage when a behavior change lacks it.
+
+Static inspection, compilation, a screenshot or `/health` alone is not functional evidence. Record the scenario, expected and observed outcomes, commands/tools, and any unverified behavior. If execution is blocked, try a practical fallback and distinguish setup failures from product failures. Plans and documentation-only changes do not require application execution. The shared [testing skill](../.agents/skills/testing/SKILL.md#runtime-verification) owns the Codex/Cursor execution workflow, including Playwright MCP preference and fallback steps. These checks preserve the offline default and explicit opt-in policy above; a real use case does not require a live provider.
+
 ## Synthetic fixtures
 
 | Implementation | Contract and behavior |
@@ -85,9 +91,9 @@ Vitest: Zustand reducers, supersession guards, sample-offset accounting, segment
 
 Opt-in real-provider smoke tests require explicit operator credentials, an explicit opt-in flag, and small bounded requests. They are excluded from default local `dotnet test` / pnpm / Playwright loops. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency and may be deferred without `OPENAI_API_KEY`. Unit gates remain deterministic and do not require real-model phrasing to match.
 
-## Future implementation commands
+## Verification commands
 
-Once projects exist: `dotnet test` from solution root; `pnpm install --frozen-lockfile`, `pnpm run test --run`, `pnpm run build` from web; `pnpm exec playwright test` with the synthetic test host; isolated `docker compose -p <throwaway> up --build` (never `down -v` on the default `agent-core` project) for Compose volume survival. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`). Core CI must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
+Current commands are documented in [Operations](17-observability-and-operations.md#running-after-implementation): `dotnet test` from solution root; `pnpm install --frozen-lockfile`, `pnpm run test --run`, `pnpm run build` from web; `pnpm exec playwright test` with the Synthetic test host; isolated `docker compose -p <throwaway> up --build` (never `down -v` on the default `agent-core` project) for Compose volume survival. Restore `tests/realtime-js` dependencies with `npm ci` before JavaScript wire tests. Check host profile and disposable state before reusing any server; the Playwright runner reuses existing servers outside CI. Repository CI runs in [GitHub Actions](../.github/workflows/synthetic.yml). Dependency/browser installation may require network; core execution must never require OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider credentials must not be required to build or pass core tests.
 
 ## CI evolution
 

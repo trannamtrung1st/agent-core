@@ -40,4 +40,6 @@ Microservices, MediatR forwarding, Kafka/Redis, generic repositories, a native r
 
 ## Completion
 
+For frontend and backend implementation, fixes and behavior reviews, follow the [testing skill](.agents/skills/testing/SKILL.md#runtime-verification). Exercise the affected use case when runnable: frontend through Playwright MCP against the running Synthetic app, backend through a relevant integration test or local Synthetic host. Static code review, compilation, a page screenshot or a health response alone do not establish functional correctness. If execution is unavailable, attempt a practical fallback and report the exact blocker and unverified behavior. Plans and docs-only changes do not require running the application.
+
 Run applicable checks and report their results. Do not claim completion or milestone acceptance when required checks fail or were not run; identify the remaining gap.
