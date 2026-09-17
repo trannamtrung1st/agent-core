@@ -75,6 +75,11 @@ test("markdown response renders and survives reopen", async ({ page }) => {
   await expect(page.locator(".markdown-message code")).toHaveText("IAgentProvider");
   await expect(page.locator(".agent-activity")).toHaveCount(0);
 
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   await page.locator(".session-row-open").first().click();

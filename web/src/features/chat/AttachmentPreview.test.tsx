@@ -39,6 +39,7 @@ describe("AttachmentPreview", () => {
       />
     );
     const image = await screen.findByRole("img", { name: "screenshot.png" });
+    expect(image.closest("a")).toHaveAttribute("aria-label", "Open screenshot.png");
     expect(image.closest("a")).toHaveAttribute("target", "_blank");
     expect(image.closest("a")).not.toHaveAttribute("download");
   });

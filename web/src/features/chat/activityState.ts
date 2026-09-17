@@ -69,7 +69,9 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
     return { kind: "idle" };
   }
 
-  if (source.outputState === "interrupted") {
+  const live = source.liveResponseId != null;
+
+  if (source.outputState === "interrupted" && live) {
     return { kind: "error", label: "Interrupted" };
   }
 
@@ -77,7 +79,7 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
     return { kind: "listening", label: "User speaking" };
   }
 
-  if (source.outputState === "agentSpeaking") {
+  if (source.outputState === "agentSpeaking" && live) {
     return { kind: "speaking", label: "Speaking…" };
   }
 
@@ -91,12 +93,8 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
 
   const hasLiveContent =
     Boolean(source.liveAssistantText?.trim()) || Boolean(source.liveAssistantHasContent);
-  const generating = source.outputState === "agentGenerating" && source.liveResponseId != null;
-  if (
-    source.outputState === "waitingForAgent" ||
-    generating ||
-    source.liveResponseId != null
-  ) {
+  const generating = source.outputState === "agentGenerating" && live;
+  if ((source.outputState === "waitingForAgent" && live) || generating || live) {
     if (hasLiveContent) {
       return { kind: "idle" };
     }

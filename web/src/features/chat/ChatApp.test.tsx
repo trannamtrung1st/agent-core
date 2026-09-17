@@ -230,7 +230,7 @@ describe("ChatApp accessibility", () => {
     expect(cancelRenderedResponse).toHaveBeenCalled();
 
     await act(async () => {
-      useSessionStore.setState({ liveResponseId: null, outputState: "agentSpeaking" });
+      useSessionStore.setState({ liveResponseId: "r2", outputState: "agentSpeaking" });
       rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Speaking…");

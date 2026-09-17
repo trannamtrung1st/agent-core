@@ -188,7 +188,39 @@ describe("Conversation", () => {
     );
     expect(screen.getByText("Hi")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "x" })).not.toBeInTheDocument();
-    expect(screen.getByText("Artifact · fixture-artifact-1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Artifact fixture-artifact-1" })).toBeInTheDocument();
+    expect(screen.queryByText("Spoken hello")).not.toBeInTheDocument();
+  });
+
+  it("does not surface hidden speech text or raw tool payloads as visible messages", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Order 91 is delayed.",
+            blocks: [
+              {
+                blockId: "b1",
+                kind: "unknown",
+                text: "",
+                fallbackText: "[Unsupported content]",
+                attachmentId: null,
+                artifactId: null
+              }
+            ]
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Order 91 is delayed.")).toBeInTheDocument();
+    expect(screen.queryByText(/tool_call/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Spoken hello/)).not.toBeInTheDocument();
+    expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
   });
 
   it("shows transient activity instead of persisting it as a message", () => {

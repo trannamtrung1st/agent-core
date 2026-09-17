@@ -22,10 +22,13 @@ describe("agent activity mapping", () => {
   });
 
   it("maps runtime states onto in-flow activity labels", () => {
-    expect(conversationStatus({ ...ready, outputState: "interrupted" })).toBe("Interrupted");
+    expect(conversationStatus({ ...ready, outputState: "interrupted" })).toBe("Ready");
+    expect(conversationStatus({ ...ready, outputState: "interrupted", liveResponseId: "r1" })).toBe("Interrupted");
     expect(conversationStatus({ ...ready, inputState: "userSpeaking" })).toBe("User speaking");
-    expect(conversationStatus({ ...ready, outputState: "agentSpeaking" })).toBe("Speaking…");
-    expect(conversationStatus({ ...ready, outputState: "waitingForAgent" })).toBe("Thinking…");
+    expect(conversationStatus({ ...ready, outputState: "agentSpeaking" })).toBe("Ready");
+    expect(conversationStatus({ ...ready, outputState: "agentSpeaking", liveResponseId: "r1" })).toBe("Speaking…");
+    expect(conversationStatus({ ...ready, outputState: "waitingForAgent" })).toBe("Ready");
+    expect(conversationStatus({ ...ready, outputState: "waitingForAgent", liveResponseId: "r1" })).toBe("Thinking…");
     expect(conversationStatus({ ...ready, outputState: "agentGenerating", liveResponseId: "r1" })).toBe(
       "Generating response…"
     );
@@ -35,6 +38,17 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, liveResponseId: "r1" })).toBe("Thinking…");
     expect(conversationStatus({ ...ready, voiceLive: true })).toBe("Listening…");
     expect(conversationStatus(ready)).toBe("Ready");
+  });
+
+  it("does not restore thinking from stale output after a terminal response", () => {
+    expect(
+      mapAgentActivity({
+        ...ready,
+        outputState: "waitingForAgent",
+        liveResponseId: null,
+        liveAssistantText: "Hello from synthetic."
+      }).kind
+    ).toBe("idle");
   });
 
   it("hides thinking once assistant text or blocks have started", () => {

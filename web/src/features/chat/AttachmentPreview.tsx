@@ -37,8 +37,8 @@ export function HistoryAttachmentView({ sessionId, file }: { sessionId: string; 
   }
 
   if (file.contentType.startsWith("image/")) {
-    return (
-      <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener">
+      return (
+      <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}>
         <img className="entry-preview" src={href} alt={file.displayName} />
       </a>
     );
