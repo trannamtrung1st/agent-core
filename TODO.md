@@ -6,6 +6,7 @@
 - [x] Sessions is stored as history and can be viewed again. Like a chat history in ChatGPT...
 - [ ] Can add queue message (non interrupt user message)
 - [ ] Add more basic tools to make agent can perform more complex tasks, or act like a human assistant, e.g, web search/browsing, shell command, read/write file, share file to users for download, memory, etc...
+- [ ] Add more events/triggers, and later make these triggers can be configured by user/admin.
 
 ## Issues
 
