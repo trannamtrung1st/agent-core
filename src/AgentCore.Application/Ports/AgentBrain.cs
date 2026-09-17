@@ -40,7 +40,10 @@ public sealed record StaySilent(
     bool CountsTowardSilentCap = true,
     int? NextWaitMs = null) : AgentDecision;
 
-public sealed record Speak(ModelRequest Request, int? NextWaitMs = null) : AgentDecision;
+public sealed record Speak(
+    ModelRequest Request,
+    int? NextWaitMs = null,
+    Agents.InitiativePlan? Plan = null) : AgentDecision;
 
 public sealed record RequestDeactivate(string Reason) : AgentDecision;
 

@@ -325,17 +325,17 @@ internal static class SyntheticInitiativeScript
         if (string.Equals(trigger, "UnfinishedInteraction", StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(pendingTopic))
         {
-            return Speak("Synthetic unfinished interaction warrants a proactive follow-up.");
+            return Speak(InitiativeIntents.FollowUp, "Synthetic unfinished interaction warrants a proactive follow-up.");
         }
 
         if (string.Equals(trigger, "EnvironmentUpdate", StringComparison.Ordinal))
         {
-            return Speak("Synthetic environment update is actionable.");
+            return Speak(InitiativeIntents.FollowUp, "Synthetic environment update is actionable.");
         }
 
         if (string.Equals(agentId, "examiner", StringComparison.Ordinal))
         {
-            return DecideExaminer(speaks, silenceMs);
+            return DecideExaminer(root, speaks, silenceMs);
         }
 
         if (string.Equals(agentId, "customer-support", StringComparison.Ordinal))
@@ -349,23 +349,105 @@ internal static class SyntheticInitiativeScript
         }
 
         return silenceMs >= 60_000
-            ? Speak("Synthetic initiative allows one proactive turn.")
+            ? Speak(InitiativeIntents.Other, "Synthetic initiative allows one proactive turn.")
             : StaySilent("Synthetic initiative waiting for longer silence.", 30_000);
     }
 
-    private static string DecideExaminer(int speaks, int silenceMs)
+    private static string DecideExaminer(JsonElement root, int speaks, int silenceMs)
     {
         if (speaks >= 1)
         {
             return StaySilent("Synthetic examiner avoids a second empty nudge.", 120_000);
         }
 
+        var lastUser = LastUserText(root);
+        var lastAssistant = LastAssistantText(root);
+        if (UserAskedForHint(lastUser))
+        {
+            return Speak(
+                InitiativeIntents.Hint,
+                "Candidate asked for a hint; provide a direct hint for the current question.");
+        }
+
+        if (IsHesitation(lastUser) && lastAssistant.Contains('?'))
+        {
+            return Speak(
+                InitiativeIntents.Hint,
+                "Candidate hesitated after an examiner question; offer brief angles without repeating the question.");
+        }
+
         if (silenceMs >= ExaminerLongSilenceMs)
         {
-            return Speak("Synthetic examiner offers a brief role-appropriate prompt.");
+            return Speak(
+                InitiativeIntents.Hint,
+                lastAssistant.Contains('?')
+                    ? "Long silence after an examiner question; offer a scaffold or hint instead of repeating the question."
+                    : "Long silence during the practice exam; offer a concise scaffold or next step instead of repeating prior wording.");
         }
 
         return StaySilent("Synthetic examiner waiting for longer candidate silence.", 30_000);
+    }
+
+    private static string LastUserText(JsonElement root)
+    {
+        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
+        {
+            return string.Empty;
+        }
+
+        for (var index = turns.GetArrayLength() - 1; index >= 0; index--)
+        {
+            var turn = turns[index];
+            if (!turn.TryGetProperty("role", out var roleNode)
+                || !string.Equals(roleNode.GetString(), "User", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return turn.TryGetProperty("text", out var textNode) ? textNode.GetString() ?? string.Empty : string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static string LastAssistantText(JsonElement root)
+    {
+        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
+        {
+            return string.Empty;
+        }
+
+        for (var index = turns.GetArrayLength() - 1; index >= 0; index--)
+        {
+            var turn = turns[index];
+            if (!turn.TryGetProperty("role", out var roleNode)
+                || !string.Equals(roleNode.GetString(), "Assistant", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return turn.TryGetProperty("text", out var textNode) ? textNode.GetString() ?? string.Empty : string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static bool UserAskedForHint(string text) =>
+        text.Contains("hint", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("help me", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsHesitation(string text)
+    {
+        var normalized = text.Trim();
+        if (normalized.Length == 0)
+        {
+            return true;
+        }
+
+        return normalized.Equals("hmmm", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("hmm", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("um", StringComparison.OrdinalIgnoreCase)
+            || normalized.Length <= 4;
     }
 
     private static string DecideSupport(JsonElement root, int speaks, int silenceMs)
@@ -382,7 +464,7 @@ internal static class SyntheticInitiativeScript
 
         if (silenceMs >= SupportAdvanceSilenceMs)
         {
-            return Speak("Synthetic support advances the simulated order conversation.");
+            return Speak(InitiativeIntents.FollowUp, "Synthetic support advances the simulated order conversation.");
         }
 
         return StaySilent("Synthetic support waiting for longer silence.", 20_000);
@@ -473,8 +555,8 @@ internal static class SyntheticInitiativeScript
         return node.GetString() ?? string.Empty;
     }
 
-    private static string Speak(string reason) =>
-        JsonSerializer.Serialize(new { decision = "speak", reason });
+    private static string Speak(string intent, string objective) =>
+        JsonSerializer.Serialize(new { decision = "speak", intent, objective });
 
     private static string StaySilent(string reason, int nextWaitMs) =>
         JsonSerializer.Serialize(new { decision = "staySilent", reason, nextWaitMs });

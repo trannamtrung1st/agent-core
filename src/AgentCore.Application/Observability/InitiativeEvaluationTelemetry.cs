@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Observability;
@@ -15,13 +16,15 @@ public static class InitiativeEvaluationTelemetry
         var policy = context.Definition.InitiativePolicy;
         var lastUserAt = context.LastUserActivityAt ?? context.UtcNow;
         var silenceMs = Math.Max(0, (context.UtcNow - lastUserAt).TotalMilliseconds);
-        var (evaluated, reasonCode, nextWaitMs) = Classify(decision);
+        var (evaluated, reasonCode, nextWaitMs, intent) = Classify(decision);
         var payload = new Dictionary<string, object?>
         {
             ["agentId"] = context.Definition.Id,
             ["trigger"] = context.Trigger.Kind.ToString(),
+            ["decision"] = evaluated,
             ["evaluated"] = evaluated,
             ["reasonCode"] = reasonCode,
+            ["intent"] = intent,
             ["nextWaitMs"] = nextWaitMs,
             ["silenceMs"] = silenceMs,
             ["consecutiveProactiveSpeaks"] = context.ConsecutiveProactiveSpeaks,
@@ -32,9 +35,17 @@ public static class InitiativeEvaluationTelemetry
             ["inactivityExceeded"] = context.InactivityExceeded,
             ["elapsedMs"] = elapsedMs
         };
-        if (RuntimeTelemetry.IncludesConversationContent && TryModelReason(decision, out var reasonDetail))
+        if (RuntimeTelemetry.IncludesConversationContent)
         {
-            payload["reasonDetail"] = reasonDetail;
+            if (TryModelReason(decision, out var reasonDetail))
+            {
+                payload["reasonDetail"] = reasonDetail;
+            }
+
+            if (decision is Speak { Plan: { } plan })
+            {
+                payload["objective"] = Clip(plan.Objective, 240);
+            }
         }
 
         RuntimeTelemetry.RecordDiagnostic("initiative_eval", elapsedMs, JsonSerializer.Serialize(payload, Json));
@@ -46,14 +57,16 @@ public static class InitiativeEvaluationTelemetry
         bool admitted,
         string? blockReason = null)
     {
-        var (kind, reasonCode, _) = Classify(evaluated);
+        var (kind, reasonCode, _, intent) = Classify(evaluated);
         var payload = new
         {
             trigger = trigger.Kind.ToString(),
+            decision = kind,
             evaluated = kind,
             evaluatedReasonCode = reasonCode,
+            intent,
             admitted,
-            blockReason = blockReason ?? (admitted ? "admitted" : DispositionBlockReason(evaluated))
+            blockReason = admitted ? null : blockReason ?? DispositionBlockReason(evaluated)
         };
         RuntimeTelemetry.RecordDiagnostic("initiative_disposition", 0, JsonSerializer.Serialize(payload, Json));
     }
@@ -71,19 +84,19 @@ public static class InitiativeEvaluationTelemetry
             _ => "semantic_silence"
         };
 
-    private static (string Evaluated, string ReasonCode, int? NextWaitMs) Classify(AgentDecision decision) =>
+    private static (string Evaluated, string ReasonCode, int? NextWaitMs, string? Intent) Classify(AgentDecision decision) =>
         decision switch
         {
-            Speak speak => ("speak", "model_speak", speak.NextWaitMs),
-            RequestDeactivate => ("deactivate", "model_deactivate", null),
+            Speak speak => ("speak", "model_speak", speak.NextWaitMs, speak.Plan?.Intent),
+            RequestDeactivate => ("deactivate", "model_deactivate", null, null),
             StaySilent silent when !silent.CountsTowardSilentCap && silent.Reason.Contains("provider", StringComparison.OrdinalIgnoreCase) =>
-                ("staySilent", "provider_failed", silent.NextWaitMs),
+                ("staySilent", "provider_failed", silent.NextWaitMs, null),
             StaySilent silent when !silent.CountsTowardSilentCap && silent.Reason.Contains("parse", StringComparison.OrdinalIgnoreCase) =>
-                ("staySilent", "unparseable", silent.NextWaitMs),
+                ("staySilent", "unparseable", silent.NextWaitMs, null),
             StaySilent silent when !silent.CountsTowardSilentCap =>
-                ("staySilent", "infrastructure", silent.NextWaitMs),
-            StaySilent silent => ("staySilent", "semantic_silence", silent.NextWaitMs),
-            _ => ("unknown", "unknown", null)
+                ("staySilent", "infrastructure", silent.NextWaitMs, null),
+            StaySilent silent => ("staySilent", "semantic_silence", silent.NextWaitMs, null),
+            _ => ("unknown", "unknown", null, null)
         };
 
     private static bool TryModelReason(AgentDecision decision, out string? detail)

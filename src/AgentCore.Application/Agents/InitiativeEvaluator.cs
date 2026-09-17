@@ -10,7 +10,7 @@ namespace AgentCore.Application.Agents;
 
 public static class InitiativeEvaluator
 {
-    public const string Marker = "initiative-decision-v1";
+    public const string Marker = "initiative-decision-v2";
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -49,8 +49,10 @@ public static class InitiativeEvaluator
                     new RequestDeactivate(deactivate.Reason),
                 InitiativeParsedDecision.Stay stay =>
                     new StaySilent(stay.Reason, CountsTowardSilentCap: true, NextWaitMs: stay.NextWaitMs),
-                InitiativeParsedDecision.Speak =>
-                    new Speak(WithTools(context, builder.Build(context, responseId))),
+                InitiativeParsedDecision.Speak speak =>
+                    new Speak(
+                        WithTools(context, builder.Build(context, responseId, speak.Plan)),
+                        Plan: speak.Plan),
                 _ => new StaySilent("Initiative evaluation was empty.", CountsTowardSilentCap: false)
             };
         }
@@ -136,13 +138,16 @@ public static class InitiativeEvaluator
                         '\n',
                         Marker,
                         """
-                        You decide whether a proactive agent message is worthwhile right now.
-                        Reply with a single JSON object only, no markdown:
-                        {"decision":"speak"|"staySilent"|"deactivate","reason":"...","nextWaitMs":number|null}
-                        Speak when a proactive turn would meaningfully advance the current interaction according to this agent's role, goals, and conversation policy.
-                        This may include a concise prompt, hint, clarification, reminder, or next-step question.
+                        You decide whether a proactive agent message is worthwhile right now and, when speaking, what conversational move is useful.
+                        Reply with a single JSON object only, no markdown.
+                        staySilent/deactivate:
+                        {"decision":"staySilent"|"deactivate","reason":"...","nextWaitMs":number|null}
+                        speak (required fields for speak):
+                        {"decision":"speak","intent":"hint"|"rephrase"|"clarification"|"reminder"|"followUp"|"other","objective":"short internal instruction for what the proactive message should accomplish","nextWaitMs":number|null}
+                        Do not write the user-visible response text. objective is internal planning only.
+                        Speak when a proactive turn would meaningfully advance the interaction. Choose intent for the move (hint, rephrase, etc.).
                         Stay silent when the message would mainly repeat readiness, encouragement, or previous wording without moving the interaction forward.
-                        Reject empty check-ins such as "I'm here when you're ready" unless that is genuinely appropriate for the role.
+                        Reject empty check-ins such as "I'm here when you're ready" unless genuinely appropriate for the role.
                         Use deactivate only when the session should pause (rare).
                         nextWaitMs is optional milliseconds until the next initiative evaluation (staySilent/deactivate).
                         """,
@@ -204,7 +209,8 @@ public static class InitiativeEvaluator
 
             decision = kind switch
             {
-                "speak" => InitiativeParsedDecision.Speak.Instance,
+                "speak" when TryReadSpeakPlan(root, reason, out var plan) =>
+                    new InitiativeParsedDecision.Speak(plan),
                 "deactivate" => new InitiativeParsedDecision.Deactivate(reason),
                 "staySilent" or "stay_silent" => new InitiativeParsedDecision.Stay(reason, nextWait),
                 _ => null
@@ -223,6 +229,25 @@ public static class InitiativeEvaluator
         {
             return false;
         }
+    }
+
+    private static bool TryReadSpeakPlan(JsonElement root, string fallbackReason, out InitiativePlan plan)
+    {
+        var objective = root.TryGetProperty("objective", out var objectiveNode)
+            ? objectiveNode.GetString()?.Trim()
+            : null;
+        if (string.IsNullOrWhiteSpace(objective))
+        {
+            objective = string.IsNullOrWhiteSpace(fallbackReason)
+                ? "Advance the interaction with one useful proactive turn."
+                : fallbackReason.Trim();
+        }
+
+        var intent = root.TryGetProperty("intent", out var intentNode)
+            ? InitiativeIntents.Normalize(intentNode.GetString())
+            : InitiativeIntents.Other;
+        plan = new InitiativePlan(intent, objective);
+        return true;
     }
 
     private static int? TryReadNextWaitMs(JsonElement root)
@@ -280,10 +305,7 @@ public static class InitiativeEvaluator
 
     private abstract record InitiativeParsedDecision
     {
-        public sealed record Speak : InitiativeParsedDecision
-        {
-            public static Speak Instance { get; } = new();
-        }
+        public sealed record Speak(InitiativePlan Plan) : InitiativeParsedDecision;
 
         public sealed record Stay(string Reason, int? NextWaitMs) : InitiativeParsedDecision;
 

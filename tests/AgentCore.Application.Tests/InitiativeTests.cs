@@ -855,23 +855,21 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var model = new ScriptedLanguageModel(["Would you like to try again?"]);
+        var model = new ScriptedLanguageModel(
+            ["What do you enjoy most about living in Vietnam?", "You could think about food, people, or daily life."]);
         var brain = RecordingDefaultBrain(model);
         await using var runtime = Create(output, model, time, brain);
         await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.SubmitUserTextAsync("Ready.");
         await runtime.WaitUntilIdleAsync();
-        time.Advance(TimeSpan.FromSeconds(65));
-        await runtime.WaitUntilMailboxDrainedAsync();
-        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.SubmitUserTextAsync("hmmm");
         await runtime.WaitUntilIdleAsync();
-        Assert.Equal(0, CountStarted(output, "LongSilence"));
-        time.Advance(TimeSpan.FromSeconds(35));
+        time.Advance(TimeSpan.FromSeconds(91));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
-        time.Advance(TimeSpan.FromSeconds(35));
+        time.Advance(TimeSpan.FromSeconds(91));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilMailboxDrainedAsync();
