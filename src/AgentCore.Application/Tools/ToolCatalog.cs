@@ -50,12 +50,18 @@ public static class ToolCatalog
     public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition)
     {
         var offered = new List<ModelToolDefinition>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in RoleEnvironments.Of(definition).ToolList)
         {
-            if (Known.TryGetValue(name, out var tool) && RolePermissions.AllowsTool(definition, name))
+            if (Known.TryGetValue(name, out var tool) && RolePermissions.AllowsTool(definition, name) && seen.Add(name))
             {
                 offered.Add(tool);
             }
+        }
+
+        if (Known.TryGetValue(AttachmentsRead, out var attachmentsRead) && seen.Add(AttachmentsRead))
+        {
+            offered.Add(attachmentsRead);
         }
 
         return offered;

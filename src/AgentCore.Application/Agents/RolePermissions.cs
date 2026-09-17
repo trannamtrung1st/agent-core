@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Agents;
@@ -23,7 +24,13 @@ public static class RolePermissions
             return false;
         }
 
-        return RoleEnvironments.Of(definition).ToolList.Contains(tool.Trim(), StringComparer.Ordinal);
+        var normalized = tool.Trim();
+        if (string.Equals(normalized, ToolCatalog.AttachmentsRead, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return RoleEnvironments.Of(definition).ToolList.Contains(normalized, StringComparer.Ordinal);
     }
 
     public static void EnsureToolAllowed(AgentDefinition definition, string tool)

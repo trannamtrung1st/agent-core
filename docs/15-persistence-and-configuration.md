@@ -7,7 +7,7 @@ EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore
 | Entity | Key and fields | Rules |
 | --- | --- | --- |
 | Session | SessionId UUID string PK; AgentId, AgentVersion, DefinitionJson, Mode, PendingMode nullable, Status, CreatedAtUtc, UpdatedAtUtc, Revision | Store pinned validated definition; terminal Ended is irreversible |
-| ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text (display); ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive (speech coordinate); ReceivedTextEndExclusive (display); EnvelopeJson nullable; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry |
+| ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text (display); ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive (speech coordinate); ReceivedTextEndExclusive (display); EnvelopeJson nullable; AttachmentRefsJson nullable; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry |
 | SessionSnapshot | SessionId PK/FK; SchemaVersion=1; Summary; SummarizedThroughEntrySequence; PendingTopic nullable; ProfileId nullable; LastEntrySequence; UpdatedAtUtc | Persist coarse semantic continuity, never tasks/timers/active provider streams |
 | UserProfile | ProfileId UUID PK; PreferencesJson; Revision; UpdatedAtUtc | <=16 allowlisted preferences, <=2,000 total characters; MVP uses one local profile |
 
@@ -20,11 +20,13 @@ public enum ConversationRole { User, Assistant }
 public enum EntryStatus { Streaming, Completed, Interrupted, Failed }
 public enum SessionMode { Text, Voice }
 public enum SessionStatus { Created, Attached, Paused, Ending, Ended }
+public sealed record ConversationAttachmentRef(Guid AttachmentId, string DisplayName, string ContentType);
 public sealed record ConversationEntry(Guid EntryId, long Sequence,
     Guid? SourceEventId, ConversationRole Role, string Text, Guid? ResponseId,
     EntryStatus Status, SessionMode DeliveryMode,
     int HeardTextEndExclusive, int ReceivedTextEndExclusive,
-    DateTimeOffset CreatedAt, ResponseEnvelope? Envelope = null);
+    DateTimeOffset CreatedAt, ResponseEnvelope? Envelope = null,
+    IReadOnlyList<ConversationAttachmentRef>? Attachments = null);
 public sealed record UserProfile(Guid ProfileId, long Revision,
     IReadOnlyDictionary<string, string> Preferences, DateTimeOffset UpdatedAt);
 public sealed record SessionSnapshot(int SchemaVersion, Guid SessionId,

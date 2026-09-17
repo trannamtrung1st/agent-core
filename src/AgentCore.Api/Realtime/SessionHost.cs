@@ -1756,6 +1756,12 @@ public static class SessionEventMapper
             ["heardTextEndExclusive"] = entry.HeardTextEndExclusive,
             ["receivedTextEndExclusive"] = entry.ReceivedTextEndExclusive,
             ["createdAt"] = entry.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            ["attachments"] = entry.Attachments?.Select(item => (object)new Dictionary<string, object?>
+            {
+                ["attachmentId"] = item.AttachmentId.ToString(),
+                ["displayName"] = item.DisplayName,
+                ["contentType"] = item.ContentType
+            }).ToArray(),
             ["blocks"] = entry.Blocks.Select(block => (object)new Dictionary<string, object?>
             {
                 ["blockId"] = block.BlockId,

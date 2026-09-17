@@ -657,7 +657,10 @@ public sealed partial class SessionRuntime
             _snapshot.Mode,
             text.Length,
             text.Length,
-            now);
+            now,
+            Attachments: await BuildAttachmentRefsAsync(staged, cancellationToken).ConfigureAwait(false) is { Count: > 0 } refs
+                ? refs
+                : null);
         var titleHints = await AttachmentTitleHintsAsync(staged, cancellationToken).ConfigureAwait(false);
         _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
         var cause = context;

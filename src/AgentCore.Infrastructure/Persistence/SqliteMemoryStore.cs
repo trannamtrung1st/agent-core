@@ -105,6 +105,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "ConversationEntries", "AttachmentRefsJson", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260917012822_ConversationEntryAttachmentRefs', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -388,6 +398,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.HeardTextEndExclusive == entry.HeardTextEndExclusive
         && row.ReceivedTextEndExclusive == entry.ReceivedTextEndExclusive
         && row.EnvelopeJson == SerializeEnvelope(entry.Envelope)
+        && row.AttachmentRefsJson == SerializeAttachmentRefs(entry.Attachments)
         && row.Role == entry.Role.ToString()
         && row.DeliveryMode == entry.DeliveryMode.ToString()
         && row.ResponseId == entry.ResponseId?.ToString("D")
@@ -451,6 +462,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.HeardTextEndExclusive = entry.HeardTextEndExclusive;
         row.ReceivedTextEndExclusive = entry.ReceivedTextEndExclusive;
         row.EnvelopeJson = SerializeEnvelope(entry.Envelope);
+        row.AttachmentRefsJson = SerializeAttachmentRefs(entry.Attachments);
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
 
@@ -495,7 +507,18 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.HeardTextEndExclusive,
             row.ReceivedTextEndExclusive,
             FromUnix(row.CreatedAtUtc),
-            DeserializeEnvelope(row.EnvelopeJson));
+            DeserializeEnvelope(row.EnvelopeJson),
+            DeserializeAttachmentRefs(row.AttachmentRefsJson));
+
+    private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
+        attachments is not { Count: > 0 }
+            ? null
+            : JsonSerializer.Serialize(attachments, Json);
+
+    private static IReadOnlyList<ConversationAttachmentRef>? DeserializeAttachmentRefs(string? json) =>
+        string.IsNullOrEmpty(json)
+            ? null
+            : JsonSerializer.Deserialize<ConversationAttachmentRef[]>(json, Json);
 
     private static string? SerializeEnvelope(ResponseEnvelope? envelope) =>
         envelope is null ? null : JsonSerializer.Serialize(envelope, Json);

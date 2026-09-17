@@ -894,6 +894,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var now = _time.GetUtcNow();
         var text = input.Text ?? "";
+        var attachmentRefs = await BuildAttachmentRefsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         var userEntry = new ConversationEntry(
             input.Context.EventId,
             NextSequence(),
@@ -905,7 +906,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot.Mode,
             text.Length,
             text.Length,
-            now);
+            now,
+            Attachments: attachmentRefs.Count == 0 ? null : attachmentRefs);
 
         var titleHints = await AttachmentTitleHintsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
@@ -1141,22 +1143,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IReadOnlyList<AttachmentProcessResult>? attachments = null,
         bool workHeld = false)
     {
-        var context = new AgentContext(
-            _snapshot.Definition,
-            _snapshot.Entries,
-            _snapshot.Summary,
-            Profile: _profile,
-            _snapshot.Mode,
-            _snapshot.PendingTopic,
-            HelpOfferedDuringSilence: _helpOfferedDuringSilence,
-            InterruptedHeardText: LastInterruptedHeardText(),
-            trigger,
-            attachments,
-            ConsecutiveProactiveSpeaks: _consecutiveProactiveSpeaks,
-            SilentEvaluations: _silentEvaluations,
-            SpeaksThisSilencePeriod: _proactiveSpeaksThisSilence,
-            InitiativeHeld: _initiativeHeld || _pendingUploadHold,
-            InactivityExceeded: InactivityExceeded());
         if (_deactivated || (trigger.Kind != TriggerKind.UserTurn && _activeResponseId is not null))
         {
             _outputActivity = OutputActivity.Idle;
@@ -1172,6 +1158,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             try
             {
+                var sessionAttachments = await BuildSessionAttachmentManifestAsync(_lifetime.Token).ConfigureAwait(false);
+                var context = new AgentContext(
+                    _snapshot.Definition,
+                    _snapshot.Entries,
+                    _snapshot.Summary,
+                    Profile: _profile,
+                    _snapshot.Mode,
+                    _snapshot.PendingTopic,
+                    HelpOfferedDuringSilence: _helpOfferedDuringSilence,
+                    InterruptedHeardText: LastInterruptedHeardText(),
+                    trigger,
+                    attachments,
+                    sessionAttachments,
+                    ConsecutiveProactiveSpeaks: _consecutiveProactiveSpeaks,
+                    SilentEvaluations: _silentEvaluations,
+                    SpeaksThisSilencePeriod: _proactiveSpeaksThisSilence,
+                    InitiativeHeld: _initiativeHeld || _pendingUploadHold,
+                    InactivityExceeded: InactivityExceeded());
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 var decision = await _brain.DecideAsync(context, responseId, _lifetime.Token).ConfigureAwait(false);
@@ -1950,6 +1954,69 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         return names.Count == 0 ? null : new AttachmentTitleHints(names, imageOnly);
+    }
+
+    private async Task<IReadOnlyList<ConversationAttachmentRef>> BuildAttachmentRefsAsync(
+        IReadOnlyList<Guid> attachmentIds,
+        CancellationToken cancellationToken)
+    {
+        if (attachmentIds.Count == 0 || _attachments is null)
+        {
+            return [];
+        }
+
+        var refs = new List<ConversationAttachmentRef>(attachmentIds.Count);
+        foreach (var id in attachmentIds)
+        {
+            var record = await _attachments.GetAsync(SessionId, id, cancellationToken).ConfigureAwait(false);
+            if (record is not null)
+            {
+                refs.Add(new ConversationAttachmentRef(record.AttachmentId, record.DisplayName, record.ContentType));
+            }
+        }
+
+        return refs;
+    }
+
+    private async Task<IReadOnlyList<SessionAttachmentManifestItem>> BuildSessionAttachmentManifestAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_attachments is null)
+        {
+            return [];
+        }
+
+        var records = await _attachments.ListForSessionAsync(SessionId, cancellationToken).ConfigureAwait(false);
+        var sequenceByEntry = _snapshot.Entries.ToDictionary(entry => entry.EntryId, entry => entry.Sequence);
+        var items = new List<SessionAttachmentManifestItem>();
+        foreach (var record in records.Where(item => item.State == AttachmentState.Bound))
+        {
+            long turnSequence = 0;
+            if (record.EntryId is { } entryId && sequenceByEntry.TryGetValue(entryId, out var sequence))
+            {
+                turnSequence = sequence;
+            }
+            else
+            {
+                var entry = _snapshot.Entries.FirstOrDefault(row =>
+                    row.Attachments?.Any(attachment => attachment.AttachmentId == record.AttachmentId) == true);
+                if (entry is not null)
+                {
+                    turnSequence = entry.Sequence;
+                }
+            }
+
+            items.Add(new SessionAttachmentManifestItem(
+                record.AttachmentId,
+                record.DisplayName,
+                record.ContentType,
+                turnSequence));
+        }
+
+        return items
+            .OrderBy(item => item.UploadedWithEntrySequence)
+            .ThenBy(item => item.DisplayName, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private sealed record AttachmentTitleHints(IReadOnlyList<string> Names, bool ImageOnly);

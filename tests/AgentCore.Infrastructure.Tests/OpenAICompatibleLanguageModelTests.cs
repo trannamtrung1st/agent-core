@@ -318,7 +318,6 @@ public sealed class OpenAICompatibleLanguageModelTests
         var body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"finish_reason\":\"stop\"}]}\n\n" +
                    "data: [DONE]\n\n";
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
-        var model = Create(handler);
         var output = new CapturingSessionOutput();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -343,15 +342,27 @@ public sealed class OpenAICompatibleLanguageModelTests
             1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
             SessionStatus.Created, [], string.Empty, 0, null, null, now, now);
         await store.SaveAsync(snapshot, 0);
+        var modelWithTools = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = true
+            },
+            time);
         await using var runtime = new SessionRuntime(
             snapshot,
-            model,
+            modelWithTools,
             new DefaultAgentBrain(new PromptContextBuilder()),
             store,
             output,
             ids,
             time,
             NullLogger<SessionRuntime>.Instance);
+        await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(output.TextDeltas, delta => delta.Text == "Hello");

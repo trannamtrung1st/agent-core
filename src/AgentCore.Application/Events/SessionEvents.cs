@@ -144,6 +144,11 @@ public sealed record PublicResponseBlock(
     string? AttachmentId,
     string? ArtifactId);
 
+public sealed record PublicHistoryAttachment(
+    Guid AttachmentId,
+    string DisplayName,
+    string ContentType);
+
 public sealed record PublicHistoryEntry(
     Guid EntryId,
     long Sequence,
@@ -156,7 +161,8 @@ public sealed record PublicHistoryEntry(
     int ReceivedTextEndExclusive,
     SessionMode DeliveryMode,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<PublicResponseBlock> Blocks);
+    IReadOnlyList<PublicResponseBlock> Blocks,
+    IReadOnlyList<PublicHistoryAttachment>? Attachments = null);
 
 public sealed record SessionReadyProjection(
     SessionMode Mode,
@@ -259,6 +265,11 @@ public static class PublicHistory
                 .Select(ToPublicBlock)
                 .ToArray()
             : [];
+        var attachments = entry.Attachments is { Count: > 0 }
+            ? entry.Attachments
+                .Select(item => new PublicHistoryAttachment(item.AttachmentId, item.DisplayName, item.ContentType))
+                .ToArray()
+            : null;
         return new PublicHistoryEntry(
             entry.EntryId,
             entry.Sequence,
@@ -271,7 +282,8 @@ public static class PublicHistory
             received,
             entry.DeliveryMode,
             entry.CreatedAt,
-            blocks);
+            blocks,
+            attachments);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

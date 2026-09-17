@@ -10,6 +10,11 @@ public enum SessionMode { Text, Voice }
 
 public enum SessionStatus { Created, Attached, Paused, Ending, Ended }
 
+public sealed record ConversationAttachmentRef(
+    Guid AttachmentId,
+    string DisplayName,
+    string ContentType);
+
 public sealed record ConversationEntry(
     Guid EntryId,
     long Sequence,
@@ -22,7 +27,8 @@ public sealed record ConversationEntry(
     int HeardTextEndExclusive,
     int ReceivedTextEndExclusive,
     DateTimeOffset CreatedAt,
-    ResponseEnvelope? Envelope = null);
+    ResponseEnvelope? Envelope = null,
+    IReadOnlyList<ConversationAttachmentRef>? Attachments = null);
 
 public sealed record UserProfile(
     Guid ProfileId,

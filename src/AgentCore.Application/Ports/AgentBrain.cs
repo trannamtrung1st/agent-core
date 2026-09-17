@@ -6,6 +6,12 @@ public enum TriggerKind { UserTurn, LongSilence, EnvironmentUpdate, UnfinishedIn
 
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text, string? EnvironmentKind = null);
 
+public sealed record SessionAttachmentManifestItem(
+    Guid AttachmentId,
+    string DisplayName,
+    string ContentType,
+    long UploadedWithEntrySequence);
+
 public sealed record AgentContext(
     AgentDefinition Definition,
     IReadOnlyList<Domain.Conversation.ConversationEntry> History,
@@ -17,6 +23,7 @@ public sealed record AgentContext(
     string? InterruptedHeardText,
     AgentTrigger Trigger,
     IReadOnlyList<AttachmentProcessResult>? AttachmentContents = null,
+    IReadOnlyList<SessionAttachmentManifestItem>? SessionAttachments = null,
     int ConsecutiveProactiveSpeaks = 0,
     int SilentEvaluations = 0,
     int SpeaksThisSilencePeriod = 0,

@@ -10,7 +10,8 @@ public sealed record PromptSections(
     string ModeSystem,
     string MemorySystem,
     string EnvironmentSystem,
-    IReadOnlyList<ModelMessage> TurnMessages);
+    IReadOnlyList<ModelMessage> TurnMessages,
+    string AttachmentManifestSystem);
 
 public sealed class PromptContextBuilder
 {
@@ -26,8 +27,9 @@ public sealed class PromptContextBuilder
         var mode = BuildModeSystem(context);
         var memory = BuildMemorySystem(context);
         var environment = BuildEnvironmentSystem(context.Definition);
+        var attachments = BuildAttachmentManifestSystem(context);
         var turns = BuildTurnMessages(context);
-        return new PromptSections(identity, mode, memory, environment, turns);
+        return new PromptSections(identity, mode, memory, environment, turns, attachments);
     }
 
     public ModelRequest Build(AgentContext context, Guid responseId)
@@ -40,6 +42,10 @@ public sealed class PromptContextBuilder
             new(ModelRole.System, sections.MemorySystem),
             new(ModelRole.System, sections.EnvironmentSystem)
         };
+        if (!string.IsNullOrEmpty(sections.AttachmentManifestSystem))
+        {
+            messages.Add(new ModelMessage(ModelRole.System, sections.AttachmentManifestSystem));
+        }
         messages.AddRange(sections.TurnMessages);
         if (context.Trigger is { Kind: TriggerKind.EnvironmentUpdate, Text: { } environment })
         {
@@ -127,6 +133,49 @@ public sealed class PromptContextBuilder
         ]);
     }
 
+    private static string BuildAttachmentManifestSystem(AgentContext context)
+    {
+        if (context.SessionAttachments is not { Count: > 0 })
+        {
+            return string.Empty;
+        }
+
+        var lines = new List<string>
+        {
+            "Files available in this session (user data; use attachments.read with attachmentId when full content is needed):"
+        };
+        foreach (var item in context.SessionAttachments)
+        {
+            lines.Add($"- {item.DisplayName}");
+            lines.Add($"  attachmentId: {item.AttachmentId:D}");
+            lines.Add($"  type: {item.ContentType}");
+            if (item.UploadedWithEntrySequence > 0)
+            {
+                lines.Add($"  uploaded with user turn sequence {item.UploadedWithEntrySequence}");
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string BuildHistoricalUserText(ConversationEntry entry)
+    {
+        if (entry.Attachments is not { Count: > 0 })
+        {
+            return entry.Text;
+        }
+
+        var refs = string.Join(
+            ", ",
+            entry.Attachments.Select(item => $"{item.DisplayName} (attachmentId={item.AttachmentId:D})"));
+        if (string.IsNullOrEmpty(entry.Text))
+        {
+            return $"[Sent attachments: {refs}]";
+        }
+
+        return $"{entry.Text}\n[Sent attachments: {refs}]";
+    }
+
     private static IReadOnlyList<ModelMessage> BuildTurnMessages(AgentContext context)
     {
         var currentUser = context.Trigger.Kind == TriggerKind.UserTurn
@@ -184,16 +233,20 @@ public sealed class PromptContextBuilder
         return selected.Select(entry =>
             {
                 var role = entry.Role == ConversationRole.User ? ModelRole.User : ModelRole.Assistant;
-                var body = entry.Role == ConversationRole.Assistant ? EligibleAssistantText(entry) : entry.Text;
+                if (entry.Role == ConversationRole.Assistant)
+                {
+                    return new ModelMessage(role, EligibleAssistantText(entry));
+                }
+
                 if (currentUser is not null && entry.EntryId == currentUser.EntryId)
                 {
                     return BuildCurrentUserMessage(
-                        body,
+                        entry.Text,
                         context.AttachmentContents,
                         RolePermissions.AllowsTool(context.Definition, ToolCatalog.AttachmentsRead));
                 }
 
-                return new ModelMessage(role, body);
+                return new ModelMessage(role, BuildHistoricalUserText(entry));
             })
             .ToArray();
     }
