@@ -52,7 +52,6 @@ public sealed partial class SessionRuntime
         }
 
         _deactivated = false;
-        NoteUserActivity();
         if (_snapshot.ProfileId is { } profileId)
         {
             _profile = await _store.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
@@ -112,9 +111,24 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        CancelBrainEvaluation();
+
         if (_activeResponseId is { } live)
         {
             await SupersedeAsync(input.Context, live, cancellationToken, "disconnected").ConfigureAwait(false);
+        }
+
+        if (_snapshot.Status == SessionStatus.Paused)
+        {
+            _input = InputActivity.Idle;
+            _muted = false;
+            _environmentQueue.Clear();
+            AbandonLiveSpeech(rotateEpoch: true);
+            _input = InputActivity.Idle;
+            InvalidateSpeechJobs();
+            _ttsCts?.Cancel();
+            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+            return;
         }
 
         _snapshot = _snapshot with
@@ -123,7 +137,6 @@ public sealed partial class SessionRuntime
             PendingMode = null,
             PauseReason = "disconnected"
         };
-        _input = InputActivity.Idle;
         _muted = false;
         _environmentQueue.Clear();
         AbandonLiveSpeech(rotateEpoch: true);

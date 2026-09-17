@@ -146,11 +146,7 @@ public static class InitiativeEvaluator
             var reason = root.TryGetProperty("reason", out var reasonNode)
                 ? reasonNode.GetString() ?? "Initiative evaluation."
                 : "Initiative evaluation.";
-            int? nextWait = null;
-            if (root.TryGetProperty("nextWaitMs", out var waitNode) && waitNode.ValueKind == JsonValueKind.Number)
-            {
-                nextWait = waitNode.GetInt32();
-            }
+            var nextWait = TryReadNextWaitMs(root);
 
             decision = kind switch
             {
@@ -165,6 +161,39 @@ public static class InitiativeEvaluator
         {
             return false;
         }
+        catch (FormatException)
+        {
+            return false;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static int? TryReadNextWaitMs(JsonElement root)
+    {
+        if (!root.TryGetProperty("nextWaitMs", out var waitNode) || waitNode.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        if (waitNode.TryGetInt32(out var value))
+        {
+            return value < 0 ? null : Math.Min(value, 3_600_000);
+        }
+
+        if (waitNode.TryGetInt64(out var wide) && wide >= 0 && wide <= int.MaxValue)
+        {
+            return (int)wide;
+        }
+
+        if (waitNode.TryGetDouble(out var fractional) && fractional >= 0 && fractional <= int.MaxValue)
+        {
+            return (int)Math.Round(fractional);
+        }
+
+        return null;
     }
 
     private static string? ExtractJsonObject(string raw)

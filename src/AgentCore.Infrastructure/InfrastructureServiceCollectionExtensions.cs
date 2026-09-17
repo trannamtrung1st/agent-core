@@ -11,6 +11,7 @@ using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Sandbox;
 using AgentCore.Infrastructure.Workspaces;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -35,10 +36,14 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(SyntheticProviderAliases.Default);
         services.TryAddSingleton<PromptContextBuilder>();
+        services.TryAddSingleton<IInitiativeEvaluator>(provider =>
+            new DefaultInitiativeEvaluator(
+                provider.GetRequiredService<PromptContextBuilder>(),
+                LanguageModelFactory.Create(provider, profile, languageModel)));
         services.TryAddSingleton<IAgentBrain>(provider =>
             new DefaultAgentBrain(
                 provider.GetRequiredService<PromptContextBuilder>(),
-                provider.GetRequiredService<ILanguageModel>()));
+                provider.GetRequiredService<IInitiativeEvaluator>()));
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
@@ -99,19 +104,7 @@ public static class InfrastructureServiceCollectionExtensions
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
         services.TryAddSingleton<ILanguageModel>(provider =>
-        {
-            var options = languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" };
-            if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(options.Adapter, "Scripted", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(options.Adapter, "Synthetic", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ScriptedLanguageModel();
-            }
-
-            var http = provider.GetRequiredService<IHttpClientFactory>()
-                .CreateClient(OpenAICompatibleLanguageModel.HttpClientName);
-            return new OpenAICompatibleLanguageModel(http, options, provider.GetRequiredService<TimeProvider>());
-        });
+            LanguageModelFactory.Create(provider, profile, languageModel));
         services.TryAddSingleton<IApprovedKnowledgeCatalog>(provider =>
             new FileApprovedKnowledgeCatalog(agentDirectory));
         services.TryAddSingleton<RoleKnowledgeService>();

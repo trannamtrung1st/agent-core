@@ -303,9 +303,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 ? capNode.GetInt32()
                 : 1;
             var speak = speaks < maxSpeaks && consecutive < consecutiveCap;
-            json = speak
-                ? """{"decision":"speak","reason":"Synthetic initiative allows one more proactive turn."}"""
-                : """{"decision":"staySilent","reason":"Synthetic initiative cap or duplicate nudge.","nextWaitMs":120000}""";
+            if (speak && speaks >= 1)
+            {
+                json = """{"decision":"staySilent","reason":"Synthetic initiative avoids repeated readiness nudges.","nextWaitMs":120000}""";
+            }
+            else
+            {
+                json = speak
+                    ? """{"decision":"speak","reason":"Synthetic initiative allows one more proactive turn."}"""
+                    : """{"decision":"staySilent","reason":"Synthetic initiative cap or duplicate nudge.","nextWaitMs":120000}""";
+            }
             return true;
         }
         catch (JsonException)

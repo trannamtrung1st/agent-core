@@ -196,7 +196,9 @@ public sealed class InteractionControllerTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var model = new ScriptedLanguageModel();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder(), model));
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(
+            new PromptContextBuilder(),
+            new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)));
         var classifier = new FakeInterruptionClassifier();
         await using var runtime = CreateRuntime(output, model, time, brain, classifier, SessionMode.Text);
         await runtime.AttachAsync();

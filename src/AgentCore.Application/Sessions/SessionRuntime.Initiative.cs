@@ -152,6 +152,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        CancelBrainEvaluation();
         _deactivated = true;
         _timerGeneration++;
         _turnGeneration++;
@@ -187,8 +188,29 @@ public sealed partial class SessionRuntime
             ended: persisted);
     }
 
+    private void CancelBrainEvaluation()
+    {
+        var cts = _brainEvaluationCts;
+        if (cts is null)
+        {
+            return;
+        }
+
+        _brainEvaluationCts = null;
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        cts.Dispose();
+    }
+
     private void NoteUserActivity()
     {
+        CancelBrainEvaluation();
         var now = _time.GetUtcNow();
         _helpOfferedDuringSilence = false;
         _consecutiveProactiveSpeaks = 0;

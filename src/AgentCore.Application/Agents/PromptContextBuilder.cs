@@ -496,7 +496,7 @@ public static class ConversationSummary
     }
 }
 
-public sealed class DefaultAgentBrain(PromptContextBuilder builder, ILanguageModel? languageModel = null) : IAgentBrain
+public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeEvaluator? initiativeEvaluator = null) : IAgentBrain
 {
     public async ValueTask<AgentDecision> DecideAsync(
         AgentContext context,
@@ -536,17 +536,12 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, ILanguageMod
             return new StaySilent("No pending topic.", CountsTowardSilentCap: false);
         }
 
-        if (languageModel is null)
+        if (initiativeEvaluator is null)
         {
             return new Speak(WithTools(context, builder.Build(context, responseId)));
         }
 
-        return await InitiativeEvaluator.EvaluateAsync(
-            languageModel,
-            builder,
-            context,
-            responseId,
-            cancellationToken).ConfigureAwait(false);
+        return await initiativeEvaluator.EvaluateAsync(context, responseId, cancellationToken).ConfigureAwait(false);
     }
 
     private static bool IsTriggerEligible(AgentContext context) =>

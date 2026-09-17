@@ -107,12 +107,13 @@ public sealed class RoleEnvironmentTests
         var definition = await Load("customer-support");
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var output = new CapturingSessionOutput();
+        var model = new ScriptedLanguageModel(["How can I help?", "Still there?", "Need anything else?", "Following up?"]);
         await using var runtime = CreateRuntime(
             output,
             time,
-            new DefaultAgentBrain(new PromptContextBuilder()),
+            new DefaultAgentBrain(new PromptContextBuilder(), new DefaultInitiativeEvaluator(new PromptContextBuilder(), model)),
             definition,
-            new ScriptedLanguageModel(["How can I help?", "Still there?", "Need anything else?", "Following up?"]));
+            model);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("My order is late.");
         await runtime.WaitUntilIdleAsync();
@@ -127,7 +128,7 @@ public sealed class RoleEnvironmentTests
             }
         }
 
-        Assert.Equal(2, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
+        Assert.Equal(1, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
     }
 
     [Fact]

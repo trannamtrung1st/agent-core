@@ -16,6 +16,8 @@ internal static class MemoryStoreSemantics
         && left.Definition.Version == right.Definition.Version
         && left.Title == right.Title
         && left.RuntimeEpoch == right.RuntimeEpoch
+        && left.LastUserActivityAt == right.LastUserActivityAt
+        && left.PauseReason == right.PauseReason
         && left.WorkspaceOwned == right.WorkspaceOwned
         && left.ArchivedAt == right.ArchivedAt
         && left.DurablyDeletedAt == right.DurablyDeletedAt
@@ -42,10 +44,15 @@ internal static class MemoryStoreSemantics
             return snapshot;
         }
 
+        var pauseReason = status == SessionStatus.Paused && snapshot.Status == SessionStatus.Attached
+            ? "recovered"
+            : snapshot.PauseReason;
+
         return snapshot with
         {
             Status = status,
             PendingMode = null,
+            PauseReason = pauseReason,
             Entries = entries,
             Revision = snapshot.Revision + 1,
             UpdatedAt = now

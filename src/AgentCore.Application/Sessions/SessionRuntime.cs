@@ -52,6 +52,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private long _expectedFrameSequence = 1;
     private long _expectedSampleOffset;
     private readonly CancellationTokenSource _lifetime = new();
+    private CancellationTokenSource? _brainEvaluationCts;
     private readonly Task _loop;
     private readonly Task _persistLoop;
     private readonly Channel<PersistJob> _persistJobs = Channel.CreateUnbounded<PersistJob>(
@@ -1186,11 +1187,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             BeginWork();
         }
 
+        CancelBrainEvaluation();
+        _brainEvaluationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var evaluationToken = _brainEvaluationCts.Token;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var sessionAttachments = await BuildSessionAttachmentManifestAsync(_lifetime.Token).ConfigureAwait(false);
+                var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
                 var context = new AgentContext(
                     _snapshot.Definition,
                     _snapshot.Entries,
@@ -1213,7 +1218,38 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LastUserActivityAt: _snapshot.LastUserActivityAt);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
-                var decision = await _brain.DecideAsync(context, responseId, _lifetime.Token).ConfigureAwait(false);
+                AgentDecision decision;
+                try
+                {
+                    decision = await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
+                {
+                    if (trigger.Kind == TriggerKind.UserTurn)
+                    {
+                        return;
+                    }
+
+                    decision = new StaySilent(
+                        "Initiative evaluation superseded.",
+                        CountsTowardSilentCap: false);
+                }
+                catch (Exception) when (trigger.Kind != TriggerKind.UserTurn)
+                {
+                    decision = new StaySilent(
+                        "Initiative evaluation failed.",
+                        CountsTowardSilentCap: true);
+                }
+                catch (Exception)
+                {
+                    return;
+                }
+
+                if (evaluationToken.IsCancellationRequested && trigger.Kind == TriggerKind.UserTurn)
+                {
+                    return;
+                }
+
                 RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted));
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var inbound = NewContext(cause.EventId);
@@ -1228,6 +1264,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             finally
             {
+                if (_brainEvaluationCts?.Token == evaluationToken)
+                {
+                    _brainEvaluationCts.Dispose();
+                    _brainEvaluationCts = null;
+                }
+
                 EndWork();
             }
         }, CancellationToken.None);
