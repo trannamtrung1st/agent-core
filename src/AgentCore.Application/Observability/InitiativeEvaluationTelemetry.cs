@@ -53,10 +53,23 @@ public static class InitiativeEvaluationTelemetry
             evaluated = kind,
             evaluatedReasonCode = reasonCode,
             admitted,
-            blockReason
+            blockReason = blockReason ?? (admitted ? "admitted" : DispositionBlockReason(evaluated))
         };
         RuntimeTelemetry.RecordDiagnostic("initiative_disposition", 0, JsonSerializer.Serialize(payload, Json));
     }
+
+    public static string DispositionBlockReason(AgentDecision decision) =>
+        decision switch
+        {
+            StaySilent silent when silent.CountsTowardSilentCap => "semantic_silence",
+            StaySilent silent => Classify(silent).ReasonCode switch
+            {
+                "provider_failed" => "provider_failed",
+                "unparseable" => "unparseable",
+                _ => "hard_cap"
+            },
+            _ => "semantic_silence"
+        };
 
     private static (string Evaluated, string ReasonCode, int? NextWaitMs) Classify(AgentDecision decision) =>
         decision switch

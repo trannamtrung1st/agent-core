@@ -17,6 +17,7 @@ import {
   type PendingAttachment
 } from "./attachments";
 import { catalogShell, refreshCatalog } from "./catalog";
+import { requiresExplicitResume } from "./sessionPauseSemantics";
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
@@ -1174,7 +1175,8 @@ export async function openSessionById(
         sessionId,
         status: view.status,
         archived: false,
-        ended: view.status === "ended"
+        ended: view.status === "ended",
+        pauseReason: view.pauseReason ?? null
       },
       options
     );
@@ -1197,6 +1199,7 @@ export async function openCatalogSession(
     status: string;
     archived: boolean;
     ended: boolean;
+    pauseReason?: string | null;
   },
   options?: { syncUrl?: boolean }
 ): Promise<OpenSessionResult> {
@@ -1212,7 +1215,7 @@ export async function openCatalogSession(
     return showEndedSession(item.sessionId, options);
   }
 
-  if (item.status === "paused") {
+  if (item.status === "paused" && requiresExplicitResume(item.pauseReason)) {
     return showPausedSession(item.sessionId, options);
   }
 
@@ -1232,7 +1235,7 @@ export async function openCatalogSession(
   useSessionStore.setState({ routeNotice: null });
 
   try {
-    if (item.status !== "attached") {
+    if (item.status !== "attached" && requiresExplicitResume(item.pauseReason)) {
       await reopenSession(item.sessionId);
     }
     await startConnection(item.sessionId, { syncUrl: "none" });
@@ -1478,12 +1481,12 @@ async function showEndedSession(
 
   try {
     const view = await getSession(sessionId);
-    if (view.status === "paused") {
+    if (view.status === "paused" && requiresExplicitResume(view.pauseReason)) {
       return showPausedSession(sessionId, options);
     }
 
     if (view.status !== "ended") {
-      if (view.status !== "attached") {
+      if (view.status !== "attached" && requiresExplicitResume(view.pauseReason)) {
         await reopenSession(sessionId);
       }
       await startConnection(sessionId, { syncUrl: "none" });

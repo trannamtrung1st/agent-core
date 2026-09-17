@@ -102,6 +102,40 @@ public sealed class SessionRealtimeLifecycleTests
     }
 
     [Fact]
+    public async Task Transport_disconnect_reconnect_preserves_last_user_activity_without_reopen()
+    {
+        var store = new InMemoryMemoryStore();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        var first = new CapturingSessionOutput();
+        DateTimeOffset activityAt;
+        await using (var runtime = Create(first, time, new ScriptedLanguageModel(), store))
+        {
+            await runtime.AttachAsync();
+            time.Advance(TimeSpan.FromMinutes(5));
+            await runtime.SubmitUserTextAsync("Hello");
+            await runtime.WaitUntilIdleAsync();
+            activityAt = runtime.Snapshot.LastUserActivityAt!.Value;
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var paused = (await store.LoadAsync(Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")))!;
+        Assert.Equal(SessionStatus.Paused, paused.Status);
+        Assert.Equal("disconnected", paused.PauseReason);
+        Assert.Equal(activityAt, paused.LastUserActivityAt);
+
+        var second = new CapturingSessionOutput();
+        await using var restored = Create(second, time, new ScriptedLanguageModel(), store, paused);
+        await restored.AttachAsync();
+        await restored.WaitUntilMailboxDrainedAsync();
+
+        Assert.Equal(SessionStatus.Attached, restored.Snapshot.Status);
+        Assert.Null(restored.Snapshot.PauseReason);
+        Assert.Equal(activityAt, restored.Snapshot.LastUserActivityAt);
+        Assert.IsType<ReadyOutput>(second.Items.Single(item => item.Payload is ReadyOutput).Payload);
+    }
+
+    [Fact]
     public async Task Ready_voice_available_matches_catalog_gate_when_speech_adapters_unresolved()
     {
         var output = new CapturingSessionOutput();

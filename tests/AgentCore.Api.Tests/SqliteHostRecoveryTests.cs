@@ -447,7 +447,9 @@ public sealed class SqliteHostRecoveryTests
     private static async Task ReopenIfPausedAsync(HttpClient client, string sessionId)
     {
         var view = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v2/sessions/{sessionId}");
-        if (!string.Equals(view?.Status, "paused", StringComparison.OrdinalIgnoreCase))
+        if (view is null
+            || !string.Equals(view.Status, "paused", StringComparison.OrdinalIgnoreCase)
+            || !SessionPauseSemantics.RequiresExplicitResume(view.PauseReason))
         {
             return;
         }

@@ -340,7 +340,7 @@ internal static class SyntheticInitiativeScript
 
         if (string.Equals(agentId, "customer-support", StringComparison.Ordinal))
         {
-            return DecideSupport(speaks, silenceMs);
+            return DecideSupport(root, speaks, silenceMs);
         }
 
         if (speaks >= 1)
@@ -368,8 +368,13 @@ internal static class SyntheticInitiativeScript
         return StaySilent("Synthetic examiner waiting for longer candidate silence.", 30_000);
     }
 
-    private static string DecideSupport(int speaks, int silenceMs)
+    private static string DecideSupport(JsonElement root, int speaks, int silenceMs)
     {
+        if (!HasUnresolvedSupportContext(root))
+        {
+            return StaySilent("Synthetic support has no unresolved work.", 120_000);
+        }
+
         if (speaks >= 1 && silenceMs < SupportAdvanceSilenceMs)
         {
             return StaySilent("Synthetic support pauses briefly between proactive updates.", 20_000);
@@ -381,6 +386,61 @@ internal static class SyntheticInitiativeScript
         }
 
         return StaySilent("Synthetic support waiting for longer silence.", 20_000);
+    }
+
+    private static bool HasUnresolvedSupportContext(JsonElement root)
+    {
+        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var sawSupportIssue = false;
+        foreach (var turn in turns.EnumerateArray())
+        {
+            if (!turn.TryGetProperty("role", out var roleNode)
+                || !turn.TryGetProperty("text", out var textNode))
+            {
+                continue;
+            }
+
+            var role = roleNode.GetString() ?? string.Empty;
+            var text = textNode.GetString() ?? string.Empty;
+            if (string.Equals(role, "User", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ContainsSupportIssue(text))
+                {
+                    sawSupportIssue = true;
+                }
+
+                if (sawSupportIssue && IsSupportClosure(text))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return sawSupportIssue;
+    }
+
+    private static bool ContainsSupportIssue(string text) =>
+        text.Contains("order", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("shipment", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("delivery", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("refund", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSupportClosure(string text)
+    {
+        var normalized = text.Trim();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return normalized.Contains("that's all", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("thats all", StringComparison.OrdinalIgnoreCase)
+            || (normalized.Contains("thank", StringComparison.OrdinalIgnoreCase)
+                && !ContainsSupportIssue(normalized));
     }
 
     private static string ReadAgentId(JsonElement root)

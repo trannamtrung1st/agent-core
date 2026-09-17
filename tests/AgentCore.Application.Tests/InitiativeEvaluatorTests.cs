@@ -66,6 +66,28 @@ public sealed class InitiativeEvaluatorTests
     }
 
     [Fact]
+    public async Task Synthetic_support_stays_silent_when_user_closed_the_thread()
+    {
+        var support = SampleDefinitions.Support with
+        {
+            InitiativePolicy = new InitiativePolicy(
+                true,
+                10_000,
+                30_000,
+                2,
+                ["longSilence"],
+                MaxConsecutiveProactiveTurns: 2)
+        };
+        var json = await RunSyntheticInitiativeAsync(
+            support,
+            silenceSeconds: 50,
+            userText: "Thanks, that's all.",
+            assistantText: "Glad I could help.");
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal("staySilent", doc.RootElement.GetProperty("decision").GetString());
+    }
+
+    [Fact]
     public async Task Synthetic_support_can_speak_twice_when_context_unresolved()
     {
         var support = SampleDefinitions.Support with

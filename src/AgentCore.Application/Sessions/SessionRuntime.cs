@@ -192,6 +192,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await applied.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task ApplyTransportResumedSnapshotAsync(SessionSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        var applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new TransportResumedSnapshotReceived(context, snapshot, applied), urgent: true))
+        {
+            applied.TrySetResult();
+            EndWork();
+            return;
+        }
+
+        await applied.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<bool> SubmitUserTextAsync(
         string text,
         Guid? sourceEventId = null,
@@ -643,12 +658,41 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await HandleToolActivityAsync(tools, cancellationToken).ConfigureAwait(false);
                     break;
                 case BrainReturned brain:
-                    await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
-                    brain.Processed.TrySetResult();
+                    try
+                    {
+                        await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (brain.Trigger.Kind != TriggerKind.UserTurn && ex is not OperationCanceledException)
+                    {
+                        _logger.LogError(ex, "Proactive brain handling failed for session {SessionId}", SessionId);
+                        RecoverProactiveHandleFailure(brain);
+                    }
+                    finally
+                    {
+                        if (brain.Trigger.Kind != TriggerKind.UserTurn)
+                        {
+                            _proactiveBrainInFlight = false;
+                        }
+
+                        brain.Processed.TrySetResult();
+                    }
+
                     break;
                 case BrainFailed brainFailed:
-                    await HandleBrainFailedAsync(brainFailed, cancellationToken).ConfigureAwait(false);
-                    brainFailed.Processed.TrySetResult();
+                    try
+                    {
+                        await HandleBrainFailedAsync(brainFailed, cancellationToken).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (brainFailed.Trigger.Kind != TriggerKind.UserTurn)
+                        {
+                            _proactiveBrainInFlight = false;
+                        }
+
+                        brainFailed.Processed.TrySetResult();
+                    }
+
                     break;
                 case TimerElapsedReceived timer:
                     await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
@@ -694,6 +738,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case ReopenedSnapshotReceived reopened:
                     HandleReopenedSnapshot(reopened);
+                    break;
+                case TransportResumedSnapshotReceived transportResumed:
+                    HandleTransportResumedSnapshot(transportResumed);
                     break;
                 case EnvironmentReceived environment:
                     await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
@@ -1058,9 +1105,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     input.Trigger,
                     input.Decision,
                     admitted: false,
-                    blockReason: input.Decision is StaySilent stay && !stay.CountsTowardSilentCap
-                        ? "hard_gate"
-                        : "semantic_silence");
+                    blockReason: InitiativeEvaluationTelemetry.DispositionBlockReason(input.Decision));
             }
 
             await DeclineInitiativeAsync(input.Context, input.Decision, cancellationToken).ConfigureAwait(false);
@@ -1069,7 +1114,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (proactive)
         {
-            InitiativeEvaluationTelemetry.RecordDisposition(input.Trigger, input.Decision, admitted: true);
+            InitiativeEvaluationTelemetry.RecordDisposition(
+                input.Trigger,
+                input.Decision,
+                admitted: true,
+                blockReason: "admitted");
         }
 
         await StartSpeakPathAsync(input, speakable, cancellationToken).ConfigureAwait(false);
@@ -1106,9 +1155,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         InitiativeEvaluationTelemetry.RecordDisposition(
             input.Trigger,
-            new StaySilent("Initiative evaluation failed.", CountsTowardSilentCap: false),
+            new StaySilent("Initiative provider failed.", CountsTowardSilentCap: false),
             admitted: false,
-            blockReason: "brain_failed");
+            blockReason: "provider_failed");
         await DeclineInitiativeAsync(
             input.Context,
             new StaySilent("Initiative evaluation failed.", CountsTowardSilentCap: false),
@@ -1410,11 +1459,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             finally
             {
-                if (proactive)
-                {
-                    _proactiveBrainInFlight = false;
-                }
-
                 if (_brainEvaluationCts?.Token == evaluationToken)
                 {
                     _brainEvaluationCts.Dispose();

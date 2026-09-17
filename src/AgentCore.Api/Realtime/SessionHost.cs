@@ -135,7 +135,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 return Reject(command.EventId, "Session", "NotFound", "Session is archived.", true, null);
             }
 
-            if (snapshot.Status == SessionStatus.Paused)
+            if (snapshot.Status == SessionStatus.Paused
+                && SessionPauseSemantics.RequiresExplicitResume(snapshot.PauseReason))
             {
                 return Reject(
                     command.EventId,
@@ -292,10 +293,19 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
                 if (live.Runtime.Snapshot.Status == SessionStatus.Paused)
                 {
-                    var resumed = snapshot.Status == SessionStatus.Paused
-                        ? await _sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false)
-                        : snapshot;
-                    await live.Runtime.ApplyReopenedSnapshotAsync(resumed, cancellationToken).ConfigureAwait(false);
+                    if (SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason)
+                        || SessionPauseSemantics.IsTransportResumable(live.Runtime.Snapshot.PauseReason))
+                    {
+                        await live.Runtime.ApplyTransportResumedSnapshotAsync(snapshot, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var resumed = snapshot.Status == SessionStatus.Paused
+                            ? await _sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false)
+                            : snapshot;
+                        await live.Runtime.ApplyReopenedSnapshotAsync(resumed, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 var attached = await live.Runtime.AttachAsync(cancellationToken).ConfigureAwait(false);

@@ -148,6 +148,32 @@ public sealed class SessionCatalogTests
     }
 
     [Fact]
+    public async Task Reopen_on_transport_paused_is_idempotent()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var manager = CreateManager(store, time);
+        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var activityAt = time.GetUtcNow();
+        await manager.DeactivateAsync(created.SessionId);
+        var loaded = await manager.GetAsync(created.SessionId);
+        var paused = loaded with
+        {
+            PauseReason = "disconnected",
+            LastUserActivityAt = activityAt,
+            UpdatedAt = activityAt,
+            Revision = loaded.Revision + 1
+        };
+        await store.SaveAsync(paused, loaded.Revision, CancellationToken.None);
+
+        var reopened = await manager.ReopenAsync(created.SessionId);
+        Assert.Equal(SessionStatus.Paused, reopened.Status);
+        Assert.Equal("disconnected", reopened.PauseReason);
+        Assert.Equal(activityAt, reopened.LastUserActivityAt);
+        Assert.Equal(paused.RuntimeEpoch, reopened.RuntimeEpoch);
+    }
+
+    [Fact]
     public async Task Reopen_from_paused_returns_created_and_clears_pause_reason()
     {
         var manager = CreateManager(new InMemoryMemoryStore());

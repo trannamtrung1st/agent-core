@@ -166,7 +166,8 @@ public sealed class SessionManager
                         throw AgentCoreErrors.SessionInUse();
                     }
 
-                    var resuming = snapshot.Status == SessionStatus.Paused || snapshot.PauseReason is not null;
+                    var resuming = snapshot.Status == SessionStatus.Paused
+                        && SessionPauseSemantics.RequiresExplicitResume(snapshot.PauseReason);
                     if (!resuming)
                     {
                         return snapshot;

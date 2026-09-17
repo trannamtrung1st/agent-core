@@ -135,6 +135,63 @@ public sealed partial class SessionRuntime
         input.Applied.TrySetResult();
     }
 
+    private void HandleTransportResumedSnapshot(TransportResumedSnapshotReceived input)
+    {
+        ResetForTransportResume(input.Snapshot);
+        input.Applied.TrySetResult();
+    }
+
+    private void ResetForTransportResume(SessionSnapshot snapshot)
+    {
+        CancelBrainEvaluation();
+        _proactiveBrainInFlight = false;
+        _deactivated = false;
+        _durableRevision = snapshot.Revision;
+        _durableSnapshot = snapshot;
+        _snapshot = snapshot;
+        _lastMeaningfulActivityAt = snapshot.LastUserActivityAt ?? _lastMeaningfulActivityAt;
+        _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
+    }
+
+    private void RecoverProactiveHandleFailure(BrainReturned brain)
+    {
+        if (brain.Trigger.Kind == TriggerKind.UserTurn || _activeResponseId != brain.ResponseId)
+        {
+            return;
+        }
+
+        var entryId = _activeEntryId;
+        _responseCts?.Cancel();
+        _responseCts?.Dispose();
+        _responseCts = null;
+        _activeResponseId = null;
+        _activeEntryId = null;
+        if (entryId is not null)
+        {
+            _activeEntryId = entryId;
+            UpdateAssistant(EntryStatus.Failed);
+            _activeEntryId = null;
+        }
+
+        _lastInitiativeAt = null;
+        _pendingInitiativeExpiresAt = null;
+        _accumulator.Reset();
+        _responseTerminal = true;
+        _responseLifecycle = ResponseLifecycle.Failed;
+        _outputActivity = OutputActivity.Idle;
+        if (brain.Trigger.Kind == TriggerKind.LongSilence)
+        {
+            _helpOfferedDuringSilence = false;
+            _consecutiveProactiveSpeaks = Math.Max(0, _consecutiveProactiveSpeaks - 1);
+            _proactiveSpeaksThisSilence = Math.Max(0, _proactiveSpeaksThisSilence - 1);
+        }
+
+        if (CanEvaluateIdle())
+        {
+            ScheduleIdleTimer(SilenceThreshold());
+        }
+    }
+
     private void ResetForExplicitResume(SessionSnapshot snapshot)
     {
         CancelBrainEvaluation();

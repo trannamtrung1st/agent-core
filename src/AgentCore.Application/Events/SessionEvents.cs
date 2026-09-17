@@ -136,6 +136,11 @@ public sealed record ReopenedSnapshotReceived(
     SessionSnapshot Snapshot,
     TaskCompletionSource Applied) : SessionInput(Context);
 
+public sealed record TransportResumedSnapshotReceived(
+    EventContext Context,
+    SessionSnapshot Snapshot,
+    TaskCompletionSource Applied) : SessionInput(Context);
+
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
 
 public sealed record SessionOutput(EventContext Context, Guid? ResponseId, OutputPayload Payload);
