@@ -1,4 +1,4 @@
-import { Button, Select } from "antd";
+import { Alert, Button, Select } from "antd";
 import type { AgentDescriptor } from "../../services/api";
 
 export function IdentityPicker({
@@ -15,14 +15,11 @@ export function IdentityPicker({
   onStart: () => void;
 }) {
   const hasAgents = agents.length > 0;
+  const canStart = hasAgents && selectedAgentId.trim().length > 0;
 
   return (
     <section className="picker">
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <Alert type="error" showIcon title={error} /> : null}
       <div className="picker-field">
         <span className="picker-legend">Identity</span>
         <Select
@@ -38,7 +35,7 @@ export function IdentityPicker({
           style={{ width: "100%" }}
         />
       </div>
-      <Button type="primary" aria-label="Start conversation" onClick={onStart}>
+      <Button type="primary" aria-label="Start conversation" disabled={!canStart} onClick={onStart}>
         Start conversation
       </Button>
     </section>

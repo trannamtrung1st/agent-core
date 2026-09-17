@@ -67,7 +67,7 @@ describe("IdentityPicker", () => {
     expect(onStart).toHaveBeenCalled();
   });
 
-  it("disables identity selection when no agents are available", () => {
+  it("disables identity selection and start when no agents are available", () => {
     render(
       <IdentityPicker
         agents={[]}
@@ -79,5 +79,6 @@ describe("IdentityPicker", () => {
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start conversation" })).toBeDisabled();
   });
 });

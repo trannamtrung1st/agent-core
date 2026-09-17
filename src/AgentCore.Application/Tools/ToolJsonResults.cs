@@ -4,6 +4,9 @@ namespace AgentCore.Application.Tools;
 
 public static class ToolJsonResults
 {
+    private const string TruncatedFallback = """{"truncated":true,"error":"output_limit"}""";
+    private const string MinimalFallback = "{}";
+
     public static string FitJsonWithContentField(int budget, string content, Func<string, bool, string> buildJson)
     {
         var maxBytes = Math.Max(0, budget);
@@ -35,13 +38,27 @@ public static class ToolJsonResults
             return json;
         }
 
-        const string fallback = """{"truncated":true,"error":"output_limit"}""";
-        if (Encoding.UTF8.GetByteCount(fallback) <= maxBytes)
+        if (Encoding.UTF8.GetByteCount(TruncatedFallback) <= maxBytes)
         {
-            return fallback;
+            return TruncatedFallback;
         }
 
-        return ClipUtf8Prefix(fallback, maxBytes);
+        return MinimalValidJson(maxBytes);
+    }
+
+    internal static string MinimalValidJson(int maxBytes)
+    {
+        if (maxBytes <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (Encoding.UTF8.GetByteCount(MinimalFallback) <= maxBytes)
+        {
+            return MinimalFallback;
+        }
+
+        return string.Empty;
     }
 
     public static string ClipUtf8Prefix(string text, int maxBytes)
