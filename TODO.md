@@ -6,6 +6,7 @@ Ordered roughly by dependency and product value. Earlier sections should normall
 * [ ] Should we pause auto or manual pause session? in the future we may have background work.
 * [ ] Test the extra md content along with message/reply/voice response.
 * [ ] In admin mode later, agent just prepare the intent/payload and show in UI, its user to confirm/approve and execute the action.
+* [ ] Fail status in chat is too generic, cannot know which is the cause. we may have some tooltip or popup to show the cause.
 
 ## P0 — Conversation lifecycle and natural interaction
 
