@@ -1,4 +1,5 @@
 import {
+  CatalogRevisionConflictError,
   OwnerCapabilityError,
   archiveSession,
   durableDeleteSession,
@@ -7,7 +8,7 @@ import {
   unarchiveSession,
   type CatalogItem
 } from "./api";
-import { useSessionStore } from "../state/sessionStore";
+import { useSessionStore, type CatalogMutationKind } from "../state/sessionStore";
 
 export function catalogShell() {
   const state = useSessionStore.getState();
@@ -19,7 +20,8 @@ export function catalogShell() {
     catalogHasMore: state.catalogHasMore,
     catalogIncludeArchived: state.catalogIncludeArchived,
     catalogCapabilityLost: state.catalogCapabilityLost,
-    catalogError: state.catalogError
+    catalogError: state.catalogError,
+    catalogMutation: state.catalogMutation
   };
 }
 
@@ -72,25 +74,77 @@ export async function setIncludeArchived(includeArchived: boolean): Promise<void
   await refreshCatalog(true);
 }
 
-export async function renameCatalogItem(sessionId: string, title: string): Promise<void> {
-  const item = await renameSession(sessionId, title);
-  patchCatalog(item);
+function beginCatalogMutation(sessionId: string, kind: CatalogMutationKind): void {
+  useSessionStore.setState({
+    catalogMutation: { sessionId, kind },
+    catalogError: null
+  });
 }
 
-export async function archiveCatalogItem(sessionId: string): Promise<void> {
-  await archiveSession(sessionId);
-  await refreshCatalog(true);
+function endCatalogMutation(): void {
+  useSessionStore.setState({ catalogMutation: null });
 }
 
-export async function unarchiveCatalogItem(sessionId: string): Promise<void> {
-  const item = await unarchiveSession(sessionId);
-  patchCatalog(item);
-  await refreshCatalog(true);
+function failCatalogMutation(message: string): void {
+  useSessionStore.setState({
+    catalogMutation: null,
+    catalogError: message
+  });
 }
 
-export async function deleteCatalogItem(item: CatalogItem): Promise<void> {
-  await durableDeleteSession(item.sessionId, item.revision);
-  await refreshCatalog(true);
+async function runCatalogMutation(
+  sessionId: string,
+  kind: CatalogMutationKind,
+  action: () => Promise<void>
+): Promise<boolean> {
+  beginCatalogMutation(sessionId, kind);
+  try {
+    await action();
+    useSessionStore.setState({ catalogError: null });
+    return true;
+  } catch (error) {
+    failCatalogMutation(error instanceof Error ? error.message : "Unable to update the session catalog.");
+    return false;
+  } finally {
+    endCatalogMutation();
+  }
+}
+
+export async function renameCatalogItem(sessionId: string, title: string): Promise<boolean> {
+  return runCatalogMutation(sessionId, "rename", async () => {
+    const item = await renameSession(sessionId, title);
+    patchCatalog(item);
+  });
+}
+
+export async function archiveCatalogItem(sessionId: string): Promise<boolean> {
+  return runCatalogMutation(sessionId, "archive", async () => {
+    await archiveSession(sessionId);
+    await refreshCatalog(true);
+  });
+}
+
+export async function unarchiveCatalogItem(sessionId: string): Promise<boolean> {
+  return runCatalogMutation(sessionId, "unarchive", async () => {
+    const item = await unarchiveSession(sessionId);
+    patchCatalog(item);
+    await refreshCatalog(true);
+  });
+}
+
+export async function deleteCatalogItem(item: CatalogItem): Promise<boolean> {
+  return runCatalogMutation(item.sessionId, "delete", async () => {
+    try {
+      await durableDeleteSession(item.sessionId, item.revision);
+    } catch (error) {
+      if (error instanceof CatalogRevisionConflictError) {
+        await refreshCatalog(true);
+        throw error;
+      }
+      throw error;
+    }
+    await refreshCatalog(true);
+  });
 }
 
 function patchCatalog(item: CatalogItem): void {

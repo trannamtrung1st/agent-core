@@ -9,6 +9,7 @@ import {
   setIncludeArchived,
   unarchiveCatalogItem
 } from "../../services/catalog";
+import type { CatalogMutation } from "../../state/sessionStore";
 
 function agentLabel(agents: AgentDescriptor[], item: CatalogItem): string {
   const agent = agents.find((row) => row.id === item.agentId && row.version === item.agentVersion)
@@ -33,6 +34,14 @@ function rowState(item: CatalogItem): string {
   return "Paused";
 }
 
+function mutationBusy(mutation: CatalogMutation | null, sessionId: string, kind: CatalogMutation["kind"]): boolean {
+  return mutation?.sessionId === sessionId && mutation.kind === kind;
+}
+
+function rowBusy(mutation: CatalogMutation | null, sessionId: string): boolean {
+  return mutation?.sessionId === sessionId;
+}
+
 export function SessionRail({
   items,
   agents,
@@ -41,6 +50,7 @@ export function SessionRail({
   hasMore,
   capabilityLost,
   error,
+  mutation,
   onNewChat,
   onOpen
 }: {
@@ -51,18 +61,20 @@ export function SessionRail({
   hasMore: boolean;
   capabilityLost: boolean;
   error: string | null;
+  mutation: CatalogMutation | null;
   onNewChat: () => void;
   onOpen: (item: CatalogItem) => void;
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const catalogBusy = mutation != null;
 
   return (
     <nav className="session-rail" aria-label="Sessions" data-testid="session-rail">
       <Flex justify="space-between" align="center" gap={8}>
         <Typography.Text strong>Sessions</Typography.Text>
-        <Button type="primary" aria-label="Start a new chat" onClick={onNewChat}>
+        <Button type="primary" aria-label="Start a new chat" onClick={onNewChat} disabled={catalogBusy}>
           New chat
         </Button>
       </Flex>
@@ -72,6 +84,7 @@ export function SessionRail({
       {!capabilityLost && error ? <Alert type="error" showIcon title={error} /> : null}
       <Checkbox
         checked={includeArchived}
+        disabled={catalogBusy}
         onChange={(event) => void setIncludeArchived(event.target.checked)}
       >
         Show archived
@@ -83,6 +96,7 @@ export function SessionRail({
         {items.map((item) => {
           const locked = item.ended;
           const inactive = item.archived || item.ended;
+          const busy = rowBusy(mutation, item.sessionId);
           return (
             <li
               key={item.sessionId}
@@ -95,26 +109,37 @@ export function SessionRail({
                   className="session-rename"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void renameCatalogItem(item.sessionId, draftTitle).then(() => setRenamingId(null));
+                    void renameCatalogItem(item.sessionId, draftTitle).then((ok) => {
+                      if (ok) {
+                        setRenamingId(null);
+                      }
+                    });
                   }}
                 >
                   <Input
                     aria-label="Session title"
                     value={draftTitle}
                     onChange={(event) => setDraftTitle(event.target.value)}
+                    disabled={mutationBusy(mutation, item.sessionId, "rename")}
                     onKeyDown={(event) => {
-                      if (event.key === "Escape") {
+                      if (event.key === "Escape" && !mutationBusy(mutation, item.sessionId, "rename")) {
                         setRenamingId(null);
                       }
                     }}
                   />
-                  <Button htmlType="submit">Save</Button>
+                  <Button
+                    htmlType="submit"
+                    loading={mutationBusy(mutation, item.sessionId, "rename")}
+                    disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "rename")}
+                  >
+                    Save
+                  </Button>
                 </form>
               ) : (
                 <Button
                   type="text"
                   block
-                  disabled={inactive}
+                  disabled={inactive || busy}
                   onClick={() => onOpen(item)}
                   style={{ height: "auto", textAlign: "start", whiteSpace: "normal" }}
                 >
@@ -128,15 +153,21 @@ export function SessionRail({
                 </Button>
               )}
               {locked ? null : (
-                <div className="session-row-actions">
+                <div className="session-rail-actions">
                   {item.archived ? (
-                    <Button size="small" onClick={() => void unarchiveCatalogItem(item.sessionId)}>
+                    <Button
+                      size="small"
+                      loading={mutationBusy(mutation, item.sessionId, "unarchive")}
+                      disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "unarchive")}
+                      onClick={() => void unarchiveCatalogItem(item.sessionId)}
+                    >
                       Unarchive
                     </Button>
                   ) : (
                     <>
                       <Button
                         size="small"
+                        disabled={busy}
                         onClick={() => {
                           setRenamingId(item.sessionId);
                           setDraftTitle(item.title);
@@ -144,7 +175,12 @@ export function SessionRail({
                       >
                         Rename
                       </Button>
-                      <Button size="small" onClick={() => void archiveCatalogItem(item.sessionId)}>
+                      <Button
+                        size="small"
+                        loading={mutationBusy(mutation, item.sessionId, "archive")}
+                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "archive")}
+                        onClick={() => void archiveCatalogItem(item.sessionId)}
+                      >
                         Archive
                       </Button>
                     </>
@@ -154,16 +190,30 @@ export function SessionRail({
                       <Button
                         size="small"
                         danger
-                        onClick={() => void deleteCatalogItem(item).then(() => setConfirmDeleteId(null))}
+                        loading={mutationBusy(mutation, item.sessionId, "delete")}
+                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "delete")}
+                        onClick={() => {
+                          void deleteCatalogItem(item).then((ok) => {
+                            if (ok) {
+                              setConfirmDeleteId(null);
+                            } else {
+                              setConfirmDeleteId(null);
+                            }
+                          });
+                        }}
                       >
                         Confirm delete
                       </Button>
-                      <Button size="small" onClick={() => setConfirmDeleteId(null)}>
+                      <Button
+                        size="small"
+                        disabled={mutationBusy(mutation, item.sessionId, "delete")}
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
                         Cancel
                       </Button>
                     </>
                   ) : (
-                    <Button size="small" danger onClick={() => setConfirmDeleteId(item.sessionId)}>
+                    <Button size="small" danger disabled={busy} onClick={() => setConfirmDeleteId(item.sessionId)}>
                       Delete
                     </Button>
                   )}
@@ -174,7 +224,9 @@ export function SessionRail({
         })}
       </ul>
       {hasMore ? (
-        <Button onClick={() => void refreshCatalog(false)}>Load more</Button>
+        <Button disabled={catalogBusy} onClick={() => void refreshCatalog(false)}>
+          Load more
+        </Button>
       ) : null}
     </nav>
   );

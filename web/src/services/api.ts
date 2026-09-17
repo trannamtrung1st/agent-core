@@ -52,6 +52,13 @@ export class OwnerCapabilityError extends Error {
   }
 }
 
+export class CatalogRevisionConflictError extends Error {
+  constructor(message = "Session changed. Review it and confirm delete again.") {
+    super(message);
+    this.name = "CatalogRevisionConflictError";
+  }
+}
+
 export function clearOwnerCapability(): void {
   window.localStorage.removeItem(OWNER_STORAGE_KEY);
 }
@@ -211,6 +218,9 @@ export async function durableDeleteSession(sessionId: string, expectedRevision: 
     `/api/v2/sessions/${sessionId}?expectedRevision=${expectedRevision}`,
     { method: "DELETE" }
   );
+  if (response.status === 409) {
+    throw new CatalogRevisionConflictError();
+  }
   if (!response.ok) {
     throw new Error("Unable to delete the session.");
   }

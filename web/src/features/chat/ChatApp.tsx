@@ -5,6 +5,7 @@ import {
   beginNewChat,
   bootstrap,
   cancelVoice,
+  composerSendEnabled,
   hangUp,
   openCatalogSession,
   reportCommittedEntries,
@@ -58,10 +59,7 @@ export function ChatApp() {
 
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const voiceLive = state.mode === "voice" && state.captureLive;
-  const canSend =
-    state.connection === "ready"
-    && (state.draft.trim().length > 0 || state.pendingAttachments.some((item) => item.status === "ready"))
-    && state.pendingAttachments.every((item) => item.status === "ready");
+  const canSend = composerSendEnabled();
   const inSession = state.sessionId != null;
   const connectionText = conversationStatus({
     connection: state.connection,
@@ -92,6 +90,7 @@ export function ChatApp() {
       hasMore={state.catalogHasMore}
       capabilityLost={state.catalogCapabilityLost}
       error={state.catalogError}
+      mutation={state.catalogMutation}
       onNewChat={handleNewChat}
       onOpen={handleOpen}
     />

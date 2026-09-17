@@ -45,4 +45,13 @@ describe("catalog owner fetch", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v2/sessions/s1?expectedRevision=4");
     expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
   });
+
+  it("maps stale revision delete to a conflict error", async () => {
+    window.localStorage.setItem("agent-core.owner-capability", "tok");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(durableDeleteSession("s1", 4)).rejects.toThrow(
+      "Session changed. Review it and confirm delete again."
+    );
+  });
 });

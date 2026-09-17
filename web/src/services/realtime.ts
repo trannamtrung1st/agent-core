@@ -1329,6 +1329,24 @@ function commitOptimisticUserEntry(eventId: string): void {
   });
 }
 
+function clearRestoredPendingAttachments(restored: PendingAttachment[]): void {
+  if (restored.length === 0) {
+    return;
+  }
+
+  for (const item of restored) {
+    releasePendingFile(item.localId);
+  }
+
+  const latest = useSessionStore.getState();
+  const restoredIds = new Set(restored.map((item) => item.localId));
+  if (latest.pendingAttachments.some((item) => restoredIds.has(item.localId))) {
+    useSessionStore.setState({
+      pendingAttachments: latest.pendingAttachments.filter((item) => !restoredIds.has(item.localId))
+    });
+  }
+}
+
 function reconcilePendingUserText(entries: { sourceEventId: string | null; role: string }[]): void {
   if (!pendingUserText) {
     return;
@@ -1336,10 +1354,16 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
 
   if (historyHasUserEvent(entries, pendingUserText.eventId)) {
     const text = pendingUserText.text;
+    const restored = pendingUserText.pendingAttachments;
     pendingUserText = null;
     const latest = useSessionStore.getState();
+    const patch: { draft?: string; pendingAttachments?: PendingAttachment[] } = {};
     if (latest.draft === text) {
-      useSessionStore.setState({ draft: "" });
+      patch.draft = "";
+    }
+    clearRestoredPendingAttachments(restored);
+    if (Object.keys(patch).length > 0) {
+      useSessionStore.setState(patch);
     }
     return;
   }

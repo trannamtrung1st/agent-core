@@ -404,6 +404,14 @@ export type SessionStore = SessionView & {
   catalogIncludeArchived: boolean;
   catalogCapabilityLost: boolean;
   catalogError: string | null;
+  catalogMutation: CatalogMutation | null;
+};
+
+export type CatalogMutationKind = "rename" | "archive" | "unarchive" | "delete";
+
+export type CatalogMutation = {
+  sessionId: string;
+  kind: CatalogMutationKind;
 };
 
 export const emptyCatalog = () => ({
@@ -412,7 +420,8 @@ export const emptyCatalog = () => ({
   catalogHasMore: false,
   catalogIncludeArchived: false,
   catalogCapabilityLost: false,
-  catalogError: null as string | null
+  catalogError: null as string | null,
+  catalogMutation: null as CatalogMutation | null
 });
 
 export const useSessionStore = create<SessionStore>(() => ({

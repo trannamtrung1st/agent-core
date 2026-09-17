@@ -63,6 +63,7 @@ describe("SessionRail", () => {
         hasMore={false}
         capabilityLost={false}
         error={null}
+        mutation={null}
         onNewChat={onNewChat}
         onOpen={vi.fn()}
       />
@@ -83,6 +84,7 @@ describe("SessionRail", () => {
         hasMore
         capabilityLost={false}
         error={null}
+        mutation={null}
         onNewChat={vi.fn()}
         onOpen={onOpen}
       />
@@ -109,6 +111,7 @@ describe("SessionRail", () => {
         hasMore={false}
         capabilityLost
         error="Local owner access is unavailable."
+        mutation={null}
         onNewChat={vi.fn()}
         onOpen={vi.fn()}
       />
@@ -118,10 +121,10 @@ describe("SessionRail", () => {
   });
 
   it("rename save, archive, unarchive, and confirm delete call versioned catalog APIs", async () => {
-    vi.mocked(renameCatalogItem).mockResolvedValue(undefined);
-    vi.mocked(archiveCatalogItem).mockResolvedValue(undefined);
-    vi.mocked(unarchiveCatalogItem).mockResolvedValue(undefined);
-    vi.mocked(deleteCatalogItem).mockResolvedValue(undefined);
+    vi.mocked(renameCatalogItem).mockResolvedValue(true);
+    vi.mocked(archiveCatalogItem).mockResolvedValue(true);
+    vi.mocked(unarchiveCatalogItem).mockResolvedValue(true);
+    vi.mocked(deleteCatalogItem).mockResolvedValue(true);
 
     const { rerender } = render(
       <SessionRail
@@ -132,6 +135,7 @@ describe("SessionRail", () => {
         hasMore={false}
         capabilityLost={false}
         error={null}
+        mutation={null}
         onNewChat={vi.fn()}
         onOpen={vi.fn()}
       />
@@ -154,6 +158,7 @@ describe("SessionRail", () => {
         hasMore={false}
         capabilityLost={false}
         error={null}
+        mutation={null}
         onNewChat={vi.fn()}
         onOpen={vi.fn()}
       />
@@ -176,6 +181,7 @@ describe("SessionRail", () => {
         hasMore={false}
         capabilityLost={false}
         error={null}
+        mutation={null}
         onNewChat={vi.fn()}
         onOpen={vi.fn()}
       />

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { capture } from "../audio/capture";
 import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
-import { realtimeTestHooks, requestVoice, sendDraft, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
+import { realtimeTestHooks, composerSendEnabled, requestVoice, sendDraft, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
 
 const hooks = realtimeTestHooks!;
 
@@ -688,6 +688,85 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().pendingAttachments).toHaveLength(1);
     expect(useSessionStore.getState().pendingAttachments[0]?.attachmentId).toBe("att-1");
     expect(useSessionStore.getState().entries[0]?.status).toBe("sending");
+    expect(composerSendEnabled()).toBe(true);
+  });
+
+  it("keeps send enabled for text-only ambiguous SendText failure", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await sendDraft();
+    expect(useSessionStore.getState().draft).toBe("");
+    expect(useSessionStore.getState().entries[0]?.status).toBe("sending");
+    expect(composerSendEnabled()).toBe(true);
+  });
+
+  it("clears restored attachments when reconnect history proves the turn persisted", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("Hub disconnected."));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      pendingAttachments: [
+        {
+          localId: "local-1",
+          displayName: "notes.md",
+          contentType: "text/markdown",
+          byteSize: 12,
+          status: "ready",
+          progress: 100,
+          attachmentId: "att-1",
+          error: null
+        }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await sendDraft();
+    expect(useSessionStore.getState().pendingAttachments).toHaveLength(1);
+    const eventId = (invoke.mock.calls[0]?.[1] as { eventId?: string })?.eventId;
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a2",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "text",
+        pendingMode: null,
+        status: "attached",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [
+          {
+            entryId: eventId!,
+            sequence: 1,
+            sourceEventId: eventId,
+            role: "user",
+            text: "Hello",
+            deliveryMode: "text",
+            status: "completed"
+          }
+        ]
+      }
+    });
+    expect(useSessionStore.getState().pendingAttachments).toHaveLength(0);
+    expect(composerSendEnabled()).toBe(false);
   });
 
   it("retries unacked text with the original eventId after reconnect", async () => {
