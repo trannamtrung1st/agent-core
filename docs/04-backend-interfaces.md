@@ -164,18 +164,43 @@ public interface IInterruptionClassifier
 public enum TriggerKind { UserTurn, LongSilence, EnvironmentUpdate, UnfinishedInteraction }
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text,
     string? EnvironmentKind = null);
-public sealed record AgentContext(AgentDefinition Definition,
-    IReadOnlyList<ConversationEntry> History, string Summary,
-    UserProfile? Profile, SessionMode Mode, string? PendingTopic,
-    bool HelpOfferedDuringSilence, string? InterruptedHeardText, AgentTrigger Trigger,
+public sealed record SessionAttachmentManifestItem(
+    Guid AttachmentId, string DisplayName, string ContentType, long UploadedWithEntrySequence);
+public sealed record AgentContext(
+    AgentDefinition Definition,
+    IReadOnlyList<ConversationEntry> History,
+    string Summary,
+    UserProfile? Profile,
+    SessionMode Mode,
+    string? PendingTopic,
+    bool HelpOfferedDuringSilence,
+    string? InterruptedHeardText,
+    AgentTrigger Trigger,
     IReadOnlyList<AttachmentProcessResult>? AttachmentContents = null,
-    int ConsecutiveProactiveSpeaks = 0, int SilentEvaluations = 0,
-    int SpeaksThisSilencePeriod = 0, bool InitiativeHeld = false,
-    bool InactivityExceeded = false);
+    IReadOnlyList<SessionAttachmentManifestItem>? SessionAttachments = null,
+    int ConsecutiveProactiveSpeaks = 0,
+    int SilentEvaluations = 0,
+    int SpeaksThisSilencePeriod = 0,
+    bool InitiativeHeld = false,
+    bool InactivityExceeded = false,
+    bool ModelSupportsTools = true,
+    DateTimeOffset UtcNow = default,
+    DateTimeOffset? LastUserActivityAt = null);
+public enum InitiativeIntent { Hint, Rephrase, Clarification, Reminder, FollowUp, Other }
+public sealed class InitiativePlan
+{
+    public InitiativeIntent Intent { get; }
+    public string PlannerNote { get; }
+    public static bool TryCreate(string? intentWire, string? plannerNote, out InitiativePlan? plan);
+    public static InitiativePlan Create(InitiativeIntent intent, string plannerNote);
+}
 public abstract record AgentDecision;
 public sealed record StaySilent(string Reason, bool CountsTowardSilentCap = true,
     int? NextWaitMs = null) : AgentDecision;
-public sealed record Speak(ModelRequest Request, int? NextWaitMs = null) : AgentDecision;
+public sealed record Speak(
+    ModelRequest Request,
+    int? NextWaitMs = null,
+    InitiativePlan? Plan = null) : AgentDecision;
 public sealed record RequestDeactivate(string Reason) : AgentDecision;
 public interface IAgentBrain
 {
@@ -189,7 +214,7 @@ public interface IIdGenerator
 }
 ```
 
-`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. User turns build a normalized ModelRequest directly. Proactive triggers run hard gates first, then `IInitiativeEvaluator` (`initiative-decision-v2` JSON on a dedicated `ILanguageModel` instance); only a well-formed `Speak` (required `intent` and `objective`) proceeds to the full generation request on the foreground model. Malformed `speak` plans fail closed to `StaySilent` with `CountsTowardSilentCap=false` (`invalid_plan`). Generation applies trusted server-owned `intent` (`InitiativeIntent` / `InitiativePlan.TryCreate`) as fixed framework instructions; planner `objective` is untrusted `initiative_planner_observation` JSON only. Session Runtime cancels in-flight brain evaluation on user activity, supersession, detach, and pause; initiative failures fail closed to `StaySilent`. Decisions must pass the same runtime policy recheck. `StaySilent.CountsTowardSilentCap=false` marks hard-gate denials that must not advance silent-evaluation pause. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. RequestDeactivate cancels live output, rotates the runtime epoch, persists Paused, and is not archive or v1 end. Role `environment.toolAllowlist` is runtime-enforced (`RolePermissions`); `process`/`shell` stay denied. Approved knowledge retrieval returns identity, title, citation, and current file body under the pinned source identity (`GET /api/v2/sessions/{id}/knowledge/{identity}`). Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
+`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. User turns build a normalized ModelRequest directly. Proactive triggers run hard gates first, then `IInitiativeEvaluator` (`initiative-decision-v2` JSON on a dedicated `ILanguageModel` instance); only a well-formed `Speak` (required `intent` and `objective`) proceeds to the full generation request on the foreground model. Malformed `speak` plans fail closed to `StaySilent` with `CountsTowardSilentCap=false` (`invalid_plan`). Generation applies trusted server-owned `intent` (`InitiativeIntent` / `InitiativePlan.TryCreate`) as fixed framework instructions; planner `objective` is untrusted `initiative_planner_observation` JSON only. That JSON is delivered as a final `ModelRole.User` message after transcript turns so adapters stay provider-shaped; it is framework-owned internal context, not a human user turn—do not treat it as the latest conversational request. Session Runtime cancels in-flight brain evaluation on user activity, supersession, detach, and pause; initiative failures fail closed to `StaySilent`. Decisions must pass the same runtime policy recheck. `StaySilent.CountsTowardSilentCap=false` marks hard-gate denials that must not advance silent-evaluation pause. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. RequestDeactivate cancels live output, rotates the runtime epoch, persists Paused, and is not archive or v1 end. Role `environment.toolAllowlist` is runtime-enforced (`RolePermissions`); `process`/`shell` stay denied. Approved knowledge retrieval returns identity, title, citation, and current file body under the pinned source identity (`GET /api/v2/sessions/{id}/knowledge/{identity}`). Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
 
 Use injected `TimeProvider` for UTC timestamps, monotonic elapsed time, and timers (`Task.Delay(delay, timeProvider, token)` or `CreateTimer`). Do not define IClock. Production NewId calls `Guid.CreateVersion7(timeProvider.GetUtcNow())`; NewSessionId calls `Guid.NewGuid()` for cryptographically random UUIDv4 local/demo bearer session IDs. Tests use reproducible sequences for both. IDs are serialized as strings at browser boundaries.
 

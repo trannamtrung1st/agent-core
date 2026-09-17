@@ -163,6 +163,13 @@ public sealed class InitiativePlanTests
     }
 
     [Fact]
+    public void InitiativePlan_create_rejects_undefined_enum_value()
+    {
+        var bogus = (InitiativeIntent)999;
+        Assert.Throws<ArgumentException>(() => InitiativePlan.Create(bogus, "valid note."));
+    }
+
+    [Fact]
     public void Rephrase_plan_adds_simpler_formulation_guidance_to_generation()
     {
         var builder = new PromptContextBuilder();

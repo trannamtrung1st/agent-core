@@ -101,6 +101,11 @@ public sealed record InitiativePlan
 
     public static InitiativePlan Create(InitiativeIntent intent, string plannerNote)
     {
+        if (!Enum.IsDefined(intent))
+        {
+            throw new ArgumentException("Intent is not a defined initiative value.", nameof(intent));
+        }
+
         if (!InitiativeIntents.TryNormalizePlannerNote(plannerNote, out var normalized))
         {
             throw new ArgumentException(
