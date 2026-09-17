@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { App as AntApp, Button, Drawer, Layout } from "antd";
+import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Typography } from "antd";
+import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
 import { useSessionStore } from "../../state/sessionStore";
 import {
   beginNewChat,
@@ -14,38 +15,49 @@ import {
   selectAgent,
   sendDraft,
   setDraft,
-  setMuted,
-  startConversation
+  setMuted
 } from "../../services/realtime";
+import { AgentPicker } from "./AgentPicker";
+import { mapAgentActivity, conversationStatusLabel, conversationStatusTone } from "./activityState";
+import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
-import { Hud } from "./Hud";
-import { IdentityPicker } from "./IdentityPicker";
+import { Conversation } from "./Conversation";
 import { SessionRail } from "./SessionRail";
-import { conversationStatus, conversationStatusTone } from "./statusLabel";
-import { Transcript } from "./Transcript";
 
 const { Header, Sider, Content } = Layout;
 const NARROW_QUERY = "(max-width: 767px)";
+const TABLET_QUERY = "(max-width: 1199px)";
 
-function useNarrowLayout() {
+function useViewport() {
   const [isNarrow, setIsNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+  const [isTablet, setIsTablet] = useState(() => window.matchMedia(TABLET_QUERY).matches);
 
   useEffect(() => {
-    const media = window.matchMedia(NARROW_QUERY);
-    const onChange = () => setIsNarrow(media.matches);
+    const narrow = window.matchMedia(NARROW_QUERY);
+    const tablet = window.matchMedia(TABLET_QUERY);
+    const onChange = () => {
+      setIsNarrow(narrow.matches);
+      setIsTablet(tablet.matches);
+    };
     onChange();
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
+    narrow.addEventListener("change", onChange);
+    tablet.addEventListener("change", onChange);
+    window.addEventListener("resize", onChange);
+    return () => {
+      narrow.removeEventListener("change", onChange);
+      tablet.removeEventListener("change", onChange);
+      window.removeEventListener("resize", onChange);
+    };
   }, []);
 
-  return isNarrow;
+  return { isNarrow, siderWidth: isTablet ? 240 : 280 };
 }
 
 export function ChatApp() {
   const state = useSessionStore();
   const [profile, setProfile] = useState("");
   const [sessionsOpen, setSessionsOpen] = useState(false);
-  const isNarrow = useNarrowLayout();
+  const { isNarrow, siderWidth } = useViewport();
 
   useEffect(() => {
     void bootstrap()
@@ -61,15 +73,26 @@ export function ChatApp() {
   const voiceLive = state.mode === "voice" && state.captureLive;
   const canSend = composerSendEnabled();
   const inSession = state.sessionId != null;
-  const connectionText = conversationStatus({
+  const selectedAgent = state.agents.find((agent) => agent.id === state.selectedAgentId) ?? state.agents[0];
+  const liveAssistantText = state.entries.find(
+    (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
+  )?.text;
+  const statusSource = {
     connection: state.connection,
     pendingVoice,
     voiceLive,
     sessionStatus: state.status,
     inputState: state.inputState,
     outputState: state.outputState,
-    liveResponseId: state.liveResponseId
-  });
+    liveResponseId: state.liveResponseId,
+    liveAssistantText
+  };
+  const connectionText = conversationStatusLabel(statusSource);
+  const activity = mapAgentActivity(statusSource);
+  const connectionTone = conversationStatusTone(connectionText);
+  const agentName = inSession ? state.agentName : selectedAgent?.name ?? "Agent Core";
+  const composerReady = state.connection === "ready" || (!inSession && state.connection === "idle");
+  const voiceAvailable = inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable);
 
   function handleNewChat() {
     setSessionsOpen(false);
@@ -102,83 +125,128 @@ export function ChatApp() {
     <AntApp className="antd-root" message={{ duration: 3, maxCount: 3 }}>
       <Layout className="app-layout">
         {isNarrow ? null : (
-          <Sider className="app-sider" theme="light" width={280}>
-            <div className="app-sider-inner">{rail}</div>
+          <Sider className="app-sider" theme="light" width={siderWidth}>
+            <div className="app-sider-inner">
+              <div className="app-sider-brand">
+                <Typography.Title level={1} className="app-sider-title">
+                  Agent Core
+                </Typography.Title>
+              </div>
+              {rail}
+            </div>
           </Sider>
         )}
         <Layout>
           <Header className="app-header">
-            <Hud
-              profile={profile}
-              connectionText={connectionText}
-              connectionTone={conversationStatusTone(connectionText)}
-              identity={inSession ? { name: state.agentName, role: state.agentRole } : null}
+            <ChatHeader
+              title={inSession ? state.agentName || "Agent" : "New chat"}
+              subtitle={inSession ? state.agentRole : null}
               sessionsToggle={
                 isNarrow ? (
-                  <Button aria-label="Open sessions" onClick={() => setSessionsOpen(true)}>
-                    Sessions
-                  </Button>
+                  <Button
+                    type="text"
+                    aria-label="Open chats"
+                    icon={<MenuOutlined />}
+                    onClick={() => setSessionsOpen(true)}
+                  />
                 ) : null
               }
+              inSession={inSession}
+              onEnd={() => void hangUp()}
             />
+            <Flex align="center" gap={8} className="chat-header-meta">
+              <Typography.Text data-testid="profile" type="secondary" className="chat-header-profile">
+                Profile: {profile || "…"}
+              </Typography.Text>
+              <Typography.Text
+                data-testid="connection"
+                type={connectionTone === "alarm" ? "danger" : "secondary"}
+                className="chat-header-status"
+              >
+                {connectionText}
+              </Typography.Text>
+            </Flex>
           </Header>
           <Content className="app-content">
-            {inSession ? (
-              <div className="conversation-pane">
-                <div className="conversation-scroll">
-                  <Transcript
+            {state.connection === "failed" ? (
+              <Alert
+                type="error"
+                showIcon
+                className="connection-alert"
+                title={connectionText}
+                action={
+                  <Button size="small" aria-label="Retry" onClick={() => void retryConnection()}>
+                    Retry
+                  </Button>
+                }
+              />
+            ) : null}
+            <div className="conversation-pane">
+              <div className="conversation-scroll">
+                <div className="conversation-column">
+                  <Conversation
                     agentName={state.agentName}
                     sessionId={state.sessionId}
                     entries={state.entries}
                     connection={state.connection}
+                    activity={inSession ? activity : { kind: "idle" }}
+                    empty={
+                      inSession ? undefined : (
+                        <div className="new-chat-intro">
+                          <Typography.Title level={2} className="new-chat-title">
+                            What do you want to work on?
+                          </Typography.Title>
+                          <AgentPicker
+                            agents={state.agents}
+                            selectedAgentId={state.selectedAgentId}
+                            error={state.error}
+                            onSelect={selectAgent}
+                          />
+                        </div>
+                      )
+                    }
                   />
                 </div>
-                <div className="conversation-composer">
+              </div>
+              <div className="conversation-composer">
+                <div className="conversation-column">
                   <Composer
                     draft={state.draft}
                     canSend={canSend}
-                    ready={state.connection === "ready"}
-                    error={state.error}
+                    ready={composerReady}
+                    error={inSession ? state.error : null}
                     pendingAttachments={state.pendingAttachments}
-                    voiceAvailable={state.voiceAvailable}
+                    voiceAvailable={voiceAvailable}
                     pendingVoice={pendingVoice}
                     voiceLive={voiceLive}
                     muted={state.muted}
+                    placeholder={`Message ${agentName}...`}
                     onDraftChange={setDraft}
                     onSend={() => void sendDraft()}
                     onVoice={() => void requestVoice()}
                     onCancelVoice={() => void cancelVoice()}
                     onMute={(muted) => void setMuted(muted)}
-                    canRetry={state.connection === "failed"}
+                    canRetry={false}
                     onRetry={() => void retryConnection()}
-                    onEnd={() => void hangUp()}
                   />
                 </div>
               </div>
-            ) : (
-              <div className="picker-pane">
-                <IdentityPicker
-                  agents={state.agents}
-                  selectedAgentId={state.selectedAgentId}
-                  error={state.error}
-                  onSelect={selectAgent}
-                  onStart={() => void startConversation()}
-                />
-              </div>
-            )}
+            </div>
           </Content>
         </Layout>
         {isNarrow ? (
           <Drawer
-            title="Sessions"
+            title={<span id="session-rail-drawer-title">Chats</span>}
+            aria-labelledby="session-rail-drawer-title"
             placement="left"
             size={320}
             open={sessionsOpen}
             onClose={() => setSessionsOpen(false)}
             extra={
               <Button
-                type="primary"
+                type="text"
                 aria-label="Start a new chat"
+                icon={<PlusOutlined />}
                 onClick={handleNewChat}
                 disabled={state.catalogMutation != null}
               >

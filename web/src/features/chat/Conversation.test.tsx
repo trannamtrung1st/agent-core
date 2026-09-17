@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { HistoryEntry } from "../../state/sessionStore";
-import { Transcript } from "./Transcript";
+import { Conversation } from "./Conversation";
 
 function entry(partial: Partial<HistoryEntry> & Pick<HistoryEntry, "entryId" | "role" | "text">): HistoryEntry {
   return {
@@ -17,17 +17,19 @@ function entry(partial: Partial<HistoryEntry> & Pick<HistoryEntry, "entryId" | "
   };
 }
 
-describe("Transcript", () => {
-  it("shows the empty prompt when there are no entries", () => {
-    render(<Transcript agentName="Alex" sessionId="s1" entries={[]} />);
-    expect(screen.getByRole("listitem")).toHaveClass("entry-empty");
+describe("Conversation", () => {
+  it("shows the empty prompt when there are no entries and no transcript chrome", () => {
+    render(
+      <Conversation agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />
+    );
+    expect(screen.getByRole("listitem")).toHaveClass("chat-message-empty");
     expect(screen.getByText("Send a message or start voice.")).toBeInTheDocument();
-    expect(screen.getByText(/Transcript · 0 entries/)).toBeInTheDocument();
+    expect(screen.queryByText(/Transcript ·/)).not.toBeInTheDocument();
   });
 
-  it("distinguishes user and agent lines and keeps interrupted status in type", () => {
+  it("lays out user bubbles and open assistant messages with status labels", () => {
     render(
-      <Transcript
+      <Conversation
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -47,22 +49,25 @@ describe("Transcript", () => {
             status: "failed"
           })
         ]}
+        activity={{ kind: "idle" }}
       />
     );
 
     const items = screen.getAllByRole("listitem");
     expect(items[0]).toHaveAttribute("data-role", "user");
+    expect(items[0]).toHaveClass("chat-message-user");
     expect(items[1]).toHaveAttribute("data-role", "assistant");
-    expect(items[0]).toHaveTextContent("You");
+    expect(items[1]).toHaveClass("chat-message-assistant");
     expect(items[0]).toHaveTextContent("Hello");
     expect(items[1]).toHaveTextContent("Alex");
     expect(screen.getByText("interrupted")).toBeInTheDocument();
     expect(screen.getByText("failed")).toBeInTheDocument();
-    expect(screen.getByText(/Transcript · 3 entries/)).toBeInTheDocument();
   });
 
   it("shows connecting as conversation loading, distinct from interrupted entries", () => {
-    render(<Transcript agentName="Alex" sessionId="s1" entries={[]} connection="connecting" />);
+    render(
+      <Conversation agentName="Alex" sessionId="s1" entries={[]} connection="connecting" activity={{ kind: "idle" }} />
+    );
     expect(screen.getByText("Send a message or start voice.")).toBeInTheDocument();
     expect(screen.getByText("Loading conversation")).toBeInTheDocument();
     expect(screen.queryByText("interrupted")).not.toBeInTheDocument();
@@ -70,7 +75,7 @@ describe("Transcript", () => {
 
   it("renders unknown blocks as sanitized fallback text", () => {
     render(
-      <Transcript
+      <Conversation
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -90,6 +95,7 @@ describe("Transcript", () => {
             ]
           })
         ]}
+        activity={{ kind: "idle" }}
       />
     );
     expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
@@ -97,7 +103,7 @@ describe("Transcript", () => {
 
   it("renders sanitized markdown, artifact labels, and rejects script links as text", () => {
     render(
-      <Transcript
+      <Conversation
         agentName="Alex"
         sessionId="s1"
         entries={[
@@ -125,10 +131,24 @@ describe("Transcript", () => {
             ]
           })
         ]}
+        activity={{ kind: "idle" }}
       />
     );
     expect(screen.getByText("Hi")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "x" })).not.toBeInTheDocument();
     expect(screen.getByText("Artifact · fixture-artifact-1")).toBeInTheDocument();
+  });
+
+  it("shows transient activity instead of persisting it as a message", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "u1", role: "user", text: "Hello" })]}
+        activity={{ kind: "thinking", label: "Thinking…" }}
+      />
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 });

@@ -1,11 +1,18 @@
 import { useRef, type ClipboardEvent, type DragEvent } from "react";
-import { Alert, Button, Flex, Input, Progress, Typography } from "antd";
+import { Alert, Button, Flex, Input, Tooltip } from "antd";
+import {
+  AudioOutlined,
+  AudioMutedOutlined,
+  PaperClipOutlined,
+  SendOutlined
+} from "@ant-design/icons";
 import {
   queueComposerFiles,
   removeComposerFile,
   retryComposerFile
 } from "../../services/realtime";
-import { pendingPreviewUrl, type PendingAttachment } from "../../services/attachments";
+import type { PendingAttachment } from "../../services/attachments";
+import { PendingAttachmentView } from "./AttachmentPreview";
 
 export function Composer({
   draft,
@@ -18,13 +25,13 @@ export function Composer({
   voiceLive,
   muted,
   canRetry,
+  placeholder,
   onDraftChange,
   onSend,
   onVoice,
   onCancelVoice,
   onMute,
-  onRetry,
-  onEnd
+  onRetry
 }: {
   draft: string;
   canSend: boolean;
@@ -36,13 +43,13 @@ export function Composer({
   voiceLive: boolean;
   muted: boolean;
   canRetry: boolean;
+  placeholder: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onVoice: () => void;
   onCancelVoice: () => void;
   onMute: (muted: boolean) => void;
   onRetry: () => void;
-  onEnd: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -77,7 +84,7 @@ export function Composer({
       {error ? <Alert type="error" showIcon title={error} /> : null}
 
       <form
-        className="composer"
+        className="composer composer-shell"
         onSubmit={(event) => {
           event.preventDefault();
           onSend();
@@ -85,106 +92,92 @@ export function Composer({
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
       >
-        <Flex vertical gap={8}>
-          <label>
-            <Flex vertical gap={8}>
-              <Typography.Text>Message</Typography.Text>
-              <Input.TextArea
-                className="message-field"
-                value={draft}
-                onChange={(event) => onDraftChange(event.target.value)}
-                onPaste={onPaste}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    onSend();
-                  }
-                }}
-                disabled={!ready}
-                rows={2}
-                placeholder="Type your message here..."
-                aria-label="Message"
+        {pendingAttachments.length > 0 ? (
+          <ul className="attach-list" aria-label="Pending attachments">
+            {pendingAttachments.map((item) => (
+              <PendingAttachmentView
+                key={item.localId}
+                item={item}
+                onRetry={() => void retryComposerFile(item.localId)}
+                onRemove={() => void removeComposerFile(item.localId)}
               />
-            </Flex>
-          </label>
-          {pendingAttachments.length > 0 ? (
-            <ul className="attach-list" aria-label="Pending attachments">
-              {pendingAttachments.map((item) => (
-                <li key={item.localId} className="attach-chip">
-                  <Flex align="center" gap={8} wrap="wrap">
-                    {item.contentType.startsWith("image/") && pendingPreviewUrl(item.localId) ? (
-                      <img className="attach-preview" src={pendingPreviewUrl(item.localId)!} alt="" />
-                    ) : null}
-                    <Typography.Text strong>{item.displayName}</Typography.Text>
-                    {item.status === "uploading" ? <Progress percent={item.progress} size="small" style={{ width: 120 }} /> : null}
-                    {item.status === "error" && item.error ? (
-                      <Typography.Text type="danger">{item.error}</Typography.Text>
-                    ) : null}
-                    {item.status === "error" ? (
-                      <Button
-                        size="small"
-                        aria-label={`Retry ${item.displayName}`}
-                        onClick={() => void retryComposerFile(item.localId)}
-                      >
-                        Retry
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="small"
-                      aria-label={`Remove ${item.displayName}`}
-                      onClick={() => void removeComposerFile(item.localId)}
-                    >
-                      Remove
-                    </Button>
-                  </Flex>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <input
-            ref={fileInput}
-            className="attach-input"
-            type="file"
-            multiple
-            aria-hidden="true"
-            tabIndex={-1}
-            onChange={(event) => {
-              takeFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
-          <Flex justify="space-between" align="center" gap={8} wrap="wrap">
-            <Flex gap={8} wrap="wrap">
-              <Button aria-label="Attach" disabled={!ready} onClick={() => fileInput.current?.click()}>
-                Attach
-              </Button>
-              <Button type="primary" htmlType="submit" aria-label="Send" disabled={!canSend}>
-                Send
-              </Button>
-              {voiceAvailable ? (
-                pendingVoice ? (
-                  <Button aria-label="Cancel voice" onClick={onCancelVoice}>
-                    Cancel
-                  </Button>
-                ) : voiceLive ? (
-                  <Button aria-label={muted ? "Unmute" : "Mute"} onClick={() => onMute(!muted)}>
-                    {muted ? "Unmute" : "Mute"}
-                  </Button>
-                ) : (
-                  <Button aria-label="Voice" onClick={onVoice}>
-                    Voice
-                  </Button>
-                )
-              ) : null}
-              {canRetry ? (
-                <Button aria-label="Retry" onClick={onRetry}>
-                  Retry
+            ))}
+          </ul>
+        ) : null}
+        <Input.TextArea
+          className="message-field"
+          value={draft}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onPaste={onPaste}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onSend();
+            }
+          }}
+          disabled={!ready}
+          autoSize={{ minRows: 1, maxRows: 8 }}
+          placeholder={placeholder}
+          aria-label="Message"
+        />
+        <input
+          ref={fileInput}
+          className="attach-input"
+          type="file"
+          multiple
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(event) => {
+            takeFiles(event.target.files);
+            event.target.value = "";
+          }}
+        />
+        <Flex justify="space-between" align="center" gap={8} className="composer-toolbar">
+          <Tooltip title="Attach">
+            <Button
+              type="text"
+              aria-label="Attach"
+              disabled={!ready}
+              icon={<PaperClipOutlined />}
+              onClick={() => fileInput.current?.click()}
+            />
+          </Tooltip>
+          <Flex gap={8} align="center">
+            {voiceAvailable ? (
+              pendingVoice ? (
+                <Button aria-label="Cancel voice" onClick={onCancelVoice}>
+                  Cancel
                 </Button>
-              ) : null}
-            </Flex>
-            <Button danger aria-label="End" onClick={onEnd}>
-              End
-            </Button>
+              ) : voiceLive ? (
+                <Tooltip title={muted ? "Unmute" : "Mute"}>
+                  <Button
+                    type="text"
+                    aria-label={muted ? "Unmute" : "Mute"}
+                    icon={muted ? <AudioMutedOutlined /> : <AudioOutlined />}
+                    onClick={() => onMute(!muted)}
+                  />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Voice">
+                  <Button type="text" aria-label="Voice" icon={<AudioOutlined />} onClick={onVoice} />
+                </Tooltip>
+              )
+            ) : null}
+            {canRetry ? (
+              <Button aria-label="Retry" onClick={onRetry}>
+                Retry
+              </Button>
+            ) : null}
+            <Tooltip title="Send">
+              <Button
+                type="primary"
+                htmlType="submit"
+                shape="circle"
+                aria-label="Send"
+                disabled={!canSend}
+                icon={<SendOutlined />}
+              />
+            </Tooltip>
           </Flex>
         </Flex>
       </form>

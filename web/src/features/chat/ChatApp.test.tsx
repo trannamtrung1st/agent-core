@@ -4,6 +4,21 @@ import { emptySession, useSessionStore } from "../../state/sessionStore";
 import { bootstrap, sendDraft } from "../../services/realtime";
 import { ChatApp } from "./ChatApp";
 
+function stubMatchMedia(matches: (query: string) => boolean) {
+  window.matchMedia = ((query: string) => ({
+    matches: matches(query),
+    media: query,
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {
+      return false;
+    }
+  })) as typeof window.matchMedia;
+}
+
 vi.mock("../../services/realtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/realtime")>();
   return {
@@ -35,8 +50,9 @@ describe("ChatApp accessibility", () => {
     });
     const view = await act(async () => render(<ChatApp />));
     expect(screen.getByLabelText("Identity")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Sessions" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start conversation" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Chats" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start conversation" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 
     await act(async () => {
       useSessionStore.setState({
@@ -53,12 +69,13 @@ describe("ChatApp accessibility", () => {
       view.rerender(<ChatApp />);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Connection failed");
-    expect(screen.getByRole("alert")).toHaveTextContent("Microphone permission was denied");
+    expect(screen.getByText("Microphone permission was denied. Enable the microphone or continue in text.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "End" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
   });
 
   it("shows Voice after reconnect when durable mode is voice until capture is live", async () => {
@@ -85,7 +102,7 @@ describe("ChatApp accessibility", () => {
       useSessionStore.setState({ captureLive: true, muted: false });
       view.rerender(<ChatApp />);
     });
-    expect(screen.getByTestId("connection")).toHaveTextContent("Listening");
+    expect(screen.getByTestId("connection")).toHaveTextContent("Listening…");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
   });
 
@@ -152,26 +169,26 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByTestId("connection")).toHaveTextContent("Starting voice…");
     expect(screen.getByRole("button", { name: "Cancel voice" })).toBeInTheDocument();
     expect(screen.getByText("interrupted")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Type your message here...")).toBeEnabled();
+    expect(screen.getByLabelText("Message")).toBeEnabled();
 
-    fireEvent.keyDown(screen.getByPlaceholderText("Type your message here..."), { key: "Enter" });
+    fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
     expect(sendDraft).toHaveBeenCalled();
 
     const sendCalls = vi.mocked(sendDraft).mock.calls.length;
-    fireEvent.keyDown(screen.getByPlaceholderText("Type your message here..."), { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter", shiftKey: true });
     expect(vi.mocked(sendDraft).mock.calls.length).toBe(sendCalls);
 
     await act(async () => {
       useSessionStore.setState({ pendingMode: null, outputState: "waitingForAgent", liveResponseId: "r2" });
       view.rerender(<ChatApp />);
     });
-    expect(screen.getByTestId("connection")).toHaveTextContent("Thinking");
+    expect(screen.getByTestId("connection")).toHaveTextContent("Thinking…");
 
     await act(async () => {
       useSessionStore.setState({ liveResponseId: null, outputState: "agentSpeaking" });
       view.rerender(<ChatApp />);
     });
-    expect(screen.getByTestId("connection")).toHaveTextContent("Agent speaking");
+    expect(screen.getByTestId("connection")).toHaveTextContent("Speaking…");
 
     await act(async () => {
       useSessionStore.setState({ inputState: "userSpeaking", outputState: "idle" });
@@ -278,18 +295,7 @@ describe("ChatApp narrow session drawer", () => {
   });
 
   it("exposes the same session catalog from a drawer", async () => {
-    window.matchMedia = ((query: string) => ({
-      matches: /max-width:\s*767px/i.test(query),
-      media: query,
-      onchange: null,
-      addListener() {},
-      removeListener() {},
-      addEventListener() {},
-      removeEventListener() {},
-      dispatchEvent() {
-        return false;
-      }
-    })) as typeof window.matchMedia;
+    stubMatchMedia((query) => /max-width:\s*767px/i.test(query));
 
     await act(async () => {
       useSessionStore.setState({
@@ -316,18 +322,57 @@ describe("ChatApp narrow session drawer", () => {
     });
 
     await act(async () => render(<ChatApp />));
-    expect(screen.getByRole("button", { name: "Open sessions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open chats" })).toBeInTheDocument();
     expect(screen.queryByTestId("session-rail")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open sessions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open chats" }));
     const rail = screen.getByTestId("session-rail");
     expect(rail).toBeInTheDocument();
     expect(within(rail).queryByText("Sessions")).not.toBeInTheDocument();
+    expect(within(rail).queryByText("Chats")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Chats" })).toBeInTheDocument();
+    expect(within(rail).getByRole("button", { name: "Chat list options" })).toBeInTheDocument();
     expect(within(rail).queryByRole("button", { name: "Start a new chat" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Planning notes/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Planning notes" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
+    expect(await screen.findByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+  });
+});
+
+describe("ChatApp tablet session rail", () => {
+  const matchMedia = window.matchMedia;
+
+  afterEach(() => {
+    window.matchMedia = matchMedia;
+    act(() => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+  });
+
+  it("uses a narrower persistent sider between 768px and 1199px", async () => {
+    stubMatchMedia((query) => /max-width:\s*1199px/i.test(query) && !/max-width:\s*767px/i.test(query));
+
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+
+    await act(async () => render(<ChatApp />));
+    expect(screen.queryByRole("button", { name: "Open chats" })).not.toBeInTheDocument();
+    const sider = document.querySelector(".app-sider");
+    expect(sider).toHaveStyle({ width: "240px" });
+    expect(screen.getByRole("navigation", { name: "Chats" })).toBeInTheDocument();
+    expect(screen.getByText("Chats")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
   });
 });

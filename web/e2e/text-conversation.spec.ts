@@ -2,12 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "Sessions" })).toBeVisible();
-  await expect(page.getByText("No sessions yet.")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();
+  await expect(page.getByText("No chats yet.")).toBeVisible();
   await expect(page.getByLabel("Identity")).toBeVisible();
-  await page.getByRole("button", { name: "Start conversation" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
@@ -24,7 +21,7 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
 
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.locator(".transcript li").filter({ hasText: "Hello" }).last()).toBeVisible();
+  await expect(page.locator(".chat-message").filter({ hasText: "Hello" }).last()).toBeVisible();
   await page.getByRole("button", { name: "Voice" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Starting voice…", { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -32,5 +29,21 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   expect(frames).toBe(0);
 
   await page.evaluate(() => window.__agentCore?.disconnect());
-  await expect(page.getByTestId("connection")).toHaveText("Reconnecting");
+  await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
+});
+
+test("markdown response renders and survives reopen", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Show markdown");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".agent-activity")).toHaveText("Thinking…", { timeout: 15_000 });
+  await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
+  await expect(page.getByText("Session runtime")).toBeVisible();
+  await expect(page.locator(".markdown-message code")).toHaveText("IAgentProvider");
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await page.locator(".session-row-open").first().click();
+  await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
 });

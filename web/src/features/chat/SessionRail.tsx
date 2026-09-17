@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Alert, App, Button, Checkbox, Empty, Flex, Input, Typography } from "antd";
+import { Alert, App, Button, Dropdown, Empty, Flex, Input, Typography } from "antd";
+import { MoreOutlined, PlusOutlined } from "@ant-design/icons";
+import type { MenuProps } from "antd";
 import type { AgentDescriptor, CatalogItem } from "../../services/api";
 import {
   archiveCatalogItem,
@@ -121,41 +123,96 @@ export function SessionRail({
     });
   }
 
+  function rowMenu(item: CatalogItem): MenuProps["items"] {
+    const items: MenuProps["items"] = [];
+    if (!item.ended) {
+      if (item.archived) {
+        items.push({
+          key: "unarchive",
+          label: "Unarchive",
+          disabled: catalogBusy && !mutationBusy(mutation, item.sessionId, "unarchive"),
+          onClick: () => {
+            void unarchiveCatalogItem(item.sessionId).then(async (ok) => {
+              await notifyMutation(ok, "Session restored.");
+            });
+          }
+        });
+      } else {
+        items.push({
+          key: "rename",
+          label: "Rename",
+          disabled: rowBusy(mutation, item.sessionId),
+          onClick: () => {
+            setRenamingId(item.sessionId);
+            setDraftTitle(item.title);
+          }
+        });
+        items.push({
+          key: "archive",
+          label: "Archive",
+          disabled: catalogBusy && !mutationBusy(mutation, item.sessionId, "archive"),
+          onClick: () => {
+            void archiveCatalogItem(item.sessionId).then(async (ok) => {
+              await notifyMutation(ok, "Session archived.");
+            });
+          }
+        });
+      }
+    }
+
+    items.push({
+      key: "delete",
+      danger: true,
+      label: "Delete",
+      disabled: rowBusy(mutation, item.sessionId),
+      onClick: () => confirmDelete(item)
+    });
+    return items;
+  }
+
+  const listMenu: MenuProps["items"] = [
+    {
+      key: "archived",
+      label: includeArchived ? "Hide archived" : "Show archived",
+      disabled: catalogBusy,
+      onClick: () => {
+        void setIncludeArchived(!includeArchived);
+      }
+    }
+  ];
+
   return (
-    <nav className="session-rail" aria-label="Sessions" data-testid="session-rail">
-      {(showHeading || showNewChat) ? (
-        <Flex justify={showHeading ? "space-between" : "flex-end"} align="center" gap={8}>
-          {showHeading ? <Typography.Text strong>Sessions</Typography.Text> : null}
-          {showNewChat ? (
-            <Button
-              type="primary"
-              aria-label="Start a new chat"
-              onClick={() => {
-                setRenamingId(null);
-                onNewChat();
-              }}
-              disabled={catalogBusy}
-            >
-              New chat
-            </Button>
-          ) : null}
-        </Flex>
+    <nav className="session-rail" aria-label="Chats" data-testid="session-rail">
+      {showNewChat ? (
+        <Button
+          type="text"
+          className="session-new-chat"
+          aria-label="Start a new chat"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setRenamingId(null);
+            onNewChat();
+          }}
+          disabled={catalogBusy}
+          block
+        >
+          New chat
+        </Button>
       ) : null}
+      <Flex justify={showHeading ? "space-between" : "flex-end"} align="center" gap={8} className="session-rail-heading">
+        {showHeading ? <Typography.Text type="secondary">Chats</Typography.Text> : null}
+        <Dropdown menu={{ items: listMenu }} trigger={["click"]} placement="bottomRight">
+          <Button type="text" size="small" aria-label="Chat list options" icon={<MoreOutlined />} />
+        </Dropdown>
+      </Flex>
       {capabilityLost ? (
         <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />
       ) : null}
       {!capabilityLost && error ? <Alert type="error" showIcon title={error} /> : null}
-      <Checkbox
-        checked={includeArchived}
-        disabled={catalogBusy}
-        onChange={(event) => void setIncludeArchived(event.target.checked)}
-      >
-        Show archived
-      </Checkbox>
       <ul className="session-rail-list">
         {items.length === 0 && !capabilityLost ? (
           <li className="session-rail-empty">
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sessions yet." />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chats yet." />
           </li>
         ) : null}
         {items.map((item) => {
@@ -203,68 +260,34 @@ export function SessionRail({
                     </Flex>
                   </form>
                 ) : (
-                  <Button
-                    type="text"
-                    className="session-row-open"
-                    block
-                    disabled={inactive || busy}
-                    onClick={() => onOpen(item)}
-                  >
-                    <Flex vertical align="flex-start" gap={0} className="session-row-copy">
-                      <Typography.Text>{item.title}</Typography.Text>
-                      <Typography.Text type="secondary">
-                        {agentLabel(agents, item)}
-                        <span> · {rowState(item)}</span>
-                      </Typography.Text>
-                    </Flex>
-                  </Button>
-                )}
-                <div className="session-rail-actions">
-                  {!item.ended ? (
-                    item.archived ? (
+                  <Flex align="flex-start" gap={8} className="session-row-main">
+                    <Button
+                      type="text"
+                      className="session-row-open"
+                      aria-label={item.title}
+                      disabled={inactive || busy}
+                      onClick={() => onOpen(item)}
+                    >
+                      <Flex vertical align="flex-start" gap={0} className="session-row-copy">
+                        <Typography.Text ellipsis={{ tooltip: item.title }}>{item.title}</Typography.Text>
+                        <Typography.Text type="secondary" className="session-row-meta">
+                          {agentLabel(agents, item)}
+                          <span> · {rowState(item)}</span>
+                        </Typography.Text>
+                      </Flex>
+                    </Button>
+                    <Dropdown menu={{ items: rowMenu(item) }} trigger={["click"]} placement="bottomRight">
                       <Button
+                        type="text"
                         size="small"
-                        loading={mutationBusy(mutation, item.sessionId, "unarchive")}
-                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "unarchive")}
-                        onClick={() => {
-                          void unarchiveCatalogItem(item.sessionId).then(async (ok) => {
-                            await notifyMutation(ok, "Session restored.");
-                          });
-                        }}
-                      >
-                        Unarchive
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          size="small"
-                          disabled={busy}
-                          onClick={() => {
-                            setRenamingId(item.sessionId);
-                            setDraftTitle(item.title);
-                          }}
-                        >
-                          Rename
-                        </Button>
-                        <Button
-                          size="small"
-                          loading={mutationBusy(mutation, item.sessionId, "archive")}
-                          disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "archive")}
-                          onClick={() => {
-                            void archiveCatalogItem(item.sessionId).then(async (ok) => {
-                              await notifyMutation(ok, "Session archived.");
-                            });
-                          }}
-                        >
-                          Archive
-                        </Button>
-                      </>
-                    )
-                  ) : null}
-                  <Button size="small" danger disabled={busy} onClick={() => confirmDelete(item)}>
-                    Delete
-                  </Button>
-                </div>
+                        className="session-row-more"
+                        aria-label={`Actions for ${item.title}`}
+                        icon={<MoreOutlined />}
+                        disabled={busy}
+                      />
+                    </Dropdown>
+                  </Flex>
+                )}
               </div>
             </li>
           );

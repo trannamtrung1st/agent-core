@@ -64,6 +64,11 @@ function renderRail(props: ComponentProps<typeof SessionRail>) {
   );
 }
 
+async function openRowMenu(title: string, action: string) {
+  fireEvent.click(screen.getByRole("button", { name: `Actions for ${title}` }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: action }));
+}
+
 describe("SessionRail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,7 +88,7 @@ describe("SessionRail", () => {
       onNewChat,
       onOpen: vi.fn()
     });
-    expect(screen.getByText("No sessions yet.")).toBeInTheDocument();
+    expect(screen.getByText("No chats yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start a new chat" }));
     expect(onNewChat).toHaveBeenCalled();
   });
@@ -103,12 +108,12 @@ describe("SessionRail", () => {
       onNewChat: vi.fn(),
       onOpen: vi.fn()
     });
-    expect(screen.queryByText("Sessions")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chats")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start a new chat" })).not.toBeInTheDocument();
-    expect(screen.getByText("No sessions yet.")).toBeInTheDocument();
+    expect(screen.getByText("No chats yet.")).toBeInTheDocument();
   });
 
-  it("shows agent identity and delete-only actions for ended sessions", () => {
+  it("shows agent identity and delete-only actions for ended sessions", async () => {
     const onOpen = vi.fn();
     renderRail({
       items: [live, ended],
@@ -126,12 +131,17 @@ describe("SessionRail", () => {
     expect(screen.getAllByText(/Alex · Examiner/).length).toBe(2);
     expect(screen.queryByText("secret")).not.toBeInTheDocument();
     expect(screen.getByText(/· Ended/)).toBeInTheDocument();
-    const endedButton = screen.getByRole("button", { name: /Closed exam/ });
+    const endedButton = screen.getByRole("button", { name: "Closed exam" });
     expect(endedButton).toBeDisabled();
     fireEvent.click(endedButton);
     expect(onOpen).not.toHaveBeenCalled();
-    expect(screen.getAllByRole("button", { name: "Rename" })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Actions for / })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
+    expect(await screen.findByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Closed exam" }));
+    expect(await screen.findByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
   });
 
@@ -149,7 +159,7 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
     expect(screen.getByRole("alert")).toHaveTextContent("Local owner access is unavailable.");
-    expect(screen.queryByText("No sessions yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No chats yet.")).not.toBeInTheDocument();
   });
 
   it("rename save, archive, unarchive, and confirm delete call versioned catalog APIs", async () => {
@@ -171,13 +181,13 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await openRowMenu("Planning notes", "Rename");
     fireEvent.change(screen.getByLabelText("Session title"), { target: { value: "Planning notes v2" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(renameCatalogItem).toHaveBeenCalledWith("s1", "Planning notes v2"));
     expect(await screen.findByText("Session renamed.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    await openRowMenu("Planning notes", "Archive");
     await waitFor(() => expect(archiveCatalogItem).toHaveBeenCalledWith("s1"));
     expect(await screen.findByText("Session archived.")).toBeInTheDocument();
 
@@ -199,11 +209,11 @@ describe("SessionRail", () => {
         </App>
       </ConfigProvider>
     );
-    fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
+    await openRowMenu("Shelved notes", "Unarchive");
     await waitFor(() => expect(unarchiveCatalogItem).toHaveBeenCalledWith("s3"));
     expect(await screen.findByText("Session restored.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await openRowMenu("Shelved notes", "Delete");
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Delete “Shelved notes”?");
     expect(screen.queryByRole("button", { name: "Confirm delete" })).not.toBeInTheDocument();
@@ -226,7 +236,8 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -248,10 +259,11 @@ describe("SessionRail", () => {
       onNewChat,
       onOpen: vi.fn()
     });
-    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Unarchive" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Closed exam" }));
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Unarchive" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteCatalogItem).toHaveBeenCalledWith(ended));
@@ -274,7 +286,7 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await openRowMenu("Planning notes", "Delete");
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteCatalogItem).toHaveBeenCalledWith(live));
@@ -292,7 +304,7 @@ describe("SessionRail", () => {
           onOk = config.onOk;
         }
       }
-    } as ReturnType<typeof antd.App.useApp>);
+    } as unknown as ReturnType<typeof antd.App.useApp>);
 
     vi.mocked(deleteCatalogItem).mockImplementation(async () => {
       const { useSessionStore } = await import("../../state/sessionStore");
@@ -313,7 +325,7 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await openRowMenu("Planning notes", "Delete");
     expect(onOk).toBeTypeOf("function");
     await expect(onOk!()).rejects.toThrow("Delete failed.");
     expect(messageApi.error).toHaveBeenCalledWith("Delete failed.");
@@ -341,7 +353,7 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await openRowMenu("Planning notes", "Rename");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Rename failed.")).toBeInTheDocument();
   });

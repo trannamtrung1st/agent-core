@@ -234,7 +234,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         error: null,
         errorFatal: false,
         errorHoldSequence: 0,
-        preflightReady: false
+        preflightReady: asString(payload.mode) === "voice" ? false : state.preflightReady
       };
     }
     case "agent.response.started": {
@@ -349,7 +349,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         pendingMode,
         streamId: event.payload.streamId == null ? null : asString(event.payload.streamId),
         muted: Boolean(event.payload.muted),
-        preflightReady: mode === "voice" ? false : pendingMode === "voice" ? state.preflightReady : false,
+        preflightReady: mode === "voice" ? false : pendingMode === "voice" || state.preflightReady,
         error: state.errorFatal
           ? state.error
           : event.sequence === state.errorHoldSequence + 1

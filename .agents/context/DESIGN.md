@@ -32,7 +32,9 @@ This file is lightweight MVP **presentation** guidance only. Screens, copy, and 
 
 **Creative North Star: Ant Design operate UI**
 
-Agent Core is a personal-chat operate surface. Ant Design v6 owns generic controls (Layout, Select, Button, Input, Empty, Spin, Tag, Alert, Progress, Typography). Product components import those primitives directly. `web/src/app.css` may only size the shell, manage overflow, constrain product layout/content, size attachment previews, and fix accessibility.
+Agent Core is a personal-chat operate surface. Ant Design is the MVP component system. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT is a UX/layout reference for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer, in-flow activity)—not a component dependency or pixel clone.
+
+Ant Design v6 owns generic controls (Layout, Select, Button, Input, Empty, Spin, Tag, Alert, Progress, Typography, Dropdown, Drawer). Product components import those primitives directly. `web/src/app.css` may only size the shell, manage overflow, constrain product layout/content, size attachment previews, and fix accessibility.
 
 ## Product Context
 
@@ -42,7 +44,7 @@ Agent Core is a personal-chat operate surface. Ant Design v6 owns generic contro
 
 ## Personality
 
-Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Start conversation, Send, Voice, Cancel voice, Mute, Unmute, End, Attach).
+Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Send, Voice, Cancel voice, Mute, Unmute, End, Attach).
 
 ## Tone
 
@@ -56,6 +58,7 @@ Use Ant Design type and spacing. Do not self-host a display face or recreate pho
 
 - Import `antd` components in feature files; keep ConfigProvider at the app root.
 - Honor `prefers-reduced-motion`; keep labeled errors and visible focus.
+- Session rail is 280px at 1200px and above, 240px from 768–1199px, and an Ant Design Drawer below 768px.
 - Preserve testids `connection` and `profile`.
 - Keep the labeled composer available while voice is live until `/docs` and tests change together.
 

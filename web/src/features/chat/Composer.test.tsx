@@ -21,13 +21,13 @@ function emptyComposerProps() {
     voiceLive: false,
     muted: false,
     canRetry: false,
+    placeholder: "Message Agent Core...",
     onDraftChange: vi.fn(),
     onSend: vi.fn(),
     onVoice: vi.fn(),
     onCancelVoice: vi.fn(),
     onMute: vi.fn(),
-    onRetry: vi.fn(),
-    onEnd: vi.fn()
+    onRetry: vi.fn()
   };
 }
 
@@ -64,7 +64,7 @@ describe("Composer attachment staging", () => {
   it("stages pasted images through the same pending-attachment queue as the picker", () => {
     const image = new File([new Uint8Array([137, 80, 78, 71])], "clip.png", { type: "image/png" });
     render(<Composer {...emptyComposerProps()} />);
-    fireEvent.paste(screen.getByPlaceholderText("Type your message here..."), {
+    fireEvent.paste(screen.getByLabelText("Message"), {
       clipboardData: { files: asFileList([image]) }
     });
     expect(queueComposerFiles).toHaveBeenCalledTimes(1);
@@ -77,7 +77,7 @@ describe("Composer attachment staging", () => {
   it("sends on Enter and inserts a newline on Shift+Enter", () => {
     const onSend = vi.fn();
     render(<Composer {...emptyComposerProps()} canSend onSend={onSend} draft="Hello" />);
-    const field = screen.getByPlaceholderText("Type your message here...");
+    const field = screen.getByLabelText("Message");
     fireEvent.keyDown(field, { key: "Enter" });
     expect(onSend).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(field, { key: "Enter", shiftKey: true });

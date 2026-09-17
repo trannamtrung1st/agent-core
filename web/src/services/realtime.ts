@@ -47,6 +47,7 @@ let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
 let voiceEpoch = 0;
 let sendRequest: Promise<void> | null = null;
+let startRequest: Promise<boolean> | null = null;
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -772,7 +773,9 @@ function syncCapture(): void {
   const state = useSessionStore.getState();
   if (state.connection !== "ready") {
     captureStreamId = null;
-    capture.release();
+    if (!state.preflightReady && state.pendingMode !== "voice") {
+      capture.release();
+    }
     publishCaptureLive();
     return;
   }
@@ -904,7 +907,8 @@ export const realtimeTestHooks =
     : null;
 
 async function startConnection(sessionId: string): Promise<void> {
-  await stopConnection();
+  const keepPreparedCapture = capture.isPrepared() && useSessionStore.getState().preflightReady;
+  await stopConnection({ keepPreparedCapture });
   commandSequence = 0;
   audioFramesSent = 0;
   audioOutputsReceived = 0;
@@ -956,8 +960,8 @@ async function startConnection(sessionId: string): Promise<void> {
     connection: "connecting",
     sessionId,
     attachmentId: null,
-    pendingMode: null,
-    preflightReady: false,
+    pendingMode: keepPreparedCapture ? useSessionStore.getState().pendingMode : null,
+    preflightReady: keepPreparedCapture,
     captureLive: false,
     lastServerSequence: 0,
     error: null,
@@ -981,10 +985,12 @@ async function attachAfterReconnect(): Promise<void> {
   await attachWithBusyRetry(useSessionStore.getState().lastServerSequence || null);
 }
 
-async function stopConnection(): Promise<void> {
+async function stopConnection(options?: { keepPreparedCapture?: boolean }): Promise<void> {
   attachLoop += 1;
   abortPlayback();
-  capture.release();
+  if (!options?.keepPreparedCapture) {
+    capture.release();
+  }
   connectionEpoch += 1;
   useSessionStore.setState({ captureLive: false });
   if (!connection) {
@@ -1012,23 +1018,39 @@ export async function bootstrap(): Promise<string> {
   return health.profile;
 }
 
-export async function startConversation(): Promise<void> {
-  try {
-    const snapshot = useSessionStore.getState();
-    const agent = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
-    if (!agent) {
-      throw new Error("Unable to create a session.");
-    }
-
-    const created = await createSession(agent.id, agent.version, "text");
-    await startConnection(created.sessionId);
-    await refreshCatalog(true);
-  } catch (error) {
-    useSessionStore.setState({
-      error: error instanceof Error ? error.message : "Unable to start a conversation.",
-      errorFatal: false
-    });
+export async function startConversation(): Promise<boolean> {
+  if (startRequest) {
+    return startRequest;
   }
+
+  startRequest = (async () => {
+    try {
+      const snapshot = useSessionStore.getState();
+      if (snapshot.sessionId && snapshot.connection === "ready") {
+        return true;
+      }
+
+      const agent = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
+      if (!agent) {
+        throw new Error("Unable to create a session.");
+      }
+
+      const created = await createSession(agent.id, agent.version, "text");
+      await startConnection(created.sessionId);
+      await refreshCatalog(true);
+      return useSessionStore.getState().connection === "ready";
+    } catch (error) {
+      useSessionStore.setState({
+        error: error instanceof Error ? error.message : "Unable to start a conversation.",
+        errorFatal: false
+      });
+      return false;
+    } finally {
+      startRequest = null;
+    }
+  })();
+
+  return startRequest;
 }
 
 export async function beginNewChat(): Promise<void> {
@@ -1166,11 +1188,24 @@ async function syncVoiceStage(): Promise<void> {
 
 export function composerSendEnabled(): boolean {
   const snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId) {
+    const hasAgent = snapshot.selectedAgentId.trim().length > 0 && snapshot.agents.length > 0;
+    return hasAgent && snapshot.draft.trim().length > 0 && snapshot.connection === "idle";
+  }
+
   return composerCanSend(snapshot.draft, snapshot.pendingAttachments, snapshot.connection);
 }
 
 export async function queueComposerFiles(fileList: File[]): Promise<void> {
-  const snapshot = useSessionStore.getState();
+  let snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId) {
+    const started = await startConversation();
+    if (!started) {
+      return;
+    }
+    snapshot = useSessionStore.getState();
+  }
+
   if (!snapshot.sessionId || snapshot.connection !== "ready") {
     return;
   }
@@ -1379,7 +1414,15 @@ export async function sendDraft(): Promise<void> {
     return sendRequest;
   }
 
-  const snapshot = useSessionStore.getState();
+  let snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId) {
+    const started = await startConversation();
+    if (!started) {
+      return;
+    }
+    snapshot = useSessionStore.getState();
+  }
+
   const draft = snapshot.draft.trim();
   const text = draft || pendingUserText?.text || "";
   const readyFiles = snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId);
@@ -1462,7 +1505,17 @@ export async function requestVoice(): Promise<void> {
   }
 
   const snapshot = useSessionStore.getState();
-  if (!snapshot.voiceAvailable || snapshot.connection !== "ready") {
+  const selected = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
+  const voiceAvailable = snapshot.sessionId ? snapshot.voiceAvailable : Boolean(selected?.voiceAvailable);
+  if (!voiceAvailable) {
+    return;
+  }
+
+  if (snapshot.sessionId && snapshot.connection !== "ready") {
+    return;
+  }
+
+  if (!snapshot.sessionId && snapshot.connection !== "idle") {
     return;
   }
 
@@ -1494,6 +1547,15 @@ export async function requestVoice(): Promise<void> {
       capture.release();
       useSessionStore.setState({ preflightReady: false });
       return;
+    }
+
+    if (!useSessionStore.getState().sessionId) {
+      const started = await startConversation();
+      if (!started || epoch !== voiceEpoch) {
+        capture.release();
+        useSessionStore.setState({ preflightReady: false });
+        return;
+      }
     }
 
     commandSequence += 1;

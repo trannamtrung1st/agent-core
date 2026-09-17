@@ -32,6 +32,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     public static IReadOnlyList<string> ShortChunks { get; } = ["OK."];
 
+    public static IReadOnlyList<string> MarkdownChunks { get; } =
+        ["The architecture has **three** pieces:\n\n", "1. Session runtime\n2. Agent execution\n\n", "Use `IAgentProvider`.\n"];
+
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -58,6 +61,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             if (index == 1 && _release is not null)
             {
                 await _release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (index == 0 && lastUser.Contains("markdown", StringComparison.OrdinalIgnoreCase))
+            {
+                await Task.Delay(400, cancellationToken).ConfigureAwait(false);
             }
 
             yield return new ModelTextDelta(chunks[index]);
@@ -240,6 +248,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         if (_chunks != DefaultChunks)
         {
             return _chunks;
+        }
+
+        if (lastUser.Contains("markdown", StringComparison.OrdinalIgnoreCase))
+        {
+            return MarkdownChunks;
         }
 
         if (lastUser.Contains("explain", StringComparison.OrdinalIgnoreCase))

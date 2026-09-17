@@ -2,10 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("superseding a live voice response flushes R1 before R2 renders and keeps capture", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Start conversation" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Listening", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
@@ -32,5 +31,5 @@ test("superseding a live voice response flushes R1 before R2 renders and keeps c
   expect(after?.rendered[r2Ids[0] ?? ""]).toBeGreaterThan(0);
   expect(after?.rendered[r1 ?? ""]).toBe(r1AfterFlush);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
-  await expect(page.getByTestId("connection")).toHaveText(/Agent speaking|Listening/);
+  await expect(page.getByTestId("connection")).toHaveText(/Speaking…|Listening…/);
 });

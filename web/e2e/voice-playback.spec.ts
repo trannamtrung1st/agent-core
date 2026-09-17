@@ -2,10 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("output worklet acknowledges playback while capture stays active", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Start conversation" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Listening", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.outputWorkletLoaded() ?? false)).toBe(true);
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
 
@@ -21,10 +20,9 @@ test("output worklet acknowledges playback while capture stays active", async ({
 
 test("two completed voice turns reset worklet identity and consume each response independently", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Start conversation" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Listening", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
 
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
@@ -48,20 +46,19 @@ test("two completed voice turns reset worklet identity and consume each response
 
 test("disconnect during playback then reconnect plays a new response", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Start conversation" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Listening", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
   await page.evaluate(() => window.__agentCore?.disconnect());
-  await expect(page.getByTestId("connection")).toHaveText("Reconnecting");
+  await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.flushing?.() ?? false)).toBe(false);
   await page.evaluate(() => window.__agentCore?.reconnect?.());
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
-  await expect(page.getByTestId("connection")).toHaveText("Listening", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
