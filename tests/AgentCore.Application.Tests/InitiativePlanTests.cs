@@ -256,6 +256,53 @@ public sealed class InitiativePlanTests
     }
 
     [Fact]
+    public async Task Deactivate_json_with_next_wait_ms_is_still_deactivate_without_wait()
+    {
+        var model = new FixedInitiativeModel(
+            """{"decision":"deactivate","reason":"Nothing left to do.","nextWaitMs":45000}""");
+        var builder = new PromptContextBuilder();
+        var context = ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion);
+        var decision = await InitiativeEvaluator.EvaluateAsync(
+            model,
+            builder,
+            context,
+            Guid.NewGuid(),
+            CancellationToken.None);
+        Assert.IsType<RequestDeactivate>(decision);
+    }
+
+    [Fact]
+    public async Task Invalid_next_wait_ms_is_treated_as_null()
+    {
+        var model = new FixedInitiativeModel(
+            """{"decision":"staySilent","reason":"Hold.","nextWaitMs":-12}""");
+        var builder = new PromptContextBuilder();
+        var context = ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion);
+        var decision = await InitiativeEvaluator.EvaluateAsync(
+            model,
+            builder,
+            context,
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var silent = Assert.IsType<StaySilent>(decision);
+        Assert.Null(silent.NextWaitMs);
+    }
+
+    [Fact]
+    public void Evaluator_prompt_omits_next_wait_for_deactivate()
+    {
+        var request = InitiativeEvaluator.CreateEvaluationRequest(
+            ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion),
+            new PromptContextBuilder());
+        var system = request.Messages.First(message => message.Role == ModelRole.System).Text;
+        Assert.Contains("staySilent", system, StringComparison.Ordinal);
+        Assert.Contains("nextWaitMs is optional on staySilent and speak only", system, StringComparison.Ordinal);
+        Assert.DoesNotContain("nextWaitMs is optional on every decision", system, StringComparison.Ordinal);
+        Assert.DoesNotContain("staySilent/deactivate it delays", system, StringComparison.Ordinal);
+        Assert.Contains("no next wait is armed", system, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Default_brain_hard_cap_blocks_evaluator_even_when_model_returns_speak()
     {
         var model = new ScriptedLanguageModel(

@@ -243,6 +243,8 @@ public sealed partial class SessionRuntime
         _turnGeneration++;
         _epoch = _ids.NewId();
         _environmentQueue.Clear();
+        ClearPendingPostResponseIdleDelay();
+        _lastArmedIdleDelay = null;
         AbandonLiveSpeech(rotateEpoch: true);
         _input = InputActivity.Idle;
         await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
@@ -302,6 +304,7 @@ public sealed partial class SessionRuntime
         _proactiveSpeaksThisSilence = 0;
         _silentEvaluations = 0;
         _lastMeaningfulActivityAt = now;
+        ClearPendingPostResponseIdleDelay();
         _snapshot = _snapshot with { LastUserActivityAt = now, UpdatedAt = now };
         _timerGeneration++;
     }
@@ -342,6 +345,7 @@ public sealed partial class SessionRuntime
             delay = TimeSpan.FromMilliseconds(1);
         }
 
+        _lastArmedIdleDelay = delay;
         var generation = ++_timerGeneration;
         _ = WaitIdleAsync(delay, generation);
     }

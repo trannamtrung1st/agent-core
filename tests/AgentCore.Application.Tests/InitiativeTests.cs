@@ -1,5 +1,7 @@
+using System.Diagnostics.Metrics;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -525,6 +527,156 @@ public sealed class InitiativeTests
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
         Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+        Assert.Equal(TimeSpan.FromSeconds(120), runtime.LastArmedIdleDelay);
+    }
+
+    [Fact]
+    public async Task Stay_silent_next_wait_inside_bounds_is_armed()
+    {
+        var captured = CaptureWaitMetrics();
+        using var listener = captured.Listener;
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            ["""{"decision":"staySilent","reason":"Wait a bit.","nextWaitMs":45000}"""],
+            ["Hello from synthetic."]);
+        await using var runtime = Create(output, model, time, RecordingDefaultBrain(model), definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(TimeSpan.FromSeconds(45), runtime.LastArmedIdleDelay);
+        Assert.Contains(
+            captured.Samples,
+            sample => sample.Value == 45_000 && sample.Source == "model" && sample.Clamp == "none");
+    }
+
+    [Fact]
+    public async Task Stay_silent_too_small_and_too_large_waits_are_clamped()
+    {
+        var captured = CaptureWaitMetrics();
+        using var listener = captured.Listener;
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            [
+                """{"decision":"staySilent","reason":"Too small.","nextWaitMs":1000}""",
+                """{"decision":"staySilent","reason":"Too large.","nextWaitMs":3600000}"""
+            ],
+            ["Hello from synthetic."]);
+        await using var runtime = Create(output, model, time, RecordingDefaultBrain(model), definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(TimeSpan.FromSeconds(30), runtime.LastArmedIdleDelay);
+        time.Advance(TimeSpan.FromSeconds(31));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(TimeSpan.FromMilliseconds(450_000), runtime.LastArmedIdleDelay);
+        Assert.Contains(captured.Samples, sample => sample.Value == 30_000 && sample.Clamp == "min");
+        Assert.Contains(captured.Samples, sample => sample.Value == 450_000 && sample.Clamp == "max");
+    }
+
+    [Fact]
+    public async Task Null_next_wait_uses_deterministic_idle_backoff()
+    {
+        var captured = CaptureWaitMetrics();
+        using var listener = captured.Listener;
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            ["""{"decision":"staySilent","reason":"No wait supplied."}"""],
+            ["Hello from synthetic."]);
+        await using var runtime = Create(output, model, time, RecordingDefaultBrain(model), definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(TimeSpan.FromSeconds(30), runtime.LastArmedIdleDelay);
+        Assert.Contains(
+            captured.Samples,
+            sample => sample.Source == "fallback" && sample.Clamp == "n/a" && sample.Value == 30_000);
+    }
+
+    [Fact]
+    public async Task Deactivate_ignores_planner_next_wait_and_does_not_arm_idle()
+    {
+        var captured = CaptureWaitMetrics();
+        using var listener = captured.Listener;
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            ["""{"decision":"deactivate","reason":"Pause now.","nextWaitMs":120000}"""],
+            ["Hello from synthetic."]);
+        await using var runtime = Create(output, model, time, RecordingDefaultBrain(model), definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal("initiative", runtime.Snapshot.PauseReason);
+        Assert.Null(runtime.LastArmedIdleDelay);
+        var started = CountStarted(output, "LongSilence");
+        time.Advance(TimeSpan.FromSeconds(180));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(started, CountStarted(output, "LongSilence"));
+        Assert.Contains(captured.Samples, sample => sample.Source == "none" && sample.Value == 0);
+        Assert.DoesNotContain(
+            captured.Samples,
+            sample => sample.Source == "model" && sample.Value == 120_000);
+    }
+
+    [Fact]
+    public async Task Proactive_speak_next_wait_is_armed_after_the_response_completes()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            ["""{"decision":"speak","intent":"hint","objective":"Offer a short hint.","nextWaitMs":45000}"""],
+            ["Hello from synthetic.", "Here is a hint."]);
+        await using var runtime = Create(output, model, time, RecordingDefaultBrain(model), definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        Assert.Equal(TimeSpan.FromSeconds(45), runtime.LastArmedIdleDelay);
+    }
+
+    [Fact]
+    public async Task Pending_initiative_wait_is_interrupted_by_user_input()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            ["""{"decision":"staySilent","reason":"Waiting.","nextWaitMs":120000}"""],
+            ["Hello from synthetic.", "User returned."]);
+        await using var runtime = Create(output, model, time, RecordingDefaultBrain(model), definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        var generation = runtime.TimerGeneration;
+        await runtime.SubmitUserTextAsync("I am here");
+        await runtime.WaitUntilIdleAsync();
+        Assert.NotEqual(generation, runtime.TimerGeneration);
+        Assert.Equal(0, CountStarted(output, "LongSilence"));
     }
 
     [Fact]
@@ -600,6 +752,49 @@ public sealed class InitiativeTests
 
     private static FakeTimeProvider Clock() =>
         new(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+
+    private static WaitMetricCapture CaptureWaitMetrics()
+    {
+        var samples = new List<WaitSample>();
+        var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == RuntimeTelemetry.Name
+                && instrument.Name == InitiativeWaitTelemetry.InstrumentName)
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((instrument, value, tags, state) =>
+        {
+            string? source = null;
+            string? clamp = null;
+            string? mode = null;
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "source")
+                {
+                    source = tag.Value?.ToString();
+                }
+                else if (tag.Key == "clamp")
+                {
+                    clamp = tag.Value?.ToString();
+                }
+                else if (tag.Key == "mode")
+                {
+                    mode = tag.Value?.ToString();
+                }
+            }
+
+            samples.Add(new WaitSample(value, source, clamp, mode));
+        });
+        listener.Start();
+        return new WaitMetricCapture(listener, samples);
+    }
+
+    private sealed record WaitMetricCapture(MeterListener Listener, List<WaitSample> Samples);
+
+    private sealed record WaitSample(double Value, string? Source, string? Clamp, string? Mode);
 
     private static AgentDefinition RepeatPolicy(int maxPerSilence, int consecutiveCap, int? silentEvaluations = null) =>
         SampleDefinitions.Examiner with

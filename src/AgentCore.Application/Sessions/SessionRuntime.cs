@@ -109,6 +109,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _proactiveBrainInFlight;
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
+    private TimeSpan? _pendingPostResponseIdleDelay;
+    private string _pendingPostResponseIdleClamp = "n/a";
+    private TimeSpan? _lastArmedIdleDelay;
     private readonly HashSet<Guid> _environmentIds = [];
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
     private int _mailboxPressureSignaled;
@@ -293,6 +296,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     public InputActivity Input => _input;
 
     public int TimerGeneration => _timerGeneration;
+
+    public TimeSpan? LastArmedIdleDelay => _lastArmedIdleDelay;
 
     public int MaxUtteranceGeneration => _maxUtteranceGeneration;
 
@@ -1085,6 +1090,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 InitiativeEvaluationTelemetry.RecordDisposition(input.Trigger, input.Decision, admitted: true, blockReason: "deactivate");
             }
 
+            InitiativeWaitTelemetry.RecordIgnoredDeactivate(_snapshot.Mode);
             await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "initiative")
                 .ConfigureAwait(false);
             return;
@@ -1181,6 +1187,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (input.Trigger.Kind != TriggerKind.UserTurn)
         {
             RecordInitiativeEvaluation();
+            RememberPostResponseIdleDelay(speakable.NextWaitMs);
         }
 
         var now = _time.GetUtcNow();
@@ -1853,6 +1860,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _ttsCts?.Cancel();
         ClearActive();
         _turnGeneration++;
+        ClearPendingPostResponseIdleDelay();
         if (reason is "userBargeIn" or "newText")
         {
             await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
@@ -1897,7 +1905,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     .ConfigureAwait(false);
                 ClearActive();
                 await DrainEnvironmentAsync(context, ct).ConfigureAwait(false);
-                ScheduleIdleTimer(SilenceThreshold());
+                SchedulePostResponseIdleTimer();
                 await ApplyPendingVoiceIfIdleAsync(context, ct).ConfigureAwait(false);
             });
     }
@@ -1916,18 +1924,63 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (decision is StaySilent silent && silent.NextWaitMs is int waitMs)
         {
-            return ClampInitiativeWait(TimeSpan.FromMilliseconds(waitMs));
+            return RecordClampedWait(TimeSpan.FromMilliseconds(waitMs), "model");
         }
 
         if (decision is Speak speak && speak.NextWaitMs is int speakWaitMs)
         {
-            return ClampInitiativeWait(TimeSpan.FromMilliseconds(speakWaitMs));
+            return RecordClampedWait(TimeSpan.FromMilliseconds(speakWaitMs), "model");
         }
 
-        return IdleBackoff();
+        var fallback = IdleBackoff();
+        InitiativeWaitTelemetry.Record(fallback, "fallback", "n/a", _snapshot.Mode);
+        return fallback;
     }
 
-    private TimeSpan ClampInitiativeWait(TimeSpan requested)
+    private void RememberPostResponseIdleDelay(int? nextWaitMs)
+    {
+        if (nextWaitMs is not int waitMs)
+        {
+            ClearPendingPostResponseIdleDelay();
+            return;
+        }
+
+        var (applied, clamp) = ClampInitiativeWaitWithReason(TimeSpan.FromMilliseconds(waitMs));
+        _pendingPostResponseIdleDelay = applied;
+        _pendingPostResponseIdleClamp = clamp;
+    }
+
+    private void SchedulePostResponseIdleTimer()
+    {
+        if (_pendingPostResponseIdleDelay is { } delay)
+        {
+            _pendingPostResponseIdleDelay = null;
+            InitiativeWaitTelemetry.Record(delay, "model", _pendingPostResponseIdleClamp, _snapshot.Mode);
+            _pendingPostResponseIdleClamp = "n/a";
+            ScheduleIdleTimer(delay);
+            return;
+        }
+
+        ScheduleIdleTimer(SilenceThreshold());
+    }
+
+    private void ClearPendingPostResponseIdleDelay()
+    {
+        _pendingPostResponseIdleDelay = null;
+        _pendingPostResponseIdleClamp = "n/a";
+    }
+
+    private TimeSpan RecordClampedWait(TimeSpan requested, string source)
+    {
+        var (applied, clamp) = ClampInitiativeWaitWithReason(requested);
+        InitiativeWaitTelemetry.Record(applied, source, clamp, _snapshot.Mode);
+        return applied;
+    }
+
+    private TimeSpan ClampInitiativeWait(TimeSpan requested) =>
+        ClampInitiativeWaitWithReason(requested).Applied;
+
+    private (TimeSpan Applied, string Clamp) ClampInitiativeWaitWithReason(TimeSpan requested)
     {
         var policy = _snapshot.Definition.InitiativePolicy;
         var min = _snapshot.Mode == SessionMode.Text
@@ -1936,15 +1989,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var max = TimeSpan.FromMilliseconds(Math.Max(policy.InactivityLimitMs / 2, policy.CooldownMs * 4));
         if (requested < min)
         {
-            return min;
+            return (min, "min");
         }
 
         if (requested > max)
         {
-            return max;
+            return (max, "max");
         }
 
-        return requested;
+        return (requested, "none");
     }
 
     private static bool HasCompletedAssistantTurn(SessionSnapshot snapshot) =>

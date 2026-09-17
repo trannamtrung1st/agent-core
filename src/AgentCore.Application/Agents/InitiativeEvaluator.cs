@@ -143,16 +143,18 @@ public static class InitiativeEvaluator
                         """
                         You decide whether a proactive agent message is worthwhile right now and, when speaking, what conversational move is useful.
                         Reply with a single JSON object only, no markdown.
-                        staySilent/deactivate:
-                        {"decision":"staySilent"|"deactivate","reason":"...","nextWaitMs":number|null}
+                        staySilent:
+                        {"decision":"staySilent","reason":"...","nextWaitMs":number|null}
+                        deactivate:
+                        {"decision":"deactivate","reason":"..."}
                         speak (required fields for speak):
                         {"decision":"speak","intent":"hint"|"rephrase"|"clarification"|"reminder"|"followUp"|"other","objective":"short internal instruction for what the proactive message should accomplish","nextWaitMs":number|null}
                         Do not write the user-visible response text. objective is internal planning only.
                         Speak when a proactive turn would meaningfully advance the interaction. Choose intent for the move (hint, rephrase, etc.).
                         Stay silent when the message would mainly repeat readiness, encouragement, or previous wording without moving the interaction forward.
                         Reject empty check-ins such as "I'm here when you're ready" unless genuinely appropriate for the role.
-                        Use deactivate only when the session should pause (rare).
-                        nextWaitMs is optional on every decision: for staySilent/deactivate it delays the next evaluation; for speak it delays the next idle timer after the proactive turn completes.
+                        Use deactivate only when the session should pause (rare). Deactivate pauses immediately; omit nextWaitMs, and ignore it if present because no next wait is armed.
+                        nextWaitMs is optional on staySilent and speak only: for staySilent it delays the next evaluation; for speak it delays the next idle timer after the proactive turn completes.
                         """,
                         "Agent context:",
                         agentContext)),
