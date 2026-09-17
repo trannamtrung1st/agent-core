@@ -11,3 +11,4 @@
 - [ ] Allow background research, scheduled tasks, etc.
 - [ ] Opensandbox for future sandbox providers
 - [ ] STT/TTS using browser APIs for demo, cheap alternative to cloud services, LLMs.
+- [ ] Summarize, compact session with LLM.
