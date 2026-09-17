@@ -2,7 +2,7 @@
 
 - [ ] End the session after user silence (timeout TBD)
 - [ ] Agent chooses the next wait (short/long), not a fixed interval
-- [ ] Turns can carry extra markdown with text/voice
+- [ ] Turns can carry extra markdown with text/voice? but how display in the UI?
 - [ ] Sessions is stored as history and can be viewed again. Like a chat history in ChatGPT...
 
 # Later (idea)
