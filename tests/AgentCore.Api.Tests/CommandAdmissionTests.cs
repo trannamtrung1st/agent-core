@@ -151,6 +151,74 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         }
     }
 
+    [Fact]
+    public async Task Unknown_user_text_behavior_is_rejected()
+    {
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        created.EnsureSuccessStatusCode();
+        var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        await using var hub = await ConnectAsync();
+        var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type == "session.ready" && evt.AttachmentId is not null)
+            {
+                ready.TrySetResult(evt.AttachmentId);
+            }
+        });
+        var attached = await hub.InvokeAsync<CommandAck>("Attach", Command(session.SessionId, 0, "session.attach", new AttachPayload()));
+        Assert.True(attached.Accepted, attached.Error?.Message);
+        var attachment = await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var denied = await hub.InvokeAsync<CommandAck>(
+            "SendText",
+            Command(
+                session.SessionId,
+                1,
+                "user.text",
+                new UserTextPayload { Text = "Hello", Behavior = "drop" },
+                attachment));
+        Assert.False(denied.Accepted);
+        Assert.Equal("ValidationError", denied.Error?.Code);
+    }
+
+    [Fact]
+    public async Task CancelResponse_rejects_unknown_and_missing_ids()
+    {
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        created.EnsureSuccessStatusCode();
+        var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        await using var hub = await ConnectAsync();
+        var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type == "session.ready" && evt.AttachmentId is not null)
+            {
+                ready.TrySetResult(evt.AttachmentId);
+            }
+        });
+        var attached = await hub.InvokeAsync<CommandAck>("Attach", Command(session.SessionId, 0, "session.attach", new AttachPayload()));
+        Assert.True(attached.Accepted, attached.Error?.Message);
+        var attachment = await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var missing = await hub.InvokeAsync<CommandAck>(
+            "CancelResponse",
+            Command(session.SessionId, 1, "agent.response.cancel", new CancelResponsePayload(), attachment));
+        Assert.False(missing.Accepted);
+        Assert.Equal("ValidationError", missing.Error?.Code);
+        var unknown = await hub.InvokeAsync<CommandAck>(
+            "CancelResponse",
+            Command(
+                session.SessionId,
+                2,
+                "agent.response.cancel",
+                new CancelResponsePayload(),
+                attachment,
+                responseId: Guid.NewGuid().ToString()));
+        Assert.False(unknown.Accepted);
+        Assert.Equal("ValidationError", unknown.Error?.Code);
+    }
+
     private async Task<HubConnection> ConnectAsync()
     {
         var connection = new HubConnectionBuilder()
@@ -174,7 +242,8 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
         string type,
         T payload,
         string? attachmentId = null,
-        string? eventId = null)
+        string? eventId = null,
+        string? responseId = null)
     {
         return new ClientCommand<T>
         {
@@ -184,6 +253,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
             Sequence = sequence,
             Timestamp = DateTimeOffset.UtcNow.ToString("o"),
             AttachmentId = attachmentId,
+            ResponseId = responseId,
             Type = type,
             Payload = payload
         };

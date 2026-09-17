@@ -155,5 +155,10 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("parallel-controls")]
     [InlineData("receipt-backwards")]
     [InlineData("dual-attach")]
+    [InlineData("user-text-unknown-behavior")]
+    [InlineData("user-text-behavior-retry")]
+    [InlineData("cancel-response-unknown")]
+    [InlineData("cancel-response-idempotent")]
+    [InlineData("cancel-response-stale")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

@@ -23,6 +23,12 @@ public sealed class SessionHub(SessionHost host) : Hub
     public Task<CommandAck> SendText(ClientCommand<UserTextPayload> command) =>
         Complete(host.SendTextAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 
+    public Task<CommandAck> CancelResponse(ClientCommand<CancelResponsePayload> command)
+    {
+        command.Payload ??= new CancelResponsePayload();
+        return Complete(host.CancelResponseAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+    }
+
     public Task<CommandAck> SetMode(ClientCommand<SetModePayload> command) =>
         Complete(host.SetModeAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 

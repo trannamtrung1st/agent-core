@@ -26,7 +26,7 @@ All rows run in mailbox admission order. Missing/old epoch, attachment, utteranc
 | --- | --- | --- |
 | Attach Created/Paused | InjectEvent | Attached using stored Mode (attach payload has no mode); text Input=Idle, voice Input=Listening; start recognition if voice |
 | session.mode.set | See [mode transitions](#mode-transitions) | Queue or apply; never a second session |
-| user.text while attached | Interrupt if response live; else InjectEvent | Supersede old response first; persist user turn; WaitingForAgent; launch brain after save |
+| user.text while attached | `behavior=interrupt` or omitted: Interrupt if response live, else InjectEvent. `behavior=queue`: persist the user entry; Interrupt only when no response is live | Persist the user turn before ACK. Queue keeps the live response. Interrupt supersedes after persist so earlier queued user entries stay ordered. Unknown behavior is rejected |
 | SpeechStarted while no output | InjectEvent | UserSpeaking; reset silence generation |
 | SpeechStarted while live output | Queue evidence | UserSpeaking; create InterruptionCandidate, optional duck |
 | SpeechPartial explicit stop/question | Interrupt | Supersede captured response; keep accepting utterance |

@@ -92,6 +92,16 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Consequence:** [Frontend Implementation](13-frontend-implementation-spec.md) owns screens and behavior. `.agents/context/DESIGN.md` may hold only lightweight visual guidance; if it conflicts with `/docs`, `/docs` wins.
 
+## Decision: history-derived user-text queue
+
+**Decision:** Queued first-party user text is an additive `user.text.behavior` of `queue` or `interrupt`. Omitted `behavior` remains `interrupt` for protocol-v1 clients. Unknown values are rejected. Accepted user entries (and their attachment binds) persist on the existing ordered conversation history before success ACK. The pending batch is that history's trailing user suffix; P0 does not add a second durable queue store, `PendingUserEntryIds`, or `deliveryPolicy`. `queue` while a response is active keeps that response alive. `interrupt` supersedes the active response after the new user entry is persisted so already accepted queued entries stay earlier in sequence. Explicit stop is `agent.response.cancel` / `CancelResponse` with the top-level expected `responseId`; it creates no user entry and must not cancel a newer response.
+
+**Status:** **Verified** in Application fake-time/gated-model tests, hub admission tests, and loopback Kestrel JavaScript SignalR/MessagePack scenarios.
+
+**Rationale:** A parallel queue table would have to stay reconciled with history. Ordered entries already express arrival, attachments, and recovery without command replay.
+
+**Consequence:** [Interaction Controller](05-interaction-controller.md) and [Protocol](14-api-and-realtime-protocol.md) own the live contracts. Trailing-suffix batching after terminalization is a follow-on P0-C slice; this decision forbids a second store unless a later proven invariant is documented first.
+
 ## Explicit non-goals
 
 No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, or Next.js. Ant Design v6 is the verified MVP generic UI system (see the decision above); do not add another component or CSS framework, Ant Design Pro/ProComponents/X, or a replacement custom design system. No autonomous tools/platform, distributed event bus or generic repository framework. No extra hosted mock or third-party test-only inference service. Reconsider only when actual requirements justify the cost.

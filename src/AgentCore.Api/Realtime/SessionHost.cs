@@ -757,6 +757,17 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return Reject(command.EventId, "Validation", "ValidationError", "Text exceeds 8000 UTF-16 code units.", false, null);
         }
 
+        if (!UserTextBehaviors.TryParse(command.Payload?.Behavior, out var behavior))
+        {
+            return Reject(
+                command.EventId,
+                "Validation",
+                "ValidationError",
+                "behavior must be queue or interrupt.",
+                false,
+                null);
+        }
+
         return await AdmitControlAsync(connectionId, command, async live =>
         {
             if (!Guid.TryParse(command.EventId, out var sourceEventId))
@@ -770,7 +781,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         text,
                         sourceEventId,
                         cancellationToken,
-                        ids)
+                        ids,
+                        behavior)
                     .ConfigureAwait(false);
                 if (persisted is null)
                 {
@@ -817,6 +829,51 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             {
                 return Reject(command.EventId, "Validation", ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
             }
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CommandAck> CancelResponseAsync(
+        string connectionId,
+        ClientCommand<CancelResponsePayload> command,
+        CancellationToken cancellationToken)
+    {
+        var envelope = Validate(command, attach: false, expectedType: "agent.response.cancel");
+        if (!envelope.Accepted)
+        {
+            return envelope;
+        }
+
+        if (!Guid.TryParse(command.ResponseId, out var responseId) || responseId == Guid.Empty)
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "responseId is required.", false, null);
+        }
+
+        return await AdmitControlAsync(connectionId, command, async live =>
+        {
+            var result = await live.Runtime.CancelResponseAsync(responseId, cancellationToken).ConfigureAwait(false);
+            if (result is null)
+            {
+                return Reject(
+                    command.EventId,
+                    "Transport",
+                    "Backpressure",
+                    "The session mailbox is full. Stop or retry after the current work drains.",
+                    false,
+                    1000);
+            }
+
+            return result switch
+            {
+                ResponseCancelResult.Cancelled or ResponseCancelResult.Idempotent => Accept(command.EventId),
+                ResponseCancelResult.Stale => Reject(
+                    command.EventId,
+                    "Protocol",
+                    "StaleCommand",
+                    "responseId does not match the active response.",
+                    false,
+                    null),
+                _ => Reject(command.EventId, "Validation", "ValidationError", "Unknown responseId.", false, null)
+            };
         }, cancellationToken).ConfigureAwait(false);
     }
 

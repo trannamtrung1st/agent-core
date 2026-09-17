@@ -22,7 +22,8 @@ public sealed record UserTextReceived(
     EventContext Context,
     string Text,
     TaskCompletionSource<bool>? Persisted = null,
-    IReadOnlyList<Guid>? AttachmentIds = null) : SessionInput(Context);
+    IReadOnlyList<Guid>? AttachmentIds = null,
+    UserTextBehavior Behavior = UserTextBehavior.Interrupt) : SessionInput(Context);
 
 public sealed record AttachmentsStagedReceived(
     EventContext Context,
@@ -94,7 +95,10 @@ public sealed record ModelResultReceived(
     ModelGenerationEvent Event,
     TaskCompletionSource Processed) : SessionInput(Context);
 
-public sealed record CancelResponseReceived(EventContext Context, Guid ResponseId) : SessionInput(Context);
+public sealed record CancelResponseReceived(
+    EventContext Context,
+    Guid ResponseId,
+    TaskCompletionSource<ResponseCancelResult>? Completed = null) : SessionInput(Context);
 
 public sealed record MuteReceived(EventContext Context, bool Muted) : SessionInput(Context);
 

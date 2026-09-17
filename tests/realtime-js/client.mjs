@@ -716,6 +716,153 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "user-text-unknown-behavior": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const denied = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello", behavior: "drop" }, { attachmentId })
+      );
+      if (denied.accepted || denied.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(denied));
+      }
+      await connection.stop();
+      break;
+    }
+    case "user-text-behavior-retry": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const eventId = uuid();
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const changed = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "Hello", behavior: "queue" }, { attachmentId, eventId })
+      );
+      if (changed.accepted || changed.error?.code !== "ProtocolError") {
+        throw new Error(JSON.stringify(changed));
+      }
+      const retry = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId, eventId })
+      );
+      if (!retry.accepted || retry.eventId !== first.eventId) {
+        throw new Error(JSON.stringify(retry));
+      }
+      await connection.stop();
+      break;
+    }
+    case "cancel-response-unknown": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const missing = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 1, "agent.response.cancel", {}, { attachmentId })
+      );
+      if (missing.accepted || missing.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(missing));
+      }
+      const unknown = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 2, "agent.response.cancel", {}, { attachmentId, responseId: uuid() })
+      );
+      if (unknown.accepted || unknown.error?.code !== "ValidationError") {
+        throw new Error(JSON.stringify(unknown));
+      }
+      await connection.stop();
+      break;
+    }
+    case "cancel-response-idempotent": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      const completed = await waitForEvent((evt) => evt.type === "agent.response.completed");
+      const first = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 2, "agent.response.cancel", {}, { attachmentId, responseId: completed.responseId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const second = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 3, "agent.response.cancel", {}, { attachmentId, responseId: completed.responseId })
+      );
+      if (!second.accepted) {
+        throw new Error(JSON.stringify(second));
+      }
+      await connection.stop();
+      break;
+    }
+    case "cancel-response-stale": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const firstSend = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!firstSend.accepted) {
+        throw new Error(JSON.stringify(firstSend));
+      }
+      const firstCompleted = await waitForEvent((evt) => evt.type === "agent.response.completed");
+      const secondSend = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "Next" }, { attachmentId })
+      );
+      if (!secondSend.accepted) {
+        throw new Error(JSON.stringify(secondSend));
+      }
+      const secondStarted = await waitForEvent(
+        (evt) => evt.type === "agent.response.started" && evt.responseId !== firstCompleted.responseId
+      );
+      const stale = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 3, "agent.response.cancel", {}, { attachmentId, responseId: firstCompleted.responseId })
+      );
+      if (stale.accepted) {
+        if (stale.error) {
+          throw new Error(JSON.stringify(stale));
+        }
+      } else if (stale.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(stale));
+      }
+      const secondTerminal = await waitForEvent(
+        (evt) =>
+          (evt.type === "agent.response.completed" || evt.type === "agent.response.interrupted") &&
+          evt.responseId === secondStarted.responseId
+      );
+      if (stale.accepted && secondTerminal.type === "agent.response.interrupted") {
+        throw new Error("stale cancel of R1 interrupted R2");
+      }
+      await connection.stop();
+      break;
+    }
     case "capacity": {
       const a = await createSession();
       const b = await createSession();

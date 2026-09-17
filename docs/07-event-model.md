@@ -16,7 +16,8 @@ Vendor SSE objects are a fourth, private adapter detail. Do not serialize domain
 public sealed record EventContext(Guid EventId, Guid SessionId, Guid Epoch,
     DateTimeOffset Timestamp, Guid CorrelationId, Guid? CausationId);
 public abstract record SessionInput(EventContext Context);
-public sealed record UserTextReceived(EventContext Context, string Text)
+public sealed record UserTextReceived(EventContext Context, string Text,
+    UserTextBehavior Behavior = UserTextBehavior.Interrupt)
     : SessionInput(Context);
 public sealed record RecognitionReceived(EventContext Context,
     SpeechRecognitionEvent Event) : SessionInput(Context);

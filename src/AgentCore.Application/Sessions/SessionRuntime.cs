@@ -214,27 +214,31 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string text,
         Guid? sourceEventId = null,
         CancellationToken cancellationToken = default,
-        IReadOnlyList<Guid>? attachmentIds = null)
+        IReadOnlyList<Guid>? attachmentIds = null,
+        UserTextBehavior behavior = UserTextBehavior.Interrupt)
     {
         ValidateUserTurn(text, attachmentIds);
         _ = cancellationToken;
         var eventId = sourceEventId ?? _ids.NewId();
         var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(), eventId, null);
         BeginWork();
-        return Task.FromResult(Enqueue(new UserTextReceived(context, text, AttachmentIds: attachmentIds), urgent: false));
+        return Task.FromResult(Enqueue(
+            new UserTextReceived(context, text, AttachmentIds: attachmentIds, Behavior: behavior),
+            urgent: false));
     }
 
     public async Task<bool?> SubmitPersistedUserTextAsync(
         string text,
         Guid sourceEventId,
         CancellationToken cancellationToken = default,
-        IReadOnlyList<Guid>? attachmentIds = null)
+        IReadOnlyList<Guid>? attachmentIds = null,
+        UserTextBehavior behavior = UserTextBehavior.Interrupt)
     {
         ValidateUserTurn(text, attachmentIds);
         var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = new EventContext(sourceEventId, SessionId, _epoch, _time.GetUtcNow(), sourceEventId, null);
         BeginWork();
-        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds), urgent: false))
+        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds, behavior), urgent: false))
         {
             persisted.TrySetResult(false);
             return null;
@@ -278,6 +282,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         BeginWork();
         _ = Enqueue(new CancelResponseReceived(context, responseId), urgent: true);
         return Task.CompletedTask;
+    }
+
+    public async Task<ResponseCancelResult?> CancelResponseAsync(
+        Guid expectedResponseId,
+        CancellationToken cancellationToken = default)
+    {
+        var completed = new TaskCompletionSource<ResponseCancelResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new CancelResponseReceived(context, expectedResponseId, completed), urgent: true))
+        {
+            completed.TrySetResult(ResponseCancelResult.Unknown);
+            return null;
+        }
+
+        return await WaitOrCancelAsync(completed, ResponseCancelResult.Unknown, cancellationToken).ConfigureAwait(false);
     }
 
     public Task WaitUntilMailboxDrainedAsync(CancellationToken cancellationToken = default)
@@ -972,11 +992,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (_activeResponseId is { } live)
-        {
-            await SupersedeAsync(input.Context, live, cancellationToken, "newText").ConfigureAwait(false);
-        }
-
         var now = _time.GetUtcNow();
         var text = input.Text ?? "";
         var attachmentRefs = await BuildAttachmentRefsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
@@ -1005,16 +1020,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot = _snapshot with { Summary = summary, SummarizedThroughEntrySequence = through };
         }
 
-        _timerGeneration++;
-        _environmentQueue.Clear();
+        var queued = input.Behavior == UserTextBehavior.Queue && _activeResponseId is not null;
         var cause = input.Context;
-        var turn = ++_turnGeneration;
+        if (!queued)
+        {
+            _timerGeneration++;
+            _environmentQueue.Clear();
+        }
+
         try
         {
             RequestPersist(
                 _snapshot,
                 PersistKind.Normal,
-                then: async _ =>
+                then: async ct =>
                 {
                     if (attachmentIds.Count > 0 && _attachments is not null)
                     {
@@ -1029,8 +1048,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         }
                     }
 
+                    var wire = UserTextBehaviors.WireName(input.Behavior);
+                    if (queued)
+                    {
+                        UserTextQueueTelemetry.Record(wire, queued: true);
+                        return;
+                    }
+
+                    if (_activeResponseId is { } live)
+                    {
+                        await SupersedeAsync(cause, live, ct, "newText").ConfigureAwait(false);
+                    }
+
+                    UserTextQueueTelemetry.Record(wire, queued: false);
                     var responseId = _ids.NewId();
                     var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
+                    var turn = ++_turnGeneration;
                     _pendingUploadHold = false;
                     NoteUserActivity();
                     _outputActivity = OutputActivity.WaitingForAgent;
@@ -1807,13 +1840,38 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private async Task HandleCancelAsync(CancelResponseReceived input, CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        if (_activeResponseId != input.ResponseId)
+        ResponseCancelTelemetry.RecordRequested();
+        try
         {
-            return;
-        }
+            if (_activeResponseId == input.ResponseId)
+            {
+                await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userBargeIn").ConfigureAwait(false);
+                RuntimeTelemetry.Record("bargein", RuntimeTelemetry.ElapsedMs(started));
+                input.Completed?.TrySetResult(ResponseCancelResult.Cancelled);
+                return;
+            }
 
-        await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userBargeIn").ConfigureAwait(false);
-        RuntimeTelemetry.Record("bargein", RuntimeTelemetry.ElapsedMs(started));
+            var known = _snapshot.Entries.Any(entry => entry.ResponseId == input.ResponseId);
+            if (!known)
+            {
+                input.Completed?.TrySetResult(ResponseCancelResult.Unknown);
+                return;
+            }
+
+            if (_activeResponseId is not null)
+            {
+                ResponseCancelTelemetry.RecordStale();
+                input.Completed?.TrySetResult(ResponseCancelResult.Stale);
+                return;
+            }
+
+            input.Completed?.TrySetResult(ResponseCancelResult.Idempotent);
+        }
+        catch
+        {
+            input.Completed?.TrySetResult(ResponseCancelResult.Unknown);
+            throw;
+        }
     }
 
     private async Task SupersedeAsync(

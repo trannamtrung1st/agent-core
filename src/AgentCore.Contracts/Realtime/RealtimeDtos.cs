@@ -109,6 +109,9 @@ public sealed class UserTextPayload
 
     [Key("attachmentIds")]
     public string[]? AttachmentIds { get; set; }
+
+    [Key("behavior")]
+    public string? Behavior { get; set; }
 }
 
 [MessagePackObject]
@@ -185,6 +188,11 @@ public sealed class EndPayload
 {
     [Key("reason")]
     public string Reason { get; set; } = "";
+}
+
+[MessagePackObject]
+public sealed class CancelResponsePayload
+{
 }
 
 [MessagePackObject]
