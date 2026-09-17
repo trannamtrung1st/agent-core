@@ -1,11 +1,17 @@
-# Next (business)
+## Next (business)
 
 - [ ] End the session after user silence (timeout TBD)
 - [ ] Agent chooses the next wait (short/long), not a fixed interval
 - [ ] Turns can carry extra markdown with text/voice? but how display in the UI?
 - [ ] Sessions is stored as history and can be viewed again. Like a chat history in ChatGPT...
 
-# Later (idea)
+## Issues
+
+- [ ] Cannot delete ended session.
+- [ ] Use confirm modal/dialog instead of inline.
+- [ ] Need UI toast/snackbar for success/error messages.
+
+## Later (idea)
 
 - [ ] Full harness: validation, runtime, identity, tools, memory, plugins
 - [ ] Allow background research, scheduled tasks, etc.

@@ -2,6 +2,8 @@
 
 Identify reusable patterns, components, and design tokens, then extract and consolidate them into the design system for systematic reuse.
 
+For Agent Core, apply the [repository component and layout policy](../SKILL.md#agent-core-component-and-layout-policy). Ant Design is the existing generic component system even without a local shared-UI directory. Reuse its controls directly; extraction here means justified product compositions within the requested scope, not new control wrappers or a replacement token catalog.
+
 ## Step 1: Discover the Design System
 
 Find the design system, component library, or shared UI directory. Understand its structure: component organization, naming conventions, design token structure, import/export conventions.
@@ -19,7 +21,7 @@ Look for extraction opportunities in the target area:
 - **Type styles**: Repeated font-size + weight + line-height combinations
 - **Animation patterns**: Repeated easing, duration, or keyframe combinations
 
-Assess value: only extract things used 3+ times with the same intent. Premature abstraction is worse than duplication.
+Assess value by shared intent and demonstrated maintenance benefit, not a fixed count. Three or more uses are a useful signal; two equivalent product layouts with recurring spacing drift can justify one shared owner. Reuse an existing component before extracting a new one, and keep one-off arrangements local.
 
 ## Step 3: Plan Extraction
 
@@ -66,4 +68,3 @@ Update design system documentation:
 - Skip proper TypeScript types or prop documentation
 - Create tokens for every single value (tokens should have semantic meaning)
 - Extract things that differ in intent (two buttons that look similar but serve different purposes should stay separate)
-
