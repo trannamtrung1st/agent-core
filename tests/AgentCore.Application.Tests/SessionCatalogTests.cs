@@ -55,7 +55,7 @@ public sealed class SessionCatalogTests
     }
 
     [Fact]
-    public async Task Archive_hides_from_default_catalog_and_reopen_increments_epoch()
+    public async Task Archive_hides_from_default_catalog_and_reopen_is_noop_when_not_paused()
     {
         var manager = CreateManager(new InMemoryMemoryStore());
         var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
@@ -66,7 +66,7 @@ public sealed class SessionCatalogTests
         Assert.True(archived.Items[0].ArchivedAt is not null);
         await manager.UnarchiveAsync(created.SessionId);
         var reopened = await manager.ReopenAsync(created.SessionId);
-        Assert.Equal(1, reopened.RuntimeEpoch);
+        Assert.Equal(0, reopened.RuntimeEpoch);
     }
 
     [Fact]
@@ -132,6 +132,19 @@ public sealed class SessionCatalogTests
         await manager.DeactivateAsync(second.SessionId);
         var afterDeactivate = await manager.ListCatalogAsync(null, 50, false);
         Assert.Equal([second.SessionId, first.SessionId], afterDeactivate.Items.Select(item => item.SessionId).ToArray());
+    }
+
+    [Fact]
+    public async Task Reopen_on_created_session_is_idempotent()
+    {
+        var manager = CreateManager(new InMemoryMemoryStore());
+        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var first = await manager.ReopenAsync(created.SessionId);
+        Assert.Equal(created.RuntimeEpoch, first.RuntimeEpoch);
+        Assert.Equal(created.Revision, first.Revision);
+        var second = await manager.ReopenAsync(created.SessionId);
+        Assert.Equal(created.RuntimeEpoch, second.RuntimeEpoch);
+        Assert.Equal(first.Revision, second.Revision);
     }
 
     [Fact]

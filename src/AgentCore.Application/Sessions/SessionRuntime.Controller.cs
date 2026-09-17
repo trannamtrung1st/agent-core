@@ -560,9 +560,7 @@ public sealed partial class SessionRuntime
 
                 var responseId = _ids.NewId();
                 var turn = ++_turnGeneration;
-                _outputActivity = OutputActivity.WaitingForAgent;
                 LaunchBrain(input.Context, trigger, responseId, turn);
-                await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
             else if (ShouldRetryIdleAfterCooldown())
             {

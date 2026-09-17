@@ -68,7 +68,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         var reopened = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/reopen", null);
         reopened.EnsureSuccessStatusCode();
         var epoch = await reopened.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
-        Assert.Equal(1, epoch!.RuntimeEpoch);
+        Assert.Equal(0, epoch!.RuntimeEpoch);
 
         var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={epoch.Revision}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);

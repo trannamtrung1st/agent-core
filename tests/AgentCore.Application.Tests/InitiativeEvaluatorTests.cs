@@ -108,7 +108,9 @@ public sealed class InitiativeEvaluatorTests
         var entry = Assert.Single(timeline, item => item.Stage == "initiative_eval");
         Assert.False(string.IsNullOrEmpty(entry.Detail));
         Assert.Contains("examiner", entry.Detail!, StringComparison.Ordinal);
-        Assert.Contains("decision", entry.Detail!, StringComparison.Ordinal);
+        Assert.Contains("evaluated", entry.Detail!, StringComparison.Ordinal);
+        Assert.Contains("reasonCode", entry.Detail!, StringComparison.Ordinal);
+        Assert.DoesNotContain("reasonDetail", entry.Detail!, StringComparison.Ordinal);
     }
 
     private static AgentContext ExaminerContext(

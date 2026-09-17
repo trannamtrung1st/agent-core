@@ -106,6 +106,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _initiativeHeld;
     private bool _pendingUploadHold;
     private bool _deactivated;
+    private bool _proactiveBrainInFlight;
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private readonly HashSet<Guid> _environmentIds = [];
@@ -1001,13 +1002,28 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleBrainAsync(BrainReturned input, CancellationToken cancellationToken)
     {
+        var proactive = input.Trigger.Kind != TriggerKind.UserTurn;
         if (_deactivated || input.TurnGeneration != _turnGeneration)
         {
+            if (proactive)
+            {
+                InitiativeEvaluationTelemetry.RecordDisposition(
+                    input.Trigger,
+                    input.Decision,
+                    admitted: false,
+                    blockReason: "superseded");
+            }
+
             return;
         }
 
-        if (input.Trigger.Kind != TriggerKind.UserTurn && IsStaleProactiveDecision(input.Trigger))
+        if (proactive && IsStaleProactiveDecision(input.Trigger))
         {
+            InitiativeEvaluationTelemetry.RecordDisposition(
+                input.Trigger,
+                input.Decision,
+                admitted: false,
+                blockReason: "stale");
             await DeclineInitiativeAsync(
                 input.Context,
                 new StaySilent("Initiative declined.", CountsTowardSilentCap: false),
@@ -1017,6 +1033,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Decision is RequestDeactivate)
         {
+            if (proactive)
+            {
+                InitiativeEvaluationTelemetry.RecordDisposition(input.Trigger, input.Decision, admitted: true, blockReason: "deactivate");
+            }
+
             await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "initiative")
                 .ConfigureAwait(false);
             return;
@@ -1026,13 +1047,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             if (input.Decision is StaySilent silent
                 && silent.CountsTowardSilentCap
-                && input.Trigger.Kind != TriggerKind.UserTurn)
+                && proactive)
             {
                 _silentEvaluations++;
             }
 
+            if (proactive)
+            {
+                InitiativeEvaluationTelemetry.RecordDisposition(
+                    input.Trigger,
+                    input.Decision,
+                    admitted: false,
+                    blockReason: input.Decision is StaySilent stay && !stay.CountsTowardSilentCap
+                        ? "hard_gate"
+                        : "semantic_silence");
+            }
+
             await DeclineInitiativeAsync(input.Context, input.Decision, cancellationToken).ConfigureAwait(false);
             return;
+        }
+
+        if (proactive)
+        {
+            InitiativeEvaluationTelemetry.RecordDisposition(input.Trigger, input.Decision, admitted: true);
         }
 
         await StartSpeakPathAsync(input, speakable, cancellationToken).ConfigureAwait(false);
@@ -1067,6 +1104,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        InitiativeEvaluationTelemetry.RecordDisposition(
+            input.Trigger,
+            new StaySilent("Initiative evaluation failed.", CountsTowardSilentCap: false),
+            admitted: false,
+            blockReason: "brain_failed");
         await DeclineInitiativeAsync(
             input.Context,
             new StaySilent("Initiative evaluation failed.", CountsTowardSilentCap: false),
@@ -1236,7 +1278,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IReadOnlyList<AttachmentProcessResult>? attachments = null,
         bool workHeld = false)
     {
-        if (_deactivated || (trigger.Kind != TriggerKind.UserTurn && _activeResponseId is not null))
+        var proactive = trigger.Kind != TriggerKind.UserTurn;
+        if (_deactivated || (proactive && _activeResponseId is not null))
         {
             _outputActivity = OutputActivity.Idle;
             return;
@@ -1248,6 +1291,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         CancelBrainEvaluation();
+        if (proactive)
+        {
+            _proactiveBrainInFlight = true;
+        }
+
         _brainEvaluationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var evaluationToken = _brainEvaluationCts.Token;
 
@@ -1362,6 +1410,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
             finally
             {
+                if (proactive)
+                {
+                    _proactiveBrainInFlight = false;
+                }
+
                 if (_brainEvaluationCts?.Token == evaluationToken)
                 {
                     _brainEvaluationCts.Dispose();

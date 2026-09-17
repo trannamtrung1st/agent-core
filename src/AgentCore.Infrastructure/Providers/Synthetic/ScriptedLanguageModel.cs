@@ -304,7 +304,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 internal static class SyntheticInitiativeScript
 {
     private const int ExaminerLongSilenceMs = 90_000;
-    private const int ExaminerShortSilenceAfterQuestionMs = 90_000;
     private const int SupportAdvanceSilenceMs = 45_000;
 
     public static string Decide(JsonElement root)
@@ -314,7 +313,6 @@ internal static class SyntheticInitiativeScript
         var consecutive = ReadInt(root, "consecutiveProactiveSpeaks");
         var consecutiveCap = ReadInt(root, "consecutiveCap", 1);
         var silenceMs = ReadInt(root, "silenceMs");
-        var sinceAssistantMs = ReadInt(root, "sinceAssistantMs");
         var agentId = ReadAgentId(root);
         var trigger = ReadString(root, "trigger");
         var pendingTopic = ReadString(root, "pendingTopic");
@@ -337,12 +335,12 @@ internal static class SyntheticInitiativeScript
 
         if (string.Equals(agentId, "examiner", StringComparison.Ordinal))
         {
-            return DecideExaminer(speaks, silenceMs, sinceAssistantMs, root);
+            return DecideExaminer(speaks, silenceMs);
         }
 
         if (string.Equals(agentId, "customer-support", StringComparison.Ordinal))
         {
-            return DecideSupport(speaks, silenceMs, root);
+            return DecideSupport(speaks, silenceMs);
         }
 
         if (speaks >= 1)
@@ -355,20 +353,11 @@ internal static class SyntheticInitiativeScript
             : StaySilent("Synthetic initiative waiting for longer silence.", 30_000);
     }
 
-    private static string DecideExaminer(int speaks, int silenceMs, int sinceAssistantMs, JsonElement root)
+    private static string DecideExaminer(int speaks, int silenceMs)
     {
         if (speaks >= 1)
         {
             return StaySilent("Synthetic examiner avoids a second empty nudge.", 120_000);
-        }
-
-        if (LastAssistantEndsWithQuestion(root)
-            && sinceAssistantMs < ExaminerShortSilenceAfterQuestionMs
-            && silenceMs < ExaminerLongSilenceMs)
-        {
-            return StaySilent(
-                "Synthetic examiner stays silent after a recent question until silence is longer.",
-                30_000);
         }
 
         if (silenceMs >= ExaminerLongSilenceMs)
@@ -379,13 +368,8 @@ internal static class SyntheticInitiativeScript
         return StaySilent("Synthetic examiner waiting for longer candidate silence.", 30_000);
     }
 
-    private static string DecideSupport(int speaks, int silenceMs, JsonElement root)
+    private static string DecideSupport(int speaks, int silenceMs)
     {
-        if (!HasUnresolvedSupportContext(root))
-        {
-            return StaySilent("Synthetic support has no open task to advance.", 60_000);
-        }
-
         if (speaks >= 1 && silenceMs < SupportAdvanceSilenceMs)
         {
             return StaySilent("Synthetic support pauses briefly between proactive updates.", 20_000);
@@ -407,54 +391,6 @@ internal static class SyntheticInitiativeScript
         }
 
         return idNode.GetString() ?? string.Empty;
-    }
-
-    private static bool LastAssistantEndsWithQuestion(JsonElement root)
-    {
-        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        for (var index = turns.GetArrayLength() - 1; index >= 0; index--)
-        {
-            var turn = turns[index];
-            if (!turn.TryGetProperty("role", out var roleNode)
-                || !string.Equals(roleNode.GetString(), "Assistant", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var text = turn.TryGetProperty("text", out var textNode) ? textNode.GetString() ?? string.Empty : string.Empty;
-            return text.Contains('?', StringComparison.Ordinal);
-        }
-
-        return false;
-    }
-
-    private static bool HasUnresolvedSupportContext(JsonElement root)
-    {
-        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        var userMentionedIssue = false;
-        foreach (var turn in turns.EnumerateArray())
-        {
-            var role = turn.TryGetProperty("role", out var roleNode) ? roleNode.GetString() : null;
-            var text = turn.TryGetProperty("text", out var textNode) ? textNode.GetString() ?? string.Empty : string.Empty;
-            if (string.Equals(role, "User", StringComparison.OrdinalIgnoreCase)
-                && (text.Contains("order", StringComparison.OrdinalIgnoreCase)
-                    || text.Contains("late", StringComparison.OrdinalIgnoreCase)
-                    || text.Contains("refund", StringComparison.OrdinalIgnoreCase)))
-            {
-                userMentionedIssue = true;
-            }
-
-        }
-
-        return userMentionedIssue;
     }
 
     private static int ReadInt(JsonElement root, string name, int defaultValue = 0)

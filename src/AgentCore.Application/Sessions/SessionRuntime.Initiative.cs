@@ -94,12 +94,10 @@ public sealed partial class SessionRuntime
         }
 
         _pendingInitiativeExpiresAt = queued.ReceivedAt + EnvironmentTtl;
-        _outputActivity = OutputActivity.WaitingForAgent;
         var responseId = _ids.NewId();
         var turn = ++_turnGeneration;
         var trigger = new AgentTrigger(context.EventId, queued.Kind, queued.Text, queued.Event.Kind);
         LaunchBrain(context, trigger, responseId, turn);
-        await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task HandleDeactivateAsync(DeactivateReceived input, CancellationToken cancellationToken)
@@ -133,17 +131,32 @@ public sealed partial class SessionRuntime
 
     private void HandleReopenedSnapshot(ReopenedSnapshotReceived input)
     {
+        ResetForExplicitResume(input.Snapshot);
+        input.Applied.TrySetResult();
+    }
+
+    private void ResetForExplicitResume(SessionSnapshot snapshot)
+    {
         CancelBrainEvaluation();
         _deactivated = false;
         _activeResponseId = null;
         _outputActivity = OutputActivity.Idle;
         _initiativeHeld = false;
+        _proactiveBrainInFlight = false;
         _silentEvaluations = 0;
-        _durableRevision = input.Snapshot.Revision;
-        _durableSnapshot = input.Snapshot;
-        _snapshot = input.Snapshot;
-        _input = input.Snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
-        input.Applied.TrySetResult();
+        _helpOfferedDuringSilence = false;
+        _consecutiveProactiveSpeaks = 0;
+        _proactiveSpeaksThisSilence = 0;
+        _lastInitiativeAt = null;
+        _pendingInitiativeExpiresAt = null;
+        _environmentQueue.Clear();
+        var activityAt = snapshot.LastUserActivityAt ?? _time.GetUtcNow();
+        _lastMeaningfulActivityAt = activityAt;
+        _durableRevision = snapshot.Revision;
+        _durableSnapshot = snapshot;
+        _snapshot = snapshot;
+        _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
+        _timerGeneration++;
     }
 
     private void HandleInitiativeHold(InitiativeHoldReceived input)
@@ -363,7 +376,9 @@ public sealed partial class SessionRuntime
         _pendingInitiativeExpiresAt is { } deadline && _time.GetUtcNow() > deadline;
 
     private bool IsOutputQuiet() =>
-        _activeResponseId is null && _outputActivity == OutputActivity.Idle;
+        _activeResponseId is null
+        && _outputActivity == OutputActivity.Idle
+        && !_proactiveBrainInFlight;
 
     private bool HasTrigger(string trigger) =>
         _snapshot.Definition.InitiativePolicy.Triggers.Contains(trigger, StringComparer.Ordinal);

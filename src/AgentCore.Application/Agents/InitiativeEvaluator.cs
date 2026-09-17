@@ -55,7 +55,7 @@ public static class InitiativeEvaluator
             };
         }
 
-        InitiativeEvaluationTelemetry.Record(context, decision, RuntimeTelemetry.ElapsedMs(started));
+        InitiativeEvaluationTelemetry.RecordEvaluation(context, decision, RuntimeTelemetry.ElapsedMs(started));
         return decision;
     }
 

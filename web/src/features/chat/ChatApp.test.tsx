@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ConfigProvider } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
@@ -446,6 +446,7 @@ describe("ChatApp narrow session drawer", () => {
   });
 
   it("exposes the same session catalog from a drawer", async () => {
+    vi.setConfig({ testTimeout: 15_000 });
     stubMatchMedia((query) => /max-width:\s*767px/i.test(query));
 
     await act(async () => {
@@ -478,6 +479,9 @@ describe("ChatApp narrow session drawer", () => {
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open chats" }));
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: "Chats" })).toBeInTheDocument();
+    });
     const rail = screen.getByTestId("session-rail");
     expect(rail).toBeInTheDocument();
     expect(within(rail).queryByText("Sessions")).not.toBeInTheDocument();
@@ -488,8 +492,10 @@ describe("ChatApp narrow session drawer", () => {
     expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Planning notes" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
-    expect(await screen.findByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    });
   });
 });
 

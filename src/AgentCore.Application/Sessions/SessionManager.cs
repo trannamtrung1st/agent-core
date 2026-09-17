@@ -161,12 +161,22 @@ public sealed class SessionManager
                         throw AgentCoreErrors.Validation("Archived sessions must be unarchived before reopen.");
                     }
 
-                    var now = _time.GetUtcNow();
+                    if (snapshot.Status is SessionStatus.Attached)
+                    {
+                        throw AgentCoreErrors.SessionInUse();
+                    }
+
                     var resuming = snapshot.Status == SessionStatus.Paused || snapshot.PauseReason is not null;
+                    if (!resuming)
+                    {
+                        return snapshot;
+                    }
+
+                    var now = _time.GetUtcNow();
                     return snapshot with
                     {
-                        Status = resuming ? SessionStatus.Created : snapshot.Status,
-                        PauseReason = resuming ? null : snapshot.PauseReason,
+                        Status = SessionStatus.Created,
+                        PauseReason = null,
                         RuntimeEpoch = snapshot.RuntimeEpoch + 1,
                         LastUserActivityAt = now,
                         UpdatedAt = now

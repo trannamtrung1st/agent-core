@@ -21,6 +21,8 @@ public static class RuntimeTelemetry
     private static int _timelineLimit = 64;
     private static bool _contentLogging;
 
+    public static bool IncludesConversationContent => _contentLogging;
+
     public static void Configure(int timelineCapacity, bool contentLogging)
     {
         _timelineLimit = Math.Clamp(timelineCapacity, 1, 1000);
@@ -41,8 +43,26 @@ public static class RuntimeTelemetry
 
             return list;
         });
-        var includeDetail = _contentLogging || stage is "initiative_eval";
-        Timeline.Enqueue(new TimelineEvent(stage, milliseconds, includeDetail ? detail : null, DateTimeOffset.UtcNow));
+        Timeline.Enqueue(new TimelineEvent(stage, milliseconds, _contentLogging ? detail : null, DateTimeOffset.UtcNow));
+        while (Timeline.Count > _timelineLimit)
+        {
+            Timeline.TryDequeue(out _);
+        }
+    }
+
+    public static void RecordDiagnostic(string stage, double milliseconds, string? detail)
+    {
+        StageMs.Record(milliseconds, new KeyValuePair<string, object?>("stage", stage));
+        Samples.AddOrUpdate(stage, _ => [milliseconds], (_, list) =>
+        {
+            lock (list)
+            {
+                list.Add(milliseconds);
+            }
+
+            return list;
+        });
+        Timeline.Enqueue(new TimelineEvent(stage, milliseconds, detail, DateTimeOffset.UtcNow));
         while (Timeline.Count > _timelineLimit)
         {
             Timeline.TryDequeue(out _);

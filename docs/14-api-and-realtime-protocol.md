@@ -208,7 +208,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | GET /api/v2/sessions | Catalog, `UpdatedAt` descending, stable cursor pagination; includes labeled Ended rows |
 | POST /api/v2/sessions | Create with chosen `agentId`/`agentVersion`; pin; workspace-ownership record |
 | POST /api/v2/sessions/{id}/rename \| archive \| unarchive | Persist catalog mutation in the runtime revision stream |
-| POST /api/v2/sessions/{id}/reopen | Clears durable pause, bumps runtime epoch, and reconciles a detached in-memory runtime when present; rejected with `SessionInUse` while a hub connection still holds the lease; not the same as `session.attach` |
+| POST /api/v2/sessions/{id}/reopen | When `paused`, clears pause, bumps `runtimeEpoch`, and refreshes `LastUserActivityAt`; reconciles a detached in-memory runtime when present. No-op on `created` (epoch unchanged). Rejected with `SessionInUse` when status is `attached` or a hub lease is active. Not the same as `session.attach` |
 | POST /api/v2/sessions/{id}/deactivate | Runtime deactivation: cancel live output, persist Paused, increment RuntimeEpoch; not archive and not v1 end; idempotent |
 | GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
 | GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query, default `/`); owner capability |

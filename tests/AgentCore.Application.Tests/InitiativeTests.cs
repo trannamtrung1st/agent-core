@@ -805,6 +805,52 @@ public sealed class InitiativeTests
     }
 
     [Fact]
+    public async Task Explicit_reopen_resets_inactivity_after_pause()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = SampleDefinitions.Examiner with
+        {
+            InitiativePolicy = new InitiativePolicy(
+                true,
+                8000,
+                5000,
+                1,
+                ["longSilence"],
+                MaxInactivityMs: 30_000)
+        };
+        var model = new ScriptedLanguageModel();
+        var brain = RecordingDefaultBrain(model);
+        await using var runtime = Create(output, model, time, brain, definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        time.Advance(TimeSpan.FromSeconds(35));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal("inactivity", runtime.Snapshot.PauseReason);
+
+        var now = time.GetUtcNow();
+        var reopened = runtime.Snapshot with
+        {
+            Status = SessionStatus.Created,
+            PauseReason = null,
+            LastUserActivityAt = now,
+            RuntimeEpoch = runtime.Snapshot.RuntimeEpoch + 1,
+            UpdatedAt = now
+        };
+        await runtime.ApplyReopenedSnapshotAsync(reopened);
+        await runtime.AttachAsync();
+        time.Advance(TimeSpan.FromSeconds(20));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+    }
+
+    [Fact]
     public async Task Examiner_initiative_waits_after_question_then_speaks_once()
     {
         var time = Clock();

@@ -292,8 +292,10 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
                 if (live.Runtime.Snapshot.Status == SessionStatus.Paused)
                 {
-                    var reopened = await _sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false);
-                    await live.Runtime.ApplyReopenedSnapshotAsync(reopened, cancellationToken).ConfigureAwait(false);
+                    var resumed = snapshot.Status == SessionStatus.Paused
+                        ? await _sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false)
+                        : snapshot;
+                    await live.Runtime.ApplyReopenedSnapshotAsync(resumed, cancellationToken).ConfigureAwait(false);
                 }
 
                 var attached = await live.Runtime.AttachAsync(cancellationToken).ConfigureAwait(false);
