@@ -83,6 +83,25 @@ test("queued U2 and U3 do not interrupt R1 and produce one next reply", async ({
   await expect(page.locator(".chat-message-assistant")).toHaveCount(2);
 });
 
+test("queued attachment stays bound to the live send", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await page.locator("input.attach-input").setInputFiles({
+    name: "queued.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("queued file")
+  });
+  await expect(page.getByRole("button", { name: "Remove queued.txt" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible();
+});
+
 test("manual pause via deactivate shows Resume and keeps history", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("Hello");

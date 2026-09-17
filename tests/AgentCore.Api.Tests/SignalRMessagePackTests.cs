@@ -158,8 +158,12 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("user-text-unknown-behavior")]
     [InlineData("user-text-behavior-retry")]
     [InlineData("user-text-queue")]
+    [InlineData("user-text-interrupt-live")]
+    [InlineData("user-text-omit-interrupt-live")]
+    [InlineData("user-text-interrupt-after-queue")]
     [InlineData("cancel-response-unknown")]
     [InlineData("cancel-response-idempotent")]
     [InlineData("cancel-response-stale")]
+    [InlineData("cancel-response-active")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

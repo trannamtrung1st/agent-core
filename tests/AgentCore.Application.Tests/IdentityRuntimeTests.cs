@@ -22,11 +22,16 @@ public sealed class RecordingLanguageModel : ILanguageModel
 
     public ModelRequest? LastRequest { get; private set; }
 
+    public IReadOnlyList<ModelRequest> Requests => _requests;
+
+    private readonly List<ModelRequest> _requests = [];
+
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         LastRequest = request;
+        _requests.Add(request);
         await foreach (var item in _inner.GenerateAsync(request, cancellationToken))
         {
             yield return item;

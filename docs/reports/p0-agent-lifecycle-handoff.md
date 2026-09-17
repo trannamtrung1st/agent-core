@@ -23,9 +23,9 @@ HEAD `f118878` (later P0 commits built on that). Live primitives already include
 | 07 | item-981a46e4872c Send/Stop | `2d24763` |
 | 08 | item-aeb896d504f7 envelope | `5d1b633` |
 | 09 | item-67061d5a4dfc P0-F | `f99d723` (handoff then recorded combined sln FAIL) |
-| 10 | item-67061d5a4dfc P0-F sln-gate repair | local correction commit in this revision |
+| 10 | item-67061d5a4dfc P0-F sln-gate repair | `65fc8fa6470380a96576358270c79a5c425bc0ef` |
 
-Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batch 10 is the review repair that makes `dotnet test AgentCore.sln` pass.
+Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batch 10 made `dotnet test AgentCore.sln` pass. The following local commit that adds Kestrel interrupt/cancel wire cases and queued-attachment coverage is recorded in P0-F evidence after it is created.
 
 ## P0-AC01–20
 
@@ -36,20 +36,20 @@ Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batc
 | P0-AC03 | met | Silent cap / inactivity pause, not end | `SessionPauseSemanticsTests`; P0-B |
 | P0-AC04 | met | Pause ≠ end in runtime, store, API, UI | P0-B; Playwright Resume |
 | P0-AC05 | met | First-party Send `behavior=queue` while live | `realtime.race.test.ts`; Playwright hold-the-line; JS `user-text-queue` |
-| P0-AC06 | met | Omitted behavior = interrupt | `UserTextQueueTests.Omitted_behavior_interrupts_like_interrupt`; CommandAdmission |
-| P0-AC07 | met | `CancelResponse` / Stop, no user entry | `UserTextQueueTests.CancelResponse_*`; Composer Stop |
+| P0-AC06 | met | Omitted behavior = interrupt | JS `user-text-omit-interrupt-live`; `UserTextQueueTests.Omitted_behavior_interrupts_like_interrupt` |
+| P0-AC07 | met | `CancelResponse` / Stop, no user entry | JS `cancel-response-active` plus idempotent/stale; `UserTextQueueTests.CancelResponse_*`; Composer Stop |
 | P0-AC08 | met | Voice barge-in still interruptive | `voice-interrupt.spec.ts` (Stop then text); existing barge-in Application tests |
 | P0-AC09 | met | U2+U3 one next assistant | `Two_queued_users_become_one_next_response`; Playwright `queued U2 and U3` count 2 assistants after Stop |
 | P0-AC10 | met | Persist before ACK | User-text persist-then-ACK; `SqliteHostRecoveryTests` killed-before-persist |
 | P0-AC11 | met | Restart/reconnect no dup | `Attach_recovers_trailing_suffix`; `Recover_keeps_trailing_queued_users`; Playwright session path refresh |
 | P0-AC12 | met | History suffix, no second queue store | `TrailingUserSuffix`; no `PendingUserEntryIds` |
-| P0-AC13 | met | Attachments bound to queued user entries | `Sqlite_reopen_from_paused_runs_attachments_read_tool_loop`; Playwright notes.txt bind |
+| P0-AC13 | met | Attachments bound to queued user entries | `QueuedAttachmentRuntimeTests` (attachment-only, text+file during R1, two queued files, SQLite restart); Playwright `queued attachment stays bound to the live send` |
 | P0-AC14 | met | Pending user over initiative/pause | `Pending_suffix_blocks_long_silence_inactivity_pause_and_environment` |
 | P0-AC15 | met | `ResponseEnvelope` canonical | P0-E; RichEnvelope tests |
 | P0-AC16 | met | Thinking live-only | `activityState`; Playwright markdown reload without Thinking |
 | P0-AC17 | met | Reconnect/history/a11y | P0-E Conversation/ChatMessage tests; markdown reopen E2E |
-| P0-AC18 | met | See commands | Combined `dotnet test AgentCore.sln --nologo`: Domain 22, Application 264, Infrastructure 78 passed / 9 skip, Api 72. Live OpenAI/OpenRouter and Docker sandbox skipped as designed. |
-| P0-AC19 | met | Playwright | `CI=1 pnpm exec playwright test`: **15 passed** (isolated ports/servers). Pause assertion uses `getByTestId("connection")` text `Paused`. |
+| P0-AC18 | met | See commands | Combined `dotnet test AgentCore.sln --nologo`: Domain 22, Application 268, Infrastructure 78 passed / 9 skip, Api 76. Live OpenAI/OpenRouter and Docker sandbox skipped as designed. |
+| P0-AC19 | met | Playwright | `CI=1 pnpm exec playwright test`: **16 passed** (isolated ports/servers). |
 | P0-AC20 | met | docs 16/18 table; TODO P0 `[x]`; this handoff | Canonical P0 observed table in `docs/18-implementation-plan.md` |
 
 ## Section 17 mapping
@@ -66,25 +66,25 @@ Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batc
 | 2 | queue no supersede | `Queue_during_live_response_persists_without_superseding` |
 | 3 | two queued → one response | `Two_queued_users_become_one_next_response_and_stay_distinct` |
 | 4 | distinct durable users | same |
-| 5 | interrupt supersedes | `Omitted_behavior_interrupts_like_interrupt`; `Interrupt_after_queued_user_keeps_queue_earlier_in_history` |
-| 6 | queue earlier than interrupt | `Interrupt_after_queued_user_keeps_queue_earlier_in_history` |
+| 5 | interrupt supersedes | JS `user-text-interrupt-live`; runtime `Omitted_behavior_interrupts_like_interrupt` |
+| 6 | queue earlier than interrupt | JS `user-text-interrupt-after-queue`; runtime `Interrupt_after_queued_user_keeps_queue_earlier_in_history` |
 | 7 | after explicit cancel | `Queued_users_start_after_explicit_cancel` |
 | 8 | healthy failure advances suffix | `Healthy_response_failure_still_advances_the_pending_suffix_once` |
 | 9 | initiative not ahead of pending | `Pending_suffix_blocks_long_silence_inactivity_pause_and_environment` |
 | 10 | no auto-pause with pending | same |
-| 11 | queue + attachments | `Sqlite_reopen_from_paused_runs_attachments_read_tool_loop` |
-| 12 | stale cancel | `CancelResponse_is_idempotent_stale_and_unknown` |
+| 11 | queue + attachments | `QueuedAttachmentRuntimeTests` (queued attachment-only, text+attachment during R1, two distinct files, SQLite restart) |
+| 12 | stale cancel | JS `cancel-response-stale`; runtime `CancelResponse_is_idempotent_stale_and_unknown` |
 | 13–16 | nextWaitMs / clamp / null / deactivate | InitiativePlan/Initiative tests (P0-A) |
 
 Focused Application filter including those types: **48 passed**.
 
 ### 17.3 API/realtime
 
-`user.text` queue JS scenario `user-text-queue` (`SignalRMessagePackTests` InlineData). Interrupt / omit / unknown: `CommandAdmissionTests.Unknown_user_text_behavior_is_rejected`, omitted interrupt in Application. Idempotency and cancel: CommandAdmission + UserTextQueueTests. Persist-before-ACK: SqliteHostRecovery. Pause/reopen: lifecycle tests. Api filter MessagePack+SqliteHost+CommandAdmission: **39 passed**.
+Loopback Kestrel + `tests/realtime-js/client.mjs` (`SignalRMessagePackTests`): `user-text-queue`, `user-text-interrupt-live`, `user-text-omit-interrupt-live`, `user-text-interrupt-after-queue`, `user-text-unknown-behavior`, `user-text-behavior-retry`, `cancel-response-active`, `cancel-response-idempotent`, `cancel-response-stale`, `cancel-response-unknown`. Application `UserTextQueueTests` remain runtime evidence only. Persist-before-ACK: SqliteHostRecovery. Pause/reopen: lifecycle tests. `SignalRMessagePackTests` **33 passed**.
 
 ### 17.4 SQLite
 
-`Recover_keeps_trailing_queued_users_after_interrupting_streaming` **passed**. Attachment-bound reopen tool loop **passed** (wait recovered suffix then Count). Per-file `SqliteConnection.ClearPool` replaces `ClearAllPools` so parallel suites do not drop other databases.
+`Recover_keeps_trailing_queued_users_after_interrupting_streaming` **passed**. `QueuedAttachmentRuntimeTests.Sqlite_restart_after_persisted_queued_attachment_supplies_bindings` **passed**. Per-file `SqliteConnection.ClearPool` replaces `ClearAllPools` so parallel suites do not drop other databases.
 
 ### 17.5 Web unit
 
@@ -99,8 +99,9 @@ Vitest **174 passed** (`pnpm run test --run`). Pre-existing NaN-height / act std
 | Reload | no dup, history remains | `session path survives refresh` passed |
 | Pause/Resume | Paused + Resume | deactivate POST + `connection` = Paused; Resume passed |
 | Voice barge-in | capture continues | `voice-interrupt.spec.ts` passed |
+| Queue attachment while R1 live | chip bound to queued user send | `queued attachment stays bound to the live send` passed |
 
-Full suite **15 passed** after pause locator fix (strict-mode `/paused/i`).
+Full suite **16 passed** after adding the queued-attachment case.
 
 ## Section 15 telemetry
 
@@ -110,13 +111,13 @@ Full suite **15 passed** after pause locator fix (strict-mode `/paused/i`).
 
 | Command | Expected | Observed |
 | --- | --- | --- |
-| `dotnet test AgentCore.sln --nologo` | all pass | **pass** Domain 22, Application 264, Infrastructure 78 + 9 skip, Api 72 |
-| Application csproj | pass | **264 passed** (standalone) |
-| Domain / Infrastructure / Api sequential | pass | 22 / 78+9 skip / 72 |
+| `dotnet test AgentCore.sln --nologo` | all pass | **pass** Domain 22, Application 268, Infrastructure 78 + 9 skip, Api 76 |
+| Application csproj | pass | **268 passed** (standalone) |
+| Domain / Infrastructure / Api sequential | pass | 22 / 78+9 skip / 76 |
 | `cd web && pnpm run test --run` | pass | 174 passed |
 | `pnpm exec tsc --noEmit` | pass | via build |
 | `pnpm run build` | pass | pass |
-| `CI=1 pnpm exec playwright test` | pass | 15 passed |
+| `CI=1 pnpm exec playwright test` | pass | 16 passed |
 
 ## Deviations / not claimed
 

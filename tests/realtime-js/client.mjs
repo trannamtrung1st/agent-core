@@ -793,6 +793,115 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "user-text-interrupt-live": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Please hold the line" }, { attachmentId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const started = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const interrupt = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "Wait, stop", behavior: "interrupt" }, { attachmentId })
+      );
+      if (!interrupt.accepted) {
+        throw new Error(JSON.stringify(interrupt));
+      }
+      const interrupted = await waitForEvent(
+        (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
+      );
+      if (interrupted.payload?.reason !== "newText") {
+        throw new Error(JSON.stringify(interrupted));
+      }
+      await connection.stop();
+      break;
+    }
+    case "user-text-omit-interrupt-live": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Please hold the line" }, { attachmentId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const started = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const omitted = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "Wait, stop" }, { attachmentId })
+      );
+      if (!omitted.accepted) {
+        throw new Error(JSON.stringify(omitted));
+      }
+      const interrupted = await waitForEvent(
+        (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
+      );
+      if (interrupted.payload?.reason !== "newText") {
+        throw new Error(JSON.stringify(interrupted));
+      }
+      await connection.stop();
+      break;
+    }
+    case "user-text-interrupt-after-queue": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Please hold the line" }, { attachmentId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const started = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const queued = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "queued later", behavior: "queue" }, { attachmentId })
+      );
+      if (!queued.accepted) {
+        throw new Error(JSON.stringify(queued));
+      }
+      const interrupt = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 3, "user.text", { text: "take over", behavior: "interrupt" }, { attachmentId })
+      );
+      if (!interrupt.accepted) {
+        throw new Error(JSON.stringify(interrupt));
+      }
+      await waitForEvent(
+        (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
+      );
+      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`, {
+        headers: await ownerHeaders()
+      });
+      if (!page.ok) {
+        throw new Error(`history ${page.status}`);
+      }
+      const history = await page.json();
+      const users = history.items.filter((item) => item.role === "user").map((item) => item.text);
+      if (
+        users[0] !== "Please hold the line" ||
+        users[1] !== "queued later" ||
+        users[2] !== "take over"
+      ) {
+        throw new Error(`queue order lost: ${JSON.stringify(users)}`);
+      }
+      await connection.stop();
+      break;
+    }
     case "cancel-response-unknown": {
       const session = await createSession();
       const connection = await connect();
@@ -890,6 +999,33 @@ async function run() {
       if (stale.accepted && secondTerminal.type === "agent.response.interrupted") {
         throw new Error("stale cancel of R1 interrupted R2");
       }
+      await connection.stop();
+      break;
+    }
+    case "cancel-response-active": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Please hold the line" }, { attachmentId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      const started = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const cancel = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 2, "agent.response.cancel", {}, { attachmentId, responseId: started.responseId })
+      );
+      if (!cancel.accepted) {
+        throw new Error(JSON.stringify(cancel));
+      }
+      await waitForEvent(
+        (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
+      );
       await connection.stop();
       break;
     }
