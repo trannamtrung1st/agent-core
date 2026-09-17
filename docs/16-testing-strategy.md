@@ -87,7 +87,7 @@ WebApplicationFactory covers HTTP and in-process integration; additionally start
 
 ## Frontend and end-to-end
 
-Vitest: Zustand reducers, supersession guards, sample-offset accounting, segmentation/resampling math and queue bounds. React Testing Library: user interactions/statuses, keyboard access, safe errors, retained drafts. Playwright: synthetic text, attachment picker bind, voice fixture, stop/late audio, mute, disconnect/reconnect and history. Use deterministic scenario fixtures and fake media devices; test actual AudioWorklet execution where supported. Assertions observe sample counters and flush acknowledgements, not unreliable “did sound play” timing guesses.
+Vitest: Zustand reducers, supersession guards, sample-offset accounting, segmentation/resampling math and queue bounds. React Testing Library: user interactions/statuses, keyboard access, safe errors, retained drafts. Playwright: synthetic text, queued first-party Send and Stop (hold-the-line), attachment picker bind, voice fixture, stop/late audio, mute, disconnect/reconnect and history. Voice barge-in remains interruptive. Use deterministic scenario fixtures and fake media devices; test actual AudioWorklet execution where supported. Assertions observe sample counters and flush acknowledgements, not unreliable “did sound play” timing guesses.
 
 Opt-in real-provider smoke tests require explicit operator credentials, an explicit opt-in flag, and small bounded requests. They are excluded from default local `dotnet test` / pnpm / Playwright loops. Manual headset/speaker demos measure subjective turn-taking, echo and provider latency and may be deferred without `OPENAI_API_KEY`. Unit gates remain deterministic and do not require real-model phrasing to match.
 

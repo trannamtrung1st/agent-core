@@ -63,7 +63,7 @@ Ant Design v6 owns generic controls (Layout, Select, Button, Input, Empty, Spin,
 
 ## Personality
 
-Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Send, Voice, Cancel voice, Mute, Unmute, End, Attach).
+Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Send, Stop, Voice, Cancel voice, Mute, Unmute, End, Attach, Resume).
 
 ## Tone
 

@@ -11,7 +11,7 @@ import { capture } from "../audio/capture";
 import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
 import { listSessionMessages } from "./api";
-import { realtimeTestHooks, composerSendEnabled, requestVoice, sendDraft, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
+import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, requestVoice, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
 
 const hooks = realtimeTestHooks!;
 
@@ -385,6 +385,85 @@ describe("realtime race handling", () => {
     await Promise.all([first, second]);
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().entries).toHaveLength(1);
+  });
+
+  it("sends first-party text with behavior queue while a response is live", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      liveResponseId: "r1",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    expect(composerSendEnabled()).toBe(true);
+    expect(composerStopEnabled()).toBe(true);
+    await sendDraft();
+    expect(invoke).toHaveBeenCalledWith(
+      "SendText",
+      expect.objectContaining({
+        type: "user.text",
+        payload: expect.objectContaining({ text: "Hello", behavior: "queue" })
+      })
+    );
+  });
+
+  it("cancels the rendered responseId and ignores stale completion after a newer live response", async () => {
+    let resolveAck: (value: { accepted: boolean; error: { code: string; message: string } }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(
+      () => new Promise((resolve) => {
+        resolveAck = resolve;
+      })
+    );
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      draft: "queued later",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const stopping = cancelRenderedResponse();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenCalledWith(
+      "CancelResponse",
+      expect.objectContaining({
+        type: "agent.response.cancel",
+        responseId: "r1",
+        payload: {}
+      })
+    );
+    useSessionStore.setState({
+      liveResponseId: "r2",
+      entries: [
+        {
+          entryId: "a2",
+          sequence: 2,
+          sourceEventId: null,
+          role: "assistant",
+          text: "newer",
+          responseId: "r2",
+          status: "streaming",
+          deliveryMode: "text",
+          heardTextEndExclusive: 0,
+          receivedTextEndExclusive: 5,
+          createdAt: "2026-09-18T00:00:00.000Z"
+        }
+      ]
+    });
+    resolveAck({ accepted: false, error: { code: "StaleCommand", message: "A newer response is active." } });
+    await stopping;
+    expect(useSessionStore.getState().liveResponseId).toBe("r2");
+    expect(useSessionStore.getState().entries[0]?.text).toBe("newer");
+    expect(useSessionStore.getState().draft).toBe("queued later");
+    expect(useSessionStore.getState().error).toBeNull();
   });
 
   it("clears errorFatal when mute is rejected", async () => {

@@ -3,7 +3,7 @@ import { ConfigProvider } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
 import { emptySession, useSessionStore } from "../../state/sessionStore";
-import { bootstrap, sendDraft, resumePausedSession } from "../../services/realtime";
+import { bootstrap, sendDraft, cancelRenderedResponse, resumePausedSession } from "../../services/realtime";
 import { ChatApp } from "./ChatApp";
 
 function stubMatchMedia(matches: (query: string) => boolean) {
@@ -44,6 +44,7 @@ vi.mock("../../services/realtime", async (importOriginal) => {
     bootstrap: vi.fn().mockResolvedValue(""),
     reportCommittedEntries: vi.fn(),
     sendDraft: vi.fn().mockResolvedValue(undefined),
+    cancelRenderedResponse: vi.fn().mockResolvedValue(undefined),
     resumePausedSession: vi.fn().mockResolvedValue(true)
   };
 });
@@ -223,6 +224,10 @@ describe("ChatApp accessibility", () => {
       rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Thinking…");
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(cancelRenderedResponse).toHaveBeenCalled();
 
     await act(async () => {
       useSessionStore.setState({ liveResponseId: null, outputState: "agentSpeaking" });

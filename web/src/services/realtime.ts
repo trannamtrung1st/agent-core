@@ -49,6 +49,7 @@ let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
 let voiceEpoch = 0;
 let sendRequest: Promise<void> | null = null;
+let cancelRequest: Promise<void> | null = null;
 let startRequest: Promise<boolean> | null = null;
 
 function uuid(): string {
@@ -898,6 +899,8 @@ export const realtimeTestHooks =
           attachLoop += 1;
           reconnectBudgetStarted = 0;
           pendingUserText = null;
+          sendRequest = null;
+          cancelRequest = null;
           voiceEpoch = 0;
           stoppedResponses.clear();
           flushing = false;
@@ -1669,7 +1672,7 @@ async function syncVoiceStage(): Promise<void> {
 
 export function composerSendEnabled(): boolean {
   const snapshot = useSessionStore.getState();
-  if (isReadonlySession(snapshot)) {
+  if (isReadonlySession(snapshot) || snapshot.status === "paused") {
     return false;
   }
 
@@ -1679,6 +1682,16 @@ export function composerSendEnabled(): boolean {
   }
 
   return composerCanSend(snapshot.draft, snapshot.pendingAttachments, snapshot.connection);
+}
+
+export function composerStopEnabled(): boolean {
+  const snapshot = useSessionStore.getState();
+  return (
+    !isReadonlySession(snapshot)
+    && snapshot.status !== "paused"
+    && snapshot.connection === "ready"
+    && snapshot.liveResponseId != null
+  );
 }
 
 export async function queueComposerFiles(fileList: File[]): Promise<void> {
@@ -1950,7 +1963,7 @@ export async function sendDraft(): Promise<void> {
       const ack = await invoke(
         "SendText",
         "user.text",
-        { text, attachmentIds },
+        { text, attachmentIds, behavior: "queue" },
         commandSequence,
         null,
         eventId
@@ -1989,6 +2002,55 @@ export async function sendDraft(): Promise<void> {
     await sendRequest;
   } finally {
     sendRequest = null;
+  }
+}
+
+export async function cancelRenderedResponse(): Promise<void> {
+  if (cancelRequest) {
+    return cancelRequest;
+  }
+
+  const snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot) || snapshot.connection !== "ready" || snapshot.status === "paused") {
+    return;
+  }
+
+  const responseId = snapshot.liveResponseId;
+  if (!responseId) {
+    return;
+  }
+
+  commandSequence += 1;
+  const sequence = commandSequence;
+  cancelRequest = (async () => {
+    try {
+      const ack = await invoke("CancelResponse", "agent.response.cancel", {}, sequence, responseId);
+      const latest = useSessionStore.getState();
+      if (ack?.accepted || latest.liveResponseId !== responseId || ack?.error?.code === "StaleCommand") {
+        return;
+      }
+
+      useSessionStore.setState({
+        error: ack?.error?.message ?? "Stop was not accepted.",
+        errorFatal: false
+      });
+    } catch (error) {
+      const latest = useSessionStore.getState();
+      if (latest.liveResponseId !== responseId) {
+        return;
+      }
+
+      useSessionStore.setState({
+        error: error instanceof Error ? error.message : "Stop was not accepted.",
+        errorFatal: false
+      });
+    }
+  })();
+
+  try {
+    await cancelRequest;
+  } finally {
+    cancelRequest = null;
   }
 }
 

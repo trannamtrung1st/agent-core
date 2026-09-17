@@ -46,6 +46,25 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
 });
 
+test("queued send and Stop keep history and the composer", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel("Message").fill("Hello");
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Please hold the line")).toBeVisible();
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByLabel("Message")).toBeFocused();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Please hold the line")).toBeVisible();
+  await expect(page.getByLabel("Message")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+  await expect(page).toHaveURL(/\/c\/[0-9a-f-]{36}$/i);
+});
+
 test("markdown response renders and survives reopen", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("Show markdown");

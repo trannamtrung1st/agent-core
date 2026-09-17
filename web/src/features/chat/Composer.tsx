@@ -4,8 +4,10 @@ import {
   AudioOutlined,
   AudioMutedOutlined,
   PaperClipOutlined,
-  SendOutlined
+  SendOutlined,
+  StopOutlined
 } from "@ant-design/icons";
+import type { InputRef } from "antd";
 import {
   queueComposerFiles,
   removeComposerFile,
@@ -17,6 +19,7 @@ import { PendingAttachmentView } from "./AttachmentPreview";
 export function Composer({
   draft,
   canSend,
+  canStop,
   ready,
   error,
   pendingAttachments,
@@ -28,6 +31,7 @@ export function Composer({
   placeholder,
   onDraftChange,
   onSend,
+  onStop,
   onVoice,
   onCancelVoice,
   onMute,
@@ -35,6 +39,7 @@ export function Composer({
 }: {
   draft: string;
   canSend: boolean;
+  canStop: boolean;
   ready: boolean;
   error: string | null;
   pendingAttachments: PendingAttachment[];
@@ -46,12 +51,18 @@ export function Composer({
   placeholder: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
+  onStop: () => void;
   onVoice: () => void;
   onCancelVoice: () => void;
   onMute: (muted: boolean) => void;
   onRetry: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<InputRef>(null);
+
+  function focusMessage() {
+    messageRef.current?.focus();
+  }
 
   function takeFiles(list: FileList | File[] | null) {
     if (!list || !ready) {
@@ -105,6 +116,7 @@ export function Composer({
           </ul>
         ) : null}
         <Input.TextArea
+          ref={messageRef}
           className="message-field"
           value={draft}
           onChange={(event) => onDraftChange(event.target.value)}
@@ -167,6 +179,20 @@ export function Composer({
               <Button aria-label="Retry" onClick={onRetry}>
                 Retry
               </Button>
+            ) : null}
+            {canStop ? (
+              <Tooltip title="Stop">
+                <Button
+                  htmlType="button"
+                  className="composer-stop"
+                  aria-label="Stop"
+                  icon={<StopOutlined />}
+                  onClick={() => {
+                    onStop();
+                    focusMessage();
+                  }}
+                />
+              </Tooltip>
             ) : null}
             <Tooltip title="Send">
               <Button

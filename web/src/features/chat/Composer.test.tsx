@@ -13,6 +13,7 @@ function emptyComposerProps() {
   return {
     draft: "",
     canSend: false,
+    canStop: false,
     ready: true,
     error: null,
     pendingAttachments: [],
@@ -24,6 +25,7 @@ function emptyComposerProps() {
     placeholder: "Message Agent Core...",
     onDraftChange: vi.fn(),
     onSend: vi.fn(),
+    onStop: vi.fn(),
     onVoice: vi.fn(),
     onCancelVoice: vi.fn(),
     onMute: vi.fn(),
@@ -111,5 +113,19 @@ describe("Composer attachment staging", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove notes.txt" }));
     expect(retryComposerFile).toHaveBeenCalledWith("l1");
     expect(removeComposerFile).toHaveBeenCalledWith("l1");
+  });
+
+  it("keeps Send available and shows Stop without labeling Send as Interrupt", () => {
+    const onStop = vi.fn();
+    render(<Composer {...emptyComposerProps()} canSend canStop onStop={onStop} draft="Next" />);
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /interrupt/i })).not.toBeInTheDocument();
+    const stop = screen.getByRole("button", { name: "Stop" });
+    expect(stop).toBeEnabled();
+    stop.focus();
+    expect(stop).toHaveFocus();
+    fireEvent.click(stop);
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Message")).toHaveFocus();
   });
 });

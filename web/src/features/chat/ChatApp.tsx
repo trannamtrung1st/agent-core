@@ -9,6 +9,7 @@ import {
   clearRouteNotice,
   navigateFromBrowserHistory,
   composerSendEnabled,
+  composerStopEnabled,
   hangUp,
   openCatalogSession,
   reportCommittedEntries,
@@ -17,6 +18,7 @@ import {
   resumePausedSession,
   selectAgent,
   sendDraft,
+  cancelRenderedResponse,
   setDraft,
   setMuted
 } from "../../services/realtime";
@@ -83,6 +85,7 @@ export function ChatApp() {
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
   const voiceLive = state.mode === "voice" && state.captureLive;
   const canSend = composerSendEnabled();
+  const canStop = composerStopEnabled();
   const inSession = state.sessionId != null;
   const readonly = isReadonlySession(state);
   const selectedAgent = state.agents.find((agent) => agent.id === state.selectedAgentId) ?? state.agents[0];
@@ -251,7 +254,21 @@ export function ChatApp() {
                       <Typography.Text type="secondary">
                         {pausedSessionMessage(state.pauseReason)}
                       </Typography.Text>
-                      <Button type="primary" htmlType="button" onClick={() => void resumePausedSession()}>
+                      <Button
+                        type="primary"
+                        htmlType="button"
+                        aria-label="Resume"
+                        onClick={() => {
+                          void resumePausedSession().then((ok) => {
+                            if (!ok) {
+                              return;
+                            }
+                            window.requestAnimationFrame(() => {
+                              document.querySelector<HTMLTextAreaElement>('[aria-label="Message"]')?.focus();
+                            });
+                          });
+                        }}
+                      >
                         Resume
                       </Button>
                     </Flex>
@@ -259,6 +276,7 @@ export function ChatApp() {
                     <Composer
                       draft={state.draft}
                       canSend={canSend}
+                      canStop={canStop}
                       ready={composerReady}
                       error={inSession ? state.error : null}
                       pendingAttachments={state.pendingAttachments}
@@ -269,6 +287,7 @@ export function ChatApp() {
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}
                       onSend={() => void sendDraft()}
+                      onStop={() => void cancelRenderedResponse()}
                       onVoice={() => void requestVoice()}
                       onCancelVoice={() => void cancelVoice()}
                       onMute={(muted) => void setMuted(muted)}
