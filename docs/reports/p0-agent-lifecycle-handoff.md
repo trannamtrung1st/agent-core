@@ -24,14 +24,15 @@ HEAD `f118878` (later P0 commits built on that). Live primitives already include
 | 08 | item-aeb896d504f7 envelope | `5d1b633` |
 | 09 | item-67061d5a4dfc P0-F | `f99d723` (handoff then recorded combined sln FAIL) |
 | 10 | item-67061d5a4dfc P0-F sln-gate repair | `65fc8fa6470380a96576358270c79a5c425bc0ef` |
+| 11 | Kestrel interrupt/cancel + queued-attachment repair | `e7f3c292332333addf26f7c293a4c0407f942989` |
 
-Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batch 10 made `dotnet test AgentCore.sln` pass. The following local commit that adds Kestrel interrupt/cancel wire cases and queued-attachment coverage is recorded in P0-F evidence after it is created.
+Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batch 10 made `dotnet test AgentCore.sln` pass. Batch 11 delivered the loopback-Kestrel interrupt/cancel-active scenarios and queued-attachment matrix.
 
 ## P0-AC01–20
 
 | ID | Result | Code / tests | Observed this item |
 | --- | --- | --- | --- |
-| P0-AC01 | met | InitiativePlan clamp; `InitiativePlanTests`/`InitiativeTests`; meter `initiative.next_wait_ms` tags `source\|clamp\|mode` | Covered by P0-A commit; focused Application filter 48 passed including initiative/pause/queue |
+| P0-AC01 | met | InitiativePlan clamp; `InitiativePlanTests`/`InitiativeTests`; meter `initiative.next_wait_ms` tags `source\|clamp\|mode` | Covered by P0-A commit; `InitiativePlanTests\|InitiativeTests\|SessionPauseSemanticsTests` **64 passed** |
 | P0-AC02 | met | Evaluator prompt no longer ascribes wait to deactivate | P0-A |
 | P0-AC03 | met | Silent cap / inactivity pause, not end | `SessionPauseSemanticsTests`; P0-B |
 | P0-AC04 | met | Pause ≠ end in runtime, store, API, UI | P0-B; Playwright Resume |
@@ -76,7 +77,7 @@ Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batc
 | 12 | stale cancel | JS `cancel-response-stale`; runtime `CancelResponse_is_idempotent_stale_and_unknown` |
 | 13–16 | nextWaitMs / clamp / null / deactivate | InitiativePlan/Initiative tests (P0-A) |
 
-Focused Application filter including those types: **48 passed**.
+Focused Application filter including those types (`UserTextQueueTests|QueuedAttachmentRuntimeTests|InitiativePlanTests|InitiativeTests|SyntheticTextSliceTests`): **66 passed**.
 
 ### 17.3 API/realtime
 
