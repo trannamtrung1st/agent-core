@@ -69,7 +69,7 @@ public sealed partial class SessionRuntime
 
     private async Task DrainEnvironmentAsync(EventContext context, CancellationToken cancellationToken)
     {
-        while (_environmentQueue.Count > 0 && IsOutputQuiet())
+        while (_environmentQueue.Count > 0 && IsOutputQuiet() && !HasPendingUserBatch())
         {
             var queued = _environmentQueue.Dequeue();
             if (IsExpired(queued) || !HasTrigger(TriggerName(queued.Kind)))
@@ -321,6 +321,7 @@ public sealed partial class SessionRuntime
         var policy = _snapshot.Definition.InitiativePolicy;
         return !_initiativeHeld
             && !_pendingUploadHold
+            && !HasPendingUserBatch()
             && policy.ConsecutiveCap > 0
             && _consecutiveProactiveSpeaks < policy.ConsecutiveCap
             && _proactiveSpeaksThisSilence < policy.MaxPerSilencePeriod;
@@ -332,6 +333,7 @@ public sealed partial class SessionRuntime
 
     private bool NeedsTerminalDeactivate() =>
         !_deactivated
+        && !HasPendingUserBatch()
         && (_silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
             || InactivityExceeded());
 
@@ -385,6 +387,7 @@ public sealed partial class SessionRuntime
         && IsOutputQuiet()
         && !_initiativeHeld
         && !_pendingUploadHold
+        && !HasPendingUserBatch()
         && _input is InputActivity.Idle or InputActivity.Listening
         && RemainingCooldown() == TimeSpan.Zero;
 
@@ -400,6 +403,7 @@ public sealed partial class SessionRuntime
         && HasTrigger("longSilence")
         && !_initiativeHeld
         && !_pendingUploadHold
+        && !HasPendingUserBatch()
         && (_silentEvaluations < _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
             || NeedsTerminalDeactivate());
 
@@ -426,7 +430,8 @@ public sealed partial class SessionRuntime
             TriggerKind.LongSilence => HasTrigger("longSilence")
                 && _snapshot.Definition.InitiativePolicy.Enabled
                 && !_initiativeHeld
-                && !_pendingUploadHold,
+                && !_pendingUploadHold
+                && !HasPendingUserBatch(),
             TriggerKind.EnvironmentUpdate => HasTrigger("environmentUpdate") && !InitiativeExpired(),
             TriggerKind.UnfinishedInteraction => HasTrigger("unfinishedInteraction")
                 && !string.IsNullOrEmpty(_snapshot.PendingTopic)

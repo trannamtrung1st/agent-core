@@ -1061,20 +1061,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
 
                     UserTextQueueTelemetry.Record(wire, queued: false);
-                    var responseId = _ids.NewId();
-                    var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
-                    var turn = ++_turnGeneration;
-                    _pendingUploadHold = false;
-                    NoteUserActivity();
-                    _outputActivity = OutputActivity.WaitingForAgent;
                     RuntimeTelemetry.Record("controller", RuntimeTelemetry.ElapsedMs(started));
                     _logger.LogInformation(
                         "User turn accepted {SessionId} {EventId} chars {CharCount}",
                         SessionId,
                         cause.EventId,
                         text.Length);
-                    LaunchPreparedTurn(cause, trigger, responseId, turn, attachmentIds);
-                    await PublishWaitingOutputAsync(cause).ConfigureAwait(false);
+                    await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
                 },
                 ended: input.Persisted);
         }
@@ -1275,6 +1268,61 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 EndWork();
             }
         }, CancellationToken.None);
+    }
+
+    private async Task AfterResponseTerminalizedAsync(EventContext context, CancellationToken cancellationToken)
+    {
+        if (await TryStartPendingUserBatchAsync(context, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
+        SchedulePostResponseIdleTimer();
+        await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool HasPendingUserBatch() => TrailingUserSuffix.HasPending(_snapshot.Entries);
+
+    private async Task<bool> TryStartPendingUserBatchAsync(EventContext cause, CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        if (_deactivated
+            || _activeResponseId is not null
+            || _snapshot.Status is not (SessionStatus.Attached or SessionStatus.Created))
+        {
+            return false;
+        }
+
+        var suffix = TrailingUserSuffix.Of(_snapshot.Entries);
+        if (suffix.Count == 0)
+        {
+            return false;
+        }
+
+        var last = suffix[^1];
+        var eventId = last.SourceEventId ?? last.EntryId;
+        var batchCause = new EventContext(
+            eventId,
+            SessionId,
+            _epoch,
+            _time.GetUtcNow(),
+            cause.CorrelationId == Guid.Empty ? eventId : cause.CorrelationId,
+            cause.EventId);
+        var attachmentIds = suffix
+            .SelectMany(entry => entry.Attachments ?? [])
+            .Select(item => item.AttachmentId)
+            .Distinct()
+            .ToArray();
+        var trigger = new AgentTrigger(eventId, TriggerKind.UserTurn, last.Text);
+        var turn = ++_turnGeneration;
+        _pendingUploadHold = false;
+        NoteUserActivity();
+        _environmentQueue.Clear();
+        _outputActivity = OutputActivity.WaitingForAgent;
+        LaunchPreparedTurn(batchCause, trigger, _ids.NewId(), turn, attachmentIds);
+        await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
+        return true;
     }
 
     private void LaunchPreparedTurn(
@@ -1919,7 +1967,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ClearActive();
         _turnGeneration++;
         ClearPendingPostResponseIdleDelay();
-        if (reason is "userBargeIn" or "newText")
+        if (reason is "userBargeIn")
+        {
+            await AfterResponseTerminalizedAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+        else if (reason is "newText")
         {
             await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
         }
@@ -1962,9 +2014,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         ct)
                     .ConfigureAwait(false);
                 ClearActive();
-                await DrainEnvironmentAsync(context, ct).ConfigureAwait(false);
-                SchedulePostResponseIdleTimer();
-                await ApplyPendingVoiceIfIdleAsync(context, ct).ConfigureAwait(false);
+                await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
             });
     }
 

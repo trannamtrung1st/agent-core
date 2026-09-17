@@ -27,7 +27,7 @@ Ordered roughly by dependency and product value. Earlier sections should normall
 
   * Allow a user to send a message without immediately interrupting the current agent response.
   * Preserve the existing explicit interruption/barge-in behavior separately.
-  * Define ordering when multiple queued messages arrive.
+  * Define ordering when multiple queued messages arrive: the trailing durable user suffix is one next assistant response.
 
 * [ ] Finish rich turn presentation semantics.
 

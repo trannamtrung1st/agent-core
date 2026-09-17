@@ -409,9 +409,7 @@ public sealed partial class SessionRuntime
                         ct)
                     .ConfigureAwait(false);
                 ClearActive();
-                await DrainEnvironmentAsync(context, ct).ConfigureAwait(false);
-                SchedulePostResponseIdleTimer();
-                await ApplyPendingVoiceIfIdleAsync(context, ct).ConfigureAwait(false);
+                await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
             });
     }
 

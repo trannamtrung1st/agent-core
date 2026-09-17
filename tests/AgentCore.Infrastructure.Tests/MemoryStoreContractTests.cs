@@ -129,6 +129,40 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Recover_keeps_trailing_queued_users_after_interrupting_streaming()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        var id = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        var u1Id = Guid.Parse("019944af-0000-7000-8000-0000000000c1");
+        var r1Id = Guid.Parse("019944af-0000-7000-8000-0000000000c2");
+        var u2Id = Guid.Parse("019944af-0000-7000-8000-0000000000c3");
+        var u3Id = Guid.Parse("019944af-0000-7000-8000-0000000000c4");
+        var u1 = Entry(u1Id, 1, EntryStatus.Completed, "U1") with { Role = ConversationRole.User, ResponseId = null };
+        var streaming = Entry(r1Id, 2, EntryStatus.Streaming, "R1");
+        var u2 = Entry(u2Id, 3, EntryStatus.Completed, "U2") with { Role = ConversationRole.User, ResponseId = null };
+        var u3 = Entry(u3Id, 4, EntryStatus.Completed, "U3") with { Role = ConversationRole.User, ResponseId = null };
+        var first = First() with
+        {
+            Status = SessionStatus.Attached,
+            Entries = [u1, streaming, u2, u3]
+        };
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(first, 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        await reopened.Store.RecoverCrashedSessionsAsync();
+        var loaded = await reopened.Store.LoadAsync(first.SessionId);
+        Assert.Equal(SessionStatus.Paused, loaded!.Status);
+        Assert.Equal(["U1", "U2", "U3"], loaded.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        Assert.Equal(EntryStatus.Interrupted, loaded.Entries.Single(entry => entry.Role == ConversationRole.Assistant).Status);
+        Assert.Equal(["U2", "U3"], TrailingUserSuffix.Of(loaded.Entries).Select(entry => entry.Text).ToArray());
+    }
+
+    [Fact]
     public async Task Checkpoint_does_not_rewrite_unchanged_completed_rows()
     {
         await using var harness = await SqliteAsync();

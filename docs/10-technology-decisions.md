@@ -100,7 +100,7 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Rationale:** A parallel queue table would have to stay reconciled with history. Ordered entries already express arrival, attachments, and recovery without command replay.
 
-**Consequence:** [Interaction Controller](05-interaction-controller.md) and [Protocol](14-api-and-realtime-protocol.md) own the live contracts. Trailing-suffix batching after terminalization is a follow-on P0-C slice; this decision forbids a second store unless a later proven invariant is documented first.
+**Consequence:** [Interaction Controller](05-interaction-controller.md) and [Protocol](14-api-and-realtime-protocol.md) own the live contracts. After a response is durably terminal (complete, fail, or explicit cancel), the runtime starts at most one next user-turn for the current trailing user suffix. Restart/attach uses the same helper on durable history. A second store remains forbidden unless a later proven invariant is documented first.
 
 ## Explicit non-goals
 

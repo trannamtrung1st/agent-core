@@ -359,10 +359,10 @@ public sealed class PromptContextBuilder
 
     private static IReadOnlyList<ModelMessage> BuildTurnMessages(AgentContext context)
     {
-        var currentUser = context.Trigger.Kind == TriggerKind.UserTurn
-            ? context.History.LastOrDefault(entry =>
-                entry.Role == ConversationRole.User && entry.Status == EntryStatus.Completed)
-            : null;
+        var currentBatch = context.Trigger.Kind == TriggerKind.UserTurn
+            ? TrailingUserSuffix.Of(context.History)
+            : [];
+        var currentIds = currentBatch.Select(entry => entry.EntryId).ToHashSet();
         var eligible = context.History
             .Where(entry => entry.Status != EntryStatus.Streaming)
             .Select(entry => (entry, text: entry.Role == ConversationRole.Assistant
@@ -370,19 +370,19 @@ public sealed class PromptContextBuilder
                 : entry.Text))
             .Where(pair =>
                 pair.text.Length > 0
-                || (currentUser is not null
-                    && pair.entry.EntryId == currentUser.EntryId
-                    && context.AttachmentContents is { Count: > 0 }))
+                || (currentIds.Contains(pair.entry.EntryId)
+                    && (pair.entry.Attachments is { Count: > 0 }
+                        || context.AttachmentContents is { Count: > 0 })))
             .ToList();
 
         var selected = new List<ConversationEntry>();
         var characters = 0;
-        var includedCurrent = false;
+        var includedCurrent = new HashSet<Guid>();
         for (var index = eligible.Count - 1; index >= 0; index--)
         {
             var (entry, text) = eligible[index];
-            var isCurrent = currentUser is not null && entry.EntryId == currentUser.EntryId;
-            if (isCurrent && includedCurrent)
+            var isCurrent = currentIds.Contains(entry.EntryId);
+            if (isCurrent && includedCurrent.Contains(entry.EntryId))
             {
                 continue;
             }
@@ -401,12 +401,12 @@ public sealed class PromptContextBuilder
             characters += text.Length;
             if (isCurrent)
             {
-                includedCurrent = true;
+                includedCurrent.Add(entry.EntryId);
             }
         }
 
         selected.Reverse();
-        if (currentUser is not null && !includedCurrent)
+        if (currentBatch.Count > 0 && currentBatch.Any(entry => !includedCurrent.Contains(entry.EntryId)))
         {
             throw new InvalidOperationException("Current user turn must appear once in prompt history.");
         }
@@ -419,17 +419,34 @@ public sealed class PromptContextBuilder
                     return new ModelMessage(role, EligibleAssistantText(entry));
                 }
 
-                if (currentUser is not null && entry.EntryId == currentUser.EntryId)
+                if (currentIds.Contains(entry.EntryId))
                 {
-                    return BuildCurrentUserMessage(
-                        entry.Text,
-                        context.AttachmentContents,
-                        ToolCatalog.OffersAttachmentRead(context.Definition, context));
+                    var contents = FilterAttachments(context.AttachmentContents, entry.Attachments);
+                    if (contents.Count > 0)
+                    {
+                        return BuildCurrentUserMessage(
+                            entry.Text,
+                            contents,
+                            ToolCatalog.OffersAttachmentRead(context.Definition, context));
+                    }
                 }
 
                 return new ModelMessage(role, BuildHistoricalUserText(entry));
             })
             .ToArray();
+    }
+
+    private static IReadOnlyList<AttachmentProcessResult> FilterAttachments(
+        IReadOnlyList<AttachmentProcessResult>? contents,
+        IReadOnlyList<ConversationAttachmentRef>? refs)
+    {
+        if (contents is null || contents.Count == 0 || refs is null || refs.Count == 0)
+        {
+            return [];
+        }
+
+        var wanted = refs.Select(item => item.AttachmentId).ToHashSet();
+        return contents.Where(item => wanted.Contains(item.AttachmentId)).ToArray();
     }
 
     public static ModelMessage BuildCurrentUserMessage(

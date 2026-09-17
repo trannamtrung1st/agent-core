@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -30,15 +31,15 @@ public sealed class UserTextQueueTests
 
         Assert.Equal(r1, harness.Runtime.ActiveResponseId);
         Assert.Equal(1, harness.Model.Calls);
-        Assert.DoesNotContain(harness.Output.TextDeltas, delta => delta.Text == "R1b");
         Assert.Equal(["Hello", "queued later"], UserTexts(harness));
         Assert.DoesNotContain(harness.Output.Items, item => item.Payload is ResponseCompletedOutput);
 
         harness.Model.Gate.TrySetResult();
         await harness.Runtime.WaitUntilIdleAsync();
         Assert.Contains(harness.Output.TextDeltas, delta => delta.Text == "R1b");
-        Assert.Equal(1, harness.Model.Calls);
-        Assert.Equal(r1, harness.Snapshot.Entries.Single(entry => entry.Role == ConversationRole.Assistant).ResponseId);
+        Assert.Equal(2, harness.Model.Calls);
+        Assert.Contains(harness.Output.TextDeltas, delta => delta.Text == "R2");
+        Assert.Equal(2, harness.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
         await harness.Runtime.DisposeAsync();
     }
 
@@ -155,6 +156,198 @@ public sealed class UserTextQueueTests
         await harness.Runtime.DisposeAsync();
     }
 
+    [Fact]
+    public async Task Two_queued_users_become_one_next_response_and_stay_distinct()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new GatedThenLiveModel();
+        var recorded = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var runtime = CreateRuntime(output, model, time, recorded, new FakeInterruptionClassifier(), SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "R1a");
+        await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        await runtime.SubmitPersistedUserTextAsync("U3", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        Assert.Equal(1, model.Calls);
+        Assert.Equal(["Hello", "U2", "U3"], runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        model.Gate.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(2, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
+        Assert.Equal(["Hello", "U2", "U3"], runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        var second = recorded.Contexts.Last(context => context.Trigger.Kind == TriggerKind.UserTurn);
+        Assert.Equal(["Hello", "U2", "U3"], second.History.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Queued_users_start_after_explicit_cancel()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new HoldingLanguageModel();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T1");
+        var r1 = runtime.ActiveResponseId!.Value;
+        await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        await runtime.SubmitPersistedUserTextAsync("U3", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        Assert.Equal(ResponseCancelResult.Cancelled, await runtime.CancelResponseAsync(r1));
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(["Hello", "U2", "U3"], runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Attach_recovers_trailing_suffix_as_one_response_without_duplicating_users()
+    {
+        var time = Clock();
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var store = new InMemoryMemoryStore();
+        var now = time.GetUtcNow();
+        var sessionId = ids.NewSessionId();
+        ConversationEntry User(long seq, string text, string key) => new(
+            Guid.Parse($"019944af-ffff-7000-8000-{key}"),
+            seq,
+            Guid.Parse($"019944af-ffff-7000-8000-{key}"),
+            ConversationRole.User,
+            text,
+            null,
+            EntryStatus.Completed,
+            SessionMode.Text,
+            text.Length,
+            text.Length,
+            now);
+        var assistant = new ConversationEntry(
+            Guid.Parse("019944af-ffff-7000-8000-0000000000a1"),
+            2,
+            null,
+            ConversationRole.Assistant,
+            "done",
+            Guid.Parse("019944af-ffff-7000-8000-0000000000a0"),
+            EntryStatus.Completed,
+            SessionMode.Text,
+            4,
+            4,
+            now);
+        var snapshot = new SessionSnapshot(
+            1,
+            sessionId,
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [User(1, "U1", "000000000001"), assistant, User(3, "U2", "000000000003"), User(4, "U3", "000000000004")],
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now);
+        await store.SaveAsync(snapshot, 0);
+        var output = new CapturingSessionOutput();
+        var recorded = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        await using var runtime = new SessionRuntime(
+            snapshot,
+            new ScriptedLanguageModel(["batch"]),
+            recorded,
+            store,
+            output,
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance,
+            new FakeInterruptionClassifier());
+        await runtime.AttachAsync();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(["U1", "U2", "U3"], runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        Assert.Equal(2, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
+        Assert.Contains(recorded.Contexts, context =>
+            context.Trigger.Kind == TriggerKind.UserTurn
+            && context.History.Count(entry => entry.Role == ConversationRole.User && entry.Text is "U2" or "U3") == 2);
+    }
+
+    [Fact]
+    public async Task Attach_does_not_rebatch_when_assistant_already_started_for_the_suffix()
+    {
+        var time = Clock();
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var store = new InMemoryMemoryStore();
+        var now = time.GetUtcNow();
+        var sessionId = ids.NewSessionId();
+        ConversationEntry User(long seq, string text, string key) => new(
+            Guid.Parse($"019944af-ffff-7000-8000-{key}"),
+            seq,
+            Guid.Parse($"019944af-ffff-7000-8000-{key}"),
+            ConversationRole.User,
+            text,
+            null,
+            EntryStatus.Completed,
+            SessionMode.Text,
+            text.Length,
+            text.Length,
+            now);
+        var started = new ConversationEntry(
+            Guid.Parse("019944af-ffff-7000-8000-0000000000b1"),
+            3,
+            null,
+            ConversationRole.Assistant,
+            "partial",
+            Guid.Parse("019944af-ffff-7000-8000-0000000000b0"),
+            EntryStatus.Interrupted,
+            SessionMode.Text,
+            7,
+            7,
+            now);
+        var snapshot = new SessionSnapshot(
+            1,
+            sessionId,
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [User(1, "U2", "000000000011"), User(2, "U3", "000000000012"), started],
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now);
+        await store.SaveAsync(snapshot, 0);
+        var output = new CapturingSessionOutput();
+        var model = new ScriptedLanguageModel(["should-not-run"]);
+        await using var runtime = new SessionRuntime(
+            snapshot,
+            model,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            store,
+            output,
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance,
+            new FakeInterruptionClassifier());
+        await runtime.AttachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(1, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
+        Assert.DoesNotContain(output.TextDeltas, delta => delta.Text == "should-not-run");
+    }
+
     private static string[] UserTexts(Harness harness) =>
         harness.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray();
 
@@ -226,6 +419,8 @@ file sealed class HoldingLanguageModel : ILanguageModel
 {
     public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public int Calls { get; private set; }
+
     public ModelCapabilities Capabilities { get; } = new(true, true);
 
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
@@ -233,6 +428,7 @@ file sealed class HoldingLanguageModel : ILanguageModel
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var call = Interlocked.Increment(ref _calls);
+        Calls = call;
         yield return new ModelTextDelta($"T{call}");
         await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         yield return new ModelCompleted(ModelStopReason.Completed);

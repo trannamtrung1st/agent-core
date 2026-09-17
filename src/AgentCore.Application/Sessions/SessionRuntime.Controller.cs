@@ -101,7 +101,10 @@ public sealed partial class SessionRuntime
                 await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
                     .ConfigureAwait(false);
                 RuntimeTelemetry.Record("attach", RuntimeTelemetry.ElapsedMs(started));
-                ScheduleIdleTimer(SilenceThreshold());
+                if (!await TryStartPendingUserBatchAsync(input.Context, ct).ConfigureAwait(false))
+                {
+                    ScheduleIdleTimer(SilenceThreshold());
+                }
             },
             ended: input.Attached);
     }
