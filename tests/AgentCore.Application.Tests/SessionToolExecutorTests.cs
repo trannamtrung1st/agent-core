@@ -312,7 +312,6 @@ trailer<< /Root 1 0 R >>
             ToolAllowlist:
             [
                 ToolCatalog.KnowledgeRetrieve,
-                ToolCatalog.AttachmentsRead,
                 ToolCatalog.WorkspaceWrite
             ]));
 

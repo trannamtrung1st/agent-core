@@ -30,7 +30,7 @@ public sealed class PromptContextBuilder
         var identity = BuildIdentitySystem(context.Definition);
         var mode = BuildModeSystem(context);
         var memory = BuildMemorySystem(context);
-        var environment = BuildEnvironmentSystem(context.Definition);
+        var environment = BuildEnvironmentSystem(context);
         var attachments = BuildAttachmentManifestSystem(context);
         var turns = BuildTurnMessages(context);
         return new PromptSections(identity, mode, memory, environment, turns, attachments);
@@ -104,19 +104,22 @@ public sealed class PromptContextBuilder
         return string.Join('\n', lines);
     }
 
-    private static string BuildEnvironmentSystem(AgentDefinition definition)
+    private static string BuildEnvironmentSystem(AgentContext context)
     {
-        var role = RoleEnvironments.Of(definition);
+        var role = RoleEnvironments.Of(context.Definition);
         var harness = role.HarnessList.Count == 0 ? "(none)" : string.Join(", ", role.HarnessList);
         var knowledge = role.KnowledgeList.Count == 0
             ? "(none)"
             : string.Join(", ", role.KnowledgeList.Select(item => item.Identity));
-        var tools = role.ToolList.Count == 0 ? "(none)" : string.Join(", ", role.ToolList);
+        var roleTools = role.ToolList.Count == 0 ? "(none)" : string.Join(", ", role.ToolList);
+        var effective = ToolCatalog.For(context.Definition, context);
+        var effectiveTools = effective.Count == 0 ? "(none)" : string.Join(", ", effective.Select(tool => tool.Name));
         return string.Join('\n',
         [
             $"Approved harness: {harness}.",
             $"Approved knowledge identities: {knowledge}.",
-            $"Allowed tools: {tools}.",
+            $"Role tools: {roleTools}.",
+            $"Effective tools this request: {effectiveTools}.",
             "Do not access the Agent Core repository, secrets, or other sessions.",
             "Tool and path permission is runtime-enforced and is not granted by model text."
         ]);

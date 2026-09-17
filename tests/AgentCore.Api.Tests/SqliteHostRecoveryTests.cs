@@ -373,17 +373,31 @@ public sealed class SqliteHostRecoveryTests
 
     private static async Task<HubConnection> ConnectAsync(string baseAddress)
     {
-        var connection = new HubConnectionBuilder()
-            .WithUrl($"{baseAddress}/hubs/session", options =>
+        Exception? last = null;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var connection = new HubConnectionBuilder()
+                .WithUrl($"{baseAddress}/hubs/session", options =>
+                {
+                    options.Transports = HttpTransportType.LongPolling;
+                    options.Headers[OwnerCapabilityHeaders.Name] = IssueOwnerHttp(baseAddress);
+                })
+                .AddMessagePackProtocol()
+                .Build();
+            try
             {
-                options.Transports = HttpTransportType.WebSockets;
-                options.SkipNegotiation = true;
-                options.Headers[OwnerCapabilityHeaders.Name] = IssueOwnerHttp(baseAddress);
-            })
-            .AddMessagePackProtocol()
-            .Build();
-        await connection.StartAsync();
-        return connection;
+                await connection.StartAsync();
+                return connection;
+            }
+            catch (Exception ex) when (attempt < 4)
+            {
+                last = ex;
+                await connection.DisposeAsync();
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * (attempt + 1)));
+            }
+        }
+
+        throw new InvalidOperationException("Failed to connect to restarted host.", last);
     }
 
     private static string IssueOwnerHttp(string baseAddress)

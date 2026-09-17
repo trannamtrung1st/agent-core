@@ -98,7 +98,7 @@ public sealed class SessionAttachmentRecallTests
     }
 
     [Fact]
-    public async Task Sqlite_reopen_preserves_attachment_refs_and_allows_attachments_read()
+    public async Task Sqlite_reopen_from_paused_runs_attachments_read_tool_loop()
     {
         await using var harness = await SqliteTestHarness.CreateMigratedAsync();
         var blobRoot = Path.Combine(Path.GetTempPath(), $"agent-attach-{Guid.NewGuid():N}");
@@ -109,7 +109,7 @@ public sealed class SessionAttachmentRecallTests
             var attachments = new SqliteAttachmentStore(harness.Factory, time, blobRoot);
             var processor = new AttachmentProcessor(attachments);
             var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
-            var model = new RecordingLanguageModel(new ScriptedLanguageModel());
+            var firstModel = new RecordingLanguageModel(new ScriptedLanguageModel());
             var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
             var output = new CapturingSessionOutput();
             var ids = new DeterministicIdGenerator(
@@ -134,11 +134,12 @@ public sealed class SessionAttachmentRecallTests
             await harness.Store.SaveAsync(snapshot, 0);
 
             var body = "Alpha beta gamma delta";
+            Guid attachmentId;
             await using (var runtime = CreateRuntime(
                              output,
                              attachments,
                              processor,
-                             model,
+                             firstModel,
                              brain,
                              harness.Store,
                              snapshot,
@@ -153,45 +154,79 @@ public sealed class SessionAttachmentRecallTests
                     "text/markdown",
                     new MemoryStream(Encoding.UTF8.GetBytes(body)),
                     false);
+                attachmentId = uploaded.AttachmentId;
                 Assert.True(await runtime.SubmitUserTextAsync("Summarize it.", attachmentIds: [uploaded.AttachmentId]));
                 await runtime.WaitUntilIdleAsync();
+                await WaitForBoundAttachmentAsync(attachments, runtime.SessionId, uploaded.AttachmentId);
                 await runtime.DetachAsync();
+                await WaitForPersistedStatusAsync(harness.Store, sessionId, SessionStatus.Paused);
             }
 
             var reloaded = await harness.Store.LoadAsync(sessionId);
             Assert.NotNull(reloaded);
-            var userEntry = Assert.Single(reloaded!.Entries, entry => entry.Role == ConversationRole.User);
+            Assert.Equal(SessionStatus.Paused, reloaded!.Status);
+            var userEntry = Assert.Single(reloaded.Entries, entry => entry.Role == ConversationRole.User);
             Assert.NotNull(userEntry.Attachments);
-            var attachmentId = userEntry.Attachments![0].AttachmentId;
+            Assert.Equal(attachmentId, userEntry.Attachments![0].AttachmentId);
 
-            var read = await tools.ExecuteAsync(
+            var directRead = await tools.ExecuteAsync(
                 SampleDefinitions.Support,
                 sessionId,
-                new ModelToolCall("read-1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{attachmentId:D}}"}"""),
+                new ModelToolCall("direct", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{attachmentId:D}}"}"""),
                 ToolLimits.MaxOutputBytes);
-            using var readJson = JsonDocument.Parse(read);
-            Assert.Equal(body, readJson.RootElement.GetProperty("content").GetString());
+            Assert.Contains("Alpha beta gamma delta", directRead, StringComparison.Ordinal);
 
-            await using var reopened = CreateRuntime(
-                output,
-                attachments,
-                processor,
-                model,
-                brain,
-                harness.Store,
-                reloaded with { Status = SessionStatus.Created },
-                ids,
-                time,
-                tools);
-            await reopened.AttachAsync();
-            Assert.True(await reopened.SubmitUserTextAsync("Count the words in that file."));
-            await reopened.WaitUntilIdleAsync();
+            var reopenOutput = new CapturingSessionOutput();
+            var recallModel = new AttachmentRecallRecordingModel(attachmentId);
+            await using (var reopened = CreateRuntime(
+                             reopenOutput,
+                             attachments,
+                             processor,
+                             recallModel,
+                             brain,
+                             harness.Store,
+                             reloaded,
+                             ids,
+                             time,
+                             tools))
+            {
+                Assert.True(await reopened.AttachAsync());
+                Assert.Equal(SessionStatus.Attached, reopened.Snapshot.Status);
+                Assert.True(await reopened.SubmitUserTextAsync("Count the words in that file."));
+                var assistantCountBefore = reopened.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var completedBefore = reopenOutput.Terminals.Count;
+                await reopenOutput.WaitForAsync(
+                    item => item.Payload is ResponseCompletedOutput && reopenOutput.Terminals.Count == completedBefore + 1,
+                    cts.Token);
+                await reopened.WaitUntilIdleAsync();
 
-            var followUp = brain.Contexts[^1];
-            Assert.Contains(
-                followUp.SessionAttachments!,
-                item => item.AttachmentId == attachmentId && item.DisplayName == "proposal.md");
-            Assert.Contains(model.LastRequest!.Tools ?? [], tool => tool.Name == ToolCatalog.AttachmentsRead);
+                var followUpContext = brain.Contexts[^1];
+                Assert.NotNull(followUpContext.SessionAttachments);
+                Assert.Contains(
+                    followUpContext.SessionAttachments!,
+                    item => item.AttachmentId == attachmentId);
+                Assert.NotNull(recallModel.LastRequest?.Tools);
+                Assert.Contains(recallModel.LastRequest.Tools, tool => tool.Name == ToolCatalog.AttachmentsRead);
+
+                var toolRequest = Assert.Single(recallModel.RequestsWithToolInput);
+                Assert.Contains(
+                    "Alpha beta gamma delta",
+                    toolRequest.Messages.Last(message => message.Role == ModelRole.Tool).Text ?? string.Empty,
+                    StringComparison.Ordinal);
+                Assert.True(recallModel.GenerateCount >= 2);
+
+                var assistant = reopened.Snapshot.Entries
+                    .Where(entry => entry.Role == ConversationRole.Assistant)
+                    .Skip(assistantCountBefore)
+                    .Last();
+                Assert.Equal(EntryStatus.Completed, assistant.Status);
+                Assert.Contains(
+                    reopenOutput.TextDeltas,
+                    delta => delta.Text.Contains("4 words", StringComparison.OrdinalIgnoreCase));
+            }
+
+            Assert.Contains(recallModel.LastRequest!.Tools ?? [], tool => tool.Name == ToolCatalog.AttachmentsRead);
         }
         finally
         {
@@ -203,6 +238,29 @@ public sealed class SessionAttachmentRecallTests
             {
             }
         }
+    }
+
+    [Fact]
+    public void Environment_lists_effective_tools_including_session_attachment_reader()
+    {
+        var attachmentId = Guid.Parse("019944af-0014-7000-8000-000000000002");
+        var context = new AgentContext(
+            SampleDefinitions.Examiner,
+            [],
+            string.Empty,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "Review this file."),
+            SessionAttachments:
+            [
+                new SessionAttachmentManifestItem(attachmentId, "proposal.md", "text/markdown", 1)
+            ]);
+        var environment = new PromptContextBuilder().BuildSections(context).EnvironmentSystem;
+        Assert.Contains("Role tools: (none).", environment, StringComparison.Ordinal);
+        Assert.Contains("Effective tools this request: attachments.read.", environment, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -275,6 +333,46 @@ public sealed class SessionAttachmentRecallTests
         Assert.True(manifest.Length <= PromptContextBuilder.MaxManifestCharacters + 256);
     }
 
+    private static async Task WaitForBoundAttachmentAsync(
+        IAttachmentStore attachments,
+        Guid sessionId,
+        Guid attachmentId)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var record = await attachments.GetAsync(sessionId, attachmentId);
+            if (record?.State == AttachmentState.Bound)
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        var final = await attachments.GetAsync(sessionId, attachmentId);
+        Assert.Equal(AttachmentState.Bound, final?.State);
+    }
+
+    private static async Task WaitForPersistedStatusAsync(
+        IMemoryStore store,
+        Guid sessionId,
+        SessionStatus status)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var snapshot = await store.LoadAsync(sessionId);
+            if (snapshot?.Status == status)
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        var final = await store.LoadAsync(sessionId);
+        Assert.Equal(status, final?.Status);
+    }
+
     private static SessionRuntime CreateRuntime(
         ISessionOutput output,
         IAttachmentStore attachments,
@@ -324,5 +422,83 @@ public sealed class SessionAttachmentRecallTests
             attachments: attachments,
             processor: processor,
             tools: tools);
+    }
+
+    private sealed class AttachmentRecallRecordingModel(Guid attachmentId) : ILanguageModel
+    {
+        private readonly AttachmentReadLoopLanguageModel _inner = new(attachmentId);
+
+        public ModelCapabilities Capabilities => _inner.Capabilities;
+
+        public ModelRequest? LastRequest { get; private set; }
+
+        public IReadOnlyList<ModelRequest> RequestsWithToolInput { get; private set; } = [];
+
+        public int GenerateCount { get; private set; }
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            GenerateCount++;
+            LastRequest = request;
+            if (request.Messages.Any(message => message.Role == ModelRole.Tool))
+            {
+                RequestsWithToolInput = RequestsWithToolInput.Concat([request]).ToArray();
+            }
+
+            await foreach (var item in _inner.GenerateAsync(request, cancellationToken))
+            {
+                yield return item;
+            }
+        }
+    }
+
+    private sealed class AttachmentReadLoopLanguageModel(Guid attachmentId) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var toolMessages = request.Messages.Where(message => message.Role == ModelRole.Tool).ToList();
+            if (toolMessages.Count > 0)
+            {
+                using var json = JsonDocument.Parse(toolMessages[^1].Text ?? "{}");
+                if (!json.RootElement.TryGetProperty("content", out var contentElement))
+                {
+                    yield return new ModelFailed(new ProviderFailure(
+                        ProviderErrorCode.InvalidRequest,
+                        toolMessages[^1].Text ?? "attachments.read failed"));
+                    yield break;
+                }
+
+                var content = contentElement.GetString() ?? string.Empty;
+                var words = content.Split(
+                    (char[]?)null,
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+                yield return new ModelTextDelta($"That file contains {words} words.");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+            if (request.Tools?.Any(tool => tool.Name == ToolCatalog.AttachmentsRead) == true
+                && lastUser.Contains("Count", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new ModelToolCallEvent(
+                    new ModelToolCall(
+                        "read-1",
+                        ToolCatalog.AttachmentsRead,
+                        $$"""{"attachmentId":"{{attachmentId:D}}"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Noted.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
     }
 }

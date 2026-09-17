@@ -16,7 +16,7 @@
     "knowledgeSources": [
       {"identity": "compliance-retention", "title": "Simulated retention policy", "citation": "compliance-retention@demo"}
     ],
-    "toolAllowlist": ["knowledge.retrieve", "attachments.read", "workspace.read", "workspace.write", "artifacts.create", "artifacts.verify"],
+    "toolAllowlist": ["knowledge.retrieve", "workspace.read", "workspace.write", "artifacts.create", "artifacts.verify"],
     "workspace": {},
     "attachments": {"allowUnreadUnsupportedTypes": false}
   }

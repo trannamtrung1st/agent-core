@@ -16,7 +16,7 @@
     "knowledgeSources": [
       {"identity": "support-order-policy", "title": "Simulated order policy", "citation": "support-order-policy@demo"}
     ],
-    "toolAllowlist": ["knowledge.retrieve", "attachments.read", "workspace.read", "workspace.write", "artifacts.create", "artifacts.verify"],
+    "toolAllowlist": ["knowledge.retrieve", "workspace.read", "workspace.write", "artifacts.create", "artifacts.verify"],
     "workspace": {},
     "attachments": {"allowUnreadUnsupportedTypes": false}
   }
