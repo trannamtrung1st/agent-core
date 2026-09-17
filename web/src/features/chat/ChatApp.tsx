@@ -14,6 +14,7 @@ import {
   reportCommittedEntries,
   requestVoice,
   retryConnection,
+  resumePausedSession,
   selectAgent,
   sendDraft,
   setDraft,
@@ -104,7 +105,9 @@ export function ChatApp() {
   const connectionTone = conversationStatusTone(connectionText);
   const failedAlertTitle = readonly && state.error ? state.error : connectionText;
   const agentName = inSession ? state.agentName : selectedAgent?.name ?? "Agent Core";
-  const composerReady = !readonly && (state.connection === "ready" || (!inSession && state.connection === "idle"));
+  const composerReady = !readonly
+    && state.status !== "paused"
+    && (state.connection === "ready" || (!inSession && state.connection === "idle"));
   const voiceAvailable = inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable);
   const headerTimestamp = inSession
     ? state.entries.at(-1)?.createdAt
@@ -243,6 +246,15 @@ export function ChatApp() {
                     <Typography.Text type="secondary" className="conversation-ended-note">
                       This conversation has ended.
                     </Typography.Text>
+                  ) : state.status === "paused" ? (
+                    <Flex vertical gap={8} className="conversation-paused-note">
+                      <Typography.Text type="secondary">
+                        This conversation is paused. Resume to continue messaging.
+                      </Typography.Text>
+                      <Button type="primary" onClick={() => void resumePausedSession()}>
+                        Resume
+                      </Button>
+                    </Flex>
                   ) : (
                     <Composer
                       draft={state.draft}

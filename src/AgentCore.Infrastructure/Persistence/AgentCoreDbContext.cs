@@ -34,6 +34,7 @@ public sealed class SnapshotRecord
     public string? ProfileId { get; set; }
     public long LastEntrySequence { get; set; }
     public long UpdatedAtUtc { get; set; }
+    public long? LastUserActivityAtUtc { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 

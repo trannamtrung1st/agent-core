@@ -74,6 +74,7 @@ export type SessionView = {
   errorHoldSequence: number;
   preflightReady: boolean;
   captureLive: boolean;
+  pauseReason: string | null;
 };
 
 export const emptySession = (): SessionView => ({
@@ -100,7 +101,8 @@ export const emptySession = (): SessionView => ({
   errorFatal: false,
   errorHoldSequence: 0,
   preflightReady: false,
-  captureLive: false
+  captureLive: false,
+  pauseReason: null
 });
 
 function asString(value: unknown): string {
@@ -367,10 +369,15 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const pendingMode = event.payload.pendingMode == null
         ? null
         : asString(event.payload.pendingMode) === "voice" ? "voice" : "text";
+      const status = asString(event.payload.status) || state.status;
+      const pauseReason = event.payload.pauseReason == null ? null : asString(event.payload.pauseReason);
+      const paused = status === "paused";
       return {
         ...state,
+        connection: paused ? "idle" : state.connection,
         lastServerSequence: event.sequence,
-        status: asString(event.payload.status) || state.status,
+        status,
+        pauseReason: paused ? pauseReason : null,
         inputState: asString(event.payload.inputState) || state.inputState,
         outputState: asString(event.payload.outputState) || state.outputState,
         mode,

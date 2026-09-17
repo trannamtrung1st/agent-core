@@ -1105,6 +1105,22 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
 
         await _hubs.Clients.Client(connectionId).SendAsync("SessionEvent", evt, cancellationToken).ConfigureAwait(false);
+        if (output.Payload is StateChangedOutput { Status: SessionStatus.Paused, PauseReason: not null } paused)
+        {
+            var sessionId = output.Context.SessionId;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await CancelLiveRuntimeAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            });
+            return;
+        }
+
         if (output.Payload is ErrorOutput { Code: "SessionPersistenceUnavailable" }
             && live.Runtime.Snapshot.Status is SessionStatus.Paused)
         {
@@ -1692,7 +1708,8 @@ public static class SessionEventMapper
                 ["inputState"] = ToInput(state.InputState),
                 ["outputState"] = ToOutput(state.OutputState),
                 ["muted"] = state.Muted,
-                ["streamId"] = state.StreamId?.ToString()
+                ["streamId"] = state.StreamId?.ToString(),
+                ["pauseReason"] = state.PauseReason
             }),
             TranscriptPartialOutput partial => ("transcript.partial", new Dictionary<string, object?>
             {

@@ -80,7 +80,8 @@ public sealed class SessionManager
             ProfileId: profile.ProfileId,
             now,
             now,
-            SessionTitles.Default,
+            LastUserActivityAt: now,
+            Title: SessionTitles.Default,
             RuntimeEpoch: 0,
             WorkspaceOwned: true);
 

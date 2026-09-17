@@ -163,7 +163,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
-        _lastMeaningfulActivityAt = snapshot.UpdatedAt;
+        _lastMeaningfulActivityAt = snapshot.LastUserActivityAt ?? snapshot.CreatedAt;
         _epoch = _ids.NewId();
         _durableRevision = snapshot.Revision;
         _durableSnapshot = snapshot;
@@ -859,7 +859,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused)
+        {
+            input.Persisted?.TrySetResult(false);
+            return;
+        }
+
+        if (_deactivated)
         {
             input.Persisted?.TrySetResult(false);
             return;
@@ -977,9 +983,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (input.Decision is RequestDeactivate)
+        if (input.Decision is RequestDeactivate deactivate)
         {
-            await ApplyDeactivateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "initiative")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -993,6 +1000,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Decision is not Speak speakable)
         {
+            if (input.Decision is StaySilent && input.Trigger.Kind != TriggerKind.UserTurn)
+            {
+                _silentEvaluations++;
+            }
+
             await DeclineInitiativeAsync(input.Context, cancellationToken).ConfigureAwait(false);
             return;
         }

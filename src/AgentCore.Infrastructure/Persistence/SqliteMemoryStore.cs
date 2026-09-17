@@ -115,6 +115,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "SessionSnapshots", "LastUserActivityAtUtc", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260917100000_LastUserActivityAt', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -428,6 +438,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Snapshot.ProfileId = snapshot.ProfileId?.ToString("D");
         row.Snapshot.LastEntrySequence = snapshot.Entries.Count == 0 ? 0 : snapshot.Entries[^1].Sequence;
         row.Snapshot.UpdatedAtUtc = snapshot.UpdatedAt.ToUnixTimeMilliseconds();
+        row.Snapshot.LastUserActivityAtUtc = snapshot.LastUserActivityAt?.ToUnixTimeMilliseconds();
     }
 
     private static SessionRecord ToRecord(SessionSnapshot snapshot)
@@ -487,6 +498,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             string.IsNullOrEmpty(snapshot.ProfileId) ? null : Guid.Parse(snapshot.ProfileId),
             FromUnix(row.CreatedAtUtc),
             FromUnix(row.UpdatedAtUtc),
+            snapshot.LastUserActivityAtUtc is { } lastUser ? FromUnix(lastUser) : null,
             string.IsNullOrEmpty(row.Title) ? SessionTitles.Default : row.Title,
             row.RuntimeEpoch,
             row.WorkspaceOwned,

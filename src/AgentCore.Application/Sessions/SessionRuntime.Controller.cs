@@ -51,6 +51,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        _deactivated = false;
         if (_snapshot.ProfileId is { } profileId)
         {
             _profile = await _store.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
@@ -308,12 +309,18 @@ public sealed partial class SessionRuntime
                 ? _synthesizer?.Capabilities ?? new SynthesisCapabilities(false, false, false, false, false, [])
                 : new SynthesisCapabilities(false, false, false, false, false, []),
             voice ? _policy.BargeInPolicy : "none",
-            history.Length == 0 ? 0 : history[^1].Sequence,
+            _snapshot.Entries.Count == 0 ? 0 : _snapshot.Entries[^1].Sequence,
             history,
             ActiveResponseId: null);
     }
 
-    private async Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
+    private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
+        PublishStateAsync(context, pauseReason: null, cancellationToken);
+
+    private async Task PublishStateAsync(
+        EventContext context,
+        string? pauseReason,
+        CancellationToken cancellationToken) =>
         await PublishAsync(
                 new SessionOutput(
                     context,
@@ -325,7 +332,8 @@ public sealed partial class SessionRuntime
                         _input.ToString(),
                         _outputActivity.ToString(),
                         Muted: _muted,
-                        _streamId)),
+                        _streamId,
+                        pauseReason)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -513,7 +521,20 @@ public sealed partial class SessionRuntime
             _timerGeneration++;
             if (CanEvaluateIdle())
             {
-                _silentEvaluations++;
+                if (InactivityExceeded())
+                {
+                    await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "inactivity")
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                if (_silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap)
+                {
+                    await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "silentEvaluation")
+                        .ConfigureAwait(false);
+                    return;
+                }
+
                 var responseId = _ids.NewId();
                 var turn = ++_turnGeneration;
                 _outputActivity = OutputActivity.WaitingForAgent;

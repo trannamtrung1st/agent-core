@@ -29,6 +29,10 @@ function idleLabel(source: StatusSource): string {
     return "Ended";
   }
 
+  if (source.sessionStatus === "paused") {
+    return "Paused";
+  }
+
   if (source.connection === "idle") {
     return "Ready";
   }
@@ -129,6 +133,7 @@ export function conversationStatusTone(text: string): "live" | "wait" | "alarm" 
     text === "Reconnecting…" ||
     text === "Reconnecting" ||
     text === "Ended" ||
+    text === "Paused" ||
     text === "Starting voice…" ||
     text === "Thinking…" ||
     text === "Generating response…" ||

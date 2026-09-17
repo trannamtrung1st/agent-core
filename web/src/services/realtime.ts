@@ -294,6 +294,12 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "session.ready") {
     reconcilePendingUserText(next.entries);
     void hydrateBoundAttachments(next.sessionId);
+    void hydrateActiveHistory(next.sessionId, next.entries);
+  }
+  if (raw.type === "session.state.changed" && String(raw.payload.status ?? "") === "paused") {
+    void stopConnection();
+    stopReceipts();
+    capture.release();
   }
   if (raw.type === "transcript.final") {
     void hydrateBoundAttachments(next.sessionId);
@@ -1253,6 +1259,22 @@ export async function openCatalogSession(
   }
 }
 
+export async function resumePausedSession(): Promise<boolean> {
+  const snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId || snapshot.status !== "paused") {
+    return false;
+  }
+
+  const sessionId = snapshot.sessionId;
+  try {
+    await reopenSession(sessionId);
+    await startConnection(sessionId, { syncUrl: "none" });
+    return useSessionStore.getState().connection === "ready";
+  } catch {
+    return false;
+  }
+}
+
 export async function retryConnection(): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (!snapshot.sessionId) {
@@ -1268,6 +1290,52 @@ export async function retryConnection(): Promise<void> {
 }
 
 const ENDED_HISTORY_PAGE_SIZE = 50;
+
+function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryEntry[]): HistoryEntry[] {
+  const byId = new Map<string, HistoryEntry>();
+  for (const entry of [...incoming, ...existing]) {
+    byId.set(entry.entryId, entry);
+  }
+
+  return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
+}
+
+async function hydrateActiveHistory(sessionId: string | null, bootstrap: HistoryEntry[]): Promise<void> {
+  if (!sessionId || bootstrap.length === 0) {
+    return;
+  }
+
+  const firstSeq = bootstrap[0]?.sequence ?? 1;
+  if (firstSeq <= 1) {
+    return;
+  }
+
+  let after = 0;
+  let prefix: HistoryEntry[] = [];
+  for (;;) {
+    const page = await listSessionMessages(sessionId, after, ENDED_HISTORY_PAGE_SIZE);
+    const chunk = historyFromPayload(page.items);
+    prefix = mergeHistoryEntries(prefix, chunk.filter((entry) => entry.sequence < firstSeq));
+    if (!page.hasMore || chunk.some((entry) => entry.sequence <= 1)) {
+      break;
+    }
+
+    after = page.nextAfter;
+  }
+
+  if (prefix.length === 0) {
+    return;
+  }
+
+  const latest = useSessionStore.getState();
+  if (!sameSessionId(latest.sessionId, sessionId)) {
+    return;
+  }
+
+  useSessionStore.setState({
+    entries: mergeHistoryEntries(prefix, latest.entries)
+  });
+}
 
 async function loadAllSessionHistory(sessionId: string): Promise<HistoryPage["items"]> {
   const items: HistoryPage["items"] = [];

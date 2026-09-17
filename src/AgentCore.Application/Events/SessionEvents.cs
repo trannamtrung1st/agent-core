@@ -214,7 +214,8 @@ public sealed record StateChangedOutput(
     string InputState,
     string OutputState,
     bool Muted,
-    Guid? StreamId) : OutputPayload;
+    Guid? StreamId,
+    string? PauseReason = null) : OutputPayload;
 
 public sealed record PlaybackStopOutput(string Reason) : OutputPayload;
 

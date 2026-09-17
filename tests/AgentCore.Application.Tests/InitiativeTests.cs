@@ -249,8 +249,7 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(3, CountStarted(output, "LongSilence"));
-        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
-        Assert.Equal(1, runtime.Snapshot.RuntimeEpoch);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
     }
 
     [Fact]
@@ -287,16 +286,12 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
-        var epoch = runtime.Snapshot.RuntimeEpoch;
         time.Advance(TimeSpan.FromSeconds(5));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
-        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
-        Assert.True(await runtime.RequestDeactivateAsync());
-        Assert.True(await runtime.RequestDeactivateAsync());
-        Assert.Equal(epoch + 1, runtime.Snapshot.RuntimeEpoch);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
         Assert.NotEmpty(runtime.Snapshot.Entries);
     }
 
@@ -342,6 +337,11 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
         Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
         time.Advance(TimeSpan.FromSeconds(5));
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -640,12 +640,16 @@ public sealed class InitiativeTests
 
             if (context.Trigger.Kind == TriggerKind.LongSilence)
             {
-                if ((definition.InitiativePolicy.ConsecutiveCap > 0
-                        && context.ConsecutiveProactiveSpeaks >= definition.InitiativePolicy.ConsecutiveCap)
-                    || context.SilentEvaluations >= definition.InitiativePolicy.SilentEvaluationCap
+                if (context.SilentEvaluations >= definition.InitiativePolicy.SilentEvaluationCap
                     || context.InactivityExceeded)
                 {
                     return ValueTask.FromResult<AgentDecision>(new RequestDeactivate("Cap reached."));
+                }
+
+                if (definition.InitiativePolicy.ConsecutiveCap > 0
+                    && context.ConsecutiveProactiveSpeaks >= definition.InitiativePolicy.ConsecutiveCap)
+                {
+                    return ValueTask.FromResult<AgentDecision>(new StaySilent("Consecutive proactive cap reached."));
                 }
 
                 return ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId)));

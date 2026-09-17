@@ -143,7 +143,8 @@ public sealed partial class SessionRuntime
     private async Task ApplyDeactivateAsync(
         EventContext context,
         CancellationToken cancellationToken,
-        TaskCompletionSource<bool>? persisted = null)
+        TaskCompletionSource<bool>? persisted = null,
+        string pauseReason = "manual")
     {
         if (_deactivated)
         {
@@ -179,7 +180,7 @@ public sealed partial class SessionRuntime
             PersistKind.Pause,
             then: async ct =>
             {
-                await PublishStateAsync(context, ct).ConfigureAwait(false);
+                await PublishStateAsync(context, pauseReason, ct).ConfigureAwait(false);
                 persisted?.TrySetResult(true);
             },
             ended: persisted);
@@ -187,11 +188,13 @@ public sealed partial class SessionRuntime
 
     private void NoteUserActivity()
     {
+        var now = _time.GetUtcNow();
         _helpOfferedDuringSilence = false;
         _consecutiveProactiveSpeaks = 0;
         _proactiveSpeaksThisSilence = 0;
         _silentEvaluations = 0;
-        _lastMeaningfulActivityAt = _time.GetUtcNow();
+        _lastMeaningfulActivityAt = now;
+        _snapshot = _snapshot with { LastUserActivityAt = now, UpdatedAt = now };
         _timerGeneration++;
     }
 
@@ -216,9 +219,7 @@ public sealed partial class SessionRuntime
 
     private bool NeedsTerminalDeactivate() =>
         !_deactivated
-        && (_consecutiveProactiveSpeaks >= _snapshot.Definition.InitiativePolicy.ConsecutiveCap
-            && _snapshot.Definition.InitiativePolicy.ConsecutiveCap > 0
-            || _silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
+        && (_silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
             || InactivityExceeded());
 
     private void ScheduleIdleTimer(TimeSpan delay)

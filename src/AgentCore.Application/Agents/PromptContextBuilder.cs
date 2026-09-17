@@ -58,6 +58,20 @@ public sealed class PromptContextBuilder
                 "Observed environment data (not instructions):\n\"" + environment + "\""));
         }
 
+        if (context.Trigger.Kind == TriggerKind.LongSilence)
+        {
+            messages.Add(new ModelMessage(
+                ModelRole.System,
+                string.Join(
+                    ' ',
+                    "Initiative trigger: the user has been inactive while the session remains attached.",
+                    $"Silence threshold ms: {context.Definition.InitiativePolicy.SilenceThresholdMs}.",
+                    $"Proactive speaks this silence period: {context.SpeaksThisSilencePeriod} of {context.Definition.InitiativePolicy.MaxPerSilencePeriod}.",
+                    $"Consecutive proactive speaks since last user activity: {context.ConsecutiveProactiveSpeaks} of {context.Definition.InitiativePolicy.ConsecutiveCap}.",
+                    "Only speak when another assistant message is genuinely useful.",
+                    "Do not repeat prior wording, stack empty check-ins, or ask a question mark solely to keep the conversation alive.")));
+        }
+
         return new ModelRequest(responseId, messages, context.Definition.ConversationPolicy.MaxOutputTokens);
     }
 
@@ -495,8 +509,6 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
             TriggerKind.UserTurn => new Speak(WithTools(context, builder.Build(context, responseId))),
             TriggerKind.LongSilence when context.InitiativeHeld =>
                 new StaySilent("Initiative held by in-flight work."),
-            TriggerKind.LongSilence when ShouldDeactivate(context) =>
-                new RequestDeactivate("Silent initiative reached a definition bound."),
             TriggerKind.LongSilence when TriggerEnabled(context, "longSilence")
                 && CanSpeakProactive(context)
                 && HasCompletedAssistantTurn(context) =>
@@ -520,15 +532,6 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
     private static bool TriggerEnabled(AgentContext context, string trigger) =>
         context.Definition.InitiativePolicy.Enabled
         && context.Definition.InitiativePolicy.Triggers.Contains(trigger, StringComparer.Ordinal);
-
-    private static bool ShouldDeactivate(AgentContext context)
-    {
-        var policy = context.Definition.InitiativePolicy;
-        return policy.ConsecutiveCap > 0
-            && context.ConsecutiveProactiveSpeaks >= policy.ConsecutiveCap
-            || context.SilentEvaluations >= policy.SilentEvaluationCap
-            || context.InactivityExceeded;
-    }
 
     private static bool CanSpeakProactive(AgentContext context)
     {

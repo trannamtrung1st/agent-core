@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api")>();
+  return {
+    ...actual,
+    listSessionMessages: vi.fn()
+  };
+});
 import { capture } from "../audio/capture";
 import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
+import { listSessionMessages } from "./api";
 import { realtimeTestHooks, composerSendEnabled, requestVoice, sendDraft, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
 
 const hooks = realtimeTestHooks!;
@@ -900,6 +909,65 @@ describe("realtime race handling", () => {
     await vi.waitFor(() => {
       expect(invoke).toHaveBeenCalled();
     });
+  });
+
+  it("hydrates older pages after session.ready when bootstrap is only the latest fifty entries", async () => {
+    const makeHistoryRow = (sequence: number) => ({
+      entryId: `e${sequence}`,
+      sequence,
+      sourceEventId: `e${sequence}`,
+      role: sequence % 2 === 1 ? "user" : "assistant",
+      text: `Message ${sequence}`,
+      responseId: sequence % 2 === 0 ? `r${sequence}` : null,
+      status: "completed",
+      deliveryMode: "text",
+      heardTextEndExclusive: 8,
+      receivedTextEndExclusive: 8,
+      createdAt: "2026-01-01T00:00:00Z"
+    });
+    const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 13));
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: Array.from({ length: 12 }, (_, index) => makeHistoryRow(index + 1)),
+      nextAfter: 12,
+      hasMore: false
+    });
+    hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "connecting",
+      sessionId: "s-active",
+      attachmentId: "a1",
+      lastServerSequence: 0,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s-active",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "text",
+        pendingMode: null,
+        status: "attached",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: bootstrap
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().entries).toHaveLength(62);
+    });
+    expect(listSessionMessages).toHaveBeenCalledWith("s-active", 0, 50);
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 1");
+    expect(useSessionStore.getState().entries[61]?.text).toBe("Message 62");
   });
 
   it("surfaces start conversation failures", async () => {

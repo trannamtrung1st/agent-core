@@ -123,6 +123,7 @@ public sealed record SessionSnapshot(
     Guid? ProfileId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    DateTimeOffset? LastUserActivityAt = null,
     string Title = SessionTitles.Default,
     long RuntimeEpoch = 0,
     bool WorkspaceOwned = true,
