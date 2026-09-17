@@ -84,7 +84,8 @@ public sealed class RichEnvelopeRuntimeTests
         }
 
         var restoredOutput = new CapturingSessionOutput();
-        var loaded = (await store.LoadAsync(sessionId))!;
+        var paused = (await store.LoadAsync(sessionId))!;
+        var loaded = await PausedSessionReopen.ReopenAsync(store, paused, new FakeTimeProvider(DateTimeOffset.UtcNow));
         await using var restored = Create(restoredOutput, store, new ScriptedLanguageModel(), loaded);
         await restored.AttachAsync();
         await restored.WaitUntilMailboxDrainedAsync();

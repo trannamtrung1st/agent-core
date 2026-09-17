@@ -176,6 +176,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public SessionSnapshot Snapshot => _snapshot;
 
+    public async Task ApplyReopenedSnapshotAsync(SessionSnapshot reopened, CancellationToken cancellationToken = default)
+    {
+        var applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new ReopenedSnapshotReceived(context, reopened, applied), urgent: true))
+        {
+            applied.TrySetResult();
+            EndWork();
+            return;
+        }
+
+        await applied.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<bool> SubmitUserTextAsync(
         string text,
         Guid? sourceEventId = null,
@@ -630,6 +645,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await HandleBrainAsync(brain, cancellationToken).ConfigureAwait(false);
                     brain.Processed.TrySetResult();
                     break;
+                case BrainFailed brainFailed:
+                    await HandleBrainFailedAsync(brainFailed, cancellationToken).ConfigureAwait(false);
+                    brainFailed.Processed.TrySetResult();
+                    break;
                 case TimerElapsedReceived timer:
                     await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
                     break;
@@ -671,6 +690,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case InitiativeHoldReceived hold:
                     HandleInitiativeHold(hold);
+                    break;
+                case ReopenedSnapshotReceived reopened:
+                    HandleReopenedSnapshot(reopened);
                     break;
                 case EnvironmentReceived environment:
                     await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
@@ -984,21 +1006,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (input.Decision is RequestDeactivate deactivate)
-        {
-            await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "initiative")
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (input.Decision is Speak
-            && input.Trigger.Kind != TriggerKind.UserTurn
-            && (_activeResponseId is not null || !InitiativeStillEligible(input.Trigger) || !CanAcceptProactiveSpeak(input.Trigger)))
+        if (input.Trigger.Kind != TriggerKind.UserTurn && IsStaleProactiveDecision(input.Trigger))
         {
             await DeclineInitiativeAsync(
                 input.Context,
                 new StaySilent("Initiative declined.", CountsTowardSilentCap: false),
                 cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (input.Decision is RequestDeactivate)
+        {
+            await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "initiative")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -1015,6 +1035,46 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        await StartSpeakPathAsync(input, speakable, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleBrainFailedAsync(BrainFailed input, CancellationToken cancellationToken)
+    {
+        if (input.TurnGeneration != _turnGeneration)
+        {
+            return;
+        }
+
+        if (input.Trigger.Kind == TriggerKind.UserTurn)
+        {
+            await PublishOutputIdleAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            if (input.Recoverable)
+            {
+                await PublishAsync(
+                        new SessionOutput(
+                            input.Context,
+                            null,
+                            new ErrorOutput(
+                                "Session",
+                                "BrainFailed",
+                                "The agent could not prepare a response.",
+                                false,
+                                null)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        await DeclineInitiativeAsync(
+            input.Context,
+            new StaySilent("Initiative evaluation failed.", CountsTowardSilentCap: false),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task StartSpeakPathAsync(BrainReturned input, Speak speakable, CancellationToken cancellationToken)
+    {
         if (input.Trigger.Kind == TriggerKind.LongSilence)
         {
             _helpOfferedDuringSilence = true;
@@ -1218,7 +1278,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LastUserActivityAt: _snapshot.LastUserActivityAt);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
-                AgentDecision decision;
+                AgentDecision? decision = null;
+                BrainFailed? failure = null;
                 try
                 {
                     decision = await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
@@ -1227,33 +1288,70 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     if (trigger.Kind == TriggerKind.UserTurn)
                     {
-                        return;
+                        failure = new BrainFailed(
+                            NewContext(cause.EventId),
+                            turn,
+                            responseId,
+                            trigger,
+                            Recoverable: false,
+                            Message: null,
+                            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
                     }
-
-                    decision = new StaySilent(
-                        "Initiative evaluation superseded.",
-                        CountsTowardSilentCap: false);
+                    else
+                    {
+                        decision = new StaySilent(
+                            "Initiative evaluation superseded.",
+                            CountsTowardSilentCap: false);
+                    }
                 }
                 catch (Exception) when (trigger.Kind != TriggerKind.UserTurn)
                 {
                     decision = new StaySilent(
                         "Initiative evaluation failed.",
-                        CountsTowardSilentCap: true);
+                        CountsTowardSilentCap: false);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    return;
-                }
-
-                if (evaluationToken.IsCancellationRequested && trigger.Kind == TriggerKind.UserTurn)
-                {
-                    return;
+                    failure = new BrainFailed(
+                        NewContext(cause.EventId),
+                        turn,
+                        responseId,
+                        trigger,
+                        Recoverable: true,
+                        Message: ex.Message,
+                        new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
                 }
 
                 RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted));
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var inbound = NewContext(cause.EventId);
                 BeginWork();
+                if (failure is not null)
+                {
+                    var failed = new BrainFailed(
+                        failure.Context,
+                        failure.TurnGeneration,
+                        failure.ResponseId,
+                        failure.Trigger,
+                        failure.Recoverable,
+                        failure.Message,
+                        processed);
+                    if (!TryMailbox(failed))
+                    {
+                        EndWork();
+                        return;
+                    }
+
+                    await processed.Task.ConfigureAwait(false);
+                    return;
+                }
+
+                if (decision is null)
+                {
+                    EndWork();
+                    return;
+                }
+
                 if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed)))
                 {
                     EndWork();
@@ -2281,7 +2379,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                if (_snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending)
+                if (_snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending
+                    && job.Kind is not PersistKind.Pause)
                 {
                     await FailPersistenceAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -2331,20 +2430,40 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (_activeResponseId is { } live)
+        var context = NewContext();
+        if (!_deactivated)
         {
-            await SupersedeAsync(NewContext(), live, cancellationToken, "disconnected").ConfigureAwait(false);
+            CancelBrainEvaluation();
+            _deactivated = true;
+            _timerGeneration++;
+            _turnGeneration++;
+            _epoch = _ids.NewId();
+            _environmentQueue.Clear();
+            AbandonLiveSpeech(rotateEpoch: true);
+            _input = InputActivity.Idle;
+            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+            InvalidateSpeechJobs();
+            _ttsCts?.Cancel();
+            if (_activeResponseId is { } live)
+            {
+                await SupersedeAsync(context, live, cancellationToken, "disconnected").ConfigureAwait(false);
+            }
+
+            _outputActivity = OutputActivity.Idle;
+            _initiativeHeld = false;
         }
 
         _snapshot = _durableSnapshot with
         {
             Status = SessionStatus.Paused,
             PendingMode = null,
+            PauseReason = "persistence",
+            RuntimeEpoch = Math.Max(_durableSnapshot.RuntimeEpoch, _snapshot.RuntimeEpoch) + 1,
             UpdatedAt = _time.GetUtcNow()
         };
         await PublishAsync(
                 new SessionOutput(
-                    NewContext(),
+                    context,
                     null,
                     new ErrorOutput(
                         "Session",
@@ -2354,7 +2473,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         TimeSpan.FromSeconds(1))),
                 cancellationToken)
             .ConfigureAwait(false);
-        await PublishStateAsync(NewContext(), cancellationToken).ConfigureAwait(false);
+        await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
+        if (_durableSnapshot.Status is not SessionStatus.Paused)
+        {
+            RequestPersist(_snapshot, PersistKind.Pause);
+        }
     }
 
     private async Task RunPersistAsync(CancellationToken cancellationToken)

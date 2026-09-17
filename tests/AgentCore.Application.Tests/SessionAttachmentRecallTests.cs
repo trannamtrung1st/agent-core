@@ -181,6 +181,7 @@ public sealed class SessionAttachmentRecallTests
 
             var reopenOutput = new CapturingSessionOutput();
             var recallModel = new AttachmentRecallRecordingModel(attachmentId);
+            var resumed = await PausedSessionReopen.ReopenAsync(harness.Store, reloaded!, time);
             await using (var reopened = CreateRuntime(
                              reopenOutput,
                              attachments,
@@ -188,19 +189,19 @@ public sealed class SessionAttachmentRecallTests
                              recallModel,
                              brain,
                              harness.Store,
-                             reloaded,
+                             resumed,
                              ids,
                              time,
                              tools))
             {
                 Assert.True(await reopened.AttachAsync());
                 Assert.Equal(SessionStatus.Attached, reopened.Snapshot.Status);
-                Assert.True(await reopened.SubmitUserTextAsync("Count the words in that file."));
                 var assistantCountBefore = reopened.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var completedBefore = reopenOutput.Terminals.Count;
+                Assert.True(await reopened.SubmitUserTextAsync("Count the words in that file."));
                 await reopenOutput.WaitForAsync(
-                    item => item.Payload is ResponseCompletedOutput && reopenOutput.Terminals.Count == completedBefore + 1,
+                    item => item.Payload is ResponseCompletedOutput && reopenOutput.Terminals.Count > completedBefore,
                     cts.Token);
                 await reopened.WaitUntilIdleAsync();
 
@@ -371,11 +372,11 @@ public sealed class SessionAttachmentRecallTests
         using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, first.Token);
 
+        var completedBefore = output.Terminals.Count;
         Assert.True(await runtime.SubmitUserTextAsync("Hello again."));
         using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var completedBefore = output.Terminals.Count;
         await output.WaitForAsync(
-            item => item.Payload is ResponseCompletedOutput && output.Terminals.Count == completedBefore + 1,
+            item => item.Payload is ResponseCompletedOutput && output.Terminals.Count > completedBefore,
             second.Token);
         await runtime.WaitUntilIdleAsync();
 

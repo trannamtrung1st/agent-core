@@ -134,7 +134,8 @@ public sealed class VoiceRealtimeRegressionTests
         }
 
         var restoredOutput = new CapturingSessionOutput();
-        var loaded = (await store.LoadAsync(sessionId))!;
+        var paused = (await store.LoadAsync(sessionId))!;
+        var loaded = await PausedSessionReopen.ReopenAsync(store, paused, TimeProvider.System);
         await using var restored = CreateVoice(
             restoredOutput,
             new ScriptedLanguageModel(),

@@ -135,6 +135,21 @@ public sealed class SessionCatalogTests
     }
 
     [Fact]
+    public async Task Reopen_from_paused_returns_created_and_clears_pause_reason()
+    {
+        var manager = CreateManager(new InMemoryMemoryStore());
+        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var paused = await manager.DeactivateAsync(created.SessionId);
+        Assert.Equal(SessionStatus.Paused, paused.Status);
+        Assert.Equal("manual", paused.PauseReason);
+
+        var reopened = await manager.ReopenAsync(created.SessionId);
+        Assert.Equal(SessionStatus.Created, reopened.Status);
+        Assert.Null(reopened.PauseReason);
+        Assert.Equal(paused.RuntimeEpoch + 1, reopened.RuntimeEpoch);
+    }
+
+    [Fact]
     public async Task Deactivate_pauses_without_archive_or_delete_and_is_idempotent()
     {
         var manager = CreateManager(new InMemoryMemoryStore());

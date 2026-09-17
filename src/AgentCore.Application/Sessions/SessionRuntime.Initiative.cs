@@ -131,6 +131,21 @@ public sealed partial class SessionRuntime
         return Task.CompletedTask;
     }
 
+    private void HandleReopenedSnapshot(ReopenedSnapshotReceived input)
+    {
+        CancelBrainEvaluation();
+        _deactivated = false;
+        _activeResponseId = null;
+        _outputActivity = OutputActivity.Idle;
+        _initiativeHeld = false;
+        _silentEvaluations = 0;
+        _durableRevision = input.Snapshot.Revision;
+        _durableSnapshot = input.Snapshot;
+        _snapshot = input.Snapshot;
+        _input = input.Snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
+        input.Applied.TrySetResult();
+    }
+
     private void HandleInitiativeHold(InitiativeHoldReceived input)
     {
         _initiativeHeld = input.Held;
@@ -311,6 +326,12 @@ public sealed partial class SessionRuntime
         && !_pendingUploadHold
         && (_silentEvaluations < _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
             || NeedsTerminalDeactivate());
+
+    private bool IsStaleProactiveDecision(AgentTrigger trigger) =>
+        trigger.Kind != TriggerKind.UserTurn
+        && (_activeResponseId is not null
+            || !InitiativeStillEligible(trigger)
+            || (trigger.Kind == TriggerKind.LongSilence && !CanAcceptProactiveSpeak(trigger)));
 
     private bool InitiativeStillEligible(AgentTrigger trigger)
     {

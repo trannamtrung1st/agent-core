@@ -64,6 +64,9 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         await hubA.StopAsync();
         await hubA.DisposeAsync();
 
+        var reopen = await client.PostAsync($"/api/v2/sessions/{session.SessionId}/reopen", null);
+        reopen.EnsureSuccessStatusCode();
+
         await using var hubB = await ConnectAsync();
         var readyB = ReadyWaiter(hubB);
         var attachedB = await hubB.InvokeAsync<CommandAck>("Attach", Attach(session.SessionId));

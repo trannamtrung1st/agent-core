@@ -67,6 +67,15 @@ public sealed record BrainReturned(
     AgentDecision Decision,
     TaskCompletionSource Processed) : SessionInput(Context);
 
+public sealed record BrainFailed(
+    EventContext Context,
+    int TurnGeneration,
+    Guid ResponseId,
+    AgentTrigger Trigger,
+    bool Recoverable,
+    string? Message,
+    TaskCompletionSource Processed) : SessionInput(Context);
+
 public sealed record TimerElapsedReceived(
     EventContext Context,
     string Kind,
@@ -121,6 +130,11 @@ public sealed record RenameReceived(
     TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
 public sealed record InitiativeHoldReceived(EventContext Context, bool Held) : SessionInput(Context);
+
+public sealed record ReopenedSnapshotReceived(
+    EventContext Context,
+    SessionSnapshot Snapshot,
+    TaskCompletionSource Applied) : SessionInput(Context);
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
 

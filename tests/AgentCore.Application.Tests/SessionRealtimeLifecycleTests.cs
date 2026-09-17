@@ -84,9 +84,10 @@ public sealed class SessionRealtimeLifecycleTests
         }
 
         var second = new CapturingSessionOutput();
-        var snapshot = (await store.LoadAsync(Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")))!;
-        Assert.Equal(SessionStatus.Paused, snapshot.Status);
-        Assert.Null(snapshot.PendingMode);
+        var paused = (await store.LoadAsync(Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")))!;
+        Assert.Equal(SessionStatus.Paused, paused.Status);
+        Assert.Null(paused.PendingMode);
+        var snapshot = await PausedSessionReopen.ReopenAsync(store, paused, time);
         await using var restored = Create(second, time, new ScriptedLanguageModel(), store, snapshot);
         await restored.AttachAsync();
         await restored.WaitUntilMailboxDrainedAsync();
@@ -149,7 +150,8 @@ public sealed class SessionRealtimeLifecycleTests
             await runtime.WaitUntilIdleAsync();
         }
 
-        var snapshot = (await harness.Store.LoadAsync(sessionId))!;
+        var paused = (await harness.Store.LoadAsync(sessionId))!;
+        var snapshot = await PausedSessionReopen.ReopenAsync(harness.Store, paused, time);
         await using var restored = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), harness.Store, snapshot);
         await restored.AttachAsync();
         await restored.WaitUntilMailboxDrainedAsync();

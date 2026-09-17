@@ -162,8 +162,11 @@ public sealed class SessionManager
                     }
 
                     var now = _time.GetUtcNow();
+                    var resuming = snapshot.Status == SessionStatus.Paused || snapshot.PauseReason is not null;
                     return snapshot with
                     {
+                        Status = resuming ? SessionStatus.Created : snapshot.Status,
+                        PauseReason = resuming ? null : snapshot.PauseReason,
                         RuntimeEpoch = snapshot.RuntimeEpoch + 1,
                         LastUserActivityAt = now,
                         UpdatedAt = now

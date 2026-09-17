@@ -41,7 +41,8 @@ public static class RuntimeTelemetry
 
             return list;
         });
-        Timeline.Enqueue(new TimelineEvent(stage, milliseconds, _contentLogging ? detail : null, DateTimeOffset.UtcNow));
+        var includeDetail = _contentLogging || stage is "initiative_eval";
+        Timeline.Enqueue(new TimelineEvent(stage, milliseconds, includeDetail ? detail : null, DateTimeOffset.UtcNow));
         while (Timeline.Count > _timelineLimit)
         {
             Timeline.TryDequeue(out _);

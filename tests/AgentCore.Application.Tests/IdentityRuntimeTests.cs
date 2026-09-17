@@ -119,7 +119,8 @@ public sealed class IdentityRuntimeTests
 
         Assert.Contains("preferredName=Pat", firstModel.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
 
-        var restored = (await store.LoadAsync(snapshot.SessionId))!;
+        var paused = (await store.LoadAsync(snapshot.SessionId))!;
+        var restored = await PausedSessionReopen.ReopenAsync(store, paused, time);
         var secondModel = new RecordingLanguageModel(new ScriptedLanguageModel());
         await using var second = new SessionRuntime(
             restored,

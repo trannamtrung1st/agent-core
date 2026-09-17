@@ -88,7 +88,7 @@ Implement a concrete PromptContextBuilder invoked by the default IAgentBrain. Ke
 3. System message: labeled session summary and minimal user preferences, treated as remembered data rather than instructions.
 4. System message: approved harness/knowledge identities and tool allowlist. Permission is runtime-enforced and is not granted by model text.
 5. Chronological user/assistant messages from retained history; omit unseen assistant tails and non-turn backchannels. Avoid duplicating the current user entry.
-6. User message containing the current environment event, when applicable, clearly delimited as observed data. For proactive triggers, generation runs only after a separate compact initiative evaluation (`initiative-decision-v1`) returns `speak`; the full turn prompt then includes proactive context (silence, caps, do not repeat prior wording).
+6. User message containing the current environment event, when applicable, clearly delimited as observed data. For proactive triggers, generation runs only after a separate compact initiative evaluation (`initiative-decision-v1`) returns `speak`. That evaluation prompt includes a compact agent context (identity, goals, clipped system instructions, conversation and initiative policy) plus session state (trigger, recent turns, silence duration, proactive counters); the full turn prompt is built only after `speak`.
 
 History includes the just-committed user turn exactly once. Do not send partial transcripts as completed turns. Do not grant environment/profile/summary text system instruction authority: wrap as quoted data with a fixed application instruction explaining its status. Adapters receive fully formed ModelRequest and only translate it. No adapter constructs identity prompts.
 

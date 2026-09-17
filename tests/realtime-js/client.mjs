@@ -72,6 +72,32 @@ async function ownerHeaders(extra = {}) {
   return { ...extra, "X-AgentCore-Owner-Capability": ownerToken };
 }
 
+async function reopenIfPaused(sessionId) {
+  const view = await fetch(`${base}/api/v2/sessions/${sessionId}`, { headers: await ownerHeaders() });
+  if (!view.ok) {
+    throw new Error(`session view failed ${view.status}`);
+  }
+  const body = await view.json();
+  if (body.status !== "paused") {
+    return;
+  }
+  const reopen = await fetch(`${base}/api/v2/sessions/${sessionId}/reopen`, {
+    method: "POST",
+    headers: await ownerHeaders()
+  });
+  if (reopen.status === 409) {
+    return;
+  }
+  if (!reopen.ok) {
+    throw new Error(`reopen failed ${reopen.status}`);
+  }
+}
+
+async function attachSession(connection, sessionId, sequence = 0, extra = {}) {
+  await reopenIfPaused(sessionId);
+  return connection.invoke("Attach", command(sessionId, sequence, "session.attach", { lastServerSequence: null }, extra));
+}
+
 async function createSession() {
   await ensureOwner();
   const response = await fetch(`${base}/api/v1/sessions`, {
@@ -90,12 +116,9 @@ async function run() {
     case "text-roundtrip": {
       const session = await createSession();
       const connection = await connect();
-      const attach = await connection.invoke(
-        "Attach",
-        command(session.sessionId, 0, "session.attach", { lastServerSequence: null })
-      );
-      if (!attach.accepted) {
-        throw new Error(JSON.stringify(attach));
+      const attachAck = await attachSession(connection, session.sessionId);
+      if (!attachAck.accepted) {
+        throw new Error(JSON.stringify(attachAck));
       }
       await waitFor((evt) => evt.type === "session.ready");
       const send = await connection.invoke(
@@ -145,12 +168,9 @@ async function run() {
     case "second-connection": {
       const session = await createSession();
       const first = await connect();
-      const attach = await first.invoke(
-        "Attach",
-        command(session.sessionId, 0, "session.attach", { lastServerSequence: null })
-      );
-      if (!attach.accepted) {
-        throw new Error(JSON.stringify(attach));
+      const attachAck = await attachSession(first, session.sessionId);
+      if (!attachAck.accepted) {
+        throw new Error(JSON.stringify(attachAck));
       }
       const second = await connect();
       const denied = await second.invoke(
@@ -167,7 +187,7 @@ async function run() {
     case "stale-sequence": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const first = await connection.invoke(
@@ -190,7 +210,7 @@ async function run() {
     case "exact-retry": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const eventId = uuid();
@@ -214,7 +234,7 @@ async function run() {
     case "eventid-reuse": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const eventId = uuid();
@@ -232,7 +252,7 @@ async function run() {
     case "missing-attachment": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const denied = await connection.invoke(
         "SendText",
@@ -247,7 +267,7 @@ async function run() {
     case "method-type-mismatch": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const denied = await connection.invoke(
@@ -263,7 +283,7 @@ async function run() {
     case "command-gap": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const send = await connection.invoke(
@@ -300,7 +320,7 @@ async function run() {
     case "response-received": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       await connection.invoke("SendText", command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId }));
@@ -319,7 +339,7 @@ async function run() {
     case "audio-session-mismatch": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const mode = await connection.invoke(
@@ -357,7 +377,7 @@ async function run() {
     case "speech-boundary-order": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const mode = await connection.invoke(
@@ -415,7 +435,7 @@ async function run() {
     case "older-retry": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const eventId = uuid();
@@ -446,7 +466,7 @@ async function run() {
     case "reconnect-retry": {
       const session = await createSession();
       const first = await connect();
-      await first.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(first, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const firstAttachment = events[0].attachmentId;
       const eventId = uuid();
@@ -461,7 +481,7 @@ async function run() {
       await first.stop();
       events.length = 0;
       const second = await connect();
-      await second.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(second, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const retry = await second.invoke(
         "SendText",
@@ -487,7 +507,7 @@ async function run() {
     case "stale-attachment": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const denied = await connection.invoke(
         "SendText",
@@ -502,7 +522,7 @@ async function run() {
     case "oversized-audio": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const mode = await connection.invoke(
@@ -540,7 +560,7 @@ async function run() {
     case "playback-invalid": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const mode = await connection.invoke(
@@ -610,7 +630,7 @@ async function run() {
     case "parallel-controls": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       const [first, second] = await Promise.all([
@@ -647,7 +667,7 @@ async function run() {
     case "receipt-backwards": {
       const session = await createSession();
       const connection = await connect();
-      await connection.invoke("Attach", command(session.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      await attachSession(connection, session.sessionId);
       await waitFor((evt) => evt.type === "session.ready");
       const attachmentId = events[0].attachmentId;
       await connection.invoke("SendText", command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId }));
@@ -674,10 +694,7 @@ async function run() {
       const firstSession = await createSession();
       const secondSession = await createSession();
       const connection = await connect();
-      const first = await connection.invoke(
-        "Attach",
-        command(firstSession.sessionId, 0, "session.attach", { lastServerSequence: null })
-      );
+      const first = await attachSession(connection, firstSession.sessionId);
       if (!first.accepted) {
         throw new Error(JSON.stringify(first));
       }
@@ -711,12 +728,12 @@ async function run() {
         throw new Error(`create should succeed, got ${extra.status}`);
       }
       const first = await connect();
-      const attached = await first.invoke("Attach", command(a.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      const attached = await attachSession(first, a.sessionId);
       if (!attached.accepted) {
         throw new Error(JSON.stringify(attached));
       }
       const second = await connect();
-      const denied = await second.invoke("Attach", command(b.sessionId, 0, "session.attach", { lastServerSequence: null }));
+      const denied = await attachSession(second, b.sessionId);
       if (denied.accepted || denied.error?.code !== "SessionCapacityExceeded" || denied.error?.retryAfterMs !== 5000) {
         throw new Error(JSON.stringify(denied));
       }

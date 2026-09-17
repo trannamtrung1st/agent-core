@@ -135,6 +135,17 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 return Reject(command.EventId, "Session", "NotFound", "Session is archived.", true, null);
             }
 
+            if (snapshot.Status == SessionStatus.Paused)
+            {
+                return Reject(
+                    command.EventId,
+                    "Session",
+                    "SessionPaused",
+                    "Session is paused; reopen before attach.",
+                    false,
+                    null);
+            }
+
             while (true)
             {
                 if (_disposing.TryGetValue(sessionId, out var pendingDispose))
@@ -279,6 +290,12 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     return replayAck!;
                 }
 
+                if (live.Runtime.Snapshot.Status == SessionStatus.Paused)
+                {
+                    var reopened = await _sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    await live.Runtime.ApplyReopenedSnapshotAsync(reopened, cancellationToken).ConfigureAwait(false);
+                }
+
                 var attached = await live.Runtime.AttachAsync(cancellationToken).ConfigureAwait(false);
                 if (!attached || live.Evicted || !_live.TryGetValue(sessionId, out var stillAttached) || !ReferenceEquals(stillAttached, live) || live.ConnectionId != connectionId)
                 {
@@ -339,6 +356,20 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     }
 
     public bool HasLiveRuntime(Guid sessionId) => _live.ContainsKey(sessionId);
+
+    public bool HasActiveLiveConnection(Guid sessionId) =>
+        _live.TryGetValue(sessionId, out var live) && live.ConnectionId is not null;
+
+    public async Task ApplyReopenedSnapshotToLiveAsync(
+        Guid sessionId,
+        SessionSnapshot reopened,
+        CancellationToken cancellationToken = default)
+    {
+        if (_live.TryGetValue(sessionId, out var live))
+        {
+            await live.Runtime.ApplyReopenedSnapshotAsync(reopened, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     public Task StageAttachmentsAsync(Guid sessionId, IReadOnlyList<Guid> attachmentIds, CancellationToken cancellationToken)
     {

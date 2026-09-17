@@ -128,7 +128,7 @@ public sealed class RoleEnvironmentTests
             }
         }
 
-        Assert.Equal(1, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
+        Assert.Equal(2, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
     }
 
     [Fact]

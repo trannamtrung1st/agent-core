@@ -27,6 +27,8 @@ public sealed class InitiativeTests
         await runtime.SubmitUserTextAsync("Hello?");
         await runtime.WaitUntilIdleAsync();
         var started = CountStarted(output, "LongSilence");
+        time.Advance(TimeSpan.FromSeconds(91));
+        await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(started + 1, CountStarted(output, "LongSilence"));
@@ -58,6 +60,8 @@ public sealed class InitiativeTests
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello?");
         await runtime.WaitUntilIdleAsync();
+        time.Advance(TimeSpan.FromSeconds(91));
+        await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
@@ -798,6 +802,34 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));
+    }
+
+    [Fact]
+    public async Task Examiner_initiative_waits_after_question_then_speaks_once()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new ScriptedLanguageModel(["Would you like to try again?"]);
+        var brain = RecordingDefaultBrain(model);
+        await using var runtime = Create(output, model, time, brain);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        time.Advance(TimeSpan.FromSeconds(65));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(0, CountStarted(output, "LongSilence"));
+        time.Advance(TimeSpan.FromSeconds(35));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        time.Advance(TimeSpan.FromSeconds(35));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
     }
 
     [Fact]

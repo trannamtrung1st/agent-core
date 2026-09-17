@@ -196,7 +196,8 @@ public sealed class SpeechPlaybackTests
         }
 
         var restoredOutput = new CapturingSessionOutput();
-        var loaded = (await store.LoadAsync(sessionId))!;
+        var paused = (await store.LoadAsync(sessionId))!;
+        var loaded = await PausedSessionReopen.ReopenAsync(store, paused, TimeProvider.System);
         await using var restored = Create(restoredOutput, new ScriptedLanguageModel(), store: store, snapshot: loaded);
         await restored.AttachAsync();
         await restored.WaitUntilMailboxDrainedAsync();

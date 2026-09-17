@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -16,6 +18,9 @@ public static class InitiativeEvaluator
         PropertyNameCaseInsensitive = true
     };
 
+    public static ModelRequest CreateEvaluationRequest(AgentContext context, PromptContextBuilder _) =>
+        BuildEvaluationRequest(context);
+
     public static async ValueTask<AgentDecision> EvaluateAsync(
         ILanguageModel languageModel,
         PromptContextBuilder builder,
@@ -23,23 +28,35 @@ public static class InitiativeEvaluator
         Guid responseId,
         CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
         var request = BuildEvaluationRequest(context);
-        var text = await CollectTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
-        if (!TryParseDecision(text, out var parsed))
+        var (text, providerFailed) = await CollectTextAsync(languageModel, request, cancellationToken)
+            .ConfigureAwait(false);
+        AgentDecision decision;
+        if (providerFailed)
         {
-            return new StaySilent("Initiative evaluation was not parseable.", CountsTowardSilentCap: true);
+            decision = new StaySilent("Initiative provider failed.", CountsTowardSilentCap: false);
+        }
+        else if (!TryParseDecision(text, out var parsed))
+        {
+            decision = new StaySilent("Initiative evaluation was not parseable.", CountsTowardSilentCap: false);
+        }
+        else
+        {
+            decision = parsed switch
+            {
+                InitiativeParsedDecision.Deactivate deactivate =>
+                    new RequestDeactivate(deactivate.Reason),
+                InitiativeParsedDecision.Stay stay =>
+                    new StaySilent(stay.Reason, CountsTowardSilentCap: true, NextWaitMs: stay.NextWaitMs),
+                InitiativeParsedDecision.Speak =>
+                    new Speak(WithTools(context, builder.Build(context, responseId))),
+                _ => new StaySilent("Initiative evaluation was empty.", CountsTowardSilentCap: false)
+            };
         }
 
-        return parsed switch
-        {
-            InitiativeParsedDecision.Deactivate deactivate =>
-                new RequestDeactivate(deactivate.Reason),
-            InitiativeParsedDecision.Stay stay =>
-                new StaySilent(stay.Reason, CountsTowardSilentCap: true, NextWaitMs: stay.NextWaitMs),
-            InitiativeParsedDecision.Speak =>
-                new Speak(WithTools(context, builder.Build(context, responseId))),
-            _ => new StaySilent("Initiative evaluation was empty.", CountsTowardSilentCap: true)
-        };
+        InitiativeEvaluationTelemetry.Record(context, decision, RuntimeTelemetry.ElapsedMs(started));
+        return decision;
     }
 
     private static ModelRequest BuildEvaluationRequest(AgentContext context)
@@ -56,15 +73,39 @@ public static class InitiativeEvaluator
             : Math.Max(0, (context.UtcNow - lastAssistantAt).TotalMilliseconds);
 
         var recent = context.History
-            .TakeLast(6)
+            .TakeLast(8)
             .Select(entry => new
             {
                 role = entry.Role.ToString(),
                 text = Clip(entry.Role == ConversationRole.Assistant
                     ? PromptContextBuilder.EligibleAssistantText(entry)
-                    : entry.Text, 240),
+                    : entry.Text, 320),
                 status = entry.Status.ToString()
             });
+
+        var agent = new
+        {
+            id = context.Definition.Id,
+            name = context.Definition.Identity.Name,
+            role = context.Definition.Identity.Role,
+            tone = context.Definition.Identity.Tone,
+            goals = context.Definition.Goals,
+            systemInstructions = Clip(context.Definition.SystemInstructions, 600),
+            conversationPolicy = new
+            {
+                responseLength = context.Definition.ConversationPolicy.ResponseLength,
+                askOneQuestionAtATime = context.Definition.ConversationPolicy.AskOneQuestionAtATime,
+                language = context.Definition.ConversationPolicy.Language
+            },
+            initiativePolicy = new
+            {
+                silenceThresholdMs = policy.SilenceThresholdMs,
+                cooldownMs = policy.CooldownMs,
+                maxPerSilencePeriod = policy.MaxPerSilencePeriod,
+                consecutiveCap = policy.ConsecutiveCap,
+                triggers = policy.Triggers
+            }
+        };
 
         var payload = new
         {
@@ -81,31 +122,39 @@ public static class InitiativeEvaluator
             silenceMs,
             sinceAssistantMs,
             inactivityExceeded = context.InactivityExceeded,
-            recentTurns = recent
+            recentTurns = recent,
+            agent
         };
 
+        var agentContext = PromptContextBuilder.BuildInitiativeAgentContext(context.Definition);
         return new ModelRequest(
             Guid.Empty,
             [
                 new ModelMessage(
                     ModelRole.System,
-                    """
-                    initiative-decision-v1
-                    You decide whether a proactive agent message is worthwhile right now.
-                    Reply with a single JSON object only, no markdown:
-                    {"decision":"speak"|"staySilent"|"deactivate","reason":"...","nextWaitMs":number|null}
-                    Use speak only when you can add concrete value (new help, a specific follow-up, or advancing an open task).
-                    Use staySilent when repeating encouragement, readiness, or prior wording would be the main content.
-                    Use deactivate only when the session should pause (rare).
-                    nextWaitMs is optional milliseconds until the next initiative evaluation (staySilent/deactivate).
-                    """),
+                    string.Join(
+                        '\n',
+                        Marker,
+                        """
+                        You decide whether a proactive agent message is worthwhile right now.
+                        Reply with a single JSON object only, no markdown:
+                        {"decision":"speak"|"staySilent"|"deactivate","reason":"...","nextWaitMs":number|null}
+                        Speak when a proactive turn would meaningfully advance the current interaction according to this agent's role, goals, and conversation policy.
+                        This may include a concise prompt, hint, clarification, reminder, or next-step question.
+                        Stay silent when the message would mainly repeat readiness, encouragement, or previous wording without moving the interaction forward.
+                        Reject empty check-ins such as "I'm here when you're ready" unless that is genuinely appropriate for the role.
+                        Use deactivate only when the session should pause (rare).
+                        nextWaitMs is optional milliseconds until the next initiative evaluation (staySilent/deactivate).
+                        """,
+                        "Agent context:",
+                        agentContext)),
                 new ModelMessage(ModelRole.User, JsonSerializer.Serialize(payload, Json))
             ],
-            MaxOutputTokens: 120,
+            MaxOutputTokens: 160,
             Temperature: 0.2);
     }
 
-    private static async Task<string> CollectTextAsync(
+    private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(
         ILanguageModel languageModel,
         ModelRequest request,
         CancellationToken cancellationToken)
@@ -113,13 +162,18 @@ public static class InitiativeEvaluator
         var builder = new System.Text.StringBuilder();
         await foreach (var evt in languageModel.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
         {
+            if (evt is ModelFailed)
+            {
+                return (builder.ToString(), true);
+            }
+
             if (evt is ModelTextDelta delta)
             {
                 builder.Append(delta.Text);
             }
         }
 
-        return builder.ToString();
+        return (builder.ToString(), false);
     }
 
     private static bool TryParseDecision(string raw, out InitiativeParsedDecision? decision)

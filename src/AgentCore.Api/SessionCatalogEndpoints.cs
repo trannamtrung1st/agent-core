@@ -195,12 +195,13 @@ public static class SessionCatalogEndpoints
         {
             try
             {
-                if (host.HasLiveRuntime(sessionId))
+                if (host.HasActiveLiveConnection(sessionId))
                 {
                     throw AgentCoreErrors.SessionInUse();
                 }
 
                 var snapshot = await sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                await host.ApplyReopenedSnapshotToLiveAsync(sessionId, snapshot, cancellationToken).ConfigureAwait(false);
                 return Results.Json(HttpMapping.ToCatalogItem(snapshot));
             }
             catch (AgentCoreException ex)

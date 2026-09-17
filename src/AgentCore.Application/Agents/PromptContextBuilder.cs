@@ -90,6 +90,37 @@ public sealed class PromptContextBuilder
             $"Conversation: responseLength={definition.ConversationPolicy.ResponseLength}; askOneQuestionAtATime={definition.ConversationPolicy.AskOneQuestionAtATime}; language={definition.ConversationPolicy.Language}; maxOutputTokens={definition.ConversationPolicy.MaxOutputTokens}."
         ]);
 
+    public static string BuildInitiativeAgentContext(AgentDefinition definition)
+    {
+        var policy = definition.InitiativePolicy;
+        var triggers = string.Join(", ", policy.Triggers);
+        return string.Join(
+            '\n',
+            [
+                $"Agent id: {definition.Id}",
+                $"Name: {definition.Identity.Name}",
+                $"Role: {definition.Identity.Role}",
+                $"Description: {Clip(definition.Identity.Description, 240)}",
+                $"Tone: {definition.Identity.Tone}",
+                "Goals:",
+                .. definition.Goals.Select(goal => $"- {goal}"),
+                "System instructions:",
+                Clip(definition.SystemInstructions, 900),
+                $"Conversation policy: responseLength={definition.ConversationPolicy.ResponseLength}; askOneQuestionAtATime={definition.ConversationPolicy.AskOneQuestionAtATime}; language={definition.ConversationPolicy.Language}.",
+                $"Initiative policy: silenceThresholdMs={policy.SilenceThresholdMs}; cooldownMs={policy.CooldownMs}; maxPerSilencePeriod={policy.MaxPerSilencePeriod}; consecutiveCap={policy.ConsecutiveCap}; triggers=[{triggers}]."
+            ]);
+    }
+
+    private static string Clip(string text, int max)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= max)
+        {
+            return text;
+        }
+
+        return text[..max];
+    }
+
     public static string EligibleAssistantText(ConversationEntry entry)
     {
         if (entry.DeliveryMode == SessionMode.Voice)

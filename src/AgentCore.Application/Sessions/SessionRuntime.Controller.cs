@@ -45,7 +45,7 @@ public sealed partial class SessionRuntime
     {
         using var activity = RuntimeTelemetry.Activity.StartActivity("attach");
         var started = Stopwatch.GetTimestamp();
-        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused)
         {
             input.Attached.TrySetResult(false);
             return;

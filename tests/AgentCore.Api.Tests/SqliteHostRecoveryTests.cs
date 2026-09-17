@@ -72,6 +72,7 @@ public sealed class SqliteHostRecoveryTests
             TestOwnerCapability.Apply(retryClient, second.Services);
             await using var retryHub = await ConnectFactoryAsync(second);
             var retryReady = ReadyWaiter(retryHub);
+            await ReopenIfPausedAsync(retryClient, sessionId);
             var retriedAttach = await retryHub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
             Assert.True(retriedAttach.Accepted, retriedAttach.Error?.Message);
             var retryAttachment = await retryReady;
@@ -131,6 +132,7 @@ public sealed class SqliteHostRecoveryTests
             TestOwnerCapability.Apply(retryClient, second.Services);
             await using var retryHub = await ConnectFactoryAsync(second);
             var retryReady = ReadyWaiter(retryHub);
+            await ReopenIfPausedAsync(retryClient, sessionId);
             var retriedAttach = await retryHub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
             Assert.True(retriedAttach.Accepted, retriedAttach.Error?.Message);
             var retryAttachment = await retryReady;
@@ -277,6 +279,8 @@ public sealed class SqliteHostRecoveryTests
             Text(session.SessionId, 2, attachment, "Again", Guid.NewGuid().ToString()));
         Assert.False(followUp.Accepted);
         Assert.Equal("NotFound", followUp.Error?.Code);
+        await WaitForCatalogStatusAsync(client, session.SessionId, "paused", TimeSpan.FromSeconds(10));
+        await ReopenIfPausedAsync(client, session.SessionId);
         var reconnectReady = ReadyWaiter(hub);
         var reconnect = await hub.InvokeAsync<CommandAck>("Attach", Attach(session.SessionId));
         Assert.True(reconnect.Accepted, reconnect.Error?.Message);
@@ -416,6 +420,45 @@ public sealed class SqliteHostRecoveryTests
         created.EnsureSuccessStatusCode();
         var session = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         return session!.SessionId;
+    }
+
+    private static async Task WaitForCatalogStatusAsync(
+        HttpClient client,
+        string sessionId,
+        string status,
+        TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var view = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v2/sessions/{sessionId}");
+            if (string.Equals(view?.Status, status, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        var final = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v2/sessions/{sessionId}");
+        Assert.Equal(status, final?.Status);
+    }
+
+    private static async Task ReopenIfPausedAsync(HttpClient client, string sessionId)
+    {
+        var view = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v2/sessions/{sessionId}");
+        if (!string.Equals(view?.Status, "paused", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var reopen = await client.PostAsync($"/api/v2/sessions/{sessionId}/reopen", null);
+        if (reopen.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            return;
+        }
+
+        reopen.EnsureSuccessStatusCode();
     }
 
     private static ClientCommand<AttachPayload> Attach(string sessionId) =>
