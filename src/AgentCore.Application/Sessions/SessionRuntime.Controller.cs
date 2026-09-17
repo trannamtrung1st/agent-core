@@ -546,6 +546,11 @@ public sealed partial class SessionRuntime
             }
 
             _timerGeneration++;
+            if (HasPendingUserBatch())
+            {
+                return;
+            }
+
             if (CanEvaluateIdle())
             {
                 if (InactivityExceeded())

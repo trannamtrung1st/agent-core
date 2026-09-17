@@ -14,6 +14,15 @@ public static class UserTextQueueTelemetry
     private static readonly Counter<long> Queued =
         RuntimeTelemetry.Meter.CreateCounter<long>(QueuedInstrument);
 
+    public const string PendingBatchSizeInstrument = "user_text.pending_batch_size";
+    public const string PendingBatchStartedInstrument = "user_text.pending_batch_started";
+
+    private static readonly Histogram<int> PendingBatchSize =
+        RuntimeTelemetry.Meter.CreateHistogram<int>(PendingBatchSizeInstrument);
+
+    private static readonly Counter<long> PendingBatchStarted =
+        RuntimeTelemetry.Meter.CreateCounter<long>(PendingBatchStartedInstrument);
+
     public static void Record(string behavior, bool queued)
     {
         Behavior.Add(1, new TagList { { "behavior", behavior } });
@@ -21,6 +30,13 @@ public static class UserTextQueueTelemetry
         {
             Queued.Add(1, new TagList { { "behavior", "queue" } });
         }
+    }
+
+    public static void RecordPendingBatchStarted(int size)
+    {
+        var bounded = Math.Clamp(size, 1, 8);
+        PendingBatchSize.Record(bounded);
+        PendingBatchStarted.Add(1);
     }
 }
 

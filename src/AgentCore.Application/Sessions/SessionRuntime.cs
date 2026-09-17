@@ -1126,7 +1126,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             if (input.Decision is StaySilent silent
                 && silent.CountsTowardSilentCap
-                && proactive)
+                && proactive
+                && !HasPendingUserBatch())
             {
                 _silentEvaluations++;
             }
@@ -1320,6 +1321,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         NoteUserActivity();
         _environmentQueue.Clear();
         _outputActivity = OutputActivity.WaitingForAgent;
+        UserTextQueueTelemetry.RecordPendingBatchStarted(suffix.Count);
         LaunchPreparedTurn(batchCause, trigger, _ids.NewId(), turn, attachmentIds);
         await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
         return true;

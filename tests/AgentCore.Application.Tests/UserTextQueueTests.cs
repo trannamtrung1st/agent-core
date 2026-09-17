@@ -348,6 +348,98 @@ public sealed class UserTextQueueTests
         Assert.DoesNotContain(output.TextDeltas, delta => delta.Text == "should-not-run");
     }
 
+    [Fact]
+    public async Task Pending_suffix_blocks_long_silence_inactivity_pause_and_environment()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new HoldingLanguageModel();
+        var recorded = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var definition = SampleDefinitions.Support with
+        {
+            InitiativePolicy = SampleDefinitions.Support.InitiativePolicy with { MaxInactivityMs = 5_000 }
+        };
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            recorded,
+            new FakeInterruptionClassifier(),
+            SessionMode.Text,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T1");
+        var generation = runtime.TimerGeneration;
+        await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        time.Advance(TimeSpan.FromSeconds(10));
+        await runtime.SubmitTimerElapsedAsync("idle", generation);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+        Assert.Equal(0, recorded.Triggers.Count(kind => kind == TriggerKind.LongSilence));
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(Guid.NewGuid(), "A-1"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(0, recorded.Triggers.Count(kind => kind == TriggerKind.EnvironmentUpdate));
+        Assert.Equal(1, model.Calls);
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Contains(recorded.Triggers, kind => kind == TriggerKind.UserTurn);
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Healthy_response_failure_still_advances_the_pending_suffix_once()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new FailThenSpeakModel();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "fail");
+        await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, model.Calls);
+        Assert.Equal(1, output.Items.Count(item => item.Payload is ResponseCompletedOutput completed && completed.Failed));
+        Assert.Contains(output.TextDeltas, delta => delta.Text == "ok");
+        Assert.Equal(2, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Pause_does_not_start_the_pending_suffix()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new HoldingLanguageModel();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T1");
+        await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        Assert.True(await runtime.RequestDeactivateAsync());
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal(1, model.Calls);
+        Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "U2");
+        model.Release.TrySetResult();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(1, model.Calls);
+        await runtime.DisposeAsync();
+    }
+
     private static string[] UserTexts(Harness harness) =>
         harness.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray();
 
@@ -374,7 +466,8 @@ public sealed class UserTextQueueTests
         FakeTimeProvider time,
         IAgentBrain brain,
         IInterruptionClassifier classifier,
-        SessionMode mode)
+        SessionMode mode,
+        AgentDefinition? definition = null)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
@@ -385,7 +478,7 @@ public sealed class UserTextQueueTests
             1,
             ids.NewSessionId(),
             1,
-            SampleDefinitions.Examiner,
+            definition ?? SampleDefinitions.Examiner,
             mode,
             null,
             SessionStatus.Created,
@@ -432,6 +525,33 @@ file sealed class HoldingLanguageModel : ILanguageModel
         yield return new ModelTextDelta($"T{call}");
         await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         yield return new ModelCompleted(ModelStopReason.Completed);
+    }
+
+    private int _calls;
+}
+
+file sealed class FailThenSpeakModel : ILanguageModel
+{
+    public int Calls { get; private set; }
+
+    public ModelCapabilities Capabilities { get; } = new(true, true);
+
+    public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+        ModelRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var call = Interlocked.Increment(ref _calls);
+        Calls = call;
+        if (call == 1)
+        {
+            yield return new ModelTextDelta("fail");
+            yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "synthetic failure"));
+            yield break;
+        }
+
+        yield return new ModelTextDelta("ok");
+        yield return new ModelCompleted(ModelStopReason.Completed);
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private int _calls;

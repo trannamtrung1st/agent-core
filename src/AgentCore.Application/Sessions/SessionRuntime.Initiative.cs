@@ -89,7 +89,7 @@ public sealed partial class SessionRuntime
         QueuedEnvironment queued,
         CancellationToken cancellationToken)
     {
-        if (IsExpired(queued) || !HasTrigger(TriggerName(queued.Kind)) || _activeResponseId is not null)
+        if (IsExpired(queued) || !HasTrigger(TriggerName(queued.Kind)) || _activeResponseId is not null || HasPendingUserBatch())
         {
             return;
         }
