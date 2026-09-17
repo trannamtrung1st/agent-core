@@ -330,12 +330,12 @@ internal static class SyntheticInitiativeScript
         if (string.Equals(trigger, "UnfinishedInteraction", StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(pendingTopic))
         {
-            return Speak(InitiativeIntents.FollowUp, "Synthetic unfinished interaction warrants a proactive follow-up.");
+            return Speak(InitiativeIntent.FollowUp, "Synthetic unfinished interaction warrants a proactive follow-up.");
         }
 
         if (string.Equals(trigger, "EnvironmentUpdate", StringComparison.Ordinal))
         {
-            return Speak(InitiativeIntents.FollowUp, "Synthetic environment update is actionable.");
+            return Speak(InitiativeIntent.FollowUp, "Synthetic environment update is actionable.");
         }
 
         if (string.Equals(agentId, "examiner", StringComparison.Ordinal))
@@ -354,7 +354,7 @@ internal static class SyntheticInitiativeScript
         }
 
         return silenceMs >= 60_000
-            ? Speak(InitiativeIntents.Other, "Synthetic initiative allows one proactive turn.")
+            ? Speak(InitiativeIntent.Other, "Synthetic initiative allows one proactive turn.")
             : StaySilent("Synthetic initiative waiting for longer silence.", 30_000);
     }
 
@@ -369,7 +369,7 @@ internal static class SyntheticInitiativeScript
         if (silenceMs >= ExaminerLongSilenceMs)
         {
             return Speak(
-                InitiativeIntents.Hint,
+                InitiativeIntent.Hint,
                 "Synthetic long silence during practice exam; offer a concise scaffold or hint.");
         }
 
@@ -390,7 +390,7 @@ internal static class SyntheticInitiativeScript
 
         if (silenceMs >= SupportAdvanceSilenceMs)
         {
-            return Speak(InitiativeIntents.FollowUp, "Synthetic support advances the simulated order conversation.");
+            return Speak(InitiativeIntent.FollowUp, "Synthetic support advances the simulated order conversation.");
         }
 
         return StaySilent("Synthetic support waiting for longer silence.", 20_000);
@@ -481,8 +481,8 @@ internal static class SyntheticInitiativeScript
         return node.GetString() ?? string.Empty;
     }
 
-    private static string Speak(string intent, string objective) =>
-        JsonSerializer.Serialize(new { decision = "speak", intent, objective });
+    private static string Speak(InitiativeIntent intent, string objective) =>
+        JsonSerializer.Serialize(new { decision = "speak", intent = InitiativeIntents.ToWire(intent), objective });
 
     private static string StaySilent(string reason, int nextWaitMs) =>
         JsonSerializer.Serialize(new { decision = "staySilent", reason, nextWaitMs });

@@ -89,7 +89,11 @@ public static class InitiativeEvaluationTelemetry
     private static (string Evaluated, string ReasonCode, int? NextWaitMs, string? Intent) Classify(AgentDecision decision) =>
         decision switch
         {
-            Speak speak => ("speak", "model_speak", speak.NextWaitMs, speak.Plan?.Intent),
+            Speak speak => (
+                "speak",
+                "model_speak",
+                speak.NextWaitMs,
+                speak.Plan is { } plan ? InitiativeIntents.ToWire(plan.Intent) : null),
             RequestDeactivate => ("deactivate", "model_deactivate", null, null),
             StaySilent silent when !silent.CountsTowardSilentCap && silent.Reason.Contains("provider", StringComparison.OrdinalIgnoreCase) =>
                 ("staySilent", "provider_failed", silent.NextWaitMs, null),

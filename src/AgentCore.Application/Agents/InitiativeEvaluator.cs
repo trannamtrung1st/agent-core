@@ -152,7 +152,7 @@ public static class InitiativeEvaluator
                         Stay silent when the message would mainly repeat readiness, encouragement, or previous wording without moving the interaction forward.
                         Reject empty check-ins such as "I'm here when you're ready" unless genuinely appropriate for the role.
                         Use deactivate only when the session should pause (rare).
-                        nextWaitMs is optional milliseconds until the next initiative evaluation (staySilent/deactivate).
+                        nextWaitMs is optional on every decision: for staySilent/deactivate it delays the next evaluation; for speak it delays the next idle timer after the proactive turn completes.
                         """,
                         "Agent context:",
                         agentContext)),
@@ -212,7 +212,7 @@ public static class InitiativeEvaluator
 
             decision = kind switch
             {
-                "speak" => TryReadSpeakPlan(root, out var plan, out var speakWait)
+                "speak" => TryReadSpeakPlan(root, out var plan, out var speakWait) && plan is not null
                     ? new InitiativeParsedDecision.Speak(plan, speakWait)
                     : InitiativeParsedDecision.InvalidPlan.Instance,
                 "deactivate" => new InitiativeParsedDecision.Deactivate(reason),
@@ -235,12 +235,11 @@ public static class InitiativeEvaluator
         }
     }
 
-    private static bool TryReadSpeakPlan(JsonElement root, out InitiativePlan plan, out int? nextWaitMs)
+    private static bool TryReadSpeakPlan(JsonElement root, out InitiativePlan? plan, out int? nextWaitMs)
     {
-        plan = new InitiativePlan(InitiativeIntents.Other, string.Empty);
+        plan = null;
         nextWaitMs = TryReadNextWaitMs(root);
-        if (!root.TryGetProperty("intent", out var intentNode)
-            || !InitiativeIntents.TryParse(intentNode.GetString(), out var intent))
+        if (!root.TryGetProperty("intent", out var intentNode))
         {
             return false;
         }
@@ -251,14 +250,7 @@ public static class InitiativeEvaluator
             return false;
         }
 
-        var note = objectiveNode.GetString()?.Trim() ?? string.Empty;
-        if (note.Length == 0 || note.Length > InitiativeIntents.MaxPlannerNoteLength)
-        {
-            return false;
-        }
-
-        plan = new InitiativePlan(intent, note);
-        return true;
+        return InitiativePlan.TryCreate(intentNode.GetString(), objectiveNode.GetString(), out plan);
     }
 
     private static int? TryReadNextWaitMs(JsonElement root)

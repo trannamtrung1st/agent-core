@@ -49,7 +49,7 @@ public sealed class InitiativePlanTests
         await runtime.WaitUntilIdleAsync();
 
         Assert.Contains("Proactive initiative intent: hint", capture.LastGenerationRequest, StringComparison.Ordinal);
-        Assert.Contains("untrusted observations", capture.LastGenerationRequest, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("initiative_planner_observation", capture.LastGenerationRequest, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(HintObjective, capture.LastGenerationRequest, StringComparison.Ordinal);
         Assert.Contains("food, the people", output.Items
             .Select(item => item.Payload)
@@ -134,6 +134,35 @@ public sealed class InitiativePlanTests
     }
 
     [Fact]
+    public void Planner_context_serializes_note_as_structured_json()
+    {
+        var builder = new PromptContextBuilder();
+        var context = ExaminerContext(
+            DateTimeOffset.UtcNow,
+            silenceSeconds: 60,
+            userText: "hmmm",
+            assistantText: VietnamQuestion);
+        var plan = InitiativePlan.Create(InitiativeIntent.Hint, "line one\nline two\"quoted\"");
+        var request = builder.Build(context, Guid.NewGuid(), plan);
+        var plannerContext = request.Messages.Single(message =>
+            message.Role == ModelRole.User
+            && message.Text.Contains("initiative_planner_observation", StringComparison.Ordinal)).Text;
+        var jsonStart = plannerContext.IndexOf('{');
+        Assert.True(jsonStart >= 0);
+        using var doc = JsonDocument.Parse(plannerContext[jsonStart..]);
+        Assert.Equal("initiative_planner_observation", doc.RootElement.GetProperty("type").GetString());
+        Assert.Equal("line one\nline two\"quoted\"", doc.RootElement.GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public void InitiativePlan_create_rejects_empty_or_oversized_planner_note()
+    {
+        Assert.Throws<ArgumentException>(() => InitiativePlan.Create(InitiativeIntent.Hint, "   "));
+        Assert.Throws<ArgumentException>(() => InitiativePlan.Create(InitiativeIntent.Hint, new string('x', 401)));
+        Assert.False(InitiativePlan.TryCreate("hint", new string('y', 401), out _));
+    }
+
+    [Fact]
     public void Rephrase_plan_adds_simpler_formulation_guidance_to_generation()
     {
         var builder = new PromptContextBuilder();
@@ -142,7 +171,7 @@ public sealed class InitiativePlanTests
             silenceSeconds: 60,
             userText: "hmmm",
             assistantText: VietnamQuestion);
-        var plan = new InitiativePlan(InitiativeIntents.Rephrase, "Simplify the Vietnam enjoyment question.");
+        var plan = InitiativePlan.Create(InitiativeIntent.Rephrase, "Simplify the Vietnam enjoyment question.");
         var request = builder.Build(context, Guid.NewGuid(), plan);
         var planSystem = request.Messages.Single(message =>
             message.Role == ModelRole.System
@@ -171,7 +200,7 @@ public sealed class InitiativePlanTests
             CancellationToken.None);
         var speak = Assert.IsType<Speak>(decision);
         Assert.NotNull(speak.Plan);
-        Assert.Equal(InitiativeIntents.Hint, speak.Plan.Intent);
+        Assert.Equal(InitiativeIntent.Hint, speak.Plan.Intent);
         Assert.Equal(objective, speak.Plan.PlannerNote);
         var plannerContext = speak.Request.Messages.Single(message =>
             message.Role == ModelRole.User

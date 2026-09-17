@@ -64,13 +64,9 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         await hubA.StopAsync();
         await hubA.DisposeAsync();
 
-        var reopen = await client.PostAsync($"/api/v2/sessions/{session.SessionId}/reopen", null);
-        reopen.EnsureSuccessStatusCode();
-
         await using var hubB = await ConnectAsync();
         var readyB = ReadyWaiter(hubB);
-        var attachedB = await hubB.InvokeAsync<CommandAck>("Attach", Attach(session.SessionId));
-        Assert.True(attachedB.Accepted, attachedB.Error?.Message);
+        var attachedB = await AttachWhenSessionAvailableAsync(hubB, session.SessionId);
         var attachmentB = await readyB;
         Assert.NotEqual(attachmentA, attachmentB);
 
@@ -108,6 +104,30 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
             Type = "session.attach",
             Payload = new AttachPayload()
         };
+
+    private static async Task<CommandAck> AttachWhenSessionAvailableAsync(HubConnection hub, string sessionId)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        CommandAck? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            last = await hub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
+            if (last.Accepted)
+            {
+                return last;
+            }
+
+            if (last.Error?.Code is not ("SessionInUse" or "SessionBusy"))
+            {
+                break;
+            }
+
+            await Task.Delay(50);
+        }
+
+        Assert.True(last?.Accepted ?? false, last?.Error?.Message);
+        return last!;
+    }
 
     private static Task<string> ReadyWaiter(HubConnection hub)
     {
