@@ -166,7 +166,7 @@ Historical Milestones 0–12 and post-MVP A–H stay as recorded above. P0 is a 
 | P0-C | `user.text` queue/interrupt; trailing durable suffix; CancelResponse; persist-before-ACK; pending user over initiative | Domain TrailingUserSuffix; UserTextQueueTests; JS MessagePack scenarios; SQLite Recover_keeps_trailing |
 | P0-D | First-party Send always queues; Stop targets rendered `responseId` | Composer/ChatApp/realtime unit tests; Playwright queue/Stop |
 | P0-E | ResponseEnvelope DisplayText/blocks; SpeechText not visible; live-only thinking | Conversation/activityState tests; markdown reload Playwright |
-| P0-F | Full section-17 cases and minimum commands | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
+| P0-F | Full section-17 cases and minimum commands, including named `dotnet test AgentCore.sln` | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
 
 ## Handoff rule
 

@@ -1,6 +1,6 @@
 # P0 agent-lifecycle handoff
 
-Run `run-20260917T172245-9d5497`, plan revision 3, production batch for `item-67061d5a4dfc` (P0-F). Synthetic/offline only. Hosted LLM/speech and headset checks were not run and are not claimed. Playwright MCP was not used; repeatable evidence is `CI=1 pnpm exec playwright test` with disposable servers.
+Run `run-20260917T172245-9d5497`, plan revision 3, P0-F plus review repair so the named `dotnet test AgentCore.sln` gate is green. Synthetic/offline only. Hosted LLM/speech and headset checks were not run and are not claimed. Playwright MCP was not used; repeatable evidence is `CI=1 pnpm exec playwright test` with disposable servers.
 
 ## Skills
 
@@ -22,9 +22,10 @@ HEAD `f118878` (later P0 commits built on that). Live primitives already include
 | 06 | item-b70466c9d2ac pending-user | `5682c5c` |
 | 07 | item-981a46e4872c Send/Stop | `2d24763` |
 | 08 | item-aeb896d504f7 envelope | `5d1b633` |
-| 09 | item-67061d5a4dfc P0-F | recorded after commit in evidence |
+| 09 | item-67061d5a4dfc P0-F | `f99d723` (handoff then recorded combined sln FAIL) |
+| 10 | item-67061d5a4dfc P0-F sln-gate repair | local correction commit in this revision |
 
-Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D.
+Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batch 10 is the review repair that makes `dotnet test AgentCore.sln` pass.
 
 ## P0-AC01–20
 
@@ -47,7 +48,7 @@ Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D.
 | P0-AC15 | met | `ResponseEnvelope` canonical | P0-E; RichEnvelope tests |
 | P0-AC16 | met | Thinking live-only | `activityState`; Playwright markdown reload without Thinking |
 | P0-AC17 | met | Reconnect/history/a11y | P0-E Conversation/ChatMessage tests; markdown reopen E2E |
-| P0-AC18 | partial | See commands | Per-project suites passed sequentially (Domain 22, Application 264, Infrastructure 78 + 9 skip, Api 72). Combined `dotnet test AgentCore.sln` **failed** `TwentyTurnDemoTests` (M12 demo interrupt race under concurrent testhosts). Live OpenAI/OpenRouter and Docker sandbox skipped as designed. |
+| P0-AC18 | met | See commands | Combined `dotnet test AgentCore.sln --nologo`: Domain 22, Application 264, Infrastructure 78 passed / 9 skip, Api 72. Live OpenAI/OpenRouter and Docker sandbox skipped as designed. |
 | P0-AC19 | met | Playwright | `CI=1 pnpm exec playwright test`: **15 passed** (isolated ports/servers). Pause assertion uses `getByTestId("connection")` text `Paused`. |
 | P0-AC20 | met | docs 16/18 table; TODO P0 `[x]`; this handoff | Canonical P0 observed table in `docs/18-implementation-plan.md` |
 
@@ -109,7 +110,7 @@ Full suite **15 passed** after pause locator fix (strict-mode `/paused/i`).
 
 | Command | Expected | Observed |
 | --- | --- | --- |
-| `dotnet test AgentCore.sln` | all pass | **FAIL** `TwentyTurnDemoTests` when assemblies run together |
+| `dotnet test AgentCore.sln --nologo` | all pass | **pass** Domain 22, Application 264, Infrastructure 78 + 9 skip, Api 72 |
 | Application csproj | pass | **264 passed** (standalone) |
 | Domain / Infrastructure / Api sequential | pass | 22 / 78+9 skip / 72 |
 | `cd web && pnpm run test --run` | pass | 174 passed |
@@ -119,8 +120,7 @@ Full suite **15 passed** after pause locator fix (strict-mode `/paused/i`).
 
 ## Deviations / not claimed
 
-- Combined `dotnet test AgentCore.sln` is not green: `TwentyTurnDemoTests` interrupt assertion races when other testhosts share the machine. Isolated Application suite passes. Not a section-17 case.
-- `ToolWorkflowRuntimeTests.Deactivation_rejects_stale_workspace_write` also flakes under load (in-flight workspace write vs deactivate). Isolated usually passes.
+- Combined `dotnet test AgentCore.sln` previously failed `TwentyTurnDemoTests` when the interrupt assertion sampled after releasing the model gate. The demo now waits for `ResponseCompletedOutput` with `InterruptReason == newText` while the scripted model is still gated, then the named sln command passes. Not a section-17 case.
 - Playwright MCP not exercised.
 - Hosted/headset/OpenAI/OpenRouter live and Docker sandbox: skipped/opt-in only.
 - No push.

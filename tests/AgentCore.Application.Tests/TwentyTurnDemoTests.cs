@@ -86,14 +86,14 @@ public sealed class TwentyTurnDemoTests
             new SyntheticSpeechSynthesizer(),
             new ScriptedLanguageModel(ScriptedLanguageModel.LongerChunks, gate));
         await interrupting.AttachAsync();
+        await interruptOutput.WaitForAsync(item => item.Payload is ReadyOutput);
         await interrupting.SubmitUserTextAsync("Please explain");
         await interruptOutput.WaitForAsync(item => item.Payload is TextDeltaOutput);
         await interrupting.SubmitUserTextAsync("Wait, stop");
+        await interruptOutput.WaitForAsync(
+            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason == "newText");
         gate.TrySetResult();
         await interrupting.WaitUntilIdleAsync();
-        Assert.Contains(
-            interruptOutput.Items,
-            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason == "newText");
 
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
