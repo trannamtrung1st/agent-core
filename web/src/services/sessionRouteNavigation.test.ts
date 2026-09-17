@@ -154,6 +154,81 @@ describe("session route navigation", () => {
     expect(useSessionStore.getState().error).toBeNull();
   });
 
+  it("loads full ended history beyond fifty entries across pages", async () => {
+    const makeEntry = (sequence: number, text: string) => ({
+      entryId: `e${sequence}`,
+      sequence,
+      sourceEventId: `e${sequence}`,
+      role: sequence % 2 === 1 ? "user" : "assistant",
+      text,
+      responseId: sequence % 2 === 0 ? `r${sequence}` : null,
+      status: "completed",
+      deliveryMode: "text",
+      heardTextEndExclusive: text.length,
+      receivedTextEndExclusive: text.length,
+      createdAt: "2026-01-01T00:00:00Z"
+    });
+    const firstPage = Array.from({ length: 50 }, (_, index) => makeEntry(index + 1, `Message ${index + 1}`));
+    const secondPage = Array.from({ length: 12 }, (_, index) => makeEntry(index + 51, `Message ${index + 51}`));
+
+    vi.mocked(getSession).mockResolvedValue({
+      sessionId: endedId,
+      agentId: "examiner",
+      agentVersion: 1,
+      mode: "text",
+      pendingMode: null,
+      status: "ended",
+      lastEntrySequence: 62
+    });
+    vi.mocked(listSessionMessages)
+      .mockResolvedValueOnce({
+        items: firstPage,
+        nextAfter: 50,
+        hasMore: true
+      })
+      .mockResolvedValueOnce({
+        items: secondPage,
+        nextAfter: 62,
+        hasMore: false
+      });
+
+    await applyRouteFromLocation();
+
+    expect(listSessionMessages).toHaveBeenCalledTimes(2);
+    expect(useSessionStore.getState().entries).toHaveLength(62);
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 1");
+    expect(useSessionStore.getState().entries[61]?.text).toBe("Message 62");
+  });
+
+  it("loads all ended history pages before rendering read-only transcript", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      sessionId: endedId,
+      agentId: "examiner",
+      agentVersion: 1,
+      mode: "text",
+      pendingMode: null,
+      status: "ended",
+      lastEntrySequence: 120
+    });
+    vi.mocked(listSessionMessages)
+      .mockResolvedValueOnce({
+        items: [{ entryId: "e1", sequence: 1, sourceEventId: "e1", role: "user", text: "First", responseId: null, status: "completed", deliveryMode: "text", heardTextEndExclusive: 5, receivedTextEndExclusive: 5, createdAt: "2026-01-01T00:00:00Z" }],
+        nextAfter: 50,
+        hasMore: true
+      })
+      .mockResolvedValueOnce({
+        items: [{ entryId: "e2", sequence: 120, sourceEventId: "e2", role: "assistant", text: "Last", responseId: "r1", status: "completed", deliveryMode: "text", heardTextEndExclusive: 4, receivedTextEndExclusive: 4, createdAt: "2026-01-02T00:00:00Z" }],
+        nextAfter: 120,
+        hasMore: false
+      });
+
+    await applyRouteFromLocation();
+
+    expect(listSessionMessages).toHaveBeenNthCalledWith(1, endedId, 0, 50);
+    expect(listSessionMessages).toHaveBeenNthCalledWith(2, endedId, 50, 50);
+    expect(useSessionStore.getState().entries.map((entry) => entry.text)).toEqual(["First", "Last"]);
+  });
+
   it("keeps an ended deep link when history load fails", async () => {
     vi.mocked(getSession).mockRejectedValue(new Error("Unable to open the conversation."));
 

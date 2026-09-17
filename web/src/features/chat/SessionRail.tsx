@@ -113,10 +113,7 @@ export function SessionRail({
       centered: true,
       mask: { closable: true },
       onOk: async () => {
-        let ok = await deleteCatalogItem(latestItem(item.sessionId, item));
-        if (!ok) {
-          ok = await deleteCatalogItem(latestItem(item.sessionId, item));
-        }
+        const ok = await deleteCatalogItem(latestItem(item.sessionId, item));
         await notifyMutation(ok, "Session deleted.", { rejectOnFailure: true });
         if (ok && sameSessionId(item.sessionId, activeSessionId)) {
           onNewChat({ urlMode: "replace" });

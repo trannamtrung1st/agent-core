@@ -499,7 +499,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
                 new RequestDeactivate("Silent initiative reached a definition bound."),
             TriggerKind.LongSilence when TriggerEnabled(context, "longSilence")
                 && CanSpeakProactive(context)
-                && CanOfferHelp(context) =>
+                && HasCompletedAssistantTurn(context) =>
                 new Speak(WithTools(context, builder.Build(context, responseId))),
             TriggerKind.EnvironmentUpdate when TriggerEnabled(context, "environmentUpdate") && IsUsefulEnvironment(context) =>
                 new Speak(WithTools(context, builder.Build(context, responseId))),
@@ -538,18 +538,9 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
             && context.SpeaksThisSilencePeriod < policy.MaxPerSilencePeriod;
     }
 
-    private static bool CanOfferHelp(AgentContext context)
-    {
-        var lastAssistant = context.History.LastOrDefault(entry =>
+    private static bool HasCompletedAssistantTurn(AgentContext context) =>
+        context.History.Any(entry =>
             entry.Role == ConversationRole.Assistant && entry.Status != EntryStatus.Streaming);
-        if (lastAssistant is null)
-        {
-            return false;
-        }
-
-        var text = lastAssistant.Text;
-        return text.TrimEnd().EndsWith('?');
-    }
 
     private static readonly HashSet<string> OrderStatuses = new(StringComparer.Ordinal)
     {

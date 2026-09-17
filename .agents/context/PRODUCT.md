@@ -36,7 +36,7 @@ The distinctive mechanism is one Session Runtime mailbox owning mutable conversa
 - Fast loop: native .NET + Vite; Synthetic profile is the default key-free path.
 - Demo target: current Chromium-family desktop (Chrome/Edge).
 - Identities load from versioned JSON under `agents/` (`examiner.json`, `customer-support.json`, `compliance.json`; see [docs/12](../../docs/12-backend-implementation-spec.md)).
-- `voiceAvailable` on GET `/api/v1/agents` and on `session.ready` agent uses the same backend gate ([docs/04](../../docs/04-backend-interfaces.md)); the composer hides Voice when it is false. Default Infrastructure registers synthetic speech for every profile, so voice-enabled agents normally show Voice on Synthetic and Real until a host opts out.
+- `voiceAvailable` on GET `/api/v1/agents` and on `session.ready` agent uses the same backend gate ([docs/04](../../docs/04-backend-interfaces.md)); the composer hides Voice when it is false. Synthetic profile advertises voice for voice-enabled agents; Real profile keeps voice hidden until hosted STT/TTS is wired, even if synthetic speech adapters are registered for development.
 - Browser talks to `/hubs/session` (SignalR + MessagePack); HTTP is for agent/session/history and health, not live chat text.
 - Persistence/reconnect restores the active conversation; ended catalog rows open a read-only history without attach; durable sessions use the v2 catalog rail (see [docs/13](../../docs/13-frontend-implementation-spec.md)), not a separate inbox product.
 

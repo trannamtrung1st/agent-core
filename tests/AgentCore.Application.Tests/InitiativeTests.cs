@@ -410,6 +410,100 @@ public sealed class InitiativeTests
     }
 
     [Fact]
+    public async Task Default_brain_allows_second_long_silence_when_prior_assistant_text_does_not_end_with_question_mark()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Hello from synthetic.", "Following up without a question mark."]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain('?', runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text);
+
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+
+        time.Advance(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, CountStarted(output, "LongSilence"));
+        Assert.Equal(2, brain.Triggers.Count(kind => kind == TriggerKind.LongSilence));
+    }
+
+    [Fact]
+    public async Task Default_brain_emits_three_consecutive_proactive_messages_without_user_input()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(
+                ["Hello from synthetic.", "Proactive two.", "Proactive three.", "Proactive four."]),
+            time,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+
+        for (var i = 0; i < 3; i++)
+        {
+            if (i > 0)
+            {
+                time.Advance(TimeSpan.FromSeconds(5));
+                await runtime.WaitUntilMailboxDrainedAsync();
+            }
+
+            await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+            await runtime.WaitUntilIdleAsync();
+            Assert.Equal(i + 1, CountStarted(output, "LongSilence"));
+        }
+    }
+
+    [Fact]
+    public async Task Runtime_caps_long_silence_even_when_brain_always_returns_speak()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 2);
+        var brain = new AlwaysSpeakLongSilenceBrain();
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Hello from synthetic.", "One.", "Two.", "Three."]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+
+        for (var i = 0; i < 4; i++)
+        {
+            if (i > 0)
+            {
+                time.Advance(TimeSpan.FromSeconds(5));
+                await runtime.WaitUntilMailboxDrainedAsync();
+            }
+
+            await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        Assert.Equal(2, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+    }
+
+    [Fact]
     public async Task Environment_speak_is_independent_of_silence_cap()
     {
         var time = Clock();
@@ -563,6 +657,23 @@ public sealed class InitiativeTests
             }
 
             return ValueTask.FromResult<AgentDecision>(new StaySilent("scripted"));
+        }
+    }
+
+    private sealed class AlwaysSpeakLongSilenceBrain : IAgentBrain
+    {
+        public ValueTask<AgentDecision> DecideAsync(
+            AgentContext context,
+            Guid responseId,
+            CancellationToken cancellationToken = default)
+        {
+            var builder = new PromptContextBuilder();
+            return context.Trigger.Kind switch
+            {
+                TriggerKind.UserTurn => ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId))),
+                TriggerKind.LongSilence => ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId))),
+                _ => ValueTask.FromResult<AgentDecision>(new StaySilent("scripted"))
+            };
         }
     }
 

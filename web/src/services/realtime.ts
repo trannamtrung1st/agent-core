@@ -4,7 +4,7 @@ import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
 import { applyServerEvent, emptySession, hasControlSequenceGap, historyFromPayload, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type ServerEvent } from "../state/sessionStore";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import { createSession, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession } from "./api";
+import { createSession, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession, type HistoryPage } from "./api";
 import {
   abortPendingAttachment,
   listAttachments,
@@ -1267,6 +1267,22 @@ export async function retryConnection(): Promise<void> {
   await startConnection(snapshot.sessionId);
 }
 
+const ENDED_HISTORY_PAGE_SIZE = 50;
+
+async function loadAllSessionHistory(sessionId: string): Promise<HistoryPage["items"]> {
+  const items: HistoryPage["items"] = [];
+  let after = 0;
+  for (;;) {
+    const page = await listSessionMessages(sessionId, after, ENDED_HISTORY_PAGE_SIZE);
+    items.push(...page.items);
+    if (!page.hasMore) {
+      return items;
+    }
+
+    after = page.nextAfter;
+  }
+}
+
 async function showEndedSession(
   sessionId: string,
   options?: { syncUrl?: boolean }
@@ -1312,8 +1328,7 @@ async function showEndedSession(
       return useSessionStore.getState().connection === "ready" ? "ready" : "failed";
     }
 
-    const after = Math.max(0, (view.lastEntrySequence ?? 0) - 50);
-    const page = await listSessionMessages(sessionId, after, 50);
+    const historyItems = await loadAllSessionHistory(sessionId);
     const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
       ?? agents.find((row) => row.id === view.agentId);
     const latest = useSessionStore.getState();
@@ -1328,7 +1343,7 @@ async function showEndedSession(
       agentRole: agent?.role ?? "",
       voiceAvailable: false,
       status: "ended",
-      entries: historyFromPayload(page.items),
+      entries: historyFromPayload(historyItems),
       lastServerSequence: view.lastEntrySequence ?? 0,
       error: null,
       errorFatal: false
@@ -1372,8 +1387,7 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
       return;
     }
 
-    const after = Math.max(0, (view.lastEntrySequence ?? 0) - 50);
-    const page = await listSessionMessages(sessionId, after, 50);
+    const historyItems = await loadAllSessionHistory(sessionId);
     const latest = useSessionStore.getState();
     if (!sameSessionId(latest.sessionId, sessionId) || latest.status !== "ended") {
       return;
@@ -1385,7 +1399,7 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
       return;
     }
 
-    const nextEntries = historyFromPayload(page.items);
+    const nextEntries = historyFromPayload(historyItems);
     if (sequence === latest.lastServerSequence && nextEntries.length < latest.entries.length) {
       void hydrateBoundAttachments(sessionId);
       return;

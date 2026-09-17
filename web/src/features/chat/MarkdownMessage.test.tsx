@@ -46,6 +46,13 @@ line
     expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
   });
 
+  it("does not load remote markdown images", () => {
+    render(<MarkdownMessage source={`![tracker](https://tracker.example/pixel?id=1)`} />);
+
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.getByText("[Image: tracker]")).toBeInTheDocument();
+  });
+
   it("does not execute raw HTML or javascript links", () => {
     render(
       <MarkdownMessage source={`Hello <script data-testid="injected">alert(1)</script> <img alt="x" src="x" onerror="alert(1)" /> [x](javascript:alert(1))`} />

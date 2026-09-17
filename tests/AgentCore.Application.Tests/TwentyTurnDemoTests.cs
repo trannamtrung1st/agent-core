@@ -125,6 +125,14 @@ public sealed class TwentyTurnDemoTests
             await runtime.WaitUntilIdleAsync();
         }
 
+        var initiativeAssistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        if (initiativeAssistant.ResponseId is { } initiativeResponseId
+            && initiativeAssistant.ReceivedTextEndExclusive < initiativeAssistant.Text.Length)
+        {
+            Assert.True(await runtime.SubmitReceiptAsync(initiativeResponseId, initiativeAssistant.Text.Length));
+            await runtime.WaitUntilMailboxDrainedAsync();
+        }
+
         await runtime.DetachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.AttachAsync();

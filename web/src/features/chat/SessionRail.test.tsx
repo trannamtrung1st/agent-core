@@ -11,6 +11,7 @@ import {
   renameCatalogItem,
   unarchiveCatalogItem
 } from "../../services/catalog";
+import { useSessionStore } from "../../state/sessionStore";
 import { SessionRail } from "./SessionRail";
 
 vi.mock("../../services/catalog", () => ({
@@ -335,8 +336,54 @@ describe("SessionRail", () => {
     expect(onOk).toBeTypeOf("function");
     await expect(onOk!()).rejects.toThrow("Delete failed.");
     expect(messageApi.error).toHaveBeenCalledWith("Delete failed.");
-    expect(deleteCatalogItem).toHaveBeenCalledTimes(2);
+    expect(deleteCatalogItem).toHaveBeenCalledTimes(1);
     expect(deleteCatalogItem).toHaveBeenCalledWith(live);
+  });
+
+  it("does not retry delete after a revision conflict refresh", async () => {
+    const messageApi = { success: vi.fn(), error: vi.fn() };
+    let onOk: (() => Promise<void>) | undefined;
+    vi.spyOn(antd.App, "useApp").mockReturnValue({
+      message: messageApi,
+      modal: {
+        confirm: (config: { onOk?: () => Promise<void> }) => {
+          onOk = config.onOk;
+        }
+      }
+    } as unknown as ReturnType<typeof antd.App.useApp>);
+
+    const refreshed = { ...live, revision: 5, title: "Changed title" };
+    vi.mocked(deleteCatalogItem).mockImplementation(async (item) => {
+      const { useSessionStore } = await import("../../state/sessionStore");
+      if (item.revision === live.revision) {
+        useSessionStore.setState({
+          catalogItems: [refreshed],
+          catalogError: "Session changed. Review it and confirm delete again."
+        });
+        return false;
+      }
+
+      return true;
+    });
+
+    renderRail({
+      items: [live],
+      agents,
+      activeSessionId: "s1",
+      includeArchived: false,
+      hasMore: false,
+      capabilityLost: false,
+      error: null,
+      mutation: null,
+      onNewChat: vi.fn(),
+      onOpen: vi.fn()
+    });
+
+    await openRowMenu("Planning notes", "Delete");
+    await expect(onOk!()).rejects.toThrow("Session changed. Review it and confirm delete again.");
+    expect(deleteCatalogItem).toHaveBeenCalledTimes(1);
+    expect(deleteCatalogItem).toHaveBeenCalledWith(live);
+    expect(useSessionStore.getState().catalogItems[0]?.revision).toBe(5);
   });
 
   it("toasts catalog mutation failures", async () => {

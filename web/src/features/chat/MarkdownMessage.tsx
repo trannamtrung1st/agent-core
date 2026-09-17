@@ -15,6 +15,9 @@ export function MarkdownMessage({ source }: { source: string }) {
         skipHtml
         urlTransform={(url) => authorizedHref(url) ?? ""}
         components={{
+          img: ({ alt }) => (
+            <span className="md-image-placeholder">{alt ? `[Image: ${alt}]` : "[Image]"}</span>
+          ),
           a: ({ href, children }) => {
             const safe = href ? authorizedHref(href) : null;
             if (!safe) {
