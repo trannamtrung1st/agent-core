@@ -31,7 +31,8 @@ public static class HttpMapping
             Format(snapshot.UpdatedAt),
             snapshot.Entries.Count == 0 ? 0 : snapshot.Entries[^1].Sequence,
             activeResponseId?.ToString(),
-            ProtocolVersion);
+            ProtocolVersion,
+            snapshot.PauseReason);
 
     public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
         new(
@@ -46,7 +47,8 @@ public static class HttpMapping
             snapshot.RuntimeEpoch,
             snapshot.Revision,
             Format(snapshot.CreatedAt),
-            Format(snapshot.UpdatedAt));
+            Format(snapshot.UpdatedAt),
+            snapshot.PauseReason);
 
     public static AttachmentResponse ToAttachment(AgentCore.Application.Ports.AttachmentRecord record) =>
         new(

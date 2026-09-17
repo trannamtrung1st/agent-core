@@ -970,6 +970,65 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().entries[61]?.text).toBe("Message 62");
   });
 
+  it("hydrates all missing history pages when bootstrap starts above sequence fifty", async () => {
+    const makeHistoryRow = (sequence: number) => ({
+      entryId: `e${sequence}`,
+      sequence,
+      sourceEventId: `e${sequence}`,
+      role: sequence % 2 === 1 ? "user" : "assistant",
+      text: `Message ${sequence}`,
+      responseId: sequence % 2 === 0 ? `r${sequence}` : null,
+      status: "completed",
+      deliveryMode: "text",
+      heardTextEndExclusive: 8,
+      receivedTextEndExclusive: 8,
+      createdAt: "2026-01-01T00:00:00Z"
+    });
+    const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 101));
+    const firstPage = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 1));
+    const secondPage = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 51));
+    vi.mocked(listSessionMessages)
+      .mockResolvedValueOnce({ items: firstPage, nextAfter: 50, hasMore: true })
+      .mockResolvedValueOnce({ items: secondPage, nextAfter: 100, hasMore: false });
+    hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "connecting",
+      sessionId: "s-long",
+      attachmentId: "a1",
+      lastServerSequence: 0,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s-long",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "text",
+        pendingMode: null,
+        status: "attached",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: bootstrap
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().entries).toHaveLength(150);
+    });
+    expect(listSessionMessages).toHaveBeenCalledTimes(2);
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 1");
+    expect(useSessionStore.getState().entries[149]?.text).toBe("Message 150");
+  });
+
   it("surfaces start conversation failures", async () => {
     vi.stubGlobal(
       "fetch",

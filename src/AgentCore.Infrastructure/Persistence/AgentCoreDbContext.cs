@@ -12,6 +12,7 @@ public sealed class SessionRecord
     public string Mode { get; set; } = "";
     public string? PendingMode { get; set; }
     public string Status { get; set; } = "";
+    public string? PauseReason { get; set; }
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public long Revision { get; set; }

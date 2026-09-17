@@ -147,7 +147,7 @@ describe("session route navigation", () => {
     );
 
     expect(result).toBe("ended");
-    expect(reopenSession).toHaveBeenCalledWith(endedId);
+    expect(reopenSession).not.toHaveBeenCalled();
     expect(useSessionStore.getState().status).toBe("ended");
     expect(useSessionStore.getState().connection).toBe("idle");
     expect(useSessionStore.getState().entries[0]?.text).toBe("Hello");
@@ -227,6 +227,55 @@ describe("session route navigation", () => {
     expect(listSessionMessages).toHaveBeenNthCalledWith(1, endedId, 0, 50);
     expect(listSessionMessages).toHaveBeenNthCalledWith(2, endedId, 50, 50);
     expect(useSessionStore.getState().entries.map((entry) => entry.text)).toEqual(["First", "Last"]);
+  });
+
+  it("opens paused catalog sessions without reopening the runtime", async () => {
+    const pausedId = "bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee";
+    vi.mocked(getSession).mockResolvedValue({
+      sessionId: pausedId,
+      agentId: "examiner",
+      agentVersion: 1,
+      mode: "text",
+      pendingMode: null,
+      status: "paused",
+      pauseReason: "inactivity",
+      lastEntrySequence: 1
+    });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [
+        {
+          entryId: "e1",
+          sequence: 1,
+          sourceEventId: "e1",
+          role: "user",
+          text: "Hello",
+          responseId: null,
+          status: "completed",
+          deliveryMode: "text",
+          heardTextEndExclusive: 5,
+          receivedTextEndExclusive: 5,
+          createdAt: "2026-01-01T00:00:00Z"
+        }
+      ],
+      nextAfter: 1,
+      hasMore: false
+    });
+
+    const result = await openCatalogSession(
+      {
+        sessionId: pausedId,
+        status: "paused",
+        archived: false,
+        ended: false
+      },
+      { syncUrl: false }
+    );
+
+    expect(result).toBe("paused");
+    expect(reopenSession).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().status).toBe("paused");
+    expect(useSessionStore.getState().connection).toBe("idle");
+    expect(useSessionStore.getState().pauseReason).toBe("inactivity");
   });
 
   it("keeps an ended deep link when history load fails", async () => {

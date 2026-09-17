@@ -29,13 +29,18 @@ public sealed record AgentContext(
     int SpeaksThisSilencePeriod = 0,
     bool InitiativeHeld = false,
     bool InactivityExceeded = false,
-    bool ModelSupportsTools = true);
+    bool ModelSupportsTools = true,
+    DateTimeOffset UtcNow = default,
+    DateTimeOffset? LastUserActivityAt = null);
 
 public abstract record AgentDecision;
 
-public sealed record StaySilent(string Reason) : AgentDecision;
+public sealed record StaySilent(
+    string Reason,
+    bool CountsTowardSilentCap = true,
+    int? NextWaitMs = null) : AgentDecision;
 
-public sealed record Speak(ModelRequest Request) : AgentDecision;
+public sealed record Speak(ModelRequest Request, int? NextWaitMs = null) : AgentDecision;
 
 public sealed record RequestDeactivate(string Reason) : AgentDecision;
 

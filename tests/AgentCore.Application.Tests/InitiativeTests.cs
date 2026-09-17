@@ -20,8 +20,9 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
-        await using var runtime = Create(output, new ScriptedLanguageModel(["Need a hint?"]), time, brain);
+        var model = new ScriptedLanguageModel(["Need a hint?"]);
+        var brain = RecordingDefaultBrain(model);
+        await using var runtime = Create(output, model, time, brain);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello?");
         await runtime.WaitUntilIdleAsync();
@@ -41,10 +42,11 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var definition = RepeatPolicy(maxPerSilence: 2, consecutiveCap: 2);
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var model = new ScriptedLanguageModel(["Still there?", "Follow up?", "Third?"]);
+        var brain = RecordingDefaultBrain(model);
         await using var runtime = Create(
             output,
-            new ScriptedLanguageModel(["Still there?", "Follow up?", "Third?"]),
+            model,
             time,
             brain,
             definition);
@@ -71,27 +73,23 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
-        await using var runtime = Create(output, new ScriptedLanguageModel(), time, brain);
+        var model = new ScriptedLanguageModel();
+        var brain = new RecordingAgentBrain(new StaySilentBrain());
+        await using var runtime = Create(output, model, time, brain);
         await runtime.AttachAsync();
-        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        var calls = brain.Calls;
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));
         Assert.Equal(OutputActivity.Idle, runtime.Output);
-        Assert.Contains(
-            output.Items,
-            item => item.Payload is StateChangedOutput state
-                && state.OutputState == nameof(OutputActivity.WaitingForAgent));
-        Assert.Contains(
-            output.Items,
-            item => item.Payload is StateChangedOutput state
-                && state.OutputState == nameof(OutputActivity.Idle));
-        var calls = brain.Calls;
+        Assert.True(brain.Calls > calls);
+        calls = brain.Calls;
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(calls, brain.Calls);
-        time.Advance(TimeSpan.FromSeconds(30));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
@@ -105,9 +103,10 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var inner = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var model = new ScriptedLanguageModel(["Need a hint?"]);
+        var inner = RecordingDefaultBrain(model);
         var brain = new GatedInitiativeBrain(inner, gate);
-        await using var runtime = Create(output, new ScriptedLanguageModel(["Need a hint?"]), time, brain);
+        await using var runtime = Create(output, model, time, brain);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello?");
         await runtime.WaitUntilIdleAsync();
@@ -127,7 +126,7 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var model = new GatedThenLiveModel();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var brain = RecordingDefaultBrain(new ScriptedLanguageModel());
         var classifier = new FakeInterruptionClassifier();
         await using var runtime = Create(
             output,
@@ -157,7 +156,7 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var model = new GatedThenLiveModel();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var brain = RecordingDefaultBrain(new ScriptedLanguageModel());
         await using var runtime = Create(output, model, time, brain, SampleDefinitions.Support);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
@@ -176,8 +175,9 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
-        await using var runtime = Create(output, new ScriptedLanguageModel(), time, brain, SampleDefinitions.Support);
+        var model = new ScriptedLanguageModel();
+        var brain = RecordingDefaultBrain(model);
+        await using var runtime = Create(output, model, time, brain, SampleDefinitions.Support);
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
         var generation = runtime.TimerGeneration;
@@ -198,8 +198,9 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
-        await using var runtime = Create(output, new ScriptedLanguageModel(["Still there?"]), time, brain, SampleDefinitions.Support);
+        var model = new ScriptedLanguageModel(["Still there?"]);
+        var brain = RecordingDefaultBrain(model);
+        await using var runtime = Create(output, model, time, brain, SampleDefinitions.Support);
         await runtime.AttachAsync();
         await runtime.SubmitEnvironmentAsync(
             SyntheticEnvironmentDriver.Unfinished(Guid.Parse("019944af-0000-7000-8000-0000000000f2"), "return"));
@@ -235,7 +236,7 @@ public sealed class InitiativeTests
         {
             if (i > 0)
             {
-                time.Advance(TimeSpan.FromSeconds(5));
+                time.Advance(TimeSpan.FromSeconds(31));
                 await runtime.WaitUntilMailboxDrainedAsync();
             }
 
@@ -244,7 +245,7 @@ public sealed class InitiativeTests
             Assert.Equal(i + 1, CountStarted(output, "LongSilence"));
         }
 
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
@@ -258,7 +259,8 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var definition = RepeatPolicy(maxPerSilence: 1, consecutiveCap: 0);
-        await using var runtime = Create(output, new ScriptedLanguageModel(), time, new DefaultAgentBrain(new PromptContextBuilder()), definition);
+        var model = new ScriptedLanguageModel();
+        await using var runtime = Create(output, model, time, new DefaultAgentBrain(new PromptContextBuilder(), model), definition);
         await runtime.AttachAsync();
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
@@ -286,7 +288,7 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
@@ -316,7 +318,7 @@ public sealed class InitiativeTests
         Assert.Equal(1, CountStarted(output, "LongSilence"));
         await runtime.SubmitUserTextAsync("I am back");
         await runtime.WaitUntilIdleAsync();
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
@@ -333,17 +335,18 @@ public sealed class InitiativeTests
         var brain = new StaySilentBrain();
         await using var runtime = Create(output, new ScriptedLanguageModel(), time, brain, definition);
         await runtime.AttachAsync();
-        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));
         Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
@@ -370,7 +373,7 @@ public sealed class InitiativeTests
         await runtime.WaitUntilIdleAsync();
         await runtime.SubmitInitiativeHoldAsync(true);
         await runtime.WaitUntilMailboxDrainedAsync();
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         var calls = brain.Calls;
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
@@ -414,11 +417,12 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var model = new ScriptedLanguageModel(["Hello from synthetic.", "Following up without a question mark."]);
+        var brain = RecordingDefaultBrain(model);
         var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
         await using var runtime = Create(
             output,
-            new ScriptedLanguageModel(["Hello from synthetic.", "Following up without a question mark."]),
+            model,
             time,
             brain,
             definition);
@@ -431,7 +435,7 @@ public sealed class InitiativeTests
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, CountStarted(output, "LongSilence"));
 
-        time.Advance(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(31));
         await runtime.WaitUntilMailboxDrainedAsync();
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
@@ -445,12 +449,13 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new ScriptedLanguageModel(
+            ["Hello from synthetic.", "Proactive two.", "Proactive three.", "Proactive four."]);
         await using var runtime = Create(
             output,
-            new ScriptedLanguageModel(
-                ["Hello from synthetic.", "Proactive two.", "Proactive three.", "Proactive four."]),
+            model,
             time,
-            new DefaultAgentBrain(new PromptContextBuilder()),
+            new DefaultAgentBrain(new PromptContextBuilder(), model),
             definition);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hi");
@@ -460,7 +465,7 @@ public sealed class InitiativeTests
         {
             if (i > 0)
             {
-                time.Advance(TimeSpan.FromSeconds(5));
+                time.Advance(TimeSpan.FromSeconds(31));
                 await runtime.WaitUntilMailboxDrainedAsync();
             }
 
@@ -468,6 +473,34 @@ public sealed class InitiativeTests
             await runtime.WaitUntilIdleAsync();
             Assert.Equal(i + 1, CountStarted(output, "LongSilence"));
         }
+    }
+
+    [Fact]
+    public async Task Initiative_evaluation_can_stay_silent_while_caps_still_allow_another_speak()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
+        var model = new QueuedInitiativeLanguageModel(
+            [
+                """{"decision":"speak","reason":"First useful nudge."}""",
+                """{"decision":"staySilent","reason":"Nothing new to add.","nextWaitMs":120000}"""
+            ],
+            ["Hello from synthetic.", "Would have followed up."]);
+        var brain = RecordingDefaultBrain(model);
+        await using var runtime = Create(output, model, time, brain, definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        time.Advance(TimeSpan.FromSeconds(31));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
     }
 
     [Fact]
@@ -491,7 +524,7 @@ public sealed class InitiativeTests
         {
             if (i > 0)
             {
-                time.Advance(TimeSpan.FromSeconds(5));
+                time.Advance(TimeSpan.FromSeconds(31));
                 await runtime.WaitUntilMailboxDrainedAsync();
             }
 
@@ -678,6 +711,37 @@ public sealed class InitiativeTests
                 TriggerKind.LongSilence => ValueTask.FromResult<AgentDecision>(new Speak(builder.Build(context, responseId))),
                 _ => ValueTask.FromResult<AgentDecision>(new StaySilent("scripted"))
             };
+        }
+    }
+
+    private static RecordingAgentBrain RecordingDefaultBrain(ILanguageModel model) =>
+        new(new DefaultAgentBrain(new PromptContextBuilder(), model));
+
+    private sealed class QueuedInitiativeLanguageModel(IReadOnlyList<string> initiativeJson, IReadOnlyList<string> generationChunks)
+        : ILanguageModel
+    {
+        private readonly ScriptedLanguageModel _generation = new(generationChunks);
+        private int _initiativeCalls;
+
+        public ModelCapabilities Capabilities => _generation.Capabilities;
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+            if (system is not null && system.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal))
+            {
+                var index = Math.Min(_initiativeCalls++, initiativeJson.Count - 1);
+                yield return new ModelTextDelta(initiativeJson[index]);
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            await foreach (var evt in _generation.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return evt;
+            }
         }
     }
 

@@ -27,8 +27,8 @@ public sealed class RoleEnvironmentTests
         Assert.NotNull(support);
         Assert.NotNull(compliance);
         Assert.Equal(1, examiner!.InitiativePolicy.ConsecutiveCap);
-        Assert.Equal(5, support!.InitiativePolicy.ConsecutiveCap);
-        Assert.Equal(5, support.InitiativePolicy.MaxPerSilencePeriod);
+        Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(2, support.InitiativePolicy.MaxPerSilencePeriod);
         Assert.Equal(0, compliance!.InitiativePolicy.ConsecutiveCap);
         Assert.False(RoleEnvironments.Of(examiner).AttachmentPolicy.AllowUnreadUnsupportedTypes);
         Assert.Contains("knowledge.retrieve", RoleEnvironments.Of(support).ToolList);
@@ -78,8 +78,8 @@ public sealed class RoleEnvironmentTests
     public async Task Support_runtime_consumes_pinned_consecutive_cap()
     {
         var definition = await Load("customer-support");
-        Assert.Equal(5, definition.InitiativePolicy.ConsecutiveCap);
-        Assert.Equal(5, definition.InitiativePolicy.MaxPerSilencePeriod);
+        Assert.Equal(2, definition.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(2, definition.InitiativePolicy.MaxPerSilencePeriod);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var output = new CapturingSessionOutput();
         var brain = new ScriptedCapBrain(definition);
@@ -93,12 +93,12 @@ public sealed class RoleEnvironmentTests
             await runtime.WaitUntilIdleAsync();
             if (i < 2)
             {
-                time.Advance(TimeSpan.FromSeconds(30));
+                time.Advance(TimeSpan.FromSeconds(121));
                 await runtime.WaitUntilMailboxDrainedAsync();
             }
         }
 
-        Assert.Equal(3, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
+        Assert.Equal(2, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
     }
 
     [Fact]
@@ -122,12 +122,12 @@ public sealed class RoleEnvironmentTests
             await runtime.WaitUntilIdleAsync();
             if (i < 2)
             {
-                time.Advance(TimeSpan.FromSeconds(30));
+                time.Advance(TimeSpan.FromSeconds(121));
                 await runtime.WaitUntilMailboxDrainedAsync();
             }
         }
 
-        Assert.Equal(3, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
+        Assert.Equal(2, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
     }
 
     [Fact]

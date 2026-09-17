@@ -9,6 +9,7 @@ using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Conversation;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AgentCore.Api.Realtime;
@@ -30,6 +31,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     private readonly TimeProvider _time;
     private readonly AgentCoreOptions _options;
     private readonly IOwnerCapabilityService _capabilities;
+    private readonly ILogger<SessionHost> _logger;
     private readonly ConcurrentDictionary<Guid, Live> _live = new();
     private readonly ConcurrentDictionary<string, Guid> _connections = new();
     private readonly HashSet<Guid> _terminating = [];
@@ -48,7 +50,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         IHubContext<SessionHub> hubs,
         TimeProvider time,
         IOptions<AgentCoreOptions> options,
-        IOwnerCapabilityService capabilities)
+        IOwnerCapabilityService capabilities,
+        ILogger<SessionHost> logger)
     {
         _sessions = sessions;
         _factory = factory;
@@ -56,6 +59,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         _time = time;
         _options = options.Value;
         _capabilities = capabilities;
+        _logger = logger;
     }
 
     public Guid? ActiveResponseId(Guid sessionId) =>
@@ -1110,12 +1114,27 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             var sessionId = output.Context.SessionId;
             _ = Task.Run(async () =>
             {
-                try
+                for (var attempt = 0; attempt < 2; attempt++)
                 {
-                    await CancelLiveRuntimeAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch
-                {
+                    try
+                    {
+                        await CancelLiveRuntimeAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
+                        return;
+                    }
+                    catch (Exception ex) when (attempt == 0)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Paused session cleanup failed for {SessionId}; retrying once.",
+                            sessionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Paused session cleanup failed for {SessionId} after retry.",
+                            sessionId);
+                    }
                 }
             });
             return;

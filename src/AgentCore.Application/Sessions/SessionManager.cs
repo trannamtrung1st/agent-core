@@ -161,7 +161,13 @@ public sealed class SessionManager
                         throw AgentCoreErrors.Validation("Archived sessions must be unarchived before reopen.");
                     }
 
-                    return snapshot with { RuntimeEpoch = snapshot.RuntimeEpoch + 1 };
+                    var now = _time.GetUtcNow();
+                    return snapshot with
+                    {
+                        RuntimeEpoch = snapshot.RuntimeEpoch + 1,
+                        LastUserActivityAt = now,
+                        UpdatedAt = now
+                    };
                 },
                 cancellationToken,
                 touchCatalogOrder: false)
@@ -194,7 +200,8 @@ public sealed class SessionManager
                     {
                         Status = SessionStatus.Paused,
                         PendingMode = null,
-                        RuntimeEpoch = snapshot.RuntimeEpoch + 1
+                        RuntimeEpoch = snapshot.RuntimeEpoch + 1,
+                        PauseReason = "manual"
                     };
                 },
                 cancellationToken,

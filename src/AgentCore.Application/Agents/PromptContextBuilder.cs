@@ -496,32 +496,67 @@ public static class ConversationSummary
     }
 }
 
-public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrain
+public sealed class DefaultAgentBrain(PromptContextBuilder builder, ILanguageModel? languageModel = null) : IAgentBrain
 {
-    public ValueTask<AgentDecision> DecideAsync(
+    public async ValueTask<AgentDecision> DecideAsync(
         AgentContext context,
         Guid responseId,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        AgentDecision decision = context.Trigger.Kind switch
+        if (context.Trigger.Kind == TriggerKind.UserTurn)
         {
-            TriggerKind.UserTurn => new Speak(WithTools(context, builder.Build(context, responseId))),
-            TriggerKind.LongSilence when context.InitiativeHeld =>
-                new StaySilent("Initiative held by in-flight work."),
-            TriggerKind.LongSilence when TriggerEnabled(context, "longSilence")
-                && CanSpeakProactive(context)
-                && HasCompletedAssistantTurn(context) =>
-                new Speak(WithTools(context, builder.Build(context, responseId))),
-            TriggerKind.EnvironmentUpdate when TriggerEnabled(context, "environmentUpdate") && IsUsefulEnvironment(context) =>
-                new Speak(WithTools(context, builder.Build(context, responseId))),
-            TriggerKind.UnfinishedInteraction when TriggerEnabled(context, "unfinishedInteraction")
-                && !string.IsNullOrEmpty(context.PendingTopic) =>
-                new Speak(WithTools(context, builder.Build(context, responseId))),
-            _ => new StaySilent("Not useful or not eligible.")
-        };
-        return ValueTask.FromResult(decision);
+            return new Speak(WithTools(context, builder.Build(context, responseId)));
+        }
+
+        if (context.InitiativeHeld)
+        {
+            return new StaySilent("Initiative held by in-flight work.", CountsTowardSilentCap: false);
+        }
+
+        if (!IsTriggerEligible(context))
+        {
+            return new StaySilent("Not useful or not eligible.", CountsTowardSilentCap: false);
+        }
+
+        if (context.Trigger.Kind == TriggerKind.LongSilence
+            && (!CanSpeakProactive(context) || !HasCompletedAssistantTurn(context)))
+        {
+            return new StaySilent("Proactive hard cap reached.", CountsTowardSilentCap: false);
+        }
+
+        if (context.Trigger.Kind == TriggerKind.EnvironmentUpdate && !IsUsefulEnvironment(context))
+        {
+            return new StaySilent("Environment update not actionable.", CountsTowardSilentCap: false);
+        }
+
+        if (context.Trigger.Kind == TriggerKind.UnfinishedInteraction
+            && string.IsNullOrEmpty(context.PendingTopic))
+        {
+            return new StaySilent("No pending topic.", CountsTowardSilentCap: false);
+        }
+
+        if (languageModel is null)
+        {
+            return new Speak(WithTools(context, builder.Build(context, responseId)));
+        }
+
+        return await InitiativeEvaluator.EvaluateAsync(
+            languageModel,
+            builder,
+            context,
+            responseId,
+            cancellationToken).ConfigureAwait(false);
     }
+
+    private static bool IsTriggerEligible(AgentContext context) =>
+        context.Trigger.Kind switch
+        {
+            TriggerKind.LongSilence => TriggerEnabled(context, "longSilence"),
+            TriggerKind.EnvironmentUpdate => TriggerEnabled(context, "environmentUpdate"),
+            TriggerKind.UnfinishedInteraction => TriggerEnabled(context, "unfinishedInteraction"),
+            _ => false
+        };
 
     private static ModelRequest WithTools(AgentContext context, ModelRequest request)
     {

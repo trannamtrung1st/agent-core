@@ -21,7 +21,7 @@ import {
   setMuted
 } from "../../services/realtime";
 import { AgentPicker } from "./AgentPicker";
-import { mapAgentActivity, conversationStatusLabel, conversationStatusTone } from "./activityState";
+import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -249,7 +249,7 @@ export function ChatApp() {
                   ) : state.status === "paused" ? (
                     <Flex vertical gap={8} className="conversation-paused-note">
                       <Typography.Text type="secondary">
-                        This conversation is paused. Resume to continue messaging.
+                        {pausedSessionMessage(state.pauseReason)}
                       </Typography.Text>
                       <Button type="primary" onClick={() => void resumePausedSession()}>
                         Resume

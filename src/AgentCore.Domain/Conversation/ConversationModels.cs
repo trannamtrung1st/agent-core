@@ -124,6 +124,7 @@ public sealed record SessionSnapshot(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? LastUserActivityAt = null,
+    string? PauseReason = null,
     string Title = SessionTitles.Default,
     long RuntimeEpoch = 0,
     bool WorkspaceOwned = true,

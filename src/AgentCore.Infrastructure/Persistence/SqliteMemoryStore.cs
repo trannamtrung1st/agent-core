@@ -125,6 +125,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "Sessions", "PauseReason", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260917120000_PauseReasonAndActivityBackfill', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -423,6 +433,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
         row.Status = snapshot.Status.ToString();
+        row.PauseReason = snapshot.PauseReason;
         row.Title = snapshot.Title;
         row.RuntimeEpoch = snapshot.RuntimeEpoch;
         row.WorkspaceOwned = snapshot.WorkspaceOwned;
@@ -499,6 +510,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             FromUnix(row.CreatedAtUtc),
             FromUnix(row.UpdatedAtUtc),
             snapshot.LastUserActivityAtUtc is { } lastUser ? FromUnix(lastUser) : null,
+            row.PauseReason,
             string.IsNullOrEmpty(row.Title) ? SessionTitles.Default : row.Title,
             row.RuntimeEpoch,
             row.WorkspaceOwned,

@@ -35,10 +35,10 @@ POST request:
 201 / GET session response:
 
 ```json
-{"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","agentId":"examiner","agentVersion":1,"mode":"text","pendingMode":null,"status":"created","createdAt":"2026-09-15T00:00:00.000Z","updatedAt":"2026-09-15T00:00:00.000Z","lastEntrySequence":0,"activeResponseId":null,"protocolVersion":1}
+{"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","agentId":"examiner","agentVersion":1,"mode":"text","pendingMode":null,"status":"created","createdAt":"2026-09-15T00:00:00.000Z","updatedAt":"2026-09-15T00:00:00.000Z","lastEntrySequence":0,"activeResponseId":null,"protocolVersion":1,"pauseReason":null}
 ```
 
-status is `created|attached|paused|ending|ended`; `pendingMode` is `text|voice` while a mode change is queued, otherwise null. activeResponseId is required and nullable. GET reads the current runtime projection when active, durable snapshot otherwise. Session summary is server-only and never appears on this view. Initial mode is honored only after attach; creation performs no provider calls.
+status is `created|attached|paused|ending|ended`; `pendingMode` is `text|voice` while a mode change is queued, otherwise null. `pauseReason` is null unless `status` is `paused`, then one of `manual|inactivity|silentEvaluation|initiative|disconnected` (extensible string). activeResponseId is required and nullable. GET reads the current runtime projection when active, durable snapshot otherwise. Session summary is server-only and never appears on this view. Initial mode is honored only after attach; creation performs no provider calls. Paused sessions are opened read-only in the browser until the user explicitly resumes (reopen + attach); catalog/deep links must not auto-resume.
 
 History response (all listed entry fields required; nullable responseId/sourceEventId):
 

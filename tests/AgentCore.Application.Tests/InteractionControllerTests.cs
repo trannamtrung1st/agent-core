@@ -195,11 +195,13 @@ public sealed class InteractionControllerTests
 
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var model = new ScriptedLanguageModel();
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder(), model));
         var classifier = new FakeInterruptionClassifier();
-        await using var runtime = CreateRuntime(output, new ScriptedLanguageModel(), time, brain, classifier, SessionMode.Text);
+        await using var runtime = CreateRuntime(output, model, time, brain, classifier, SessionMode.Text);
         await runtime.AttachAsync();
-        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitUserTextAsync("Hi");
+        await runtime.WaitUntilIdleAsync();
         var generation = runtime.TimerGeneration;
         await runtime.SubmitTimerElapsedAsync("idle", generation);
         await runtime.WaitUntilIdleAsync();

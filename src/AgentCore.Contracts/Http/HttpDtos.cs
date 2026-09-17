@@ -15,7 +15,8 @@ public sealed record SessionViewResponse(
     string UpdatedAt,
     long LastEntrySequence,
     string? ActiveResponseId,
-    int ProtocolVersion);
+    int ProtocolVersion,
+    string? PauseReason = null);
 
 public sealed record AgentDescriptorResponse(
     string Id,
@@ -77,7 +78,8 @@ public sealed record SessionCatalogItemResponse(
     long RuntimeEpoch,
     long Revision,
     string CreatedAt,
-    string UpdatedAt);
+    string UpdatedAt,
+    string? PauseReason = null);
 
 public sealed record SessionCatalogPageResponse(
     IReadOnlyList<SessionCatalogItemResponse> Items,

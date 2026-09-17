@@ -173,8 +173,9 @@ public sealed record AgentContext(AgentDefinition Definition,
     int SpeaksThisSilencePeriod = 0, bool InitiativeHeld = false,
     bool InactivityExceeded = false);
 public abstract record AgentDecision;
-public sealed record StaySilent(string Reason) : AgentDecision;
-public sealed record Speak(ModelRequest Request) : AgentDecision;
+public sealed record StaySilent(string Reason, bool CountsTowardSilentCap = true,
+    int? NextWaitMs = null) : AgentDecision;
+public sealed record Speak(ModelRequest Request, int? NextWaitMs = null) : AgentDecision;
 public sealed record RequestDeactivate(string Reason) : AgentDecision;
 public interface IAgentBrain
 {
@@ -188,7 +189,7 @@ public interface IIdGenerator
 }
 ```
 
-`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. The default brain deterministically gates initiative and builds a normalized ModelRequest; Session Runtime then enumerates ILanguageModel. It does not run a second conversational LLM call just to decide every user turn. Optional future model-assisted initiative is behind this port; its result must pass the same policy recheck. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. RequestDeactivate cancels live output, rotates the runtime epoch, persists Paused, and is not archive or v1 end. Role `environment.toolAllowlist` is runtime-enforced (`RolePermissions`); `process`/`shell` stay denied. Approved knowledge retrieval returns identity, title, citation, and current file body under the pinned source identity (`GET /api/v2/sessions/{id}/knowledge/{identity}`). Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
+`RequestInterruptionClassification` invokes `IInterruptionClassifier` only. `RequestAgentDecision` invokes `IAgentBrain` only. Do not call AgentBrain to classify microphone events. `InterruptionContext.ActivityScore` is the browser VAD observation; `TranscriptConfidence` is optional STT evidence (null when the adapter does not provide it). IAgentBrain is an application policy/context-builder boundary. User turns build a normalized ModelRequest directly. Proactive triggers run hard gates first, then a compact initiative evaluation on `ILanguageModel` when configured (`initiative-decision-v1` JSON); only `Speak` proceeds to the full generation request. Session Runtime enumerates `ILanguageModel` for both evaluation and generation. Decisions must pass the same runtime policy recheck. `StaySilent.CountsTowardSilentCap=false` marks hard-gate denials that must not advance silent-evaluation pause. Allocate a candidate response ID before deciding; only Speak makes it live and emits `agent.response.started`. StaySilent allocates no visible response. RequestDeactivate cancels live output, rotates the runtime epoch, persists Paused, and is not archive or v1 end. Role `environment.toolAllowlist` is runtime-enforced (`RolePermissions`); `process`/`shell` stay denied. Approved knowledge retrieval returns identity, title, citation, and current file body under the pinned source identity (`GET /api/v2/sessions/{id}/knowledge/{identity}`). Classifier defaults to deterministic heuristics; optional model fallback is bounded by [Controller](05-interaction-controller.md).
 
 Use injected `TimeProvider` for UTC timestamps, monotonic elapsed time, and timers (`Task.Delay(delay, timeProvider, token)` or `CreateTimer`). Do not define IClock. Production NewId calls `Guid.CreateVersion7(timeProvider.GetUtcNow())`; NewSessionId calls `Guid.NewGuid()` for cryptographically random UUIDv4 local/demo bearer session IDs. Tests use reproducible sequences for both. IDs are serialized as strings at browser boundaries.
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -39,6 +40,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (TryInitiativeDecision(request, out var initiativeJson))
+        {
+            yield return new ModelTextDelta(initiativeJson);
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
         if (request.Tools is { Count: > 0 } && (_alwaysToolCall || ShouldScriptTools(request)))
         {
             await foreach (var item in GenerateToolScriptAsync(request, cancellationToken).ConfigureAwait(false))
@@ -266,5 +274,44 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         return DefaultChunks;
+    }
+
+    private static bool TryInitiativeDecision(ModelRequest request, out string json)
+    {
+        json = string.Empty;
+        var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+        if (system is null || !system.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var payload = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var root = doc.RootElement;
+            var speaks = root.TryGetProperty("speaksThisSilencePeriod", out var speaksNode)
+                ? speaksNode.GetInt32()
+                : 0;
+            var maxSpeaks = root.TryGetProperty("maxPerSilencePeriod", out var maxSpeaksNode)
+                ? maxSpeaksNode.GetInt32()
+                : 1;
+            var consecutive = root.TryGetProperty("consecutiveProactiveSpeaks", out var consecutiveNode)
+                ? consecutiveNode.GetInt32()
+                : 0;
+            var consecutiveCap = root.TryGetProperty("consecutiveCap", out var capNode)
+                ? capNode.GetInt32()
+                : 1;
+            var speak = speaks < maxSpeaks && consecutive < consecutiveCap;
+            json = speak
+                ? """{"decision":"speak","reason":"Synthetic initiative allows one more proactive turn."}"""
+                : """{"decision":"staySilent","reason":"Synthetic initiative cap or duplicate nudge.","nextWaitMs":120000}""";
+            return true;
+        }
+        catch (JsonException)
+        {
+            json = """{"decision":"staySilent","reason":"Synthetic initiative fallback."}""";
+            return true;
+        }
     }
 }

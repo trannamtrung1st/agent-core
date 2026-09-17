@@ -52,6 +52,7 @@ public sealed partial class SessionRuntime
         }
 
         _deactivated = false;
+        NoteUserActivity();
         if (_snapshot.ProfileId is { } profileId)
         {
             _profile = await _store.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
@@ -60,7 +61,8 @@ public sealed partial class SessionRuntime
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Attached,
-            PendingMode = null
+            PendingMode = null,
+            PauseReason = null
         };
         _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         if (_snapshot.Mode == SessionMode.Voice)
@@ -118,7 +120,8 @@ public sealed partial class SessionRuntime
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Paused,
-            PendingMode = null
+            PendingMode = null,
+            PauseReason = "disconnected"
         };
         _input = InputActivity.Idle;
         _muted = false;
@@ -131,7 +134,7 @@ public sealed partial class SessionRuntime
         RequestPersist(
             _snapshot,
             PersistKind.Pause,
-            then: ct => PublishStateAsync(input.Context, ct));
+            then: ct => PublishStateAsync(input.Context, "disconnected", ct));
     }
 
     private async Task HandleMuteAsync(MuteReceived input, CancellationToken cancellationToken)
@@ -535,10 +538,16 @@ public sealed partial class SessionRuntime
                     return;
                 }
 
+                var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.LongSilence, Text: null);
+                if (!CanAcceptProactiveSpeak(trigger) || !HasCompletedAssistantTurn(_snapshot))
+                {
+                    ScheduleIdleTimer(SilenceThreshold());
+                    return;
+                }
+
                 var responseId = _ids.NewId();
                 var turn = ++_turnGeneration;
                 _outputActivity = OutputActivity.WaitingForAgent;
-                var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.LongSilence, Text: null);
                 LaunchBrain(input.Context, trigger, responseId, turn);
                 await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }

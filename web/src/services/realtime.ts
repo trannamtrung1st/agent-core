@@ -1149,11 +1149,11 @@ export function clearRouteNotice(): void {
   useSessionStore.setState({ routeNotice: null });
 }
 
-export type OpenSessionResult = "ready" | "ended" | "blocked" | "failed";
+export type OpenSessionResult = "ready" | "ended" | "blocked" | "failed" | "paused";
 
 function isOpenSession(snapshot: { connection: string; sessionId: string | null; status: string }): boolean {
   return snapshot.connection === "ready"
-    || (isReadonlySession(snapshot) && snapshot.connection === "idle");
+    || (snapshot.connection === "idle" && (isReadonlySession(snapshot) || snapshot.status === "paused"));
 }
 
 export async function openSessionById(
@@ -1210,6 +1210,10 @@ export async function openCatalogSession(
 
   if (item.ended || item.status === "ended") {
     return showEndedSession(item.sessionId, options);
+  }
+
+  if (item.status === "paused") {
+    return showPausedSession(item.sessionId, options);
   }
 
   const snapshot = useSessionStore.getState();
@@ -1269,7 +1273,11 @@ export async function resumePausedSession(): Promise<boolean> {
   try {
     await reopenSession(sessionId);
     await startConnection(sessionId, { syncUrl: "none" });
-    return useSessionStore.getState().connection === "ready";
+    const latest = useSessionStore.getState();
+    if (latest.connection === "ready") {
+      useSessionStore.setState({ pauseReason: null });
+    }
+    return latest.connection === "ready";
   } catch {
     return false;
   }
@@ -1316,7 +1324,8 @@ async function hydrateActiveHistory(sessionId: string | null, bootstrap: History
     const page = await listSessionMessages(sessionId, after, ENDED_HISTORY_PAGE_SIZE);
     const chunk = historyFromPayload(page.items);
     prefix = mergeHistoryEntries(prefix, chunk.filter((entry) => entry.sequence < firstSeq));
-    if (!page.hasMore || chunk.some((entry) => entry.sequence <= 1)) {
+    const highestFetched = prefix.reduce((max, entry) => Math.max(max, entry.sequence), 0);
+    if (!page.hasMore || highestFetched >= firstSeq - 1) {
       break;
     }
 
@@ -1348,6 +1357,88 @@ async function loadAllSessionHistory(sessionId: string): Promise<HistoryPage["it
     }
 
     after = page.nextAfter;
+  }
+}
+
+async function showPausedSession(
+  sessionId: string,
+  options?: { syncUrl?: boolean }
+): Promise<OpenSessionResult> {
+  const snapshot = useSessionStore.getState();
+  if (
+    sameSessionId(snapshot.sessionId, sessionId)
+    && snapshot.status === "paused"
+    && snapshot.connection === "idle"
+  ) {
+    useSessionStore.setState({ routeNotice: null });
+    if (options?.syncUrl !== false) {
+      syncBrowserSessionPath(sessionId, "push");
+    }
+    return "paused";
+  }
+
+  disposed = true;
+  await stopConnection();
+  stopReceipts();
+  capture.release();
+  releaseAllPendingFiles();
+  disposed = false;
+
+  if (options?.syncUrl !== false) {
+    syncBrowserSessionPath(sessionId, "push");
+  }
+
+  const agents = useSessionStore.getState().agents;
+  useSessionStore.setState({
+    ...emptySession(),
+    ...catalogShell(),
+    connection: "idle",
+    sessionId,
+    status: "paused",
+    routeNotice: null
+  });
+
+  try {
+    const view = await getSession(sessionId);
+    if (view.status === "ended") {
+      return showEndedSession(sessionId, options);
+    }
+
+    const historyItems = await loadAllSessionHistory(sessionId);
+    const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
+      ?? agents.find((row) => row.id === view.agentId);
+    const latest = useSessionStore.getState();
+    if (!sameSessionId(latest.sessionId, sessionId)) {
+      return "failed";
+    }
+
+    useSessionStore.setState({
+      sessionId: view.sessionId,
+      agentName: agent?.name ?? "",
+      agentRole: agent?.role ?? "",
+      voiceAvailable: Boolean(agent?.voiceAvailable),
+      status: "paused",
+      pauseReason: view.pauseReason ?? null,
+      entries: historyFromPayload(historyItems),
+      lastServerSequence: view.lastEntrySequence ?? 0,
+      error: null,
+      errorFatal: false
+    });
+    await refreshCatalog(true);
+    return "paused";
+  } catch (error) {
+    const latest = useSessionStore.getState();
+    if (!sameSessionId(latest.sessionId, sessionId)) {
+      return "failed";
+    }
+
+    useSessionStore.setState({
+      connection: "failed",
+      status: "paused",
+      error: error instanceof Error ? error.message : "Unable to open the conversation.",
+      errorFatal: false
+    });
+    return "failed";
   }
 }
 
@@ -1387,6 +1478,10 @@ async function showEndedSession(
 
   try {
     const view = await getSession(sessionId);
+    if (view.status === "paused") {
+      return showPausedSession(sessionId, options);
+    }
+
     if (view.status !== "ended") {
       if (view.status !== "attached") {
         await reopenSession(sessionId);

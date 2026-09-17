@@ -994,18 +994,23 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             && input.Trigger.Kind != TriggerKind.UserTurn
             && (_activeResponseId is not null || !InitiativeStillEligible(input.Trigger) || !CanAcceptProactiveSpeak(input.Trigger)))
         {
-            await DeclineInitiativeAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            await DeclineInitiativeAsync(
+                input.Context,
+                new StaySilent("Initiative declined.", CountsTowardSilentCap: false),
+                cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (input.Decision is not Speak speakable)
         {
-            if (input.Decision is StaySilent && input.Trigger.Kind != TriggerKind.UserTurn)
+            if (input.Decision is StaySilent silent
+                && silent.CountsTowardSilentCap
+                && input.Trigger.Kind != TriggerKind.UserTurn)
             {
                 _silentEvaluations++;
             }
 
-            await DeclineInitiativeAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            await DeclineInitiativeAsync(input.Context, input.Decision, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -1203,7 +1208,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     SpeaksThisSilencePeriod: _proactiveSpeaksThisSilence,
                     InitiativeHeld: _initiativeHeld || _pendingUploadHold,
                     InactivityExceeded: InactivityExceeded(),
-                    ModelSupportsTools: _languageModel.Capabilities.Tools);
+                    ModelSupportsTools: _languageModel.Capabilities.Tools,
+                    UtcNow: _time.GetUtcNow(),
+                    LastUserActivityAt: _snapshot.LastUserActivityAt);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 var decision = await _brain.DecideAsync(context, responseId, _lifetime.Token).ConfigureAwait(false);
@@ -1658,12 +1665,54 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             });
     }
 
-    private async Task DeclineInitiativeAsync(EventContext context, CancellationToken cancellationToken)
+    private async Task DeclineInitiativeAsync(
+        EventContext context,
+        AgentDecision decision,
+        CancellationToken cancellationToken)
     {
         RecordInitiativeEvaluation();
         await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
-        ScheduleIdleTimer(IdleBackoff());
+        ScheduleIdleTimer(ResolveInitiativeDelay(decision));
     }
+
+    private TimeSpan ResolveInitiativeDelay(AgentDecision decision)
+    {
+        if (decision is StaySilent silent && silent.NextWaitMs is int waitMs)
+        {
+            return ClampInitiativeWait(TimeSpan.FromMilliseconds(waitMs));
+        }
+
+        if (decision is Speak speak && speak.NextWaitMs is int speakWaitMs)
+        {
+            return ClampInitiativeWait(TimeSpan.FromMilliseconds(speakWaitMs));
+        }
+
+        return IdleBackoff();
+    }
+
+    private TimeSpan ClampInitiativeWait(TimeSpan requested)
+    {
+        var policy = _snapshot.Definition.InitiativePolicy;
+        var min = _snapshot.Mode == SessionMode.Text
+            ? TimeSpan.FromSeconds(30)
+            : TimeSpan.FromSeconds(5);
+        var max = TimeSpan.FromMilliseconds(Math.Max(policy.InactivityLimitMs / 2, policy.CooldownMs * 4));
+        if (requested < min)
+        {
+            return min;
+        }
+
+        if (requested > max)
+        {
+            return max;
+        }
+
+        return requested;
+    }
+
+    private static bool HasCompletedAssistantTurn(SessionSnapshot snapshot) =>
+        snapshot.Entries.Any(entry =>
+            entry.Role == ConversationRole.Assistant && entry.Status != EntryStatus.Streaming);
 
     private async Task PublishWaitingOutputAsync(EventContext context)
     {

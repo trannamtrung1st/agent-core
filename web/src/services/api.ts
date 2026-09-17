@@ -21,6 +21,7 @@ export type SessionResponse = {
   pendingMode: string | null;
   status: string;
   lastEntrySequence?: number;
+  pauseReason?: string | null;
 };
 
 export type HistoryPage = {
@@ -42,6 +43,7 @@ export type CatalogItem = {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  pauseReason?: string | null;
 };
 
 export type CatalogPage = {

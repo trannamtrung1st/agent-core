@@ -123,6 +123,21 @@ export function conversationStatusLabel(source: StatusSource): string {
   return activity.label;
 }
 
+export function pausedSessionMessage(reason: string | null | undefined): string {
+  switch (reason) {
+    case "inactivity":
+      return "This conversation was paused after a period of inactivity. Resume to continue.";
+    case "silentEvaluation":
+      return "This conversation was paused after repeated quiet checks. Resume to continue.";
+    case "initiative":
+      return "This conversation was paused by the agent. Resume to continue.";
+    case "manual":
+      return "This conversation was paused. Resume to continue messaging.";
+    default:
+      return "This conversation is paused. Resume to continue messaging.";
+  }
+}
+
 export function conversationStatusTone(text: string): "live" | "wait" | "alarm" {
   if (text.startsWith("Connection failed") || text === "Interrupted") {
     return "alarm";

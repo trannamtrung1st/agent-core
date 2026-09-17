@@ -35,7 +35,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(SyntheticProviderAliases.Default);
         services.TryAddSingleton<PromptContextBuilder>();
-        services.TryAddSingleton<IAgentBrain, DefaultAgentBrain>();
+        services.TryAddSingleton<IAgentBrain>(provider =>
+            new DefaultAgentBrain(
+                provider.GetRequiredService<PromptContextBuilder>(),
+                provider.GetRequiredService<ILanguageModel>()));
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))

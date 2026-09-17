@@ -173,7 +173,8 @@ public sealed partial class SessionRuntime
         {
             Status = SessionStatus.Paused,
             PendingMode = null,
-            RuntimeEpoch = _snapshot.RuntimeEpoch + 1
+            RuntimeEpoch = _snapshot.RuntimeEpoch + 1,
+            PauseReason = pauseReason
         };
         RequestPersist(
             _snapshot,
@@ -324,11 +325,29 @@ public sealed partial class SessionRuntime
     private bool HasTrigger(string trigger) =>
         _snapshot.Definition.InitiativePolicy.Triggers.Contains(trigger, StringComparer.Ordinal);
 
-    private TimeSpan SilenceThreshold() =>
-        TimeSpan.FromMilliseconds(_snapshot.Definition.InitiativePolicy.SilenceThresholdMs);
+    private TimeSpan SilenceThreshold()
+    {
+        var policy = _snapshot.Definition.InitiativePolicy;
+        var ms = policy.SilenceThresholdMs;
+        if (_snapshot.Mode == SessionMode.Text)
+        {
+            ms = Math.Max(ms, 60_000);
+        }
 
-    private TimeSpan Cooldown() =>
-        TimeSpan.FromMilliseconds(_snapshot.Definition.InitiativePolicy.CooldownMs);
+        return TimeSpan.FromMilliseconds(ms);
+    }
+
+    private TimeSpan Cooldown()
+    {
+        var policy = _snapshot.Definition.InitiativePolicy;
+        var ms = policy.CooldownMs;
+        if (_snapshot.Mode == SessionMode.Text)
+        {
+            ms = Math.Max(ms, 30_000);
+        }
+
+        return TimeSpan.FromMilliseconds(ms);
+    }
 
     private TimeSpan RemainingCooldown()
     {
