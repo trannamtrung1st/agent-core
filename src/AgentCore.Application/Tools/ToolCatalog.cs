@@ -76,6 +76,9 @@ public static class ToolCatalog
         return offered;
     }
 
+    public static bool OffersAttachmentRead(AgentDefinition definition, AgentContext context) =>
+        For(definition, context).Any(item => string.Equals(item.Name, AttachmentsRead, StringComparison.Ordinal));
+
     public static bool SessionHasAttachments(AgentContext context) =>
         context.SessionAttachments is { Count: > 0 }
         || context.AttachmentContents is { Count: > 0 };

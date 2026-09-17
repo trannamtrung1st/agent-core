@@ -385,6 +385,96 @@ public sealed class SessionAttachmentRecallTests
     }
 
     [Fact]
+    public void Manifest_omits_attachments_read_guidance_when_model_does_not_support_tools()
+    {
+        var attachmentId = Guid.Parse("019944af-0014-7000-8000-000000000002");
+        var context = new AgentContext(
+            SampleDefinitions.Examiner,
+            [],
+            string.Empty,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "Review this file."),
+            SessionAttachments:
+            [
+                new SessionAttachmentManifestItem(attachmentId, "proposal.md", "text/markdown", 1)
+            ],
+            ModelSupportsTools: false);
+        var manifest = new PromptContextBuilder().BuildSections(context).AttachmentManifestSystem;
+        Assert.DoesNotContain("attachments.read", manifest, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unavailable with the current model", manifest, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(attachmentId.ToString("D"), manifest, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Manifest_includes_attachments_read_guidance_when_tool_is_offered()
+    {
+        var attachmentId = Guid.Parse("019944af-0014-7000-8000-000000000002");
+        var context = new AgentContext(
+            SampleDefinitions.Examiner,
+            [],
+            string.Empty,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "Review this file."),
+            SessionAttachments:
+            [
+                new SessionAttachmentManifestItem(attachmentId, "proposal.md", "text/markdown", 1)
+            ]);
+        var manifest = new PromptContextBuilder().BuildSections(context).AttachmentManifestSystem;
+        Assert.Contains("attachments.read", manifest, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Tool_less_examiner_omits_attachments_read_from_overflow_prompt_for_large_markdown()
+    {
+        var handler = new ToolLessAttachmentHandler();
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = false
+            });
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(
+            output,
+            attachments,
+            processor,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            snapshot: CreateExaminerSnapshot());
+        await runtime.AttachAsync();
+        var body = new string('a', PromptContextBuilder.MaxAttachmentContextCharacters + 256);
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "large.md",
+            "text/markdown",
+            new MemoryStream(Encoding.UTF8.GetBytes(body)),
+            false);
+        Assert.True(await runtime.SubmitUserTextAsync("Summarize it.", attachmentIds: [uploaded.AttachmentId]));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, cts.Token);
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(1, handler.PostCount);
+        Assert.DoesNotContain("attachments.read", handler.LastBody, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unavailable with the current model", handler.LastBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"tools\"", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildAttachmentManifestSystem_is_empty_without_session_attachments()
     {
         var context = new AgentContext(

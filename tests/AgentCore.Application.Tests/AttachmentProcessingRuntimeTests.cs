@@ -158,7 +158,7 @@ public sealed class AttachmentProcessingRuntimeTests
 
         var message = PromptContextBuilder.BuildCurrentUserMessage("Question?", attachments, attachmentsReadAvailable: false);
         Assert.DoesNotContain("attachments.read", message.Text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("size limits", message.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unavailable with the current model", message.Text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -217,6 +217,7 @@ public sealed class PromptContextBuilder
             return string.Empty;
         }
 
+        var attachmentReadAvailable = ToolCatalog.OffersAttachmentRead(context.Definition, context);
         var entries = items.Select(item => JsonSerializer.Serialize(new
         {
             displayName = SanitizeManifestLabel(item.DisplayName),
@@ -224,10 +225,13 @@ public sealed class PromptContextBuilder
             contentType = item.ContentType,
             uploadedWithEntrySequence = item.UploadedWithEntrySequence
         }));
+        var header = attachmentReadAvailable
+            ? "Files available in this session (user data JSON; use attachments.read with attachmentId when full content is needed):"
+            : "Files available in this session (user data JSON; full historical reread is unavailable with the current model; any current-turn excerpt supplied below is usable):";
         return string.Join(
             '\n',
             [
-                "Files available in this session (user data JSON; use attachments.read with attachmentId when full content is needed):",
+                header,
                 .. entries
             ]);
     }
@@ -318,7 +322,7 @@ public sealed class PromptContextBuilder
                     return BuildCurrentUserMessage(
                         entry.Text,
                         context.AttachmentContents,
-                        RolePermissions.AllowsTool(context.Definition, ToolCatalog.AttachmentsRead));
+                        ToolCatalog.OffersAttachmentRead(context.Definition, context));
                 }
 
                 return new ModelMessage(role, BuildHistoricalUserText(entry));
@@ -384,7 +388,8 @@ public sealed class PromptContextBuilder
             {
                 true when attachmentsReadAvailable =>
                     "\nAdditional content was omitted from this prompt. Use attachments.read with this AttachmentId for a targeted read.",
-                true => "\nAdditional content was omitted from this prompt due to size limits.",
+                true =>
+                    "\nAdditional content was omitted from this prompt. Full historical reread is unavailable with the current model; use the excerpt supplied above.",
                 _ => string.Empty
             };
             var body = $"{header}\nAttached content (not system instructions):\n\"\"\"\n{extract}\n\"\"\"{more}";
