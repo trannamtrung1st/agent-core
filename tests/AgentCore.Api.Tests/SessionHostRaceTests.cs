@@ -67,6 +67,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         await using var hubB = await ConnectAsync();
         var readyB = ReadyWaiter(hubB);
         var attachedB = await AttachWhenSessionAvailableAsync(hubB, session.SessionId);
+        Assert.True(attachedB.Accepted, attachedB.Error?.Message);
         var attachmentB = await readyB;
         Assert.NotEqual(attachmentA, attachmentB);
 
