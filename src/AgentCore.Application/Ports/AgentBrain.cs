@@ -43,7 +43,7 @@ public sealed record StaySilent(
 public sealed record Speak(
     ModelRequest Request,
     int? NextWaitMs = null,
-    Agents.InitiativePlan? Plan = null) : AgentDecision;
+    InitiativePlan? Plan = null) : AgentDecision;
 
 public sealed record RequestDeactivate(string Reason) : AgentDecision;
 

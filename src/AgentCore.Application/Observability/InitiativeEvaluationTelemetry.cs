@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Observability;
@@ -21,6 +20,7 @@ public static class InitiativeEvaluationTelemetry
         {
             ["agentId"] = context.Definition.Id,
             ["trigger"] = context.Trigger.Kind.ToString(),
+            ["triggerEventId"] = context.Trigger.EventId.ToString(),
             ["decision"] = evaluated,
             ["evaluated"] = evaluated,
             ["reasonCode"] = reasonCode,
@@ -44,7 +44,7 @@ public static class InitiativeEvaluationTelemetry
 
             if (decision is Speak { Plan: { } plan })
             {
-                payload["objective"] = Clip(plan.Objective, 240);
+                payload["plannerNote"] = Clip(plan.PlannerNote, 240);
             }
         }
 
@@ -61,6 +61,7 @@ public static class InitiativeEvaluationTelemetry
         var payload = new
         {
             trigger = trigger.Kind.ToString(),
+            triggerEventId = trigger.EventId.ToString(),
             decision = kind,
             evaluated = kind,
             evaluatedReasonCode = reasonCode,
@@ -79,6 +80,7 @@ public static class InitiativeEvaluationTelemetry
             {
                 "provider_failed" => "provider_failed",
                 "unparseable" => "unparseable",
+                "invalid_plan" => "invalid_plan",
                 _ => "hard_cap"
             },
             _ => "semantic_silence"
@@ -93,6 +95,8 @@ public static class InitiativeEvaluationTelemetry
                 ("staySilent", "provider_failed", silent.NextWaitMs, null),
             StaySilent silent when !silent.CountsTowardSilentCap && silent.Reason.Contains("parse", StringComparison.OrdinalIgnoreCase) =>
                 ("staySilent", "unparseable", silent.NextWaitMs, null),
+            StaySilent silent when !silent.CountsTowardSilentCap && silent.Reason.Contains("plan was invalid", StringComparison.OrdinalIgnoreCase) =>
+                ("staySilent", "invalid_plan", silent.NextWaitMs, null),
             StaySilent silent when !silent.CountsTowardSilentCap =>
                 ("staySilent", "infrastructure", silent.NextWaitMs, null),
             StaySilent silent => ("staySilent", "semantic_silence", silent.NextWaitMs, null),

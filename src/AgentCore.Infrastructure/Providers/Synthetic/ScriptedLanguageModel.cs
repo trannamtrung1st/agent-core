@@ -81,6 +81,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             }
+
+            if (_release is not null && index == 0 && chunks.Count == 1)
+            {
+                await _release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -355,99 +360,20 @@ internal static class SyntheticInitiativeScript
 
     private static string DecideExaminer(JsonElement root, int speaks, int silenceMs)
     {
+        _ = root;
         if (speaks >= 1)
         {
             return StaySilent("Synthetic examiner avoids a second empty nudge.", 120_000);
-        }
-
-        var lastUser = LastUserText(root);
-        var lastAssistant = LastAssistantText(root);
-        if (UserAskedForHint(lastUser))
-        {
-            return Speak(
-                InitiativeIntents.Hint,
-                "Candidate asked for a hint; provide a direct hint for the current question.");
-        }
-
-        if (IsHesitation(lastUser) && lastAssistant.Contains('?'))
-        {
-            return Speak(
-                InitiativeIntents.Hint,
-                "Candidate hesitated after an examiner question; offer brief angles without repeating the question.");
         }
 
         if (silenceMs >= ExaminerLongSilenceMs)
         {
             return Speak(
                 InitiativeIntents.Hint,
-                lastAssistant.Contains('?')
-                    ? "Long silence after an examiner question; offer a scaffold or hint instead of repeating the question."
-                    : "Long silence during the practice exam; offer a concise scaffold or next step instead of repeating prior wording.");
+                "Synthetic long silence during practice exam; offer a concise scaffold or hint.");
         }
 
         return StaySilent("Synthetic examiner waiting for longer candidate silence.", 30_000);
-    }
-
-    private static string LastUserText(JsonElement root)
-    {
-        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
-        {
-            return string.Empty;
-        }
-
-        for (var index = turns.GetArrayLength() - 1; index >= 0; index--)
-        {
-            var turn = turns[index];
-            if (!turn.TryGetProperty("role", out var roleNode)
-                || !string.Equals(roleNode.GetString(), "User", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            return turn.TryGetProperty("text", out var textNode) ? textNode.GetString() ?? string.Empty : string.Empty;
-        }
-
-        return string.Empty;
-    }
-
-    private static string LastAssistantText(JsonElement root)
-    {
-        if (!root.TryGetProperty("recentTurns", out var turns) || turns.ValueKind != JsonValueKind.Array)
-        {
-            return string.Empty;
-        }
-
-        for (var index = turns.GetArrayLength() - 1; index >= 0; index--)
-        {
-            var turn = turns[index];
-            if (!turn.TryGetProperty("role", out var roleNode)
-                || !string.Equals(roleNode.GetString(), "Assistant", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            return turn.TryGetProperty("text", out var textNode) ? textNode.GetString() ?? string.Empty : string.Empty;
-        }
-
-        return string.Empty;
-    }
-
-    private static bool UserAskedForHint(string text) =>
-        text.Contains("hint", StringComparison.OrdinalIgnoreCase)
-        || text.Contains("help me", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsHesitation(string text)
-    {
-        var normalized = text.Trim();
-        if (normalized.Length == 0)
-        {
-            return true;
-        }
-
-        return normalized.Equals("hmmm", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("hmm", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("um", StringComparison.OrdinalIgnoreCase)
-            || normalized.Length <= 4;
     }
 
     private static string DecideSupport(JsonElement root, int speaks, int silenceMs)

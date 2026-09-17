@@ -48,7 +48,8 @@ public sealed class InitiativePlanTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Contains("Trusted initiative plan", capture.LastGenerationRequest, StringComparison.Ordinal);
+        Assert.Contains("Proactive initiative intent: hint", capture.LastGenerationRequest, StringComparison.Ordinal);
+        Assert.Contains("untrusted observations", capture.LastGenerationRequest, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(HintObjective, capture.LastGenerationRequest, StringComparison.Ordinal);
         Assert.Contains("food, the people", output.Items
             .Select(item => item.Payload)
@@ -145,9 +146,13 @@ public sealed class InitiativePlanTests
         var request = builder.Build(context, Guid.NewGuid(), plan);
         var planSystem = request.Messages.Single(message =>
             message.Role == ModelRole.System
-            && message.Text.Contains("Trusted initiative plan", StringComparison.Ordinal)).Text;
+            && message.Text.Contains("Proactive initiative intent: rephrase", StringComparison.Ordinal)).Text;
+        var plannerContext = request.Messages.Single(message =>
+            message.Role == ModelRole.User
+            && message.Text.Contains("untrusted observations", StringComparison.OrdinalIgnoreCase)).Text;
         Assert.Contains("simpler or clearer formulation", planSystem, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Simplify the Vietnam enjoyment question.", planSystem, StringComparison.Ordinal);
+        Assert.Contains("Simplify the Vietnam enjoyment question.", plannerContext, StringComparison.Ordinal);
+        Assert.DoesNotContain("Simplify the Vietnam enjoyment question.", planSystem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -167,9 +172,51 @@ public sealed class InitiativePlanTests
         var speak = Assert.IsType<Speak>(decision);
         Assert.NotNull(speak.Plan);
         Assert.Equal(InitiativeIntents.Hint, speak.Plan.Intent);
-        Assert.Equal(objective, speak.Plan.Objective);
-        Assert.Contains(objective, speak.Request.Messages.Single(message =>
-            message.Text.Contains("Initiative objective", StringComparison.Ordinal)).Text, StringComparison.Ordinal);
+        Assert.Equal(objective, speak.Plan.PlannerNote);
+        var plannerContext = speak.Request.Messages.Single(message =>
+            message.Role == ModelRole.User
+            && message.Text.Contains("untrusted observations", StringComparison.OrdinalIgnoreCase)).Text;
+        Assert.Contains(objective, plannerContext, StringComparison.Ordinal);
+        var framework = speak.Request.Messages.Single(message =>
+            message.Text.Contains("Proactive initiative intent: hint", StringComparison.Ordinal)).Text;
+        Assert.DoesNotContain(objective, framework, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Malformed_speak_without_objective_fails_closed()
+    {
+        var model = new FixedInitiativeModel("""{"decision":"speak","intent":"hint"}""");
+        var builder = new PromptContextBuilder();
+        var context = ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion);
+        var decision = await InitiativeEvaluator.EvaluateAsync(
+            model,
+            builder,
+            context,
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var silent = Assert.IsType<StaySilent>(decision);
+        Assert.False(silent.CountsTowardSilentCap);
+        var entry = RuntimeTelemetry.SnapshotTimeline().Single(item =>
+            item.Stage == "initiative_eval"
+            && item.Detail!.Contains(context.Trigger.EventId.ToString(), StringComparison.Ordinal));
+        Assert.Contains("\"reasonCode\":\"invalid_plan\"", entry.Detail!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Speak_next_wait_ms_is_carried_on_decision()
+    {
+        var model = new FixedInitiativeModel(
+            """{"decision":"speak","intent":"hint","objective":"Wait before next check.","nextWaitMs":45000}""");
+        var builder = new PromptContextBuilder();
+        var context = ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion);
+        var decision = await InitiativeEvaluator.EvaluateAsync(
+            model,
+            builder,
+            context,
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var speak = Assert.IsType<Speak>(decision);
+        Assert.Equal(45_000, speak.NextWaitMs);
     }
 
     [Fact]
@@ -187,15 +234,18 @@ public sealed class InitiativePlanTests
     [Fact]
     public async Task Initiative_eval_telemetry_includes_decision_and_intent_without_objective_by_default()
     {
-        RuntimeTelemetry.Reset();
-        var model = new ScriptedLanguageModel(
-            ["""{"decision":"speak","intent":"hint","objective":"Internal only objective."}"""]);
+        var triggerId = Guid.Parse("019944af-0000-7000-8000-00000000a101");
+        var model = new FixedInitiativeModel(
+            """{"decision":"speak","intent":"hint","objective":"Internal only objective."}""");
         var builder = new PromptContextBuilder();
-        var context = ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion);
+        var context = ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion, triggerId: triggerId);
         _ = await InitiativeEvaluator.EvaluateAsync(model, builder, context, Guid.NewGuid(), CancellationToken.None);
-        var entry = Assert.Single(RuntimeTelemetry.SnapshotTimeline(), item => item.Stage == "initiative_eval");
+        var entry = RuntimeTelemetry.SnapshotTimeline().Single(item =>
+            item.Stage == "initiative_eval"
+            && item.Detail!.Contains(triggerId.ToString(), StringComparison.Ordinal));
         Assert.Contains("\"decision\":\"speak\"", entry.Detail!, StringComparison.Ordinal);
         Assert.Contains("\"intent\":\"hint\"", entry.Detail!, StringComparison.Ordinal);
+        Assert.DoesNotContain("plannerNote", entry.Detail!, StringComparison.Ordinal);
         Assert.DoesNotContain("objective", entry.Detail!, StringComparison.Ordinal);
     }
 
@@ -210,7 +260,8 @@ public sealed class InitiativePlanTests
         double silenceSeconds,
         string userText,
         string assistantText,
-        int speaksThisSilencePeriod = 0) =>
+        int speaksThisSilencePeriod = 0,
+        Guid? triggerId = null) =>
         new(
             SampleDefinitions.Examiner,
             [
@@ -245,7 +296,7 @@ public sealed class InitiativePlanTests
             null,
             false,
             null,
-            new AgentTrigger(Guid.NewGuid(), TriggerKind.LongSilence, null),
+            new AgentTrigger(triggerId ?? Guid.NewGuid(), TriggerKind.LongSilence, null),
             SpeaksThisSilencePeriod: speaksThisSilencePeriod,
             UtcNow: now,
             LastUserActivityAt: now.AddSeconds(-silenceSeconds));

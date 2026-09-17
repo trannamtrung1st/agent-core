@@ -46,8 +46,8 @@ public sealed class InitiativeTests
         var definition = RepeatPolicy(maxPerSilence: 2, consecutiveCap: 2);
         var model = new QueuedInitiativeLanguageModel(
             [
-                """{"decision":"speak","reason":"First hint."}""",
-                """{"decision":"speak","reason":"Second hint."}"""
+                """{"decision":"speak","intent":"hint","objective":"First hint."}""",
+                """{"decision":"speak","intent":"hint","objective":"Second hint."}"""
             ],
             ["Still there?", "Follow up?", "Third?"]);
         var brain = RecordingDefaultBrain(model);
@@ -433,8 +433,8 @@ public sealed class InitiativeTests
         var output = new CapturingSessionOutput();
         var model = new QueuedInitiativeLanguageModel(
             [
-                """{"decision":"speak","reason":"First follow-up."}""",
-                """{"decision":"speak","reason":"Second follow-up."}"""
+                """{"decision":"speak","intent":"followUp","objective":"First follow-up."}""",
+                """{"decision":"speak","intent":"followUp","objective":"Second follow-up."}"""
             ],
             ["Hello from synthetic.", "Following up without a question mark."]);
         var brain = RecordingDefaultBrain(model);
@@ -470,9 +470,9 @@ public sealed class InitiativeTests
         var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
         var model = new QueuedInitiativeLanguageModel(
             [
-                """{"decision":"speak","reason":"Proactive one."}""",
-                """{"decision":"speak","reason":"Proactive two."}""",
-                """{"decision":"speak","reason":"Proactive three."}"""
+                """{"decision":"speak","intent":"other","objective":"Proactive one."}""",
+                """{"decision":"speak","intent":"other","objective":"Proactive two."}""",
+                """{"decision":"speak","intent":"other","objective":"Proactive three."}"""
             ],
             ["Hello from synthetic.", "Proactive two.", "Proactive three.", "Proactive four."]);
         await using var runtime = Create(
@@ -507,7 +507,7 @@ public sealed class InitiativeTests
         var definition = RepeatPolicy(maxPerSilence: 5, consecutiveCap: 5);
         var model = new QueuedInitiativeLanguageModel(
             [
-                """{"decision":"speak","reason":"First useful nudge."}""",
+                """{"decision":"speak","intent":"hint","objective":"First useful nudge."}""",
                 """{"decision":"staySilent","reason":"Nothing new to add.","nextWaitMs":120000}"""
             ],
             ["Hello from synthetic.", "Would have followed up."]);
@@ -855,14 +855,11 @@ public sealed class InitiativeTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var model = new ScriptedLanguageModel(
-            ["What do you enjoy most about living in Vietnam?", "You could think about food, people, or daily life."]);
+        var model = new ScriptedLanguageModel(["Would you like to try again?"]);
         var brain = RecordingDefaultBrain(model);
         await using var runtime = Create(output, model, time, brain);
         await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("Ready.");
-        await runtime.WaitUntilIdleAsync();
-        await runtime.SubmitUserTextAsync("hmmm");
+        await runtime.SubmitUserTextAsync("Hello?");
         await runtime.WaitUntilIdleAsync();
         time.Advance(TimeSpan.FromSeconds(91));
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -882,7 +879,7 @@ public sealed class InitiativeTests
         var time = Clock();
         var output = new CapturingSessionOutput();
         var model = new QueuedInitiativeLanguageModel(
-            ["""{"decision":"speak","reason":"Order delay still unresolved."}"""],
+            ["""{"decision":"speak","intent":"followUp","objective":"Order delay still unresolved."}"""],
             ["I can check the simulated tracking details for you."]);
         var brain = RecordingDefaultBrain(model);
         var definition = RepeatPolicy(maxPerSilence: 2, consecutiveCap: 2);

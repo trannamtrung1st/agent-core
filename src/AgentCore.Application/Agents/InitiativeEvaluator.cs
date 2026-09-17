@@ -52,7 +52,10 @@ public static class InitiativeEvaluator
                 InitiativeParsedDecision.Speak speak =>
                     new Speak(
                         WithTools(context, builder.Build(context, responseId, speak.Plan)),
+                        NextWaitMs: speak.NextWaitMs,
                         Plan: speak.Plan),
+                InitiativeParsedDecision.InvalidPlan =>
+                    new StaySilent("Initiative plan was invalid.", CountsTowardSilentCap: false),
                 _ => new StaySilent("Initiative evaluation was empty.", CountsTowardSilentCap: false)
             };
         }
@@ -209,8 +212,9 @@ public static class InitiativeEvaluator
 
             decision = kind switch
             {
-                "speak" when TryReadSpeakPlan(root, reason, out var plan) =>
-                    new InitiativeParsedDecision.Speak(plan),
+                "speak" => TryReadSpeakPlan(root, out var plan, out var speakWait)
+                    ? new InitiativeParsedDecision.Speak(plan, speakWait)
+                    : InitiativeParsedDecision.InvalidPlan.Instance,
                 "deactivate" => new InitiativeParsedDecision.Deactivate(reason),
                 "staySilent" or "stay_silent" => new InitiativeParsedDecision.Stay(reason, nextWait),
                 _ => null
@@ -231,22 +235,29 @@ public static class InitiativeEvaluator
         }
     }
 
-    private static bool TryReadSpeakPlan(JsonElement root, string fallbackReason, out InitiativePlan plan)
+    private static bool TryReadSpeakPlan(JsonElement root, out InitiativePlan plan, out int? nextWaitMs)
     {
-        var objective = root.TryGetProperty("objective", out var objectiveNode)
-            ? objectiveNode.GetString()?.Trim()
-            : null;
-        if (string.IsNullOrWhiteSpace(objective))
+        plan = new InitiativePlan(InitiativeIntents.Other, string.Empty);
+        nextWaitMs = TryReadNextWaitMs(root);
+        if (!root.TryGetProperty("intent", out var intentNode)
+            || !InitiativeIntents.TryParse(intentNode.GetString(), out var intent))
         {
-            objective = string.IsNullOrWhiteSpace(fallbackReason)
-                ? "Advance the interaction with one useful proactive turn."
-                : fallbackReason.Trim();
+            return false;
         }
 
-        var intent = root.TryGetProperty("intent", out var intentNode)
-            ? InitiativeIntents.Normalize(intentNode.GetString())
-            : InitiativeIntents.Other;
-        plan = new InitiativePlan(intent, objective);
+        if (!root.TryGetProperty("objective", out var objectiveNode)
+            || objectiveNode.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var note = objectiveNode.GetString()?.Trim() ?? string.Empty;
+        if (note.Length == 0 || note.Length > InitiativeIntents.MaxPlannerNoteLength)
+        {
+            return false;
+        }
+
+        plan = new InitiativePlan(intent, note);
         return true;
     }
 
@@ -305,10 +316,15 @@ public static class InitiativeEvaluator
 
     private abstract record InitiativeParsedDecision
     {
-        public sealed record Speak(InitiativePlan Plan) : InitiativeParsedDecision;
+        public sealed record Speak(InitiativePlan Plan, int? NextWaitMs) : InitiativeParsedDecision;
 
         public sealed record Stay(string Reason, int? NextWaitMs) : InitiativeParsedDecision;
 
         public sealed record Deactivate(string Reason) : InitiativeParsedDecision;
+
+        public sealed record InvalidPlan : InitiativeParsedDecision
+        {
+            public static InvalidPlan Instance { get; } = new();
+        }
     }
 }

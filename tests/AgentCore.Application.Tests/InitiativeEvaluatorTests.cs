@@ -120,18 +120,24 @@ public sealed class InitiativeEvaluatorTests
     [Fact]
     public async Task Evaluation_records_structured_initiative_telemetry()
     {
-        RuntimeTelemetry.Reset();
+        var triggerId = Guid.Parse("019944af-0000-7000-8000-00000000b202");
         var model = new ScriptedLanguageModel();
         var builder = new PromptContextBuilder();
         var now = DateTimeOffset.UtcNow;
-        var context = ExaminerContext(now, silenceSeconds: 95, assistantText: "Would you like to try again?");
+        var context = ExaminerContext(
+            now,
+            silenceSeconds: 95,
+            assistantText: "Would you like to try again?",
+            triggerId: triggerId);
         _ = await InitiativeEvaluator.EvaluateAsync(model, builder, context, Guid.NewGuid(), CancellationToken.None);
-        var timeline = RuntimeTelemetry.SnapshotTimeline();
-        var entry = Assert.Single(timeline, item => item.Stage == "initiative_eval");
+        var entry = RuntimeTelemetry.SnapshotTimeline().Single(item =>
+            item.Stage == "initiative_eval"
+            && item.Detail!.Contains(triggerId.ToString(), StringComparison.Ordinal));
         Assert.False(string.IsNullOrEmpty(entry.Detail));
         Assert.Contains("examiner", entry.Detail!, StringComparison.Ordinal);
         Assert.Contains("evaluated", entry.Detail!, StringComparison.Ordinal);
         Assert.Contains("reasonCode", entry.Detail!, StringComparison.Ordinal);
+        Assert.Contains("triggerEventId", entry.Detail!, StringComparison.Ordinal);
         Assert.DoesNotContain("reasonDetail", entry.Detail!, StringComparison.Ordinal);
     }
 
@@ -140,7 +146,8 @@ public sealed class InitiativeEvaluatorTests
         double silenceSeconds,
         string assistantText,
         string userText = "Hello",
-        int speaksThisSilencePeriod = 0) =>
+        int speaksThisSilencePeriod = 0,
+        Guid? triggerId = null) =>
         new(
             SampleDefinitions.Examiner,
             [
@@ -175,7 +182,7 @@ public sealed class InitiativeEvaluatorTests
             null,
             false,
             null,
-            new AgentTrigger(Guid.NewGuid(), TriggerKind.LongSilence, null),
+            new AgentTrigger(triggerId ?? Guid.NewGuid(), TriggerKind.LongSilence, null),
             SpeaksThisSilencePeriod: speaksThisSilencePeriod,
             UtcNow: now,
             LastUserActivityAt: now.AddSeconds(-silenceSeconds));
