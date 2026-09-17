@@ -131,22 +131,21 @@ public sealed class RichEnvelopeRuntimeTests
     {
         var output = new CapturingSessionOutput();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var model = new ScriptedLanguageModel(
-            ["Hello from synthetic.", " more"],
-            releaseAfterFirstChunk: release);
+        var model = new GatedDeltaLanguageModel(release);
         await using var runtime = Create(output, new InMemoryMemoryStore(), model);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
-        var started = await output.WaitForAsync(item => item.Payload is ResponseStartedOutput);
-        var firstId = started.ResponseId!.Value;
-        await runtime.SubmitUserTextAsync("Next");
-        release.TrySetResult();
-        await runtime.WaitUntilIdleAsync();
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T1");
+        var firstId = runtime.ActiveResponseId!.Value;
+        Assert.True(await runtime.SubmitUserTextAsync("Next", behavior: UserTextBehavior.Interrupt));
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
         var first = runtime.Snapshot.Entries.Single(entry => entry.ResponseId == firstId);
         Assert.Equal(EntryStatus.Interrupted, first.Status);
         Assert.True(await runtime.SubmitReceiptAsync(firstId, first.Text.Length));
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(0, runtime.Snapshot.Entries.Single(entry => entry.ResponseId == firstId).ReceivedTextEndExclusive);
+        release.TrySetResult();
+        await runtime.WaitUntilMailboxDrainedAsync();
     }
 
     private static SessionRuntime Create(
@@ -207,6 +206,23 @@ public sealed class RichEnvelopeRuntimeTests
         {
             Texts.Add(request.Text);
             return _inner.SynthesizeAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class GatedDeltaLanguageModel(TaskCompletionSource release) : ILanguageModel
+    {
+        private int _calls;
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: false);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            yield return new ModelTextDelta($"T{call}");
+            await release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 }

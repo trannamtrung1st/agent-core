@@ -763,6 +763,36 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "user-text-queue": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Please hold the line" }, { attachmentId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const started = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const queued = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "queued later", behavior: "queue" }, { attachmentId })
+      );
+      if (!queued.accepted) {
+        throw new Error(JSON.stringify(queued));
+      }
+      const stillLive = events.some(
+        (evt) => evt.type === "agent.response.completed" && evt.responseId === started.responseId
+      );
+      if (stillLive) {
+        throw new Error("queue superseded the live response");
+      }
+      await connection.stop();
+      break;
+    }
     case "cancel-response-unknown": {
       const session = await createSession();
       const connection = await connect();

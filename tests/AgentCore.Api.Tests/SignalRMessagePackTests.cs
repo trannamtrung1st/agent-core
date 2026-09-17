@@ -157,6 +157,7 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("dual-attach")]
     [InlineData("user-text-unknown-behavior")]
     [InlineData("user-text-behavior-retry")]
+    [InlineData("user-text-queue")]
     [InlineData("cancel-response-unknown")]
     [InlineData("cancel-response-idempotent")]
     [InlineData("cancel-response-stale")]

@@ -10,26 +10,26 @@ Ordered roughly by dependency and product value. Earlier sections should normall
 
 ## P0 — Conversation lifecycle and natural interaction
 
-* [ ] Let the agent choose the next wait instead of using one fixed silence interval.
+* [x] Let the agent choose the next wait instead of using one fixed silence interval.
 
   * Brain may suggest short/medium/long or a duration.
   * Runtime owns the timer and clamps it to configured min/max bounds.
   * Waiting must remain interruptible by user/environment events.
 
-* [ ] Define inactivity/session timeout behavior.
+* [x] Define inactivity/session timeout behavior.
 
   * Decide when inactivity causes another proactive turn, pause/deactivate, or terminal end.
   * Keep `deactivate/pause` distinct from `end`.
   * Add clear UI state when the agent pauses or ends because of inactivity.
   * Show the reason/status rather than silently disappearing.
 
-* [ ] Add queued user messages.
+* [x] Add queued user messages.
 
   * Allow a user to send a message without immediately interrupting the current agent response.
   * Preserve the existing explicit interruption/barge-in behavior separately.
   * Define ordering when multiple queued messages arrive: the trailing durable user suffix is one next assistant response.
 
-* [ ] Finish rich turn presentation semantics.
+* [x] Finish rich turn presentation semantics.
 
   * Keep display text/Markdown separate from optional speech text.
   * Define how extra blocks, artifact references, tool results, status/progress, and voice-only/display-only content appear in the conversation.

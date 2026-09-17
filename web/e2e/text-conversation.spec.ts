@@ -65,6 +65,50 @@ test("queued send and Stop keep history and the composer", async ({ page }) => {
   await expect(page).toHaveURL(/\/c\/[0-9a-f-]{36}$/i);
 });
 
+test("queued U2 and U3 do not interrupt R1 and produce one next reply", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel("Message").fill("Alpha");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByLabel("Message").fill("Beta");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Please hold the line" })).toBeVisible();
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(2);
+});
+
+test("manual pause via deactivate shows Resume and keeps history", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  const deactivated = await page.evaluate(async () => {
+    const token = window.localStorage.getItem("agent-core.owner-capability");
+    const match = window.location.pathname.match(/\/c\/([0-9a-f-]{36})/i);
+    if (!token || !match) {
+      return { ok: false, status: 0 };
+    }
+    const response = await fetch(`/api/v2/sessions/${match[1]}/deactivate`, {
+      method: "POST",
+      headers: { "X-AgentCore-Owner-Capability": token }
+    });
+    return { ok: response.ok, status: response.status };
+  });
+  expect(deactivated.ok).toBe(true);
+  await expect(page.getByRole("button", { name: "Resume" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Paused");
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect(page.getByLabel("Message")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+});
+
 test("markdown response renders and survives reopen", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("Show markdown");

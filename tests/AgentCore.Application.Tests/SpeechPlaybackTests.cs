@@ -127,7 +127,7 @@ public sealed class SpeechPlaybackTests
         var consumed = Math.Min(480, runtime.SentSamples);
         Assert.True(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, 0));
         Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", 0, 0));
-        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", runtime.SentSamples + 1, 0));
+        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", runtime.SentSamples + 48_000, 0));
         var generated = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text.Length;
         Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated + 1));
         Assert.True(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated));

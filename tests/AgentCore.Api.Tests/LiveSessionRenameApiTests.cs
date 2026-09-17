@@ -135,7 +135,7 @@ public sealed class LiveSessionRenameApiTests : IClassFixture<AgentCoreApiFactor
             var page = await client.GetFromJsonAsync<HistoryPageResponse>(
                 $"/api/v1/sessions/{sessionId}/messages?after=0&limit=50",
                 cancellationToken);
-            if (page?.Items.Any(item => item.Role == "assistant") == true)
+            if (page?.Items.Any(item => item.Role == "assistant" && item.Status == "completed") == true)
             {
                 return;
             }

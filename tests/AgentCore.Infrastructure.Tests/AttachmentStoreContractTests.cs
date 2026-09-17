@@ -149,7 +149,10 @@ public sealed class AttachmentStoreContractTests
 
         public async ValueTask DisposeAsync()
         {
-            SqliteConnection.ClearAllPools();
+            using (var connection = new SqliteConnection($"Data Source={dbPath}"))
+            {
+                SqliteConnection.ClearPool(connection);
+            }
             if (File.Exists(dbPath))
             {
                 File.Delete(dbPath);

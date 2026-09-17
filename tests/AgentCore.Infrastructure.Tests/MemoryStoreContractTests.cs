@@ -227,7 +227,7 @@ public sealed class MemoryStoreContractTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            ReleaseSqlite(path);
         }
     }
 
@@ -354,7 +354,7 @@ public sealed class MemoryStoreContractTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            ReleaseSqlite(partial, older, missingIndex);
             foreach (var path in new[] { partial, older, missingIndex })
             {
                 try
@@ -513,7 +513,7 @@ public sealed class MemoryStoreContractTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            ReleaseSqlite(source, backup);
             foreach (var path in new[] { source, source + "-wal", source + "-shm", backup, backup + "-wal", backup + "-shm" })
             {
                 try
@@ -524,6 +524,15 @@ public sealed class MemoryStoreContractTests
                 {
                 }
             }
+        }
+    }
+
+    private static void ReleaseSqlite(params string[] paths)
+    {
+        foreach (var path in paths)
+        {
+            using var connection = new SqliteConnection($"Data Source={path}");
+            SqliteConnection.ClearPool(connection);
         }
     }
 
@@ -555,7 +564,7 @@ public sealed class MemoryStoreContractTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            ReleaseSqlite(path);
             File.Delete(path);
             File.Delete(path + "-wal");
             File.Delete(path + "-shm");
@@ -664,7 +673,7 @@ public sealed class MemoryStoreContractTests
 
         public ValueTask DisposeAsync()
         {
-            SqliteConnection.ClearAllPools();
+            ReleaseSqlite(path);
             if (deleteOnDispose)
             {
                 try

@@ -53,7 +53,10 @@ internal sealed class SqliteTestHarness : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        SqliteConnection.ClearAllPools();
+        using (var connection = new SqliteConnection($"Data Source={_path}"))
+        {
+            SqliteConnection.ClearPool(connection);
+        }
         if (_deleteOnDispose)
         {
             foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })

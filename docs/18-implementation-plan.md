@@ -155,6 +155,19 @@ Milestones 0–12 above remain the historical MVP record and stay **Complete**. 
 
 Rename and archive/unarchive are in scope for A (R6). Do not treat a sandbox interface-only as H. Integrated Support/Compliance durable multi-chat (attachments, bounded work, artifacts, rich blocks, deactivate/reopen, idempotent cleanup) is observed in `SupportComplianceWorkflowTests` plus catalog API dual-create. Requirement matrix, migrations, operating notes, and permitted omissions: [post-MVP handoff](reports/post-mvp-handoff.md). Original proposal files: [proposal retirement](reports/proposal-retirement.md).
 
+## P0 — Conversation lifecycle (observed)
+
+Historical Milestones 0–12 and post-MVP A–H stay as recorded above. P0 is a follow-on conversation-lifecycle gate, not a replacement architecture.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P0-A | Dynamic `nextWaitMs` clamp, null fallback, deactivate ignores wait | Application InitiativePlan/Initiative tests; meter `initiative.next_wait_ms` tags `source|clamp|mode` only |
+| P0-B | Pause ≠ end; canonical pause reasons; explicit Resume; transport resume for disconnected/recovered | SessionPauseSemantics, catalog API, ChatApp pause/ended UI |
+| P0-C | `user.text` queue/interrupt; trailing durable suffix; CancelResponse; persist-before-ACK; pending user over initiative | Domain TrailingUserSuffix; UserTextQueueTests; JS MessagePack scenarios; SQLite Recover_keeps_trailing |
+| P0-D | First-party Send always queues; Stop targets rendered `responseId` | Composer/ChatApp/realtime unit tests; Playwright queue/Stop |
+| P0-E | ResponseEnvelope DisplayText/blocks; SpeechText not visible; live-only thinking | Conversation/activityState tests; markdown reload Playwright |
+| P0-F | Full section-17 cases and minimum commands | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
+
 ## Handoff rule
 
 Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter uses `openrouter/free` for **opt-in adapter smoke only**; the Real/demo profile uses a fixed model ID; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).

@@ -116,7 +116,7 @@ public sealed class SessionAttachmentRecallTests
             var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
             var output = new CapturingSessionOutput();
             var ids = new DeterministicIdGenerator(
-                Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-0014-7000-8000-{index:D12}")),
+                Enumerable.Range(1, 128).Select(index => Guid.Parse($"019944af-0014-7000-8000-{index:D12}")),
                 [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b844")]);
             var sessionId = ids.NewSessionId();
             var snapshot = new SessionSnapshot(
@@ -159,7 +159,12 @@ public sealed class SessionAttachmentRecallTests
                     false);
                 attachmentId = uploaded.AttachmentId;
                 Assert.True(await runtime.SubmitUserTextAsync("Summarize it.", attachmentIds: [uploaded.AttachmentId]));
+                using var firstTurn = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, firstTurn.Token);
                 await runtime.WaitUntilIdleAsync();
+                Assert.Contains(
+                    runtime.Snapshot.Entries,
+                    entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
                 await WaitForBoundAttachmentAsync(attachments, runtime.SessionId, uploaded.AttachmentId);
                 await runtime.DetachAsync();
                 await WaitForPersistedStatusAsync(harness.Store, sessionId, SessionStatus.Paused);
@@ -168,6 +173,9 @@ public sealed class SessionAttachmentRecallTests
             var reloaded = await harness.Store.LoadAsync(sessionId);
             Assert.NotNull(reloaded);
             Assert.Equal(SessionStatus.Paused, reloaded!.Status);
+            Assert.Contains(
+                reloaded.Entries,
+                entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
             var userEntry = Assert.Single(reloaded.Entries, entry => entry.Role == ConversationRole.User);
             Assert.NotNull(userEntry.Attachments);
             Assert.Equal(attachmentId, userEntry.Attachments![0].AttachmentId);
@@ -181,13 +189,14 @@ public sealed class SessionAttachmentRecallTests
 
             var reopenOutput = new CapturingSessionOutput();
             var recallModel = new AttachmentRecallRecordingModel(attachmentId);
+            var reopenBrain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
             var resumed = await PausedSessionReopen.ReopenAsync(harness.Store, reloaded!, time);
             await using (var reopened = CreateRuntime(
                              reopenOutput,
                              attachments,
                              processor,
                              recallModel,
-                             brain,
+                             reopenBrain,
                              harness.Store,
                              resumed,
                              ids,
@@ -196,16 +205,27 @@ public sealed class SessionAttachmentRecallTests
             {
                 Assert.True(await reopened.AttachAsync());
                 Assert.Equal(SessionStatus.Attached, reopened.Snapshot.Status);
-                var assistantCountBefore = reopened.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant);
+                await reopened.WaitUntilMailboxDrainedAsync();
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                if (reopened.ActiveResponseId is not null || TrailingUserSuffix.HasPending(reopened.Snapshot.Entries))
+                {
+                    var recoveredBefore = reopenOutput.Terminals.Count;
+                    await reopenOutput.WaitForAsync(
+                        item => item.Payload is ResponseCompletedOutput && reopenOutput.Terminals.Count > recoveredBefore,
+                        cts.Token);
+                    await reopened.WaitUntilMailboxDrainedAsync();
+                }
+
+                var assistantCountBefore = reopened.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant);
                 var completedBefore = reopenOutput.Terminals.Count;
                 Assert.True(await reopened.SubmitUserTextAsync("Count the words in that file."));
                 await reopenOutput.WaitForAsync(
                     item => item.Payload is ResponseCompletedOutput && reopenOutput.Terminals.Count > completedBefore,
                     cts.Token);
-                await reopened.WaitUntilIdleAsync();
+                await reopened.WaitUntilMailboxDrainedAsync();
 
-                var followUpContext = brain.Contexts[^1];
+                var followUpContext = reopenBrain.Contexts.Last(context =>
+                    context.Trigger.Text?.Contains("Count the words", StringComparison.OrdinalIgnoreCase) == true);
                 Assert.NotNull(followUpContext.SessionAttachments);
                 Assert.Contains(
                     followUpContext.SessionAttachments!,

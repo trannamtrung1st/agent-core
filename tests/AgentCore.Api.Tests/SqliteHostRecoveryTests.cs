@@ -86,7 +86,14 @@ public sealed class SqliteHostRecoveryTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            using (var connection = new SqliteConnection($"Data Source={db}"))
+            {
+                SqliteConnection.ClearPool(connection);
+            }
+            using (var connection = new SqliteConnection($"Data Source={backup}"))
+            {
+                SqliteConnection.ClearPool(connection);
+            }
             foreach (var path in new[] { db, db + "-wal", db + "-shm", backup, backup + "-wal", backup + "-shm" })
             {
                 try
@@ -148,7 +155,10 @@ public sealed class SqliteHostRecoveryTests
         }
         finally
         {
-            SqliteConnection.ClearAllPools();
+            using (var connection = new SqliteConnection($"Data Source={db}"))
+            {
+                SqliteConnection.ClearPool(connection);
+            }
             foreach (var path in new[] { db, db + "-wal", db + "-shm" })
             {
                 try
