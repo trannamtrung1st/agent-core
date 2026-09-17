@@ -2,6 +2,10 @@
 
 Ordered roughly by dependency and product value. Earlier sections should normally be completed before later platform work.
 
+## Maintainer notes
+* [ ] Should we pause auto or manual pause session? in the future we may have background work.
+* [ ] Test the extra md content along with message/reply/voice response.
+
 ## P0 — Conversation lifecycle and natural interaction
 
 * [ ] Let the agent choose the next wait instead of using one fixed silence interval.
