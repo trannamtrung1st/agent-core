@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Empty, Flex, Spin, Tag, Typography } from "antd";
+import { Empty, Spin, Tag, Typography } from "antd";
 import { fetchAttachmentBlob } from "../../services/attachments";
 import type { HistoryAttachment, HistoryBlock, HistoryEntry } from "../../state/sessionStore";
 import { parseSanitizedMarkdown } from "./sanitizedMarkdown";
@@ -20,12 +20,9 @@ export function Transcript({
 
   return (
     <section className="transcript-window" aria-label="Transcript">
-      <Flex justify="space-between" align="center" gap={8} wrap="wrap" className="transcript-bar">
-        <Typography.Text strong>
-          Transcript · {entryCount} {entryCount === 1 ? "entry" : "entries"}
-        </Typography.Text>
-        <Typography.Text type="secondary">Agent Core · Live</Typography.Text>
-      </Flex>
+      <Typography.Text strong>
+        Transcript · {entryCount} {entryCount === 1 ? "entry" : "entries"}
+      </Typography.Text>
       <Spin spinning={loading} description="Loading conversation">
         <ol className="transcript" aria-live="polite">
           {entries.length === 0 ? (

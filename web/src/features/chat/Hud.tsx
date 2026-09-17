@@ -17,12 +17,14 @@ export function Hud({
   const tagColor = connectionTone === "alarm" ? "error" : connectionTone === "wait" ? "warning" : "success";
 
   return (
-    <Flex align="flex-start" gap={16} wrap="wrap" style={{ width: "100%" }}>
-      {sessionsToggle}
-      <Flex vertical gap={4} flex="1 1 16rem">
+    <Flex align="center" justify="space-between" gap={12} wrap="wrap" style={{ width: "100%" }}>
+      <Flex align="center" gap={12} wrap="wrap">
+        {sessionsToggle}
         <Typography.Title level={1} style={{ margin: 0, fontSize: 20 }}>
           Agent Core
         </Typography.Title>
+      </Flex>
+      <Flex align="center" gap={8} wrap="wrap">
         <Typography.Text data-testid="profile">Profile: {profile || "…"}</Typography.Text>
         <Typography.Text data-testid="connection">
           <Tag color={tagColor} style={{ marginInlineEnd: 0 }}>

@@ -162,7 +162,8 @@ public sealed class SessionManager
 
                     return snapshot with { RuntimeEpoch = snapshot.RuntimeEpoch + 1 };
                 },
-                cancellationToken)
+                cancellationToken,
+                touchCatalogOrder: false)
             .ConfigureAwait(false);
     }
 
@@ -195,7 +196,8 @@ public sealed class SessionManager
                         RuntimeEpoch = snapshot.RuntimeEpoch + 1
                     };
                 },
-                cancellationToken)
+                cancellationToken,
+                touchCatalogOrder: false)
             .ConfigureAwait(false);
         RuntimeTelemetry.Record("initiative", RuntimeTelemetry.ElapsedMs(started));
         return result;
@@ -260,7 +262,8 @@ public sealed class SessionManager
     private async Task<SessionSnapshot> MutateAsync(
         Guid sessionId,
         Func<SessionSnapshot, SessionSnapshot> mutate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool touchCatalogOrder = true)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var next = mutate(snapshot);
@@ -277,7 +280,7 @@ public sealed class SessionManager
             next = next with
             {
                 Revision = snapshot.Revision + 1,
-                UpdatedAt = _time.GetUtcNow()
+                UpdatedAt = touchCatalogOrder ? _time.GetUtcNow() : snapshot.UpdatedAt
             };
         }
 

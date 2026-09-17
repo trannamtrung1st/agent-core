@@ -1021,8 +1021,8 @@ export async function startConversation(): Promise<void> {
     }
 
     const created = await createSession(agent.id, agent.version, "text");
-    await refreshCatalog(true);
     await startConnection(created.sessionId);
+    await refreshCatalog(true);
   } catch (error) {
     useSessionStore.setState({
       error: error instanceof Error ? error.message : "Unable to start a conversation.",
@@ -1041,6 +1041,7 @@ export async function beginNewChat(): Promise<void> {
     ...emptySession(),
     ...catalogShell()
   });
+  void refreshCatalog(true);
   disposed = false;
 }
 

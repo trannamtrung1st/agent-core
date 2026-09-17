@@ -83,6 +83,30 @@ describe("catalog mutations", () => {
     expect(useSessionStore.getState().catalogMutation).toBeNull();
   });
 
+  it("reorders the catalog after rename patches updatedAt", async () => {
+    const older = {
+      ...live,
+      sessionId: "s-old",
+      title: "Older chat",
+      updatedAt: "2026-09-16T00:00:00.000Z"
+    };
+    const newer = {
+      ...live,
+      sessionId: "s-new",
+      title: "Newer chat",
+      updatedAt: "2026-09-16T00:02:00.000Z"
+    };
+    useSessionStore.setState({ ...emptyCatalog(), catalogItems: [older, newer] });
+    vi.mocked(renameSession).mockResolvedValue({
+      ...older,
+      title: "Older chat renamed",
+      updatedAt: "2026-09-16T00:03:00.000Z"
+    });
+    const ok = await renameCatalogItem("s-old", "Older chat renamed");
+    expect(ok).toBe(true);
+    expect(useSessionStore.getState().catalogItems.map((item) => item.sessionId)).toEqual(["s-old", "s-new"]);
+  });
+
   it("refreshes after a successful archive", async () => {
     vi.mocked(archiveSession).mockResolvedValue({ ...live, archived: true });
     vi.mocked(listCatalog).mockResolvedValue({

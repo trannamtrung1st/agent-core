@@ -108,6 +108,26 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     }
 
     [Fact]
+    public async Task V2_durable_delete_removes_ended_catalog_row()
+    {
+        var client = OwnerClient();
+        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
+        var ended = await client.DeleteAsync($"/api/v1/sessions/{view!.SessionId}");
+        Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
+
+        var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        var row = Assert.Single(listed!.Items, item => item.SessionId == view.SessionId);
+        Assert.True(row.Ended);
+
+        var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={row.Revision}");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+
+        var after = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        Assert.DoesNotContain(after!.Items, item => item.SessionId == view.SessionId);
+    }
+
+    [Fact]
     public async Task Archive_cancels_live_runtime()
     {
         var client = OwnerClient();
@@ -176,6 +196,43 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     }
 
     [Fact]
+    public async Task Switching_hub_attachments_preserves_catalog_order()
+    {
+        var client = OwnerClient();
+        var firstCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var first = await firstCreated.Content.ReadFromJsonAsync<SessionViewResponse>();
+        var secondCreated = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var second = await secondCreated.Content.ReadFromJsonAsync<SessionViewResponse>();
+
+        await client.PostAsJsonAsync($"/api/v2/sessions/{first!.SessionId}/rename", new RenameSessionRequest("First session"));
+        await client.PostAsJsonAsync($"/api/v2/sessions/{second!.SessionId}/rename", new RenameSessionRequest("Second session"));
+
+        var before = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        var orderBefore = before!.Items.Select(item => item.SessionId).ToArray();
+        Assert.Equal(second.SessionId, orderBefore[0]);
+        Assert.Equal(first.SessionId, orderBefore[1]);
+
+        await using var hub = CreateHubConnection();
+        await hub.StartAsync();
+        var attachedFirst = await AttachAsync(hub, first.SessionId);
+        Assert.True(attachedFirst.Accepted, attachedFirst.Error?.Message);
+
+        var duringFirst = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        Assert.Equal(orderBefore, duringFirst!.Items.Select(item => item.SessionId).ToArray());
+
+        await hub.StopAsync();
+        var reopened = await client.PostAsync($"/api/v2/sessions/{second.SessionId}/reopen", null);
+        reopened.EnsureSuccessStatusCode();
+
+        await hub.StartAsync();
+        var attachedSecond = await AttachAsync(hub, second.SessionId);
+        Assert.True(attachedSecond.Accepted, attachedSecond.Error?.Message);
+
+        var afterSwitch = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        Assert.Equal(orderBefore, afterSwitch!.Items.Select(item => item.SessionId).ToArray());
+    }
+
+    [Fact]
     public async Task Deactivate_pauses_without_archive_and_is_idempotent()
     {
         var client = OwnerClient();
@@ -225,4 +282,30 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
             TestOwnerCapability.Token(_factory.Services));
         return client;
     }
+
+    private HubConnection CreateHubConnection() =>
+        new HubConnectionBuilder()
+            .WithUrl(
+                new Uri(_factory.Server.BaseAddress!, "/hubs/session"),
+                options =>
+                {
+                    options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                    options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, _factory.Services);
+                })
+            .AddMessagePackProtocol()
+            .Build();
+
+    private static Task<CommandAck> AttachAsync(HubConnection hub, string sessionId) =>
+        hub.InvokeAsync<CommandAck>(
+            "Attach",
+            new ClientCommand<AttachPayload>
+            {
+                ProtocolVersion = 1,
+                SessionId = sessionId,
+                EventId = Guid.NewGuid().ToString(),
+                Sequence = 0,
+                Type = "session.attach",
+                Payload = new AttachPayload()
+            });
 }

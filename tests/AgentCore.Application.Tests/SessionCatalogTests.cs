@@ -82,6 +82,18 @@ public sealed class SessionCatalogTests
     }
 
     [Fact]
+    public async Task Durable_delete_removes_ended_sessions()
+    {
+        var manager = CreateManager(new InMemoryMemoryStore());
+        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        await manager.EndAsync(created.SessionId);
+        var ended = await manager.GetAsync(created.SessionId);
+        await manager.DurablyDeleteAsync(created.SessionId, ended.Revision);
+        var page = await manager.ListCatalogAsync(null, 50, false);
+        Assert.Empty(page.Items);
+    }
+
+    [Fact]
     public async Task Durable_delete_is_versioned_and_hides_the_session()
     {
         var store = new InMemoryMemoryStore();
@@ -99,6 +111,27 @@ public sealed class SessionCatalogTests
         var tombstone = await store.LoadAsync(created.SessionId);
         Assert.NotNull(tombstone!.DurablyDeletedAt);
         Assert.Empty(tombstone.Entries);
+    }
+
+    [Fact]
+    public async Task Reopen_and_deactivate_preserve_catalog_order()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
+        var manager = CreateManager(new InMemoryMemoryStore(), time);
+        var first = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        time.Advance(TimeSpan.FromSeconds(1));
+        var second = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+
+        var before = await manager.ListCatalogAsync(null, 50, false);
+        Assert.Equal([second.SessionId, first.SessionId], before.Items.Select(item => item.SessionId).ToArray());
+
+        await manager.ReopenAsync(first.SessionId);
+        var afterReopen = await manager.ListCatalogAsync(null, 50, false);
+        Assert.Equal([second.SessionId, first.SessionId], afterReopen.Items.Select(item => item.SessionId).ToArray());
+
+        await manager.DeactivateAsync(second.SessionId);
+        var afterDeactivate = await manager.ListCatalogAsync(null, 50, false);
+        Assert.Equal([second.SessionId, first.SessionId], afterDeactivate.Items.Select(item => item.SessionId).ToArray());
     }
 
     [Fact]

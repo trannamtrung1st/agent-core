@@ -1,4 +1,4 @@
-import { Alert, Button, Select } from "antd";
+import { Alert, Button, Flex, Select, Typography } from "antd";
 import type { AgentDescriptor } from "../../services/api";
 
 export function IdentityPicker({
@@ -19,25 +19,27 @@ export function IdentityPicker({
 
   return (
     <section className="picker">
-      {error ? <Alert type="error" showIcon title={error} /> : null}
-      <div className="picker-field">
-        <span className="picker-legend">Identity</span>
-        <Select
-          aria-label="Identity"
-          value={hasAgents ? selectedAgentId : undefined}
-          placeholder="Select identity"
-          disabled={!hasAgents}
-          options={agents.map((agent) => ({
-            value: agent.id,
-            label: `${agent.name} — ${agent.role}`
-          }))}
-          onChange={(agentId) => onSelect(agentId)}
-          style={{ width: "100%" }}
-        />
-      </div>
-      <Button type="primary" aria-label="Start conversation" disabled={!canStart} onClick={onStart}>
-        Start conversation
-      </Button>
+      <Flex vertical gap={12}>
+        {error ? <Alert type="error" showIcon title={error} /> : null}
+        <Flex vertical gap={8}>
+          <Typography.Text>Identity</Typography.Text>
+          <Select
+            aria-label="Identity"
+            value={hasAgents ? selectedAgentId : undefined}
+            placeholder="Select identity"
+            disabled={!hasAgents}
+            options={agents.map((agent) => ({
+              value: agent.id,
+              label: `${agent.name} — ${agent.role}`
+            }))}
+            onChange={(agentId) => onSelect(agentId)}
+            style={{ width: "100%" }}
+          />
+        </Flex>
+        <Button type="primary" aria-label="Start conversation" disabled={!canStart} onClick={onStart}>
+          Start conversation
+        </Button>
+      </Flex>
     </section>
   );
 }

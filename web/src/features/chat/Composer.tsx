@@ -73,7 +73,7 @@ export function Composer({
   }
 
   return (
-    <div className="dock">
+    <Flex vertical gap={8} className="dock">
       {error ? <Alert type="error" showIcon title={error} /> : null}
 
       <form
@@ -87,23 +87,25 @@ export function Composer({
       >
         <Flex vertical gap={8}>
           <label>
-            <Typography.Text>Message</Typography.Text>
-            <Input.TextArea
-              className="message-field"
-              value={draft}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onPaste={onPaste}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  onSend();
-                }
-              }}
-              disabled={!ready}
-              rows={2}
-              placeholder="Type your message here..."
-              aria-label="Message"
-            />
+            <Flex vertical gap={8}>
+              <Typography.Text>Message</Typography.Text>
+              <Input.TextArea
+                className="message-field"
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                onPaste={onPaste}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    onSend();
+                  }
+                }}
+                disabled={!ready}
+                rows={2}
+                placeholder="Type your message here..."
+                aria-label="Message"
+              />
+            </Flex>
           </label>
           {pendingAttachments.length > 0 ? (
             <ul className="attach-list" aria-label="Pending attachments">
@@ -139,51 +141,53 @@ export function Composer({
               ))}
             </ul>
           ) : null}
-          <Flex gap={8} wrap="wrap">
-            <input
-              ref={fileInput}
-              className="attach-input"
-              type="file"
-              multiple
-              aria-hidden="true"
-              tabIndex={-1}
-              onChange={(event) => {
-                takeFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-            <Button aria-label="Attach" disabled={!ready} onClick={() => fileInput.current?.click()}>
-              Attach
-            </Button>
-            <Button type="primary" htmlType="submit" aria-label="Send" disabled={!canSend}>
-              Send
-            </Button>
-            {voiceAvailable ? (
-              pendingVoice ? (
-                <Button aria-label="Cancel voice" onClick={onCancelVoice}>
-                  Cancel
-                </Button>
-              ) : voiceLive ? (
-                <Button aria-label={muted ? "Unmute" : "Mute"} onClick={() => onMute(!muted)}>
-                  {muted ? "Unmute" : "Mute"}
-                </Button>
-              ) : (
-                <Button aria-label="Voice" onClick={onVoice}>
-                  Voice
-                </Button>
-              )
-            ) : null}
-            {canRetry ? (
-              <Button aria-label="Retry" onClick={onRetry}>
-                Retry
+          <input
+            ref={fileInput}
+            className="attach-input"
+            type="file"
+            multiple
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              takeFiles(event.target.files);
+              event.target.value = "";
+            }}
+          />
+          <Flex justify="space-between" align="center" gap={8} wrap="wrap">
+            <Flex gap={8} wrap="wrap">
+              <Button aria-label="Attach" disabled={!ready} onClick={() => fileInput.current?.click()}>
+                Attach
               </Button>
-            ) : null}
+              <Button type="primary" htmlType="submit" aria-label="Send" disabled={!canSend}>
+                Send
+              </Button>
+              {voiceAvailable ? (
+                pendingVoice ? (
+                  <Button aria-label="Cancel voice" onClick={onCancelVoice}>
+                    Cancel
+                  </Button>
+                ) : voiceLive ? (
+                  <Button aria-label={muted ? "Unmute" : "Mute"} onClick={() => onMute(!muted)}>
+                    {muted ? "Unmute" : "Mute"}
+                  </Button>
+                ) : (
+                  <Button aria-label="Voice" onClick={onVoice}>
+                    Voice
+                  </Button>
+                )
+              ) : null}
+              {canRetry ? (
+                <Button aria-label="Retry" onClick={onRetry}>
+                  Retry
+                </Button>
+              ) : null}
+            </Flex>
             <Button danger aria-label="End" onClick={onEnd}>
               End
             </Button>
           </Flex>
         </Flex>
       </form>
-    </div>
+    </Flex>
   );
 }

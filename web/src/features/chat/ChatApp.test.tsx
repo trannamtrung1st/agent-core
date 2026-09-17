@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptySession, useSessionStore } from "../../state/sessionStore";
 import { bootstrap, sendDraft } from "../../services/realtime";
@@ -321,7 +321,10 @@ describe("ChatApp narrow session drawer", () => {
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open sessions" }));
-    expect(screen.getByTestId("session-rail")).toBeInTheDocument();
+    const rail = screen.getByTestId("session-rail");
+    expect(rail).toBeInTheDocument();
+    expect(within(rail).queryByText("Sessions")).not.toBeInTheDocument();
+    expect(within(rail).queryByRole("button", { name: "Start a new chat" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Planning notes/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();

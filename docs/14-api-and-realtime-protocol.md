@@ -221,7 +221,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | DELETE /api/v2/sessions/{id} | Versioned durable deletion of session-owned data including workspace files and artifact blobs |
 | DELETE /api/v1/sessions/{id} | Unchanged terminal-end |
 
-Ended rows: reopen/rename/archive/unarchive/versioned-delete fail closed or no-op without resurrecting a runtime.
+Ended rows: reopen/rename/archive/unarchive fail closed or no-op without resurrecting a runtime. Versioned durable delete remains available.
 
 **Rich envelope (observed).** Parent `ResponseId` carries `reply.text`, optional `reply.speech`, Markdown, attachment/artifact reference blocks, independent display and speech receipts. Unknown blocks fallback. Artifact refs in C use fixtures (`fixture-artifact-1`). Reconnect history is the received display prefix plus display-delivered blocks only.
 

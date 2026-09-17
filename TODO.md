@@ -7,9 +7,9 @@
 
 ## Issues
 
-- [ ] Cannot delete ended session.
-- [ ] Use confirm modal/dialog instead of inline.
-- [ ] Need UI toast/snackbar for success/error messages.
+- [x] Cannot delete ended session.
+- [x] Use confirm modal/dialog instead of inline.
+- [x] Need UI toast/snackbar for success/error messages.
 
 ## Later (idea)
 

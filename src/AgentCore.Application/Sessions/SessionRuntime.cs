@@ -2333,15 +2333,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var toSave = job.Kind switch
         {
             PersistKind.TerminalEnd => RebaseForPersist(job.Proposed, SessionStatus.Ended, now),
-            PersistKind.Pause => RebaseForPersist(job.Proposed, SessionStatus.Paused, now),
-            _ => job.Proposed with { Revision = _durableRevision + 1, UpdatedAt = now }
+            PersistKind.Pause => RebaseForPersist(job.Proposed, SessionStatus.Paused, _durableSnapshot.UpdatedAt),
+            _ => job.Proposed with
+            {
+                Revision = _durableRevision + 1,
+                UpdatedAt = CatalogUpdatedAt(job.Proposed, _durableSnapshot, now)
+            }
         };
 
         await _store.SaveAsync(toSave, _durableRevision, cancellationToken).ConfigureAwait(false);
         return toSave;
     }
 
-    private SessionSnapshot RebaseForPersist(SessionSnapshot proposed, SessionStatus status, DateTimeOffset now)
+    private SessionSnapshot RebaseForPersist(SessionSnapshot proposed, SessionStatus status, DateTimeOffset updatedAt)
     {
         var entries = proposed.Entries.Count >= _durableSnapshot.Entries.Count
             ? proposed.Entries
@@ -2351,10 +2355,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             Entries = entries,
             Status = status,
             PendingMode = null,
-            UpdatedAt = now,
+            UpdatedAt = updatedAt,
             Revision = _durableRevision + 1
         };
     }
+
+    private static DateTimeOffset CatalogUpdatedAt(
+        SessionSnapshot proposed,
+        SessionSnapshot durable,
+        DateTimeOffset now) =>
+        TouchesCatalogOrder(proposed, durable) ? now : durable.UpdatedAt;
+
+    private static bool TouchesCatalogOrder(SessionSnapshot proposed, SessionSnapshot durable) =>
+        proposed.Title != durable.Title
+        || proposed.ArchivedAt != durable.ArchivedAt
+        || !EntriesEqual(proposed.Entries, durable.Entries);
 
     private void AdoptPersisted(SessionSnapshot proposed, SessionSnapshot saved, PersistKind kind)
     {

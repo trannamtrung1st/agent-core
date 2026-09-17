@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -107,6 +108,35 @@ public sealed class SessionRealtimeLifecycleTests
     }
 
     [Fact]
+    public async Task Attach_and_detach_preserve_catalog_order()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
+            Enumerable.Range(1, 8).Select(index => Guid.Parse($"873f07d1-e264-4c81-a31b-7e59e940b8{index:D2}")).ToArray());
+        var manager = new SessionManager(
+            new StaticDefinitions(SampleDefinitions.Examiner),
+            store,
+            ids,
+            time,
+            new VoiceAvailability { SpeechAdaptersResolved = true });
+        var first = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        time.Advance(TimeSpan.FromSeconds(1));
+        var second = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var firstSnapshot = await manager.GetAsync(first.SessionId);
+
+        await using var runtime = Create(new CapturingSessionOutput(), time, new ScriptedLanguageModel(), store, firstSnapshot);
+        await runtime.AttachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.DetachAsync();
+        await runtime.WaitUntilIdleAsync();
+
+        var order = await manager.ListCatalogAsync(null, 50, false);
+        Assert.Equal([second.SessionId, first.SessionId], order.Items.Select(item => item.SessionId).ToArray());
+    }
+
+    [Fact]
     public async Task Same_session_can_move_text_voice_text()
     {
         var output = new CapturingSessionOutput();
@@ -168,5 +198,18 @@ public sealed class SessionRealtimeLifecycleTests
             time,
             NullLogger<SessionRuntime>.Instance,
             policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000));
+    }
+
+    private sealed class StaticDefinitions(AgentDefinition definition) : IAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<AgentDefinition>>([definition]);
+
+        public ValueTask<AgentDefinition?> GetAsync(
+            string id,
+            int? version = null,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AgentDefinition?>(
+                string.Equals(id, definition.Id, StringComparison.Ordinal) ? definition : null);
     }
 }

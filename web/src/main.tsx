@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App as AntApp, ConfigProvider } from "antd";
+import { ConfigProvider } from "antd";
 import { App } from "./App";
 import "./app.css";
 
@@ -12,9 +12,7 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <ConfigProvider>
-      <AntApp className="antd-root">
-        <App />
-      </AntApp>
+      <App />
     </ConfigProvider>
   </StrictMode>
 );

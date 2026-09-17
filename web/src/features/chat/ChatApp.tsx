@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Button, Drawer, Layout } from "antd";
+import { App as AntApp, Button, Drawer, Layout } from "antd";
 import { useSessionStore } from "../../state/sessionStore";
 import {
   beginNewChat,
@@ -91,91 +91,106 @@ export function ChatApp() {
       capabilityLost={state.catalogCapabilityLost}
       error={state.catalogError}
       mutation={state.catalogMutation}
+      showHeading={!isNarrow}
+      showNewChat={!isNarrow}
       onNewChat={handleNewChat}
       onOpen={handleOpen}
     />
   );
 
   return (
-    <Layout className="app-layout">
-      {isNarrow ? null : (
-        <Sider className="app-sider" theme="light" width={280}>
-          <div className="app-sider-inner">{rail}</div>
-        </Sider>
-      )}
-      <Layout>
-        <Header className="app-header">
-          <Hud
-            profile={profile}
-            connectionText={connectionText}
-            connectionTone={conversationStatusTone(connectionText)}
-            identity={inSession ? { name: state.agentName, role: state.agentRole } : null}
-            sessionsToggle={
-              isNarrow ? (
-                <Button aria-label="Open sessions" onClick={() => setSessionsOpen(true)}>
-                  Sessions
-                </Button>
-              ) : null
-            }
-          />
-        </Header>
-        <Content className="app-content">
-          {inSession ? (
-            <div className="conversation-pane">
-              <div className="conversation-scroll">
-                <Transcript
-                  agentName={state.agentName}
-                  sessionId={state.sessionId}
-                  entries={state.entries}
-                  connection={state.connection}
-                />
+    <AntApp className="antd-root" message={{ duration: 3, maxCount: 3 }}>
+      <Layout className="app-layout">
+        {isNarrow ? null : (
+          <Sider className="app-sider" theme="light" width={280}>
+            <div className="app-sider-inner">{rail}</div>
+          </Sider>
+        )}
+        <Layout>
+          <Header className="app-header">
+            <Hud
+              profile={profile}
+              connectionText={connectionText}
+              connectionTone={conversationStatusTone(connectionText)}
+              identity={inSession ? { name: state.agentName, role: state.agentRole } : null}
+              sessionsToggle={
+                isNarrow ? (
+                  <Button aria-label="Open sessions" onClick={() => setSessionsOpen(true)}>
+                    Sessions
+                  </Button>
+                ) : null
+              }
+            />
+          </Header>
+          <Content className="app-content">
+            {inSession ? (
+              <div className="conversation-pane">
+                <div className="conversation-scroll">
+                  <Transcript
+                    agentName={state.agentName}
+                    sessionId={state.sessionId}
+                    entries={state.entries}
+                    connection={state.connection}
+                  />
+                </div>
+                <div className="conversation-composer">
+                  <Composer
+                    draft={state.draft}
+                    canSend={canSend}
+                    ready={state.connection === "ready"}
+                    error={state.error}
+                    pendingAttachments={state.pendingAttachments}
+                    voiceAvailable={state.voiceAvailable}
+                    pendingVoice={pendingVoice}
+                    voiceLive={voiceLive}
+                    muted={state.muted}
+                    onDraftChange={setDraft}
+                    onSend={() => void sendDraft()}
+                    onVoice={() => void requestVoice()}
+                    onCancelVoice={() => void cancelVoice()}
+                    onMute={(muted) => void setMuted(muted)}
+                    canRetry={state.connection === "failed"}
+                    onRetry={() => void retryConnection()}
+                    onEnd={() => void hangUp()}
+                  />
+                </div>
               </div>
-              <div className="conversation-composer">
-                <Composer
-                  draft={state.draft}
-                  canSend={canSend}
-                  ready={state.connection === "ready"}
+            ) : (
+              <div className="picker-pane">
+                <IdentityPicker
+                  agents={state.agents}
+                  selectedAgentId={state.selectedAgentId}
                   error={state.error}
-                  pendingAttachments={state.pendingAttachments}
-                  voiceAvailable={state.voiceAvailable}
-                  pendingVoice={pendingVoice}
-                  voiceLive={voiceLive}
-                  muted={state.muted}
-                  onDraftChange={setDraft}
-                  onSend={() => void sendDraft()}
-                  onVoice={() => void requestVoice()}
-                  onCancelVoice={() => void cancelVoice()}
-                  onMute={(muted) => void setMuted(muted)}
-                  canRetry={state.connection === "failed"}
-                  onRetry={() => void retryConnection()}
-                  onEnd={() => void hangUp()}
+                  onSelect={selectAgent}
+                  onStart={() => void startConversation()}
                 />
               </div>
-            </div>
-          ) : (
-            <div className="picker-pane">
-              <IdentityPicker
-                agents={state.agents}
-                selectedAgentId={state.selectedAgentId}
-                error={state.error}
-                onSelect={selectAgent}
-                onStart={() => void startConversation()}
-              />
-            </div>
-          )}
-        </Content>
+            )}
+          </Content>
+        </Layout>
+        {isNarrow ? (
+          <Drawer
+            title="Sessions"
+            placement="left"
+            size={320}
+            open={sessionsOpen}
+            onClose={() => setSessionsOpen(false)}
+            extra={
+              <Button
+                type="primary"
+                aria-label="Start a new chat"
+                onClick={handleNewChat}
+                disabled={state.catalogMutation != null}
+              >
+                New chat
+              </Button>
+            }
+            styles={{ body: { padding: 0, height: "100%" } }}
+          >
+            {rail}
+          </Drawer>
+        ) : null}
       </Layout>
-      {isNarrow ? (
-        <Drawer
-          title="Sessions"
-          placement="left"
-          size={320}
-          open={sessionsOpen}
-          onClose={() => setSessionsOpen(false)}
-        >
-          {rail}
-        </Drawer>
-      ) : null}
-    </Layout>
+    </AntApp>
   );
 }

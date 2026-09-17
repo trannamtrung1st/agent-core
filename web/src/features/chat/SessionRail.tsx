@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Checkbox, Flex, Input, Typography } from "antd";
+import { Alert, App, Button, Checkbox, Empty, Flex, Input, Typography } from "antd";
 import type { AgentDescriptor, CatalogItem } from "../../services/api";
 import {
   archiveCatalogItem,
@@ -9,7 +9,7 @@ import {
   setIncludeArchived,
   unarchiveCatalogItem
 } from "../../services/catalog";
-import type { CatalogMutation } from "../../state/sessionStore";
+import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
 
 function agentLabel(agents: AgentDescriptor[], item: CatalogItem): string {
   const agent = agents.find((row) => row.id === item.agentId && row.version === item.agentVersion)
@@ -42,6 +42,10 @@ function rowBusy(mutation: CatalogMutation | null, sessionId: string): boolean {
   return mutation?.sessionId === sessionId;
 }
 
+function latestCatalogError(): string {
+  return useSessionStore.getState().catalogError ?? "Unable to update the session catalog.";
+}
+
 export function SessionRail({
   items,
   agents,
@@ -51,6 +55,8 @@ export function SessionRail({
   capabilityLost,
   error,
   mutation,
+  showHeading = true,
+  showNewChat = true,
   onNewChat,
   onOpen
 }: {
@@ -62,22 +68,79 @@ export function SessionRail({
   capabilityLost: boolean;
   error: string | null;
   mutation: CatalogMutation | null;
+  showHeading?: boolean;
+  showNewChat?: boolean;
   onNewChat: () => void;
   onOpen: (item: CatalogItem) => void;
 }) {
+  const { message, modal } = App.useApp();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const catalogBusy = mutation != null;
+
+  function latestItem(sessionId: string, fallback: CatalogItem): CatalogItem {
+    return useSessionStore.getState().catalogItems.find((row) => row.sessionId === sessionId) ?? fallback;
+  }
+
+  async function notifyMutation(
+    ok: boolean,
+    success: string,
+    options?: { rejectOnFailure?: boolean }
+  ): Promise<void> {
+    if (ok) {
+      void message.success(success);
+      return;
+    }
+
+    const errorMessage = latestCatalogError();
+    void message.error(errorMessage);
+    if (options?.rejectOnFailure) {
+      return Promise.reject(new Error(errorMessage));
+    }
+  }
+
+  function confirmDelete(item: CatalogItem): void {
+    modal.confirm({
+      title: `Delete “${item.title}”?`,
+      content: "This removes the session from the catalog. This cannot be undone.",
+      okText: "Delete",
+      cancelText: "Cancel",
+      okType: "danger",
+      centered: true,
+      mask: { closable: true },
+      onOk: async () => {
+        let ok = await deleteCatalogItem(latestItem(item.sessionId, item));
+        if (!ok) {
+          ok = await deleteCatalogItem(latestItem(item.sessionId, item));
+        }
+        await notifyMutation(ok, "Session deleted.", { rejectOnFailure: true });
+        if (ok && item.sessionId === activeSessionId) {
+          onNewChat();
+        }
+      }
+    });
+  }
 
   return (
     <nav className="session-rail" aria-label="Sessions" data-testid="session-rail">
-      <Flex justify="space-between" align="center" gap={8}>
-        <Typography.Text strong>Sessions</Typography.Text>
-        <Button type="primary" aria-label="Start a new chat" onClick={onNewChat} disabled={catalogBusy}>
-          New chat
-        </Button>
-      </Flex>
+      {(showHeading || showNewChat) ? (
+        <Flex justify={showHeading ? "space-between" : "flex-end"} align="center" gap={8}>
+          {showHeading ? <Typography.Text strong>Sessions</Typography.Text> : null}
+          {showNewChat ? (
+            <Button
+              type="primary"
+              aria-label="Start a new chat"
+              onClick={() => {
+                setRenamingId(null);
+                onNewChat();
+              }}
+              disabled={catalogBusy}
+            >
+              New chat
+            </Button>
+          ) : null}
+        </Flex>
+      ) : null}
       {capabilityLost ? (
         <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />
       ) : null}
@@ -91,10 +154,11 @@ export function SessionRail({
       </Checkbox>
       <ul className="session-rail-list">
         {items.length === 0 && !capabilityLost ? (
-          <li className="session-rail-empty">No sessions yet.</li>
+          <li className="session-rail-empty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sessions yet." />
+          </li>
         ) : null}
         {items.map((item) => {
-          const locked = item.ended;
           const inactive = item.archived || item.ended;
           const busy = rowBusy(mutation, item.sessionId);
           return (
@@ -104,121 +168,104 @@ export function SessionRail({
                 item.sessionId === activeSessionId ? "session-row session-row-active" : "session-row"
               }
             >
-              {renamingId === item.sessionId ? (
-                <form
-                  className="session-rename"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void renameCatalogItem(item.sessionId, draftTitle).then((ok) => {
-                      if (ok) {
-                        setRenamingId(null);
-                      }
-                    });
-                  }}
-                >
-                  <Input
-                    aria-label="Session title"
-                    value={draftTitle}
-                    onChange={(event) => setDraftTitle(event.target.value)}
-                    disabled={mutationBusy(mutation, item.sessionId, "rename")}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape" && !mutationBusy(mutation, item.sessionId, "rename")) {
-                        setRenamingId(null);
-                      }
+              <div className="session-row-body">
+                {renamingId === item.sessionId ? (
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void renameCatalogItem(item.sessionId, draftTitle).then(async (ok) => {
+                        if (ok) {
+                          setRenamingId(null);
+                        }
+                        await notifyMutation(ok, "Session renamed.");
+                      });
                     }}
-                  />
-                  <Button
-                    htmlType="submit"
-                    loading={mutationBusy(mutation, item.sessionId, "rename")}
-                    disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "rename")}
                   >
-                    Save
-                  </Button>
-                </form>
-              ) : (
-                <Button
-                  type="text"
-                  block
-                  disabled={inactive || busy}
-                  onClick={() => onOpen(item)}
-                  style={{ height: "auto", textAlign: "start", whiteSpace: "normal" }}
-                >
-                  <Flex vertical align="flex-start" gap={0}>
-                    <Typography.Text>{item.title}</Typography.Text>
-                    <Typography.Text type="secondary">
-                      {agentLabel(agents, item)}
-                      <span> · {rowState(item)}</span>
-                    </Typography.Text>
-                  </Flex>
-                </Button>
-              )}
-              {locked ? null : (
-                <div className="session-rail-actions">
-                  {item.archived ? (
-                    <Button
-                      size="small"
-                      loading={mutationBusy(mutation, item.sessionId, "unarchive")}
-                      disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "unarchive")}
-                      onClick={() => void unarchiveCatalogItem(item.sessionId)}
-                    >
-                      Unarchive
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        size="small"
-                        disabled={busy}
-                        onClick={() => {
-                          setRenamingId(item.sessionId);
-                          setDraftTitle(item.title);
+                    <Flex gap={8} align="center">
+                      <Input
+                        aria-label="Session title"
+                        value={draftTitle}
+                        onChange={(event) => setDraftTitle(event.target.value)}
+                        disabled={mutationBusy(mutation, item.sessionId, "rename")}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape" && !mutationBusy(mutation, item.sessionId, "rename")) {
+                            setRenamingId(null);
+                          }
                         }}
+                      />
+                      <Button
+                        htmlType="submit"
+                        loading={mutationBusy(mutation, item.sessionId, "rename")}
+                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "rename")}
                       >
-                        Rename
+                        Save
                       </Button>
+                    </Flex>
+                  </form>
+                ) : (
+                  <Button
+                    type="text"
+                    className="session-row-open"
+                    block
+                    disabled={inactive || busy}
+                    onClick={() => onOpen(item)}
+                  >
+                    <Flex vertical align="flex-start" gap={0} className="session-row-copy">
+                      <Typography.Text>{item.title}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {agentLabel(agents, item)}
+                        <span> · {rowState(item)}</span>
+                      </Typography.Text>
+                    </Flex>
+                  </Button>
+                )}
+                <div className="session-rail-actions">
+                  {!item.ended ? (
+                    item.archived ? (
                       <Button
                         size="small"
-                        loading={mutationBusy(mutation, item.sessionId, "archive")}
-                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "archive")}
-                        onClick={() => void archiveCatalogItem(item.sessionId)}
-                      >
-                        Archive
-                      </Button>
-                    </>
-                  )}
-                  {confirmDeleteId === item.sessionId ? (
-                    <>
-                      <Button
-                        size="small"
-                        danger
-                        loading={mutationBusy(mutation, item.sessionId, "delete")}
-                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "delete")}
+                        loading={mutationBusy(mutation, item.sessionId, "unarchive")}
+                        disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "unarchive")}
                         onClick={() => {
-                          void deleteCatalogItem(item).then((ok) => {
-                            if (ok) {
-                              setConfirmDeleteId(null);
-                            } else {
-                              setConfirmDeleteId(null);
-                            }
+                          void unarchiveCatalogItem(item.sessionId).then(async (ok) => {
+                            await notifyMutation(ok, "Session restored.");
                           });
                         }}
                       >
-                        Confirm delete
+                        Unarchive
                       </Button>
-                      <Button
-                        size="small"
-                        disabled={mutationBusy(mutation, item.sessionId, "delete")}
-                        onClick={() => setConfirmDeleteId(null)}
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <Button size="small" danger disabled={busy} onClick={() => setConfirmDeleteId(item.sessionId)}>
-                      Delete
-                    </Button>
-                  )}
+                    ) : (
+                      <>
+                        <Button
+                          size="small"
+                          disabled={busy}
+                          onClick={() => {
+                            setRenamingId(item.sessionId);
+                            setDraftTitle(item.title);
+                          }}
+                        >
+                          Rename
+                        </Button>
+                        <Button
+                          size="small"
+                          loading={mutationBusy(mutation, item.sessionId, "archive")}
+                          disabled={catalogBusy && !mutationBusy(mutation, item.sessionId, "archive")}
+                          onClick={() => {
+                            void archiveCatalogItem(item.sessionId).then(async (ok) => {
+                              await notifyMutation(ok, "Session archived.");
+                            });
+                          }}
+                        >
+                          Archive
+                        </Button>
+                      </>
+                    )
+                  ) : null}
+                  <Button size="small" danger disabled={busy} onClick={() => confirmDelete(item)}>
+                    Delete
+                  </Button>
                 </div>
-              )}
+              </div>
             </li>
           );
         })}

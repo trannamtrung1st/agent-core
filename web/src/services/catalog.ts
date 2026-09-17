@@ -10,6 +10,17 @@ import {
 } from "./api";
 import { useSessionStore, type CatalogMutationKind } from "../state/sessionStore";
 
+function sortCatalogItems(items: CatalogItem[]): CatalogItem[] {
+  return [...items].sort((left, right) => {
+    const byUpdated = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+    if (byUpdated !== 0) {
+      return byUpdated;
+    }
+
+    return right.sessionId.localeCompare(left.sessionId);
+  });
+}
+
 export function catalogShell() {
   const state = useSessionStore.getState();
   return {
@@ -31,7 +42,7 @@ export async function refreshCatalog(reset = true): Promise<void> {
     if (reset) {
       const page = await listCatalog({ includeArchived, limit: 50 });
       useSessionStore.setState({
-        catalogItems: page.items,
+        catalogItems: sortCatalogItems(page.items),
         catalogNextCursor: page.nextCursor,
         catalogHasMore: page.hasMore,
         catalogCapabilityLost: false,
@@ -45,7 +56,10 @@ export async function refreshCatalog(reset = true): Promise<void> {
     const existing = useSessionStore.getState().catalogItems;
     const seen = new Set(existing.map((item) => item.sessionId));
     useSessionStore.setState({
-      catalogItems: [...existing, ...page.items.filter((item) => !seen.has(item.sessionId))],
+      catalogItems: sortCatalogItems([
+        ...existing,
+        ...page.items.filter((item) => !seen.has(item.sessionId))
+      ]),
       catalogNextCursor: page.nextCursor,
       catalogHasMore: page.hasMore,
       catalogCapabilityLost: false,
@@ -148,8 +162,10 @@ export async function deleteCatalogItem(item: CatalogItem): Promise<boolean> {
 }
 
 function patchCatalog(item: CatalogItem): void {
-  const items = useSessionStore.getState().catalogItems.map((row) =>
-    row.sessionId === item.sessionId ? item : row
+  const items = sortCatalogItems(
+    useSessionStore.getState().catalogItems.map((row) =>
+      row.sessionId === item.sessionId ? item : row
+    )
   );
   useSessionStore.setState({ catalogItems: items });
 }

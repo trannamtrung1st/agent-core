@@ -168,8 +168,7 @@ public sealed partial class SessionRuntime
         {
             Status = SessionStatus.Paused,
             PendingMode = null,
-            RuntimeEpoch = _snapshot.RuntimeEpoch + 1,
-            UpdatedAt = _time.GetUtcNow()
+            RuntimeEpoch = _snapshot.RuntimeEpoch + 1
         };
         RequestPersist(
             _snapshot,

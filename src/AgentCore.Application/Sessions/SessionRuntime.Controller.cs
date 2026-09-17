@@ -59,8 +59,7 @@ public sealed partial class SessionRuntime
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Attached,
-            PendingMode = null,
-            UpdatedAt = _time.GetUtcNow()
+            PendingMode = null
         };
         _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         if (_snapshot.Mode == SessionMode.Voice)
@@ -118,8 +117,7 @@ public sealed partial class SessionRuntime
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Paused,
-            PendingMode = null,
-            UpdatedAt = _time.GetUtcNow()
+            PendingMode = null
         };
         _input = InputActivity.Idle;
         _muted = false;
