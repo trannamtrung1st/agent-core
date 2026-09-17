@@ -161,7 +161,7 @@ public sealed class SupportComplianceWorkflowTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 128).Select(index => Guid.Parse($"019944af-00c1-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940cf01")]);
-        var tools = new SessionToolExecutor(knowledge, attachments, workspace, artifacts);
+        var tools = new SessionToolExecutor(knowledge, attachments, workspace: workspace, artifacts: artifacts);
         return new SessionRuntime(
             snapshot,
             new ScriptedLanguageModel(),

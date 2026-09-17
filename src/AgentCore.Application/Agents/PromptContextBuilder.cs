@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -20,6 +22,8 @@ public sealed class PromptContextBuilder
     public const int MaxSummaryCharacters = 2000;
     public const int MaxAttachmentContextCharacters = 16384;
     public const int MinAttachmentContextCharactersPerFile = 2048;
+    public const int MaxManifestFiles = 50;
+    public const int MaxManifestCharacters = 12288;
 
     public PromptSections BuildSections(AgentContext context)
     {
@@ -133,29 +137,96 @@ public sealed class PromptContextBuilder
         ]);
     }
 
-    private static string BuildAttachmentManifestSystem(AgentContext context)
+    public static string SanitizeManifestLabel(string? name)
+    {
+        var sanitized = AttachmentClassification.SanitizeDisplayName(name);
+        var builder = new StringBuilder(sanitized.Length);
+        foreach (var ch in sanitized)
+        {
+            builder.Append(ch switch
+            {
+                '\r' or '\n' or '\t' => ' ',
+                < ' ' or '\u007f' => ' ',
+                _ => ch
+            });
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    public static IReadOnlyList<SessionAttachmentManifestItem> SelectManifestItems(AgentContext context)
     {
         if (context.SessionAttachments is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var referenced = new HashSet<Guid>();
+        foreach (var entry in context.History)
+        {
+            if (entry.Attachments is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            foreach (var attachment in entry.Attachments)
+            {
+                referenced.Add(attachment.AttachmentId);
+            }
+        }
+
+        var prioritized = context.SessionAttachments
+            .OrderByDescending(item => referenced.Contains(item.AttachmentId))
+            .ThenByDescending(item => item.UploadedWithEntrySequence)
+            .ThenBy(item => item.DisplayName, StringComparer.Ordinal)
+            .Take(MaxManifestFiles)
+            .ToArray();
+
+        var selected = new List<SessionAttachmentManifestItem>(prioritized.Length);
+        var characters = 0;
+        foreach (var item in prioritized)
+        {
+            var payload = new
+            {
+                displayName = SanitizeManifestLabel(item.DisplayName),
+                attachmentId = item.AttachmentId,
+                contentType = item.ContentType,
+                uploadedWithEntrySequence = item.UploadedWithEntrySequence
+            };
+            var encoded = JsonSerializer.Serialize(payload);
+            if (selected.Count > 0 && characters + encoded.Length + 1 > MaxManifestCharacters)
+            {
+                break;
+            }
+
+            selected.Add(item);
+            characters += encoded.Length + 1;
+        }
+
+        return selected;
+    }
+
+    private static string BuildAttachmentManifestSystem(AgentContext context)
+    {
+        var items = SelectManifestItems(context);
+        if (items.Count == 0)
         {
             return string.Empty;
         }
 
-        var lines = new List<string>
+        var entries = items.Select(item => JsonSerializer.Serialize(new
         {
-            "Files available in this session (user data; use attachments.read with attachmentId when full content is needed):"
-        };
-        foreach (var item in context.SessionAttachments)
-        {
-            lines.Add($"- {item.DisplayName}");
-            lines.Add($"  attachmentId: {item.AttachmentId:D}");
-            lines.Add($"  type: {item.ContentType}");
-            if (item.UploadedWithEntrySequence > 0)
-            {
-                lines.Add($"  uploaded with user turn sequence {item.UploadedWithEntrySequence}");
-            }
-        }
-
-        return string.Join('\n', lines);
+            displayName = SanitizeManifestLabel(item.DisplayName),
+            attachmentId = item.AttachmentId,
+            contentType = item.ContentType,
+            uploadedWithEntrySequence = item.UploadedWithEntrySequence
+        }));
+        return string.Join(
+            '\n',
+            [
+                "Files available in this session (user data JSON; use attachments.read with attachmentId when full content is needed):",
+                .. entries
+            ]);
     }
 
     private static string BuildHistoricalUserText(ConversationEntry entry)
@@ -167,7 +238,8 @@ public sealed class PromptContextBuilder
 
         var refs = string.Join(
             ", ",
-            entry.Attachments.Select(item => $"{item.DisplayName} (attachmentId={item.AttachmentId:D})"));
+            entry.Attachments.Select(item =>
+                $"{SanitizeManifestLabel(item.DisplayName)} (attachmentId={item.AttachmentId:D})"));
         if (string.IsNullOrEmpty(entry.Text))
         {
             return $"[Sent attachments: {refs}]";
@@ -433,7 +505,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
 
     private static ModelRequest WithTools(AgentContext context, ModelRequest request)
     {
-        var tools = ToolCatalog.For(context.Definition);
+        var tools = ToolCatalog.For(context.Definition, context);
         return tools.Count == 0 ? request : request with { Tools = tools };
     }
 

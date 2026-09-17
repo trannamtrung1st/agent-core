@@ -47,7 +47,7 @@ public static class ToolCatalog
                 """{"type":"object","properties":{"verb":{"type":"string"},"arguments":{"type":"array","items":{"type":"string"}},"exportPath":{"type":"string"}},"required":["verb"]}""")
         };
 
-    public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition)
+    public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition, AgentContext? context = null)
     {
         var offered = new List<ModelToolDefinition>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -59,13 +59,24 @@ public static class ToolCatalog
             }
         }
 
-        if (Known.TryGetValue(AttachmentsRead, out var attachmentsRead) && seen.Add(AttachmentsRead))
+        if (context is not null
+            && SessionHasAttachments(context)
+            && Known.TryGetValue(AttachmentsRead, out var attachmentsRead)
+            && RolePermissions.AllowsTool(definition, AttachmentsRead)
+            && seen.Add(AttachmentsRead))
         {
             offered.Add(attachmentsRead);
         }
 
         return offered;
     }
+
+    public static bool SessionHasAttachments(AgentContext context) =>
+        context.SessionAttachments is { Count: > 0 }
+        || context.AttachmentContents is { Count: > 0 };
+
+    public static bool IsPermittedForExecution(AgentDefinition definition, string toolName) =>
+        RolePermissions.AllowsTool(definition, toolName);
 
     public static IEnumerable<string> AllKnownNames() => Known.Keys;
 }

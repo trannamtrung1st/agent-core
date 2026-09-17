@@ -1,8 +1,10 @@
+using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using SixLabors.ImageSharp;
@@ -208,6 +210,53 @@ public sealed class SessionToolExecutorTests
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(result) <= 48);
         using var json = JsonDocument.Parse(result);
         Assert.True(json.RootElement.TryGetProperty("truncated", out _) || json.RootElement.TryGetProperty("kind", out _));
+    }
+
+    [Fact]
+    public async Task Attachments_read_reextracts_pdf_text_on_later_turns()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var sessionId = Guid.NewGuid();
+        var uploaded = await attachments.UploadPendingAsync(
+            sessionId,
+            "doc.pdf",
+            "application/pdf",
+            new MemoryStream(PdfTwoPages()),
+            false);
+        var result = await executor.ExecuteAsync(
+            Support(),
+            sessionId,
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
+            ToolLimits.MaxOutputBytes);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal("pdf", json.RootElement.GetProperty("kind").GetString());
+        Assert.Contains("Alpha page", json.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Beta page", json.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
+    }
+
+    private static byte[] PdfTwoPages()
+    {
+        var pdf = """
+%PDF-1.1
+1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
+2 0 obj<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>endobj
+3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Resources<< /Font<< /F1 5 0 R >> >> >>endobj
+4 0 obj<< /Length 44 >>stream
+BT /F1 12 Tf 10 100 Td (Alpha page) Tj ET
+endstream
+endobj
+5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj
+6 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 7 0 R /Resources<< /Font<< /F1 5 0 R >> >> >>endobj
+7 0 obj<< /Length 43 >>stream
+BT /F1 12 Tf 10 100 Td (Beta page) Tj ET
+endstream
+endobj
+trailer<< /Root 1 0 R >>
+%%EOF
+""";
+        return Encoding.ASCII.GetBytes(pdf.Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
     private static byte[] PngBytes()

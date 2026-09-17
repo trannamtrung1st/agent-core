@@ -121,7 +121,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
-        services.TryAddSingleton<SessionToolExecutor>();
+        services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
+            provider.GetService<RoleKnowledgeService>(),
+            provider.GetService<IAttachmentStore>(),
+            provider.GetService<IAttachmentProcessor>(),
+            provider.GetService<ISessionWorkspace>(),
+            provider.GetService<IArtifactStore>(),
+            provider.GetService<ISandboxExecutor>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

@@ -13,6 +13,7 @@ namespace AgentCore.Application.Tools;
 public sealed class SessionToolExecutor(
     RoleKnowledgeService? knowledge = null,
     IAttachmentStore? attachments = null,
+    IAttachmentProcessor? processor = null,
     ISessionWorkspace? workspace = null,
     IArtifactStore? artifacts = null,
     ISandboxExecutor? sandbox = null)
@@ -31,8 +32,9 @@ public sealed class SessionToolExecutor(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(call.Name)
-            || !RolePermissions.AllowsTool(definition, call.Name)
-            || !ToolCatalog.For(definition).Any(item => string.Equals(item.Name, call.Name, StringComparison.Ordinal)))
+            || !ToolCatalog.IsPermittedForExecution(definition, call.Name)
+            || (!string.Equals(call.Name, ToolCatalog.AttachmentsRead, StringComparison.Ordinal)
+                && !ToolCatalog.For(definition).Any(item => string.Equals(item.Name, call.Name, StringComparison.Ordinal))))
         {
             return Error("forbidden", "Tool is not permitted for this role.");
         }
@@ -147,15 +149,48 @@ public sealed class SessionToolExecutor(
 
         if (string.Equals(AttachmentMedia.NormalizeContentType(record.ContentType), "application/pdf", StringComparison.OrdinalIgnoreCase))
         {
-            return JsonSerializer.Serialize(new
+            if (processor is null)
             {
-                attachmentId = record.AttachmentId,
-                displayName = record.DisplayName,
-                contentType = record.ContentType,
-                byteSize = record.ByteSize,
-                kind = "pdf",
-                note = "PDF content is extracted during attachment processing on the user turn. attachments.read returns text only for supported text attachments."
-            });
+                return JsonSerializer.Serialize(new
+                {
+                    attachmentId = record.AttachmentId,
+                    displayName = record.DisplayName,
+                    contentType = record.ContentType,
+                    byteSize = record.ByteSize,
+                    kind = "pdf",
+                    note = "PDF extraction is unavailable."
+                });
+            }
+
+            var processed = await processor.ProcessTurnAsync(sessionId, [attachmentId], cancellationToken)
+                .ConfigureAwait(false);
+            var extracted = processed.FirstOrDefault(item => item.Kind == AttachmentProcessKind.ExtractedText);
+            if (extracted is null || string.IsNullOrEmpty(extracted.Text))
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    attachmentId = record.AttachmentId,
+                    displayName = record.DisplayName,
+                    contentType = record.ContentType,
+                    byteSize = record.ByteSize,
+                    kind = "pdf",
+                    note = "PDF content could not be extracted."
+                });
+            }
+
+            return ToolJsonResults.FitJsonWithContentField(
+                remainingOutputBytes,
+                extracted.Text,
+                (content, truncated) => JsonSerializer.Serialize(new
+                {
+                    attachmentId = record.AttachmentId,
+                    displayName = record.DisplayName,
+                    contentType = record.ContentType,
+                    kind = "pdf",
+                    provenance = extracted.Provenance,
+                    truncated,
+                    content
+                }));
         }
 
         if (!AttachmentMedia.IsReadableText(record.ContentType))
