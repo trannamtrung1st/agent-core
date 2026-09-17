@@ -187,7 +187,7 @@ public sealed record AgentContext(
     DateTimeOffset UtcNow = default,
     DateTimeOffset? LastUserActivityAt = null);
 public enum InitiativeIntent { Hint, Rephrase, Clarification, Reminder, FollowUp, Other }
-public sealed class InitiativePlan
+public sealed record InitiativePlan
 {
     public InitiativeIntent Intent { get; }
     public string PlannerNote { get; }
