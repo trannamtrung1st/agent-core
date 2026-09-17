@@ -1,4 +1,5 @@
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 
@@ -264,6 +265,7 @@ public sealed partial class SessionRuntime
             RuntimeEpoch = _snapshot.RuntimeEpoch + 1,
             PauseReason = pauseReason
         };
+        SessionPauseTelemetry.Record(pauseReason);
         RequestPersist(
             _snapshot,
             PersistKind.Pause,

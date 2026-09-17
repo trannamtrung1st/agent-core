@@ -3,7 +3,7 @@ import { ConfigProvider } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
 import { emptySession, useSessionStore } from "../../state/sessionStore";
-import { bootstrap, sendDraft } from "../../services/realtime";
+import { bootstrap, sendDraft, resumePausedSession } from "../../services/realtime";
 import { ChatApp } from "./ChatApp";
 
 function stubMatchMedia(matches: (query: string) => boolean) {
@@ -43,7 +43,8 @@ vi.mock("../../services/realtime", async (importOriginal) => {
     ...actual,
     bootstrap: vi.fn().mockResolvedValue(""),
     reportCommittedEntries: vi.fn(),
-    sendDraft: vi.fn().mockResolvedValue(undefined)
+    sendDraft: vi.fn().mockResolvedValue(undefined),
+    resumePausedSession: vi.fn().mockResolvedValue(true)
   };
 });
 
@@ -353,6 +354,48 @@ describe("ChatApp accessibility", () => {
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Conversation actions" })).not.toBeInTheDocument();
+  });
+
+  it("shows reason-specific pause copy and a keyboard-operable Resume", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "idle",
+        status: "paused",
+        pauseReason: "silentEvaluation",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner",
+        entries: [
+          {
+            entryId: "e1",
+            sequence: 1,
+            sourceEventId: "e1",
+            role: "user",
+            text: "Hello",
+            responseId: null,
+            status: "completed",
+            deliveryMode: "text",
+            heardTextEndExclusive: 5,
+            receivedTextEndExclusive: 5,
+            createdAt: "2026-09-16T00:00:00.000Z"
+          }
+        ]
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByTestId("connection")).toHaveTextContent("Paused");
+    expect(screen.getByText(/paused after repeated quiet checks/i)).toBeInTheDocument();
+    expect(screen.queryByText("This conversation has ended.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    const resume = screen.getByRole("button", { name: "Resume" });
+    expect(resume).toBeEnabled();
+    resume.focus();
+    expect(resume).toHaveFocus();
+    fireEvent.click(resume);
+    expect(resumePausedSession).toHaveBeenCalled();
   });
 
   it("keeps the composer while the session is still ending", async () => {

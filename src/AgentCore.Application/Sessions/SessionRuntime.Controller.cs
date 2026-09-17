@@ -144,6 +144,7 @@ public sealed partial class SessionRuntime
             PendingMode = null,
             PauseReason = "disconnected"
         };
+        SessionPauseTelemetry.Record("disconnected");
         _muted = false;
         _environmentQueue.Clear();
         AbandonLiveSpeech(rotateEpoch: true);

@@ -2611,6 +2611,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             RuntimeEpoch = Math.Max(_durableSnapshot.RuntimeEpoch, _snapshot.RuntimeEpoch) + 1,
             UpdatedAt = _time.GetUtcNow()
         };
+        SessionPauseTelemetry.Record("persistence");
         await PublishAsync(
                 new SessionOutput(
                     context,

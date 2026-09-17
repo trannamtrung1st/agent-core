@@ -242,16 +242,36 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         first.EnsureSuccessStatusCode();
         var item = await first.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
         Assert.Equal("paused", item!.Status);
+        Assert.Equal("manual", item.PauseReason);
         Assert.False(item.Archived);
         Assert.False(item.Ended);
         Assert.Equal(1, item.RuntimeEpoch);
+        var detail = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v2/sessions/{view.SessionId}");
+        Assert.Equal("paused", detail!.Status);
+        Assert.Equal("manual", detail.PauseReason);
+        await using (var hub = CreateHubConnection())
+        {
+            await hub.StartAsync();
+            var blocked = await AttachAsync(hub, view.SessionId);
+            Assert.False(blocked.Accepted);
+            Assert.Equal("SessionPaused", blocked.Error?.Code);
+        }
+
         var second = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/deactivate", null);
         second.EnsureSuccessStatusCode();
         var again = await second.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
         Assert.Equal("paused", again!.Status);
+        Assert.Equal("manual", again.PauseReason);
         Assert.Equal(1, again.RuntimeEpoch);
         var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
-        Assert.Contains(listed!.Items, row => row.SessionId == view.SessionId && row.Status == "paused");
+        Assert.Contains(listed!.Items, row => row.SessionId == view.SessionId && row.Status == "paused" && row.PauseReason == "manual");
+
+        var reopen = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/reopen", null);
+        reopen.EnsureSuccessStatusCode();
+        var resumed = await reopen.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
+        Assert.Null(resumed!.PauseReason);
+        Assert.False(resumed.Ended);
+        Assert.NotEqual("ended", resumed.Status);
     }
 
     [Fact]

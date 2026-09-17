@@ -251,7 +251,7 @@ export function ChatApp() {
                       <Typography.Text type="secondary">
                         {pausedSessionMessage(state.pauseReason)}
                       </Typography.Text>
-                      <Button type="primary" onClick={() => void resumePausedSession()}>
+                      <Button type="primary" htmlType="button" onClick={() => void resumePausedSession()}>
                         Resume
                       </Button>
                     </Flex>

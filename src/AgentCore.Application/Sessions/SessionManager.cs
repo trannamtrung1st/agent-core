@@ -210,13 +210,15 @@ public sealed class SessionManager
                         return snapshot;
                     }
 
-                    return snapshot with
+                    var paused = snapshot with
                     {
                         Status = SessionStatus.Paused,
                         PendingMode = null,
                         RuntimeEpoch = snapshot.RuntimeEpoch + 1,
                         PauseReason = "manual"
                     };
+                    SessionPauseTelemetry.Record("manual");
+                    return paused;
                 },
                 cancellationToken,
                 touchCatalogOrder: false)

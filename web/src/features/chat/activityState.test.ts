@@ -1,4 +1,4 @@
-import { conversationStatus, conversationStatusTone, mapAgentActivity } from "./activityState";
+import { conversationStatus, conversationStatusTone, mapAgentActivity, pausedSessionMessage } from "./activityState";
 
 describe("agent activity mapping", () => {
   const ready = {
@@ -64,5 +64,14 @@ describe("agent activity mapping", () => {
     expect(conversationStatusTone("Reconnecting…")).toBe("wait");
     expect(conversationStatusTone("Interrupted")).toBe("alarm");
     expect(conversationStatusTone("Connection failed. Check the network and try again.")).toBe("alarm");
+    expect(conversationStatus({ ...ready, sessionStatus: "paused" })).toBe("Paused");
+    expect(conversationStatus({ ...ready, connection: "idle", sessionStatus: "ended" })).toBe("Ended");
+  });
+
+  it("uses reason-specific pause copy", () => {
+    expect(pausedSessionMessage("inactivity")).toContain("inactivity");
+    expect(pausedSessionMessage("silentEvaluation")).toContain("quiet checks");
+    expect(pausedSessionMessage("initiative")).toContain("paused by the agent");
+    expect(pausedSessionMessage("manual")).toBe("This conversation was paused. Resume to continue messaging.");
   });
 });

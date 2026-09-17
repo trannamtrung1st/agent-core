@@ -367,6 +367,8 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal("silentEvaluation", runtime.Snapshot.PauseReason);
+        Assert.NotEqual(SessionStatus.Ended, runtime.Snapshot.Status);
     }
 
     [Fact]
