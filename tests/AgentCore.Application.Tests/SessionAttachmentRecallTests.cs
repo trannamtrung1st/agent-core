@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
@@ -11,6 +13,7 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -264,6 +267,124 @@ public sealed class SessionAttachmentRecallTests
     }
 
     [Fact]
+    public void Environment_omits_effective_tools_when_model_does_not_support_tools()
+    {
+        var attachmentId = Guid.Parse("019944af-0014-7000-8000-000000000002");
+        var context = new AgentContext(
+            SampleDefinitions.Examiner,
+            [],
+            string.Empty,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "Review this file."),
+            SessionAttachments:
+            [
+                new SessionAttachmentManifestItem(attachmentId, "proposal.md", "text/markdown", 1)
+            ],
+            ModelSupportsTools: false);
+        var environment = new PromptContextBuilder().BuildSections(context).EnvironmentSystem;
+        Assert.Contains("Role tools: (none).", environment, StringComparison.Ordinal);
+        Assert.Contains("Effective tools this request: (none).", environment, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Tool_less_examiner_accepts_current_markdown_attachment_without_tools()
+    {
+        var handler = new ToolLessAttachmentHandler();
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = false
+            });
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(
+            output,
+            attachments,
+            processor,
+            model,
+            brain,
+            snapshot: CreateExaminerSnapshot());
+        await runtime.AttachAsync();
+        var body = "Alpha beta gamma delta";
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "proposal.md",
+            "text/markdown",
+            new MemoryStream(Encoding.UTF8.GetBytes(body)),
+            false);
+        Assert.True(await runtime.SubmitUserTextAsync("Summarize it.", attachmentIds: [uploaded.AttachmentId]));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, cts.Token);
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(1, handler.PostCount);
+        Assert.DoesNotContain("\"tools\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("proposal.md", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains(body, handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains(output.TextDeltas, delta => delta.Text == "Four words.");
+        Assert.False(brain.Contexts[^1].ModelSupportsTools);
+    }
+
+    [Fact]
+    public async Task Tool_less_examiner_accepts_follow_up_text_after_session_attachment_without_tools()
+    {
+        var handler = new ToolLessAttachmentHandler();
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = false
+            });
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(
+            output,
+            attachments,
+            processor,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            snapshot: CreateExaminerSnapshot());
+        await runtime.AttachAsync();
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "proposal.md",
+            "text/markdown",
+            new MemoryStream(Encoding.UTF8.GetBytes("Alpha beta gamma delta")),
+            false);
+        Assert.True(await runtime.SubmitUserTextAsync("Review this file.", attachmentIds: [uploaded.AttachmentId]));
+        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, first.Token);
+
+        Assert.True(await runtime.SubmitUserTextAsync("Hello again."));
+        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var completedBefore = output.Terminals.Count;
+        await output.WaitForAsync(
+            item => item.Payload is ResponseCompletedOutput && output.Terminals.Count == completedBefore + 1,
+            second.Token);
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(2, handler.PostCount);
+        Assert.DoesNotContain("\"tools\"", handler.FirstBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"tools\"", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildAttachmentManifestSystem_is_empty_without_session_attachments()
     {
         var context = new AgentContext(
@@ -422,6 +543,62 @@ public sealed class SessionAttachmentRecallTests
             attachments: attachments,
             processor: processor,
             tools: tools);
+    }
+
+    private static SessionSnapshot CreateExaminerSnapshot(FakeTimeProvider? time = null, IIdGenerator? ids = null)
+    {
+        time ??= new FakeTimeProvider(new DateTimeOffset(2026, 9, 17, 0, 0, 0, TimeSpan.Zero));
+        ids ??= new DeterministicIdGenerator(
+            Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-0015-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b845")]);
+        return new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            time.GetUtcNow(),
+            time.GetUtcNow());
+    }
+
+    private sealed class ToolLessAttachmentHandler : HttpMessageHandler
+    {
+        public int PostCount { get; private set; }
+
+        public string FirstBody { get; private set; } = "";
+
+        public string LastBody { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            PostCount++;
+            LastBody = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            if (PostCount == 1)
+            {
+                FirstBody = LastBody;
+            }
+
+            var body = Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Four words.\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: [DONE]\n\n");
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new MemoryStream(body))
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue("text/event-stream") }
+                }
+            };
+        }
     }
 
     private sealed class AttachmentRecallRecordingModel(Guid attachmentId) : ILanguageModel

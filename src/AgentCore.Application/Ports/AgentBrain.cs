@@ -28,7 +28,8 @@ public sealed record AgentContext(
     int SilentEvaluations = 0,
     int SpeaksThisSilencePeriod = 0,
     bool InitiativeHeld = false,
-    bool InactivityExceeded = false);
+    bool InactivityExceeded = false,
+    bool ModelSupportsTools = true);
 
 public abstract record AgentDecision;
 

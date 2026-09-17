@@ -49,6 +49,11 @@ public static class ToolCatalog
 
     public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition, AgentContext? context = null)
     {
+        if (context is not null && !context.ModelSupportsTools)
+        {
+            return [];
+        }
+
         var offered = new List<ModelToolDefinition>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in RoleEnvironments.Of(definition).ToolList)

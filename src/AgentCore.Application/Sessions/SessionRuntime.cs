@@ -1175,7 +1175,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     SilentEvaluations: _silentEvaluations,
                     SpeaksThisSilencePeriod: _proactiveSpeaksThisSilence,
                     InitiativeHeld: _initiativeHeld || _pendingUploadHold,
-                    InactivityExceeded: InactivityExceeded());
+                    InactivityExceeded: InactivityExceeded(),
+                    ModelSupportsTools: _languageModel.Capabilities.Tools);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 var decision = await _brain.DecideAsync(context, responseId, _lifetime.Token).ConfigureAwait(false);
