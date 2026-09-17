@@ -20,6 +20,13 @@ export type SessionResponse = {
   mode: string;
   pendingMode: string | null;
   status: string;
+  lastEntrySequence?: number;
+};
+
+export type HistoryPage = {
+  items: unknown[];
+  nextAfter: number;
+  hasMore: boolean;
 };
 
 export type CatalogItem = {
@@ -199,6 +206,29 @@ export async function unarchiveSession(sessionId: string): Promise<CatalogItem> 
   }
 
   return (await response.json()) as CatalogItem;
+}
+
+export async function getSession(sessionId: string): Promise<SessionResponse> {
+  const response = await ownerFetch(`/api/v1/sessions/${sessionId}`);
+  if (!response.ok) {
+    throw new Error("Unable to load the session.");
+  }
+
+  return (await response.json()) as SessionResponse;
+}
+
+export async function listSessionMessages(
+  sessionId: string,
+  after = 0,
+  limit = 50
+): Promise<HistoryPage> {
+  const params = new URLSearchParams({ after: String(after), limit: String(limit) });
+  const response = await ownerFetch(`/api/v1/sessions/${sessionId}/messages?${params}`);
+  if (!response.ok) {
+    throw new Error("Unable to load the conversation.");
+  }
+
+  return (await response.json()) as HistoryPage;
 }
 
 export async function reopenSession(sessionId: string): Promise<"reopened" | "in-use"> {

@@ -63,7 +63,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
-        LaunchQueuedEnvironment(input.Context, queued);
+        await LaunchQueuedEnvironmentAsync(input.Context, queued, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task DrainEnvironmentAsync(EventContext context, CancellationToken cancellationToken)
@@ -76,14 +76,17 @@ public sealed partial class SessionRuntime
                 continue;
             }
 
-            LaunchQueuedEnvironment(context, queued);
+            await LaunchQueuedEnvironmentAsync(context, queued, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    private void LaunchQueuedEnvironment(EventContext context, QueuedEnvironment queued)
+    private async Task LaunchQueuedEnvironmentAsync(
+        EventContext context,
+        QueuedEnvironment queued,
+        CancellationToken cancellationToken)
     {
         if (IsExpired(queued) || !HasTrigger(TriggerName(queued.Kind)) || _activeResponseId is not null)
         {
@@ -96,6 +99,7 @@ public sealed partial class SessionRuntime
         var turn = ++_turnGeneration;
         var trigger = new AgentTrigger(context.EventId, queued.Kind, queued.Text, queued.Event.Kind);
         LaunchBrain(context, trigger, responseId, turn);
+        await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task HandleDeactivateAsync(DeactivateReceived input, CancellationToken cancellationToken)

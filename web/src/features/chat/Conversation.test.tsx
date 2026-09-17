@@ -27,6 +27,20 @@ describe("Conversation", () => {
     expect(screen.queryByText(/Transcript ·/)).not.toBeInTheDocument();
   });
 
+  it("uses text-only empty hint when voice is unavailable", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[]}
+        activity={{ kind: "idle" }}
+        voiceAvailable={false}
+      />
+    );
+    expect(screen.getByText("Send a message.")).toBeInTheDocument();
+    expect(screen.queryByText("Send a message or start voice.")).not.toBeInTheDocument();
+  });
+
   it("lays out user bubbles and open assistant messages with status labels", () => {
     render(
       <Conversation
@@ -60,17 +74,55 @@ describe("Conversation", () => {
     expect(items[1]).toHaveClass("chat-message-assistant");
     expect(items[0]).toHaveTextContent("Hello");
     expect(items[1]).toHaveTextContent("Alex");
-    expect(screen.getByText("interrupted")).toBeInTheDocument();
-    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(items[1].querySelector(".chat-message-status")).toHaveClass("ant-tag-solid");
+    expect(items[0].querySelector("time")).toHaveAttribute("dateTime", "2026-09-15T00:00:00.000Z");
+    expect(items[1].querySelector("time")).toHaveAttribute("dateTime", "2026-09-15T00:00:00.000Z");
   });
 
-  it("shows connecting as conversation loading, distinct from interrupted entries", () => {
+  it("keeps interrupted chips in the message stack without an empty body", () => {
     render(
-      <Conversation agentName="Alex" sessionId="s1" entries={[]} connection="connecting" activity={{ kind: "idle" }} />
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "",
+            responseId: "r1",
+            status: "interrupted"
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
     );
-    expect(screen.getByText("Send a message or start voice.")).toBeInTheDocument();
-    expect(screen.getByText("Loading conversation")).toBeInTheDocument();
-    expect(screen.queryByText("interrupted")).not.toBeInTheDocument();
+
+    const item = screen.getByRole("listitem");
+    expect(item.querySelector(".assistant-body")).toBeNull();
+    expect(item.querySelector(".chat-message-status")).toHaveTextContent("Interrupted");
+  });
+
+  it("keeps messages readable and uses inline reconnect status instead of an overlay", () => {
+    render(
+      <Conversation
+        agentName="Jordan"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "The document is as follows:"
+          })
+        ]}
+        activity={{ kind: "reconnecting", label: "Reconnecting…" }}
+      />
+    );
+    expect(screen.getByText("The document is as follows:")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting…");
+    expect(screen.queryByText("Loading conversation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Interrupted")).not.toBeInTheDocument();
   });
 
   it("renders unknown blocks as sanitized fallback text", () => {
@@ -150,5 +202,67 @@ describe("Conversation", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  });
+
+  it("groups live agent meta with thinking instead of splitting an empty streaming row", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({ entryId: "u1", role: "user", text: "hi" }),
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "",
+            responseId: "r1",
+            status: "streaming"
+          })
+        ]}
+        activity={{ kind: "thinking", label: "Thinking…" }}
+      />
+    );
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("Alex")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
+    const group = document.querySelector(".agent-turn-activity");
+    expect(group).toContainElement(screen.getByText("Alex"));
+    expect(group).toContainElement(screen.getByRole("status"));
+  });
+
+  it("reserves reply space after the latest user send, not on empty chat", () => {
+    const { rerender } = render(
+      <Conversation agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />
+    );
+    expect(screen.queryByTestId("conversation-reply-space")).not.toBeInTheDocument();
+
+    rerender(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "u1", role: "user", text: "now?" })]}
+        activity={{ kind: "thinking", label: "Thinking…" }}
+      />
+    );
+    expect(screen.getByTestId("conversation-reply-space")).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveAttribute("data-turn-anchor", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
+
+    rerender(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({ entryId: "u1", role: "user", text: "now?" }),
+          entry({ entryId: "a1", role: "assistant", text: "Soon." }),
+          entry({ entryId: "u2", role: "user", text: "and now?" })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).not.toHaveAttribute("data-turn-anchor");
+    expect(items[2]).toHaveAttribute("data-turn-anchor", "true");
   });
 });

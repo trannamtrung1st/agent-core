@@ -3,6 +3,7 @@ import { App, ConfigProvider } from "antd";
 import * as antd from "antd";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { antdTheme } from "../../app/antdTheme";
 import type { CatalogItem } from "../../services/api";
 import {
   archiveCatalogItem,
@@ -56,7 +57,7 @@ const agents = [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", de
 
 function renderRail(props: ComponentProps<typeof SessionRail>) {
   return render(
-    <ConfigProvider>
+    <ConfigProvider theme={antdTheme}>
       <App>
         <SessionRail {...props} />
       </App>
@@ -131,10 +132,14 @@ describe("SessionRail", () => {
     expect(screen.getAllByText(/Alex · Examiner/).length).toBe(2);
     expect(screen.queryByText("secret")).not.toBeInTheDocument();
     expect(screen.getByText(/· Ended/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Planning notes" }).querySelector("time")).toHaveAttribute(
+      "dateTime",
+      live.updatedAt
+    );
     const endedButton = screen.getByRole("button", { name: "Closed exam" });
-    expect(endedButton).toBeDisabled();
+    expect(endedButton).toBeEnabled();
     fireEvent.click(endedButton);
-    expect(onOpen).not.toHaveBeenCalled();
+    expect(onOpen).toHaveBeenCalledWith(ended);
     expect(screen.getAllByRole("button", { name: /Actions for / })).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
     expect(await screen.findByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
@@ -192,7 +197,7 @@ describe("SessionRail", () => {
     expect(await screen.findByText("Session archived.")).toBeInTheDocument();
 
     rerender(
-      <ConfigProvider>
+      <ConfigProvider theme={antdTheme}>
         <App>
           <SessionRail
             items={[archived]}
@@ -292,6 +297,7 @@ describe("SessionRail", () => {
     await waitFor(() => expect(deleteCatalogItem).toHaveBeenCalledWith(live));
     expect(await screen.findByText("Session deleted.")).toBeInTheDocument();
     expect(onNewChat).toHaveBeenCalledTimes(1);
+    expect(onNewChat).toHaveBeenCalledWith({ urlMode: "replace" });
   });
 
   it("rejects delete confirmation when durable delete fails", async () => {

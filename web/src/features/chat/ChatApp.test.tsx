@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { ConfigProvider } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { antdTheme } from "../../app/antdTheme";
 import { emptySession, useSessionStore } from "../../state/sessionStore";
 import { bootstrap, sendDraft } from "../../services/realtime";
 import { ChatApp } from "./ChatApp";
@@ -17,6 +19,22 @@ function stubMatchMedia(matches: (query: string) => boolean) {
       return false;
     }
   })) as typeof window.matchMedia;
+}
+
+function renderChat() {
+  return render(
+    <ConfigProvider theme={antdTheme}>
+      <ChatApp />
+    </ConfigProvider>
+  );
+}
+
+function rerenderChat(view: ReturnType<typeof render>) {
+  view.rerender(
+    <ConfigProvider theme={antdTheme}>
+      <ChatApp />
+    </ConfigProvider>
+  );
 }
 
 vi.mock("../../services/realtime", async (importOriginal) => {
@@ -48,7 +66,7 @@ describe("ChatApp accessibility", () => {
         selectedAgentId: "examiner"
       });
     });
-    const view = await act(async () => render(<ChatApp />));
+    const view = await act(async () => renderChat());
     expect(screen.getByLabelText("Identity")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Chats" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start conversation" })).not.toBeInTheDocument();
@@ -66,7 +84,7 @@ describe("ChatApp accessibility", () => {
         agents: [],
         selectedAgentId: "examiner"
       });
-      view.rerender(<ChatApp />);
+      rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Connection failed");
     expect(screen.getByText("Microphone permission was denied. Enable the microphone or continue in text.")).toBeInTheDocument();
@@ -76,6 +94,26 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
+  });
+
+  it("hides Voice in session when ready reports voice unavailable", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        voiceAvailable: false,
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => {
+      renderChat();
+    });
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
   });
 
   it("shows Voice after reconnect when durable mode is voice until capture is live", async () => {
@@ -93,14 +131,14 @@ describe("ChatApp accessibility", () => {
         selectedAgentId: "examiner"
       });
     });
-    const view = await act(async () => render(<ChatApp />));
+    const view = await act(async () => renderChat());
     expect(screen.getByTestId("connection")).toHaveTextContent("Ready");
     expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
 
     await act(async () => {
       useSessionStore.setState({ captureLive: true, muted: false });
-      view.rerender(<ChatApp />);
+      rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Listening…");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
@@ -123,7 +161,7 @@ describe("ChatApp accessibility", () => {
       });
     });
     await act(async () => {
-      render(<ChatApp />);
+      renderChat();
     });
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
@@ -132,7 +170,7 @@ describe("ChatApp accessibility", () => {
   it("renders the health profile from bootstrap", async () => {
     vi.mocked(bootstrap).mockResolvedValueOnce("Real");
     await act(async () => {
-      render(<ChatApp />);
+      renderChat();
     });
     expect(screen.getByTestId("profile")).toHaveTextContent("Real");
   });
@@ -165,11 +203,12 @@ describe("ChatApp accessibility", () => {
         ]
       });
     });
-    const view = await act(async () => render(<ChatApp />));
+    const view = await act(async () => renderChat());
     expect(screen.getByTestId("connection")).toHaveTextContent("Starting voice…");
     expect(screen.getByRole("button", { name: "Cancel voice" })).toBeInTheDocument();
-    expect(screen.getByText("interrupted")).toBeInTheDocument();
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
     expect(screen.getByLabelText("Message")).toBeEnabled();
+    expect(document.querySelector(".chat-header-time time")).toHaveAttribute("dateTime", "2026-09-15T00:00:00.000Z");
 
     fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
     expect(sendDraft).toHaveBeenCalled();
@@ -180,19 +219,19 @@ describe("ChatApp accessibility", () => {
 
     await act(async () => {
       useSessionStore.setState({ pendingMode: null, outputState: "waitingForAgent", liveResponseId: "r2" });
-      view.rerender(<ChatApp />);
+      rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Thinking…");
 
     await act(async () => {
       useSessionStore.setState({ liveResponseId: null, outputState: "agentSpeaking" });
-      view.rerender(<ChatApp />);
+      rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Speaking…");
 
     await act(async () => {
       useSessionStore.setState({ inputState: "userSpeaking", outputState: "idle" });
-      view.rerender(<ChatApp />);
+      rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("User speaking");
   });
@@ -221,7 +260,7 @@ describe("ChatApp accessibility", () => {
         ]
       });
     });
-    const view = await act(async () => render(<ChatApp />));
+    const view = await act(async () => renderChat());
     expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
@@ -242,7 +281,7 @@ describe("ChatApp accessibility", () => {
           }
         ]
       });
-      view.rerender(<ChatApp />);
+      rerenderChat(view);
     });
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   });
@@ -275,8 +314,120 @@ describe("ChatApp accessibility", () => {
         ]
       });
     });
-    await act(async () => render(<ChatApp />));
+    await act(async () => renderChat());
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
+  });
+
+  it("shows ended history without composer or End", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "idle",
+        status: "ended",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner",
+        entries: [
+          {
+            entryId: "e1",
+            sequence: 1,
+            sourceEventId: "e1",
+            role: "user",
+            text: "Please explain.",
+            responseId: null,
+            status: "completed",
+            deliveryMode: "text",
+            heardTextEndExclusive: 15,
+            receivedTextEndExclusive: 15,
+            createdAt: "2026-09-16T00:00:00.000Z"
+          }
+        ]
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByText("Please explain.")).toBeInTheDocument();
+    expect(screen.getByTestId("connection")).toHaveTextContent("Ended");
+    expect(screen.getByText("This conversation has ended.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Conversation actions" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the composer while the session is still ending", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        status: "ending",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        voiceAvailable: true,
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByLabelText("Message")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
+    expect(screen.queryByText("This conversation has ended.")).not.toBeInTheDocument();
+  });
+
+  it("shows the history-load error for a failed ended view", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "failed",
+        status: "ended",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        error: "Unable to open the conversation.",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to open the conversation.");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByText("This conversation has ended.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+  });
+
+  it("reconnects with inline status over visible history, not an overlay", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "reconnecting",
+        agentName: "Jordan",
+        agentRole: "Compliance reviewer",
+        entries: [
+          {
+            entryId: "e1",
+            sequence: 1,
+            sourceEventId: null,
+            role: "assistant",
+            text: "The document is as follows:",
+            responseId: "r1",
+            status: "completed",
+            deliveryMode: "text",
+            heardTextEndExclusive: 0,
+            receivedTextEndExclusive: 26,
+            createdAt: "2026-09-17T06:43:00.000Z"
+          }
+        ]
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByText("The document is as follows:")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting…");
+    expect(screen.queryByText("Loading conversation")).not.toBeInTheDocument();
+    expect(document.querySelector(".conversation-window .ant-spin-nested-loading")).toBeNull();
   });
 });
 
@@ -321,7 +472,7 @@ describe("ChatApp narrow session drawer", () => {
       });
     });
 
-    await act(async () => render(<ChatApp />));
+    await act(async () => renderChat());
     expect(screen.getByRole("button", { name: "Open chats" })).toBeInTheDocument();
     expect(screen.queryByTestId("session-rail")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
@@ -367,7 +518,7 @@ describe("ChatApp tablet session rail", () => {
       });
     });
 
-    await act(async () => render(<ChatApp />));
+    await act(async () => renderChat());
     expect(screen.queryByRole("button", { name: "Open chats" })).not.toBeInTheDocument();
     const sider = document.querySelector(".app-sider");
     expect(sider).toHaveStyle({ width: "240px" });

@@ -44,6 +44,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private readonly InteractionPolicy _policy;
+    private readonly VoiceAvailability _voice;
     private readonly object _audioGate = new();
     private AudioIngress _ingress = new();
     private ISpeechRecognitionSession? _recognitionSession;
@@ -139,7 +140,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IAttachmentStore? attachments = null,
         IAttachmentProcessor? processor = null,
         IArtifactReferenceAuthorizer? artifacts = null,
-        SessionToolExecutor? tools = null)
+        SessionToolExecutor? tools = null,
+        VoiceAvailability? voice = null)
     {
         _snapshot = snapshot;
         _languageModel = languageModel;
@@ -157,6 +159,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _processor = processor;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
+        _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
         _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
@@ -956,6 +959,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         cause.EventId,
                         text.Length);
                     LaunchPreparedTurn(cause, trigger, responseId, turn, attachmentIds);
+                    await PublishWaitingOutputAsync(cause).ConfigureAwait(false);
                 },
                 ended: input.Persisted);
         }
@@ -983,17 +987,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             && input.Trigger.Kind != TriggerKind.UserTurn
             && (_activeResponseId is not null || !InitiativeStillEligible(input.Trigger) || !CanAcceptProactiveSpeak(input.Trigger)))
         {
-            RecordInitiativeEvaluation();
-            _outputActivity = OutputActivity.Idle;
-            ScheduleIdleTimer(IdleBackoff());
+            await DeclineInitiativeAsync(input.Context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (input.Decision is not Speak speakable)
         {
-            RecordInitiativeEvaluation();
-            _outputActivity = OutputActivity.Idle;
-            ScheduleIdleTimer(IdleBackoff());
+            await DeclineInitiativeAsync(input.Context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -1100,7 +1100,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 catch (OperationCanceledException)
                 {
                     RuntimeTelemetry.Record("extraction", RuntimeTelemetry.ElapsedMs(extractionStarted));
-                    EndWork();
+                    if (!TryMailbox(new AttachmentsProcessedReceived(inbound, turn, responseId, trigger, [])))
+                    {
+                        EndWork();
+                    }
+
                     return;
                 }
                 catch (Exception ex)
@@ -1124,8 +1128,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleAttachmentsProcessedAsync(AttachmentsProcessedReceived input, CancellationToken cancellationToken)
     {
-        if (input.TurnGeneration != _turnGeneration)
+        if (_deactivated || input.TurnGeneration != _turnGeneration)
         {
+            if (!_deactivated
+                && _activeResponseId is null
+                && _outputActivity == OutputActivity.ProcessingAttachments)
+            {
+                await PublishOutputIdleAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            }
+
             EndWork();
             return;
         }
@@ -1133,6 +1144,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _outputActivity = OutputActivity.WaitingForAgent;
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
         LaunchBrain(input.Context, input.Trigger, input.ResponseId, input.TurnGeneration, input.Results, workHeld: true);
+        if (_outputActivity == OutputActivity.Idle)
+        {
+            await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private void LaunchBrain(
@@ -1550,6 +1565,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var heard = _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         InvalidateSpeechJobs();
+        await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
         if (!_responseTerminal)
         {
             _responseTerminal = true;
@@ -1587,14 +1603,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
-    private Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
+    private async Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
     {
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
-        _outputActivity = OutputActivity.Idle;
         _initiativeHeld = false;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
         UpdateAssistant(status);
+        await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;
         var textLength = DisplayLength();
@@ -1628,7 +1644,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 ScheduleIdleTimer(SilenceThreshold());
                 await ApplyPendingVoiceIfIdleAsync(context, ct).ConfigureAwait(false);
             });
-        return Task.CompletedTask;
+    }
+
+    private async Task DeclineInitiativeAsync(EventContext context, CancellationToken cancellationToken)
+    {
+        RecordInitiativeEvaluation();
+        await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        ScheduleIdleTimer(IdleBackoff());
+    }
+
+    private async Task PublishWaitingOutputAsync(EventContext context)
+    {
+        if (_outputActivity != OutputActivity.WaitingForAgent)
+        {
+            return;
+        }
+
+        await PublishStateAsync(context, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task PublishOutputIdleAsync(EventContext context, CancellationToken cancellationToken)
+    {
+        _outputActivity = OutputActivity.Idle;
+        await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming);

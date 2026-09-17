@@ -32,10 +32,30 @@ public sealed class SessionRealtimeLifecycleTests
         Assert.Equal(SessionMode.Text, runtime.Snapshot.Mode);
         Assert.Equal(InputActivity.Idle, runtime.Input);
 
+        var baseline = output.Items.Count;
         await Task.Yield();
         time.Advance(TimeSpan.FromMilliseconds(30_000));
+        await runtime.WaitUntilMailboxDrainedAsync();
         await output.WaitForAsync(item =>
-            item.Payload is StateChangedOutput state && state.PendingMode is null && state.Mode == SessionMode.Text);
+        {
+            if (item.Payload is not StateChangedOutput state
+                || state.PendingMode is not null
+                || state.Mode != SessionMode.Text)
+            {
+                return false;
+            }
+
+            var items = output.Items;
+            for (var index = baseline; index < items.Count; index++)
+            {
+                if (ReferenceEquals(items[index], item))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        });
 
         Assert.Null(runtime.Snapshot.PendingMode);
         Assert.Equal(SessionMode.Text, runtime.Snapshot.Mode);
@@ -78,6 +98,38 @@ public sealed class SessionRealtimeLifecycleTests
         Assert.All(ready.Ready.History, entry => Assert.Equal(SessionMode.Text, entry.DeliveryMode));
         Assert.Equal("Hello from synthetic.", ready.Ready.History[^1].Text);
         Assert.DoesNotContain(ready.Ready.History.Select(entry => entry.Text), text => text.Contains("summary", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Ready_voice_available_matches_catalog_gate_when_speech_adapters_unresolved()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(
+            output,
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            new ScriptedLanguageModel(),
+            voice: new VoiceAvailability { SpeechAdaptersResolved = false });
+        await runtime.AttachAsync();
+        var ready = Assert.IsType<ReadyOutput>(output.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.False(ready.Ready.Agent.VoiceAvailable);
+    }
+
+    [Fact]
+    public async Task SetMode_voice_rejected_when_speech_adapters_unresolved()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(
+            output,
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            new ScriptedLanguageModel(),
+            voice: new VoiceAvailability { SpeechAdaptersResolved = false });
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var error = Assert.IsType<ErrorOutput>(
+            output.Items.Single(item => item.Payload is ErrorOutput err && err.Code == "VoiceUnavailable").Payload);
+        Assert.Equal("VoiceUnavailable", error.Code);
+        Assert.Equal(SessionMode.Text, runtime.Snapshot.Mode);
     }
 
     [Fact]
@@ -161,7 +213,8 @@ public sealed class SessionRealtimeLifecycleTests
         FakeTimeProvider time,
         ILanguageModel model,
         IMemoryStore? store = null,
-        SessionSnapshot? snapshot = null)
+        SessionSnapshot? snapshot = null,
+        VoiceAvailability? voice = null)
     {
         store ??= new InMemoryMemoryStore();
         var ids = new DeterministicIdGenerator(
@@ -197,7 +250,8 @@ public sealed class SessionRealtimeLifecycleTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000));
+            policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000),
+            voice: voice ?? new VoiceAvailability { SpeechAdaptersResolved = true });
     }
 
     private sealed class StaticDefinitions(AgentDefinition definition) : IAgentDefinitionStore

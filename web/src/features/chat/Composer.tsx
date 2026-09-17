@@ -172,7 +172,7 @@ export function Composer({
               <Button
                 type="primary"
                 htmlType="submit"
-                shape="circle"
+                className="composer-send"
                 aria-label="Send"
                 disabled={!canSend}
                 icon={<SendOutlined />}

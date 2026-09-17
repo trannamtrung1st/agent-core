@@ -1,5 +1,19 @@
 import { expect, test } from "@playwright/test";
 
+test("session path survives refresh", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/c\/[0-9a-f-]{36}$/i);
+  const url = page.url();
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page).toHaveURL(url);
+  await expect(page.getByText("Hello")).toBeVisible();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+});
+
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();

@@ -111,7 +111,33 @@ function asNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
 }
 
-function asHistory(raw: unknown): HistoryEntry[] {
+function isInFlightOutput(value: string): boolean {
+  return (
+    value === "waitingForAgent" ||
+    value === "agentGenerating" ||
+    value === "agentSpeaking" ||
+    value === "processingAttachments" ||
+    value === "runningTools"
+  );
+}
+
+function nextOutputState(eventType: string, liveResponseId: string | null, current: string): string {
+  if (liveResponseId != null) {
+    return current;
+  }
+
+  if (eventType === "agent.response.interrupted") {
+    return "interrupted";
+  }
+
+  return isInFlightOutput(current) ? "idle" : current;
+}
+
+export function isReadonlySession(state: Pick<SessionView, "sessionId" | "status">): boolean {
+  return state.sessionId != null && state.status === "ended";
+}
+
+export function historyFromPayload(raw: unknown): HistoryEntry[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -225,7 +251,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         status: asString(payload.status),
         inputState: asString(payload.inputState) || "idle",
         outputState: asString(payload.outputState) || "idle",
-        entries: asHistory(payload.history),
+        entries: historyFromPayload(payload.history),
         liveResponseId: payload.activeResponseId == null ? null : asString(payload.activeResponseId),
         tombstones: {},
         lastServerSequence: event.sequence,
@@ -325,9 +351,11 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const tombstones = event.responseId
         ? { ...state.tombstones, [event.responseId]: status as "interrupted" | "completed" | "failed" }
         : state.tombstones;
+      const liveResponseId = state.liveResponseId === event.responseId ? null : state.liveResponseId;
       return {
         ...state,
-        liveResponseId: state.liveResponseId === event.responseId ? null : state.liveResponseId,
+        liveResponseId,
+        outputState: nextOutputState(event.type, liveResponseId, state.outputState),
         tombstones,
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) =>
@@ -405,6 +433,7 @@ export type SessionStore = SessionView & {
   catalogCapabilityLost: boolean;
   catalogError: string | null;
   catalogMutation: CatalogMutation | null;
+  routeNotice: string | null;
 };
 
 export type CatalogMutationKind = "rename" | "archive" | "unarchive" | "delete";
@@ -421,7 +450,8 @@ export const emptyCatalog = () => ({
   catalogIncludeArchived: false,
   catalogCapabilityLost: false,
   catalogError: null as string | null,
-  catalogMutation: null as CatalogMutation | null
+  catalogMutation: null as CatalogMutation | null,
+  routeNotice: null as string | null
 });
 
 export const useSessionStore = create<SessionStore>(() => ({

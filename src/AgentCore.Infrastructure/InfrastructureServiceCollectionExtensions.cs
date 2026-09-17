@@ -116,7 +116,8 @@ public static class InfrastructureServiceCollectionExtensions
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
         services.TryAddSingleton(new VoiceAvailability
         {
-            SpeechAdaptersResolved = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+            // Synthetic STT/TTS are registered above for every profile until hosted speech is selected per profile.
+            SpeechAdaptersResolved = true
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();

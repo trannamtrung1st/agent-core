@@ -53,6 +53,11 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
 
         var ended = await client.DeleteAsync($"/api/v1/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
+        var endedView = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v1/sessions/{view.SessionId}");
+        Assert.Equal("ended", endedView!.Status);
+        var endedHistory = await client.GetFromJsonAsync<HistoryPageResponse>(
+            $"/api/v1/sessions/{view.SessionId}/messages?after=0&limit=50");
+        Assert.NotNull(endedHistory);
         var endedAgain = await client.DeleteAsync($"/api/v1/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, endedAgain.StatusCode);
         Assert.Equal(0, _factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);

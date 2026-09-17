@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Typography } from "antd";
 import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
-import { useSessionStore } from "../../state/sessionStore";
+import { isReadonlySession, useSessionStore } from "../../state/sessionStore";
 import {
   beginNewChat,
   bootstrap,
   cancelVoice,
+  clearRouteNotice,
+  navigateFromBrowserHistory,
   composerSendEnabled,
   hangUp,
   openCatalogSession,
@@ -65,6 +67,14 @@ export function ChatApp() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const onPopState = () => {
+      void navigateFromBrowserHistory();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   useLayoutEffect(() => {
     reportCommittedEntries(state.entries);
   }, [state.entries]);
@@ -73,10 +83,11 @@ export function ChatApp() {
   const voiceLive = state.mode === "voice" && state.captureLive;
   const canSend = composerSendEnabled();
   const inSession = state.sessionId != null;
+  const readonly = isReadonlySession(state);
   const selectedAgent = state.agents.find((agent) => agent.id === state.selectedAgentId) ?? state.agents[0];
-  const liveAssistantText = state.entries.find(
+  const liveAssistant = state.entries.find(
     (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
-  )?.text;
+  );
   const statusSource = {
     connection: state.connection,
     pendingVoice,
@@ -85,18 +96,25 @@ export function ChatApp() {
     inputState: state.inputState,
     outputState: state.outputState,
     liveResponseId: state.liveResponseId,
-    liveAssistantText
+    liveAssistantText: liveAssistant?.text,
+    liveAssistantHasContent: Boolean(liveAssistant?.blocks?.length)
   };
   const connectionText = conversationStatusLabel(statusSource);
   const activity = mapAgentActivity(statusSource);
   const connectionTone = conversationStatusTone(connectionText);
+  const failedAlertTitle = readonly && state.error ? state.error : connectionText;
   const agentName = inSession ? state.agentName : selectedAgent?.name ?? "Agent Core";
-  const composerReady = state.connection === "ready" || (!inSession && state.connection === "idle");
+  const composerReady = !readonly && (state.connection === "ready" || (!inSession && state.connection === "idle"));
   const voiceAvailable = inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable);
+  const headerTimestamp = inSession
+    ? state.entries.at(-1)?.createdAt
+      ?? state.catalogItems.find((item) => item.sessionId === state.sessionId)?.updatedAt
+      ?? null
+    : null;
 
-  function handleNewChat() {
+  function handleNewChat(options?: { urlMode?: "push" | "replace" }) {
     setSessionsOpen(false);
-    void beginNewChat();
+    void beginNewChat(options);
   }
 
   function handleOpen(item: Parameters<typeof openCatalogSession>[0]) {
@@ -141,6 +159,7 @@ export function ChatApp() {
             <ChatHeader
               title={inSession ? state.agentName || "Agent" : "New chat"}
               subtitle={inSession ? state.agentRole : null}
+              timestamp={headerTimestamp}
               sessionsToggle={
                 isNarrow ? (
                   <Button
@@ -151,7 +170,7 @@ export function ChatApp() {
                   />
                 ) : null
               }
-              inSession={inSession}
+              inSession={inSession && !readonly}
               onEnd={() => void hangUp()}
             />
             <Flex align="center" gap={8} className="chat-header-meta">
@@ -168,12 +187,22 @@ export function ChatApp() {
             </Flex>
           </Header>
           <Content className="app-content">
+            {state.routeNotice ? (
+              <Alert
+                type="info"
+                showIcon
+                closable
+                className="connection-alert"
+                title={state.routeNotice}
+                onClose={clearRouteNotice}
+              />
+            ) : null}
             {state.connection === "failed" ? (
               <Alert
                 type="error"
                 showIcon
                 className="connection-alert"
-                title={connectionText}
+                title={failedAlertTitle}
                 action={
                   <Button size="small" aria-label="Retry" onClick={() => void retryConnection()}>
                     Retry
@@ -188,8 +217,8 @@ export function ChatApp() {
                     agentName={state.agentName}
                     sessionId={state.sessionId}
                     entries={state.entries}
-                    connection={state.connection}
                     activity={inSession ? activity : { kind: "idle" }}
+                    voiceAvailable={voiceAvailable}
                     empty={
                       inSession ? undefined : (
                         <div className="new-chat-intro">
@@ -210,25 +239,31 @@ export function ChatApp() {
               </div>
               <div className="conversation-composer">
                 <div className="conversation-column">
-                  <Composer
-                    draft={state.draft}
-                    canSend={canSend}
-                    ready={composerReady}
-                    error={inSession ? state.error : null}
-                    pendingAttachments={state.pendingAttachments}
-                    voiceAvailable={voiceAvailable}
-                    pendingVoice={pendingVoice}
-                    voiceLive={voiceLive}
-                    muted={state.muted}
-                    placeholder={`Message ${agentName}...`}
-                    onDraftChange={setDraft}
-                    onSend={() => void sendDraft()}
-                    onVoice={() => void requestVoice()}
-                    onCancelVoice={() => void cancelVoice()}
-                    onMute={(muted) => void setMuted(muted)}
-                    canRetry={false}
-                    onRetry={() => void retryConnection()}
-                  />
+                  {readonly ? (
+                    <Typography.Text type="secondary" className="conversation-ended-note">
+                      This conversation has ended.
+                    </Typography.Text>
+                  ) : (
+                    <Composer
+                      draft={state.draft}
+                      canSend={canSend}
+                      ready={composerReady}
+                      error={inSession ? state.error : null}
+                      pendingAttachments={state.pendingAttachments}
+                      voiceAvailable={voiceAvailable}
+                      pendingVoice={pendingVoice}
+                      voiceLive={voiceLive}
+                      muted={state.muted}
+                      placeholder={`Message ${agentName}...`}
+                      onDraftChange={setDraft}
+                      onSend={() => void sendDraft()}
+                      onVoice={() => void requestVoice()}
+                      onCancelVoice={() => void cancelVoice()}
+                      onMute={(muted) => void setMuted(muted)}
+                      canRetry={false}
+                      onRetry={() => void retryConnection()}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -247,7 +282,7 @@ export function ChatApp() {
                 type="text"
                 aria-label="Start a new chat"
                 icon={<PlusOutlined />}
-                onClick={handleNewChat}
+                onClick={() => handleNewChat()}
                 disabled={state.catalogMutation != null}
               >
                 New chat

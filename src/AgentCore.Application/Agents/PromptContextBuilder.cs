@@ -540,11 +540,6 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder) : IAgentBrai
 
     private static bool CanOfferHelp(AgentContext context)
     {
-        if (context.HelpOfferedDuringSilence)
-        {
-            return false;
-        }
-
         var lastAssistant = context.History.LastOrDefault(entry =>
             entry.Role == ConversationRole.Assistant && entry.Status != EntryStatus.Streaming);
         if (lastAssistant is null)

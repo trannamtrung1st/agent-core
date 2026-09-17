@@ -166,6 +166,18 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSetModeAsync(SetModeReceived input, CancellationToken cancellationToken)
     {
+        if (input.Mode == SessionMode.Voice && !_voice.IsAvailable(_snapshot.Definition))
+        {
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new ErrorOutput("Session", "VoiceUnavailable", "Voice is not available for this agent.", false, null)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         if (_snapshot.Status is SessionStatus.Paused)
         {
             if (input.Mode == SessionMode.Voice)
@@ -193,18 +205,6 @@ public sealed partial class SessionRuntime
                         input.Context,
                         null,
                         new ErrorOutput("Session", "ValidationError", "Session has ended.", false, null)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        if (input.Mode == SessionMode.Voice && !_snapshot.Definition.Voice.Enabled)
-        {
-            await PublishAsync(
-                    new SessionOutput(
-                        input.Context,
-                        null,
-                        new ErrorOutput("Session", "VoiceUnavailable", "Voice is not available for this agent.", false, null)),
                     cancellationToken)
                 .ConfigureAwait(false);
             return;
@@ -298,7 +298,7 @@ public sealed partial class SessionRuntime
             _snapshot.Mode,
             _snapshot.PendingMode,
             _snapshot.Status,
-            PublicHistory.FromDefinition(_snapshot.Definition, _snapshot.Definition.Voice.Enabled),
+            PublicHistory.FromDefinition(_snapshot.Definition, _voice.IsAvailable(_snapshot.Definition)),
             voice ? _streamId : null,
             voice ? CanonicalAudio.Format : null,
             voice
@@ -519,6 +519,7 @@ public sealed partial class SessionRuntime
                 _outputActivity = OutputActivity.WaitingForAgent;
                 var trigger = new AgentTrigger(input.Context.EventId, TriggerKind.LongSilence, Text: null);
                 LaunchBrain(input.Context, trigger, responseId, turn);
+                await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
             else if (ShouldRetryIdleAfterCooldown())
             {
@@ -676,6 +677,7 @@ public sealed partial class SessionRuntime
                 var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
                 _outputActivity = OutputActivity.WaitingForAgent;
                 LaunchPreparedTurn(cause, trigger, responseId, turn, staged);
+                await PublishWaitingOutputAsync(cause).ConfigureAwait(false);
             });
     }
 

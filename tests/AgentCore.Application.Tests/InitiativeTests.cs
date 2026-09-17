@@ -36,6 +36,37 @@ public sealed class InitiativeTests
     }
 
     [Fact]
+    public async Task Default_brain_allows_repeated_long_silence_hints_within_max_per_silence_period()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var definition = RepeatPolicy(maxPerSilence: 2, consecutiveCap: 2);
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(["Still there?", "Follow up?", "Third?"]),
+            time,
+            brain,
+            definition);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello?");
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, CountStarted(output, "LongSilence"));
+        time.Advance(TimeSpan.FromSeconds(30));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, CountStarted(output, "LongSilence"));
+        time.Advance(TimeSpan.FromSeconds(30));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(2, CountStarted(output, "LongSilence"));
+    }
+
+    [Fact]
     public async Task Stay_silent_applies_cooldown_without_response_started()
     {
         var time = Clock();
@@ -47,6 +78,15 @@ public sealed class InitiativeTests
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(0, CountStarted(output, "LongSilence"));
+        Assert.Equal(OutputActivity.Idle, runtime.Output);
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is StateChangedOutput state
+                && state.OutputState == nameof(OutputActivity.WaitingForAgent));
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is StateChangedOutput state
+                && state.OutputState == nameof(OutputActivity.Idle));
         var calls = brain.Calls;
         await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
         await runtime.WaitUntilMailboxDrainedAsync();

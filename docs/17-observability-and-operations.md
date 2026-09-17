@@ -88,7 +88,7 @@ curl -sS http://127.0.0.1:5080/health
 
 `/health` reports `"profile":"Real"`. Compose interpolates a gitignored root `.env` (copy from `.env.example`) or the same variables from the host environment. Do not commit `.env`. Never put secrets in the Compose files. `OPENROUTER_API_KEY` is required to start the Real overlay. `AGENTCORE_LLM_MODEL` defaults to `openai/gpt-4o-mini-2024-07-18` (pinned OpenRouter model with tools and vision); do not set it to `openrouter/free`. Pair capability overrides with the model: `AGENTCORE_LLM_VISION` and `AGENTCORE_LLM_TOOLS` default to `true` for the pinned model and should be set to `false` when overriding to a text-only or tool-less model. Stop with the same files: `docker compose -f docker-compose.yml -f docker-compose.real.yml down`. Synthetic and Real share volume `agent-core-data`. `.env` is not an application `IConfiguration` source; native `dotnet run` does not load it unless you export those variables into the process environment.
 
-The overlay matches the native `http-openrouter` launch profile: hosted OpenRouter text, vision, and tools (`Adapter=OpenAICompatible`, `Vision=true`, `Tools=true` for the pinned model). Compose reads `AGENTCORE_LLM_VISION` and `AGENTCORE_LLM_TOOLS` alongside `AGENTCORE_LLM_MODEL`. Hosted STT/TTS are not selected in this file; Real voice stays unavailable until those adapters are resolved at startup (`voiceAvailable` is false and Voice create returns 409). Native processes can pass the same text environment without Compose:
+The overlay matches the native `http-openrouter` launch profile: hosted OpenRouter text, vision, and tools (`Adapter=OpenAICompatible`, `Vision=true`, `Tools=true` for the pinned model). Compose reads `AGENTCORE_LLM_VISION` and `AGENTCORE_LLM_TOOLS` alongside `AGENTCORE_LLM_MODEL`. Hosted STT/TTS provider aliases are not wired in this overlay yet; voice still uses the default synthetic speech adapters, so `voiceAvailable` remains true for voice-enabled agents. Native processes can pass the same text environment without Compose:
 
 ```text
 AgentCore__Profile=Real
@@ -113,7 +113,7 @@ Docker Compose
 
 Hosted services outside Compose:
 OpenRouter text (selected by docker-compose.real.yml)
-OpenAI STT · OpenAI TTS (not selected until hosted speech adapters are resolved)
+OpenAI STT · OpenAI TTS (optional; Real overlay uses synthetic speech until operator wires hosted speech adapters)
 ```
 
 Do not split frontend and backend into separate production runtime containers. Vite is a build stage in this artifact, not a production server. The SQLite volume must survive application container recreation; the container's writable layer is not durable storage. Compose should expose the application locally, pass backend configuration/secrets, and use /health for readiness. No additional reverse proxy, Redis, broker, service mesh or Kubernetes is required.

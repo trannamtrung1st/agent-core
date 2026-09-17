@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyServerEvent, emptySession, type ServerEvent } from "./sessionStore";
+import { applyServerEvent, emptySession, isReadonlySession, type ServerEvent } from "./sessionStore";
 
 function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "sequence">): ServerEvent {
   return {
@@ -240,6 +240,114 @@ describe("applyServerEvent", () => {
     expect(thinking.outputState).toBe("agentGenerating");
   });
 
+  it("clears leftover thinking output when the live response completes", () => {
+    const thinking = {
+      ...emptySession(),
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      outputState: "waitingForAgent",
+      entries: [
+        {
+          entryId: "e1",
+          sequence: 1,
+          sourceEventId: null,
+          role: "assistant" as const,
+          text: "Hello",
+          responseId: "r1",
+          status: "streaming",
+          deliveryMode: "text" as const,
+          heardTextEndExclusive: 0,
+          receivedTextEndExclusive: 5,
+          createdAt: "2026-09-15T00:00:00.000Z"
+        }
+      ]
+    };
+    const completed = applyServerEvent(
+      thinking,
+      event({
+        type: "agent.response.completed",
+        sequence: 1,
+        responseId: "r1",
+        payload: { status: "completed" }
+      })
+    );
+    expect(completed.liveResponseId).toBeNull();
+    expect(completed.outputState).toBe("idle");
+    expect(completed.entries[0]?.status).toBe("completed");
+  });
+
+  it("marks interrupted output when the live response is barged in", () => {
+    const interrupted = applyServerEvent(
+      {
+        ...emptySession(),
+        attachmentId: "a1",
+        liveResponseId: "r1",
+        outputState: "agentGenerating"
+      },
+      event({
+        type: "agent.response.interrupted",
+        sequence: 1,
+        responseId: "r1",
+        payload: { reason: "newText" }
+      })
+    );
+    expect(interrupted.liveResponseId).toBeNull();
+    expect(interrupted.outputState).toBe("interrupted");
+  });
+
+  it("keeps a newer live response in flight when an older one completes", () => {
+    const state = applyServerEvent(
+      {
+        ...emptySession(),
+        attachmentId: "a1",
+        liveResponseId: "r2",
+        outputState: "waitingForAgent"
+      },
+      event({
+        type: "agent.response.completed",
+        sequence: 1,
+        responseId: "r1",
+        payload: { status: "completed" }
+      })
+    );
+    expect(state.liveResponseId).toBe("r2");
+    expect(state.outputState).toBe("waitingForAgent");
+  });
+
+  it("lets a later state.changed replace inferred interrupted output", () => {
+    const interrupted = applyServerEvent(
+      {
+        ...emptySession(),
+        attachmentId: "a1",
+        liveResponseId: "r1",
+        outputState: "agentGenerating"
+      },
+      event({
+        type: "agent.response.interrupted",
+        sequence: 1,
+        responseId: "r1",
+        payload: { reason: "newText" }
+      })
+    );
+    const waiting = applyServerEvent(
+      interrupted,
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: {
+          status: "attached",
+          mode: "text",
+          pendingMode: null,
+          muted: false,
+          inputState: "idle",
+          outputState: "waitingForAgent"
+        }
+      })
+    );
+    expect(waiting.liveResponseId).toBeNull();
+    expect(waiting.outputState).toBe("waitingForAgent");
+  });
+
   it("ready with durable voice does not mark capture live", () => {
     const state = applyServerEvent(
       { ...emptySession(), captureLive: false },
@@ -320,5 +428,14 @@ describe("applyServerEvent", () => {
       })
     );
     expect(next.error).toBe("Protocol error.");
+  });
+});
+
+describe("isReadonlySession", () => {
+  it("locks only terminal ended sessions", () => {
+    expect(isReadonlySession({ sessionId: "s1", status: "ended" })).toBe(true);
+    expect(isReadonlySession({ sessionId: "s1", status: "ending" })).toBe(false);
+    expect(isReadonlySession({ sessionId: "s1", status: "attached" })).toBe(false);
+    expect(isReadonlySession({ sessionId: null, status: "ended" })).toBe(false);
   });
 });

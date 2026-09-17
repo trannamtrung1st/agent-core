@@ -134,7 +134,7 @@ Hub **connection lease** (`attachmentId` on SignalR commands) remains a per-conn
 
 ### Decision: v1 terminal-end stays; durable delete is additive (R4)
 
-**Decision:** `DELETE /api/v1/sessions/{id}` remains irreversible terminal-end. Existing Ended rows stay labeled Ended in the catalog; they are not archived, not reopenable, and not physically deleted by v1 DELETE. Versioned durable deletion and runtime deactivation are additive routes. Archive preserves data and rejects activation/messages/uploads until unarchive. Deactivation is not archive and is not deletion. Migrations backfill workspace-ownership keyed by SessionId, preserve pins/revisions/receipts, and keep Ended irreversible.
+**Decision:** `DELETE /api/v1/sessions/{id}` remains irreversible terminal-end. Existing Ended rows stay labeled Ended in the catalog; they are not archived, not reopenable, and not physically deleted by v1 DELETE. Read-only HTTP history (GET session / GET messages) remains available without attach. GET attachment list/metadata/content remains readable on that view; upload, stage, abort, and materialize stay rejected. Versioned durable deletion and runtime deactivation are additive routes. Archive preserves data and rejects activation/messages/uploads until unarchive. Deactivation is not archive and is not deletion. Migrations backfill workspace-ownership keyed by SessionId, preserve pins, revisions, and receipts, and keep Ended irreversible.
 
 ### Decision: finite silent initiative and at-cap deactivation (R5)
 

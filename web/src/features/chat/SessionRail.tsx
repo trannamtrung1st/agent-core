@@ -11,7 +11,9 @@ import {
   setIncludeArchived,
   unarchiveCatalogItem
 } from "../../services/catalog";
+import { sameSessionId } from "../../app/sessionRoute";
 import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
+import { formatChatTime } from "./chatTime";
 
 function agentLabel(agents: AgentDescriptor[], item: CatalogItem): string {
   const agent = agents.find((row) => row.id === item.agentId && row.version === item.agentVersion)
@@ -72,7 +74,7 @@ export function SessionRail({
   mutation: CatalogMutation | null;
   showHeading?: boolean;
   showNewChat?: boolean;
-  onNewChat: () => void;
+  onNewChat: (options?: { urlMode?: "push" | "replace" }) => void;
   onOpen: (item: CatalogItem) => void;
 }) {
   const { message, modal } = App.useApp();
@@ -116,8 +118,8 @@ export function SessionRail({
           ok = await deleteCatalogItem(latestItem(item.sessionId, item));
         }
         await notifyMutation(ok, "Session deleted.", { rejectOnFailure: true });
-        if (ok && item.sessionId === activeSessionId) {
-          onNewChat();
+        if (ok && sameSessionId(item.sessionId, activeSessionId)) {
+          onNewChat({ urlMode: "replace" });
         }
       }
     });
@@ -199,16 +201,17 @@ export function SessionRail({
           New chat
         </Button>
       ) : null}
-      <Flex justify={showHeading ? "space-between" : "flex-end"} align="center" gap={8} className="session-rail-heading">
-        {showHeading ? <Typography.Text type="secondary">Chats</Typography.Text> : null}
-        <Dropdown menu={{ items: listMenu }} trigger={["click"]} placement="bottomRight">
-          <Button type="text" size="small" aria-label="Chat list options" icon={<MoreOutlined />} />
-        </Dropdown>
-      </Flex>
-      {capabilityLost ? (
-        <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />
-      ) : null}
-      {!capabilityLost && error ? <Alert type="error" showIcon title={error} /> : null}
+      <div className="session-rail-catalog">
+        <Flex justify={showHeading ? "space-between" : "flex-end"} align="center" gap={8} className="session-rail-heading">
+          {showHeading ? <Typography.Text type="secondary">Chats</Typography.Text> : null}
+          <Dropdown menu={{ items: listMenu }} trigger={["click"]} placement="bottomRight">
+            <Button type="text" size="small" className="session-overflow" aria-label="Chat list options" icon={<MoreOutlined />} />
+          </Dropdown>
+        </Flex>
+        {capabilityLost ? (
+          <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />
+        ) : null}
+        {!capabilityLost && error ? <Alert type="error" showIcon title={error} /> : null}
       <ul className="session-rail-list">
         {items.length === 0 && !capabilityLost ? (
           <li className="session-rail-empty">
@@ -216,18 +219,20 @@ export function SessionRail({
           </li>
         ) : null}
         {items.map((item) => {
-          const inactive = item.archived || item.ended;
+          const inactive = item.archived;
           const busy = rowBusy(mutation, item.sessionId);
+          const updatedLabel = formatChatTime(item.updatedAt);
           return (
             <li
               key={item.sessionId}
               className={
-                item.sessionId === activeSessionId ? "session-row session-row-active" : "session-row"
+                sameSessionId(item.sessionId, activeSessionId) ? "session-row session-row-active" : "session-row"
               }
             >
               <div className="session-row-body">
                 {renamingId === item.sessionId ? (
                   <form
+                    className="session-row-rename"
                     onSubmit={(event) => {
                       event.preventDefault();
                       void renameCatalogItem(item.sessionId, draftTitle).then(async (ok) => {
@@ -260,7 +265,7 @@ export function SessionRail({
                     </Flex>
                   </form>
                 ) : (
-                  <Flex align="flex-start" gap={8} className="session-row-main">
+                  <>
                     <Button
                       type="text"
                       className="session-row-open"
@@ -269,10 +274,18 @@ export function SessionRail({
                       onClick={() => onOpen(item)}
                     >
                       <Flex vertical align="flex-start" gap={0} className="session-row-copy">
-                        <Typography.Text ellipsis={{ tooltip: item.title }}>{item.title}</Typography.Text>
-                        <Typography.Text type="secondary" className="session-row-meta">
-                          {agentLabel(agents, item)}
-                          <span> · {rowState(item)}</span>
+                        <Flex align="baseline" gap={8} className="session-row-title">
+                          <Typography.Text ellipsis={{ tooltip: item.title }} className="session-row-name">
+                            {item.title}
+                          </Typography.Text>
+                          {updatedLabel ? (
+                            <time dateTime={item.updatedAt} className="session-row-time">
+                              {updatedLabel}
+                            </time>
+                          ) : null}
+                        </Flex>
+                        <Typography.Text type="secondary" ellipsis className="session-row-meta">
+                          {`${agentLabel(agents, item)} · ${rowState(item)}`}
                         </Typography.Text>
                       </Flex>
                     </Button>
@@ -280,13 +293,13 @@ export function SessionRail({
                       <Button
                         type="text"
                         size="small"
-                        className="session-row-more"
+                        className="session-overflow session-row-more"
                         aria-label={`Actions for ${item.title}`}
                         icon={<MoreOutlined />}
                         disabled={busy}
                       />
                     </Dropdown>
-                  </Flex>
+                  </>
                 )}
               </div>
             </li>
@@ -298,6 +311,7 @@ export function SessionRail({
           Load more
         </Button>
       ) : null}
+      </div>
     </nav>
   );
 }

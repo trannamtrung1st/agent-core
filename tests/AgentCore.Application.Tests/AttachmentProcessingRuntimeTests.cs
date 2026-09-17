@@ -34,9 +34,18 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("Please summarize.", attachmentIds: [uploaded.AttachmentId]));
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await output.WaitForAsync(item => item.Payload is TextDeltaOutput, cts.Token);
+        await output.WaitForAsync(
+            item => item.Payload is StateChangedOutput state && state.OutputState == nameof(OutputActivity.Idle),
+            cts.Token);
 
         Assert.Contains(output.Items, item => item.Payload is StateChangedOutput state
             && state.OutputState == nameof(OutputActivity.ProcessingAttachments));
+        Assert.Contains(output.Items, item => item.Payload is StateChangedOutput state
+            && state.OutputState == nameof(OutputActivity.WaitingForAgent));
+        Assert.Equal(OutputActivity.Idle, runtime.Output);
+        var lastOutput = Assert.IsType<StateChangedOutput>(
+            output.Items.Last(item => item.Payload is StateChangedOutput).Payload);
+        Assert.Equal(nameof(OutputActivity.Idle), lastOutput.OutputState);
         Assert.Equal("Please summarize.", runtime.Snapshot.Entries[0].Text);
         Assert.DoesNotContain("Overlord", runtime.Snapshot.Entries[0].Text, StringComparison.Ordinal);
         var request = model.LastRequest!;
@@ -179,9 +188,13 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("first", attachmentIds: [uploaded.AttachmentId]));
         Assert.True(await runtime.SubmitUserTextAsync("second"));
         gate.TrySetResult([]);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, cts.Token);
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(brain.Contexts, context => context.Trigger.Text == "second");
         Assert.DoesNotContain(brain.Contexts, context => context.Trigger.Text == "first");
+        Assert.NotEqual(OutputActivity.ProcessingAttachments, runtime.Output);
+        Assert.Equal(OutputActivity.Idle, runtime.Output);
     }
 
     private static SessionRuntime CreateRuntime(

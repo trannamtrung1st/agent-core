@@ -245,6 +245,15 @@ public sealed class SessionManager
         RuntimeTelemetry.Record("cleanup", RuntimeTelemetry.ElapsedMs(started));
     }
 
+    public async Task EnsureAttachmentsReadableAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (snapshot.ArchivedAt is not null)
+        {
+            throw AgentCoreErrors.SessionArchived();
+        }
+    }
+
     public async Task EnsureAttachmentsAllowedAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -563,7 +572,8 @@ public sealed class VoiceAvailability
         && SpeechAdaptersResolved;
 
     /// <summary>
-    /// Synthetic adapters count as resolved. Hosted speech adapters arrive in later milestones.
+    /// When false, public <c>voiceAvailable</c> stays false even if definitions enable voice.
+    /// Production hosts set this true while default Infrastructure registers synthetic speech for all profiles.
     /// </summary>
     public bool SpeechAdaptersResolved { get; init; }
 }
@@ -579,6 +589,7 @@ public sealed class SessionRuntimeFactory(
     InteractionPolicy policy,
     ISpeechRecognizer recognizer,
     ISpeechSynthesizer synthesizer,
+    VoiceAvailability voice,
     IAttachmentStore attachments,
     IAttachmentProcessor processor,
     IArtifactReferenceAuthorizer artifacts,
@@ -599,6 +610,7 @@ public sealed class SessionRuntimeFactory(
             policy,
             recognizer,
             synthesizer,
+            voice: voice,
             attachments: attachments,
             processor: processor,
             artifacts: artifacts,

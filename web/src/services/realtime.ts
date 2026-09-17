@@ -2,8 +2,9 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microso
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, useSessionStore, type HistoryAttachment, type HistoryEntry, type ServerEvent } from "../state/sessionStore";
-import { createSession, endSession, ensureOwnerCapability, getHealth, listAgents, reopenSession } from "./api";
+import { applyServerEvent, emptySession, hasControlSequenceGap, historyFromPayload, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type ServerEvent } from "../state/sessionStore";
+import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
+import { createSession, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession } from "./api";
 import {
   abortPendingAttachment,
   listAttachments,
@@ -272,6 +273,10 @@ async function recoverFromSequenceGap(): Promise<void> {
 }
 
 function handleEvent(raw: ServerEvent): void {
+  if (!connection || isReadonlySession(useSessionStore.getState())) {
+    return;
+  }
+
   const prior = useSessionStore.getState();
   if (hasControlSequenceGap(prior, raw)) {
     abortPlayback();
@@ -358,7 +363,7 @@ function handleAudioOutput(dto: {
 }): void {
   audioOutputsReceived += 1;
   const responseId = dto.responseId ?? (dto as { ResponseId?: string }).ResponseId;
-  if (!responseId || !connection) {
+  if (!responseId || !connection || isReadonlySession(useSessionStore.getState())) {
     return;
   }
 
@@ -906,7 +911,10 @@ export const realtimeTestHooks =
       }
     : null;
 
-async function startConnection(sessionId: string): Promise<void> {
+async function startConnection(
+  sessionId: string,
+  options?: { syncUrl?: "push" | "replace" | "none" }
+): Promise<void> {
   const keepPreparedCapture = capture.isPrepared() && useSessionStore.getState().preflightReady;
   await stopConnection({ keepPreparedCapture });
   commandSequence = 0;
@@ -967,6 +975,11 @@ async function startConnection(sessionId: string): Promise<void> {
     error: null,
     errorFatal: false
   });
+  if (options?.syncUrl && options.syncUrl !== "none") {
+    syncBrowserSessionPath(sessionId, options.syncUrl);
+  } else if (!options?.syncUrl) {
+    syncBrowserSessionPath(sessionId, "replace");
+  }
   beginReconnectBudget();
   try {
     await connection.start();
@@ -1008,6 +1021,8 @@ async function stopConnection(options?: { keepPreparedCapture?: boolean }): Prom
   }
 }
 
+let applyRouteTask: Promise<void> | null = null;
+
 export async function bootstrap(): Promise<string> {
   const [agents, health] = await Promise.all([listAgents(), getHealth()]);
   useSessionStore.setState({
@@ -1015,7 +1030,56 @@ export async function bootstrap(): Promise<string> {
     selectedAgentId: agents[0]?.id ?? "examiner"
   });
   await refreshCatalog(true);
+  await applyRouteFromLocation();
   return health.profile;
+}
+
+export function applyRouteFromLocation(): Promise<void> {
+  if (applyRouteTask) {
+    return applyRouteTask;
+  }
+
+  applyRouteTask = applyRouteFromLocationInner().finally(() => {
+    applyRouteTask = null;
+  });
+  return applyRouteTask;
+}
+
+async function applyRouteFromLocationInner(): Promise<void> {
+  const sessionId = parseSessionIdFromPath(window.location.pathname);
+  if (!sessionId) {
+    return;
+  }
+
+  const snapshot = useSessionStore.getState();
+  if (sameSessionId(snapshot.sessionId, sessionId) && isOpenSession(snapshot)) {
+    return;
+  }
+
+  const result = await openSessionById(sessionId, { syncUrl: false });
+  if (result === "failed" && !isReadonlySession(useSessionStore.getState())) {
+    syncBrowserSessionPath(null, "replace");
+    useSessionStore.setState({ routeNotice: "That conversation is unavailable." });
+  }
+}
+
+export async function navigateFromBrowserHistory(): Promise<void> {
+  const sessionId = parseSessionIdFromPath(window.location.pathname);
+  if (!sessionId) {
+    await beginNewChat({ syncUrl: false });
+    return;
+  }
+
+  const snapshot = useSessionStore.getState();
+  if (sameSessionId(snapshot.sessionId, sessionId) && isOpenSession(snapshot)) {
+    return;
+  }
+
+  const result = await openSessionById(sessionId, { syncUrl: false });
+  if (result === "failed" && !isReadonlySession(useSessionStore.getState())) {
+    syncBrowserSessionPath(null, "replace");
+    useSessionStore.setState({ routeNotice: "That conversation is unavailable." });
+  }
 }
 
 export async function startConversation(): Promise<boolean> {
@@ -1026,6 +1090,10 @@ export async function startConversation(): Promise<boolean> {
   startRequest = (async () => {
     try {
       const snapshot = useSessionStore.getState();
+      if (isReadonlySession(snapshot)) {
+        return false;
+      }
+
       if (snapshot.sessionId && snapshot.connection === "ready") {
         return true;
       }
@@ -1036,7 +1104,7 @@ export async function startConversation(): Promise<boolean> {
       }
 
       const created = await createSession(agent.id, agent.version, "text");
-      await startConnection(created.sessionId);
+      await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
     } catch (error) {
@@ -1053,7 +1121,7 @@ export async function startConversation(): Promise<boolean> {
   return startRequest;
 }
 
-export async function beginNewChat(): Promise<void> {
+export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "push" | "replace" }): Promise<void> {
   disposed = true;
   await stopConnection();
   stopReceipts();
@@ -1061,43 +1129,276 @@ export async function beginNewChat(): Promise<void> {
   releaseAllPendingFiles();
   useSessionStore.setState({
     ...emptySession(),
-    ...catalogShell()
+    ...catalogShell(),
+    routeNotice: null
   });
   void refreshCatalog(true);
   disposed = false;
+  if (options?.syncUrl !== false) {
+    syncBrowserSessionPath(null, options?.urlMode ?? "push");
+  }
 }
 
-export async function openCatalogSession(item: {
-  sessionId: string;
-  status: string;
-  archived: boolean;
-  ended: boolean;
-}): Promise<void> {
-  if (item.ended || item.archived) {
-    return;
+export function clearRouteNotice(): void {
+  useSessionStore.setState({ routeNotice: null });
+}
+
+export type OpenSessionResult = "ready" | "ended" | "blocked" | "failed";
+
+function isOpenSession(snapshot: { connection: string; sessionId: string | null; status: string }): boolean {
+  return snapshot.connection === "ready"
+    || (isReadonlySession(snapshot) && snapshot.connection === "idle");
+}
+
+export async function openSessionById(
+  sessionId: string,
+  options?: { syncUrl?: boolean }
+): Promise<OpenSessionResult> {
+  const catalogItem = useSessionStore
+    .getState()
+    .catalogItems.find((row) => sameSessionId(row.sessionId, sessionId));
+  if (catalogItem) {
+    return openCatalogSession(catalogItem, options);
   }
+
+  try {
+    const view = await getSession(sessionId);
+    return openCatalogSession(
+      {
+        sessionId,
+        status: view.status,
+        archived: false,
+        ended: view.status === "ended"
+      },
+      options
+    );
+  } catch {
+    return openCatalogSession(
+      {
+        sessionId,
+        status: "paused",
+        archived: false,
+        ended: false
+      },
+      options
+    );
+  }
+}
+
+export async function openCatalogSession(
+  item: {
+    sessionId: string;
+    status: string;
+    archived: boolean;
+    ended: boolean;
+  },
+  options?: { syncUrl?: boolean }
+): Promise<OpenSessionResult> {
+  if (item.archived) {
+    syncBrowserSessionPath(null, "replace");
+    useSessionStore.setState({
+      routeNotice: "That conversation is archived. Unarchive it from the chat list to open it."
+    });
+    return "blocked";
+  }
+
+  if (item.ended || item.status === "ended") {
+    return showEndedSession(item.sessionId, options);
+  }
+
+  const snapshot = useSessionStore.getState();
+  if (sameSessionId(snapshot.sessionId, item.sessionId) && snapshot.connection === "ready") {
+    useSessionStore.setState({ routeNotice: null });
+    if (options?.syncUrl !== false) {
+      syncBrowserSessionPath(item.sessionId, "push");
+    }
+    return "ready";
+  }
+
+  if (options?.syncUrl !== false) {
+    syncBrowserSessionPath(item.sessionId, "push");
+  }
+
+  useSessionStore.setState({ routeNotice: null });
 
   try {
     if (item.status !== "attached") {
       await reopenSession(item.sessionId);
     }
-    await startConnection(item.sessionId);
+    await startConnection(item.sessionId, { syncUrl: "none" });
     await refreshCatalog(true);
+    if (useSessionStore.getState().connection === "ready") {
+      return "ready";
+    }
+
+    const ended = await openEndedIfTerminal(item.sessionId);
+    if (ended) {
+      return ended;
+    }
+
+    syncBrowserSessionPath(null, "replace");
+    return "failed";
   } catch (error) {
+    const ended = await openEndedIfTerminal(item.sessionId);
+    if (ended) {
+      return ended;
+    }
+
     useSessionStore.setState({
       error: error instanceof Error ? error.message : "Unable to open the session.",
       errorFatal: false
     });
+    syncBrowserSessionPath(null, "replace");
+    return "failed";
   }
 }
 
 export async function retryConnection(): Promise<void> {
-  const sessionId = useSessionStore.getState().sessionId;
-  if (!sessionId) {
+  const snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId) {
     return;
   }
 
-  await startConnection(sessionId);
+  if (isReadonlySession(snapshot)) {
+    await showEndedSession(snapshot.sessionId, { syncUrl: false });
+    return;
+  }
+
+  await startConnection(snapshot.sessionId);
+}
+
+async function showEndedSession(
+  sessionId: string,
+  options?: { syncUrl?: boolean }
+): Promise<OpenSessionResult> {
+  const snapshot = useSessionStore.getState();
+  if (sameSessionId(snapshot.sessionId, sessionId) && isReadonlySession(snapshot) && snapshot.connection === "idle") {
+    useSessionStore.setState({ routeNotice: null });
+    if (options?.syncUrl !== false) {
+      syncBrowserSessionPath(sessionId, "push");
+    }
+    return "ended";
+  }
+
+  disposed = true;
+  await stopConnection();
+  stopReceipts();
+  capture.release();
+  releaseAllPendingFiles();
+  disposed = false;
+
+  if (options?.syncUrl !== false) {
+    syncBrowserSessionPath(sessionId, "push");
+  }
+
+  const agents = useSessionStore.getState().agents;
+  useSessionStore.setState({
+    ...emptySession(),
+    ...catalogShell(),
+    connection: "connecting",
+    sessionId,
+    status: "ended",
+    routeNotice: null
+  });
+
+  try {
+    const view = await getSession(sessionId);
+    if (view.status !== "ended") {
+      if (view.status !== "attached") {
+        await reopenSession(sessionId);
+      }
+      await startConnection(sessionId, { syncUrl: "none" });
+      await refreshCatalog(true);
+      return useSessionStore.getState().connection === "ready" ? "ready" : "failed";
+    }
+
+    const after = Math.max(0, (view.lastEntrySequence ?? 0) - 50);
+    const page = await listSessionMessages(sessionId, after, 50);
+    const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
+      ?? agents.find((row) => row.id === view.agentId);
+    const latest = useSessionStore.getState();
+    if (!sameSessionId(latest.sessionId, sessionId)) {
+      return "failed";
+    }
+
+    useSessionStore.setState({
+      connection: "idle",
+      sessionId: view.sessionId,
+      agentName: agent?.name ?? "",
+      agentRole: agent?.role ?? "",
+      voiceAvailable: false,
+      status: "ended",
+      entries: historyFromPayload(page.items),
+      lastServerSequence: view.lastEntrySequence ?? 0,
+      error: null,
+      errorFatal: false
+    });
+    void hydrateBoundAttachments(sessionId);
+    await refreshCatalog(true);
+    return "ended";
+  } catch (error) {
+    const latest = useSessionStore.getState();
+    if (!sameSessionId(latest.sessionId, sessionId)) {
+      return "failed";
+    }
+
+    useSessionStore.setState({
+      connection: "failed",
+      status: "ended",
+      error: error instanceof Error ? error.message : "Unable to open the conversation.",
+      errorFatal: false
+    });
+    return "failed";
+  }
+}
+
+async function openEndedIfTerminal(sessionId: string): Promise<OpenSessionResult | null> {
+  try {
+    const view = await getSession(sessionId);
+    if (view.status !== "ended") {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return showEndedSession(sessionId, { syncUrl: false });
+}
+
+async function refreshEndedHistory(sessionId: string): Promise<void> {
+  try {
+    const view = await getSession(sessionId);
+    if (view.status !== "ended") {
+      return;
+    }
+
+    const after = Math.max(0, (view.lastEntrySequence ?? 0) - 50);
+    const page = await listSessionMessages(sessionId, after, 50);
+    const latest = useSessionStore.getState();
+    if (!sameSessionId(latest.sessionId, sessionId) || latest.status !== "ended") {
+      return;
+    }
+
+    const sequence = view.lastEntrySequence ?? 0;
+    if (sequence < latest.lastServerSequence) {
+      void hydrateBoundAttachments(sessionId);
+      return;
+    }
+
+    const nextEntries = historyFromPayload(page.items);
+    if (sequence === latest.lastServerSequence && nextEntries.length < latest.entries.length) {
+      void hydrateBoundAttachments(sessionId);
+      return;
+    }
+
+    useSessionStore.setState({
+      entries: nextEntries,
+      lastServerSequence: sequence
+    });
+    void hydrateBoundAttachments(sessionId);
+  } catch {
+    // Keep the in-memory transcript if durable history cannot be refreshed.
+  }
 }
 
 function restoreDraft(text: string, error: string): void {
@@ -1148,7 +1449,7 @@ async function hydrateBoundAttachments(sessionId: string | null): Promise<void> 
     }
 
     const latest = useSessionStore.getState();
-    if (latest.sessionId !== sessionId) {
+    if (!sameSessionId(latest.sessionId, sessionId)) {
       return;
     }
 
@@ -1159,7 +1460,7 @@ async function hydrateBoundAttachments(sessionId: string | null): Promise<void> 
       })
     });
   } catch {
-    // History still shows text; attachment chips hydrate on the next ready snapshot.
+    // History still shows text when attachment metadata cannot be loaded.
   }
 }
 
@@ -1188,6 +1489,10 @@ async function syncVoiceStage(): Promise<void> {
 
 export function composerSendEnabled(): boolean {
   const snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot)) {
+    return false;
+  }
+
   if (!snapshot.sessionId) {
     const hasAgent = snapshot.selectedAgentId.trim().length > 0 && snapshot.agents.length > 0;
     return hasAgent && snapshot.draft.trim().length > 0 && snapshot.connection === "idle";
@@ -1198,6 +1503,10 @@ export function composerSendEnabled(): boolean {
 
 export async function queueComposerFiles(fileList: File[]): Promise<void> {
   let snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot)) {
+    return;
+  }
+
   if (!snapshot.sessionId) {
     const started = await startConversation();
     if (!started) {
@@ -1415,6 +1724,10 @@ export async function sendDraft(): Promise<void> {
   }
 
   let snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot)) {
+    return;
+  }
+
   if (!snapshot.sessionId) {
     const started = await startConversation();
     if (!started) {
@@ -1505,6 +1818,10 @@ export async function requestVoice(): Promise<void> {
   }
 
   const snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot)) {
+    return;
+  }
+
   const selected = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
   const voiceAvailable = snapshot.sessionId ? snapshot.voiceAvailable : Boolean(selected?.voiceAvailable);
   if (!voiceAvailable) {
@@ -1683,15 +2000,28 @@ export async function hangUp(): Promise<void> {
     }
   }
 
+  const latest = useSessionStore.getState();
   disposed = true;
   await stopConnection();
   stopReceipts();
   capture.release();
+  releaseAllPendingFiles();
   useSessionStore.setState({
     ...emptySession(),
-    ...catalogShell()
+    ...catalogShell(),
+    connection: "idle",
+    sessionId: latest.sessionId,
+    agentName: latest.agentName,
+    agentRole: latest.agentRole,
+    status: "ended",
+    entries: latest.entries,
+    lastServerSequence: latest.lastServerSequence,
+    routeNotice: null
   });
   void refreshCatalog(true);
+  if (latest.sessionId) {
+    void refreshEndedHistory(latest.sessionId);
+  }
   disposed = false;
 }
 

@@ -7,6 +7,7 @@ export type StatusSource = {
   outputState: string;
   liveResponseId: string | null;
   liveAssistantText?: string;
+  liveAssistantHasContent?: boolean;
 };
 
 export type AgentActivityState =
@@ -24,12 +25,12 @@ export function conversationStatus(source: StatusSource): string {
 }
 
 function idleLabel(source: StatusSource): string {
-  if (source.connection === "idle") {
-    return "Ready";
+  if (source.sessionStatus === "ended") {
+    return "Ended";
   }
 
-  if (source.sessionStatus === "ended" || source.sessionStatus === "ending") {
-    return "Ended";
+  if (source.connection === "idle") {
+    return "Ready";
   }
 
   if (source.connection === "connecting") {
@@ -60,7 +61,7 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
     return { kind: "idle" };
   }
 
-  if (source.sessionStatus === "ended" || source.sessionStatus === "ending") {
+  if (source.sessionStatus === "ended") {
     return { kind: "idle" };
   }
 
@@ -84,23 +85,21 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
     return { kind: "tools", label: "Running tools…" };
   }
 
-  const hasLiveText = Boolean(source.liveAssistantText?.trim());
-  if (source.outputState === "agentGenerating" && hasLiveText) {
-    return { kind: "idle" };
-  }
-
+  const hasLiveContent =
+    Boolean(source.liveAssistantText?.trim()) || Boolean(source.liveAssistantHasContent);
+  const generating = source.outputState === "agentGenerating" && source.liveResponseId != null;
   if (
     source.outputState === "waitingForAgent" ||
-    source.outputState === "agentGenerating" ||
+    generating ||
     source.liveResponseId != null
   ) {
-    if (hasLiveText) {
+    if (hasLiveContent) {
       return { kind: "idle" };
     }
 
     return {
       kind: "thinking",
-      label: source.outputState === "agentGenerating" ? "Generating response…" : "Thinking…"
+      label: generating ? "Generating response…" : "Thinking…"
     };
   }
 

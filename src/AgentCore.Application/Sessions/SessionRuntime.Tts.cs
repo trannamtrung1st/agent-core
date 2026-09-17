@@ -381,8 +381,8 @@ public sealed partial class SessionRuntime
 
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
-        _outputActivity = OutputActivity.Idle;
         UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed);
+        await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
         var heard = failed ? 0 : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         var capturedResponseId = responseId;

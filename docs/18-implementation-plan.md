@@ -33,7 +33,7 @@ The verified MVP generic UI is Ant Design v6 ([Technology Decisions](10-technolo
 - **Tests:** Complete example definitions deserialize/validate; missing aliases/version failures; exact prompt sections; current turn once; independent simultaneous sessions; deterministic snapshot revisions.
 - **Acceptance criteria:** Examiner/support differ by definition only; no vendor DTO crosses Application; mutable state has a single owner and synthetic scripts work with both.
 - **Explicit non-goals:** Agent editor, YAML, tools, native realtime implementation or model-assisted summarization.
-- **Status:** Complete. Definitions load from `agents/examiner.json` and `agents/customer-support.json`. `PromptContextBuilder` + `DefaultAgentBrain` drive the same `SessionRuntime` mailbox for both identities. See [Milestone 2 verification](reports/m02-verification.md).
+- **Status:** Complete. Definitions load from `agents/examiner.json` and `agents/customer-support.json` (M2 gate). Shipped fixtures also include `agents/compliance.json` from post-MVP role environments. `PromptContextBuilder` + `DefaultAgentBrain` drive the same `SessionRuntime` mailbox for both identities. See [Milestone 2 verification](reports/m02-verification.md).
 
 ## Milestone 3 — OpenAI-compatible streaming LLM and OpenRouter configuration
 
@@ -143,11 +143,11 @@ Milestones 0–12 above remain the historical MVP record and stay **Complete**. 
 
 | Phase | Production behavior | Evidence |
 | --- | --- | --- |
-| A — Sessions | Multi-chat catalog, picker, pinned AgentId+AgentVersion, deterministic titles, rename, archive/unarchive, versioned durable delete, new epoch on reopen, trusted-local capability, workspace-ownership record | **Observed:** list order/pagination; Ended rows stay terminal; v1 DELETE unchanged; capability fail-closed; migrations backfill ownership |
+| A — Sessions | Multi-chat catalog, picker, pinned AgentId+AgentVersion, deterministic titles, rename, archive/unarchive, versioned durable delete, new epoch on reopen, trusted-local capability, workspace-ownership record | **Observed:** list order/pagination; Ended rows stay terminal and open read-only HTTP history without attach; v1 DELETE unchanged; capability fail-closed; migrations backfill ownership |
 | B — Attachments | HTTP streamed pending→bound attachments; immutable originals outside SQLite; authorized content. OCR/Office still out of scope. | **Observed:** store/upload/bind/cleanup, composer picker, processors/vision mapping |
 | C — Rich responses | reply.text, optional reply.speech, Markdown, attachment/artifact refs, independent receipts | **Observed:** conservative heard; no unseen tails on reconnect; fixture artifact refs; sanitized Markdown/reference UI |
 | D — Initiative | Repeated StaySilent/Speak/RequestDeactivate; definition-owned cap; finite silent bounds; deactivation ≠ archive/delete | **Observed:** FakeTimeProvider 1st/2nd/3rd Speak; at-cap and zero-cap RequestDeactivate; HTTP deactivate idempotent |
-| E — Role environments | Versioned Support and Compliance plus preserved examiner; allowlists; initiative pins | **Observed:** distinct MaxConsecutiveProactiveTurns 1/2/0; pin stable across file version bump; knowledge citation retrieve; process/shell denied |
+| E — Role environments | Versioned Support and Compliance plus preserved examiner; allowlists; initiative pins | **Observed:** distinct MaxConsecutiveProactiveTurns 1/5/0 (support `maxPerSilencePeriod=5`); pin stable across file version bump; knowledge citation retrieve; process/shell denied |
 | F — Workspace | Lazy provision; /agent and /attachments read-only; /workspace 250 MiB; artifacts distinct | **Observed:** isolation/traversal/symlink/other-session/secret denial; lazy empty workspace; template without corpus copy; archive/reopen/deactivate preserve files; durable delete cleans up; 250 MiB concurrent workspace writes; artifact store 50 MiB each / 250 MiB per session; explicit materialize with hash/provenance |
 | G — Bounded work | Typed tools, Support/Compliance workflows, step/time/output caps | **Observed:** OpenAI-compatible tool_calls mapping; Scripted Support/Compliance multi-step replies with Markdown and artifact refs; 12 / 30 s / 120 s / 8 MiB caps; host-path and Session-mutation denial; late tool results rejected; uploads never execute |
 | H — Sandbox | Concrete container behind the execution boundary | **Observed:** Docker `sandbox.run` isolation/resource/cleanup/export tests on `busybox:1.36`; process/shell still denied; Support/Compliance allowlists unchanged |

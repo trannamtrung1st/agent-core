@@ -1,55 +1,78 @@
-import { Tag, Typography } from "antd";
+import { Flex, Tag, Typography } from "antd";
 import type { HistoryBlock, HistoryEntry } from "../../state/sessionStore";
 import { HistoryAttachmentView } from "./AttachmentPreview";
+import { formatChatTime, statusLabel } from "./chatTime";
 import { MarkdownMessage } from "./MarkdownMessage";
 
 export function ChatMessage({
   entry,
   agentName,
-  sessionId
+  sessionId,
+  turnAnchor = false
 }: {
   entry: HistoryEntry;
   agentName: string;
   sessionId: string | null;
-  connection?: string;
+  turnAnchor?: boolean;
 }) {
   const isUser = entry.role === "user";
   const speaker = isUser ? "You" : agentName || "Agent";
-  const status = entry.status === "interrupted" || entry.status === "failed" ? entry.status : null;
+  const status = statusLabel(entry.status);
+  const timeLabel = formatChatTime(entry.createdAt);
+  const hasFiles = Boolean(entry.attachments?.length && sessionId);
+  const hasBlocks = Boolean(entry.blocks?.length);
+  const hasBody = Boolean(entry.text) || hasBlocks || hasFiles;
 
   return (
-    <li data-role={entry.role} className={isUser ? "chat-message chat-message-user" : "chat-message chat-message-assistant"}>
-      {isUser ? null : (
-        <Typography.Text type="secondary" className="chat-message-speaker">
-          {speaker}
-        </Typography.Text>
-      )}
-      <div className={isUser ? "user-bubble" : "assistant-body"}>
-        {isUser ? (
-          entry.text ? <Typography.Paragraph className="user-bubble-text">{entry.text}</Typography.Paragraph> : null
-        ) : entry.text ? (
-          <MarkdownMessage source={entry.text} />
+    <li
+      data-role={entry.role}
+      data-turn-anchor={turnAnchor ? "true" : undefined}
+      className={isUser ? "chat-message chat-message-user" : "chat-message chat-message-assistant"}
+    >
+      <Flex align="baseline" gap={8} className="chat-message-meta">
+        {isUser ? null : (
+          <Typography.Text type="secondary" className="chat-message-speaker">
+            {speaker}
+          </Typography.Text>
+        )}
+        {timeLabel ? (
+          <Typography.Text type="secondary" className="chat-message-time">
+            <time dateTime={entry.createdAt}>{timeLabel}</time>
+          </Typography.Text>
         ) : null}
-        {status ? (
-          <Tag color={status === "failed" ? "error" : "warning"} className="chat-message-status">
-            {status}
-          </Tag>
-        ) : null}
-        {entry.blocks && entry.blocks.length > 0 ? (
-          <div className="entry-blocks">
-            {entry.blocks.map((block) => (
-              <RichBlock key={block.blockId} sessionId={sessionId} block={block} />
-            ))}
-          </div>
-        ) : null}
-        {entry.attachments && entry.attachments.length > 0 && sessionId ? (
-          <div className="entry-files">
-            {entry.attachments.map((file) => (
-              <HistoryAttachmentView key={file.attachmentId} sessionId={sessionId} file={file} />
-            ))}
-          </div>
-        ) : null}
-      </div>
+      </Flex>
+      {hasBody ? (
+        <div className={isUser ? "user-bubble" : "assistant-body"}>
+          {isUser ? (
+            entry.text ? <Typography.Paragraph className="user-bubble-text">{entry.text}</Typography.Paragraph> : null
+          ) : entry.text ? (
+            <MarkdownMessage source={entry.text} />
+          ) : null}
+          {hasBlocks && entry.blocks ? (
+            <div className="entry-blocks">
+              {entry.blocks.map((block) => (
+                <RichBlock key={block.blockId} sessionId={sessionId} block={block} />
+              ))}
+            </div>
+          ) : null}
+          {hasFiles && entry.attachments && sessionId ? (
+            <div className="entry-files">
+              {entry.attachments.map((file) => (
+                <HistoryAttachmentView key={file.attachmentId} sessionId={sessionId} file={file} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {status ? (
+        <Tag
+          color={entry.status === "failed" ? "red" : "gold"}
+          variant="solid"
+          className="chat-message-status"
+        >
+          {status}
+        </Tag>
+      ) : null}
     </li>
   );
 }

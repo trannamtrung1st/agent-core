@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 
 const webDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(webDir, "..");
+const apiPort = process.env.PLAYWRIGHT_API_PORT ?? "5080";
+const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? "5173";
+const apiUrl = `http://127.0.0.1:${apiPort}`;
+const webUrl = `http://127.0.0.1:${webPort}`;
 
 const chromium = devices["Desktop Chrome"];
 
@@ -14,7 +18,7 @@ export default defineConfig({
   retries: 0,
   use: {
     ...chromium,
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: webUrl,
     trace: "off",
     permissions: ["microphone"],
     launchOptions: {
@@ -29,16 +33,24 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "dotnet run --project src/AgentCore.Api --launch-profile http",
+      command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${apiUrl}`,
       cwd: root,
-      url: "http://127.0.0.1:5080/health",
+      env: {
+        ASPNETCORE_ENVIRONMENT: "Development",
+        AgentCore__Profile: "Synthetic"
+      },
+      url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000
     },
     {
-      command: "pnpm exec vite --host 127.0.0.1 --port 5173",
+      command: `pnpm exec vite --host 127.0.0.1 --port ${webPort}`,
       cwd: webDir,
-      url: "http://127.0.0.1:5173",
+      env: {
+        VITE_API_PROXY_TARGET: apiUrl,
+        VITE_DEV_PORT: webPort
+      },
+      url: webUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000
     }

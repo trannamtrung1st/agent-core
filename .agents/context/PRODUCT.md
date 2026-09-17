@@ -24,7 +24,7 @@ Other audiences (implementers, CI, Synthetic testers) use the same UI without ho
 
 Agent Core is a reusable harness for running an AI identity as a persistent conversational participant. The MVP thesis is conversational presence: low latency, natural turn-taking, interruption, identity consistency, restrained proactivity, and continuity.
 
-Success is a simple personal-chat UI where text and voice are modes of **one** Session, the microphone stays active while the agent speaks, and two identities (examiner and customer support) feel different without changing the runtime.
+Success is a simple personal-chat UI where text and voice are modes of **one** Session, the microphone stays active while the agent speaks, and shipped demo identities (examiner, customer support, compliance) feel different without changing the runtime.
 
 ## Positioning
 
@@ -35,29 +35,29 @@ The distinctive mechanism is one Session Runtime mailbox owning mutable conversa
 - Canonical specs: `/docs` (especially vision, MVP scope, frontend implementation, protocol, testing).
 - Fast loop: native .NET + Vite; Synthetic profile is the default key-free path.
 - Demo target: current Chromium-family desktop (Chrome/Edge).
-- Identities load from `agents/examiner.json` and `agents/customer-support.json`.
+- Identities load from versioned JSON under `agents/` (`examiner.json`, `customer-support.json`, `compliance.json`; see [docs/12](../../docs/12-backend-implementation-spec.md)).
+- `voiceAvailable` on GET `/api/v1/agents` and on `session.ready` agent uses the same backend gate ([docs/04](../../docs/04-backend-interfaces.md)); the composer hides Voice when it is false. Default Infrastructure registers synthetic speech for every profile, so voice-enabled agents normally show Voice on Synthetic and Real until a host opts out.
 - Browser talks to `/hubs/session` (SignalR + MessagePack); HTTP is for agent/session/history and health, not live chat text.
-- Persistence/reconnect restores the active conversation; there is no session-list product.
+- Persistence/reconnect restores the active conversation; ended catalog rows open a read-only history without attach; durable sessions use the v2 catalog rail (see [docs/13](../../docs/13-frontend-implementation-spec.md)), not a separate inbox product.
 
 ## Capabilities and Constraints
 
 Confirmed MVP UI/product facts (see `/docs`; do not extend here):
 
-- Select one of two identities, then open **one** conversation. No conversation-list/inbox UI.
+- Choose an identity, open or resume a durable session from the catalog rail, or open an ended session as read-only history, and talk in one live conversation at a time.
 - Text chat: agent header, scrollable conversation, composer/send, voice control when `voiceAvailable`, connection/error indicator.
 - Voice is a **mode transition on the same session**, not a new conversation. Preflight microphone/AudioContext/worklets under user activation; send PCM only after Mode=voice. Pending voice shows Starting voice… and Cancel. After reconnect the user must press Voice again.
-- Mute is input-only. The labeled composer stays available during voice (current session still accepts user text). End/Cancel returns to the same conversation’s text composer. History and drafts remain.
-- Visible status such as Listening, User speaking, Thinking, Agent speaking, Interrupted, Reconnecting (see [docs/13](../../docs/13-frontend-implementation-spec.md)). Partial assistant text streams as escaped plain text. Interrupted/failed entries keep a status label.
+- Mute is input-only. The labeled composer stays available during voice (current session still accepts user text). Cancel voice returns to the same conversation’s text composer. Header End keeps `/c/{id}` as read-only history without attach.
+- Visible status such as Listening, User speaking, Thinking, Agent speaking, Interrupted, Reconnecting (see [docs/13](../../docs/13-frontend-implementation-spec.md)). Assistant content renders as sanitized Markdown and blocks per docs/13; interrupted/failed entries keep a status label.
+- Session catalog rail, attachment picker, and authorized blob fetch for history chips are shipped MVP UI (see [docs/13](../../docs/13-frontend-implementation-spec.md)); artifact refs show fixture labels only.
 - Synthetic mode must not pretend to transcribe arbitrary speech; it is scripted and hardware-free by default.
 
 Explicitly out of this UI foundation and out of MVP product UI:
 
-- persistent multi-session UI, session sidebar, chat history management;
-- file/image attachments, rich assistant blocks, artifact panels, markdown HTML injection;
-- agent workspaces, autonomous tools, sandboxing, post-MVP proactive changes;
-- authentication, WebRTC, native speech-to-speech, Ant Design Pro/ProComponents/X, or a second UI framework.
-
-Layout may later accommodate `session navigation | conversation` without implementing that navigation now.
+- a separate admin dashboard, multi-tenant inbox, or second UI framework;
+- unsanitized HTML injection, raw provider secrets in the UI, or a second component framework;
+- agent workspaces as a full product surface, unrestricted autonomous tooling, or post-MVP proactive policy changes beyond current docs;
+- authentication, WebRTC, native speech-to-speech, Ant Design Pro/ProComponents/X.
 
 Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, strict TypeScript, Zustand, Ant Design v6 imported directly in product components, minimal `app.css`, `@microsoft/signalr` + MessagePack. No SSR or Next.js.
 

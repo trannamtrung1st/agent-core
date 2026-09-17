@@ -120,7 +120,7 @@ public sealed class RealComposeHostTests : IClassFixture<RealComposeHostFixture>
     }
 
     [Fact]
-    public async Task Health_reports_real_and_text_is_available_without_voice()
+    public async Task Health_reports_real_with_synthetic_voice_available()
     {
         using var client = new HttpClient { BaseAddress = new Uri(_fixture.BaseAddress) };
         client.DefaultRequestHeaders.TryAddWithoutValidation(
@@ -133,13 +133,13 @@ public sealed class RealComposeHostTests : IClassFixture<RealComposeHostFixture>
 
         var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
         Assert.NotNull(agents);
-        Assert.All(agents!.Agents, agent => Assert.False(agent.VoiceAvailable));
+        Assert.All(agents!.Agents, agent => Assert.True(agent.VoiceAvailable));
 
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
         var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
-        Assert.Equal(HttpStatusCode.Conflict, voice.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
     }
 
     private static string IssueOwnerCapability(string baseAddress)

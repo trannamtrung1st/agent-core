@@ -101,6 +101,35 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
     }
 
+    [Fact]
+    public async Task Ended_session_can_read_attachments_but_not_upload()
+    {
+        var client = Owner();
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
+        var uploaded = await client.PostAsync(
+            $"/api/v2/sessions/{view!.SessionId}/attachments",
+            FileContent("notes.txt", "hello world"));
+        Assert.Equal(HttpStatusCode.Created, uploaded.StatusCode);
+
+        var ended = await client.DeleteAsync($"/api/v1/sessions/{view.SessionId}");
+        Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
+
+        var listed = await client.GetAsync($"/api/v2/sessions/{view.SessionId}/attachments");
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var items = await listed.Content.ReadFromJsonAsync<AttachmentResponse[]>();
+        var notes = Assert.Single(items!, item => item.DisplayName == "notes.txt");
+        var content = await client.GetAsync($"/api/v2/sessions/{view.SessionId}/attachments/{notes.AttachmentId}/content");
+        Assert.Equal(HttpStatusCode.OK, content.StatusCode);
+        Assert.Equal("hello world", await content.Content.ReadAsStringAsync());
+
+        var rejected = await client.PostAsync(
+            $"/api/v2/sessions/{view.SessionId}/attachments",
+            FileContent("more.txt", "nope"));
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Contains("Ended sessions cannot accept attachments", await rejected.Content.ReadAsStringAsync());
+    }
+
     private HttpClient Owner()
     {
         var client = _factory.CreateClient();

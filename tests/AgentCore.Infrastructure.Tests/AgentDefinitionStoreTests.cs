@@ -19,7 +19,8 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(support);
         Assert.NotNull(compliance);
         Assert.Equal(1, examiner.InitiativePolicy.ConsecutiveCap);
-        Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(5, support!.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(5, support.InitiativePolicy.MaxPerSilencePeriod);
         Assert.Equal(0, compliance!.InitiativePolicy.ConsecutiveCap);
         Assert.Null(missing);
     }

@@ -27,7 +27,8 @@ public sealed class RoleEnvironmentTests
         Assert.NotNull(support);
         Assert.NotNull(compliance);
         Assert.Equal(1, examiner!.InitiativePolicy.ConsecutiveCap);
-        Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(5, support!.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(5, support.InitiativePolicy.MaxPerSilencePeriod);
         Assert.Equal(0, compliance!.InitiativePolicy.ConsecutiveCap);
         Assert.False(RoleEnvironments.Of(examiner).AttachmentPolicy.AllowUnreadUnsupportedTypes);
         Assert.Contains("knowledge.retrieve", RoleEnvironments.Of(support).ToolList);
@@ -77,21 +78,56 @@ public sealed class RoleEnvironmentTests
     public async Task Support_runtime_consumes_pinned_consecutive_cap()
     {
         var definition = await Load("customer-support");
-        Assert.Equal(2, definition.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(5, definition.InitiativePolicy.ConsecutiveCap);
+        Assert.Equal(5, definition.InitiativePolicy.MaxPerSilencePeriod);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var output = new CapturingSessionOutput();
         var brain = new ScriptedCapBrain(definition);
-        await using var runtime = CreateRuntime(output, time, brain, definition, new ScriptedLanguageModel(["Q?", "A", "B"]));
+        await using var runtime = CreateRuntime(output, time, brain, definition, new ScriptedLanguageModel(["Q?", "A", "B", "C"]));
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello?");
         await runtime.WaitUntilIdleAsync();
-        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        for (var i = 0; i < 3; i++)
+        {
+            await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+            await runtime.WaitUntilIdleAsync();
+            if (i < 2)
+            {
+                time.Advance(TimeSpan.FromSeconds(30));
+                await runtime.WaitUntilMailboxDrainedAsync();
+            }
+        }
+
+        Assert.Equal(3, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
+    }
+
+    [Fact]
+    public async Task Support_default_brain_allows_multiple_long_silence_within_pinned_policy()
+    {
+        var definition = await Load("customer-support");
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(
+            output,
+            time,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            definition,
+            new ScriptedLanguageModel(["How can I help?", "Still there?", "Need anything else?", "Following up?"]));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("My order is late.");
         await runtime.WaitUntilIdleAsync();
-        time.Advance(TimeSpan.FromSeconds(30));
-        await runtime.WaitUntilMailboxDrainedAsync();
-        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(2, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
+        for (var i = 0; i < 3; i++)
+        {
+            await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+            await runtime.WaitUntilIdleAsync();
+            if (i < 2)
+            {
+                time.Advance(TimeSpan.FromSeconds(30));
+                await runtime.WaitUntilMailboxDrainedAsync();
+            }
+        }
+
+        Assert.Equal(3, output.Items.Count(item => item.Payload is ResponseStartedOutput started && started.Trigger == "LongSilence"));
     }
 
     [Fact]

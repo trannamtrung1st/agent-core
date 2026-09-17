@@ -23,7 +23,8 @@ async function renameFirstRow(page: Page, title: string): Promise<void> {
 async function endConversation(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Conversation actions" }).click();
   await page.getByRole("menuitem", { name: "End" }).click();
-  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Ended", { timeout: 15_000 });
+  await expect(page.getByText("This conversation has ended.")).toBeVisible();
 }
 
 test("narrow viewport opens the chat list in a drawer", async ({ page }) => {
@@ -74,10 +75,29 @@ test("session catalog orders by latest update, renames, and deletes ended sessio
 
   await page.getByRole("button", { name: "Second session", exact: true }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/c\//);
+  const endedSessionUrl = page.url();
   await endConversation(page);
+  await expect(page).toHaveURL(endedSessionUrl);
+  await expect(page.getByText("Hello", { exact: true })).toBeVisible();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+  await expect(page.getByLabel("Message")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send" })).toHaveCount(0);
 
+  await page.goto(endedSessionUrl);
+  await expect(page).toHaveURL(endedSessionUrl);
+  await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   const endedRow = rows.filter({ hasText: "Second session" });
   await expect(endedRow).toContainText("Ended");
+  await endedRow.getByRole("button", { name: "Second session", exact: true }).click();
+  await expect(page.getByText("This conversation has ended.")).toBeVisible();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+  await expect(page.getByLabel("Message")).toHaveCount(0);
+
   await endedRow.getByRole("button", { name: /Actions for / }).click();
   await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);

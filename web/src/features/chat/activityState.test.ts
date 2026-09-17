@@ -17,6 +17,8 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, pendingVoice: true })).toBe("Starting voice…");
     expect(conversationStatus({ ...ready, connection: "connecting" })).toBe("Connecting");
     expect(conversationStatus({ ...ready, connection: "idle" })).toBe("Ready");
+    expect(conversationStatus({ ...ready, connection: "idle", sessionStatus: "ended" })).toBe("Ended");
+    expect(conversationStatus({ ...ready, sessionStatus: "ending" })).toBe("Ready");
   });
 
   it("maps runtime states onto in-flow activity labels", () => {
@@ -24,7 +26,10 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, inputState: "userSpeaking" })).toBe("User speaking");
     expect(conversationStatus({ ...ready, outputState: "agentSpeaking" })).toBe("Speaking…");
     expect(conversationStatus({ ...ready, outputState: "waitingForAgent" })).toBe("Thinking…");
-    expect(conversationStatus({ ...ready, outputState: "agentGenerating" })).toBe("Generating response…");
+    expect(conversationStatus({ ...ready, outputState: "agentGenerating", liveResponseId: "r1" })).toBe(
+      "Generating response…"
+    );
+    expect(conversationStatus({ ...ready, outputState: "agentGenerating" })).toBe("Ready");
     expect(conversationStatus({ ...ready, outputState: "processingAttachments" })).toBe("Reading attachments…");
     expect(conversationStatus({ ...ready, outputState: "runningTools" })).toBe("Running tools…");
     expect(conversationStatus({ ...ready, liveResponseId: "r1" })).toBe("Thinking…");
@@ -32,13 +37,21 @@ describe("agent activity mapping", () => {
     expect(conversationStatus(ready)).toBe("Ready");
   });
 
-  it("hides thinking once assistant text has started", () => {
+  it("hides thinking once assistant text or blocks have started", () => {
     expect(
       mapAgentActivity({
         ...ready,
         outputState: "agentGenerating",
         liveResponseId: "r1",
         liveAssistantText: "Hello"
+      }).kind
+    ).toBe("idle");
+    expect(
+      mapAgentActivity({
+        ...ready,
+        outputState: "agentGenerating",
+        liveResponseId: "r1",
+        liveAssistantHasContent: true
       }).kind
     ).toBe("idle");
   });

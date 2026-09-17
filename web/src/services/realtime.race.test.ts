@@ -448,7 +448,9 @@ describe("realtime race handling", () => {
     );
     const deleteHeaders = fetchMock.mock.calls[0][1].headers as Headers;
     expect(deleteHeaders.get("X-AgentCore-Owner-Capability")).toBe("tok");
-    expect(useSessionStore.getState().sessionId).toBeNull();
+    expect(useSessionStore.getState().sessionId).toBe("s1");
+    expect(useSessionStore.getState().status).toBe("ended");
+    expect(useSessionStore.getState().connection).toBe("idle");
   });
 
   it("keeps the session when EndSession and HTTP end both fail", async () => {

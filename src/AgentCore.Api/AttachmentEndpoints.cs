@@ -26,7 +26,7 @@ public static class AttachmentEndpoints
         {
             try
             {
-                await sessions.EnsureAttachmentsAllowedAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                await sessions.EnsureAttachmentsReadableAsync(sessionId, cancellationToken).ConfigureAwait(false);
                 var records = await attachments.ListForSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
                 return Results.Json(records.Select(HttpMapping.ToAttachment).ToArray());
             }
@@ -90,7 +90,7 @@ public static class AttachmentEndpoints
         {
             try
             {
-                await sessions.EnsureAttachmentsAllowedAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                await sessions.EnsureAttachmentsReadableAsync(sessionId, cancellationToken).ConfigureAwait(false);
                 var record = await attachments.GetAsync(sessionId, attachmentId, cancellationToken).ConfigureAwait(false)
                     ?? throw AgentCoreErrors.NotFound("Session was not found.");
                 return Results.Json(HttpMapping.ToAttachment(record));
@@ -110,7 +110,7 @@ public static class AttachmentEndpoints
         {
             try
             {
-                await sessions.EnsureAttachmentsAllowedAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                await sessions.EnsureAttachmentsReadableAsync(sessionId, cancellationToken).ConfigureAwait(false);
                 var record = await attachments.GetAsync(sessionId, attachmentId, cancellationToken).ConfigureAwait(false)
                     ?? throw AgentCoreErrors.NotFound("Session was not found.");
                 var stream = await attachments.OpenContentAsync(sessionId, attachmentId, cancellationToken)

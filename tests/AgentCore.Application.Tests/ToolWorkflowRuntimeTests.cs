@@ -29,6 +29,10 @@ public sealed class ToolWorkflowRuntimeTests
             runtime.Output.Items,
             item => item.Payload is StateChangedOutput state
                 && state.OutputState == nameof(OutputActivity.RunningTools));
+        Assert.Contains(
+            runtime.Output.Items,
+            item => item.Payload is StateChangedOutput state
+                && state.OutputState == nameof(OutputActivity.Idle));
         var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Contains("delayed", assistant.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(assistant.Envelope!.Blocks, block => block.Kind == ResponseBlockKind.Markdown);
@@ -48,6 +52,10 @@ public sealed class ToolWorkflowRuntimeTests
         var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Contains("demonstration session", assistant.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("compliance-retention@demo", assistant.Text, StringComparison.Ordinal);
+        Assert.Contains(
+            runtime.Output.Items,
+            item => item.Payload is StateChangedOutput state
+                && state.OutputState == nameof(OutputActivity.Idle));
         Assert.Contains(assistant.Envelope!.Blocks, block => block.Kind == ResponseBlockKind.Markdown);
         var artifactBlock = Assert.Single(assistant.Envelope.Blocks, block => block.Kind == ResponseBlockKind.ArtifactReference);
         Assert.True(Guid.TryParse(artifactBlock.ArtifactId, out var artifactId));
