@@ -51,8 +51,14 @@ describe("Conversation", () => {
         sttTransport="clientTranscript"
       />
     );
-    expect(screen.getByText("Send a message or start voice. Speech recognition runs in this browser tab.")).toBeInTheDocument();
-    expect(screen.queryByText(/offline/i)).not.toBeInTheDocument();
+    const hint = screen.getByText(/does not send PCM to backend speech recognition/i);
+    expect(hint.textContent).toMatch(/browser vendor may use a cloud recognizer/i);
+    expect(hint.textContent).toMatch(/choose another speech provider/i);
+    expect(hint.textContent).toMatch(/backend-controlled or local recognition/i);
+    expect(hint.textContent).not.toMatch(/offline/i);
+    expect(hint.textContent).not.toMatch(/on-device/i);
+    expect(hint.textContent).not.toMatch(/this browser tab/i);
+    expect(hint.textContent).not.toMatch(/runs in this browser/i);
   });
 
   it("lays out user bubbles and open assistant messages with status labels", () => {

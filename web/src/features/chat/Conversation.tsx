@@ -105,7 +105,7 @@ export function Conversation({
   const safeReplySpace = Number.isFinite(replySpace) ? Math.max(0, replySpace) : 0;
   const emptyHint = voiceAvailable
     ? (sttTransport === "clientTranscript"
-      ? "Send a message or start voice. Speech recognition runs in this browser tab."
+      ? "Send a message or start voice. Agent Core does not send PCM to backend speech recognition. The browser vendor may use a cloud recognizer. Choose another speech provider for backend-controlled or local recognition."
       : "Send a message or start voice.")
     : "Send a message.";
 
