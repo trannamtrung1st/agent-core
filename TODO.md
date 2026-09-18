@@ -11,6 +11,7 @@ P0 conversation/UI stabilization is a frozen baseline unless a real regression a
 ## Maintainer notes
 - [ ] Weird preferred name of 'friend', we should fix. [TBD]
 - [ ] Multilang STT/TTS support. [TBD]
+- [ ] Task/goal/stop condition for agent session? configurable, some agent/session is ongoing, some has a specific goal/task, some has a stop condition [TBD]
 
 
 ## P0 — Stabilize the current conversation/UI baseline
