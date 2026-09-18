@@ -4,7 +4,9 @@ import {
   AudioOutlined,
   AudioMutedOutlined,
   DeleteOutlined,
+  DownOutlined,
   PaperClipOutlined,
+  RightOutlined,
   SendOutlined,
   StopOutlined,
   UnorderedListOutlined
@@ -129,20 +131,24 @@ export function Composer({
       {pendingSendQueue.length > 0 ? (
         <section className="pending-send-queue" aria-label="Queued messages">
           <Flex justify="space-between" align="center" className="pending-send-queue-header">
-            <span className="pending-send-queue-label">
-              Queued · {pendingSendQueue.length}
-            </span>
             {pendingSendQueue.length > QUEUE_COLLAPSED_VISIBLE ? (
-              <Button
-                type="text"
-                size="small"
+              <button
+                type="button"
+                className="pending-send-queue-toggle"
                 aria-expanded={queueExpanded}
                 aria-label={queueExpanded ? "Collapse queued messages" : "Expand queued messages"}
                 onClick={() => setQueueExpanded((value) => !value)}
               >
-                {queueExpanded ? "Collapse" : "Expand"}
-              </Button>
-            ) : null}
+                <span>Queued · {pendingSendQueue.length}</span>
+                {queueExpanded ? (
+                  <DownOutlined aria-hidden="true" />
+                ) : (
+                  <RightOutlined aria-hidden="true" />
+                )}
+              </button>
+            ) : (
+              <span className="pending-send-queue-label">Queued · {pendingSendQueue.length}</span>
+            )}
           </Flex>
           <ul
             className={`pending-send-queue-list${queueNeedsScroll && queueExpanded ? " pending-send-queue-list-scroll" : ""}`}

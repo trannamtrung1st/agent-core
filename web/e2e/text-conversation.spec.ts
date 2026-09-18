@@ -1,4 +1,34 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function assistantBodyTextLength(page: Page, index: number): Promise<number> {
+  return page
+    .locator(".chat-message-assistant")
+    .nth(index)
+    .locator(".assistant-body")
+    .evaluate((node) => node.textContent?.length ?? 0);
+}
+
+async function expectAssistantTextLengthStable(
+  page: Page,
+  index: number,
+  length: number,
+  settleMs = 2_000
+): Promise<void> {
+  const deadline = Date.now() + settleMs;
+  while (Date.now() < deadline) {
+    expect(await assistantBodyTextLength(page, index)).toBe(length);
+    await page.waitForTimeout(250);
+  }
+}
+
+async function startLongHoldResponse(page: Page): Promise<void> {
+  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant").first()).toContainText("Hello", {
+    timeout: 15_000
+  });
+}
 
 test("session path survives refresh", async ({ page }) => {
   await page.goto("/");
@@ -64,22 +94,57 @@ test("queued send and Stop keep the local queue without starting R2", async ({ p
   await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toBeVisible({ timeout: 15_000 });
 });
 
-test("Steer sends the queue head and auto-dispatch follows completion", async ({ page }) => {
+test("Steer interrupts R1 promptly and auto-dispatch follows completion", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Message").fill("Please hold the line");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await startLongHoldResponse(page);
+  const r1Length = await assistantBodyTextLength(page, 0);
+
   await page.getByRole("textbox", { name: "Message" }).fill("Alpha");
   await page.locator('button.composer-send[aria-label="Queue"]').click();
   await page.getByRole("textbox", { name: "Message" }).fill("Beta");
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await expect(page.getByLabel("Queued messages")).toBeVisible();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toHaveCount(0);
   await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toHaveCount(0);
+
   await page.getByRole("button", { name: "Steer queued message 1" }).click();
+  await expect(page.locator(".chat-message-assistant").first().getByText("Interrupted")).toBeVisible({
+    timeout: 5_000
+  });
+  await expect(page.getByLabel("Queued messages")).toContainText("Beta", { timeout: 15_000 });
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toHaveCount(0);
+  await expectAssistantTextLengthStable(page, 0, r1Length);
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toBeVisible({ timeout: 25_000 });
+
   await expect(page.locator(".chat-message-assistant").filter({ hasText: "Hello from synthetic." })).toHaveCount(2, {
+    timeout: 25_000
+  });
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toBeVisible({ timeout: 25_000 });
+});
+
+test("Steer middle queue item keeps head and tail queued", async ({ page }) => {
+  await page.goto("/");
+  await startLongHoldResponse(page);
+  const r1Length = await assistantBodyTextLength(page, 0);
+
+  await page.getByRole("textbox", { name: "Message" }).fill("Alpha");
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+  await page.getByRole("textbox", { name: "Message" }).fill("Bravo");
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+  await page.getByRole("textbox", { name: "Message" }).fill("Charlie");
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+
+  await page.getByRole("button", { name: "Steer queued message 2" }).click();
+
+  await expect(page.locator(".chat-message-assistant").first().getByText("Interrupted")).toBeVisible({
+    timeout: 5_000
+  });
+  const queue = page.getByLabel("Queued messages");
+  await expect(queue).toContainText("Alpha", { timeout: 15_000 });
+  await expect(queue).toContainText("Charlie");
+  await expect(queue.getByText("Bravo")).toHaveCount(0);
+  await expectAssistantTextLengthStable(page, 0, r1Length);
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Bravo" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant").nth(1)).toContainText("Hello from synthetic.", {
     timeout: 25_000
   });
 });

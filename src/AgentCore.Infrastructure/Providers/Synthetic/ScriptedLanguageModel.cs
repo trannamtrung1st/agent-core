@@ -77,6 +77,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             }
 
             yield return new ModelTextDelta(chunks[index]);
+            if (index == 0 && IsSteerQueueProbeUser(lastUser))
+            {
+                await Task.Delay(4000, cancellationToken).ConfigureAwait(false);
+            }
+
             if (index == 0 && lastUser.Contains("hold the line", StringComparison.OrdinalIgnoreCase))
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
@@ -255,6 +260,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var end = toolJson.IndexOf('"', start);
         return end < 0 ? FixtureArtifactReferenceAuthorizer.AuthorizedId : toolJson[start..end];
     }
+
+    private static bool IsSteerQueueProbeUser(string lastUser) =>
+        lastUser is "Alpha" or "Beta" or "Bravo" or "Charlie";
 
     private IReadOnlyList<string> Select(string lastUser)
     {

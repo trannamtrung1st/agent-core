@@ -1056,6 +1056,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _environmentQueue.Clear();
         }
 
+        if (!queued && _activeResponseId is { } liveResponse)
+        {
+            await TerminalizeActiveResponseAsync(cause, liveResponse, cancellationToken, "newText", requestPersist: false)
+                .ConfigureAwait(false);
+            await ApplyPendingVoiceIfIdleAsync(cause, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             RequestPersist(
@@ -1086,11 +1093,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         }
 
                         return;
-                    }
-
-                    if (_activeResponseId is { } live)
-                    {
-                        await SupersedeAsync(cause, live, ct, "newText").ConfigureAwait(false);
                     }
 
                     UserTextQueueTelemetry.Record(wire, queued: false);
@@ -1967,6 +1969,34 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         CancellationToken cancellationToken,
         string reason = "newText")
     {
+        await TerminalizeActiveResponseAsync(context, responseId, cancellationToken, reason, requestPersist: true)
+            .ConfigureAwait(false);
+        if (reason is "userBargeIn")
+        {
+            await AfterResponseTerminalizedAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+        else if (reason is "newText")
+        {
+            await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+        else if (reason is "userStop")
+        {
+            await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
+            SchedulePostResponseIdleTimer();
+            await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task TerminalizeActiveResponseAsync(
+        EventContext context,
+        Guid responseId,
+        CancellationToken cancellationToken,
+        string reason,
+        bool requestPersist)
+    {
+        _responseCts?.Cancel();
+        _ttsCts?.Cancel();
+
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
         _initiativeHeld = false;
@@ -1995,31 +2025,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             InterruptReason: reason)),
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (_snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
+            if (requestPersist && _snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
             {
                 RequestPersist(_snapshot);
             }
         }
 
-        _responseCts?.Cancel();
-        _ttsCts?.Cancel();
         ClearActive();
         _turnGeneration++;
         ClearPendingPostResponseIdleDelay();
-        if (reason is "userBargeIn")
-        {
-            await AfterResponseTerminalizedAsync(context, cancellationToken).ConfigureAwait(false);
-        }
-        else if (reason is "newText")
-        {
-            await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
-        }
-        else if (reason is "userStop")
-        {
-            await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
-            SchedulePostResponseIdleTimer();
-            await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private async Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
