@@ -267,7 +267,13 @@ export function ChatApp() {
                       This conversation has ended.
                     </Typography.Text>
                   ) : state.status === "paused" ? (
-                    <Flex vertical gap={8} className="conversation-paused-note">
+                    <Flex
+                      align="center"
+                      justify="center"
+                      wrap="wrap"
+                      gap={16}
+                      className="conversation-paused-note"
+                    >
                       <Typography.Text type="secondary">
                         {pausedSessionMessage(state.pauseReason)}
                       </Typography.Text>

@@ -1,3 +1,4 @@
+import { speechError } from "./errors";
 import { ClientTranscriptAccumulator } from "./clientTranscriptAccumulator";
 import type { ClientSpeechEvidence } from "./clientSpeechRecognizer";
 import type { SessionErrorView } from "../features/chat/sessionError";
@@ -186,10 +187,12 @@ export class ClientTranscriptLifecycle {
       return;
     }
 
+    let recognitionErrorReported = false;
     try {
       await this.transport.startInput({
         onEvidence: (evidence) => this.ingest(evidence, this.epoch),
         onError: (error) => {
+          recognitionErrorReported = true;
           this.listening = false;
           this.blocked = true;
           this.accumulator.fail();
@@ -208,6 +211,10 @@ export class ClientTranscriptLifecycle {
       this.listening = false;
       this.blocked = true;
       this.accumulator.fail();
+      if (!recognitionErrorReported) {
+        this.reportError(speechError("SpeechRecognitionUnavailable"));
+      }
+
       this.notifyStateChange();
     }
   }

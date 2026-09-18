@@ -116,6 +116,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private TimeSpan? _lastArmedIdleDelay;
     private readonly HashSet<Guid> _environmentIds = [];
     private readonly HashSet<Guid> _undurableUserEntryIds = [];
+    private bool _allowQueuedSuffixAutoDispatch;
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
@@ -1110,6 +1111,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (queued)
                     {
                         UserTextQueueTelemetry.Record(wire, queued: true);
+                        if (_allowQueuedSuffixAutoDispatch && _activeResponseId is null)
+                        {
+                            if (await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false))
+                            {
+                                _allowQueuedSuffixAutoDispatch = false;
+                            }
+                        }
+
                         return;
                     }
 
@@ -1353,9 +1362,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task AfterResponseTerminalizedAsync(EventContext context, CancellationToken cancellationToken)
     {
+        if (HasPendingUserBatch())
+        {
+            _allowQueuedSuffixAutoDispatch = true;
+        }
+
         if (await TryStartPendingUserBatchAsync(context, cancellationToken).ConfigureAwait(false))
         {
+            _allowQueuedSuffixAutoDispatch = false;
             return;
+        }
+
+        if (!HasPendingUserBatch())
+        {
+            _allowQueuedSuffixAutoDispatch = false;
         }
 
         await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
@@ -2017,6 +2037,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         CancellationToken cancellationToken,
         string reason = "newText")
     {
+        if (reason is "userStop")
+        {
+            _allowQueuedSuffixAutoDispatch = false;
+        }
+
         await TerminalizeActiveResponseAsync(context, responseId, cancellationToken, reason, requestPersist: true)
             .ConfigureAwait(false);
         if (reason is "userBargeIn")
