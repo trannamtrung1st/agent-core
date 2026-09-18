@@ -155,4 +155,5 @@ public sealed class HostingOptions
     public string BindUrl { get; set; } = "http://127.0.0.1:5080";
     public string[] AllowedOrigins { get; set; } = ["http://127.0.0.1:5173"];
     public bool UseViteProxy { get; set; } = true;
+    public bool TrustPublishedPortGateway { get; set; }
 }

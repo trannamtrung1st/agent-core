@@ -124,7 +124,7 @@ Historical MVP acceptance is unchanged. Phases A–H and the Phase I decision ar
 
 **Contract:**
 
-- Obtain: `POST /api/v1/local/owner-capability` succeeds only for a trusted-local caller (loopback bind of the API). Response is an opaque token (not a SessionId) plus expiry metadata.
+- Obtain: `POST /api/v1/local/owner-capability` succeeds only for a trusted-local caller. Native processes require loopback `RemoteIpAddress`. Compose publishes `127.0.0.1:host:container` while Kestrel listens inside the container; Docker NAT may present that traffic as this container's IPv4 default gateway, so Compose sets `Hosting:TrustPublishedPortGateway=true` to trust **that one hop**. Private ranges are not trusted. Response is an opaque token (not a SessionId) plus expiry metadata.
 - Persist: hash the token in SQLite as a single local-owner grant so **API process restart** can still validate a restored token. The browser stores the token in `localStorage` (`agentcore.ownerCapability`) and restores it on reload; if missing, revoked, or hash-mismatch, re-obtain on loopback and fail closed.
 - Present: HTTP header `X-AgentCore-Owner-Capability`. Hub `session.attach` requires the same token (capability field on the attach command, not the connection-lease `attachmentId`).
 - Fail closed: unauthenticated → 401; wrong-owner, revoked, or cross-session → 403 or a uniform 404 that does **not** leak other sessions' existence. Deleted and archived sessions deny upload/bind/content without enumerating foreign ids. Safe errors omit other sessions' titles and ids.

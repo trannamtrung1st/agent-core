@@ -1,9 +1,11 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
+using Microsoft.Extensions.Options;
 
 namespace AgentCore.Api;
 
@@ -14,9 +16,10 @@ public static class SessionCatalogEndpoints
         app.MapPost("/api/v1/local/owner-capability", async (
             HttpContext http,
             IOwnerCapabilityService capabilities,
+            IOptions<HostingOptions> hosting,
             CancellationToken cancellationToken) =>
         {
-            if (!TrustedLocalCaller.IsLoopback(http))
+            if (!TrustedLocalCaller.IsTrustedLocal(http, hosting.Value.TrustPublishedPortGateway))
             {
                 return ProblemResults.From(AgentCoreErrors.Forbidden("Owner capability can only be issued on the local host."));
             }

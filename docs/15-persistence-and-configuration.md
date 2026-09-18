@@ -77,7 +77,7 @@ Bind/validate on startup with standard .NET options and ValidateOnStart. These o
 | VoiceOptions / Voice | Canonical format, frame size, queue budgets, utterance limit, playback progress |
 | PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout, attachment blob root (`data/attachments`), workspace root (`data/workspaces`), template root (`agents/templates`), artifact blob root (`data/artifacts`); never under `local/` |
 | ObservabilityOptions / Observability | Logging level, timeline limit, content logging opt-in, OTLP enable/endpoint |
-| HostingOptions / Hosting | Same-origin/default local binding, allowed development origins, development proxy behavior |
+| HostingOptions / Hosting | Same-origin/default local binding, allowed development origins, development proxy behavior, Compose published-port gateway trust (`TrustPublishedPortGateway`, default false) |
 
 Complete conceptual appsettings.json example, **Markdown only**:
 
@@ -154,7 +154,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
   },
   "Persistence": {"Provider": "InMemory", "ConnectionString": "Data Source=data/agent-core.db", "CheckpointMs": 1000, "BusyTimeoutMs": 5000, "AttachmentRoot": "data/attachments", "WorkspaceRoot": "data/workspaces", "TemplateRoot": "agents/templates", "ArtifactRoot": "data/artifacts"},
   "Observability": {"LogLevel": "Information", "TimelineCapacity": 500, "LogConversationContent": false, "OtlpEnabled": false, "OtlpEndpoint": "http://localhost:4317"},
-  "Hosting": {"BindUrl": "http://localhost:5080", "AllowedOrigins": ["http://localhost:5173"], "UseViteProxy": true}
+  "Hosting": {"BindUrl": "http://localhost:5080", "AllowedOrigins": ["http://localhost:5173"], "UseViteProxy": true, "TrustPublishedPortGateway": false}
 }
 ```
 
@@ -214,7 +214,7 @@ DefaultModel is the concrete model field; it is not copied into ModelRequest or 
 
 To migrate text inference on-prem, retain Adapter=OpenAICompatible and replace BaseUrl with e.g. `http://localhost:8000/v1/`, DefaultModel with the served local model name, and ApiKey/AdditionalHeaders with the local server's requirements. A vLLM-compatible endpoint is an example, not mandatory infrastructure. Direct OpenAI can use `https://api.openai.com/v1/` with its own credentials/model and verified compatibility settings. OpenRouter remains a hosted gateway; changing its model ID does not make inference local.
 
-For STT and TTS, initially choose the OpenAI adapters (STT: realtime transcription, recommended DefaultModel `gpt-live-transcribe`), then independently replace the adapter alias, endpoint, model, credentials and required/disabled capability constraints as needed. Prefer streaming STT with partials and streaming TTS; effective capabilities come from the adapter. Implement those adapters on schedule, but default automated tests keep Synthetic speech until `OPENAI_API_KEY` is supplied. Local speech may need a different concrete adapter if its protocol differs, but never changes ISpeechRecognizer/ISpeechSynthesizer or controller logic. All secrets/endpoints can be overridden using the same .NET double-underscore syntax, including:
+For hosted STT, select `OpenAICompatibleBatch` (no streaming input, no interim partials). Recognition Adapter=`OpenAI` (`OpenAiSpeechRecognizer` realtime transcription, recommended DefaultModel `gpt-live-transcribe`) remains unselectable while the live session is a no-op. For hosted TTS, select Adapter=`OpenAI` (`OpenAiSpeechSynthesizer`). Then independently replace the adapter alias, endpoint, model, credentials and required/disabled capability constraints as needed. Prefer streaming STT with partials and streaming TTS when a selectable adapter actually provides them; effective capabilities come from the adapter. Default automated tests keep Synthetic speech until `OPENAI_API_KEY` is supplied for a selected hosted speech adapter. Local speech may need a different concrete adapter if its protocol differs, but never changes ISpeechRecognizer/ISpeechSynthesizer or controller logic. All secrets/endpoints can be overridden using the same .NET double-underscore syntax, including:
 
 ```text
 Providers__Speech__Recognition__BaseUrl=<hosted-or-local-stt-endpoint>
@@ -242,7 +242,7 @@ Initial hosted configuration:
   "Providers": {
     "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "https://openrouter.ai/api/v1/", "DefaultModel": "<operator-fixed-openrouter-model-id>", "ApiKey": "<OPENROUTER_API_KEY>"}},
     "Speech": {
-      "Recognition": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "gpt-live-transcribe", "ApiKey": "<OPENAI_API_KEY>"},
+      "Recognition": {"Adapter": "OpenAICompatibleBatch", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<stt-model>", "ApiKey": "<OPENAI_API_KEY>"},
       "Synthesis": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<OPENAI_API_KEY>"}
     }
   }

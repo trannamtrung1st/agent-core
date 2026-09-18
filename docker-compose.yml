@@ -12,6 +12,9 @@ services:
       Persistence__Provider: Sqlite
       Persistence__ConnectionString: Data Source=/data/agent-core.db
       Providers__LanguageModels__primary-llm__Adapter: Scripted
+      # Published 127.0.0.1:5080:8080 is SNATed to this container's default
+      # gateway. Trust that one hop, not private IP ranges.
+      Hosting__TrustPublishedPortGateway: "true"
     volumes:
       - agent-core-data:/data
     # Native `dotnet run` + Vite remains the fast loop. This service is the

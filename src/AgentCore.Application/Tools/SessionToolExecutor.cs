@@ -452,11 +452,13 @@ public sealed class SessionToolExecutor(
         return !string.IsNullOrWhiteSpace(value);
     }
 
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     private static string DecodeText(byte[] bytes)
     {
         try
         {
-            return Encoding.UTF8.GetString(bytes);
+            return StrictUtf8.GetString(bytes);
         }
         catch (DecoderFallbackException)
         {

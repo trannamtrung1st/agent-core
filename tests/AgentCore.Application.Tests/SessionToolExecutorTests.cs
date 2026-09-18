@@ -175,6 +175,29 @@ public sealed class SessionToolExecutorTests
     }
 
     [Fact]
+    public async Task Attachments_read_falls_back_to_base64_for_invalid_utf8()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var executor = new SessionToolExecutor(attachments: attachments);
+        var sessionId = Guid.NewGuid();
+        var bytes = new byte[] { 0xFF, 0xFE, 0xFD };
+        var uploaded = await attachments.UploadPendingAsync(
+            sessionId,
+            "note.bin",
+            "text/plain",
+            new MemoryStream(bytes),
+            false);
+        var result = await executor.ExecuteAsync(
+            Support(),
+            sessionId,
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
+            ToolLimits.MaxOutputBytes);
+        using var json = JsonDocument.Parse(result);
+        Assert.Equal(Convert.ToBase64String(bytes), json.RootElement.GetProperty("content").GetString());
+        Assert.DoesNotContain("\uFFFD", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Knowledge_retrieve_returns_valid_json_when_output_is_truncated()
     {
         var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);

@@ -45,6 +45,23 @@ public sealed class FileSessionWorkspaceTests
             workspace.ReadAsync(session, definition, "/workspace/working/escape.txt").AsTask());
         Assert.Equal("Forbidden", escaped.Code);
 
+        var outsideDir = Path.Combine(dir.Root, "outside-dir");
+        Directory.CreateDirectory(outsideDir);
+        var linkedDir = Path.Combine(dir.WorkspaceRoot, session.ToString("N"), "workspace", "working", "out");
+        File.CreateSymbolicLink(linkedDir, outsideDir);
+        var writeThrough = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            workspace.WriteAsync(session, "/workspace/working/out/pwn.txt", "x"u8.ToArray()).AsTask());
+        Assert.Equal("Forbidden", writeThrough.Code);
+        Assert.False(File.Exists(Path.Combine(outsideDir, "pwn.txt")));
+
+        var deepLink = Path.Combine(dir.WorkspaceRoot, session.ToString("N"), "workspace", "working", "a");
+        File.CreateSymbolicLink(deepLink, outsideDir);
+        Directory.CreateDirectory(Path.Combine(deepLink, "b", "c", "d", "e", "f", "g", "h", "i"));
+        var deepWrite = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            workspace.WriteAsync(session, "/workspace/working/a/b/c/d/e/f/g/h/i/pwn.txt", "x"u8.ToArray()).AsTask());
+        Assert.Equal("Forbidden", deepWrite.Code);
+        Assert.False(File.Exists(Path.Combine(outsideDir, "b", "c", "d", "e", "f", "g", "h", "i", "pwn.txt")));
+
         await workspace.DeleteSessionAsync(session);
         var late = await Assert.ThrowsAsync<AgentCoreException>(() =>
             workspace.WriteAsync(session, "/workspace/working/late.txt", "x"u8.ToArray()).AsTask());

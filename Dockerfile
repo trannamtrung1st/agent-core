@@ -19,7 +19,9 @@ WORKDIR /app
 COPY --from=build /app/publish ./
 COPY --from=web /src/web/dist ./wwwroot
 COPY agents ./agents
-RUN mkdir -p /data
+RUN mkdir -p /data /app/data/workspaces /app/data/attachments /app/data/artifacts \
+    && chown -R $APP_UID:$APP_UID /data /app/data
+USER $APP_UID
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 ENV AgentCore__Profile=Synthetic
 ENV AgentCore__AgentDirectory=/app/agents

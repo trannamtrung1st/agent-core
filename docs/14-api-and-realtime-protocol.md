@@ -203,7 +203,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 
 **Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
 
-**Trusted-local owner capability.** Catalog, lifecycle, attach, upload, bind, artifact, and content routes require `X-AgentCore-Owner-Capability` (hub attach includes the same token). `SessionId` is not a credential. Loopback `POST /api/v1/local/owner-capability`; browser restore from `localStorage`; hashed grant survives API restart. Fail closed without leaking other sessions.
+**Trusted-local owner capability.** Catalog, lifecycle, attach, upload, bind, artifact, and content routes require `X-AgentCore-Owner-Capability` (hub attach includes the same token). `SessionId` is not a credential. Native issue/use is loopback `POST /api/v1/local/owner-capability`; Compose published-port NAT additionally trusts this container's default gateway when `Hosting:TrustPublishedPortGateway` is true. Browser restore from `localStorage`; hashed grant survives API restart. Fail closed without leaking other sessions.
 
 **Additive lifecycle (keep v1 DELETE).** Versioned routes:
 

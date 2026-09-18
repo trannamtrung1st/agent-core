@@ -171,7 +171,10 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
             linked.Token.ThrowIfCancellationRequested();
             var physical = MapWorkspaceFile(sessionId, path);
-            Directory.CreateDirectory(Path.GetDirectoryName(physical)!);
+            var parent = Path.GetDirectoryName(physical)!;
+            DenyEscapingLinks(physical, SessionRoot(sessionId));
+            DenyEscapingLinks(parent, SessionRoot(sessionId));
+            Directory.CreateDirectory(parent);
             DenyEscapingLinks(physical, SessionRoot(sessionId));
             var used = Measure(SessionWorkspaceDir(sessionId));
             var existing = File.Exists(physical) ? new FileInfo(physical).Length : 0;
@@ -465,7 +468,10 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
                 continue;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            var destParent = Path.GetDirectoryName(dest)!;
+            DenyEscapingLinks(dest, physical);
+            DenyEscapingLinks(destParent, physical);
+            Directory.CreateDirectory(destParent);
             File.Copy(file, dest, overwrite: false);
         }
     }
@@ -577,19 +583,23 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             .Sum();
     }
 
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     private static bool IsUnder(string root, string candidate)
     {
         var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
         var full = Path.GetFullPath(candidate);
-        return full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetFullPath(root), full, StringComparison.OrdinalIgnoreCase);
+        return full.StartsWith(prefix, PathComparison)
+            || string.Equals(Path.GetFullPath(root), full, PathComparison);
     }
 
     private static void DenyEscapingLinks(string path, string root)
     {
-        var current = path;
-        for (var i = 0; i < 8 && !string.IsNullOrEmpty(current); i++)
+        var rootFull = Path.GetFullPath(root);
+        var current = string.IsNullOrEmpty(path) ? path : Path.GetFullPath(path);
+        while (!string.IsNullOrEmpty(current))
         {
             if (File.Exists(current) || Directory.Exists(current))
             {
@@ -597,17 +607,28 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
                 if ((attrs & FileAttributes.ReparsePoint) != 0)
                 {
                     var target = File.ResolveLinkTarget(current, returnFinalTarget: true);
-                    if (target is null || !IsUnder(root, target.FullName))
+                    if (target is null || !IsUnder(rootFull, target.FullName))
                     {
                         throw AgentCoreErrors.Forbidden("Symlink targets outside the session workspace are denied.");
                     }
                 }
             }
 
-            current = Path.GetDirectoryName(current);
+            if (string.Equals(current, rootFull, PathComparison))
+            {
+                break;
+            }
+
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, PathComparison))
+            {
+                break;
+            }
+
+            current = parent;
         }
 
-        if (!IsUnder(root, path) && (File.Exists(path) || Directory.Exists(path)))
+        if (!IsUnder(rootFull, path) && (File.Exists(path) || Directory.Exists(path)))
         {
             throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
         }
