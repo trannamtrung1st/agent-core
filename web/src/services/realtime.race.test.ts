@@ -410,6 +410,17 @@ describe("realtime race handling", () => {
     expect(invoke.mock.calls[0][1].payload).not.toHaveProperty("behavior", "queue");
   });
 
+  it("enables Stop while voice playback continues after the live response completes", () => {
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      mode: "voice",
+      liveResponseId: null,
+      voicePlaybackResponseId: "r1"
+    });
+    expect(composerStopEnabled()).toBe(true);
+  });
+
   it("queues locally instead of SendText while a response is live", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);

@@ -23,10 +23,6 @@ vi.mock("../../services/catalog", () => ({
   unarchiveCatalogItem: vi.fn()
 }));
 
-vi.mock("../../services/realtime", () => ({
-  disconnectForSessionDelete: vi.fn().mockResolvedValue(undefined)
-}));
-
 const live: CatalogItem = {
   sessionId: "s1",
   title: "Planning notes",
@@ -302,6 +298,7 @@ describe("SessionRail", () => {
     await waitFor(() => expect(deleteCatalogItem).toHaveBeenCalledWith(live));
     expect(onNewChat).toHaveBeenCalledTimes(1);
     expect(onNewChat).toHaveBeenCalledWith({ urlMode: "replace" });
+    expect(await screen.findByText("Session deleted.")).toBeInTheDocument();
   });
 
   it("rejects delete confirmation when durable delete fails", async () => {

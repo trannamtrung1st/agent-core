@@ -11,7 +11,6 @@ import {
   setIncludeArchived,
   unarchiveCatalogItem
 } from "../../services/catalog";
-import { disconnectForSessionDelete } from "../../services/realtime";
 import { sameSessionId } from "../../app/sessionRoute";
 import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
 import { formatChatTime } from "./chatTime";
@@ -114,17 +113,14 @@ export function SessionRail({
       centered: true,
       mask: { closable: true },
       onOk: async () => {
-        if (sameSessionId(item.sessionId, activeSessionId)) {
-          await disconnectForSessionDelete();
-        }
+        const deletingActive = sameSessionId(item.sessionId, activeSessionId);
         const ok = await deleteCatalogItem(latestItem(item.sessionId, item));
         if (!ok) {
           await notifyMutation(false, "Session deleted.", { rejectOnFailure: true });
           return;
         }
-        if (sameSessionId(item.sessionId, activeSessionId)) {
+        if (deletingActive) {
           onNewChat({ urlMode: "replace" });
-          return;
         }
         void message.success("Session deleted.");
       }

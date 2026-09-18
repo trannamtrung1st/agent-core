@@ -445,4 +445,72 @@ describe("Codex-style pending send queue", () => {
     expect(invoke).not.toHaveBeenCalled();
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
   });
+
+  it("drops the queue item when reconnect history proves a lost steer ACK succeeded", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("network"));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        {
+          localId: "q1",
+          eventId: "e-steer",
+          text: "Steer me",
+          attachmentIds: [],
+          attachments: []
+        }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await steerQueuedSend("q1");
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: new Date().toISOString(),
+      correlationId: "ready",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        history: [
+          {
+            entryId: "entry-1",
+            sequence: 1,
+            sourceEventId: "e-steer",
+            role: "user",
+            text: "Steer me",
+            status: "completed",
+            createdAt: "2026-09-18T00:00:00.000Z"
+          }
+        ]
+      }
+    });
+    await Promise.resolve();
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
+    invoke.mockClear();
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready-2",
+      sequence: 2,
+      timestamp: new Date().toISOString(),
+      correlationId: "ready-2",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: { history: [] }
+    });
+    await Promise.resolve();
+    expect(invoke).not.toHaveBeenCalled();
+  });
 });

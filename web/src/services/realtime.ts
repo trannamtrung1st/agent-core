@@ -69,10 +69,20 @@ export function playbackConsumedCount(): number {
 }
 
 export function playbackDiagnostics() {
+  const rendered = capture.playbackRendered();
+  let fallbackResponseId: string | null = null;
+  let bestRendered = 0;
+  for (const [id, count] of Object.entries(rendered)) {
+    if (count > bestRendered) {
+      bestRendered = count;
+      fallbackResponseId = id;
+    }
+  }
+
   return {
     consumed: capture.playbackConsumed(),
     queued: capture.playbackQueued(),
-    responseId: capture.playbackResponseId() ?? playbackResponseId,
+    responseId: capture.playbackResponseId() ?? playbackResponseId ?? fallbackResponseId,
     epoch: capture.playbackEpoch(),
     closed: capture.playbackClosed(),
     rendered: capture.playbackRendered(),
@@ -536,12 +546,14 @@ function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
   if (!playbackStarted || playbackResponseId !== responseId) {
     playbackStarted = true;
     playbackResponseId = responseId;
+    syncVoicePlaybackResponseId(responseId);
     playbackFinal = false;
     playbackWorkletComplete = false;
     playbackCompletedSent = false;
     playbackConsumed = 0;
     capture.setPlaybackListener((consumed) => {
       playbackConsumed = consumed;
+      syncVoicePlaybackFromCapture();
     });
     capture.setPlaybackCompleteListener((completedResponseId, consumed) => {
       if (playbackResponseId !== completedResponseId) {
@@ -567,6 +579,7 @@ function enqueueLiveAudio(dto: OutputAudioFrame, responseId: string): void {
   }
 
   playbackConsumed = capture.playbackConsumed();
+  syncVoicePlaybackFromCapture();
   if (isFinal) {
     playbackFinal = true;
     maybeCompletePlayback();
@@ -598,6 +611,22 @@ function duckLocally(): void {
   }, 600);
 }
 
+async function stopVoicePlayback(preferredResponseId: string | null): Promise<void> {
+  const epochBefore = capture.playbackEpoch();
+  const target = capture.playbackResponseId() ?? playbackResponseId ?? preferredResponseId;
+  if (target) {
+    await interruptPlayback(target);
+  }
+
+  if (capture.playbackEpoch() === epochBefore && voicePlaybackHoldActive()) {
+    abortPlayback();
+    await playbackInterrupt;
+  } else if (!target) {
+    abortPlayback();
+    await playbackInterrupt;
+  }
+}
+
 async function interruptPlayback(responseId: string): Promise<void> {
   const run = async () => {
     stoppedResponses.add(responseId);
@@ -616,6 +645,7 @@ async function interruptPlayback(responseId: string): Promise<void> {
         playbackWorkletComplete = false;
         playbackCompletedSent = false;
         playbackResponseId = null;
+        syncVoicePlaybackResponseId(null);
         playbackConsumed = stoppedAt;
         capture.setPlaybackListener(null);
         capture.setPlaybackCompleteListener(null);
@@ -668,6 +698,7 @@ function maybeCompletePlayback(): void {
   playbackFinal = false;
   playbackWorkletComplete = false;
   playbackResponseId = null;
+  syncVoicePlaybackResponseId(null);
   capture.setPlaybackListener(null);
   capture.setPlaybackCompleteListener(null);
 }
@@ -789,6 +820,7 @@ function abortPlayback(): void {
   playbackWorkletComplete = false;
   playbackCompletedSent = false;
   playbackResponseId = null;
+  syncVoicePlaybackResponseId(null);
   playbackConsumed = 0;
   capture.setPlaybackListener(null);
   capture.setPlaybackCompleteListener(null);
@@ -820,6 +852,73 @@ function publishCaptureLive(): void {
   if (state.captureLive !== live) {
     useSessionStore.setState({ captureLive: live });
   }
+}
+
+function syncVoicePlaybackResponseId(responseId: string | null): void {
+  if (useSessionStore.getState().voicePlaybackResponseId !== responseId) {
+    useSessionStore.setState({ voicePlaybackResponseId: responseId });
+  }
+}
+
+function syncVoicePlaybackFromCapture(): void {
+  const snapshot = useSessionStore.getState();
+  if (snapshot.mode !== "voice") {
+    return;
+  }
+
+  const responseId = capture.playbackResponseId() ?? playbackResponseId;
+  if (!responseId) {
+    syncVoicePlaybackResponseId(null);
+    return;
+  }
+
+  const rendered = capture.playbackRendered()[responseId] ?? 0;
+  const consumed = capture.playbackConsumed();
+  const active = capture.playbackQueued() > 0 || rendered > consumed;
+  syncVoicePlaybackResponseId(active ? responseId : null);
+}
+
+function voicePlaybackStopId(): string | null {
+  const direct = capture.playbackResponseId() ?? playbackResponseId;
+  if (direct) {
+    return direct;
+  }
+
+  const rendered = capture.playbackRendered();
+  let fallback: string | null = null;
+  let bestRendered = 0;
+  for (const [id, count] of Object.entries(rendered)) {
+    if (count > bestRendered) {
+      bestRendered = count;
+      fallback = id;
+    }
+  }
+
+  return fallback;
+}
+
+function voicePlaybackHoldActive(): boolean {
+  const snapshot = useSessionStore.getState();
+  if (snapshot.mode !== "voice") {
+    return false;
+  }
+
+  const responseId = voicePlaybackStopId();
+  if (!responseId) {
+    return false;
+  }
+
+  if (capture.playbackQueued() > 0 || !capture.playbackClosed()) {
+    return true;
+  }
+
+  const rendered = capture.playbackRendered()[responseId] ?? 0;
+  return rendered > capture.playbackConsumed();
+}
+
+function composerOutputBusy(): boolean {
+  const snapshot = useSessionStore.getState();
+  return snapshot.liveResponseId != null || voicePlaybackHoldActive();
 }
 
 function syncCapture(): void {
@@ -953,6 +1052,7 @@ export const realtimeTestHooks =
           playbackWorkletComplete = false;
           playbackCompletedSent = false;
           playbackResponseId = null;
+          syncVoicePlaybackResponseId(null);
           playbackConsumed = 0;
           capture.setOverflowListener(null);
           capture.setPlaybackListener(null);
@@ -1170,14 +1270,6 @@ export async function startConversation(): Promise<boolean> {
   })();
 
   return startRequest;
-}
-
-export async function disconnectForSessionDelete(): Promise<void> {
-  disposed = true;
-  await stopConnection();
-  stopReceipts();
-  capture.release();
-  disposed = false;
 }
 
 export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "push" | "replace" }): Promise<void> {
@@ -1662,7 +1754,7 @@ function composerCanSend(draft: string, pending: PendingAttachment[], connection
     return true;
   }
 
-  return liveResponseId == null && pendingSendQueue.length > 0;
+  return liveResponseId == null && !voicePlaybackHoldActive() && pendingSendQueue.length > 0;
 }
 
 async function hydrateBoundAttachments(sessionId: string | null): Promise<void> {
@@ -1748,7 +1840,7 @@ export function composerStopEnabled(): boolean {
     !isReadonlySession(snapshot)
     && snapshot.status !== "paused"
     && snapshot.connection === "ready"
-    && snapshot.liveResponseId != null
+    && (snapshot.liveResponseId != null || voicePlaybackHoldActive() || snapshot.voicePlaybackResponseId != null)
   );
 }
 
@@ -2128,7 +2220,6 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
       if (queueLocalId) {
-        pendingUserText = null;
         removeOptimisticUserEntry(eventId);
         clearQueueItemDispatchState(queueLocalId);
         useSessionStore.setState((state) => ({
@@ -2156,7 +2247,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   return accepted;
 }
 
-async function maybeAutoDispatchQueueHead(): Promise<void> {
+async function maybeAutoDispatchQueueHead(options?: { ignorePlaybackHold?: boolean }): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (
     isReadonlySession(snapshot)
@@ -2165,6 +2256,10 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
     || snapshot.pendingSendQueue.length === 0
     || sendRequest
   ) {
+    return;
+  }
+
+  if (!options?.ignorePlaybackHold && voicePlaybackHoldActive()) {
     return;
   }
 
@@ -2202,8 +2297,7 @@ export function composerSteerEnabled(localId: string): boolean {
 }
 
 export function composerSendLabel(): string {
-  const snapshot = useSessionStore.getState();
-  return snapshot.liveResponseId != null ? "Queue" : "Send";
+  return composerOutputBusy() ? "Queue" : "Send";
 }
 
 export async function steerQueuedSend(localId: string): Promise<void> {
@@ -2239,8 +2333,14 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
   const queueLocalId = pendingUserText.queueLocalId;
   if (queueLocalId) {
     const eventId = pendingUserText.eventId;
+    const attachments = pendingUserText.pendingAttachments;
     if (historyHasUserEvent(entries, eventId)) {
+      const queued = useSessionStore.getState().pendingSendQueue.find((item) => item.localId === queueLocalId);
       pendingUserText = null;
+      if (queued) {
+        releasePendingSendAttachments(queued);
+      }
+      clearRestoredPendingAttachments(attachments);
       useSessionStore.setState((state) => ({
         pendingSendQueue: state.pendingSendQueue.filter((item) => item.localId !== queueLocalId)
       }));
@@ -2300,14 +2400,14 @@ export async function sendDraft(): Promise<void> {
   }
 
   if (!text && readyAttachmentIds.length === 0) {
-    if (snapshot.liveResponseId == null && snapshot.pendingSendQueue.length > 0) {
+    if (!composerOutputBusy() && snapshot.pendingSendQueue.length > 0) {
       await maybeAutoDispatchQueueHead();
     }
 
     return;
   }
 
-  if (snapshot.liveResponseId != null) {
+  if (composerOutputBusy()) {
     if (text.length > 0 || readyAttachmentIds.length > 0) {
       enqueueLocalSend(text, readyFiles, readyAttachmentIds);
     } else if (pendingUserText) {
@@ -2338,11 +2438,30 @@ export async function cancelRenderedResponse(): Promise<void> {
     return;
   }
 
-  const responseId = snapshot.liveResponseId;
-  if (!responseId) {
+  const playbackResponseId = voicePlaybackStopId();
+  const liveResponseId = snapshot.liveResponseId;
+
+  if (snapshot.mode === "voice" && voicePlaybackHoldActive() && playbackResponseId) {
+    await stopVoicePlayback(playbackResponseId);
+    if (liveResponseId == null || liveResponseId === playbackResponseId) {
+      if (liveResponseId === playbackResponseId) {
+        await cancelServerResponse(liveResponseId);
+      }
+
+      void maybeAutoDispatchQueueHead({ ignorePlaybackHold: true });
+      return;
+    }
+
+    void maybeAutoDispatchQueueHead({ ignorePlaybackHold: true });
     return;
   }
 
+  if (liveResponseId) {
+    return cancelServerResponse(liveResponseId);
+  }
+}
+
+async function cancelServerResponse(responseId: string): Promise<void> {
   const existing = pendingStops.get(responseId);
   if (existing) {
     return existing;

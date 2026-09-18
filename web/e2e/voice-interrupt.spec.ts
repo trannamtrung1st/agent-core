@@ -13,9 +13,11 @@ test("Stop flushes a live voice response before queued text renders and keeps ca
   expect(r1).toBeTruthy();
   const epochBefore = before?.epoch ?? 0;
 
+  await expect(page.getByRole("button", { name: "Queue" })).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Message").fill("Wait");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.locator(".chat-message-user").filter({ hasText: "Wait" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Queue" })).toBeEnabled();
+  await page.getByRole("button", { name: "Queue" }).click();
+  await expect(page.getByLabel("Queued messages")).toContainText("Wait", { timeout: 15_000 });
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackDiagnostics?.().responseId ?? null)).toBe(r1);
 
   await page.getByRole("button", { name: "Stop" }).click();

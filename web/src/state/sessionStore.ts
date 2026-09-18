@@ -86,6 +86,7 @@ export type SessionView = {
   errorHoldSequence: number;
   preflightReady: boolean;
   captureLive: boolean;
+  voicePlaybackResponseId: string | null;
   pauseReason: string | null;
 };
 
@@ -115,6 +116,7 @@ export const emptySession = (): SessionView => ({
   errorHoldSequence: 0,
   preflightReady: false,
   captureLive: false,
+  voicePlaybackResponseId: null,
   pauseReason: null
 });
 
@@ -276,7 +278,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         error: null,
         errorFatal: false,
         errorHoldSequence: 0,
-        preflightReady: asString(payload.mode) === "voice" ? false : state.preflightReady
+        preflightReady: asString(payload.mode) === "voice" ? false : state.preflightReady,
+        voicePlaybackResponseId: null
       };
     }
     case "agent.response.started": {
