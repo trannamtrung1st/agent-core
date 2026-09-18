@@ -36,6 +36,17 @@ public sealed class SnapshotRecord
     public long LastEntrySequence { get; set; }
     public long UpdatedAtUtc { get; set; }
     public long? LastUserActivityAtUtc { get; set; }
+    public string? LifecycleStatus { get; set; }
+    public string? PurposeKind { get; set; }
+    public string? PurposeDescription { get; set; }
+    public long? DeadlineAtUtc { get; set; }
+    public string? PurposeMetadataJson { get; set; }
+    public string? AgentCompletion { get; set; }
+    public bool? UserCompletionAllowed { get; set; }
+    public bool? UserCancellationAllowed { get; set; }
+    public string? LifecycleReason { get; set; }
+    public string? LifecycleSource { get; set; }
+    public long? LifecycleChangedAtUtc { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 

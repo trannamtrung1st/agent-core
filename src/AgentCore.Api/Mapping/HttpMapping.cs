@@ -19,6 +19,7 @@ public static class HttpMapping
             _ => throw AgentCoreErrors.Validation("mode must be text or voice.")
         };
 
+    // Purpose metadata and completion-authority policy stay private; protocol-v1 status remains the public field.
     public static SessionViewResponse ToView(SessionSnapshot snapshot, Guid? activeResponseId) =>
         new(
             snapshot.SessionId.ToString(),

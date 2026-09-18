@@ -507,6 +507,87 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Ended_and_archived_sessions_keep_orthogonal_lifecycle()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        var archivedAt = new DateTimeOffset(2026, 9, 19, 4, 0, 0, TimeSpan.Zero);
+        foreach (var store in stores)
+        {
+            var ended = First() with
+            {
+                SessionId = Guid.NewGuid(),
+                Status = SessionStatus.Ended
+            };
+            await store.SaveAsync(ended, 0);
+            var loaded = await store.LoadMetadataAsync(ended.SessionId);
+            Assert.Equal(SessionStatus.Ended, loaded!.Status);
+            Assert.Equal(SessionLifecycleStatus.Ended, loaded.LifecycleStatus);
+            Assert.Null(loaded.ArchivedAt);
+
+            var archived = loaded with { Revision = 2, ArchivedAt = archivedAt };
+            await store.SaveAsync(archived, 1);
+            loaded = await store.LoadMetadataAsync(ended.SessionId);
+            Assert.Equal(SessionLifecycleStatus.Ended, loaded!.LifecycleStatus);
+            Assert.Equal(archivedAt, loaded.ArchivedAt);
+        }
+    }
+
+    [Fact]
+    public async Task Ending_recovery_is_deterministically_ended()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        foreach (var store in stores)
+        {
+            var ending = First() with
+            {
+                SessionId = Guid.NewGuid(),
+                Status = SessionStatus.Ending
+            };
+            await store.SaveAsync(ending, 0);
+            await store.RecoverCrashedSessionsAsync();
+            var loaded = await store.LoadMetadataAsync(ending.SessionId);
+            Assert.Equal(SessionStatus.Ended, loaded!.Status);
+            Assert.Equal(SessionLifecycleStatus.Ended, loaded.LifecycleStatus);
+            Assert.Equal("ending-recovery", loaded.LifecycleReason);
+            Assert.Equal(LifecycleTransitionSource.System, loaded.LifecycleSource);
+        }
+    }
+
+    [Fact]
+    public async Task Purpose_policy_and_private_metadata_round_trip()
+    {
+        await using var harness = await SqliteAsync();
+        var deadline = new DateTimeOffset(2026, 9, 19, 5, 0, 0, TimeSpan.Zero);
+        var snapshot = First() with
+        {
+            Purpose = new SessionPurpose(
+                SessionPurposeKind.Goal,
+                "Host exam window",
+                deadline,
+                new Dictionary<string, string> { ["integration"] = "exam-app" }),
+            CompletionPolicy = new SessionCompletionPolicy(
+                AgentCompletionAuthority.Advisory,
+                UserCompletionAllowed: false,
+                UserCancellationAllowed: true),
+            LifecycleStatus = SessionLifecycleStatus.Active,
+            LifecycleSource = LifecycleTransitionSource.Host,
+            LifecycleReason = "created",
+            LifecycleChangedAt = deadline.AddHours(-1)
+        };
+        await harness.Store.SaveAsync(snapshot, 0);
+        var loaded = await harness.Store.LoadMetadataAsync(snapshot.SessionId);
+        Assert.Equal(SessionPurposeKind.Goal, loaded!.Purpose!.Kind);
+        Assert.Equal("Host exam window", loaded.Purpose.Description);
+        Assert.Equal(deadline, loaded.Purpose.DeadlineAt);
+        Assert.Equal("exam-app", loaded.Purpose.Metadata!["integration"]);
+        Assert.Equal(AgentCompletionAuthority.Advisory, loaded.CompletionPolicy!.AgentCompletion);
+        Assert.False(loaded.CompletionPolicy.UserCompletionAllowed);
+        Assert.True(loaded.CompletionPolicy.UserCancellationAllowed);
+    }
+
+    [Fact]
     public async Task Sqlite_migrate_reopens_existing_database()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");

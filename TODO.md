@@ -82,17 +82,17 @@ Core rule:
 
 > **The model may propose lifecycle intent; Agent Core policy and/or the host application owns lifecycle authority.**
 
-- [ ] Define a small generic session-purpose model.
+- [x] Define a small generic session-purpose model.
 
   Support at least:
   - ongoing conversation;
   - goal/task-oriented session;
-  - optional deadline / maximum duration;
+  - optional deadline / maximum duration (maxDuration resolves once to `deadlineAt`);
   - optional completion/termination policy.
 
-  Keep the goal description and any domain metadata generic/opaque to Agent Core. Do not encode application-specific predicates such as exam scoring or submission rules in the runtime.
+  Keep the goal description and any domain metadata generic/opaque to Agent Core. Do not encode application-specific predicates such as exam scoring or submission rules in the runtime. P1B-1 persists these fields; public session views omit metadata and policy.
 
-- [ ] Distinguish lifecycle states that have different meaning.
+- [x] Distinguish lifecycle states that have different meaning.
 
   Introduce additive durable `lifecycleStatus` conceptually:
   - Active;
@@ -102,7 +102,7 @@ Core rule:
   - Cancelled;
   - Ended.
 
-  Keep protocol-v1 `status` (`created|attached|paused|ending|ended`) compatible during migration. Archive (`ArchivedAt`) stays orthogonal. Do not collapse every terminal outcome into one generic `Stopped` state. One Application `TransitionLifecycle` owns the graph.
+  Keep protocol-v1 `status` (`created|attached|paused|ending|ended`) compatible during migration. Archive (`ArchivedAt`) stays orthogonal. Do not collapse every terminal outcome into one generic `Stopped` state. One Application `TransitionLifecycle` owns the graph (P1B-2, not yet the execution path). Existing sessions migrate Created/Attached→Active, Paused→Paused, Ended→Ended; Ending recovery is Ended.
 
 - [ ] Add a model lifecycle intent such as `RequestComplete`.
 
@@ -120,7 +120,7 @@ Core rule:
   - agent-requested completion allowed for low-risk autonomous workflows;
   - user-requested completion/cancellation where permitted.
 
-  Avoid hard-coding these exact policy names until the domain model is implemented.
+  Avoid hard-coding these exact policy names until the domain model is implemented. P1B-1 persists agent disabled/advisory/allowed plus user complete/cancel allowed/denied; host/system authority remains always allowed at the transition layer (P1B-2).
 
 - [ ] Support authoritative deterministic termination from Agent Core / host integration.
 

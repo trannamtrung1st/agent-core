@@ -204,7 +204,10 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         _sessions[snapshot.SessionId] = snapshot with
         {
             Entries = [],
-            LastEntrySequence = snapshot.DurableLastEntrySequence
+            LastEntrySequence = snapshot.DurableLastEntrySequence,
+            LifecycleStatus = SessionLifecycle.Align(snapshot.Status, snapshot.LifecycleStatus),
+            Purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault,
+            CompletionPolicy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default
         };
     }
 

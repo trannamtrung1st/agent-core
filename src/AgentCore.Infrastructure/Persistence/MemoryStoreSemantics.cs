@@ -22,7 +22,57 @@ internal static class MemoryStoreSemantics
         && left.ArchivedAt == right.ArchivedAt
         && left.DurablyDeletedAt == right.DurablyDeletedAt
         && left.DurableLastEntrySequence == right.DurableLastEntrySequence
+        && SessionLifecycle.Align(left.Status, left.LifecycleStatus)
+            == SessionLifecycle.Align(right.Status, right.LifecycleStatus)
+        && PurposeEquals(left.Purpose, right.Purpose)
+        && PolicyEquals(left.CompletionPolicy, right.CompletionPolicy)
+        && left.LifecycleReason == right.LifecycleReason
+        && left.LifecycleSource == right.LifecycleSource
+        && left.LifecycleChangedAt == right.LifecycleChangedAt
         && IncomingEntriesMatch(left.Entries, right.Entries);
+
+    private static bool PurposeEquals(SessionPurpose? left, SessionPurpose? right)
+    {
+        var a = left ?? SessionPurpose.OngoingDefault;
+        var b = right ?? SessionPurpose.OngoingDefault;
+        if (a.Kind != b.Kind || a.Description != b.Description || a.DeadlineAt != b.DeadlineAt)
+        {
+            return false;
+        }
+
+        return MetadataEquals(a.Metadata, b.Metadata);
+    }
+
+    private static bool MetadataEquals(
+        IReadOnlyDictionary<string, string>? left,
+        IReadOnlyDictionary<string, string>? right)
+    {
+        var a = left ?? new Dictionary<string, string>();
+        var b = right ?? new Dictionary<string, string>();
+        if (a.Count != b.Count)
+        {
+            return false;
+        }
+
+        foreach (var pair in a)
+        {
+            if (!b.TryGetValue(pair.Key, out var value) || value != pair.Value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool PolicyEquals(SessionCompletionPolicy? left, SessionCompletionPolicy? right)
+    {
+        var a = left ?? SessionCompletionPolicy.Default;
+        var b = right ?? SessionCompletionPolicy.Default;
+        return a.AgentCompletion == b.AgentCompletion
+            && a.UserCompletionAllowed == b.UserCompletionAllowed
+            && a.UserCancellationAllowed == b.UserCancellationAllowed;
+    }
 
     private static bool IncomingEntriesMatch(
         IReadOnlyList<ConversationEntry> stored,
@@ -68,10 +118,31 @@ internal static class MemoryStoreSemantics
         var pauseReason = status == SessionStatus.Paused && snapshot.Status == SessionStatus.Attached
             ? "recovered"
             : snapshot.PauseReason;
+        var lifecycleChanged = status != snapshot.Status;
+        var lifecycle = SessionLifecycle.Align(status, snapshot.LifecycleStatus);
+        var reason = snapshot.LifecycleReason;
+        var source = snapshot.LifecycleSource;
+        var changedAt = snapshot.LifecycleChangedAt;
+        if (lifecycleChanged && snapshot.Status == SessionStatus.Ending && status == SessionStatus.Ended)
+        {
+            reason ??= "ending-recovery";
+            source ??= LifecycleTransitionSource.System;
+            changedAt = now;
+        }
+        else if (lifecycleChanged)
+        {
+            source ??= LifecycleTransitionSource.System;
+            changedAt = now;
+            reason ??= pauseReason;
+        }
 
         return snapshot with
         {
             Status = status,
+            LifecycleStatus = lifecycle,
+            LifecycleReason = reason,
+            LifecycleSource = source,
+            LifecycleChangedAt = changedAt,
             PendingMode = null,
             PauseReason = pauseReason,
             Entries = entries,

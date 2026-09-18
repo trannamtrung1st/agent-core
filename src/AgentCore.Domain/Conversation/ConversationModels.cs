@@ -193,7 +193,13 @@ public sealed record SessionSnapshot(
     bool WorkspaceOwned = true,
     DateTimeOffset? ArchivedAt = null,
     DateTimeOffset? DurablyDeletedAt = null,
-    long LastEntrySequence = 0)
+    long LastEntrySequence = 0,
+    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
+    SessionPurpose? Purpose = null,
+    SessionCompletionPolicy? CompletionPolicy = null,
+    string? LifecycleReason = null,
+    LifecycleTransitionSource? LifecycleSource = null,
+    DateTimeOffset? LifecycleChangedAt = null)
 {
     public long DurableLastEntrySequence
     {

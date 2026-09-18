@@ -31,7 +31,7 @@ Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-
 
 ## Follow-on P1 planned until verified
 
-History paging is observed (bounded restore, HTTP pages, Load earlier messages). Additive session lifecycle and provider-neutral speech locale are **not shipped**. Decisions: [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence). Gates: [Implementation Plan](18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech-planned-until-verified). Do not treat this table row as replacing observed P1 replaceable speech.
+History paging is observed (bounded restore, HTTP pages, Load earlier messages). Additive session lifecycle fields persist; authoritative transitions are **not shipped**. Provider-neutral speech locale is **not shipped**. Decisions: [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence). Gates: [Implementation Plan](18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech-planned-until-verified). Do not treat this table row as replacing observed P1 replaceable speech.
 
 ## Post-MVP planned until verified
 

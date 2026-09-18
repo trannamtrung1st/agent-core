@@ -161,6 +161,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "SessionSnapshots", "LifecycleStatus", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260918200644_SessionLifecycle', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -674,6 +684,19 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Snapshot.LastEntrySequence = snapshot.DurableLastEntrySequence;
         row.Snapshot.UpdatedAtUtc = snapshot.UpdatedAt.ToUnixTimeMilliseconds();
         row.Snapshot.LastUserActivityAtUtc = snapshot.LastUserActivityAt?.ToUnixTimeMilliseconds();
+        var purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault;
+        var policy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
+        row.Snapshot.LifecycleStatus = SessionLifecycle.Align(snapshot.Status, snapshot.LifecycleStatus).ToString();
+        row.Snapshot.PurposeKind = purpose.Kind.ToString();
+        row.Snapshot.PurposeDescription = purpose.Description;
+        row.Snapshot.DeadlineAtUtc = purpose.DeadlineAt?.ToUnixTimeMilliseconds();
+        row.Snapshot.PurposeMetadataJson = SerializeMetadata(purpose.Metadata);
+        row.Snapshot.AgentCompletion = policy.AgentCompletion.ToString();
+        row.Snapshot.UserCompletionAllowed = policy.UserCompletionAllowed;
+        row.Snapshot.UserCancellationAllowed = policy.UserCancellationAllowed;
+        row.Snapshot.LifecycleReason = snapshot.LifecycleReason;
+        row.Snapshot.LifecycleSource = snapshot.LifecycleSource?.ToString();
+        row.Snapshot.LifecycleChangedAtUtc = snapshot.LifecycleChangedAt?.ToUnixTimeMilliseconds();
     }
 
     private static SessionRecord ToRecord(SessionSnapshot snapshot)
@@ -742,7 +765,13 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.WorkspaceOwned,
             row.ArchivedAtUtc is { } archived ? FromUnix(archived) : null,
             row.DurablyDeletedAtUtc is { } deleted ? FromUnix(deleted) : null,
-            snapshot.LastEntrySequence);
+            snapshot.LastEntrySequence,
+            ReadLifecycleStatus(row.Status, snapshot.LifecycleStatus),
+            ReadPurpose(snapshot),
+            ReadPolicy(snapshot),
+            snapshot.LifecycleReason,
+            ParseEnumOrNull<LifecycleTransitionSource>(snapshot.LifecycleSource),
+            snapshot.LifecycleChangedAtUtc is { } changed ? FromUnix(changed) : null);
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>
@@ -772,6 +801,43 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         string.IsNullOrEmpty(json)
             ? null
             : JsonSerializer.Deserialize<ConversationAttachmentRef[]>(json, Json);
+
+    private static string? SerializeMetadata(IReadOnlyDictionary<string, string>? metadata) =>
+        metadata is null || metadata.Count == 0
+            ? null
+            : JsonSerializer.Serialize(metadata, Json);
+
+    private static IReadOnlyDictionary<string, string>? DeserializeMetadata(string? json) =>
+        string.IsNullOrEmpty(json)
+            ? null
+            : JsonSerializer.Deserialize<Dictionary<string, string>>(json, Json);
+
+    private static SessionLifecycleStatus ReadLifecycleStatus(string protocolStatus, string? stored)
+    {
+        var status = Enum.Parse<SessionStatus>(protocolStatus);
+        var current = ParseEnumOrNull<SessionLifecycleStatus>(stored) ?? SessionLifecycle.FromProtocolStatus(status);
+        return SessionLifecycle.Align(status, current);
+    }
+
+    private static SessionPurpose ReadPurpose(SnapshotRecord snapshot)
+    {
+        var kind = ParseEnumOrNull<SessionPurposeKind>(snapshot.PurposeKind) ?? SessionPurposeKind.Ongoing;
+        return new SessionPurpose(
+            kind,
+            snapshot.PurposeDescription,
+            snapshot.DeadlineAtUtc is { } deadline ? FromUnix(deadline) : null,
+            DeserializeMetadata(snapshot.PurposeMetadataJson));
+    }
+
+    private static SessionCompletionPolicy ReadPolicy(SnapshotRecord snapshot) =>
+        new(
+            ParseEnumOrNull<AgentCompletionAuthority>(snapshot.AgentCompletion)
+                ?? SessionCompletionPolicy.Default.AgentCompletion,
+            snapshot.UserCompletionAllowed ?? true,
+            snapshot.UserCancellationAllowed ?? true);
+
+    private static TEnum? ParseEnumOrNull<TEnum>(string? value) where TEnum : struct, Enum =>
+        string.IsNullOrEmpty(value) ? null : Enum.Parse<TEnum>(value);
 
     private static string? SerializeEnvelope(ResponseEnvelope? envelope) =>
         envelope is null ? null : JsonSerializer.Serialize(envelope, Json);

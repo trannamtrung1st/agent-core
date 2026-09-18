@@ -47,7 +47,10 @@ public sealed class SessionManager
         string agentId,
         int? agentVersion,
         SessionMode mode,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SessionPurpose? purpose = null,
+        SessionCompletionPolicy? policy = null,
+        TimeSpan? maxDuration = null)
     {
         if (string.IsNullOrWhiteSpace(agentId))
         {
@@ -65,6 +68,8 @@ public sealed class SessionManager
 
         var now = _time.GetUtcNow();
         var profile = await EnsureLocalProfileAsync(now, cancellationToken).ConfigureAwait(false);
+        var resolvedPurpose = SessionLifecycle.ResolvePurpose(purpose, now, maxDuration);
+        var resolvedPolicy = policy ?? SessionCompletionPolicy.Default;
         var snapshot = new SessionSnapshot(
             SchemaVersion: 1,
             SessionId: _ids.NewSessionId(),
@@ -83,7 +88,12 @@ public sealed class SessionManager
             LastUserActivityAt: now,
             Title: SessionTitles.Default,
             RuntimeEpoch: 0,
-            WorkspaceOwned: true);
+            WorkspaceOwned: true,
+            LifecycleStatus: SessionLifecycleStatus.Active,
+            Purpose: resolvedPurpose,
+            CompletionPolicy: resolvedPolicy,
+            LifecycleSource: LifecycleTransitionSource.System,
+            LifecycleChangedAt: now);
 
         await _store.SaveAsync(snapshot, expectedRevision: 0, cancellationToken).ConfigureAwait(false);
         return snapshot;
