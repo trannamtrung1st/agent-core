@@ -70,6 +70,9 @@ export type SessionView = {
   voiceAvailable: boolean;
   conversationLanguage: string | null;
   speechLocale: string | null;
+  speechLocaleSource: string | null;
+  speechLocaleOverride: string | null;
+  pendingSpeechLocale: string | null;
   sttTransport: "serverAudio" | "clientTranscript" | null;
   ttsTransport: "serverAudio" | "clientSpeech" | null;
   mode: "text" | "voice";
@@ -111,6 +114,9 @@ export const emptySession = (): SessionView => ({
   voiceAvailable: false,
   conversationLanguage: null,
   speechLocale: null,
+  speechLocaleSource: null,
+  speechLocaleOverride: null,
+  pendingSpeechLocale: null,
   sttTransport: null,
   ttsTransport: null,
   mode: "text",
@@ -151,10 +157,17 @@ function asNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
 }
 
-function speechLocaleFromPayload(payload: Record<string, unknown>): string | null {
+function speechLocaleFieldsFromPayload(
+  payload: Record<string, unknown>,
+  agentLanguage: string | null
+): Pick<SessionView, "speechLocale" | "speechLocaleSource" | "speechLocaleOverride"> {
   const capabilities = (payload.capabilities ?? {}) as Record<string, unknown>;
   const speechLocale = (capabilities.speechLocale ?? payload.speechLocale ?? {}) as Record<string, unknown>;
-  return asString(speechLocale.effective) || null;
+  return {
+    speechLocale: asString(speechLocale.effective) || agentLanguage,
+    speechLocaleSource: asString(speechLocale.source) || null,
+    speechLocaleOverride: asString(speechLocale.override) || null
+  };
 }
 
 function transportsFromPayload(payload: Record<string, unknown>): {
@@ -313,7 +326,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         agentRole: asString(agent.role),
         voiceAvailable: Boolean(agent.voiceAvailable),
         conversationLanguage: asString(agent.language) || null,
-        speechLocale: speechLocaleFromPayload(payload) ?? (asString(agent.language) || null),
+        ...speechLocaleFieldsFromPayload(payload, asString(agent.language) || null),
         ...transportsFromPayload(payload),
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",

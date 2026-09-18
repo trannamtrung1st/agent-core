@@ -2,17 +2,22 @@ import { Flex, Select, Typography } from "antd";
 import type { AgentDescriptor } from "../../services/api";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import type { SessionErrorView } from "./sessionError";
+import { SpeechLocalePicker } from "./SpeechLocalePicker";
 
 export function AgentPicker({
   agents,
   selectedAgentId,
   error,
-  onSelect
+  speechLocale,
+  onSelect,
+  onSpeechLocaleChange
 }: {
   agents: AgentDescriptor[];
   selectedAgentId: string;
   error: SessionErrorView | string | null;
+  speechLocale: string;
   onSelect: (agentId: string) => void;
+  onSpeechLocaleChange: (locale: string | null) => void;
 }) {
   const hasAgents = agents.length > 0;
 
@@ -32,6 +37,7 @@ export function AgentPicker({
         onChange={(agentId) => onSelect(agentId)}
         style={{ width: "100%" }}
       />
+      <SpeechLocalePicker value={speechLocale} onChange={onSpeechLocaleChange} />
     </Flex>
   );
 }

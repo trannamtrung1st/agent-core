@@ -178,6 +178,37 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
   });
 
+  it("keeps the text composer when Voice is unavailable for the speech locale", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        voiceAvailable: false,
+        agentName: "Alex",
+        agentRole: "Examiner",
+        error: "Voice is not available for this speech locale.",
+        sessionError: {
+          category: "Session",
+          code: "VoiceUnavailable",
+          message: "Voice is not available for this speech locale.",
+          fatal: false,
+          retryAfterMs: null,
+          classId: "speech/capture/playback"
+        },
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => {
+      renderChat();
+    });
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+    expect(screen.getByTestId("session-failure")).toHaveTextContent("Voice is not available for this speech locale.");
+  });
+
   it("shows Voice after reconnect when durable mode is voice until capture is live", async () => {
     await act(async () => {
       useSessionStore.setState({

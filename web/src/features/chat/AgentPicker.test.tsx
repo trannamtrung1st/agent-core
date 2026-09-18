@@ -33,11 +33,14 @@ describe("AgentPicker", () => {
         agents={agents}
         selectedAgentId="customer-support"
         error={null}
+        speechLocale=""
         onSelect={onSelect}
+        onSpeechLocaleChange={vi.fn()}
       />
     );
 
     expect(screen.getByRole("combobox", { name: "Identity" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
     expect(screen.getByText("Identity")).toBeInTheDocument();
     expect(screen.getByText("Sam — Support")).toBeInTheDocument();
 
@@ -52,7 +55,9 @@ describe("AgentPicker", () => {
         agents={agents}
         selectedAgentId="customer-support"
         error="Unable to list agents."
+        speechLocale=""
         onSelect={vi.fn()}
+        onSpeechLocaleChange={vi.fn()}
       />
     );
 
@@ -66,7 +71,9 @@ describe("AgentPicker", () => {
         agents={[]}
         selectedAgentId=""
         error={null}
+        speechLocale=""
         onSelect={vi.fn()}
+        onSpeechLocaleChange={vi.fn()}
       />
     );
 

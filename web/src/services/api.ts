@@ -159,14 +159,45 @@ export async function getHealth(): Promise<HealthResponse> {
   return (await response.json()) as HealthResponse;
 }
 
-export async function createSession(agentId: string, agentVersion?: number, mode = "text"): Promise<SessionResponse> {
+export async function createSession(
+  agentId: string,
+  agentVersion?: number,
+  mode = "text",
+  speechLocale?: string | null
+): Promise<SessionResponse> {
+  const body: Record<string, unknown> = { agentId, agentVersion, mode };
+  if (speechLocale) {
+    body.speechLocale = speechLocale;
+  }
+
   const response = await ownerFetch("/api/v2/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ agentId, agentVersion, mode })
+    body: JSON.stringify(body)
   });
   if (!response.ok) {
     throw new Error("Unable to create a session.");
+  }
+
+  return (await response.json()) as SessionResponse;
+}
+
+export async function setSpeechLocale(sessionId: string, locale: string | null): Promise<SessionResponse> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/speech-locale`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ locale })
+  });
+  if (!response.ok) {
+    let message = "Unable to update the speech locale.";
+    try {
+      const problem = (await response.json()) as { title?: string; detail?: string };
+      message = problem.detail?.trim() || problem.title?.trim() || message;
+    } catch {
+      // keep fallback
+    }
+
+    throw new Error(message);
   }
 
   return (await response.json()) as SessionResponse;

@@ -20,11 +20,13 @@ import {
   resumePausedSession,
   selectAgent,
   sendDraft,
+  applySpeechLocale,
   cancelRenderedResponse,
   setDraft,
   setMuted
 } from "../../services/realtime";
 import { AgentPicker } from "./AgentPicker";
+import { SpeechLocalePicker, speechLocaleSelectValue } from "./SpeechLocalePicker";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
@@ -189,6 +191,20 @@ export function ChatApp() {
               title={inSession ? state.agentName || "Agent" : "New chat"}
               subtitle={inSession ? state.agentRole : null}
               timestamp={headerTimestamp}
+              speechLocale={
+                inSession && !readonly ? (
+                  <SpeechLocalePicker
+                    layout="row"
+                    value={speechLocaleSelectValue(
+                      state.speechLocaleSource,
+                      state.speechLocaleOverride,
+                      state.pendingSpeechLocale,
+                      true
+                    )}
+                    onChange={(locale) => void applySpeechLocale(locale)}
+                  />
+                ) : null
+              }
               sessionsToggle={
                 isNarrow ? (
                   <Button
@@ -266,7 +282,14 @@ export function ChatApp() {
                             agents={state.agents}
                             selectedAgentId={state.selectedAgentId}
                             error={state.sessionError ?? state.error}
+                            speechLocale={speechLocaleSelectValue(
+                              state.speechLocaleSource,
+                              state.speechLocaleOverride,
+                              state.pendingSpeechLocale,
+                              false
+                            )}
                             onSelect={selectAgent}
+                            onSpeechLocaleChange={(locale) => void applySpeechLocale(locale)}
                           />
                         </div>
                       )

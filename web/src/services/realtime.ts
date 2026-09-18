@@ -5,7 +5,7 @@ import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio
 import { applyServerEvent, emptySession, hasControlSequenceGap, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, reopenSession } from "./api";
+import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, reopenSession, setSpeechLocale } from "./api";
 import { loadNewestHistoryPage, loadOlderHistoryPage, beginSessionHistory } from "./sessionHistory";
 import {
   abortPendingAttachment,
@@ -1805,7 +1805,7 @@ export async function startConversation(): Promise<boolean> {
         throw new Error("Unable to create a session.");
       }
 
-      const created = await createSession(agent.id, agent.version, "text");
+      const created = await createSession(agent.id, agent.version, "text", snapshot.pendingSpeechLocale);
       await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
@@ -1848,6 +1848,39 @@ export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "pus
 
 export function clearRouteNotice(): void {
   useSessionStore.setState({ routeNotice: null });
+}
+
+export async function applySpeechLocale(locale: string | null): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot)) {
+    return;
+  }
+
+  if (!snapshot.sessionId) {
+    useSessionStore.setState({ pendingSpeechLocale: locale });
+    return;
+  }
+
+  try {
+    const view = await setSpeechLocale(snapshot.sessionId, locale);
+    const speech = view.speechLocale;
+    useSessionStore.setState({
+      pendingSpeechLocale: locale,
+      speechLocale: speech?.effective ?? snapshot.speechLocale,
+      speechLocaleSource: speech?.source ?? snapshot.speechLocaleSource,
+      speechLocaleOverride: speech?.override ?? null,
+      error: null,
+      sessionError: null,
+      errorFatal: false
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update the speech locale.";
+    useSessionStore.setState({
+      error: message,
+      sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
+      errorFatal: false
+    });
+  }
 }
 
 export type OpenSessionResult = "ready" | "ended" | "blocked" | "failed" | "paused";

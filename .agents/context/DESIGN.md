@@ -63,7 +63,7 @@ Ant Design v6 owns generic controls (Layout, Select, Button, Input, Empty, Spin,
 
 ## Personality
 
-Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Send, Stop, Queue, Voice, Cancel voice, Mute, Unmute, End, Attach, Resume). Voice is a session-mode control and stays visible while voice is on; Mute/Unmute is a separate microphone control. Accent (primary blue) means Voice mode is on; green means the microphone is actively listening.
+Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Speech locale, Send, Stop, Queue, Voice, Cancel voice, Mute, Unmute, End, Attach, Resume). Voice is a session-mode control and stays visible while voice is on; Mute/Unmute is a separate microphone control. Accent (primary blue) means Voice mode is on; green means the microphone is actively listening.
 
 ## Tone
 

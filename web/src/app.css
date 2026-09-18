@@ -491,6 +491,10 @@ body,
   text-align: start;
 }
 
+.speech-locale-picker {
+  min-width: 0;
+}
+
 .session-rail {
   display: flex;
   flex-direction: column;

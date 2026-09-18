@@ -260,6 +260,8 @@ describe("applyServerEvent", () => {
     );
     expect(state.conversationLanguage).toBe("en");
     expect(state.speechLocale).toBe("vi-VN");
+    expect(state.speechLocaleSource).toBe("sessionOverride");
+    expect(state.speechLocaleOverride).toBe("vi-VN");
   });
 
   it("applies mute from session.state.changed without dropping voice mode", () => {

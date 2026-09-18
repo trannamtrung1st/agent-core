@@ -9,6 +9,7 @@ export function ChatHeader({
   subtitle,
   timestamp,
   sessionsToggle,
+  speechLocale,
   onEnd,
   inSession
 }: {
@@ -16,6 +17,7 @@ export function ChatHeader({
   subtitle?: string | null;
   timestamp?: string | null;
   sessionsToggle?: ReactNode;
+  speechLocale?: ReactNode;
   onEnd: () => void;
   inSession: boolean;
 }) {
@@ -51,6 +53,7 @@ export function ChatHeader({
               {subtitle}
             </Typography.Text>
           ) : null}
+          {speechLocale}
         </div>
       </Flex>
       {inSession ? (
