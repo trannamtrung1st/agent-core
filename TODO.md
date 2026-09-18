@@ -198,7 +198,7 @@ Do this after Browser voice works so normal development remains cheap.
 
   If realtime transcription is not worth the complexity yet, keep `OpenAICompatibleBatchSpeechRecognizer` as the supported hosted STT fallback and document the capability difference.
 
-- [ ] Wire `OpenAiSpeechSynthesizer` through the new explicit provider selection.
+- [x] Wire `OpenAiSpeechSynthesizer` through the new explicit provider selection.
 
 - [ ] Verify Real-mode voice end to end with at least one actual non-Synthetic configuration.
 

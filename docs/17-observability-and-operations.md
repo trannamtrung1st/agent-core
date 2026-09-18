@@ -113,7 +113,7 @@ Docker Compose
 
 Hosted services outside Compose:
 OpenRouter text (selected by docker-compose.real.yml)
-OpenAI STT · OpenAI TTS (optional; Real overlay uses synthetic speech until operator wires hosted speech adapters)
+OpenAI STT · OpenAI TTS (optional; OpenAI TTS is selectable when Synthesis Adapter=`OpenAI` and a backend key is present; OpenAI realtime STT remains deferred. Live HTTP stays opt-in.)
 ```
 
 Do not split frontend and backend into separate production runtime containers. Vite is a build stage in this artifact, not a production server. The SQLite volume must survive application container recreation; the container's writable layer is not durable storage. Compose should expose the application locally, pass backend configuration/secrets, and use /health for readiness. No additional reverse proxy, Redis, broker, service mesh or Kubernetes is required.

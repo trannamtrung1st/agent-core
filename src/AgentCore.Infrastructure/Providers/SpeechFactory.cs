@@ -19,7 +19,7 @@ internal static class SpeechFactory
     {
         options ??= provider.GetService<SpeechProvidersOptions>() ?? new SpeechProvidersOptions();
         var recognition = ResolveRecognition(options.Recognition);
-        var synthesis = ResolveSynthesis(options.Synthesis);
+        var synthesis = ResolveSynthesis(provider, options.Synthesis);
         return new SpeechResolution
         {
             Recognizer = recognition.Adapter,
@@ -52,7 +52,9 @@ internal static class SpeechFactory
         return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false);
     }
 
-    private static ResolvedSynthesis ResolveSynthesis(SpeechSynthesisProviderOptions options)
+    private static ResolvedSynthesis ResolveSynthesis(
+        IServiceProvider provider,
+        SpeechSynthesisProviderOptions options)
     {
         if (SpeechAdapterCatalog.IsBrowser(options.Adapter))
         {
@@ -65,7 +67,21 @@ internal static class SpeechFactory
             return new ResolvedSynthesis(adapter, SpeechTransport.ServerAudio, true);
         }
 
-        // OpenAI TTS stays gated until hosted speech wiring.
+        if (SpeechAdapterCatalog.EqualsName(options.Adapter, SpeechAdapterCatalog.OpenAI))
+        {
+            if (string.IsNullOrWhiteSpace(options.ApiKey))
+            {
+                return new ResolvedSynthesis(null, SpeechTransport.ServerAudio, false);
+            }
+
+            var http = provider.GetRequiredService<IHttpClientFactory>()
+                .CreateClient(OpenAiSpeechSynthesizer.HttpClientName);
+            return new ResolvedSynthesis(
+                new OpenAiSpeechSynthesizer(http, options),
+                SpeechTransport.ServerAudio,
+                true);
+        }
+
         return new ResolvedSynthesis(null, SpeechTransport.ServerAudio, false);
     }
 

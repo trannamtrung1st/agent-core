@@ -66,7 +66,7 @@ public sealed class SpeechFactoryTests
     }
 
     [Fact]
-    public void Hosted_batch_stt_and_openai_tts_stay_gated_without_synthetic_fallback()
+    public void Hosted_batch_stt_stays_gated_while_openai_tts_resolves_with_key()
     {
         using var provider = Build(new SpeechProvidersOptions
         {
@@ -75,17 +75,39 @@ public sealed class SpeechFactoryTests
         });
         var speech = provider.GetRequiredService<SpeechResolution>();
         Assert.Null(speech.Recognizer);
-        Assert.Null(speech.Synthesizer);
+        Assert.IsType<OpenAiSpeechSynthesizer>(speech.Synthesizer);
         Assert.False(speech.Recognizer is SyntheticSpeechRecognizer);
         Assert.False(speech.Synthesizer is SyntheticSpeechSynthesizer);
         Assert.False(speech.Plan.RecognitionResolvable);
-        Assert.False(speech.Plan.SynthesisResolvable);
+        Assert.True(speech.Plan.SynthesisResolvable);
         Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.InputTransport);
         Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.OutputTransport);
+        Assert.True(speech.Plan.SynthesisCapabilities?.StreamingAudio);
+        Assert.True(speech.Plan.SynthesisCapabilities?.Cancellation);
+        Assert.IsType<OpenAiSpeechSynthesizer>(provider.GetRequiredService<ISpeechSynthesizer>());
     }
 
     [Fact]
-    public void Mixed_browser_stt_and_gated_openai_tts_does_not_substitute_synthetic()
+    public void OpenAI_tts_without_key_is_not_resolvable_and_not_synthetic()
+    {
+        using var provider = Build(new SpeechProvidersOptions
+        {
+            Recognition = new SpeechRecognitionProviderOptions { Adapter = "Synthetic" },
+            Synthesis = new SpeechSynthesisProviderOptions { Adapter = "OpenAI", ApiKey = "  " }
+        });
+        var speech = provider.GetRequiredService<SpeechResolution>();
+        Assert.IsType<SyntheticSpeechRecognizer>(speech.Recognizer);
+        Assert.Null(speech.Synthesizer);
+        Assert.False(speech.Synthesizer is SyntheticSpeechSynthesizer);
+        Assert.False(speech.Synthesizer is OpenAiSpeechSynthesizer);
+        Assert.True(speech.Plan.RecognitionResolvable);
+        Assert.False(speech.Plan.SynthesisResolvable);
+        Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.OutputTransport);
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISpeechSynthesizer>());
+    }
+
+    [Fact]
+    public void Mixed_browser_stt_and_openai_tts_with_key_resolves_openai_synthesizer()
     {
         using var provider = Build(new SpeechProvidersOptions
         {
@@ -94,18 +116,18 @@ public sealed class SpeechFactoryTests
         });
         var speech = provider.GetRequiredService<SpeechResolution>();
         Assert.Null(speech.Recognizer);
-        Assert.Null(speech.Synthesizer);
+        Assert.IsType<OpenAiSpeechSynthesizer>(speech.Synthesizer);
         Assert.Equal(SpeechTransport.ClientTranscript, speech.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.OutputTransport);
         Assert.True(speech.Plan.RecognitionResolvable);
-        Assert.False(speech.Plan.SynthesisResolvable);
+        Assert.True(speech.Plan.SynthesisResolvable);
+        Assert.False(speech.Synthesizer is SyntheticSpeechSynthesizer);
     }
 
     [Theory]
     [InlineData("Synthetic", "Synthetic", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, true, true, true, true)]
     [InlineData("Browser", "Browser", SpeechTransport.ClientTranscript, SpeechTransport.ClientSpeech, false, false, true, true)]
-    [InlineData("Browser", "OpenAI", SpeechTransport.ClientTranscript, SpeechTransport.ServerAudio, false, false, true, false)]
     [InlineData("OpenAICompatibleBatch", "Browser", SpeechTransport.ServerAudio, SpeechTransport.ClientSpeech, false, false, false, true)]
-    [InlineData("OpenAI", "OpenAI", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, false, false, false, false)]
     public void Required_mixed_combinations_resolve_without_paid_clients_or_synthetic_fallback(
         string recognitionAdapter,
         string synthesisAdapter,
@@ -143,6 +165,26 @@ public sealed class SpeechFactoryTests
                 Assert.IsType<SyntheticSpeechSynthesizer>(speech.Synthesizer);
             }
         }
+    }
+
+    [Fact]
+    public void OpenAI_stt_and_tts_with_key_keeps_realtime_stt_gated()
+    {
+        using var provider = Build(new SpeechProvidersOptions
+        {
+            Recognition = new SpeechRecognitionProviderOptions { Adapter = "OpenAI", ApiKey = "not-a-live-key" },
+            Synthesis = new SpeechSynthesisProviderOptions { Adapter = "OpenAI", ApiKey = "not-a-live-key" }
+        });
+        var speech = provider.GetRequiredService<SpeechResolution>();
+        Assert.Null(speech.Recognizer);
+        Assert.IsType<OpenAiSpeechSynthesizer>(speech.Synthesizer);
+        Assert.False(speech.Plan.RecognitionResolvable);
+        Assert.True(speech.Plan.SynthesisResolvable);
+        Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.OutputTransport);
+        Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
+        Assert.False(speech.Recognizer is OpenAICompatibleBatchSpeechRecognizer);
+        Assert.False(speech.Synthesizer is SyntheticSpeechSynthesizer);
     }
 
     [Fact]

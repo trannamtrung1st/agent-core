@@ -157,14 +157,18 @@ public sealed class SpeechConfigurationHostTests
         });
         var resolution = factory.Services.GetRequiredService<SpeechResolution>();
         Assert.Null(resolution.Recognizer);
-        Assert.Null(resolution.Synthesizer);
+        Assert.IsType<AgentCore.Infrastructure.Providers.OpenAI.OpenAiSpeechSynthesizer>(resolution.Synthesizer);
         Assert.Equal(SpeechTransport.ClientTranscript, resolution.Plan.InputTransport);
         Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.OutputTransport);
+        Assert.True(resolution.Plan.RecognitionResolvable);
+        Assert.True(resolution.Plan.SynthesisResolvable);
         Assert.False(string.IsNullOrWhiteSpace(factory.Services.GetRequiredService<SpeechProvidersOptions>().Synthesis.ApiKey));
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
         var text = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, text.StatusCode);
+        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
 
