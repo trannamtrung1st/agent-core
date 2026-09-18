@@ -137,12 +137,13 @@ Public `voiceAvailable` for an agent is:
 ```text
 voiceAvailable =
     AgentDefinition.Voice.Enabled
-    && selected STT adapter resolves
-    && selected TTS adapter resolves
-    && effective STT and TTS capabilities support the canonical session format
+    && configured STT path is structurally resolvable
+    && configured TTS path is structurally resolvable
 ```
 
-A backend with a valid text-only configuration must start without STT/TTS adapters. Creating or switching to voice when `voiceAvailable` is false yields typed recoverable `VoiceUnavailable`; the session remains in text mode. Apply the same gate for `session.mode.set` while attached or paused (pending voice is not queued when unavailable). Shipped Infrastructure registers synthetic STT/TTS for every profile. The internal speech-resolution gate advertises `voiceAvailable: true` on the **Synthetic** profile (demo STT/TTS). The **Real** profile keeps the gate false until hosted STT/TTS adapters are selected for that host, even though synthetic speech adapters may still be registered for development.
+Resolvable includes Synthetic `serverAudio` adapters and Browser `clientTranscript`/`clientSpeech` paths. It does not mean “a Synthetic backend port happens to be registered.” Gated or unselectable hosted adapters (deferred OpenAI realtime STT, unwired batch STT/TTS) are not resolvable. Server-advertised `voiceAvailable` for Browser does not require browser feature detection; clients AND that later.
+
+A backend with a valid text-only configuration must start without STT/TTS adapters. Creating or switching to voice when `voiceAvailable` is false yields typed recoverable `VoiceUnavailable`; the session remains in text mode. Apply the same gate for `session.mode.set` while attached or paused (pending voice is not queued when unavailable). Public availability follows the effective speech plan, not the process profile.
 
 TTS capability discovery also reports VoiceSelection and SpeakingRate. When unsupported, only the configured default voice and rate 1.0 are accepted; an explicitly requested unsupported non-default fails validation rather than pretending it worked. StreamingAudio=false still permits phrase-level synthesis and playback between phrases, never a requirement to wait for the entire agent response. Hosted speech selection is independent of the text gateway; OpenAI speech is the initial hosted selection, not a permanent architectural requirement.
 

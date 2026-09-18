@@ -97,7 +97,22 @@ public sealed class SpeechConfigurationHostTests
         var client = TestOwnerCapability.CreateOwnerClient(factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && agent.VoiceAvailable);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
+    [Fact]
+    public async Task Gated_hosted_speech_does_not_advertise_voice_available()
+    {
+        await using var factory = new SpeechHostFactory(new Dictionary<string, string?>
+        {
+            ["Providers:Speech:Recognition:Adapter"] = "OpenAI",
+            ["Providers:Speech:Synthesis:Adapter"] = "OpenAI"
+        });
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && !agent.VoiceAvailable);
     }
 
     private sealed class SpeechHostFactory(Dictionary<string, string?> extra) : AgentCoreApiFactory

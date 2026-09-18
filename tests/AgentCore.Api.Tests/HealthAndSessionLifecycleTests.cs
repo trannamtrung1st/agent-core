@@ -31,6 +31,14 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
+    public async Task Synthetic_agents_advertise_voice_when_speech_paths_resolve()
+    {
+        var client = _factory.CreateClient();
+        var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && agent.VoiceAvailable);
+    }
+
+    [Fact]
     public async Task Session_lifecycle_create_get_history_end()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);

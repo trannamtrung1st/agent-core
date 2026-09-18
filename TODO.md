@@ -100,7 +100,7 @@ Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthes
   - Hosted adapters read credentials only from backend configuration/user-secrets/environment.
   - Missing hosted credentials must not break Synthetic or Browser startup.
 
-- [ ] Make `voiceAvailable` and `session.ready.capabilities` represent the **effective selected** STT/TTS path rather than only the currently registered backend implementation.
+- [x] Make `voiceAvailable` and `session.ready.capabilities` represent the **effective selected** STT/TTS path rather than only the currently registered backend implementation.
 
 - [ ] Keep provider/vendor details outside Session Runtime and Interaction Controller.
 

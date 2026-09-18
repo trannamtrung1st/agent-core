@@ -200,7 +200,9 @@ public sealed record SessionReadyProjection(
     string BargeInPolicy,
     long LastEntrySequence,
     IReadOnlyList<PublicHistoryEntry> History,
-    Guid? ActiveResponseId);
+    Guid? ActiveResponseId,
+    string InputTransport,
+    string OutputTransport);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

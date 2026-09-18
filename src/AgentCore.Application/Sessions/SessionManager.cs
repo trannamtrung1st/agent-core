@@ -584,17 +584,24 @@ public sealed class SessionManager
 
 public sealed class VoiceAvailability
 {
+    public EffectiveSpeechPlan? Plan { get; init; }
+    public bool SpeechAdaptersResolved { get; init; } = true;
+
+    public EffectiveSpeechPlan EffectivePlan =>
+        Plan ?? new EffectiveSpeechPlan(
+            SpeechTransport.ServerAudio,
+            SpeechTransport.ServerAudio,
+            SpeechAdaptersResolved,
+            SpeechAdaptersResolved,
+            RecognitionCapabilities: null,
+            SynthesisCapabilities: null);
+
     public bool IsAvailable(AgentDefinition definition) =>
         definition.Voice.Enabled
         && !string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechRecognizer)
         && !string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechSynthesizer)
-        && SpeechAdaptersResolved;
-
-    /// <summary>
-    /// When false, public <c>voiceAvailable</c> stays false even if definitions enable voice.
-    /// Production hosts set this true while default Infrastructure registers synthetic speech for all profiles.
-    /// </summary>
-    public bool SpeechAdaptersResolved { get; init; }
+        && EffectivePlan.RecognitionResolvable
+        && EffectivePlan.SynthesisResolvable;
 }
 
 public sealed class SessionRuntimeFactory(

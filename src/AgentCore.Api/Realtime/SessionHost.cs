@@ -1991,7 +1991,8 @@ public static class SessionEventMapper
                     ["streamingAudio"] = ready.Recognition.StreamingAudio,
                     ["partialTranscripts"] = ready.Recognition.PartialTranscripts,
                     ["speechBoundaryEvents"] = ready.Recognition.SpeechBoundaryEvents,
-                    ["cancellation"] = ready.Recognition.Cancellation
+                    ["cancellation"] = ready.Recognition.Cancellation,
+                    ["transport"] = ready.InputTransport
                 },
                 ["tts"] = new Dictionary<string, object?>
                 {
@@ -2000,7 +2001,8 @@ public static class SessionEventMapper
                     ["cancellation"] = ready.Synthesis.Cancellation,
                     ["voiceSelection"] = ready.Synthesis.VoiceSelection,
                     ["speakingRate"] = ready.Synthesis.SpeakingRate,
-                    ["supportedFormats"] = Array.Empty<object>()
+                    ["supportedFormats"] = Array.Empty<object>(),
+                    ["transport"] = ready.OutputTransport
                 },
                 ["bargeInPolicy"] = ready.BargeInPolicy
             },

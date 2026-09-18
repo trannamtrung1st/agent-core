@@ -1,5 +1,6 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -147,6 +148,38 @@ public sealed class SessionRealtimeLifecycleTests
         await runtime.AttachAsync();
         var ready = Assert.IsType<ReadyOutput>(output.Items.Single(item => item.Payload is ReadyOutput).Payload);
         Assert.False(ready.Ready.Agent.VoiceAvailable);
+        Assert.Equal(SpeechTransport.ServerAudio, ready.Ready.InputTransport);
+    }
+
+    [Fact]
+    public async Task Ready_voice_available_when_browser_paths_are_structurally_resolvable()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(
+            output,
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            new ScriptedLanguageModel(),
+            voice: new VoiceAvailability
+            {
+                Plan = new EffectiveSpeechPlan(
+                    SpeechTransport.ClientTranscript,
+                    SpeechTransport.ClientSpeech,
+                    RecognitionResolvable: true,
+                    SynthesisResolvable: true,
+                    RecognitionCapabilities: null,
+                    SynthesisCapabilities: null)
+            });
+        await runtime.AttachAsync();
+        var ready = Assert.IsType<ReadyOutput>(output.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.True(ready.Ready.Agent.VoiceAvailable);
+        Assert.Equal(SpeechTransport.ClientTranscript, ready.Ready.InputTransport);
+        Assert.Equal(SpeechTransport.ClientSpeech, ready.Ready.OutputTransport);
+        Assert.Contains(
+            RuntimeTelemetry.SnapshotTimeline(),
+            item => item.Stage == "speech.input.transport" && item.Detail == SpeechTransport.ClientTranscript);
+        Assert.Contains(
+            RuntimeTelemetry.SnapshotTimeline(),
+            item => item.Stage == "speech.output.transport" && item.Detail == SpeechTransport.ClientSpeech);
     }
 
     [Fact]

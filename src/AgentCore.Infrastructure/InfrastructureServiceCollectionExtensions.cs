@@ -134,10 +134,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<RoleKnowledgeService>();
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
-        services.TryAddSingleton(new VoiceAvailability
+        services.TryAddSingleton(provider => new VoiceAvailability
         {
-            // Synthetic adapters are registered for every profile; only Synthetic advertises voice until hosted STT/TTS is wired for Real.
-            SpeechAdaptersResolved = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+            Plan = provider.GetRequiredService<EffectiveSpeechPlan>()
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();

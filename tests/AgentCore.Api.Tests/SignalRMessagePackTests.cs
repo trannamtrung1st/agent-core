@@ -165,5 +165,6 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("cancel-response-idempotent")]
     [InlineData("cancel-response-stale")]
     [InlineData("cancel-response-active")]
+    [InlineData("ready-transports")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

@@ -1054,6 +1054,32 @@ async function run() {
       await first.stop();
       break;
     }
+    case "ready-transports": {
+      const session = await createSession();
+      const connection = await connect();
+      const attachAck = await attachSession(connection, session.sessionId);
+      if (!attachAck.accepted) {
+        throw new Error(JSON.stringify(attachAck));
+      }
+      const ready = await waitForEvent((evt) => evt.type === "session.ready");
+      const encoded = JSON.stringify(ready);
+      if (encoded.includes("ApiKey") || encoded.includes("OPENAI") || encoded.includes("OPENROUTER")) {
+        throw new Error("ready payload leaked provider secrets");
+      }
+      const stt = ready.payload?.capabilities?.stt;
+      const tts = ready.payload?.capabilities?.tts;
+      if (stt?.transport !== "serverAudio" || tts?.transport !== "serverAudio") {
+        throw new Error(`missing additive transports: ${encoded}`);
+      }
+      if (typeof stt.streamingAudio !== "boolean" || typeof tts.timingMarks !== "boolean") {
+        throw new Error(`legacy capability booleans missing: ${encoded}`);
+      }
+      if (ready.payload?.agent?.voiceAvailable !== true) {
+        throw new Error(`voiceAvailable expected true: ${encoded}`);
+      }
+      await connection.stop();
+      break;
+    }
     default:
       throw new Error(`unknown scenario ${scenario}`);
   }

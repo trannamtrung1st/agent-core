@@ -4,6 +4,7 @@ using AgentCore.Application.Interaction;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace AgentCore.Application.Sessions;
@@ -100,6 +101,15 @@ public sealed partial class SessionRuntime
             {
                 await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
                     .ConfigureAwait(false);
+                var plan = _voice.EffectivePlan;
+                RuntimeTelemetry.RecordDiagnostic("speech.input.transport", 0, plan.InputTransport);
+                RuntimeTelemetry.RecordDiagnostic("speech.output.transport", 0, plan.OutputTransport);
+                _logger.LogInformation(
+                    "Speech plan input {SpeechInputTransport} output {SpeechOutputTransport} recognitionResolvable {RecognitionResolvable} synthesisResolvable {SynthesisResolvable}",
+                    plan.InputTransport,
+                    plan.OutputTransport,
+                    plan.RecognitionResolvable,
+                    plan.SynthesisResolvable);
                 RuntimeTelemetry.Record("attach", RuntimeTelemetry.ElapsedMs(started));
                 if (!await TryStartPendingUserBatchAsync(input.Context, ct).ConfigureAwait(false))
                 {
@@ -338,7 +348,9 @@ public sealed partial class SessionRuntime
             voice ? _policy.BargeInPolicy : "none",
             _snapshot.Entries.Count == 0 ? 0 : _snapshot.Entries[^1].Sequence,
             history,
-            ActiveResponseId: null);
+            ActiveResponseId: null,
+            _voice.EffectivePlan.InputTransport,
+            _voice.EffectivePlan.OutputTransport);
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
