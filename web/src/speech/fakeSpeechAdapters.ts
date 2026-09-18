@@ -2,7 +2,8 @@ import { speechError, type SpeechErrorCode } from "./errors";
 import type {
   ClientSpeechEvidence,
   ClientSpeechRecognizer,
-  ClientSpeechRecognizerListener
+  ClientSpeechRecognizerListener,
+  ClientSpeechRecognizerStartOptions
 } from "./clientSpeechRecognizer";
 import type {
   ClientSpeechSpeakRequest,
@@ -18,14 +19,16 @@ export class FakeSpeechRecognizer implements ClientSpeechRecognizer {
   private listener: ClientSpeechRecognizerListener | null = null;
   private running = false;
   readonly evidence: ClientSpeechEvidence[] = [];
+  lastLanguage: string | undefined;
 
   get isRunning(): boolean {
     return this.running;
   }
 
-  async start(listener: ClientSpeechRecognizerListener): Promise<void> {
+  async start(listener: ClientSpeechRecognizerListener, options?: ClientSpeechRecognizerStartOptions): Promise<void> {
     this.listener = listener;
     this.running = true;
+    this.lastLanguage = options?.language;
     this.evidence.length = 0;
   }
 
@@ -92,7 +95,18 @@ export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
   async speak(request: ClientSpeechSpeakRequest, listener?: ClientSpeechSynthesizerListener): Promise<void> {
     this.cancelled = false;
     this.speaking = true;
-    const voice = this.resolveVoice(request.hint);
+    const hint = request.hint?.lang
+      ? request.hint
+      : { ...request.hint, lang: request.language };
+    const voice = this.resolveVoice(hint);
+    const langConstraint = Boolean(request.language?.trim() || request.hint?.lang?.trim());
+    if (langConstraint && this.voices.length > 0 && !voice) {
+      this.speaking = false;
+      const error = speechError("SpeechVoiceUnavailable");
+      listener?.onError?.(error);
+      throw error;
+    }
+
     this.spoken.push({
       text: request.text,
       voice,

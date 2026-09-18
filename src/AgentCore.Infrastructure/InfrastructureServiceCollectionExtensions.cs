@@ -134,9 +134,14 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<RoleKnowledgeService>();
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
-        services.TryAddSingleton(provider => new VoiceAvailability
+        services.TryAddSingleton(provider =>
         {
-            Plan = provider.GetRequiredService<EffectiveSpeechPlan>()
+            var speech = provider.GetRequiredService<SpeechResolution>();
+            return new VoiceAvailability
+            {
+                Plan = speech.Plan,
+                LocaleSupport = speech.LocaleSupport
+            };
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();

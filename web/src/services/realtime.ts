@@ -308,7 +308,13 @@ function sendClientSpeechAck(
 
 function ensureClientSpeechPlayer(): ClientSpeechPlayer {
   if (!clientSpeechPlayer) {
-    clientSpeechPlayer = createClientSpeechPlayer(transportSynthesizer(), sendClientSpeechAck);
+    clientSpeechPlayer = createClientSpeechPlayer(transportSynthesizer(), sendClientSpeechAck, (error) => {
+      useSessionStore.setState({
+        error: error.message,
+        sessionError: error,
+        errorFatal: false
+      });
+    });
   }
 
   return clientSpeechPlayer;
@@ -1420,7 +1426,7 @@ function syncCapture(): void {
               attachmentId: state.attachmentId ?? "",
               mode: "voice",
               muted: false,
-              language: state.conversationLanguage ?? selected?.language ?? "en"
+              language: state.speechLocale ?? state.conversationLanguage ?? selected?.language ?? "en"
             })
             .finally(() => {
               transcriptStart = null;

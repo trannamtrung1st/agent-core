@@ -76,6 +76,56 @@ public sealed class SpeechSynthesizerTests
     }
 
     [Fact]
+    public async Task OpenAI_maps_compatible_locale_to_configured_voice()
+    {
+        var pcm = new byte[CanonicalAudio.MaxFrameBytes];
+        var handler = new SpeechHandler(pcm);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1/v1/") };
+        var synthesizer = new OpenAiSpeechSynthesizer(
+            http,
+            new SpeechSynthesisProviderOptions
+            {
+                BaseUrl = "http://127.0.0.1/v1/",
+                ApiKey = "test",
+                DefaultVoice = "alloy",
+                Voices = new Dictionary<string, string> { ["fr-FR"] = "nova" }
+            });
+        await foreach (var _ in synthesizer.SynthesizeAsync(
+                           new SpeechRequest(Guid.NewGuid(), 0, 0, "Bonjour", "alloy", 1.0, CanonicalAudio.Format, "fr")))
+        {
+        }
+
+        Assert.Contains("\"voice\":\"nova\"", handler.Body, StringComparison.Ordinal);
+        Assert.True(synthesizer.CanSynthesize("fr-FR"));
+        Assert.False(synthesizer.CanSynthesize("ja-JP"));
+    }
+
+    [Fact]
+    public async Task OpenAI_fails_closed_when_locale_has_no_configured_voice()
+    {
+        var handler = new SpeechHandler([]);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1/v1/") };
+        var synthesizer = new OpenAiSpeechSynthesizer(
+            http,
+            new SpeechSynthesisProviderOptions
+            {
+                BaseUrl = "http://127.0.0.1/v1/",
+                ApiKey = "test",
+                Voices = new Dictionary<string, string> { ["fr-FR"] = "nova" }
+            });
+        var listed = new List<SpeechSynthesisEvent>();
+        await foreach (var item in synthesizer.SynthesizeAsync(
+                           new SpeechRequest(Guid.NewGuid(), 0, 0, "こんにちは", "alloy", 1.0, CanonicalAudio.Format, "ja-JP")))
+        {
+            listed.Add(item);
+        }
+
+        var failed = Assert.IsType<SpeechSynthesisFailed>(Assert.Single(listed));
+        Assert.Equal(ProviderErrorCode.UnsupportedCapability, failed.Failure.Code);
+        Assert.Equal("", handler.Body);
+    }
+
+    [Fact]
     public async Task OpenAI_without_key_is_voice_unavailable()
     {
         using var http = new HttpClient();

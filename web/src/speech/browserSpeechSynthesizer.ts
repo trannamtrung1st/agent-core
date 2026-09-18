@@ -57,7 +57,14 @@ export class BrowserSpeechSynthesizer implements ClientSpeechSynthesizer {
     const hint = request.hint?.lang
       ? request.hint
       : { ...request.hint, lang: request.language };
+    const voices = this.listVoices();
     const chosen = this.resolveVoice(hint);
+    const langConstraint = Boolean(request.language?.trim() || request.hint?.lang?.trim());
+    if (langConstraint && voices.length > 0 && !chosen) {
+      const error = speechError("SpeechVoiceUnavailable");
+      listener?.onError?.(error);
+      throw error;
+    }
     this.cancelled = false;
     const utterance = new SpeechSynthesisUtterance(request.text);
     if (request.language) {

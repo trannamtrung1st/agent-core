@@ -3,13 +3,17 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 
 namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 
-public sealed class OpenAICompatibleBatchSpeechRecognizer : ISpeechRecognizer
+public sealed class OpenAICompatibleBatchSpeechRecognizer : ISpeechRecognizer, ISpeechLocaleSupport
 {
     public const string HttpClientName = "openai-compatible-batch-stt";
+
+    public static string WhisperLanguageHint(string locale) =>
+        SpeechLocaleCompatibility.PrimarySubtag(locale);
 
     private readonly HttpClient _http;
     private readonly SpeechRecognitionProviderOptions _options;
@@ -22,6 +26,10 @@ public sealed class OpenAICompatibleBatchSpeechRecognizer : ISpeechRecognizer
     }
 
     public RecognitionCapabilities Capabilities { get; }
+
+    public bool CanRecognize(string locale) => !string.IsNullOrWhiteSpace(locale);
+
+    public bool CanSynthesize(string locale) => false;
 
     public ValueTask<ISpeechRecognitionSession> OpenAsync(
         RecognitionOptions options,
@@ -66,7 +74,7 @@ public sealed class OpenAICompatibleBatchSpeechRecognizer : ISpeechRecognizer
             cts.CancelAfter(TimeSpan.FromSeconds(20));
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(_options.DefaultModel ?? "whisper-1"), "model");
-            content.Add(new StringContent(_language), "language");
+            content.Add(new StringContent(WhisperLanguageHint(_language)), "language");
             content.Add(new StringContent("json"), "response_format");
             var wav = WavPcm.WrapPcm16Mono24k(_buffer.ToArray());
             var file = new ByteArrayContent(wav);

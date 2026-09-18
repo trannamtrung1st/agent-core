@@ -193,7 +193,8 @@ public sealed partial class SessionRuntime
             segment.Text,
             _snapshot.Definition.Voice.VoiceId,
             _snapshot.Definition.Voice.SpeakingRate,
-            CanonicalAudio.Format);
+            CanonicalAudio.Format,
+            SpeechLocale.Resolve(_snapshot).Effective);
         BeginWork();
         _ = Task.Run(async () =>
         {

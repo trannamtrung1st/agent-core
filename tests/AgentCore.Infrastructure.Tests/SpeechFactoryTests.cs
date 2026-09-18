@@ -282,6 +282,32 @@ public sealed class SpeechFactoryTests
         Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
         Assert.False(speech.Recognizer is OpenAICompatibleBatchSpeechRecognizer);
         Assert.False(speech.Synthesizer is SyntheticSpeechSynthesizer);
+        Assert.True(speech.LocaleSupport.CanSynthesize("en"));
+        Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
+    }
+
+    [Fact]
+    public void Hosted_tts_locale_support_follows_configured_voices_without_selecting_realtime_stt()
+    {
+        using var provider = Build(new SpeechProvidersOptions
+        {
+            Recognition = new SpeechRecognitionProviderOptions { Adapter = "OpenAICompatibleBatch", ApiKey = "not-a-live-key" },
+            Synthesis = new SpeechSynthesisProviderOptions
+            {
+                Adapter = "OpenAI",
+                ApiKey = "not-a-live-key",
+                Voices = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["fr-FR"] = "nova" }
+            }
+        });
+        var speech = provider.GetRequiredService<SpeechResolution>();
+        Assert.IsType<OpenAICompatibleBatchSpeechRecognizer>(speech.Recognizer);
+        Assert.IsType<OpenAiSpeechSynthesizer>(speech.Synthesizer);
+        Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
+        Assert.True(speech.LocaleSupport.CanRecognize("ja-JP"));
+        Assert.True(speech.LocaleSupport.CanSynthesize("fr"));
+        Assert.False(speech.LocaleSupport.CanSynthesize("ja-JP"));
+        var availability = provider.GetRequiredService<VoiceAvailability>();
+        Assert.False(availability.LocaleSupport.CanSynthesize("ja-JP"));
     }
 
     [Fact]

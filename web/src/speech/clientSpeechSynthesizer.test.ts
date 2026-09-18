@@ -12,12 +12,15 @@ const voices = [
 ];
 
 describe("resolveSpeechVoice", () => {
-  it("resolves voiceURI, then name, then language, then default", () => {
+  it("resolves voiceURI, then name, then exact or base language, and does not fall through to English", () => {
     expect(resolveSpeechVoice(voices, { voiceURI: "uri-fr" })?.name).toBe("French");
     expect(resolveSpeechVoice(voices, { voiceURI: "missing", name: "British" })?.name).toBe("British");
     expect(resolveSpeechVoice(voices, { lang: "fr-FR" })?.name).toBe("French");
     expect(resolveSpeechVoice(voices, { lang: "en" })?.name).toBe("English");
-    expect(resolveSpeechVoice(voices, { voiceURI: "nope", name: "nope", lang: "nope" })?.default).toBe(true);
+    expect(resolveSpeechVoice(voices, { lang: "en-GB" })?.name).toBe("British");
+    expect(resolveSpeechVoice(voices, { voiceURI: "nope", name: "nope", lang: "nope" })).toBeNull();
+    expect(resolveSpeechVoice(voices, { lang: "ja-JP" })).toBeNull();
+    expect(resolveSpeechVoice(voices)?.name).toBe("English");
   });
 });
 
@@ -97,6 +100,35 @@ describe("BrowserSpeechSynthesizer", () => {
     spoken[1]?.onend?.(new Event("end"));
     await second;
     expect(spoken.map((item) => item.text)).toEqual(["one", "two"]);
+  });
+
+  it("fails Voice when voices exist but none match the requested locale", async () => {
+    class MockUtterance {
+      lang = "";
+      rate = 1;
+      voice: SpeechSynthesisVoice | null = null;
+      onend: ((event: Event) => void) | null = null;
+      onerror: ((event: { error?: string }) => void) | null = null;
+      constructor(public text: string) {}
+    }
+    const spoken: MockUtterance[] = [];
+    vi.stubGlobal("SpeechSynthesisUtterance", MockUtterance);
+    vi.stubGlobal("speechSynthesis", {
+      getVoices: () => [
+        { voiceURI: "en", name: "English", lang: "en-US", default: true, localService: true }
+      ],
+      speak(utterance: MockUtterance) {
+        spoken.push(utterance);
+      },
+      cancel: vi.fn()
+    });
+    const adapter = new BrowserSpeechSynthesizer();
+    const errors: string[] = [];
+    await expect(
+      adapter.speak({ text: "hola", language: "es-ES" }, { onError: (error) => errors.push(error.code) })
+    ).rejects.toMatchObject({ code: "SpeechVoiceUnavailable" });
+    expect(errors).toEqual(["SpeechVoiceUnavailable"]);
+    expect(spoken).toEqual([]);
   });
 
   it("cancels only on explicit cancel", async () => {

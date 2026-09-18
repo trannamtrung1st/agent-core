@@ -1,4 +1,5 @@
 import type { ClientSpeechSynthesizer } from "./clientSpeechSynthesizer";
+import type { SessionErrorView } from "../features/chat/sessionError";
 import { recordSpeechObservation } from "./speechObservability";
 
 export type ClientSpeechPlaybackAck = {
@@ -28,7 +29,8 @@ export type ClientSpeechPlayer = {
 
 export function createClientSpeechPlayer(
   synthesizer: ClientSpeechSynthesizer,
-  ack: (responseId: string, report: ClientSpeechPlaybackAck) => void
+  ack: (responseId: string, report: ClientSpeechPlaybackAck) => void,
+  onError?: (error: SessionErrorView) => void
 ): ClientSpeechPlayer {
   let responseId: string | null = null;
   let generation = 0;
@@ -63,6 +65,7 @@ export function createClientSpeechPlayer(
       }
 
       busy = true;
+      let reportedError = false;
       try {
         await synthesizer.speak(
           {
@@ -79,11 +82,18 @@ export function createClientSpeechPlayer(
 
               trusted = Math.max(trusted, next.textStart + next.text.length);
               report(current, "progress", trusted);
+            },
+            onError: (error) => {
+              reportedError = true;
+              onError?.(error);
             }
           }
         );
-      } catch {
+      } catch (caught) {
         busy = false;
+        if (!reportedError && caught && typeof caught === "object" && "code" in caught && "message" in caught) {
+          onError?.(caught as SessionErrorView);
+        }
         if (gen === generation && current && started && !completedSent) {
           report(current, "stopped", trusted);
           recordSpeechObservation({ name: "speech.cancel.reason", reason: "clientCancel" });

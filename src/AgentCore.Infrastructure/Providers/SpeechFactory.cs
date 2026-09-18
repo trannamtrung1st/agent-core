@@ -12,6 +12,7 @@ public sealed class SpeechResolution
     public required EffectiveSpeechPlan Plan { get; init; }
     public ISpeechRecognizer? Recognizer { get; init; }
     public ISpeechSynthesizer? Synthesizer { get; init; }
+    public ISpeechLocaleSupport LocaleSupport { get; init; } = UnrestrictedSpeechLocaleSupport.Instance;
 }
 
 internal static class SpeechFactory
@@ -31,7 +32,10 @@ internal static class SpeechFactory
                 recognition.Resolvable,
                 synthesis.Resolvable,
                 recognition.Capabilities,
-                synthesis.Capabilities)
+                synthesis.Capabilities),
+            LocaleSupport = new CompositeSpeechLocaleSupport(
+                LocaleSupportOf(recognition.Adapter),
+                LocaleSupportOf(synthesis.Adapter))
         };
     }
 
@@ -117,4 +121,16 @@ internal static class SpeechFactory
         string Transport,
         bool Resolvable,
         SynthesisCapabilities? Capabilities);
+
+    private static ISpeechLocaleSupport LocaleSupportOf(object? adapter) =>
+        adapter as ISpeechLocaleSupport ?? UnrestrictedSpeechLocaleSupport.Instance;
+
+    private sealed class CompositeSpeechLocaleSupport(
+        ISpeechLocaleSupport recognition,
+        ISpeechLocaleSupport synthesis) : ISpeechLocaleSupport
+    {
+        public bool CanRecognize(string locale) => recognition.CanRecognize(locale);
+
+        public bool CanSynthesize(string locale) => synthesis.CanSynthesize(locale);
+    }
 }

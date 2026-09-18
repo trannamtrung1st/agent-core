@@ -64,6 +64,22 @@ describe("clientSpeechPlayer", () => {
     expect(JSON.stringify(snapshotSpeechObservations())).not.toContain("unheard");
   });
 
+  it("reports SpeechVoiceUnavailable instead of speaking a mismatched default voice", async () => {
+    const acks: { responseId: string; report: ClientSpeechPlaybackAck }[] = [];
+    const errors: string[] = [];
+    const synth = new FakeSpeechSynthesizer();
+    const player = createClientSpeechPlayer(
+      synth,
+      (responseId, report) => acks.push({ responseId, report }),
+      (error) => errors.push(error.code)
+    );
+    player.enqueue({ responseId: "r1", segmentIndex: 0, textStart: 0, text: "Hola", language: "es-ES" });
+    await Promise.resolve();
+    expect(synth.spoken).toEqual([]);
+    expect(errors).toEqual(["SpeechVoiceUnavailable"]);
+    expect(acks.at(-1)?.report.kind).toBe("stopped");
+  });
+
   it("passes language and speakingRate through to the synthesizer", async () => {
     const { player, synth } = collect();
     player.enqueue({

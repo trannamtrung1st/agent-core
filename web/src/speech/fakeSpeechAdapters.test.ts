@@ -46,6 +46,18 @@ describe("FakeSpeechRecognizer", () => {
     expect(speechError("SpeechDeviceUnavailable").fatal).toBe(false);
     expect(speechError("SpeechRecognitionRestartLimit").code).toBe("SpeechRecognitionRestartLimit");
   });
+
+  it("records the start language for Browser STT locale wiring", async () => {
+    const fake = new FakeSpeechRecognizer();
+    await fake.start(
+      {
+        onEvidence: () => undefined,
+        onError: () => undefined
+      },
+      { language: "fr-FR" }
+    );
+    expect(fake.lastLanguage).toBe("fr-FR");
+  });
 });
 
 describe("FakeSpeechSynthesizer", () => {
@@ -60,5 +72,15 @@ describe("FakeSpeechSynthesizer", () => {
     await speaking;
     expect(ended).toBe(false);
     expect(synth.cancelled).toBe(true);
+  });
+
+  it("fails speak when no compatible voice exists for the requested locale", async () => {
+    const synth = new FakeSpeechSynthesizer();
+    const errors: string[] = [];
+    await expect(
+      synth.speak({ text: "hola", language: "es-ES" }, { onError: (error) => errors.push(error.code) })
+    ).rejects.toMatchObject({ code: "SpeechVoiceUnavailable" });
+    expect(errors).toEqual(["SpeechVoiceUnavailable"]);
+    expect(synth.spoken).toEqual([]);
   });
 });

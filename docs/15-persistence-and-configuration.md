@@ -120,7 +120,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "ApiKey": "",
         "DefaultModel": "configured-tts-model",
         "AdditionalHeaders": {},
-        "Voices": {"default": "configured-voice"},
+        "Voices": {"default": "configured-voice", "fr-FR": "nova"},
         "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
       }
     }

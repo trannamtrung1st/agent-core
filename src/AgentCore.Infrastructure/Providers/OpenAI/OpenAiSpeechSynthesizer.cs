@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 
 namespace AgentCore.Infrastructure.Providers.OpenAI;
@@ -34,7 +35,7 @@ public static class OpenAiSpeechPayload
         });
 }
 
-public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer
+public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer, ISpeechLocaleSupport
 {
     public const string HttpClientName = "openai-speech-tts";
 
@@ -58,6 +59,18 @@ public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer
 
     public SynthesisCapabilities Capabilities { get; }
 
+    public bool CanRecognize(string locale) => false;
+
+    public bool CanSynthesize(string locale)
+    {
+        if (string.IsNullOrWhiteSpace(locale) || !HasLocaleVoiceMap())
+        {
+            return true;
+        }
+
+        return SpeechLocaleCompatibility.AnyMatch(locale, LocaleVoiceKeys());
+    }
+
     public async IAsyncEnumerable<SpeechSynthesisEvent> SynthesizeAsync(
         SpeechRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -67,13 +80,22 @@ public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer
             throw AgentCoreErrors.VoiceUnavailable();
         }
 
+        if (!TryResolveVoice(request, out var voice))
+        {
+            yield return new SpeechSynthesisFailed(
+                new ProviderFailure(
+                    ProviderErrorCode.UnsupportedCapability,
+                    "No compatible speech synthesis voice is configured for this locale."));
+            yield break;
+        }
+
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _speech)
         {
             Content = new StringContent(
                 OpenAiSpeechPayload.CreateJson(
                     _options.DefaultModel ?? "tts-1",
                     request.Text,
-                    string.IsNullOrWhiteSpace(request.Voice) ? _options.DefaultVoice : request.Voice,
+                    voice,
                     request.SpeakingRate),
                 Encoding.UTF8,
                 "application/json")
@@ -155,6 +177,73 @@ public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer
 
             yield return new SpeechSynthesisCompleted(offset);
         }
+    }
+
+    internal bool TryResolveVoice(SpeechRequest request, out string voice)
+    {
+        voice = "";
+        if (!string.IsNullOrWhiteSpace(request.Language)
+            && HasLocaleVoiceMap()
+            && TryMapLocaleVoice(request.Language, out var mapped))
+        {
+            voice = mapped;
+            return true;
+        }
+
+        if (HasLocaleVoiceMap() && !string.IsNullOrWhiteSpace(request.Language))
+        {
+            return false;
+        }
+
+        if (_options.Voices.TryGetValue("default", out var configuredDefault)
+            && !string.IsNullOrWhiteSpace(configuredDefault)
+            && string.IsNullOrWhiteSpace(request.Voice))
+        {
+            voice = configuredDefault;
+            return true;
+        }
+
+        voice = string.IsNullOrWhiteSpace(request.Voice) ? _options.DefaultVoice : request.Voice;
+        return !string.IsNullOrWhiteSpace(voice);
+    }
+
+    private bool HasLocaleVoiceMap() => LocaleVoiceKeys().Any();
+
+    private IEnumerable<string> LocaleVoiceKeys() =>
+        _options.Voices.Keys.Where(key => !string.Equals(key, "default", StringComparison.OrdinalIgnoreCase));
+
+    private bool TryMapLocaleVoice(string locale, out string voice)
+    {
+        foreach (var pair in _options.Voices)
+        {
+            if (string.Equals(pair.Key, "default", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(pair.Key, locale, StringComparison.OrdinalIgnoreCase))
+            {
+                voice = pair.Value;
+                return !string.IsNullOrWhiteSpace(voice);
+            }
+        }
+
+        foreach (var pair in _options.Voices)
+        {
+            if (string.Equals(pair.Key, "default", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (SpeechLocaleCompatibility.Matches(locale, pair.Key))
+            {
+                voice = pair.Value;
+                return !string.IsNullOrWhiteSpace(voice);
+            }
+        }
+
+        voice = "";
+        return false;
     }
 
     private static ProviderFailure MapStatus(System.Net.HttpStatusCode status) =>

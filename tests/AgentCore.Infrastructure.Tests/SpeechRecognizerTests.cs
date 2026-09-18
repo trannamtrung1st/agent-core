@@ -66,6 +66,34 @@ public sealed class SpeechRecognizerTests
     }
 
     [Fact]
+    public async Task Batch_posts_whisper_language_hint_from_effective_locale()
+    {
+        var handler = new BatchHandler("""{"text":"bonjour"}""");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1/v1/") };
+        var recognizer = new OpenAICompatibleBatchSpeechRecognizer(
+            http,
+            new SpeechRecognitionProviderOptions
+            {
+                BaseUrl = "http://127.0.0.1/v1/",
+                ApiKey = "test",
+                DefaultModel = "whisper-1"
+            });
+        await using var session = await recognizer.OpenAsync(new RecognitionOptions(CanonicalAudio.Format, "fr-FR"));
+        var utterance = Guid.NewGuid();
+        await session.PushAudioAsync(new AudioFrame(1, 0, new byte[960]));
+        await session.ObserveBoundaryAsync(utterance, SpeechBoundary.Ended);
+        await foreach (var _ in session.ReadEventsAsync())
+        {
+            break;
+        }
+
+        Assert.Equal("fr", handler.LastLanguage);
+        Assert.Equal("fr", OpenAICompatibleBatchSpeechRecognizer.WhisperLanguageHint("fr-FR"));
+        Assert.True(recognizer.CanRecognize("ja-JP"));
+        Assert.False(recognizer.CanSynthesize("en"));
+    }
+
+    [Fact]
     public void Synthetic_di_resolves_synthetic_recognizer_without_openai()
     {
         var services = new ServiceCollection();
@@ -112,15 +140,29 @@ public sealed class SpeechRecognizerTests
 
         public string LastUri { get; private set; } = "";
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public string LastLanguage { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Posts++;
             LastUri = request.RequestUri?.ToString() ?? "";
             Assert.Equal(HttpMethod.Post, request.Method);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            if (request.Content is MultipartFormDataContent multipart)
+            {
+                foreach (var part in multipart)
+                {
+                    var name = part.Headers.ContentDisposition?.Name?.Trim('"');
+                    if (string.Equals(name, "language", StringComparison.Ordinal))
+                    {
+                        LastLanguage = await part.ReadAsStringAsync(cancellationToken);
+                    }
+                }
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
-            });
+            };
         }
     }
 }

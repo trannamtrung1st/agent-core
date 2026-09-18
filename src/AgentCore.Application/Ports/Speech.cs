@@ -69,7 +69,8 @@ public sealed record SpeechRequest(
     string Text,
     string Voice,
     double SpeakingRate,
-    AudioFormat Format);
+    AudioFormat Format,
+    string? Language = null);
 
 public abstract record SpeechSynthesisEvent;
 
