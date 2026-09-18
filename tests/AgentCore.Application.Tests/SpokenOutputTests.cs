@@ -89,11 +89,11 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
-    public void Derived_speech_projection_persists_only_for_runtime_lead_in()
+    public void Derived_speech_projection_persists_when_playback_coordinates_differ_from_display()
     {
         Assert.True(SpokenOutput.ShouldPersistDerivedSpeechText(SpokenOutput.StructuredLeadIn, "| a | b |"));
         Assert.False(SpokenOutput.ShouldPersistDerivedSpeechText("Plain spoken line.", "Plain spoken line."));
-        Assert.False(
+        Assert.True(
             SpokenOutput.ShouldPersistDerivedSpeechText(
                 SpokenOutput.ForPlayback(null, "The architecture has **three** pieces."),
                 "The architecture has **three** pieces."));

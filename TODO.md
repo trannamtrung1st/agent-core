@@ -14,6 +14,7 @@ P0 conversation/UI stabilization is a frozen baseline unless a real regression a
 - [ ] Task/goal/stop condition for agent session? configurable, some agent/session is ongoing, some has a specific goal/task, some has a stop condition [TBD]
 - [ ] Show intermediate message then conclude final message like chatgpt or codex? [TBD]
 - [ ] Structured output (JSON, markdown, etc.) [TBD]
+- [ ] Lazy load old chat history
 
 
 ## P0 — Stabilize the current conversation/UI baseline
@@ -121,7 +122,7 @@ Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthes
 
 Goal: inexpensive Chrome/Edge development/demo speech input that can stream recognition results to the backend while the user speaks for a long time.
 
-**Status:** Live-browser stabilization through `8d78b8b` plus the follow-up Voice-latch, block-aware display-receipt, and long-structured speech-fallback fixes on this checkout (half-duplex suspend, endpoint liveness, durable `transcript.final`, reconnect latch, mode-independent display receipts). Further Browser STT work is live Chrome/Edge/headset observation only unless a reproducible defect appears.
+**Status:** Voice/composer stabilization through `c4b0413` (Voice-latch reset, block-aware display receipts, long-structured speech fallback, full conversational TTS, separate Voice/Mute and Stop/Queue composer UX). GitHub Actions run #71 green on that baseline. Further Browser STT work is live Chrome/Edge/headset observation only unless a reproducible defect appears.
 
 - [x] Add a frontend ClientSpeechRecognizer port with Browser and fake adapters, plus one speech-transport orchestration service (native recognition objects stay out of Zustand).
 

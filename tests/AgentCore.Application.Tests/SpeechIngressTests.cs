@@ -217,6 +217,25 @@ public sealed class SpeechIngressTests
     }
 
     [Fact]
+    public async Task Typed_user_text_in_voice_abandons_in_progress_speech_input()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new SyntheticSpeechRecognizer());
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000ae");
+        await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(InputActivity.UserSpeaking, runtime.Input);
+
+        await runtime.SubmitUserTextAsync("typed in voice");
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(InputActivity.Listening, runtime.Input);
+        Assert.Null(runtime.Candidate);
+    }
+
+    [Fact]
     public async Task Max_utterance_timer_is_invalidated_after_normal_final()
     {
         var output = new CapturingSessionOutput();

@@ -7,10 +7,43 @@ export type StatusSource = {
   inputState: string;
   outputState: string;
   liveResponseId: string | null;
+  liveUserTranscript?: string | null;
   liveAssistantText?: string;
   liveAssistantHasContent?: boolean;
   connectionError?: string | null;
 };
+
+function agentOutputLive(source: StatusSource): boolean {
+  if (source.liveResponseId == null) {
+    return false;
+  }
+
+  return (
+    source.outputState === "agentSpeaking"
+    || source.outputState === "agentGenerating"
+    || source.outputState === "waitingForAgent"
+    || source.outputState === "processingAttachments"
+    || source.outputState === "runningTools"
+    || source.outputState === "interrupted"
+  );
+}
+
+/** Avoid echo-only VAD leaving "User speaking" after a typed turn or completed reply. */
+function shouldShowUserSpeaking(source: StatusSource): boolean {
+  if (source.inputState === "finalizing") {
+    return true;
+  }
+
+  if (source.inputState !== "userSpeaking") {
+    return false;
+  }
+
+  if (source.liveUserTranscript?.trim()) {
+    return true;
+  }
+
+  return agentOutputLive(source);
+}
 
 export type AgentActivityState =
   | { kind: "idle" }
@@ -85,7 +118,7 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
     return { kind: "error", label: "Interrupted" };
   }
 
-  if (source.inputState === "userSpeaking") {
+  if (shouldShowUserSpeaking(source)) {
     return { kind: "listening", label: "User speaking" };
   }
 

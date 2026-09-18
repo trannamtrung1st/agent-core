@@ -297,7 +297,9 @@ describe("ChatApp accessibility", () => {
       renderChat();
     });
     expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Voice input inactive" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unmute" })).not.toBeInTheDocument();
   });
 
   it("shows Mute while browser capture is live in voice mode", async () => {
@@ -391,7 +393,19 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByTestId("connection")).toHaveTextContent("Speaking…");
 
     await act(async () => {
-      useSessionStore.setState({ inputState: "userSpeaking", outputState: "idle" });
+      useSessionStore.setState({
+        inputState: "userSpeaking",
+        outputState: "idle",
+        liveResponseId: null,
+        mode: "voice",
+        captureLive: true
+      });
+      rerenderChat(view);
+    });
+    expect(screen.getByTestId("connection")).toHaveTextContent("Listening…");
+
+    await act(async () => {
+      useSessionStore.setState({ liveUserTranscript: "Wait, stop" });
       rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("User speaking");

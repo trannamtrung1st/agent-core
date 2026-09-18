@@ -109,6 +109,7 @@ export function ChatApp() {
     inputState: state.inputState,
     outputState: state.outputState,
     liveResponseId: state.liveResponseId,
+    liveUserTranscript: state.liveUserTranscript,
     liveAssistantText: liveAssistant?.text,
     liveAssistantHasContent: Boolean(liveAssistant?.blocks?.length),
     connectionError: state.error

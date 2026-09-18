@@ -87,11 +87,11 @@ Flags: `AGENTCORE_LIVE_PROVIDER_TESTS=0`, `AGENTCORE_LIVE_OPENAI_STT=0`, `AGENTC
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 25 passed (synthetic + browser-stt + browser-browser) |
 
-## Post–Browser-STT-freeze gate (through live-browser stabilization `8d78b8b`)
+## Post–Browser-STT-freeze gate (through voice/composer stabilization `c4b0413`)
 
-Additional contract coverage landed after batch 26 (`a8ec9b7`): half-duplex Browser STT during agent output, Chrome endpoint liveness, durable voice `transcript.final`, reconnect/capability recovery, mode-independent display receipts (`9d628dd1`), max-utterance timer invalidation, Mute-finalizes Browser STT, command dispatch ordering, and voice-first activation (`8d78b8b`). GitHub Actions run #70 was green on `8d78b8b`. This checkout also includes the follow-up Voice-latch reset, block-aware receipt de-duplication, and long-structured speech fallback. Further Browser STT work is observation-only (headset/live Web Speech), not speculative hardening.
+Additional contract coverage landed after batch 26 (`a8ec9b7`): half-duplex Browser STT during agent output, Chrome endpoint liveness, durable voice `transcript.final`, reconnect/capability recovery, mode-independent display receipts (`9d628dd1`), max-utterance timer invalidation, Mute-finalizes Browser STT, command dispatch ordering, and voice-first activation (`8d78b8b`). Follow-ups through `c4b0413`: Voice-latch reset, block-aware receipt de-duplication, long-structured speech fallback, full conversational TTS, speech-coordinate persistence for markdown stripping, and separate Voice/Mute plus Stop/Queue composer UX. GitHub Actions run #71 was green on `c4b0413`. Further Browser STT work is observation-only (headset/live Web Speech), not speculative hardening.
 
-Same flags and ports. Final refresh after batches 21–26 (native Web Speech contracts, restart stitching, whole-word `mergeRestartContinuation`) and the `9b132657` → `9d628dd1` → `8d78b8b` stabilization chain.
+Same flags and ports. Final refresh after batches 21–26 (native Web Speech contracts, restart stitching, whole-word `mergeRestartContinuation`) and the stabilization chain through `c4b0413`.
 
 | Command | Observed |
 | --- | --- |
@@ -103,7 +103,7 @@ Same flags and ports. Final refresh after batches 21–26 (native Web Speech con
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 26 passed |
 
-Count growth versus batch 19 is additional Browser-STT contract coverage, not regressions. GitHub Actions run #70 on `8d78b8b` reported Domain 22, Infrastructure 101 passed / 9 skipped, Application 297, API 114, all 40 frontend test files, frontend build, 27 Playwright tests, and the Compose persistence/capability smoke; the table above is the earlier post–batch-26 refresh. Further Browser STT work is observation-only (headset/live Web Speech), not speculative hardening.
+Count growth versus batch 19 is additional Browser-STT contract coverage, not regressions. GitHub Actions run #71 on `c4b0413` reported Domain 22, Infrastructure 101 passed / 9 skipped, Application 313, API 114, all 40 frontend test files, frontend build, 27 Playwright tests, and the Compose persistence/capability smoke; the table above is the earlier post–batch-26 refresh. Further Browser STT work is observation-only (headset/live Web Speech), not speculative hardening.
 
 ## Remaining work
 

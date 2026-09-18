@@ -24,10 +24,28 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, sessionStatus: "ending" })).toBe("Ready");
   });
 
+  it("treats echo-only userSpeaking as listening when voice is live", () => {
+    expect(
+      conversationStatus({
+        ...ready,
+        voiceLive: true,
+        inputState: "userSpeaking",
+        outputState: "idle",
+        liveResponseId: null
+      })
+    ).toBe("Listening…");
+  });
+
   it("maps runtime states onto in-flow activity labels", () => {
     expect(conversationStatus({ ...ready, outputState: "interrupted" })).toBe("Ready");
     expect(conversationStatus({ ...ready, outputState: "interrupted", liveResponseId: "r1" })).toBe("Interrupted");
-    expect(conversationStatus({ ...ready, inputState: "userSpeaking" })).toBe("User speaking");
+    expect(conversationStatus({ ...ready, inputState: "userSpeaking" })).toBe("Ready");
+    expect(conversationStatus({ ...ready, inputState: "userSpeaking", liveUserTranscript: "Hello" })).toBe(
+      "User speaking"
+    );
+    expect(
+      conversationStatus({ ...ready, inputState: "userSpeaking", liveResponseId: "r1", outputState: "agentSpeaking" })
+    ).toBe("User speaking");
     expect(conversationStatus({ ...ready, outputState: "agentSpeaking" })).toBe("Ready");
     expect(conversationStatus({ ...ready, outputState: "agentSpeaking", liveResponseId: "r1" })).toBe("Speaking…");
     expect(conversationStatus({ ...ready, outputState: "waitingForAgent" })).toBe("Ready");

@@ -1076,6 +1076,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var queued = input.Behavior == UserTextBehavior.Queue && _activeResponseId is not null;
         var cause = input.Context;
+        if (_snapshot.Mode == SessionMode.Voice)
+        {
+            AbandonLiveSpeech(rotateEpoch: false);
+            await PublishStateAsync(cause, cancellationToken).ConfigureAwait(false);
+        }
+
         if (!queued)
         {
             _timerGeneration++;

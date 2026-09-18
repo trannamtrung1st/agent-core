@@ -154,7 +154,7 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public async Task Markdown_prose_without_speech_tag_does_not_persist_derived_speech_text()
+    public async Task Markdown_prose_persists_playback_projection_when_coordinates_differ()
     {
         var output = new CapturingSessionOutput();
         var synthesizer = new RecordingSynthesizer();
@@ -171,8 +171,41 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Null(assistant.Envelope!.SpeechText);
+        Assert.Equal("The architecture has three pieces.", assistant.Envelope!.SpeechText);
         Assert.Contains(synthesizer.Texts, text => text.Contains("three", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Fully_heard_markdown_assistant_uses_speech_coordinates_in_next_prompt()
+    {
+        const string display = "The architecture has **three** pieces.";
+        const string spoken = "The architecture has three pieces.";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel([display]),
+            synthesizer,
+            brain: brain);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Explain");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitUserTextAsync("Follow up");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, brain.Calls);
+        var firstAssistant = runtime.Snapshot.Entries.First(
+            entry => entry.Role == ConversationRole.Assistant && entry.Text == display);
+        Assert.Equal(spoken, PromptContextBuilder.EligibleAssistantText(firstAssistant));
+        var promptAtFollowUp = brain.Contexts[^1];
+        var assistantInPrompt = promptAtFollowUp.History.First(
+            entry => entry.Role == ConversationRole.Assistant && entry.Text == display);
+        Assert.Equal(spoken, PromptContextBuilder.EligibleAssistantText(assistantInPrompt));
     }
 
     [Fact]
@@ -277,7 +310,8 @@ public sealed class VoiceRealtimeRegressionTests
         SessionSnapshot? snapshot = null,
         AgentDefinition? snapshotDefinition = null,
         SessionToolExecutor? tools = null,
-        IArtifactStore? artifacts = null)
+        IArtifactStore? artifacts = null,
+        IAgentBrain? brain = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -308,7 +342,7 @@ public sealed class VoiceRealtimeRegressionTests
         return new SessionRuntime(
             snapshot,
             model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
+            brain ?? new DefaultAgentBrain(new PromptContextBuilder()),
             store,
             output,
             ids,

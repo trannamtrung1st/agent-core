@@ -41,13 +41,12 @@ public static class SpokenOutput
 
     /// <summary>
     /// True when the runtime should persist a derived <c>SpeechText</c> on the envelope
-    /// (model omitted <c>[[speech:]]</c> but playback intentionally differs from display).
-    /// Markdown stripping alone does not create a persisted speech projection.
+    /// (model omitted <c>[[speech:]]</c> but the TTS coordinate string differs from display).
     /// </summary>
     public static bool ShouldPersistDerivedSpeechText(string spoken, string displayText)
     {
-        _ = displayText;
-        return string.Equals(spoken, StructuredLeadIn, StringComparison.Ordinal);
+        return spoken.Length > 0
+            && !string.Equals(spoken, displayText, StringComparison.Ordinal);
     }
 
     public static bool LooksLikeStructuredDisplay(string text)

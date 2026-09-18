@@ -234,7 +234,7 @@ describe("Composer voice toolbar", () => {
     expect(onMute).toHaveBeenCalledWith(false);
   });
 
-  it("shows Unmute when voice mode is active but capture is not live", () => {
+  it("shows inactive microphone state when capture is not live and user is not muted", () => {
     const onMute = vi.fn();
     render(
       <Composer
@@ -242,13 +242,13 @@ describe("Composer voice toolbar", () => {
         voiceAvailable
         voiceModeActive
         voiceInputLive={false}
-        muted
+        muted={false}
         onMute={onMute}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
-    expect(onMute).toHaveBeenCalledWith(false);
-    expect(screen.getByRole("button", { name: /^Voice$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Voice input inactive" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Unmute" })).not.toBeInTheDocument();
+    expect(onMute).not.toHaveBeenCalled();
   });
 
   it("keeps Voice mode separate from Mute while listening", () => {

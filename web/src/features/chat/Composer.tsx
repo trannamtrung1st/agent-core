@@ -120,7 +120,7 @@ function MicrophoneControl({
     );
   }
 
-  if (muted || !voiceInputLive) {
+  if (muted) {
     return (
       <Tooltip title="Unmute">
         <Button
@@ -134,14 +134,28 @@ function MicrophoneControl({
     );
   }
 
+  if (voiceInputLive) {
+    return (
+      <Tooltip title="Listening — click to mute">
+        <Button
+          type="text"
+          className="composer-icon composer-voice-live"
+          aria-label="Mute"
+          icon={<AudioFilled />}
+          onClick={() => onMute(true)}
+        />
+      </Tooltip>
+    );
+  }
+
   return (
-    <Tooltip title="Listening — click to mute">
+    <Tooltip title="Starting microphone…">
       <Button
         type="text"
-        className="composer-icon composer-voice-live"
-        aria-label="Mute"
-        icon={<AudioFilled />}
-        onClick={() => onMute(true)}
+        className="composer-icon"
+        aria-label="Voice input inactive"
+        icon={<AudioOutlined />}
+        disabled
       />
     </Tooltip>
   );
