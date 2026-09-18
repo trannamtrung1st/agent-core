@@ -23,7 +23,9 @@
         "Providers__LanguageModels__primary-llm__BaseUrl": "https://openrouter.ai/api/v1/",
         "Providers__LanguageModels__primary-llm__DefaultModel": "openai/gpt-4o-mini-2024-07-18",
         "Providers__LanguageModels__primary-llm__Vision": "true",
-        "Providers__LanguageModels__primary-llm__Tools": "true"
+        "Providers__LanguageModels__primary-llm__Tools": "true",
+        "Persistence__Provider": "Sqlite",
+        "Persistence__ConnectionString": "Data Source=data/agent-core.db"
       }
     }
   }

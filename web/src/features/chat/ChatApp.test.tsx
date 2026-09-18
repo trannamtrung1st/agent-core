@@ -89,8 +89,9 @@ describe("ChatApp accessibility", () => {
       });
       rerenderChat(view);
     });
-    expect(screen.getByTestId("connection")).toHaveTextContent("Connection failed");
-    expect(screen.getByText("Microphone permission was denied. Enable the microphone or continue in text.")).toBeInTheDocument();
+    expect(screen.getByTestId("connection")).toHaveTextContent("Microphone permission was denied");
+    expect(screen.getAllByText("Microphone permission was denied. Enable the microphone or continue in text.").length)
+      .toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -622,7 +623,7 @@ describe("ChatApp accessibility", () => {
     });
     await act(async () => renderChat());
     expect(screen.getByText("The document is as follows:")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting…");
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting to Agent Core…");
     expect(screen.queryByText("Loading conversation")).not.toBeInTheDocument();
     expect(document.querySelector(".conversation-window .ant-spin-nested-loading")).toBeNull();
   });

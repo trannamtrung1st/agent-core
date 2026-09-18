@@ -9,6 +9,7 @@ export type StatusSource = {
   liveResponseId: string | null;
   liveAssistantText?: string;
   liveAssistantHasContent?: boolean;
+  connectionError?: string | null;
 };
 
 export type AgentActivityState =
@@ -47,11 +48,15 @@ function idleLabel(source: StatusSource): string {
 
 export function mapAgentActivity(source: StatusSource): AgentActivityState {
   if (source.connection === "failed") {
-    return { kind: "error", label: "Connection failed. Check the network and try again." };
+    const message = source.connectionError?.trim();
+    return {
+      kind: "error",
+      label: message && message.length > 0 ? message : "Connection lost. Retry to continue."
+    };
   }
 
   if (source.connection === "reconnecting") {
-    return { kind: "reconnecting", label: "Reconnecting…" };
+    return { kind: "reconnecting", label: "Reconnecting to Agent Core…" };
   }
 
   if (source.pendingVoice) {

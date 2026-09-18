@@ -13,8 +13,10 @@ describe("agent activity mapping", () => {
   };
 
   it("keeps connection copy for reconnect, failure, pending voice and connecting", () => {
-    expect(conversationStatus({ ...ready, connection: "reconnecting" })).toBe("Reconnecting…");
-    expect(conversationStatus({ ...ready, connection: "failed" })).toContain("Connection failed");
+    expect(conversationStatus({ ...ready, connection: "reconnecting" })).toBe("Reconnecting to Agent Core…");
+    expect(conversationStatus({ ...ready, connection: "failed" })).toContain("Connection lost");
+    expect(conversationStatus({ ...ready, connection: "failed", connectionError: "This conversation is no longer available." }))
+      .toBe("This conversation is no longer available.");
     expect(conversationStatus({ ...ready, pendingVoice: true })).toBe("Starting voice…");
     expect(conversationStatus({ ...ready, connection: "connecting" })).toBe("Connecting");
     expect(conversationStatus({ ...ready, connection: "idle" })).toBe("Ready");

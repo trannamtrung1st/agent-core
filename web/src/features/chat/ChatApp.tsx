@@ -110,7 +110,8 @@ export function ChatApp() {
     outputState: state.outputState,
     liveResponseId: state.liveResponseId,
     liveAssistantText: liveAssistant?.text,
-    liveAssistantHasContent: Boolean(liveAssistant?.blocks?.length)
+    liveAssistantHasContent: Boolean(liveAssistant?.blocks?.length),
+    connectionError: state.error
   };
   const connectionText = conversationStatusLabel(statusSource);
   const activity = mapAgentActivity(statusSource);

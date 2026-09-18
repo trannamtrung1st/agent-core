@@ -73,13 +73,25 @@ export function clearOwnerCapability(): void {
   window.localStorage.removeItem(OWNER_STORAGE_KEY);
 }
 
+let capabilityRefresh: Promise<string> | null = null;
+
+async function refreshOwnerCapability(): Promise<string> {
+  if (!capabilityRefresh) {
+    capabilityRefresh = issueOwnerCapability().finally(() => {
+      capabilityRefresh = null;
+    });
+  }
+
+  return capabilityRefresh;
+}
+
 export async function ensureOwnerCapability(): Promise<string> {
   const stored = window.localStorage.getItem(OWNER_STORAGE_KEY);
   if (stored) {
     return stored;
   }
 
-  return issueOwnerCapability();
+  return refreshOwnerCapability();
 }
 
 async function issueOwnerCapability(): Promise<string> {
@@ -100,7 +112,7 @@ export async function ownerFetch(input: string, init: RequestInit = {}, retried 
   const response = await fetch(input, { ...init, headers });
   if (response.status === 401 && !retried) {
     clearOwnerCapability();
-    await issueOwnerCapability();
+    await refreshOwnerCapability();
     return ownerFetch(input, init, true);
   }
 

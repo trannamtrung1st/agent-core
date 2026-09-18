@@ -75,7 +75,8 @@ describe("realtime race handling", () => {
       expect(invoke).toHaveBeenCalledWith("Attach", expect.objectContaining({ type: "session.attach" }));
     });
     expect(useSessionStore.getState().liveResponseId).toBeNull();
-    expect(useSessionStore.getState().error).toContain("Control sequence gap");
+    expect(useSessionStore.getState().connection).toBe("reconnecting");
+    expect(useSessionStore.getState().error).toBeNull();
   });
 
   it("clears errorFatal when reconnect attach is rejected", async () => {
@@ -655,6 +656,35 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().error).toContain("Unable to end the session");
     expect(useSessionStore.getState().errorFatal).toBe(false);
     expect(useSessionStore.getState().errorHoldSequence).toBe(0);
+  });
+
+  it("refreshes owner capability and retries attach once after Unauthorized", async () => {
+    const api = await import("./api");
+    window.localStorage.setItem(api.OWNER_STORAGE_KEY, "stale-token");
+    const clearSpy = vi.spyOn(api, "clearOwnerCapability");
+    const ensureSpy = vi.spyOn(api, "ensureOwnerCapability").mockResolvedValue("fresh-token");
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        accepted: false,
+        error: { code: "Unauthorized", message: "Owner capability is missing or invalid." }
+      })
+      .mockResolvedValueOnce({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "reconnecting",
+      sessionId: "s1",
+      attachmentId: null,
+      lastServerSequence: 2,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const attached = await hooks.attachWithBusyRetry!(2);
+    expect(attached).toBe(true);
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+    expect(ensureSpy).toHaveBeenCalledTimes(1);
   });
 
   it("marks the connection failed when automatic reconnect attach is rejected", async () => {

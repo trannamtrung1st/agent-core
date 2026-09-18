@@ -5,7 +5,7 @@ import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio
 import { applyServerEvent, emptySession, hasControlSequenceGap, historyFromPayload, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import { createSession, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession, type HistoryPage } from "./api";
+import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession, type HistoryPage } from "./api";
 import {
   abortPendingAttachment,
   listAttachments,
@@ -478,12 +478,22 @@ function dropLiveTransport(connection: "reconnecting" | "failed"): void {
     pendingMode: null,
     preflightReady: false,
     captureLive: false,
-    attachmentId: null
+    attachmentId: null,
+    ...(connection === "reconnecting"
+      ? { error: null, sessionError: null, errorFatal: false, errorHoldSequence: 0 }
+      : {})
   });
 }
 
-function markConnectionFailed(message: string): void {
+function markConnectionFailed(message: string, options?: { force?: boolean }): void {
   const latest = useSessionStore.getState();
+  if (
+    !options?.force
+    && (latest.connection === "reconnecting" || latest.connection === "connecting")
+  ) {
+    return;
+  }
+
   for (const item of latest.pendingSendQueue) {
     for (const attachment of item.attachments) {
       releasePendingFile(attachment.localId);
@@ -513,6 +523,7 @@ function isTransientAttachError(ack: { error?: { code?: string } } | null | unde
 async function attachWithBusyRetry(lastServerSequence: number | null): Promise<boolean> {
   const loop = attachLoop;
   let delayIndex = 0;
+  let retriedOwnerCapability = false;
   while (loop === attachLoop && connection) {
     try {
       commandSequence = 0;
@@ -527,11 +538,28 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
       }
 
       if (ack?.accepted) {
+        reconnectBudgetStarted = 0;
         return true;
       }
 
+      if (ack?.error?.code === "Unauthorized" && !retriedOwnerCapability) {
+        retriedOwnerCapability = true;
+        clearOwnerCapability();
+        await ensureOwnerCapability();
+        continue;
+      }
+
+      if (ack?.error?.code === "NotFound") {
+        markConnectionFailed("This conversation is no longer available.", { force: true });
+        return false;
+      }
+
       if (!isTransientAttachError(ack) || reconnectBudgetRemaining() <= 0) {
-        markConnectionFailed(ack?.error?.message ?? "Reconnect failed.");
+        const message =
+          reconnectBudgetRemaining() <= 0
+            ? "Connection lost. Retry to continue."
+            : ack?.error?.message ?? "Reconnect failed.";
+        markConnectionFailed(message, { force: true });
         return false;
       }
 
@@ -549,7 +577,7 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
         return false;
       }
 
-      markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.");
+      markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.", { force: true });
       return false;
     }
   }
@@ -569,7 +597,7 @@ function handleHubClosed(): void {
 async function recoverFromTransientDisconnect(): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (!connection || !snapshot.sessionId) {
-    markConnectionFailed("Connection lost. Retry to continue.");
+    markConnectionFailed("Connection lost. Retry to continue.", { force: true });
     return;
   }
 
@@ -585,10 +613,10 @@ async function recoverFromTransientDisconnect(): Promise<void> {
     await connection.start();
     const attached = await attachWithBusyRetry(snapshot.lastServerSequence || null);
     if (!attached && useSessionStore.getState().connection === "reconnecting") {
-      markConnectionFailed("Connection lost. Retry to continue.");
+      markConnectionFailed("Connection lost. Retry to continue.", { force: true });
     }
   } catch (error) {
-    markConnectionFailed(error instanceof Error ? error.message : "Connection lost. Retry to continue.");
+    markConnectionFailed(error instanceof Error ? error.message : "Connection lost. Retry to continue.", { force: true });
   }
 }
 
@@ -608,9 +636,12 @@ async function recoverFromSequenceGap(): Promise<void> {
 
   try {
     await connection.start();
-    await attachWithBusyRetry(snapshot.lastServerSequence || null);
+    const attached = await attachWithBusyRetry(snapshot.lastServerSequence || null);
+    if (!attached && useSessionStore.getState().connection === "reconnecting") {
+      markConnectionFailed("Connection lost. Retry to continue.", { force: true });
+    }
   } catch (error) {
-    markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.");
+    markConnectionFailed(error instanceof Error ? error.message : "Reconnect failed.", { force: true });
   }
 }
 
@@ -1426,6 +1457,7 @@ export const realtimeTestHooks =
         handleEvent,
         syncCapture,
         attachAfterReconnect,
+        attachWithBusyRetry,
         handleHubClosed,
         markOutputStarted(responseId: string) {
           outputGate.markStarted(responseId);
@@ -1532,7 +1564,7 @@ async function startConnection(
     await connection.start();
     await attachWithBusyRetry(null);
   } catch (error) {
-    markConnectionFailed(error instanceof Error ? error.message : "Attach failed.");
+    markConnectionFailed(error instanceof Error ? error.message : "Attach failed.", { force: true });
   }
 }
 
@@ -1542,7 +1574,10 @@ async function attachAfterReconnect(): Promise<void> {
   }
 
   dropLiveTransport("reconnecting");
-  await attachWithBusyRetry(useSessionStore.getState().lastServerSequence || null);
+  const attached = await attachWithBusyRetry(useSessionStore.getState().lastServerSequence || null);
+  if (!attached && useSessionStore.getState().connection === "reconnecting") {
+    markConnectionFailed("Connection lost. Retry to continue.", { force: true });
+  }
 }
 
 async function stopConnection(options?: { keepPreparedCapture?: boolean }): Promise<void> {
@@ -1569,8 +1604,20 @@ async function stopConnection(options?: { keepPreparedCapture?: boolean }): Prom
 }
 
 let applyRouteTask: Promise<void> | null = null;
+let bootstrapTask: Promise<string> | null = null;
 
 export async function bootstrap(): Promise<string> {
+  if (bootstrapTask) {
+    return bootstrapTask;
+  }
+
+  bootstrapTask = bootstrapInner().finally(() => {
+    bootstrapTask = null;
+  });
+  return bootstrapTask;
+}
+
+async function bootstrapInner(): Promise<string> {
   const [agents, health] = await Promise.all([listAgents(), getHealth()]);
   useSessionStore.setState({
     agents,
