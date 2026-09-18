@@ -2,222 +2,225 @@
 
 Ordered by current dependency and product value.
 
-The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, and the P0 conversation-lifecycle work (adaptive wait, inactivity pause/deactivation, queued sends/Steer/Stop semantics, and rich turn presentation).
+Reviewed against `main` through `7fe5b166` (`Fix false SpeechRecognitionRestartLimit during silent voice listening.`) on 2026-09-19.
 
-P0 conversation/UI stabilization is a frozen baseline unless a real regression appears. P1 replaceable speech (independent STT/TTS, Browser client transports, selectable OpenAI TTS and batch hosted STT) is observed on the key-free Synthetic/fake-browser gate. Remaining speech work is the deferred OpenAI realtime STT session and opt-in **HOSTED-04** live smoke.
+The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
+
+Browser STT/TTS is now a usable low-cost development path. Hosted OpenAI TTS and OpenAI-compatible batch STT are selectable. Realtime OpenAI STT remains deferred and unselectable. The `general-assistant` harness identity now exists specifically for neutral display/speech probes and has initiative disabled.
+
+The current free-form rich-response parser plus runtime speech projection is acceptable for now. Do **not** start a structured-output migration only for architectural cleanliness. Move to a validated model response contract when the response/progress model is intentionally changed, so the migration happens once rather than being rewritten twice.
 
 ---
 
-## Maintainer notes
-- [ ] Weird preferred name of 'friend', we should fix. [TBD]
-- [ ] Multilang STT/TTS support. [TBD]
-- [ ] Task/goal/stop condition for agent session? configurable, some agent/session is ongoing, some has a specific goal/task, some has a stop condition [TBD]
-- [ ] Show intermediate message then conclude final message like chatgpt or codex? [TBD]
-- [ ] **Model response envelope (display vs speech).** Replace free-form `[[speech:]]` inline markers with a validated structured generation contract (`displayText`, optional `speechText`, `blocks`). Runtime owns validation, fallback, segmentation, and delivery; the model owns what to show versus hear. Do not close this with more `SpokenOutput` heuristics. Use `general-assistant` (not Sam/Alex) for manual hosted display/speech probes. [P1+ / post-stabilization]
-- [ ] Lazy load old chat history
+## P0 — Close the current stabilization tail, then freeze it again
 
+This is a bounded verification/fix pass, not another voice redesign.
 
-## P0 — Stabilize the current conversation/UI baseline
-
-Do this before starting the next feature slice. Do not keep expanding P0 after these gates are clean.
-
-- [x] Run the complete key-free Synthetic gate on current HEAD, matching `.github/workflows/synthetic.yml`.
-
-  - Domain tests.
-  - Infrastructure tests.
-  - Application tests.
-  - API tests.
-  - Frontend unit tests.
-  - Frontend build.
-  - Playwright Chromium suite.
-  - Fix regressions before starting P1.
-
-- [x] Do one bounded Impeccable `audit` / `harden` pass over the existing chat UI, not another redesign.
-
-  Verify representative desktop/mobile states:
-  - normal text conversation;
-  - live response;
-  - queued messages;
-  - Steer;
-  - Stop during text generation;
-  - Stop during trailing voice playback;
-  - attachments;
-  - Markdown / rich blocks / artifact references;
-  - paused + resume;
-  - ended read-only history;
-  - reconnect/recovery;
-  - recoverable and fatal failures.
-
-- [x] Improve failure presentation in chat.
-
-  The current failure status is too generic. Preserve safe user-facing messages, but expose enough structured detail to distinguish:
-  - provider failure;
-  - persistence failure;
-  - transport/reconnect failure;
-  - validation/policy denial;
-  - tool/sandbox failure;
-  - voice/capture/playback failure.
-
-  Prefer a compact status plus tooltip/popover/details surface. Never expose provider bodies, stack traces, secrets, or credentials.
-
-- [x] Add/confirm regression coverage for rich response-envelope presentation together with normal reply and voice behavior.
+- [ ] Run the complete key-free Synthetic/fake-browser gate on current HEAD, matching `.github/workflows/synthetic.yml`.
 
   Cover:
-  - display Markdown;
-  - `SpeechText` separate from display text;
-  - extra Markdown block;
-  - attachment reference;
-  - artifact reference;
-  - unsupported/unavailable fallback;
-  - reconnect/history behavior;
-  - voice spoken/heard semantics remain conservative.
+  - Domain tests;
+  - Infrastructure tests;
+  - Application tests;
+  - API tests;
+  - frontend unit tests;
+  - frontend build;
+  - Playwright Chromium suite;
+  - Compose persistence/capability smoke where the workflow includes it.
 
-- [x] When the above is green, treat conversation lifecycle P0 as frozen baseline unless a real regression appears.
+  The last documented green workflow baseline in the repo is older than the latest `7fe5b166` follow-up, so verify the actual current HEAD before moving on.
 
----
+- [ ] Do one bounded live Chrome/Edge voice probe on current HEAD using `general-assistant`.
 
-## P1 — Cheap, interchangeable real voice
+  Verify:
+  - entering and leaving Voice mode;
+  - Voice and Mute remain separate controls;
+  - silence does not trigger a false `SpeechRecognitionRestartLimit`;
+  - multi-turn Browser STT still restarts correctly between utterances;
+  - long speech remains bounded by the configured maximum utterance duration;
+  - typed input while Voice mode is active cancels stale speech playback correctly;
+  - normal conversational Markdown is spoken naturally;
+  - code/table/list-heavy responses use the intended speech projection;
+  - Stop, Queue, reconnect, and session reopen do not replay stale speech;
+  - display text and persisted `SpeechText` stay consistent after reconnect/history load.
 
-### P1A — Finish speech-provider selection and capability plumbing
+- [ ] Fix the unexpected preferred name `"friend"` behavior.
 
-The core backend ports already exist:
+  - identify whether it originates in agent instructions, prompt construction, memory/context, UI fallback, or provider behavior;
+  - do not guess a user name when none is known;
+  - use a neutral no-name fallback;
+  - add a regression test at the layer that actually caused it.
 
-- `ISpeechRecognizer`
-- `ISpeechSynthesizer`
+- [ ] After the above is green, freeze conversation lifecycle and Browser voice again.
 
-Synthetic implementations exist. OpenAI TTS exists. OpenAI-compatible batch STT exists and is the selectable hosted STT path. The realtime `OpenAiSpeechRecognizer` contract exists but its live session is still deferred/no-op and is not selectable.
-
-Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthesizer`. Browser speech is client-owned; keep the server adapters and browser adapters as two implementations behind one effective session capability/selection model.
-
-- [x] Add explicit independent speech configuration.
-
-  Example conceptual selection:
-  - STT: `Synthetic | Browser | OpenAI | OpenAICompatibleBatch | future local`
-  - TTS: `Synthetic | Browser | OpenAI | future local`
-
-  STT and TTS must be independently selectable.
-
-- [x] Replace profile-only speech resolution with explicit provider factories/selection.
-
-  - Synthetic remains the default deterministic path.
-  - Real text mode must not require speech credentials.
-  - Browser mode requires no backend speech key.
-  - Hosted adapters read credentials only from backend configuration/user-secrets/environment.
-  - Missing hosted credentials must not break Synthetic or Browser startup.
-
-- [x] Make `voiceAvailable` and `session.ready.capabilities` represent the **effective selected** STT/TTS path rather than only the currently registered backend implementation.
-
-- [x] Keep provider/vendor details outside Session Runtime and Interaction Controller.
-
-- [x] Add configuration validation and tests for mixed combinations.
-
-  Important combinations:
-  - Synthetic STT + Synthetic TTS;
-  - Browser STT + Browser TTS;
-  - Browser STT + OpenAI TTS;
-  - OpenAI/batch STT + Browser TTS;
-  - hosted STT + hosted TTS.
-
-### P1B — Browser STT first
-
-Goal: inexpensive Chrome/Edge development/demo speech input that can stream recognition results to the backend while the user speaks for a long time.
-
-**Status:** Voice/composer stabilization through `c4b0413` (Voice-latch reset, block-aware display receipts, long-structured speech fallback, full conversational TTS, separate Voice/Mute and Stop/Queue composer UX). GitHub Actions run #71 green on that baseline. Further Browser STT work is live Chrome/Edge/headset observation only unless a reproducible defect appears.
-
-- [x] Add a frontend ClientSpeechRecognizer port with Browser and fake adapters, plus one speech-transport orchestration service (native recognition objects stay out of Zustand).
-
-- [x] Wire Browser STT into voice mode: capability detection, continuous recognition, native interim/`isFinal` mapping, pending `onspeechend` closure (final-after-speechend safe), start/stop/cancel, capped idle native `onend` restart, mid-utterance native `onend` preservation (no premature `ended`), and mid-utterance unexpected restart via the accumulator.
-
-- [x] Keep the existing local AudioWorklet/VAD boundary path where useful for turn-taking/barge-in, but do not send PCM to backend STT when Browser STT is selected.
-
-- [x] Add typed realtime commands for browser-recognized transcript evidence.
-
-  Normalize browser results into the same application-level speech evidence consumed by the Interaction Controller:
-  - `utteranceId`;
-  - monotonically increasing partial `revision`;
-  - partial text;
-  - final text;
-  - boundary/start/end evidence where available;
-  - attachment/session identity and normal command sequencing.
-
-  Do not persist speculative partial transcripts.
-
-- [x] Admit client-transcript evidence through the existing Interaction Controller without opening an `ISpeechRecognizer` session.
-
-- [x] Support long speech without waiting for a turn-by-turn submit.
-
-  Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, freezes and overlap-stitches spoken prefix across bounded mid-utterance restart, and drops stale partials on reconnect. Browser adapter treats `onspeechend` as pending (final may follow), caps idle native `onend` loops, and restarts recognition between turns; session `onend` is not an utterance boundary. Voice-mode wiring remains. Permission/device/service errors mark recognition inactive and surface the structured speech error.
-
-- [x] Preserve interruption semantics.
-
-  Browser STT evidence must be able to trigger:
-  - Continue;
-  - Ignore;
-  - Interrupt/barge-in;
-  - final user turn.
-
-- [x] Add deterministic frontend/backend tests using a fake Browser STT adapter; keep real browser speech manual/opt-in.
-
-- [x] Gracefully fall back to text or another configured STT provider when the browser API is unavailable.
-
-### P1C — Browser TTS
-
-Goal: inexpensive speech output without backend TTS cost while preserving the existing display/speech separation.
-
-- [x] Add a frontend ClientSpeechSynthesizer port with Browser and fake adapters, voiceURI/name/language/default fallback, and the shared speech-transport service owning output.
-
-- [x] Queue, ACK, and immediately cancel Browser TTS (`speak()` waits for `utterance.onend`, conservative offsets, transport-specific preflight after `session.ready`).
-
-- [x] Add a server-to-client speech-text segment contract for Browser TTS.
-
-  Do not synthesize directly from raw display Markdown.
-
-  Source speech from:
-  - explicit `ResponseEnvelope.SpeechText` when present;
-  - otherwise the normal speakable text projection.
-
-  Preserve:
-  - `responseId`;
-  - segment identity/order;
-  - text coordinates;
-  - cancellation identity;
-  - stale-response rejection.
-
-- [x] Keep conservative heard/spoken semantics on the server for `clientSpeech` playback (`consumedSamples=0`, completion gated on ACK).
-
-  Browser `speechSynthesis` callbacks still vary by platform; only the later Browser TTS adapter may credit from trustworthy client events.
-
-- [x] Stop browser speech immediately on:
-  - user barge-in;
-  - explicit Stop;
-  - mode change;
-  - disconnect;
-  - response supersession;
-  - session end.
-
-- [x] Add fake Browser TTS tests for segment ordering, Stop, supersession, completion, and conservative heard offsets.
-
-### P1D — Hosted speech completion and real-mode verification
-
-Do this after Browser voice works so normal development remains cheap.
-
-- [ ] Finish or replace the deferred realtime `OpenAiSpeechRecognizer` session with a real streaming implementation.
-
-- [x] Keep `OpenAICompatibleBatchSpeechRecognizer` as the supported hosted STT fallback and document the capability difference (no streaming input, no interim partials).
-
-- [x] Wire `OpenAiSpeechSynthesizer` through the new explicit provider selection.
-
-- [ ] Verify Real-mode voice end to end with at least one actual non-Synthetic configuration (**HOSTED-04**; unverified — live flags off, no opted-in smoke).
-
-- [x] Keep hosted-provider tests explicit opt-in.
-
-- [x] Keep Browser and Synthetic paths fully usable without OpenAI/OpenRouter speech credentials.
+  Further P0/Browser-STT work should require a reproducible regression or a concrete product requirement. Do not continue speculative hardening.
 
 ---
 
-## P2 — Evolve assistant tools from the current bounded baseline
+## P1 — Conversation and session ergonomics
+
+### P1A — Lazy-load old chat history
+
+The current durable history works, but loading the whole conversation does not scale.
+
+- [ ] Add paginated/cursor-based history reads.
+
+  Requirements:
+  - newest page is enough to open/reopen a session;
+  - older pages can be requested explicitly;
+  - stable ordering and no duplicate entries;
+  - attachment, artifact, rich-block, `SpeechText`, interrupted/failed status, and entry identity survive pagination;
+  - ended read-only sessions use the same history contract.
+
+- [ ] Add frontend "load older history" behavior.
+
+  Requirements:
+  - preserve visual scroll position when older entries are prepended;
+  - do not jump to the newest message merely because history was hydrated;
+  - live entries arriving while older history loads remain correctly ordered;
+  - session switch/reconnect cancels stale page requests.
+
+- [ ] Add deterministic API/frontend/Playwright coverage for long histories.
+
+### P1B — Session goal / task / stop-condition semantics
+
+Some sessions are ongoing conversations; others should represent a finite task or a condition-bound interaction. Define this before durable background work and scheduled automation depend on it.
+
+- [ ] Define a small session-purpose model.
+
+  Support at least:
+  - ongoing conversation;
+  - goal/task-oriented session;
+  - optional explicit stop/completion condition.
+
+- [ ] Keep purpose separate from runtime lifecycle.
+
+  Distinguish:
+  - active conversation;
+  - paused/deactivated runtime;
+  - completed goal/task;
+  - explicitly ended session;
+  - later detached/background work.
+
+- [ ] Persist the configured purpose/goal and completion state.
+
+- [ ] Define who may mark a goal complete.
+
+  Prefer:
+  - the model may propose completion;
+  - runtime/policy validates the transition;
+  - explicit user completion/cancellation remains authoritative.
+
+- [ ] Add minimal UI only after the domain contract is stable.
+
+  Avoid building a generic workflow editor here.
+
+### P1C — Multilingual STT/TTS
+
+Add this as provider-neutral language configuration, not provider-specific branching in Session Runtime.
+
+- [ ] Define effective speech language/locale selection.
+
+  Consider:
+  - agent default;
+  - session override;
+  - Browser STT `lang`;
+  - Browser TTS voice/language selection;
+  - hosted STT language hints where supported;
+  - hosted TTS voice/language compatibility.
+
+- [ ] Keep text mode usable even when a selected speech provider does not support the requested language.
+
+- [ ] Do not require automatic language detection initially.
+
+- [ ] Add deterministic tests for configuration/fallback; keep real multilingual voice checks opt-in/manual.
+
+---
+
+## P2 — Response, progress, and structured generation contract
+
+This is the right place to revisit structured model output. Do not migrate the current response format before this slice unless a real bug forces it.
+
+### P2A — Intermediate progress vs final assistant response
+
+The system needs a first-class distinction between transient progress and durable conversational output before tools/background work become much richer.
+
+- [ ] Define progress/event semantics.
+
+  Examples:
+  - thinking/preparing;
+  - reading attachments;
+  - running a tool;
+  - waiting on an external operation;
+  - producing a final answer.
+
+- [ ] Do not model every progress update as a normal assistant chat message.
+
+  Prefer structured transient events/state for operational progress. Persist only progress that is genuinely useful after reconnect/reopen.
+
+- [ ] Define reconnect/cancellation/supersession behavior for progress.
+
+- [ ] Define how progress appears in text mode and voice mode.
+
+  Voice should not narrate every internal/tool progress update by default.
+
+- [ ] Keep the final assistant response as the durable conversational result.
+
+### P2B — Validated model response envelope
+
+Replace free-form inline control markers when the response contract is next intentionally changed.
+
+Target conceptual contract:
+
+```text
+displayText: string
+speechText?: string
+blocks?: [...]
+```
+
+The exact schema may evolve with P2A; do not freeze it prematurely.
+
+- [ ] Introduce a provider-neutral validated generation contract.
+
+  Runtime owns:
+  - schema validation;
+  - normalization;
+  - safe fallback;
+  - block validation;
+  - speech segmentation/delivery;
+  - persistence coordinates.
+
+  The model owns:
+  - what should be displayed;
+  - optional intentionally different speech text;
+  - requested rich blocks within allowed types.
+
+- [ ] Preserve a fallback path for models/providers that do not reliably support structured output.
+
+- [ ] Keep ordinary display prose as the default speech source when explicit `speechText` is absent.
+
+- [ ] Remove `[[speech:]]` / related inline markers only after compatibility and persistence migration are covered.
+
+- [ ] Do not add more `SpokenOutput` heuristics to solve model-intent problems that belong in the structured contract.
+
+- [ ] Use `general-assistant` for neutral hosted display/speech probes.
+
+### P2C — Preferred-name / personalization boundary
+
+If user personalization grows beyond the current `"friend"` bug, define it deliberately instead of letting prompts infer personal facts.
+
+- [ ] Distinguish known user profile data from conversational guesses.
+
+- [ ] Treat absent preferred name as absent, not as an invitation to invent one.
+
+- [ ] Keep personalization provenance explicit if/when memory later supplies it.
+
+---
+
+## P3 — Evolve assistant tools from the current bounded baseline
 
 Already present:
+
 - static `ToolCatalog`;
 - role permission checks;
 - `SessionToolExecutor`;
@@ -305,13 +308,20 @@ Build on that instead of replacing it.
 
 ---
 
-## P3 — Context compaction and memory
+## P4 — Context compaction and memory
+
+### P4A — Session context compaction
 
 - [ ] Add LLM-based session compaction.
 
   - keep deterministic fallback;
-  - preserve unresolved topics, decisions and references;
-  - never replace durable raw history.
+  - preserve unresolved topics, decisions, user constraints, goals, and references;
+  - never replace durable raw history;
+  - keep compaction versioned/replaceable.
+
+- [ ] Make compaction aware of paginated history without requiring the client to load all old entries.
+
+### P4B — Structured session memory
 
 - [ ] Introduce structured session memory.
 
@@ -330,19 +340,27 @@ Build on that instead of replacing it.
   - controlled `memory.write/update`
   - keep policy separate from storage.
 
+- [ ] Add correction/deletion semantics before cross-session memory.
+
+### P4C — Cross-session memory
+
 - [ ] Add cross-session memory only after session memory works reliably.
 
   - opt-in/configurable scope;
   - agent/user ownership rules;
-  - provenance and correction/deletion semantics.
+  - provenance;
+  - correction/deletion;
+  - no silent promotion of uncertain conversational guesses into durable user facts.
 
 - [ ] Do not require a vector database initially.
 
-  Add embeddings/vector retrieval only when measured retrieval needs justify it.
+  Add embeddings/vector retrieval only when measured retrieval quality or scale justifies it.
 
 ---
 
-## P4 — Events and configurable triggers
+## P5 — Events and configurable triggers
+
+Build this after session purpose/goal semantics are defined.
 
 - [ ] Expand the event/trigger model beyond current idle/environment triggers.
 
@@ -371,18 +389,28 @@ Build on that instead of replacing it.
 
 - [ ] Add UI for trigger/scheduled-work visibility where appropriate.
 
+- [ ] Keep trigger evaluation separate from arbitrary model initiative.
+
+  A trigger creates eligible work/evidence; normal policy still decides what the agent may do.
+
 ---
 
-## P5 — Durable background work
+## P6 — Durable background work
 
-Introduce this only when work must outlive the active Session Runtime.
+Introduce this only when accepted work must outlive the active Session Runtime.
+
+Prerequisites:
+- session goal/task semantics from P1;
+- progress/result semantics from P2;
+- trigger semantics from P5 for scheduled/external work.
 
 - [ ] Introduce durable `WorkItem` when a real accepted workflow requires it.
 
   - do not duplicate normal synchronous tool execution;
   - persist execution state/checkpoints;
   - support cancellation and idempotency;
-  - guard against stale session epochs.
+  - guard against stale session epochs;
+  - preserve initiating user/session/agent provenance.
 
 - [ ] Allow work to continue after session deactivation only when explicitly intended.
 
@@ -390,25 +418,28 @@ Introduce this only when work must outlive the active Session Runtime.
 
 - [ ] Add background research when a concrete workflow needs it.
 
-- [ ] Add scheduled tasks after P4 trigger semantics exist.
+- [ ] Add scheduled tasks after P5 trigger semantics exist.
 
 - [ ] Add long-running sandbox jobs only when useful.
 
-- [ ] Stream/store progress as structured events rather than fake assistant messages.
+- [ ] Stream/store progress as structured events, not fake assistant messages.
 
 - [ ] Deliver completed work back into the appropriate session as result/event/artifact.
 
 - [ ] Revisit auto-pause vs manual-pause UX when background work exists.
 
-  Current pause/deactivation semantics are sufficient for foreground conversation. Background work may require a clearer distinction between:
+  Distinguish:
   - user-paused conversation;
   - runtime inactivity pause;
   - detached work still running;
+  - completed goal;
   - fully stopped/cancelled work.
 
 ---
 
-## P6 — Agent harness / admin mode
+## P7 — Agent harness / admin mode
+
+The repository already has versioned role environments and a shared development/documentation harness. Productize agent-harness editing only after the core runtime contracts above are stable.
 
 - [ ] Treat relevant effective agent settings as part of the agent harness/context.
 
@@ -417,28 +448,34 @@ Introduce this only when work must outlive the active Session Runtime.
 
 - [ ] Separate Admin mode from User mode.
 
-- [ ] Admin mode:
+### Admin mode
 
-  - inspect/modify harness workspace;
-  - edit instructions/configuration;
-  - edit tools/plugins configuration;
-  - edit knowledge/assets;
-  - run validation/tests;
-  - preview behavior.
+- [ ] Allow bounded inspection/modification of:
 
-- [ ] For privileged admin changes, agent prepares an intent/payload first.
+  - harness workspace;
+  - instructions/configuration;
+  - tools/integration configuration;
+  - knowledge/assets;
+  - validation/tests;
+  - behavior previews.
 
-  The UI shows the proposed operation. The human confirms/approves it. Only then is the action executed through the normal policy/tool path.
+- [ ] For privileged admin changes, have the agent prepare an intent/payload first.
 
-  Do not let “admin agent” bypass authorization merely because it generated the change itself.
+  The UI shows the proposed operation. The human confirms/approves it. Only then execute it through the normal policy/tool path.
 
-- [ ] User mode:
+  Do not let an "admin agent" bypass authorization merely because it generated the change itself.
 
-  - uses an immutable/pinned published agent version;
-  - gets its own isolated session workspace;
-  - cannot mutate the source harness.
+### User mode
 
-- [ ] Define harness publishing lifecycle.
+- [ ] Use an immutable/pinned published agent version.
+
+- [ ] Give every session its own isolated runtime workspace.
+
+- [ ] Do not allow user sessions to mutate the source harness.
+
+### Publishing lifecycle
+
+- [ ] Define:
 
   - draft;
   - validate;
@@ -446,11 +483,11 @@ Introduce this only when work must outlive the active Session Runtime.
   - publish immutable version;
   - rollback/deprecate.
 
-- [ ] Allow the admin agent to help build/refactor/improve its own harness only through the same bounded tool/policy system.
+- [ ] Allow the admin agent to help improve its own harness only through the same bounded tool/policy system.
 
 ---
 
-## P7 — Full harness/platform capabilities
+## P8 — Full harness/platform capabilities and integration extensibility
 
 - [ ] Consolidate the full harness model.
 
@@ -463,26 +500,31 @@ Introduce this only when work must outlive the active Session Runtime.
   - triggers;
   - workspace template;
   - validation/evals;
-  - plugins/extensions.
+  - integrations/extensions.
 
 - [ ] Add plugin/tool-provider extensibility only when a second real provider/integration justifies it.
 
-  - MCP-like external tool providers may be adapters;
+  - MCP-like external providers may be adapters;
   - native Agent Core tools remain supported;
-  - every plugin still passes through Agent Core policy/authorization.
+  - every provider still passes through Agent Core policy/authorization;
+  - provider credentials remain outside model context.
 
 - [ ] Add reusable harness validation.
 
   - schema validation;
   - missing tools/providers;
   - invalid permissions;
-  - incompatible model capabilities;
+  - incompatible model/provider capabilities;
   - unsafe configuration;
   - test scenarios/evals.
 
+- [ ] Keep tool-provider extensibility separate from model-provider extensibility.
+
+  Avoid one generic abstraction that hides materially different policy/security boundaries.
+
 ---
 
-## P8 — Sandbox evolution
+## P9 — Sandbox evolution
 
 - [ ] Keep Docker sandbox as the current implementation while it meets requirements.
 
@@ -505,7 +547,9 @@ Introduce this only when work must outlive the active Session Runtime.
 
 ---
 
-## P9 — Multi-user/product infrastructure
+## P10 — Multi-user/product infrastructure
+
+Do this when the product moves beyond single-owner/local development.
 
 - [ ] Authentication.
 
@@ -520,6 +564,35 @@ Introduce this only when work must outlive the active Session Runtime.
 - [ ] Public-hosting hardening.
 
 - [ ] Horizontal/distributed Session Runtime only when single-process ownership becomes an actual constraint.
+
+---
+
+## Deferred / optional provider work
+
+These are useful but should not block the product roadmap above.
+
+### Hosted voice verification
+
+- [ ] Run **HOSTED-04**: one actual non-Synthetic end-to-end voice smoke with an explicitly selected hosted configuration.
+
+  Keep it opt-in and credential-gated.
+
+### Realtime hosted STT
+
+- [ ] Finish or replace the deferred realtime `OpenAiSpeechRecognizer` only when there is a concrete need for hosted streaming STT.
+
+  Current alternatives are already valid:
+  - Browser STT for inexpensive interactive development/demo;
+  - OpenAI-compatible batch STT for supported hosted recognition;
+  - Synthetic STT for deterministic tests.
+
+  Do not implement realtime OpenAI STT merely to make every conceptual adapter selectable.
+
+### Native speech-to-speech / realtime reasoning
+
+- [ ] Revisit only if latency/quality measurements show the composed STT → text model → TTS pipeline is insufficient.
+
+  Keep the composed provider-neutral pipeline as the canonical architecture.
 
 ---
 
@@ -538,6 +611,7 @@ Introduce this only when work must outlive the active Session Runtime.
 - [ ] Maintain observability for:
 
   - model calls;
+  - response/progress lifecycle;
   - speech input/output provider and capability selection;
   - tool calls;
   - sandbox execution;
@@ -548,11 +622,20 @@ Introduce this only when work must outlive the active Session Runtime.
 
 - [ ] Keep docs synchronized with observed implementation.
 
-  In particular, do not describe deferred provider adapters as fully wired runtime behavior.
+  In particular:
+  - do not describe deferred provider adapters as fully wired runtime behavior;
+  - do not document a structured-output contract until it is actually implemented;
+  - update handoff reports when a frozen baseline materially changes.
+
+- [ ] Keep TODO focused on active/future work.
+
+  Move historical implementation detail into docs/handoff reports instead of continuously growing completed checklist sections here.
 
 ---
 
 ## Implemented baseline
+
+Keep this as a compact orientation section, not a second roadmap.
 
 - [x] .NET 10 / C# 14 modular monolith with React/Vite TypeScript client.
 - [x] SignalR + MessagePack realtime session transport.
@@ -561,7 +644,7 @@ Introduce this only when work must outlive the active Session Runtime.
 - [x] Persistent multi-session catalog/history.
 - [x] Session reopen and ended read-only history.
 - [x] Session-owned attachments and later-turn attachment recall.
-- [x] Markdown/rich response envelopes with separate display and optional speech text.
+- [x] Markdown/rich response envelopes with separate display and optional/persisted speech projection.
 - [x] Artifact references and session-owned artifacts.
 - [x] Repeated proactive initiative and deactivation/pause lifecycle.
 - [x] Adaptive agent wait timing and inactivity behavior.
@@ -571,10 +654,18 @@ Introduce this only when work must outlive the active Session Runtime.
 - [x] Versioned role environments.
 - [x] Session-owned workspaces.
 - [x] Bounded typed tool execution.
-- [x] Knowledge, attachment, workspace, artifact and sandbox tools.
+- [x] Knowledge, attachment, workspace, artifact, and sandbox tools.
 - [x] Docker-backed `sandbox.run` with isolation/resource limits.
-- [x] Synthetic STT/TTS and full-duplex voice pipeline.
-- [x] Independent STT/TTS configuration, Browser client transports, selectable OpenAI TTS and OpenAI-compatible batch STT (OpenAI realtime STT still unselectable; HOSTED-04 unverified).
+- [x] Synthetic STT/TTS and full-duplex server-audio voice pipeline.
+- [x] Independent STT/TTS selection and capability reporting.
+- [x] Browser STT and Browser TTS client transports with fake deterministic adapters.
+- [x] Selectable OpenAI TTS and OpenAI-compatible batch STT.
+- [x] Browser-STT half-duplex hold during agent output, restart stitching, endpointing, durable finals, and reconnect recovery.
+- [x] Full conversational speech projection with persisted derived `SpeechText` when spoken coordinates differ from display.
+- [x] Separate Voice mode and Mute controls.
+- [x] `general-assistant` harness identity for neutral display/speech probes with initiative disabled.
+- [x] Silent Browser STT listening no longer falsely exhausts the recognition restart limit (`7fe5b166`).
 - [x] Interruption/barge-in and conservative spoken/heard handling.
 - [x] Ant Design v6 conversation-first UI.
 - [x] Impeccable skill integrated for bounded UI audit/polish/hardening.
+- [x] Shared `develop` and `document` composition skills for agent-assisted repository work.
