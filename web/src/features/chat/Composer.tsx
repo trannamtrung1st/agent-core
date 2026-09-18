@@ -55,6 +55,7 @@ export function Composer({
   voiceModeActive,
   voiceInputLive,
   voiceInputBlocked,
+  voiceInputHeldForAgentOutput,
   muted,
   canRetry,
   placeholder,
@@ -79,6 +80,7 @@ export function Composer({
   voiceModeActive: boolean;
   voiceInputLive: boolean;
   voiceInputBlocked: boolean;
+  voiceInputHeldForAgentOutput: boolean;
   muted: boolean;
   canRetry: boolean;
   placeholder: string;
@@ -282,6 +284,15 @@ export function Composer({
               ) : voiceModeActive && voiceInputBlocked ? (
                 <Tooltip title="Retry voice input">
                   <Button type="text" aria-label="Retry voice input" icon={<AudioOutlined />} onClick={onVoice} />
+                </Tooltip>
+              ) : voiceModeActive && voiceInputHeldForAgentOutput ? (
+                <Tooltip title="Voice input resumes after the agent finishes speaking">
+                  <Button
+                    type="text"
+                    aria-label="Voice input paused while agent speaks"
+                    icon={<AudioOutlined />}
+                    disabled
+                  />
                 </Tooltip>
               ) : voiceModeActive && muted ? (
                 <Tooltip title="Unmute">

@@ -340,6 +340,17 @@ function clearLiveUserTranscript(): void {
   }
 }
 
+function publishVoiceInputHeldForAgentOutput(held: boolean): void {
+  if (useSessionStore.getState().voiceInputHeldForAgentOutput !== held) {
+    useSessionStore.setState({ voiceInputHeldForAgentOutput: held });
+  }
+}
+
+function clearVoiceInputHeldForAgentOutput(): void {
+  clientTranscriptHeldForAgent = false;
+  publishVoiceInputHeldForAgentOutput(false);
+}
+
 async function suspendClientTranscriptForAgentOutput(): Promise<void> {
   const state = useSessionStore.getState();
   if (state.sttTransport !== "clientTranscript" || state.mode !== "voice") {
@@ -347,6 +358,7 @@ async function suspendClientTranscriptForAgentOutput(): Promise<void> {
   }
 
   clientTranscriptHeldForAgent = true;
+  publishVoiceInputHeldForAgentOutput(true);
   clearLiveUserTranscript();
   await ensureTranscriptLife().suspendForAgentOutput();
   publishCaptureLive();
@@ -358,7 +370,8 @@ async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
   }
 
   const state = useSessionStore.getState();
-  if (state.sttTransport !== "clientTranscript" || state.mode !== "voice" || state.muted) {
+  if (state.sttTransport !== "clientTranscript" || state.mode !== "voice") {
+    clearVoiceInputHeldForAgentOutput();
     return;
   }
 
@@ -367,8 +380,14 @@ async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
   }
 
   clientTranscriptHeldForAgent = false;
-  await ensureTranscriptLife().resumeAfterAgentOutput();
-  syncCapture();
+  publishVoiceInputHeldForAgentOutput(false);
+
+  if (!state.muted) {
+    await ensureTranscriptLife().resumeAfterAgentOutput();
+    syncCapture();
+  } else {
+    publishCaptureLive();
+  }
 }
 
 function ensureTranscriptLife(): ClientTranscriptLifecycle {
@@ -401,6 +420,7 @@ function ensureTranscriptLife(): ClientTranscriptLifecycle {
 }
 
 async function releaseClientSpeech(): Promise<void> {
+  clearVoiceInputHeldForAgentOutput();
   await clientSpeechPlayer?.reset();
   await transcriptLife?.disconnect();
   syncClientTranscriptBlockedFromLifecycle();
@@ -452,6 +472,7 @@ function dropLiveTransport(connection: "reconnecting" | "failed"): void {
   abortPlayback();
   void releaseClientSpeech();
   capture.release();
+  clearVoiceInputHeldForAgentOutput();
   useSessionStore.setState({
     connection,
     pendingMode: null,
@@ -471,6 +492,7 @@ function markConnectionFailed(message: string): void {
   abortPlayback();
   void releaseClientSpeech();
   capture.release();
+  clearVoiceInputHeldForAgentOutput();
   useSessionStore.setState({
     ...sessionFailurePatch(message, { category: "Transport", code: "ReconnectFailed" }),
     errorHoldSequence: latest.lastServerSequence,

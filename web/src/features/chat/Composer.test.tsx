@@ -33,6 +33,7 @@ function emptyComposerProps() {
     voiceModeActive: false,
     voiceInputLive: false,
     voiceInputBlocked: false,
+    voiceInputHeldForAgentOutput: false,
     muted: false,
     canRetry: false,
     placeholder: "Message Agent Core...",
@@ -246,5 +247,28 @@ describe("Composer voice toolbar", () => {
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry voice input" }));
     expect(onVoice).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables voice input control while browser STT is held for agent output", () => {
+    const onVoice = vi.fn();
+    const onMute = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputLive={false}
+        voiceInputHeldForAgentOutput
+        muted={false}
+        onVoice={onVoice}
+        onMute={onMute}
+      />
+    );
+    const paused = screen.getByRole("button", { name: "Voice input paused while agent speaks" });
+    expect(paused).toBeDisabled();
+    fireEvent.click(paused);
+    expect(onVoice).not.toHaveBeenCalled();
+    expect(onMute).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
   });
 });

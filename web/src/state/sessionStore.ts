@@ -92,6 +92,7 @@ export type SessionView = {
   preflightReady: boolean;
   captureLive: boolean;
   clientTranscriptBlocked: boolean;
+  voiceInputHeldForAgentOutput: boolean;
   voicePlaybackResponseId: string | null;
   pauseReason: string | null;
   liveUserTranscript: string | null;
@@ -128,6 +129,7 @@ export const emptySession = (): SessionView => ({
   preflightReady: false,
   captureLive: false,
   clientTranscriptBlocked: false,
+  voiceInputHeldForAgentOutput: false,
   voicePlaybackResponseId: null,
   pauseReason: null,
   liveUserTranscript: null

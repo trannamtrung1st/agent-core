@@ -318,6 +318,7 @@ export function ChatApp() {
                       voiceModeActive={voiceModeActive}
                       voiceInputLive={voiceInputLive}
                       voiceInputBlocked={voiceInputBlocked}
+                      voiceInputHeldForAgentOutput={state.voiceInputHeldForAgentOutput}
                       muted={state.muted}
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}
