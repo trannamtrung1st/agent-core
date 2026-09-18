@@ -44,6 +44,7 @@ public static class TrustedLocalCaller
 internal static class DockerPublishedPortGateway
 {
     private static readonly AsyncLocal<Func<IPAddress?>?> ResolveOverrideLocal = new();
+    private static readonly AsyncLocal<Func<bool>?> RunningInContainerOverrideLocal = new();
 
     internal static Func<IPAddress?>? ResolveOverride
     {
@@ -51,14 +52,37 @@ internal static class DockerPublishedPortGateway
         set => ResolveOverrideLocal.Value = value;
     }
 
+    internal static Func<bool>? RunningInContainerOverride
+    {
+        get => RunningInContainerOverrideLocal.Value;
+        set => RunningInContainerOverrideLocal.Value = value;
+    }
+
     public static IPAddress? TryResolve()
     {
+        if (!IsRunningInContainer())
+        {
+            return null;
+        }
+
         if (ResolveOverride is not null)
         {
             return ResolveOverride();
         }
 
         return TryReadProcNetRoute() ?? TryReadNetworkInterface();
+    }
+
+    private static bool IsRunningInContainer()
+    {
+        if (RunningInContainerOverride is not null)
+        {
+            return RunningInContainerOverride();
+        }
+
+        var marker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER")
+            ?? Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINERS");
+        return string.Equals(marker, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IPAddress? TryReadProcNetRoute()

@@ -64,3 +64,13 @@ jobs:
         working-directory: web
         run: pnpm exec playwright test
         # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.
+
+  compose-smoke:
+    name: Synthetic Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Owner-capability path and SQLite volume survival
+        run: ./scripts/compose-sqlite-volume.sh

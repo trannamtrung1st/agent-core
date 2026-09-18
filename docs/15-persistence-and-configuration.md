@@ -77,7 +77,7 @@ Bind/validate on startup with standard .NET options and ValidateOnStart. These o
 | VoiceOptions / Voice | Canonical format, frame size, queue budgets, utterance limit, playback progress |
 | PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout, attachment blob root (`data/attachments`), workspace root (`data/workspaces`), template root (`agents/templates`), artifact blob root (`data/artifacts`); never under `local/` |
 | ObservabilityOptions / Observability | Logging level, timeline limit, content logging opt-in, OTLP enable/endpoint |
-| HostingOptions / Hosting | Same-origin/default local binding, allowed development origins, development proxy behavior, Compose published-port gateway trust (`TrustPublishedPortGateway`, default false) |
+| HostingOptions / Hosting | Same-origin/default local binding, allowed development origins, development proxy behavior, Compose published-port gateway trust (`TrustPublishedPortGateway`, default false; resolves only inside a container) |
 
 Complete conceptual appsettings.json example, **Markdown only**:
 

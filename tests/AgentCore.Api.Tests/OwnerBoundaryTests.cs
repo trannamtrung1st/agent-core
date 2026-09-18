@@ -59,6 +59,7 @@ public sealed class OwnerBoundaryTests : IClassFixture<AgentCoreApiFactory>
     public void IsTrustedLocal_accepts_only_the_published_port_gateway()
     {
         var gateway = IPAddress.Parse("172.18.0.1");
+        DockerPublishedPortGateway.RunningInContainerOverride = () => true;
         DockerPublishedPortGateway.ResolveOverride = () => gateway;
         try
         {
@@ -74,6 +75,27 @@ public sealed class OwnerBoundaryTests : IClassFixture<AgentCoreApiFactory>
         finally
         {
             DockerPublishedPortGateway.ResolveOverride = null;
+            DockerPublishedPortGateway.RunningInContainerOverride = null;
+        }
+    }
+
+    [Fact]
+    public void IsTrustedLocal_rejects_gateway_trust_outside_container_even_when_gateway_resolves()
+    {
+        var gateway = IPAddress.Parse("172.18.0.1");
+        DockerPublishedPortGateway.RunningInContainerOverride = () => false;
+        DockerPublishedPortGateway.ResolveOverride = () => gateway;
+        try
+        {
+            var context = new DefaultHttpContext();
+            context.Connection.RemoteIpAddress = gateway;
+            Assert.False(TrustedLocalCaller.IsTrustedLocal(context, trustPublishedPortGateway: true));
+            Assert.Null(DockerPublishedPortGateway.TryResolve());
+        }
+        finally
+        {
+            DockerPublishedPortGateway.ResolveOverride = null;
+            DockerPublishedPortGateway.RunningInContainerOverride = null;
         }
     }
 
