@@ -21,14 +21,15 @@ describe("ClientTranscriptLifecycle", () => {
     vi.unstubAllGlobals();
   });
 
-  it("mute abandons speculative partials without a final", async () => {
+  it("mute finalizes recognized text instead of failing the utterance", async () => {
     const { sent, fake, life } = setup();
     await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
     fake.emit({ kind: "started", utteranceId: "u1" });
     fake.emit({ kind: "partial", utteranceId: "u1", revision: 1, text: "hello" });
     await life.mute();
     expect(life.isListening()).toBe(false);
-    expect(sent.some((item) => item.kind === "final")).toBe(false);
+    expect(sent.some((item) => item.kind === "final" && item.text === "hello")).toBe(true);
+    expect(sent.some((item) => item.kind === "failed")).toBe(false);
     expect(fake.isRunning).toBe(false);
   });
 

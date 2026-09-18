@@ -315,7 +315,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         sessionError: null,
         errorFatal: false,
         errorHoldSequence: 0,
-        preflightReady: asString(payload.mode) === "voice" ? false : state.preflightReady,
+        preflightReady: false,
         voicePlaybackResponseId: null,
         liveUserTranscript: null
       };
@@ -444,7 +444,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         pendingMode,
         streamId: event.payload.streamId == null ? null : asString(event.payload.streamId),
         muted: Boolean(event.payload.muted),
-        preflightReady: mode === "voice" ? false : pendingMode === "voice" || state.preflightReady,
+        preflightReady: mode === "voice" ? false : pendingMode === "voice" ? state.preflightReady : false,
         error: state.errorFatal
           ? state.error
           : event.sequence === state.errorHoldSequence + 1

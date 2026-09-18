@@ -188,7 +188,8 @@ describe("applyServerEvent", () => {
       })
     );
     expect(state.pendingMode).toBeNull();
-    expect(state.preflightReady).toBe(true);
+    expect(state.preflightReady).toBe(false);
+    expect(state.mode).toBe("text");
     expect(state.entries).toHaveLength(1);
   });
 

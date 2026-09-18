@@ -95,7 +95,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
   });

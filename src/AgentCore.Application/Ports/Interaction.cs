@@ -58,4 +58,4 @@ public sealed record InteractionPolicy(
     int BackchannelMaxMs = 700,
     int DegradedInterruptMs = 250,
     int PendingVoiceTimeoutMs = 30_000,
-    int MaxUtteranceSeconds = 30);
+    int MaxUtteranceSeconds = 120);

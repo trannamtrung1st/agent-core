@@ -94,13 +94,10 @@ public sealed class RichEnvelopeRuntimeTests
     }
 
     [Fact]
-    public async Task Late_speech_after_tts_lock_does_not_start_a_second_source()
+    public async Task Speech_first_marker_is_spoken_while_display_stays_rich()
     {
         var output = new CapturingSessionOutput();
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var model = new ScriptedLanguageModel(
-            ["There are three points. ", "[[speech:Different spoken line]]"],
-            releaseAfterFirstChunk: release);
+        var model = new ScriptedLanguageModel(["[[speech:Different spoken line]]There are three points. "]);
         var synthesizer = new RecordingSynthesizer();
         await using var runtime = Create(
             output,
@@ -112,15 +109,11 @@ public sealed class RichEnvelopeRuntimeTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
-        Assert.True(synthesizer.Texts.Count >= 1);
-        Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("Different spoken line", text, StringComparison.Ordinal));
-        release.TrySetResult();
         var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        Assert.Contains(synthesizer.Texts, text => text.Contains("Different spoken line", StringComparison.Ordinal));
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
-        Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("Different spoken line", text, StringComparison.Ordinal));
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("There are three points. ", assistant.Text);
         Assert.Equal("Different spoken line", assistant.Envelope!.SpeechText);

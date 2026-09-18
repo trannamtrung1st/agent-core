@@ -217,6 +217,28 @@ public sealed class SpeechIngressTests
     }
 
     [Fact]
+    public async Task Max_utterance_timer_is_invalidated_after_normal_final()
+    {
+        var output = new CapturingSessionOutput();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        await using var runtime = Create(output, new SyntheticSpeechRecognizer(["Hello there"]), time: time);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000ad");
+        await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var generation = runtime.MaxUtteranceGeneration;
+        await runtime.SubmitSpeechAsync(new SpeechFinal(utterance, "Hello there", 0.9), 0.9);
+        await runtime.SubmitSpeechAsync(new SpeechEnded(utterance), 0.2);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        time.Advance(TimeSpan.FromSeconds(45));
+        await runtime.SubmitTimerElapsedAsync("maxUtterance", generation, utterance);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput error && error.Code == "MaxUtterance");
+    }
+
+    [Fact]
     public async Task Max_utterance_rotates_stream_and_admits_the_next_utterance()
     {
         var output = new CapturingSessionOutput();
@@ -430,9 +452,11 @@ public sealed class SpeechIngressTests
         ISessionOutput output,
         ISpeechRecognizer recognizer,
         ILanguageModel? model = null,
-        FakeTimeProvider? time = null)
+        FakeTimeProvider? time = null,
+        InteractionPolicy? policy = null)
     {
         time ??= new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        policy ??= new InteractionPolicy(MaxUtteranceSeconds: 30);
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
@@ -463,6 +487,7 @@ public sealed class SpeechIngressTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
+            policy: policy,
             recognizer: recognizer);
     }
 

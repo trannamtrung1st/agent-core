@@ -143,7 +143,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
   "Voice": {
     "Encoding": "pcm_s16le", "SampleRateHz": 24000, "Channels": 1,
     "FrameDurationMs": 20, "InputQueueMs": 500, "OutputQueueMs": 2000,
-    "PrebufferMs": 60, "MaxUtteranceSeconds": 30,
+    "PrebufferMs": 60, "MaxUtteranceSeconds": 120,
     "PlaybackProgressMs": 100, "PlaybackAckTimeoutMs": 5000,
     "Vad": {
       "NoiseFloorAdapt": 0.05, "StartThreshold": 0.7, "StartHangFrames": 3,

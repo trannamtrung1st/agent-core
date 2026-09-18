@@ -11,7 +11,7 @@ import { capture } from "../audio/capture";
 import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
 import { listSessionMessages } from "./api";
-import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, requestVoice, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
+import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, reportCommittedEntries, requestVoice, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
 
 const hooks = realtimeTestHooks!;
 
@@ -157,6 +157,58 @@ describe("realtime race handling", () => {
     await vi.waitFor(() => {
       expect(invoke.mock.calls.some(([method]) => method === "PlaybackCompleted")).toBe(true);
     });
+  });
+
+  it("sends display receipts in voice without copying them onto playback", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      lastServerSequence: 1,
+      mode: "voice",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "started",
+      sequence: 2,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r-voice",
+      type: "agent.response.started",
+      payload: { entryId: "e1", entrySequence: 1 }
+    });
+
+    reportCommittedEntries([
+      {
+        role: "assistant",
+        responseId: "r-voice",
+        text: "Hello from synthetic.",
+        status: "streaming"
+      }
+    ]);
+
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "ResponseReceived",
+        expect.objectContaining({
+          type: "response.received",
+          responseId: "r-voice",
+          payload: expect.objectContaining({
+            textEndExclusive: "Hello from synthetic.".length
+          })
+        })
+      );
+    });
+    expect(invoke.mock.calls.some(([method]) => method === "PlaybackProgress" || method === "PlaybackCompleted")).toBe(false);
   });
 
   it("duplicate-sequence playback.stop does not start a second flush", async () => {
@@ -1133,6 +1185,49 @@ describe("realtime race handling", () => {
       expect(invoke).toHaveBeenCalledTimes(2);
     });
     expect((invoke.mock.calls[1]?.[1] as { eventId?: string })?.eventId).toBe(firstId);
+  });
+
+  it("downgrades durable voice to text on passive session.ready", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "connecting",
+      sessionId: "s1",
+      sttTransport: "clientTranscript",
+      ttsTransport: "serverAudio",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "voice",
+        pendingMode: null,
+        status: "attached",
+        streamId: "stream-1",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [],
+        capabilities: {
+          stt: { transport: "clientTranscript" },
+          tts: { transport: "serverAudio" }
+        }
+      }
+    });
+    expect(useSessionStore.getState().mode).toBe("text");
+    expect(useSessionStore.getState().streamId).toBeNull();
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "text" } }));
+    });
   });
 
   it("clears a restored draft when reconnect history already has the turn", async () => {

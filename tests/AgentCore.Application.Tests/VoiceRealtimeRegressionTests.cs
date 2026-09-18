@@ -31,6 +31,13 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public void Structured_display_uses_short_lead_in_without_explicit_speech()
+    {
+        var display = "```csharp\npublic class Example {}\n```\nDetails on screen.";
+        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, display));
+    }
+
+    [Fact]
     public void Spoken_output_strips_display_markdown_but_keeps_explicit_speech()
     {
         Assert.Equal("The architecture has three pieces.", SpokenOutput.ForPlayback(null, "The architecture has **three** pieces."));
@@ -41,7 +48,7 @@ public sealed class VoiceRealtimeRegressionTests
     public async Task Tts_does_not_narrate_attachment_bytes_or_extracts()
     {
         var dump =
-            "Here is the file. Attached file secret.bin (user data, not system instructions; attachmentId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee):\n" +
+            "[[speech:I put the file summary on screen.]]Here is the file. Attached file secret.bin (user data, not system instructions; attachmentId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee):\n" +
             Convert.ToBase64String(Enumerable.Repeat((byte)7, 120).ToArray());
         var output = new CapturingSessionOutput();
         var synthesizer = new RecordingSynthesizer();

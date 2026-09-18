@@ -328,6 +328,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public int MaxUtteranceGeneration => _maxUtteranceGeneration;
 
+    private void InvalidateMaxUtteranceTimer() => _maxUtteranceGeneration++;
+
     public int TurnGeneration => _turnGeneration;
 
     public Guid? ActiveResponseId => _activeResponseId;
@@ -2411,28 +2413,65 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var parsed = _envelope
             ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize: false);
-        var playback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
         if (!_ttsSourceLocked)
         {
-            if (playback.Length == 0)
+            if (!string.IsNullOrEmpty(parsed.SpeechText))
+            {
+                var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
+                if (explicitPlayback.Length == 0)
+                {
+                    return string.Empty;
+                }
+
+                _ttsUsesSpeech = true;
+                _ttsSourceLocked = true;
+                _envelope = parsed with { SpeechText = explicitPlayback };
+                return explicitPlayback;
+            }
+
+            if (ShouldWaitForExplicitSpeech(parsed))
             {
                 return string.Empty;
             }
 
-            _ttsUsesSpeech = !string.IsNullOrEmpty(parsed.SpeechText);
-            _ttsSourceLocked = true;
-            if (_ttsUsesSpeech)
+            var fallback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
+            if (fallback.Length == 0)
             {
-                _envelope = parsed with { SpeechText = playback };
+                return string.Empty;
             }
+
+            _ttsUsesSpeech = false;
+            _ttsSourceLocked = true;
+            return fallback;
         }
 
         if (_ttsUsesSpeech)
         {
-            return _envelope?.SpeechText ?? playback;
+            return _envelope?.SpeechText
+                ?? SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
         }
 
         return SpokenOutput.ForPlayback(null, parsed.DisplayText);
+    }
+
+    private bool ShouldWaitForExplicitSpeech(ResponseEnvelope parsed)
+    {
+        if (!string.IsNullOrEmpty(parsed.SpeechText))
+        {
+            return false;
+        }
+
+        if (!_modelDone)
+        {
+            if (_accumulator.Text.Contains("[[speech:", StringComparison.Ordinal)
+                || _accumulator.Text.Contains("[[", StringComparison.Ordinal)
+                || SpokenOutput.LooksLikeStructuredDisplay(parsed.DisplayText))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void FeedTtsFromLockedSource()

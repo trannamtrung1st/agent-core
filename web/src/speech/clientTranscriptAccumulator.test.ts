@@ -162,4 +162,22 @@ describe("ClientTranscriptAccumulator", () => {
     acc.ingestInterim("secret");
     expect(acc.sent.some((item) => item.text === "secret")).toBe(false);
   });
+
+  it("finalizes open utterance on mute instead of failing", () => {
+    const { acc, sent, texts } = create();
+    acc.startUtterance();
+    acc.ingestInterim("I think it's beautiful");
+    acc.closeForMute();
+    expect(sent).toContain("final");
+    expect(sent).toContain("ended");
+    expect(sent).not.toContain("failed");
+    expect(texts.at(-1)).toBe("I think it's beautiful");
+  });
+
+  it("ends empty utterance on mute without failed", () => {
+    const { acc, sent } = create();
+    acc.startUtterance();
+    acc.closeForMute();
+    expect(sent).toEqual(["started", "ended"]);
+  });
 });

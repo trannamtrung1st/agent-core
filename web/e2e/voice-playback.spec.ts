@@ -1,5 +1,33 @@
 import { expect, test } from "@playwright/test";
 
+test("voice assistant text survives refresh", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: "Voice" }).click();
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".chat-message-assistant").nth(1)).toContainText("Hello from synthetic.", {
+    timeout: 25_000
+  });
+  await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackDiagnostics?.().completedResponses.length ?? 0), {
+    timeout: 25_000
+  }).toBeGreaterThan(0);
+  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
+  const url = page.url();
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page).toHaveURL(url);
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(2);
+  await expect(page.locator(".chat-message-assistant").nth(1)).toContainText("Hello from synthetic.");
+  await expect(page.locator(".chat-message-assistant").nth(1).locator(".assistant-body")).toBeVisible();
+});
+
 test("output worklet acknowledges playback while capture stays active", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });

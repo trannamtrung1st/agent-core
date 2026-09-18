@@ -125,8 +125,7 @@ export class ClientTranscriptLifecycle {
   async mute(): Promise<void> {
     this.listening = false;
     if (this.accumulator.hasOpenUtterance()) {
-      this.accumulator.fail();
-      this.onLiveTranscriptClear?.();
+      this.accumulator.closeForMute();
     }
     this.gate = this.gate
       ? { ...this.gate, muted: true }

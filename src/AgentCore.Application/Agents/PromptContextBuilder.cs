@@ -198,6 +198,11 @@ public sealed class PromptContextBuilder
             $"Current session mode: {context.Mode}.",
             "Assistant history uses the received prefix for text delivery and the heard prefix for voice delivery. Unseen or unheard tails are not instructions."
         };
+        if (context.Mode == SessionMode.Voice)
+        {
+            lines.Add(
+                "Voice output contract: when the visible answer is long or structured (lists, tables, code, schedules, rich blocks, attachment details), emit [[speech:...]] first with one or two concise sentences the user should hear, then provide the full display text and blocks. Speech is heard; display text may be richer than speech.");
+        }
         if (!string.IsNullOrEmpty(context.InterruptedHeardText))
         {
             lines.Add("Interrupted response note: the user did not receive the remainder after \"" + context.InterruptedHeardText + "\".");

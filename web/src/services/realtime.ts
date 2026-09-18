@@ -39,7 +39,7 @@ let clientTranscriptHeldForAgent = false;
 let injectedRecognizer: FakeSpeechRecognizer | null = null;
 let injectedSynthesizer: FakeSpeechSynthesizer | null = null;
 let transcriptStart: Promise<void> | null = null;
-let speechEvidenceChain: Promise<void> = Promise.resolve();
+let commandDispatchChain: Promise<void> = Promise.resolve();
 let speechEvidenceAttempts = 0;
 let audioFramesSent = 0;
 let audioOutputsReceived = 0;
@@ -66,6 +66,7 @@ const committedBlocks = new Map<string, string[]>();
 const duckingEnabled = true;
 let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
+let voiceModeRequested = false;
 let voiceEpoch = 0;
 let sendRequest: Promise<void> | null = null;
 const pendingStops = new Map<string, Promise<void>>();
@@ -204,6 +205,25 @@ async function invoke(
   }>;
 }
 
+type HubCommandAck = { accepted?: boolean; error?: WireError };
+
+function dispatchHubCommand(run: (sequence: number) => Promise<HubCommandAck | void>): Promise<HubCommandAck | void> {
+  const result = commandDispatchChain.then(async () => {
+    if (!connection) {
+      return;
+    }
+
+    commandSequence += 1;
+    const sequence = commandSequence;
+    return run(sequence);
+  });
+  commandDispatchChain = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
 function bindSpeechTransports(): void {
   const snapshot = useSessionStore.getState();
   speechTransport.setActiveInputTransport(
@@ -319,12 +339,10 @@ function sendSpeechEvidence(evidence: ClientSpeechEvidence): void {
   }
 
   speechEvidenceAttempts += 1;
-  commandSequence += 1;
-  const sequence = commandSequence;
-  speechEvidenceChain = speechEvidenceChain.then(async () => {
+  void dispatchHubCommand(async (sequence) => {
     const ack = await invoke("SpeechEvidence", "client.speech.evidence", payload, sequence);
     if (ack?.accepted) {
-      return;
+      return ack;
     }
 
     useSessionStore.setState({
@@ -332,6 +350,7 @@ function sendSpeechEvidence(evidence: ClientSpeechEvidence): void {
       sessionError: sessionErrorFromWire(ack?.error, ack?.error?.message ?? "Speech evidence was not accepted."),
       errorFatal: false
     });
+    return ack;
   }).catch((error: unknown) => {
     useSessionStore.setState({
       ...sessionFailurePatch(error instanceof Error ? error.message : "Speech evidence failed.", {
@@ -539,6 +558,7 @@ async function attachWithBusyRetry(lastServerSequence: number | null): Promise<b
   while (loop === attachLoop && connection) {
     try {
       commandSequence = 0;
+      commandDispatchChain = Promise.resolve();
       const ack = await invoke(
         "Attach",
         "session.attach",
@@ -703,6 +723,9 @@ function handleEvent(raw: ServerEvent): void {
     reconcilePendingUserText(next.entries);
     void hydrateBoundAttachments(next.sessionId);
     void hydrateActiveHistory(next.sessionId, next.entries);
+    if (String(raw.payload?.mode ?? "") === "voice" && !voiceModeRequested) {
+      downgradePassiveVoiceAttach();
+    }
   }
   if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
@@ -723,7 +746,7 @@ function handleEvent(raw: ServerEvent): void {
       void suspendClientTranscriptForAgentOutput();
     }
   }
-  if (raw.type === "agent.response.started" && useSessionStore.getState().mode === "text" && raw.responseId) {
+  if (raw.type === "agent.response.started" && raw.responseId) {
     lastReceiptOffset = 0;
     lastReceiptResponseId = raw.responseId;
     startReceipts(raw.responseId);
@@ -1138,10 +1161,7 @@ export function reportCommittedEntries(
     }
   }
 
-  const snapshot = useSessionStore.getState();
-  if (snapshot.mode === "text") {
-    void sendReceipt(false);
-  }
+  void sendReceipt(false);
 }
 
 function startReceipts(responseId: string): void {
@@ -1159,11 +1179,11 @@ function stopReceipts(): void {
 }
 
 async function sendReceipt(finalRender: boolean, responseId?: string): Promise<void> {
-  const snapshot = useSessionStore.getState();
-  if (snapshot.mode !== "text" || !connection) {
+  if (!connection) {
     return;
   }
 
+  const snapshot = useSessionStore.getState();
   const id = responseId ?? snapshot.liveResponseId ?? lastReceiptResponseId;
   if (!id) {
     return;
@@ -1176,27 +1196,29 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
 
   lastReceiptOffset = offset;
   lastReceiptResponseId = id;
-  commandSequence += 1;
-  await invoke(
-    "ResponseReceived",
-    "response.received",
-    { textEndExclusive: offset, blockIds: renderedBlockIds(id) },
-    commandSequence,
-    id
+  await dispatchHubCommand((sequence) =>
+    invoke(
+      "ResponseReceived",
+      "response.received",
+      { textEndExclusive: offset, blockIds: renderedBlockIds(id) },
+      sequence,
+      id
+    )
   );
 }
 
 async function sendPlayback(method: string, type: string, responseId: string, consumed: number, textEndExclusive?: number): Promise<void> {
-  commandSequence += 1;
-  await invoke(
-    method,
-    type,
-    {
-      consumedSamples: consumed,
-      textEndExclusive: textEndExclusive ?? renderedTextOffset(responseId)
-    },
-    commandSequence,
-    responseId
+  await dispatchHubCommand((sequence) =>
+    invoke(
+      method,
+      type,
+      {
+        consumedSamples: consumed,
+        textEndExclusive: textEndExclusive ?? renderedTextOffset(responseId)
+      },
+      sequence,
+      responseId
+    )
   );
 }
 
@@ -1309,6 +1331,22 @@ function voicePlaybackHoldActive(): boolean {
   );
 }
 
+function downgradePassiveVoiceAttach(): void {
+  useSessionStore.setState({
+    mode: "text",
+    pendingMode: null,
+    streamId: null,
+    captureLive: false,
+    muted: false,
+    preflightReady: false
+  });
+  void releaseClientSpeech();
+  capture.release();
+  void dispatchHubCommand((sequence) =>
+    invoke("SetMode", "session.mode.set", { mode: "text" }, sequence)
+  );
+}
+
 function composerOutputBusy(): boolean {
   const snapshot = useSessionStore.getState();
   return snapshot.liveResponseId != null || voicePlaybackHoldActive();
@@ -1418,13 +1456,14 @@ function syncCapture(): void {
           }
 
           duckLocally();
-          commandSequence += 1;
-          await invoke("SpeechStarted", "user.speech.started", {
-            streamId: startedStreamId,
-            utteranceId,
-            sampleOffset,
-            activityScore
-          }, commandSequence);
+          void dispatchHubCommand((sequence) =>
+            invoke("SpeechStarted", "user.speech.started", {
+              streamId: startedStreamId,
+              utteranceId,
+              sampleOffset,
+              activityScore
+            }, sequence)
+          );
         },
         speechEnded: async (utteranceId, sampleOffset, activityScore, _closing) => {
           if (!hub || !sessionId || !attachmentId) {
@@ -1435,14 +1474,15 @@ function syncCapture(): void {
             return;
           }
 
-          commandSequence += 1;
-          await invoke("SpeechEnded", "user.speech.ended", {
-            streamId: startedStreamId,
-            utteranceId,
-            sampleOffset,
-            durationMs: 0,
-            activityScore
-          }, commandSequence);
+          void dispatchHubCommand((sequence) =>
+            invoke("SpeechEnded", "user.speech.ended", {
+              streamId: startedStreamId,
+              utteranceId,
+              sampleOffset,
+              durationMs: 0,
+              activityScore
+            }, sequence)
+          );
         }
       }).then(() => publishCaptureLive());
       return;
@@ -1488,6 +1528,7 @@ export const realtimeTestHooks =
         resetOutput() {
           attachLoop += 1;
           reconnectBudgetStarted = 0;
+          voiceModeRequested = false;
           pendingUserText = null;
           sendRequest = null;
           pendingStops.clear();
@@ -1505,6 +1546,11 @@ export const realtimeTestHooks =
           playbackResponseId = null;
           syncVoicePlaybackResponseId(null);
           playbackConsumed = 0;
+          stopReceipts();
+          lastReceiptOffset = 0;
+          lastReceiptResponseId = null;
+          commandSequence = 0;
+          commandDispatchChain = Promise.resolve();
           capture.setOverflowListener(null);
           capture.setPlaybackListener(null);
           capture.setPlaybackCompleteListener(null);
@@ -1518,8 +1564,14 @@ async function startConnection(
   options?: { syncUrl?: "push" | "replace" | "none" }
 ): Promise<void> {
   const keepPreparedCapture = capture.isPrepared() && useSessionStore.getState().preflightReady;
+  if (!keepPreparedCapture) {
+    voiceEpoch += 1;
+    clientTranscriptHeldForAgent = false;
+    void releaseClientSpeech();
+  }
   await stopConnection({ keepPreparedCapture });
   commandSequence = 0;
+  commandDispatchChain = Promise.resolve();
   audioFramesSent = 0;
   audioOutputsReceived = 0;
   const epoch = ++connectionEpoch;
@@ -1740,9 +1792,13 @@ export async function startConversation(): Promise<boolean> {
 
 export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "push" | "replace" }): Promise<void> {
   disposed = true;
+  voiceEpoch += 1;
+  voiceModeRequested = false;
+  clientTranscriptHeldForAgent = false;
   await stopConnection();
   stopReceipts();
   capture.release();
+  void releaseClientSpeech();
   releaseAllPendingFiles();
   useSessionStore.setState({
     ...emptySession(),
@@ -2640,7 +2696,6 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     }));
   appendOptimisticUserEntry(eventId, text, refs, snapshot.mode);
 
-  commandSequence += 1;
   const payload: Record<string, unknown> = { text, attachmentIds: readyAttachmentIds };
   if (message.behavior === "interrupt") {
     payload.behavior = "interrupt";
@@ -2656,7 +2711,9 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   let accepted = false;
   sendRequest = (async () => {
     try {
-      const ack = await invoke("SendText", "user.text", payload, commandSequence, null, eventId);
+      const ack = await dispatchHubCommand((sequence) =>
+        invoke("SendText", "user.text", payload, sequence, null, eventId)
+      );
       if (!ack?.accepted) {
         pendingUserText = null;
         removeOptimisticUserEntry(eventId);
@@ -2938,11 +2995,11 @@ async function cancelServerResponse(responseId: string): Promise<void> {
     return existing;
   }
 
-  commandSequence += 1;
-  const sequence = commandSequence;
   const stopPromise = (async () => {
     try {
-      const ack = await invoke("CancelResponse", "agent.response.cancel", {}, sequence, responseId);
+      const ack = await dispatchHubCommand((dispatchSequence) =>
+        invoke("CancelResponse", "agent.response.cancel", {}, dispatchSequence, responseId)
+      );
       const latest = useSessionStore.getState();
       if (ack?.accepted || latest.liveResponseId !== responseId || ack?.error?.code === "StaleCommand") {
         return;
@@ -3031,6 +3088,7 @@ export async function requestVoice(): Promise<void> {
   }
 
   voiceRequest = (async () => {
+    voiceModeRequested = true;
     const epoch = ++voiceEpoch;
     useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
     ensureSpeechAdapters();
@@ -3039,6 +3097,7 @@ export async function requestVoice(): Promise<void> {
       if (!started || epoch !== voiceEpoch) {
         capture.release();
         useSessionStore.setState({ preflightReady: false });
+        voiceModeRequested = false;
         return;
       }
     }
@@ -3061,23 +3120,27 @@ export async function requestVoice(): Promise<void> {
         preflightReady: false,
         ...sessionFailurePatch(microphoneError(error), { category: "Speech", code: "SpeechCaptureFailed" })
       });
+      voiceModeRequested = false;
       return;
     }
     if (epoch !== voiceEpoch) {
       capture.release();
       useSessionStore.setState({ preflightReady: false });
+      voiceModeRequested = false;
       return;
     }
 
-    commandSequence += 1;
     try {
-      const ack = await invoke("SetMode", "session.mode.set", { mode: "voice" }, commandSequence);
+      const ack = await dispatchHubCommand((sequence) =>
+        invoke("SetMode", "session.mode.set", { mode: "voice" }, sequence)
+      );
       if (epoch !== voiceEpoch) {
         return;
       }
 
       if (!ack?.accepted) {
         capture.release();
+        voiceModeRequested = false;
         useSessionStore.setState({
           preflightReady: false,
           ...sessionFailurePatch(ack?.error?.message ?? "Voice mode was rejected.", {
@@ -3086,6 +3149,8 @@ export async function requestVoice(): Promise<void> {
             code: "VoiceUnavailable"
           })
         });
+      } else {
+        voiceModeRequested = false;
       }
     } catch (error) {
       if (epoch !== voiceEpoch) {
@@ -3112,9 +3177,10 @@ export async function requestVoice(): Promise<void> {
 
 export async function cancelVoice(): Promise<void> {
   voiceEpoch += 1;
-  commandSequence += 1;
   try {
-    const ack = await invoke("SetMode", "session.mode.set", { mode: "text" }, commandSequence);
+    const ack = await dispatchHubCommand((sequence) =>
+      invoke("SetMode", "session.mode.set", { mode: "text" }, sequence)
+    );
     if (!ack?.accepted) {
       capture.release();
       void releaseClientSpeech();
@@ -3153,15 +3219,17 @@ export async function setMuted(muted: boolean): Promise<void> {
   if (muted) {
     if (clientTranscript) {
       await ensureTranscriptLife().mute();
+      await commandDispatchChain;
     } else {
       await capture.muteInput();
     }
     publishCaptureLive();
   }
 
-  commandSequence += 1;
   try {
-    const ack = await invoke("SetMuted", "session.mute", { muted }, commandSequence);
+    const ack = await dispatchHubCommand((sequence) =>
+      invoke("SetMuted", "session.mute", { muted }, sequence)
+    );
     if (!ack?.accepted) {
       useSessionStore.setState({ error: ack?.error?.message ?? "Mute failed.", sessionError: sessionErrorFromWire(ack?.error, ack?.error?.message ?? "Mute failed."), errorFatal: false });
       if (muted) {
@@ -3190,10 +3258,11 @@ export async function setMuted(muted: boolean): Promise<void> {
 export async function hangUp(): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (snapshot.sessionId) {
-    commandSequence += 1;
     let ended = false;
     try {
-      const ack = await invoke("EndSession", "session.end", { reason: "userEnded" }, commandSequence);
+      const ack = await dispatchHubCommand((sequence) =>
+        invoke("EndSession", "session.end", { reason: "userEnded" }, sequence)
+      );
       ended = Boolean(ack?.accepted);
     } catch {
       ended = false;
@@ -3284,7 +3353,7 @@ if (typeof window !== "undefined") {
     flushing: () => flushing,
     emitClientSpeech: async (evidence: ClientSpeechEvidence) => {
       ensureTranscriptLife().ingest(evidence);
-      await speechEvidenceChain;
+      await commandDispatchChain;
     },
     clientSpeechListening: () => Boolean(transcriptLife?.isListening()),
     getUserMediaUsed: () => capture.usedMicrophone(),

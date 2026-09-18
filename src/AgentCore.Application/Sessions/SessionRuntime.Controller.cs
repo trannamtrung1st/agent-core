@@ -486,6 +486,11 @@ public sealed partial class SessionRuntime
         {
             _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         }
+
+        if (input.Evidence is SpeechFinal or SpeechEnded or RecognitionFailed)
+        {
+            InvalidateMaxUtteranceTimer();
+        }
     }
 
     private async Task HandleClassifierAsync(ClassifierReturned input, CancellationToken cancellationToken)
@@ -640,7 +645,7 @@ public sealed partial class SessionRuntime
                         new ErrorOutput(
                             "Transport",
                             "MaxUtterance",
-                            "Utterance exceeded 30 seconds and was closed.",
+                            $"Utterance exceeded {_policy.MaxUtteranceSeconds} seconds and was closed.",
                             false,
                             null)),
                     cancellationToken)
@@ -688,6 +693,7 @@ public sealed partial class SessionRuntime
         {
             _activeUtteranceId = null;
             _utteranceStarted = null;
+            InvalidateMaxUtteranceTimer();
         }
 
         if (evaluation.Decision is InteractionDecision.Interrupt && _activeResponseId is { } live)
@@ -722,6 +728,7 @@ public sealed partial class SessionRuntime
 
         var utteranceId = _activeUtteranceId ?? context.EventId;
         _committedUtteranceId = _activeUtteranceId;
+        InvalidateMaxUtteranceTimer();
         NoteUserActivity();
         _environmentQueue.Clear();
         _timerGeneration++;

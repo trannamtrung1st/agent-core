@@ -184,6 +184,25 @@ export class ClientTranscriptAccumulator {
     this.restartPrefix = null;
   }
 
+  closeForMute(): void {
+    if (!this.utteranceId) {
+      return;
+    }
+
+    const text = this.spokenText();
+    if (text) {
+      this.flushPartial(true);
+      this.applicationFinalSent = true;
+      this.send({ kind: "final", utteranceId: this.utteranceId, text, confidence: 0.9, activityScore: 0.8 });
+    }
+
+    this.send({ kind: "ended", utteranceId: this.utteranceId, durationMs: 0, activityScore: 0.2 });
+    this.utteranceId = null;
+    this.interim = "";
+    this.restartPrefix = null;
+    this.applicationFinalSent = false;
+  }
+
   fail(): void {
     if (!this.utteranceId) {
       return;

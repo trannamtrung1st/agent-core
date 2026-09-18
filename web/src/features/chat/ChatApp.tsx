@@ -122,13 +122,15 @@ export function ChatApp() {
   const composerReady = !readonly
     && state.status !== "paused"
     && (state.connection === "ready" || (!inSession && state.connection === "idle"));
-  const voiceAvailable = voiceControlEnabled({
-    voiceAvailable: inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable),
-    inputTransport: state.sttTransport,
-    outputTransport: state.ttsTransport,
-    recognitionSupported: clientRecognitionSupported(),
-    synthesisSupported: clientSynthesisSupported()
-  });
+  const voiceAvailable =
+    voiceControlEnabled({
+      voiceAvailable: inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable),
+      inputTransport: state.sttTransport,
+      outputTransport: state.ttsTransport,
+      recognitionSupported: clientRecognitionSupported(),
+      synthesisSupported: clientSynthesisSupported()
+    })
+    && (!inSession || state.connection === "ready");
   const headerTimestamp = inSession
     ? state.entries.at(-1)?.createdAt
       ?? state.catalogItems.find((item) => item.sessionId === state.sessionId)?.updatedAt

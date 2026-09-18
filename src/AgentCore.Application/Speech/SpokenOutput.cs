@@ -6,6 +6,7 @@ namespace AgentCore.Application.Speech;
 public static class SpokenOutput
 {
     public const int MaxChars = 280;
+    public const string StructuredLeadIn = "I've put the detailed answer on screen.";
 
     public static string ForPlayback(string? speechText, string displayText)
     {
@@ -15,7 +16,17 @@ public static class SpokenOutput
         }
 
         var display = displayText ?? string.Empty;
-        if (!LooksLikeFileDump(display) && display.Length <= MaxChars)
+        if (LooksLikeFileDump(display))
+        {
+            return Clip(StripDump(display));
+        }
+
+        if (LooksLikeStructuredDisplay(display))
+        {
+            return StructuredLeadIn;
+        }
+
+        if (display.Length <= MaxChars)
         {
             return Clip(StripMarkdown(display));
         }
@@ -23,10 +34,39 @@ public static class SpokenOutput
         var stripped = StripMarkdown(StripDump(display));
         if (string.IsNullOrWhiteSpace(stripped))
         {
-            return "I reviewed the attached file.";
+            return StructuredLeadIn;
         }
 
         return Clip(stripped);
+    }
+
+    public static bool LooksLikeStructuredDisplay(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        if (text.Contains("```", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (MarkdownTable.IsMatch(text))
+        {
+            return true;
+        }
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var listLines = lines.Count(line => line.TrimStart().StartsWith("- ", StringComparison.Ordinal)
+            || line.TrimStart().StartsWith("* ", StringComparison.Ordinal)
+            || Regex.IsMatch(line.TrimStart(), @"^\d+\.\s"));
+        if (listLines >= 3)
+        {
+            return true;
+        }
+
+        return text.Length > MaxChars;
     }
 
     public static bool LooksLikeFileDump(string text)
@@ -104,7 +144,8 @@ public static class SpokenOutput
             return text;
         }
 
-        var stripped = MarkdownImage.Replace(text, " ");
+        var stripped = FencedCodeBlock.Replace(text, " ");
+        stripped = MarkdownImage.Replace(stripped, " ");
         stripped = MarkdownLink.Replace(stripped, "$1");
         stripped = MarkdownHeading.Replace(stripped, "");
         stripped = MarkdownFence.Replace(stripped, " ");
@@ -112,6 +153,8 @@ public static class SpokenOutput
         return stripped.Trim();
     }
 
+    private static readonly Regex FencedCodeBlock = new("```[\\s\\S]*?```", RegexOptions.Compiled);
+    private static readonly Regex MarkdownTable = new(@"^\|.+\|\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex MarkdownImage = new(@"!\[[^\]]*\]\([^)]*\)", RegexOptions.Compiled);
     private static readonly Regex MarkdownLink = new(@"\[([^\]]+)\]\([^)]*\)", RegexOptions.Compiled);
     private static readonly Regex MarkdownHeading = new(@"^#{1,6}\s+", RegexOptions.Compiled | RegexOptions.Multiline);
