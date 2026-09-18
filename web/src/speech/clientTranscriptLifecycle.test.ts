@@ -140,7 +140,7 @@ describe("ClientTranscriptLifecycle", () => {
     expect(life.isListening()).toBe(false);
   });
 
-  it("blocks voice when the browser adapter hits the restart cap during an open utterance", async () => {
+  it("blocks voice when the accumulator exhausts the restart budget during an open utterance", async () => {
     vi.useFakeTimers();
     class MockRecognition {
       onend: ((event: Event) => void) | null = null;
@@ -149,9 +149,12 @@ describe("ClientTranscriptLifecycle", () => {
       lang = "";
       onstart: ((event: Event) => void) | null = null;
       onerror: ((event: { error?: string }) => void) | null = null;
-      onresult = null;
-      onspeechstart = null;
-      onspeechend = null;
+      onresult: ((event: {
+        resultIndex: number;
+        results: ArrayLike<{ isFinal: boolean; 0?: { transcript?: string; confidence?: number } }>;
+      }) => void) | null = null;
+      onspeechstart: ((event: Event) => void) | null = null;
+      onspeechend: ((event: Event) => void) | null = null;
       start(): void {
         this.onstart?.(new Event("start"));
       }
@@ -171,16 +174,19 @@ describe("ClientTranscriptLifecycle", () => {
     }
     vi.stubGlobal("SpeechRecognition", TrackingRecognition);
     const errors: string[] = [];
-    const adapter = new BrowserSpeechRecognizer();
+    const adapter = new BrowserSpeechRecognizer({ transcriptInactivityMs: 60_000 });
     const transport = createSpeechTransportService(adapter);
     const life = new ClientTranscriptLifecycle(transport, () => undefined, (error) => errors.push(error.code));
     await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
     holder.current?.onspeechstart?.(new Event("speechstart"));
-    holder.current?.onend?.(new Event("end"));
-    await vi.advanceTimersByTimeAsync(0);
-    holder.current?.onend?.(new Event("end"));
-    await vi.advanceTimersByTimeAsync(250);
-    holder.current?.onend?.(new Event("end"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "I was saying" } }]
+    });
+    for (let index = 0; index < 4; index += 1) {
+      holder.current?.onend?.(new Event("end"));
+      await vi.advanceTimersByTimeAsync(500);
+    }
     expect(errors).toEqual(["SpeechRecognitionRestartLimit"]);
     expect(life.isListening()).toBe(false);
     expect(life.isBlocked()).toBe(true);

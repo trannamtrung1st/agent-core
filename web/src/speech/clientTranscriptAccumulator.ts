@@ -224,6 +224,10 @@ export class ClientTranscriptAccumulator {
       return false;
     }
 
+    if (!this.spokenText()) {
+      return true;
+    }
+
     this.freezeSpokenPrefix();
     this.restarts += 1;
     if (this.restarts > this.maxRestarts) {

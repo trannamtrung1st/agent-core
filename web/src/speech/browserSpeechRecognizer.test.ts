@@ -223,7 +223,7 @@ describe("BrowserSpeechRecognizer", () => {
     await adapter.cancel();
   });
 
-  it("keeps restarting through idle native onends while no utterance is open", async () => {
+  it("keeps restarting through many idle native onends without surfacing restart-limit errors", async () => {
     vi.useFakeTimers();
     const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
@@ -234,37 +234,87 @@ describe("BrowserSpeechRecognizer", () => {
       onRecognitionEnded: () => undefined
     });
     expect(holder.starts).toBe(1);
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < 20; index += 1) {
       holder.current?.onend?.(new Event("end"));
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2000);
     }
     expect(errors).toEqual([]);
-    expect(holder.starts).toBe(9);
+    expect(holder.starts).toBe(21);
     await adapter.cancel();
   });
 
-  it("stops after three idle native onends without speech progress during an open utterance", async () => {
+  it("backs off idle native restarts until the delay cap is reached", async () => {
     vi.useFakeTimers();
     const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
-    const errors: string[] = [];
     await adapter.start({
       onEvidence: () => undefined,
-      onError: (error) => errors.push(error.code),
+      onError: () => undefined,
       onRecognitionEnded: () => undefined
     });
-    expect(holder.starts).toBe(1);
+    const advanceForNextRestart = async (expectedDelayMs: number) => {
+      holder.current?.onend?.(new Event("end"));
+      const startsBefore = holder.starts;
+      if (expectedDelayMs === 0) {
+        await vi.advanceTimersByTimeAsync(0);
+      } else {
+        await vi.advanceTimersByTimeAsync(expectedDelayMs - 1);
+        expect(holder.starts).toBe(startsBefore);
+        await vi.advanceTimersByTimeAsync(1);
+      }
+      expect(holder.starts).toBe(startsBefore + 1);
+    };
+    await advanceForNextRestart(0);
+    await advanceForNextRestart(250);
+    await advanceForNextRestart(500);
+    await advanceForNextRestart(1000);
+    await advanceForNextRestart(2000);
+    await advanceForNextRestart(2000);
+    await adapter.cancel();
+  });
+
+  it("does not surface restart-limit for noise-only speechstart with repeated native onends", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const errors: string[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), (error) => errors.push(error.code));
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
     holder.current?.onspeechstart?.(new Event("speechstart"));
-    holder.current?.onend?.(new Event("end"));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(holder.starts).toBe(2);
-    holder.current?.onend?.(new Event("end"));
-    await vi.advanceTimersByTimeAsync(250);
-    expect(holder.starts).toBe(3);
-    holder.current?.onend?.(new Event("end"));
+    for (let index = 0; index < 6; index += 1) {
+      holder.current?.onend?.(new Event("end"));
+      await vi.advanceTimersByTimeAsync(2000);
+    }
+    expect(errors).toEqual([]);
+    expect(life.isBlocked()).toBe(false);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sent.filter((item) => item.kind === "failed")).toHaveLength(1);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(0);
+    await adapter.cancel();
+  });
+
+  it("blocks voice through lifecycle after repeated mid-utterance onends with recognized text", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const errors: string[] = [];
+    const adapter = new BrowserSpeechRecognizer({ transcriptInactivityMs: 60_000 });
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, () => undefined, (error) => errors.push(error.code));
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "I was saying" } }]
+    });
+    for (let index = 0; index < 4; index += 1) {
+      holder.current?.onend?.(new Event("end"));
+      await vi.advanceTimersByTimeAsync(500);
+    }
     expect(errors).toEqual(["SpeechRecognitionRestartLimit"]);
-    await vi.advanceTimersByTimeAsync(500);
-    expect(holder.starts).toBe(3);
+    expect(life.isListening()).toBe(false);
+    expect(life.isBlocked()).toBe(true);
     await adapter.cancel();
   });
 

@@ -92,6 +92,15 @@ describe("ClientTranscriptAccumulator", () => {
     expect(sent.filter((kind) => kind === "ended")).toHaveLength(1);
   });
 
+  it("does not consume the restart budget when no transcript has been recognized", () => {
+    const { acc, errors } = create();
+    acc.startUtterance();
+    for (let index = 0; index < 6; index += 1) {
+      expect(acc.unexpectedRestart()).toBe(true);
+    }
+    expect(errors).toEqual([]);
+  });
+
   it("preserves the accumulator across bounded restarts without a second final", () => {
     const { acc, sent, texts } = create();
     acc.startUtterance();

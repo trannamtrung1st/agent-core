@@ -1,4 +1,4 @@
-import { speechError, speechErrorFromRecognitionError, type SpeechErrorCode } from "./errors";
+import { speechError, speechErrorFromRecognitionError } from "./errors";
 import type {
   ClientSpeechRecognizer,
   ClientSpeechRecognizerListener,
@@ -27,8 +27,8 @@ type BrowserRecognition = {
 
 type RecognitionCtor = new () => BrowserRecognition;
 
-const RESTART_BACKOFF_MS = [0, 250, 500];
-const MAX_IDLE_ENDS_WITHOUT_PROGRESS = 3;
+const UTTERANCE_RESTART_BACKOFF_MS = [0, 250, 500];
+const IDLE_RESTART_BACKOFF_MS = [0, 250, 500, 1000, 2000];
 /** Heuristic only: Web Speech does not bound speechend→result delay. */
 const SPEECH_END_GRACE_MS = 300;
 export const DEFAULT_TRANSCRIPT_INACTIVITY_MS = 1800;
@@ -62,7 +62,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
   private utteranceOpen = false;
   private revision = 0;
   private startedAt = 0;
-  private consecutiveEnds = 0;
+  private idleEndStreak = 0;
+  private utteranceEndStreak = 0;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private speechEndedPending = false;
   private speechEndGraceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,7 +95,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     this.language = recognitionLanguage(options?.language);
     this.wantRunning = true;
     this.fatal = false;
-    this.consecutiveEnds = 0;
+    this.idleEndStreak = 0;
+    this.utteranceEndStreak = 0;
     this.speechEndedPending = false;
     this.clearSpeechEndGrace();
     this.beginNative(Ctor, this.generation);
@@ -131,7 +133,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         return;
       }
 
-      this.consecutiveEnds = 0;
+      this.idleEndStreak = 0;
+      this.utteranceEndStreak = 0;
       if (!this.utteranceOpen) {
         this.beginUtterance();
       }
@@ -141,9 +144,9 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         return;
       }
 
-      this.consecutiveEnds = 0;
       const results = event.results;
       let sawFinal = false;
+      let hadTranscriptProgress = false;
       for (let index = event.resultIndex; index < results.length; index += 1) {
         const result = results[index];
         const alternative = result?.[0];
@@ -151,6 +154,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         if (!text) {
           continue;
         }
+
+        hadTranscriptProgress = true;
 
         if (!this.utteranceOpen) {
           this.beginUtterance();
@@ -169,6 +174,11 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
           text,
           confidence: alternative?.confidence
         });
+      }
+
+      if (hadTranscriptProgress) {
+        this.idleEndStreak = 0;
+        this.utteranceEndStreak = 0;
       }
 
       if (this.speechEndedPending) {
@@ -232,21 +242,11 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         return;
       }
 
-      // Chrome ends idle recognition sessions often; only cap restarts mid-utterance.
-      if (this.utteranceOpen) {
-        this.consecutiveEnds += 1;
-        if (this.consecutiveEnds >= MAX_IDLE_ENDS_WITHOUT_PROGRESS) {
-          this.failRecognition("SpeechRecognitionRestartLimit");
-          return;
-        }
-      } else {
-        this.consecutiveEnds = 0;
-      }
-
-      const delay =
-        this.utteranceOpen
-          ? (RESTART_BACKOFF_MS[Math.min(this.consecutiveEnds - 1, RESTART_BACKOFF_MS.length - 1)] ?? 500)
-          : 0;
+      const backoffTable = this.utteranceOpen ? UTTERANCE_RESTART_BACKOFF_MS : IDLE_RESTART_BACKOFF_MS;
+      const endStreak = this.utteranceOpen
+        ? (this.utteranceEndStreak += 1)
+        : (this.idleEndStreak += 1);
+      const delay = backoffTable[Math.min(endStreak - 1, backoffTable.length - 1)] ?? backoffTable.at(-1) ?? 0;
       this.clearRestart();
       this.restartTimer = setTimeout(() => {
         this.restartTimer = null;
@@ -391,19 +391,6 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
       this.speechEndedPending = false;
       this.endUtterance();
     }, SPEECH_END_GRACE_MS);
-  }
-
-  private failRecognition(code: SpeechErrorCode): void {
-    this.fatal = true;
-    this.wantRunning = false;
-    this.clearRestart();
-    this.clearSpeechEndGrace();
-    this.speechEndedPending = false;
-    this.listener?.onError(speechError(code));
-    if (this.utteranceOpen) {
-      this.listener?.onEvidence({ kind: "failed", utteranceId: this.utteranceId });
-      this.utteranceOpen = false;
-    }
   }
 
   private stopNative(preserveUtteranceTimers = false): void {
