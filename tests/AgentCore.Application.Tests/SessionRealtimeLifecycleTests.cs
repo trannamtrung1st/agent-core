@@ -183,6 +183,60 @@ public sealed class SessionRealtimeLifecycleTests
     }
 
     [Fact]
+    public async Task Ready_voice_available_for_browser_stt_and_server_audio_tts()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(
+            output,
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            new ScriptedLanguageModel(),
+            voice: new VoiceAvailability
+            {
+                Plan = new EffectiveSpeechPlan(
+                    SpeechTransport.ClientTranscript,
+                    SpeechTransport.ServerAudio,
+                    RecognitionResolvable: true,
+                    SynthesisResolvable: true,
+                    RecognitionCapabilities: null,
+                    SynthesisCapabilities: new SynthesisCapabilities(true, false, true, true, true, [CanonicalAudio.Format]))
+            });
+        await runtime.AttachAsync();
+        var ready = Assert.IsType<ReadyOutput>(output.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.True(ready.Ready.Agent.VoiceAvailable);
+        Assert.Equal(SpeechTransport.ClientTranscript, ready.Ready.InputTransport);
+        Assert.Equal(SpeechTransport.ServerAudio, ready.Ready.OutputTransport);
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+    }
+
+    [Fact]
+    public async Task Ready_voice_available_for_server_audio_stt_and_client_speech_tts()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(
+            output,
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            new ScriptedLanguageModel(),
+            voice: new VoiceAvailability
+            {
+                Plan = new EffectiveSpeechPlan(
+                    SpeechTransport.ServerAudio,
+                    SpeechTransport.ClientSpeech,
+                    RecognitionResolvable: true,
+                    SynthesisResolvable: true,
+                    RecognitionCapabilities: new RecognitionCapabilities(false, false, false, true),
+                    SynthesisCapabilities: null)
+            });
+        await runtime.AttachAsync();
+        var ready = Assert.IsType<ReadyOutput>(output.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.True(ready.Ready.Agent.VoiceAvailable);
+        Assert.Equal(SpeechTransport.ServerAudio, ready.Ready.InputTransport);
+        Assert.Equal(SpeechTransport.ClientSpeech, ready.Ready.OutputTransport);
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+    }
+
+    [Fact]
     public async Task SetMode_voice_rejected_when_speech_adapters_unresolved()
     {
         var output = new CapturingSessionOutput();

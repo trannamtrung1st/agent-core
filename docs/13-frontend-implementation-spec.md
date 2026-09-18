@@ -30,6 +30,7 @@ User clicks Voice
 local audio preflight while the gesture is active
     ├── if stt.transport is clientTranscript: do not call getUserMedia for STT PCM
     ├── if tts.transport is serverAudio (including mixed clientTranscript+serverAudio): create/resume AudioContext and initialize playback worklets
+    ├── if tts.transport is clientSpeech and stt.transport is serverAudio: request microphone and input worklets; do not load PCM playback worklets
     ├── if both transports are client-side: skip capture worklets; start the client recognizer/synthesizer adapters
     ├── if stt.transport is serverAudio: request microphone permission and input worklets
     └── DO NOT send PCM yet

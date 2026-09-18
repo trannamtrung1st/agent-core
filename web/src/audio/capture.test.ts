@@ -64,6 +64,35 @@ describe("capture preflight", () => {
     expect(capture.usedMicrophone()).toBe(false);
   });
 
+  it("loads microphone without playback worklet when output is clientSpeech", async () => {
+    const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [] });
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia }
+    });
+    const addModule = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      destination = {};
+      resume = vi.fn();
+      close = vi.fn();
+      audioWorklet = { addModule };
+      createGain = () => ({ gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() });
+      createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+    });
+    vi.stubGlobal("AudioWorkletNode", class {
+      port = { onmessage: null, postMessage: vi.fn() };
+      connect = vi.fn();
+      disconnect = vi.fn();
+    });
+    await capture.preflight({ microphone: true, playback: false });
+    expect(getUserMedia).toHaveBeenCalled();
+    expect(addModule).toHaveBeenCalledWith("/worklets/input-processor.js");
+    expect(addModule).not.toHaveBeenCalledWith("/worklets/output-processor.js");
+    expect(capture.isPrepared()).toBe(true);
+    expect(capture.usedMicrophone()).toBe(true);
+    expect(capture.outputWorkletLoaded()).toBe(false);
+  });
+
   it("muteInput stops streaming without releasing the graph", async () => {
     const stop = vi.fn();
     vi.stubGlobal("navigator", {

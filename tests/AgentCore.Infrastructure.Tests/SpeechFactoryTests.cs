@@ -168,6 +168,51 @@ public sealed class SpeechFactoryTests
         Assert.False(speech.Recognizer is SyntheticSpeechRecognizer);
     }
 
+    [Fact]
+    public void Section37_combinations_resolve_with_dummy_keys_without_synthetic_fallback()
+    {
+        var cases = new (string Recognition, string Synthesis, string Input, string Output, Type? Recognizer, Type? Synthesizer)[]
+        {
+            ("Synthetic", "Synthetic", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, typeof(SyntheticSpeechRecognizer), typeof(SyntheticSpeechSynthesizer)),
+            ("Browser", "Browser", SpeechTransport.ClientTranscript, SpeechTransport.ClientSpeech, null, null),
+            ("Browser", "OpenAI", SpeechTransport.ClientTranscript, SpeechTransport.ServerAudio, null, typeof(OpenAiSpeechSynthesizer)),
+            ("OpenAICompatibleBatch", "Browser", SpeechTransport.ServerAudio, SpeechTransport.ClientSpeech, typeof(OpenAICompatibleBatchSpeechRecognizer), null),
+            ("OpenAICompatibleBatch", "OpenAI", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, typeof(OpenAICompatibleBatchSpeechRecognizer), typeof(OpenAiSpeechSynthesizer))
+        };
+
+        foreach (var item in cases)
+        {
+            using var provider = Build(new SpeechProvidersOptions
+            {
+                Recognition = new SpeechRecognitionProviderOptions { Adapter = item.Recognition, ApiKey = "not-a-live-key" },
+                Synthesis = new SpeechSynthesisProviderOptions { Adapter = item.Synthesis, ApiKey = "not-a-live-key" }
+            });
+            var speech = provider.GetRequiredService<SpeechResolution>();
+            Assert.Equal(item.Input, speech.Plan.InputTransport);
+            Assert.Equal(item.Output, speech.Plan.OutputTransport);
+            Assert.True(speech.Plan.RecognitionResolvable);
+            Assert.True(speech.Plan.SynthesisResolvable);
+            Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
+            if (item.Recognizer is null)
+            {
+                Assert.Null(speech.Recognizer);
+            }
+            else
+            {
+                Assert.IsType(item.Recognizer, speech.Recognizer);
+            }
+
+            if (item.Synthesizer is null)
+            {
+                Assert.Null(speech.Synthesizer);
+            }
+            else
+            {
+                Assert.IsType(item.Synthesizer, speech.Synthesizer);
+            }
+        }
+    }
+
     [Theory]
     [InlineData("Synthetic", "Synthetic", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, true, true, true, true)]
     [InlineData("Browser", "Browser", SpeechTransport.ClientTranscript, SpeechTransport.ClientSpeech, false, false, true, true)]

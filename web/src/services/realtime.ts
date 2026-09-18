@@ -2837,10 +2837,11 @@ export async function requestVoice(): Promise<void> {
     ensureSpeechAdapters();
     try {
       const current = useSessionStore.getState();
-      const skipCapture = current.sttTransport === "clientTranscript" && current.ttsTransport === "clientSpeech";
       const microphone = current.sttTransport !== "clientTranscript";
+      const playback = current.ttsTransport !== "clientSpeech";
+      const skipCapture = !microphone && !playback;
       if (!skipCapture && !capture.isPrepared()) {
-        await capture.preflight(microphone ? undefined : { microphone: false });
+        await capture.preflight({ microphone, playback });
       }
     } catch (error) {
       if (epoch !== voiceEpoch) {

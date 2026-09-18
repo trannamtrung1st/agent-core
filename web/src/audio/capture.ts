@@ -17,7 +17,7 @@ type Prepared = {
   context: AudioContext;
   source: MediaStreamAudioSourceNode | null;
   worklet: AudioWorkletNode;
-  output: AudioWorkletNode;
+  output: AudioWorkletNode | null;
   gain: GainNode;
   stream: MediaStream;
 };
@@ -109,13 +109,14 @@ class MicrophoneCapture {
     this.onOverflow = listener;
   }
 
-  async preflight(options?: { microphone?: boolean }): Promise<void> {
+  async preflight(options?: { microphone?: boolean; playback?: boolean }): Promise<void> {
     this.release();
     if (typeof AudioWorkletNode === "undefined") {
       throw new Error("AudioWorklet is not available.");
     }
 
     const wantMicrophone = options?.microphone !== false;
+    const wantPlayback = options?.playback !== false;
     const stream = wantMicrophone
       ? await Promise.race([
           navigator.mediaDevices.getUserMedia({
@@ -145,11 +146,13 @@ class MicrophoneCapture {
     }
 
     try {
+      const modules = ["/worklets/input-processor.js"];
+      if (wantPlayback) {
+        modules.push("/worklets/output-processor.js");
+      }
+
       await Promise.race([
-        Promise.all([
-          context.audioWorklet.addModule("/worklets/input-processor.js"),
-          context.audioWorklet.addModule("/worklets/output-processor.js")
-        ]),
+        Promise.all(modules.map((module) => context.audioWorklet.addModule(module))),
         new Promise((_, reject) => {
           window.setTimeout(() => reject(new Error("AudioWorklet addModule timed out.")), 4000);
         })
@@ -159,28 +162,31 @@ class MicrophoneCapture {
         numberOfOutputs: 1,
         outputChannelCount: [1]
       });
-      const output = new AudioWorkletNode(context, "output-processor", {
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [1]
-      });
+      const output = wantPlayback
+        ? new AudioWorkletNode(context, "output-processor", {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            outputChannelCount: [1]
+          })
+        : null;
       const gain = context.createGain();
       gain.gain.value = 0;
       worklet.connect(gain);
       gain.connect(context.destination);
-      output.connect(context.destination);
+      output?.connect(context.destination);
       worklet.port.onmessage = (event: MessageEvent<{ pcm: ArrayBuffer; sampleOffset: number }>) => {
         return this.onFrame(event.data.pcm, event.data.sampleOffset);
       };
-      output.port.onmessage = (event: MessageEvent<{
-        type?: string;
-        consumed?: number;
-        queued?: number;
-        responseId?: string | null;
-        epoch?: number;
-        closed?: boolean;
-        rendered?: Record<string, number>;
-      }>) => {
+      if (output) {
+        output.port.onmessage = (event: MessageEvent<{
+          type?: string;
+          consumed?: number;
+          queued?: number;
+          responseId?: string | null;
+          epoch?: number;
+          closed?: boolean;
+          rendered?: Record<string, number>;
+        }>) => {
         if (event.data.type === "flushed") {
           const stoppedAt = typeof event.data.consumed === "number" ? event.data.consumed : 0;
           this.consumedSamples = stoppedAt;
@@ -219,10 +225,11 @@ class MicrophoneCapture {
           this.consumedSamples = event.data.consumed;
           this.onConsumed?.(event.data.consumed);
         }
-      };
+        };
+      }
       this.prepared = { context, source: null, worklet, output, gain, stream };
       this.workletReady = true;
-      this.outputReady = true;
+      this.outputReady = wantPlayback;
     } catch (error) {
       stream.getTracks().forEach((track) => track.stop());
       await context.close();
@@ -293,7 +300,7 @@ class MicrophoneCapture {
   private flushWaiters: Array<{ responseId: string; epoch: number; resolve: (consumed: number) => void }> = [];
 
   setGain(gain: number, rampMs = 20): void {
-    this.prepared?.output.port.postMessage({ type: "gain", gain, rampMs });
+    this.prepared?.output?.port.postMessage({ type: "gain", gain, rampMs });
   }
 
   enqueuePlayback(responseId: string, pcm: Uint8Array, isFinal = false): boolean {
@@ -303,7 +310,7 @@ class MicrophoneCapture {
     }
 
     this.queuedSamples += samples.length;
-    this.prepared?.output.port.postMessage(
+    this.prepared?.output?.port.postMessage(
       { type: "enqueue", responseId, pcm: samples.buffer, isFinal },
       [samples.buffer]
     );
@@ -311,7 +318,7 @@ class MicrophoneCapture {
   }
 
   flushPlayback(responseId: string): Promise<number> {
-    if (!this.prepared) {
+    if (!this.prepared?.output) {
       const stoppedAt = this.consumedSamples;
       this.consumedSamples = 0;
       this.queuedSamples = 0;
@@ -363,10 +370,12 @@ class MicrophoneCapture {
 
     try {
       prepared.worklet.port.onmessage = null;
-      prepared.output.port.onmessage = null;
+      if (prepared.output) {
+        prepared.output.port.onmessage = null;
+      }
       prepared.source?.disconnect();
       prepared.worklet.disconnect();
-      prepared.output.disconnect();
+      prepared.output?.disconnect();
       prepared.gain.disconnect();
     } catch {
       // ignored

@@ -206,6 +206,33 @@ public sealed class SpeechConfigurationHostTests
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
 
+    [Fact]
+    public async Task Hosted_batch_stt_and_openai_tts_resolve_without_outbound_http()
+    {
+        await using var factory = new SpeechHostFactory(new Dictionary<string, string?>
+        {
+            ["Providers:Speech:Recognition:Adapter"] = "OpenAICompatibleBatch",
+            ["Providers:Speech:Recognition:ApiKey"] = "not-a-live-key",
+            ["Providers:Speech:Synthesis:Adapter"] = "OpenAI",
+            ["OPENAI_API_KEY"] = "not-a-live-key"
+        });
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.IsType<AgentCore.Infrastructure.Providers.OpenAICompatible.OpenAICompatibleBatchSpeechRecognizer>(resolution.Recognizer);
+        Assert.IsType<AgentCore.Infrastructure.Providers.OpenAI.OpenAiSpeechSynthesizer>(resolution.Synthesizer);
+        Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.OutputTransport);
+        Assert.True(resolution.Plan.RecognitionResolvable);
+        Assert.True(resolution.Plan.SynthesisResolvable);
+        Assert.False(resolution.Plan.RecognitionCapabilities?.PartialTranscripts);
+
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && agent.VoiceAvailable);
+        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
+        Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
     private sealed class SpeechHostFactory(Dictionary<string, string?> extra) : AgentCoreApiFactory
     {
         protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => extra;

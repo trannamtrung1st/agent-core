@@ -32,6 +32,7 @@ describe("realtime race handling", () => {
     });
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    delete window.__agentCoreSpeechTest;
     vi.useRealTimers();
   });
 
@@ -722,6 +723,71 @@ describe("realtime race handling", () => {
     await pending;
     expect(invoke.mock.calls.some((call) => call[1]?.payload?.mode === "voice")).toBe(false);
     expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "text" } }));
+  });
+
+  it("preflights serverAudio input without playback worklet for clientSpeech output", async () => {
+    const preflight = vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    window.__agentCoreSpeechTest = { fakeSynthesizer: true };
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      voiceAvailable: true,
+      sttTransport: "serverAudio",
+      ttsTransport: "clientSpeech",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await requestVoice();
+    expect(preflight).toHaveBeenCalledWith({ microphone: true, playback: false });
+    expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "voice" } }));
+  });
+
+  it("preflights playback worklet without microphone for clientTranscript plus serverAudio", async () => {
+    const preflight = vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    window.__agentCoreSpeechTest = { fakeRecognizer: true };
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      voiceAvailable: true,
+      sttTransport: "clientTranscript",
+      ttsTransport: "serverAudio",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await requestVoice();
+    expect(preflight).toHaveBeenCalledWith({ microphone: false, playback: true });
+  });
+
+  it("skips capture worklets when both transports are client-side", async () => {
+    const preflight = vi.spyOn(capture, "preflight");
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    window.__agentCoreSpeechTest = { fakeRecognizer: true, fakeSynthesizer: true };
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      voiceAvailable: true,
+      sttTransport: "clientTranscript",
+      ttsTransport: "clientSpeech",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await requestVoice();
+    expect(preflight).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "voice" } }));
   });
 
   it("marks the connection failed when gap reattach throws", async () => {
