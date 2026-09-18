@@ -94,6 +94,7 @@ export type SessionView = {
   clientTranscriptBlocked: boolean;
   voicePlaybackResponseId: string | null;
   pauseReason: string | null;
+  liveUserTranscript: string | null;
 };
 
 export const emptySession = (): SessionView => ({
@@ -128,7 +129,8 @@ export const emptySession = (): SessionView => ({
   captureLive: false,
   clientTranscriptBlocked: false,
   voicePlaybackResponseId: null,
-  pauseReason: null
+  pauseReason: null,
+  liveUserTranscript: null
 });
 
 function asString(value: unknown): string {
@@ -312,7 +314,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         errorFatal: false,
         errorHoldSequence: 0,
         preflightReady: asString(payload.mode) === "voice" ? false : state.preflightReady,
-        voicePlaybackResponseId: null
+        voicePlaybackResponseId: null,
+        liveUserTranscript: null
       };
     }
     case "agent.response.started": {
@@ -452,12 +455,20 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
             : null
       };
     }
+    case "transcript.partial": {
+      const text = asString(event.payload.text);
+      return {
+        ...state,
+        lastServerSequence: event.sequence,
+        liveUserTranscript: text || state.liveUserTranscript
+      };
+    }
     case "transcript.final": {
       const utteranceId = asString(event.payload.utteranceId);
       const text = asString(event.payload.text);
       const entryId = event.payload.entryId == null ? utteranceId : asString(event.payload.entryId);
       if (state.entries.some((entry) => entry.entryId === entryId && entry.role === "user")) {
-        return { ...state, lastServerSequence: event.sequence };
+        return { ...state, lastServerSequence: event.sequence, liveUserTranscript: null };
       }
 
       const entry: HistoryEntry = {
@@ -473,7 +484,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         receivedTextEndExclusive: text.length,
         createdAt: event.timestamp
       };
-      return { ...state, lastServerSequence: event.sequence, entries: upsert(state.entries, entry) };
+      return { ...state, lastServerSequence: event.sequence, entries: upsert(state.entries, entry), liveUserTranscript: null };
     }
     case "error": {
       const sessionError = sessionErrorFromWire(event.payload, asString(event.payload.message) || "The session reported a failure.");

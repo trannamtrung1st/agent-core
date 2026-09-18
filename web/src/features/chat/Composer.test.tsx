@@ -30,7 +30,9 @@ function emptyComposerProps() {
     pendingAttachments: [],
     voiceAvailable: false,
     pendingVoice: false,
-    voiceLive: false,
+    voiceModeActive: false,
+    voiceInputLive: false,
+    voiceInputBlocked: false,
     muted: false,
     canRetry: false,
     placeholder: "Message Agent Core...",
@@ -187,5 +189,62 @@ describe("Composer pending-send queue", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Steer queued message 2" }));
     expect(steerQueuedSend).toHaveBeenCalledWith("q2");
+  });
+});
+
+describe("Composer voice toolbar", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows Unmute when voice mode is active but capture is not live", () => {
+    const onMute = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputLive={false}
+        muted
+        onMute={onMute}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
+    expect(onMute).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+  });
+
+  it("shows Mute when voice input is live and not blocked", () => {
+    const onMute = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputLive
+        muted={false}
+        onMute={onMute}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    expect(onMute).toHaveBeenCalledWith(true);
+  });
+
+  it("shows Retry voice input instead of Mute when browser STT is blocked", () => {
+    const onVoice = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputLive
+        voiceInputBlocked
+        muted={false}
+        onVoice={onVoice}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry voice input" }));
+    expect(onVoice).toHaveBeenCalledTimes(1);
   });
 });

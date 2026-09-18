@@ -52,7 +52,9 @@ export function Composer({
   pendingAttachments,
   voiceAvailable,
   pendingVoice,
-  voiceLive,
+  voiceModeActive,
+  voiceInputLive,
+  voiceInputBlocked,
   muted,
   canRetry,
   placeholder,
@@ -74,7 +76,9 @@ export function Composer({
   pendingAttachments: PendingAttachment[];
   voiceAvailable: boolean;
   pendingVoice: boolean;
-  voiceLive: boolean;
+  voiceModeActive: boolean;
+  voiceInputLive: boolean;
+  voiceInputBlocked: boolean;
   muted: boolean;
   canRetry: boolean;
   placeholder: string;
@@ -275,13 +279,26 @@ export function Composer({
                 <Button aria-label="Cancel voice" onClick={onCancelVoice}>
                   Cancel
                 </Button>
-              ) : voiceLive ? (
-                <Tooltip title={muted ? "Unmute" : "Mute"}>
+              ) : voiceModeActive && voiceInputBlocked ? (
+                <Tooltip title="Retry voice input">
+                  <Button type="text" aria-label="Retry voice input" icon={<AudioOutlined />} onClick={onVoice} />
+                </Tooltip>
+              ) : voiceModeActive && muted ? (
+                <Tooltip title="Unmute">
                   <Button
                     type="text"
-                    aria-label={muted ? "Unmute" : "Mute"}
-                    icon={muted ? <AudioMutedOutlined /> : <AudioOutlined />}
-                    onClick={() => onMute(!muted)}
+                    aria-label="Unmute"
+                    icon={<AudioMutedOutlined />}
+                    onClick={() => onMute(false)}
+                  />
+                </Tooltip>
+              ) : voiceModeActive && voiceInputLive ? (
+                <Tooltip title="Mute">
+                  <Button
+                    type="text"
+                    aria-label="Mute"
+                    icon={<AudioOutlined />}
+                    onClick={() => onMute(true)}
                   />
                 </Tooltip>
               ) : (

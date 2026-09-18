@@ -86,8 +86,11 @@ export function ChatApp() {
     reportCommittedEntries(state.entries);
   }, [state.entries]);
 
+  const voiceModeActive = state.mode === "voice";
+  const voiceInputLive = voiceModeActive && state.captureLive;
+  const voiceInputBlocked = state.clientTranscriptBlocked;
   const pendingVoice = state.mode !== "voice" && (state.pendingMode === "voice" || state.preflightReady);
-  const voiceLive = state.mode === "voice" && state.captureLive;
+  const voiceLive = voiceInputLive;
   const canSend = composerSendEnabled();
   const canStop = composerStopEnabled();
   const sendLabel = composerSendLabel();
@@ -239,6 +242,7 @@ export function ChatApp() {
                     agentName={state.agentName}
                     sessionId={state.sessionId}
                     entries={state.entries}
+                    liveUserTranscript={state.liveUserTranscript}
                     activity={inSession ? activity : { kind: "idle" }}
                     voiceAvailable={voiceAvailable}
                     sttTransport={state.sttTransport}
@@ -311,7 +315,9 @@ export function ChatApp() {
                       pendingAttachments={state.pendingAttachments}
                       voiceAvailable={voiceAvailable}
                       pendingVoice={pendingVoice}
-                      voiceLive={voiceLive}
+                      voiceModeActive={voiceModeActive}
+                      voiceInputLive={voiceInputLive}
+                      voiceInputBlocked={voiceInputBlocked}
                       muted={state.muted}
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}

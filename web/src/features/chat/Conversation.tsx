@@ -12,6 +12,7 @@ export function Conversation({
   agentName,
   sessionId,
   entries,
+  liveUserTranscript = null,
   activity,
   voiceAvailable = true,
   sttTransport = null,
@@ -20,6 +21,7 @@ export function Conversation({
   agentName: string;
   sessionId: string | null;
   entries: HistoryEntry[];
+  liveUserTranscript?: string | null;
   activity: AgentActivityState;
   voiceAvailable?: boolean;
   sttTransport?: "serverAudio" | "clientTranscript" | null;
@@ -100,7 +102,7 @@ export function Conversation({
       observer?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [activity, entries, lastUserId]);
+  }, [activity, entries, lastUserId, liveUserTranscript]);
 
   const safeReplySpace = Number.isFinite(replySpace) ? Math.max(0, replySpace) : 0;
   const emptyHint = voiceAvailable
@@ -125,10 +127,26 @@ export function Conversation({
               entry={entry}
               agentName={agentName}
               sessionId={sessionId}
-              turnAnchor={index === lastUserIndex}
+              turnAnchor={index === lastUserIndex && !liveUserTranscript}
             />
           ))
         )}
+        {liveUserTranscript ? (
+          <li
+            data-role="user"
+            data-testid="live-user-transcript"
+            className="chat-message chat-message-user chat-message-live-transcript"
+          >
+            <Flex align="baseline" gap={8} className="chat-message-meta">
+              <Typography.Text type="secondary" className="chat-message-speaker">
+                You
+              </Typography.Text>
+            </Flex>
+            <div className="user-bubble user-bubble-live">
+              <Typography.Paragraph className="user-bubble-text">{liveUserTranscript}</Typography.Paragraph>
+            </div>
+          </li>
+        ) : null}
       </ol>
       {activity.kind !== "idle" ? (
         <div className="agent-turn-activity">

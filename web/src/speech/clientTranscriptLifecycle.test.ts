@@ -27,8 +27,18 @@ describe("ClientTranscriptLifecycle", () => {
     fake.emit({ kind: "started", utteranceId: "u1" });
     fake.emit({ kind: "partial", utteranceId: "u1", revision: 1, text: "hello" });
     await life.mute();
+    expect(life.isListening()).toBe(false);
     expect(sent.some((item) => item.kind === "final")).toBe(false);
     expect(fake.isRunning).toBe(false);
+  });
+
+  it("does not retry recognition while muted even if blocked", async () => {
+    const { fake, life } = setup();
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
+    fake.fail("SpeechRecognitionUnavailable");
+    expect(life.isBlocked()).toBe(true);
+    await life.mute();
+    expect(await life.retryRecognition()).toBe(false);
   });
 
   it("unmute starts a fresh epoch and rejects late prior-epoch events", async () => {

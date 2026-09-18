@@ -51,6 +51,7 @@ vi.mock("../../services/realtime", async (importOriginal) => {
 
 describe("ChatApp accessibility", () => {
   afterEach(() => {
+    delete window.__agentCoreSpeechTest;
     act(() => {
       useSessionStore.setState({
         ...emptySession(),
@@ -205,6 +206,7 @@ describe("ChatApp accessibility", () => {
   });
 
   it("shows voice unavailable instead of listening when browser STT is blocked", async () => {
+    window.__agentCoreSpeechTest = { fakeRecognizer: true };
     await act(async () => {
       useSessionStore.setState({
         ...emptySession(),
@@ -239,9 +241,61 @@ describe("ChatApp accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "Failure details" }));
     expect(await screen.findByTestId("session-failure-details")).toHaveTextContent("recognitionError");
     expect(screen.getByTestId("session-failure-details")).toHaveTextContent("network");
+    expect(screen.getByRole("button", { name: "Retry voice input" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
   });
 
-  it("shows Mute while voice is prepared even if capture is not streaming", async () => {
+  it("shows Unmute while voice mode stays active after Browser STT mute", async () => {
+    window.__agentCoreSpeechTest = { fakeRecognizer: true };
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        mode: "voice",
+        muted: true,
+        captureLive: false,
+        voiceAvailable: true,
+        sttTransport: "clientTranscript",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => {
+      renderChat();
+    });
+    expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+  });
+
+  it("shows Voice (not Mute) when voice mode is active but capture is not live", async () => {
+    window.__agentCoreSpeechTest = { fakeRecognizer: true };
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        mode: "voice",
+        captureLive: false,
+        muted: false,
+        voiceAvailable: true,
+        sttTransport: "clientTranscript",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => {
+      renderChat();
+    });
+    expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
+  });
+
+  it("shows Mute while browser capture is live in voice mode", async () => {
     await act(async () => {
       useSessionStore.setState({
         ...emptySession(),

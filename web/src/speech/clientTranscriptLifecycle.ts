@@ -79,6 +79,9 @@ export class ClientTranscriptLifecycle {
 
   async mute(): Promise<void> {
     this.listening = false;
+    this.gate = this.gate
+      ? { ...this.gate, muted: true }
+      : { attachmentId: this.attachment(), mode: "voice", muted: true };
     this.accumulator.setGate({
       attachmentId: this.attachment(),
       epoch: this.epoch,

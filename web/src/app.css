@@ -305,6 +305,29 @@ body,
 .user-bubble-text {
   margin-bottom: 0 !important;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.user-bubble-live {
+  opacity: 0.92;
+  border: 1px dashed color-mix(in srgb, var(--ac-color-text) 22%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .user-bubble-live {
+    animation: live-transcript-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes live-transcript-pulse {
+  0%,
+  100% {
+    border-color: color-mix(in srgb, var(--ac-color-text) 18%, transparent);
+  }
+
+  50% {
+    border-color: color-mix(in srgb, var(--ac-color-primary) 45%, transparent);
+  }
 }
 
 .assistant-body,

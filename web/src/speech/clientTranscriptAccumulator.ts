@@ -15,10 +15,16 @@ export type ClientTranscriptAccumulatorOptions = {
   minPartialIntervalMs?: number;
   maxRestarts?: number;
   newUtteranceId?: () => string;
+  /** Pause in recognized language before committing an application final. */
+  transcriptInactivityMs?: number;
+  /** Close a noise-only utterance when speech started but no transcript arrived. */
+  noTextCloseMs?: number;
 };
 
 const DEFAULT_PARTIAL_INTERVAL_MS = 100;
 const DEFAULT_MAX_RESTARTS = 3;
+export const DEFAULT_TRANSCRIPT_INACTIVITY_MS = 1800;
+export const DEFAULT_NO_TEXT_CLOSE_MS = 4000;
 
 function wordsMatchPrefix(haystack: string[], needle: string[]): boolean {
   if (needle.length > haystack.length) {
@@ -86,8 +92,13 @@ export class ClientTranscriptAccumulator {
   private readonly now: () => number;
   private readonly minPartialIntervalMs: number;
   private readonly maxRestarts: number;
+  private readonly transcriptInactivityMs: number;
+  private readonly noTextCloseMs: number;
   private readonly newUtteranceId: () => string;
   private readonly outgoing: ClientSpeechEvidence[] = [];
+  private transcriptInactivityTimer: ReturnType<typeof setTimeout> | null = null;
+  private noTextTimer: ReturnType<typeof setTimeout> | null = null;
+  private utteranceOpenedAt = 0;
 
   constructor(
     private readonly emit: (evidence: ClientSpeechEvidence) => void,
@@ -97,6 +108,8 @@ export class ClientTranscriptAccumulator {
     this.now = options.now ?? (() => Date.now());
     this.minPartialIntervalMs = options.minPartialIntervalMs ?? DEFAULT_PARTIAL_INTERVAL_MS;
     this.maxRestarts = options.maxRestarts ?? DEFAULT_MAX_RESTARTS;
+    this.transcriptInactivityMs = options.transcriptInactivityMs ?? DEFAULT_TRANSCRIPT_INACTIVITY_MS;
+    this.noTextCloseMs = options.noTextCloseMs ?? DEFAULT_NO_TEXT_CLOSE_MS;
     this.newUtteranceId = options.newUtteranceId ?? (() => crypto.randomUUID());
   }
 
@@ -109,11 +122,13 @@ export class ClientTranscriptAccumulator {
   }
 
   beginSession(gate: AccumulatorGate): void {
+    this.clearEndpointTimers();
     this.dropPending();
     this.gate = gate;
   }
 
   startUtterance(utteranceId?: string): void {
+    this.clearEndpointTimers();
     this.utteranceId = utteranceId ?? this.newUtteranceId();
     this.stable = "";
     this.interim = "";
@@ -123,8 +138,10 @@ export class ClientTranscriptAccumulator {
     this.startedSent = false;
     this.applicationFinalSent = false;
     this.restarts = 0;
+    this.utteranceOpenedAt = this.now();
     this.send({ kind: "started", utteranceId: this.utteranceId, activityScore: 0.8 });
     this.startedSent = true;
+    this.scheduleNoTextTimer();
   }
 
   ingestInterim(text: string, epoch?: number): void {
@@ -177,6 +194,7 @@ export class ClientTranscriptAccumulator {
       return;
     }
 
+    this.clearEndpointTimers();
     this.commitApplicationFinal();
     this.send({ kind: "ended", utteranceId: this.utteranceId, durationMs, activityScore: 0.2 });
     this.utteranceId = null;
@@ -189,6 +207,7 @@ export class ClientTranscriptAccumulator {
       return;
     }
 
+    this.clearEndpointTimers();
     this.send({ kind: "failed", utteranceId: this.utteranceId });
     this.utteranceId = null;
     this.interim = "";
@@ -269,9 +288,91 @@ export class ClientTranscriptAccumulator {
     this.lastPartialText = text;
     this.revision += 1;
     this.send({ kind: "partial", utteranceId: this.utteranceId, revision: this.revision, text, activityScore: 0.8 });
+    this.noteTranscriptActivity();
+  }
+
+  private noteTranscriptActivity(): void {
+    this.clearNoTextTimer();
+    this.scheduleTranscriptInactivityTimer();
+  }
+
+  private scheduleNoTextTimer(): void {
+    this.clearNoTextTimer();
+    this.noTextTimer = setTimeout(() => {
+      this.noTextTimer = null;
+      this.onNoTextTimeout();
+    }, this.noTextCloseMs);
+  }
+
+  private scheduleTranscriptInactivityTimer(): void {
+    this.clearTranscriptInactivityTimer();
+    if (!this.spokenText().trim()) {
+      return;
+    }
+
+    this.transcriptInactivityTimer = setTimeout(() => {
+      this.transcriptInactivityTimer = null;
+      this.onTranscriptInactivityTimeout();
+    }, this.transcriptInactivityMs);
+  }
+
+  private onNoTextTimeout(): void {
+    if (!this.utteranceId || this.applicationFinalSent) {
+      return;
+    }
+
+    if (this.spokenText().trim()) {
+      this.scheduleTranscriptInactivityTimer();
+      return;
+    }
+
+    this.discardNoiseUtterance();
+  }
+
+  private onTranscriptInactivityTimeout(): void {
+    if (!this.hasOpenUtterance() || !this.spokenText().trim()) {
+      return;
+    }
+
+    const durationMs = Math.max(0, this.now() - this.utteranceOpenedAt);
+    this.endUtterance(durationMs);
+  }
+
+  private discardNoiseUtterance(): void {
+    if (!this.utteranceId || this.applicationFinalSent) {
+      return;
+    }
+
+    const utteranceId = this.utteranceId;
+    this.clearEndpointTimers();
+    this.send({ kind: "ended", utteranceId, durationMs: 0, activityScore: 0.1 });
+    this.utteranceId = null;
+    this.interim = "";
+    this.restartPrefix = null;
+    this.lastPartialText = "";
+  }
+
+  private clearNoTextTimer(): void {
+    if (this.noTextTimer != null) {
+      clearTimeout(this.noTextTimer);
+      this.noTextTimer = null;
+    }
+  }
+
+  private clearTranscriptInactivityTimer(): void {
+    if (this.transcriptInactivityTimer != null) {
+      clearTimeout(this.transcriptInactivityTimer);
+      this.transcriptInactivityTimer = null;
+    }
+  }
+
+  private clearEndpointTimers(): void {
+    this.clearNoTextTimer();
+    this.clearTranscriptInactivityTimer();
   }
 
   private dropPending(): void {
+    this.clearEndpointTimers();
     this.utteranceId = null;
     this.stable = "";
     this.interim = "";

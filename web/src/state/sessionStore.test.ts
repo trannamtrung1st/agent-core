@@ -359,6 +359,35 @@ describe("applyServerEvent", () => {
     expect(state.outputState).toBe("waitingForAgent");
   });
 
+  it("stores live user transcript on transcript.partial and clears on transcript.final", () => {
+    const base = { ...emptySession(), attachmentId: "a1" };
+    const partial = applyServerEvent(
+      base,
+      event({
+        type: "transcript.partial",
+        sequence: 1,
+        payload: { utteranceId: "u1", revision: 1, text: "My favorite book is" }
+      })
+    );
+    expect(partial.liveUserTranscript).toBe("My favorite book is");
+
+    const finalState = applyServerEvent(
+      partial,
+      event({
+        type: "transcript.final",
+        sequence: 2,
+        payload: {
+          utteranceId: "u1",
+          entryId: "e-user-1",
+          entrySequence: 1,
+          text: "My favorite book is Dune"
+        }
+      })
+    );
+    expect(finalState.liveUserTranscript).toBeNull();
+    expect(finalState.entries.some((entry) => entry.text === "My favorite book is Dune")).toBe(true);
+  });
+
   it("lets a later state.changed replace inferred interrupted output", () => {
     const interrupted = applyServerEvent(
       {

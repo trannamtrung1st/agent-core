@@ -52,6 +52,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     internal Func<CancellationToken, Task>? AfterUserTextPersisted { get; set; }
 
+    internal Func<CancellationToken, Task>? AfterAttachDurableSnapshotRead { get; set; }
+
     public SessionHost(
         SessionManager sessions,
         SessionRuntimeFactory factory,
@@ -132,27 +134,31 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         var fingerprint = Fingerprint(command);
         try
         {
-            var snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-            if (snapshot.Status == SessionStatus.Ended)
+            CommandAck? RejectIfAttachSnapshotInvalid(SessionSnapshot snap)
             {
-                return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
-            }
+                if (snap.Status == SessionStatus.Ended)
+                {
+                    return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
+                }
 
-            if (snapshot.ArchivedAt is not null)
-            {
-                return Reject(command.EventId, "Session", "NotFound", "Session is archived.", true, null);
-            }
+                if (snap.ArchivedAt is not null)
+                {
+                    return Reject(command.EventId, "Session", "NotFound", "Session is archived.", true, null);
+                }
 
-            if (snapshot.Status == SessionStatus.Paused
-                && SessionPauseSemantics.RequiresExplicitResume(snapshot.PauseReason))
-            {
-                return Reject(
-                    command.EventId,
-                    "Session",
-                    "SessionPaused",
-                    "Session is paused; reopen before attach.",
-                    false,
-                    null);
+                if (snap.Status == SessionStatus.Paused
+                    && SessionPauseSemantics.RequiresExplicitResume(snap.PauseReason))
+                {
+                    return Reject(
+                        command.EventId,
+                        "Session",
+                        "SessionPaused",
+                        "Session is paused; reopen before attach.",
+                        false,
+                        null);
+                }
+
+                return null;
             }
 
             while (true)
@@ -173,6 +179,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                             false,
                             1000);
                     }
+
+                    continue;
                 }
 
                 Live? live = null;
@@ -180,6 +188,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 var replay = false;
                 CommandAck? replayAck = null;
                 var waitDispose = false;
+                var needCreate = false;
                 lock (_gate)
                 {
                     if (_disposing.TryGetValue(sessionId, out var stillDisposing) && !stillDisposing.IsCompleted)
@@ -196,7 +205,6 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                             false,
                             null);
                     }
-
                     else if (_live.TryGetValue(sessionId, out var existing))
                     {
                         live = existing;
@@ -219,13 +227,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                                 5000);
                         }
 
-                        live = new Live(_factory.Create(snapshot, this));
-                        live.ConnectionId = connectionId;
-                        live.LastAttachEventId = command.EventId;
-                        live.LastAttachFingerprint = fingerprint;
-                        _live[sessionId] = live;
-                        _connections[connectionId] = sessionId;
-                        created = true;
+                        needCreate = true;
                     }
                 }
 
@@ -234,11 +236,66 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     continue;
                 }
 
+                SessionSnapshot snapshot;
+                if (needCreate)
+                {
+                    snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    var invalid = RejectIfAttachSnapshotInvalid(snapshot);
+                    if (invalid is not null)
+                    {
+                        return invalid;
+                    }
+
+                    if (AfterAttachDurableSnapshotRead is not null)
+                    {
+                        await AfterAttachDurableSnapshotRead(cancellationToken).ConfigureAwait(false);
+                        snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                        invalid = RejectIfAttachSnapshotInvalid(snapshot);
+                        if (invalid is not null)
+                        {
+                            return invalid;
+                        }
+                    }
+
+                    lock (_gate)
+                    {
+                        if (_disposing.TryGetValue(sessionId, out var stillDisposing) && !stillDisposing.IsCompleted)
+                        {
+                            waitDispose = true;
+                        }
+                        else if (_live.TryGetValue(sessionId, out var existing))
+                        {
+                            live = existing;
+                        }
+                        else
+                        {
+                            if (_terminating.Contains(sessionId) || !_admitting)
+                            {
+                                return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
+                            }
+
+                            live = new Live(_factory.Create(snapshot, this));
+                            live.ConnectionId = connectionId;
+                            live.LastAttachEventId = command.EventId;
+                            live.LastAttachFingerprint = fingerprint;
+                            _live[sessionId] = live;
+                            _connections[connectionId] = sessionId;
+                            created = true;
+                        }
+                    }
+
+                    if (waitDispose)
+                    {
+                        continue;
+                    }
+                }
+
                 if (live is null)
                 {
                     continue;
                 }
 
+                snapshot = live.Runtime.Snapshot;
                 if (!created)
                 {
                     await live.Admission.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -301,17 +358,24 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
                 if (live.Runtime.Snapshot.Status == SessionStatus.Paused)
                 {
-                    if (SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason)
+                    var durable = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    var invalid = RejectIfAttachSnapshotInvalid(durable);
+                    if (invalid is not null)
+                    {
+                        return invalid;
+                    }
+
+                    if (SessionPauseSemantics.IsTransportResumable(durable.PauseReason)
                         || SessionPauseSemantics.IsTransportResumable(live.Runtime.Snapshot.PauseReason))
                     {
-                        await live.Runtime.ApplyTransportResumedSnapshotAsync(snapshot, cancellationToken)
+                        await live.Runtime.ApplyTransportResumedSnapshotAsync(durable, cancellationToken)
                             .ConfigureAwait(false);
                     }
                     else
                     {
-                        var resumed = snapshot.Status == SessionStatus.Paused
+                        var resumed = durable.Status == SessionStatus.Paused
                             ? await _sessions.ReopenAsync(sessionId, cancellationToken).ConfigureAwait(false)
-                            : snapshot;
+                            : durable;
                         await live.Runtime.ApplyReopenedSnapshotAsync(resumed, cancellationToken).ConfigureAwait(false);
                     }
                 }
