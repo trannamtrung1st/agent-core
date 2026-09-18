@@ -13,8 +13,9 @@ public sealed class BoundedProcessOutputTests
         using var process = StartShell(
             "python3 -c \"import sys; sys.stdout.write('a' * 200000)\"");
 
-        var output = await BoundedProcessOutput.ReadAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
-        Assert.InRange(Encoding.UTF8.GetByteCount(output), 0, SandboxLimits.MaxOutputBytes);
+        var output = await BoundedProcessOutput.ReadDetailedAsync(process, SandboxLimits.MaxOutputBytes, CancellationToken.None);
+        Assert.True(output.Truncated);
+        Assert.InRange(Encoding.UTF8.GetByteCount(output.Text), 0, SandboxLimits.MaxOutputBytes);
         Assert.True(process.HasExited);
     }
 

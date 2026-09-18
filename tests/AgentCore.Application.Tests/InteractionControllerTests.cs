@@ -177,21 +177,36 @@ public sealed class InteractionControllerTests
     [Fact]
     public async Task Classifier_path_never_calls_brain_and_idle_timer_never_calls_classifier()
     {
-        var harness = await LiveGeneratingAsync();
-        var brainBefore = harness.Brain.Calls;
+        var timeVoice = Clock();
+        var outputVoice = new CapturingSessionOutput();
+        var modelVoice = new GatedThenLiveModel();
+        var brainVoice = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var classifierVoice = new FakeInterruptionClassifier(InteractionDecision.Continue, release);
+        await using var runtimeVoice = CreateRuntime(
+            outputVoice,
+            modelVoice,
+            timeVoice,
+            brainVoice,
+            classifierVoice,
+            SessionMode.Voice);
+        await runtimeVoice.AttachAsync();
+        await runtimeVoice.SubmitUserTextAsync("Hello");
+        await outputVoice.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "R1a");
+        var brainBefore = brainVoice.Calls;
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000af");
-        await harness.Runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
-        await harness.Runtime.WaitUntilMailboxDrainedAsync();
-        harness.Time.Advance(TimeSpan.FromMilliseconds(250));
-        await harness.Runtime.SubmitSpeechAsync(new SpeechPartial(utterance, 1, "something longer", 0.4), 0.9);
-        await harness.Runtime.WaitUntilMailboxDrainedAsync();
-        Assert.Equal(InteractionDecision.RequestInterruptionClassification, harness.Runtime.LastControllerDecision);
-        await harness.Classifier.Called;
-        Assert.Equal(brainBefore, harness.Brain.Calls);
-        Assert.True(harness.Classifier.Calls >= 1);
-        harness.Model.Gate.TrySetResult();
-        await harness.Runtime.WaitUntilIdleAsync();
-        await harness.Runtime.DisposeAsync();
+        await runtimeVoice.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
+        await runtimeVoice.WaitUntilMailboxDrainedAsync();
+        timeVoice.Advance(TimeSpan.FromMilliseconds(250));
+        await runtimeVoice.SubmitSpeechAsync(new SpeechPartial(utterance, 1, "something longer", 0.4), 0.9);
+        await runtimeVoice.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(InteractionDecision.RequestInterruptionClassification, runtimeVoice.LastControllerDecision);
+        await classifierVoice.Called;
+        Assert.Equal(brainBefore, brainVoice.Calls);
+        Assert.True(classifierVoice.Calls >= 1);
+        release.TrySetResult();
+        modelVoice.Gate.TrySetResult();
+        await runtimeVoice.WaitUntilIdleAsync();
 
         var time = Clock();
         var output = new CapturingSessionOutput();

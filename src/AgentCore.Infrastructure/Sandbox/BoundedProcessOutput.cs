@@ -6,7 +6,15 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 internal static class BoundedProcessOutput
 {
+    internal readonly record struct BoundedRead(string Text, bool Truncated);
+
     public static async Task<string> ReadAsync(
+        Process process,
+        int maxBytes,
+        CancellationToken cancellationToken) =>
+        (await ReadDetailedAsync(process, maxBytes, cancellationToken).ConfigureAwait(false)).Text;
+
+    public static async Task<BoundedRead> ReadDetailedAsync(
         Process process,
         int maxBytes,
         CancellationToken cancellationToken)
@@ -106,7 +114,9 @@ internal static class BoundedProcessOutput
             throw;
         }
 
-        return DecodeBoundedUtf8(buffer.WrittenSpan);
+        return new BoundedRead(
+            DecodeBoundedUtf8(buffer.WrittenSpan),
+            Volatile.Read(ref budgetExceeded) == 1);
     }
 
     internal static string DecodeBoundedUtf8(ReadOnlySpan<byte> bytes) =>

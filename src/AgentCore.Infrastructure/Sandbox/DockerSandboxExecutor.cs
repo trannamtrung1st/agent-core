@@ -79,7 +79,9 @@ public sealed class DockerSandboxExecutor(
                 var started = await DockerAsync(["start", "-a", name], linked.Token, SandboxLimits.MaxOutputBytes)
                     .ConfigureAwait(false);
                 output = started.Output;
-                exit = started.ExitCode;
+                // Killing the docker client after the output budget is reached can yield a
+                // non-zero process exit even though the sandbox command itself produced output.
+                exit = started.Truncated ? 0 : started.ExitCode;
             }
             catch (OperationCanceledException)
             {
@@ -162,10 +164,11 @@ public sealed class DockerSandboxExecutor(
             throw new InvalidOperationException("Failed to start docker.");
         }
 
-        string combined;
+        BoundedProcessOutput.BoundedRead combined;
         try
         {
-            combined = await BoundedProcessOutput.ReadAsync(process, maxOutput, cancellationToken).ConfigureAwait(false);
+            combined = await BoundedProcessOutput.ReadDetailedAsync(process, maxOutput, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -185,16 +188,17 @@ public sealed class DockerSandboxExecutor(
 
         if (process.ExitCode != 0 && arguments.Count > 0 && arguments[0] is "create" or "inspect")
         {
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(combined) ? "docker failed." : combined.Trim());
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(combined.Text) ? "docker failed." : combined.Text.Trim());
         }
 
-        return new DockerExec(process.ExitCode, combined);
+        return new DockerExec(process.ExitCode, combined.Text, combined.Truncated);
     }
 
     private static SandboxResult Fail(string message) =>
         new(false, -1, "", null, message);
 
-    private readonly record struct DockerExec(int ExitCode, string Output);
+    private readonly record struct DockerExec(int ExitCode, string Output, bool Truncated);
 }
 
 public static class SandboxCommand
