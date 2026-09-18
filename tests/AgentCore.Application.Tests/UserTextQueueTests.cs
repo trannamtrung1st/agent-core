@@ -610,6 +610,14 @@ file sealed class GatedPersistStore(TaskCompletionSource persistGate) : IMemoryS
         CancellationToken cancellationToken = default) =>
         _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        _inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         _inner.LoadProfileAsync(profileId, cancellationToken);
 

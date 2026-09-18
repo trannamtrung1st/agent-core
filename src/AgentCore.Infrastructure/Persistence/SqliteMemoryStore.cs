@@ -20,6 +20,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     public int MaterializedEntryRows { get; private set; }
 
+    public int LoadAsyncCalls { get; private set; }
+
+    public int LoadMetadataCalls { get; private set; }
+
     public async ValueTask EnsureCreatedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -217,6 +221,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     public async ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        LoadAsyncCalls++;
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
@@ -238,6 +243,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        LoadMetadataCalls++;
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
@@ -313,6 +319,51 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             .ConfigureAwait(false);
         MaterializedEntryRows += rows.Length;
         return rows.Select(ToEntry).ToArray();
+    }
+
+    public async ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        MaterializedEntryRows = 0;
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var key = sessionId.ToString("D");
+        var exists = await db.Sessions.AsNoTracking()
+            .AnyAsync(row => row.SessionId == key && row.DurablyDeletedAtUtc == null, cancellationToken)
+            .ConfigureAwait(false);
+        if (!exists)
+        {
+            return null;
+        }
+
+        if (afterEntrySequence is { } after)
+        {
+            var forward = await db.Entries.AsNoTracking()
+                .Where(entry => entry.SessionId == key && entry.EntrySequence > after)
+                .OrderBy(entry => entry.EntrySequence)
+                .Take(limit)
+                .ToArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
+            MaterializedEntryRows += forward.Length;
+            return HistoryPaging.FromForward(forward.Select(ToEntry).ToArray(), after, limit);
+        }
+
+        var query = db.Entries.AsNoTracking().Where(entry => entry.SessionId == key);
+        if (beforeEntrySequence is { } before)
+        {
+            query = query.Where(entry => entry.EntrySequence < before);
+        }
+
+        var newestFirst = await query
+            .OrderByDescending(entry => entry.EntrySequence)
+            .Take(limit + 1)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        MaterializedEntryRows += newestFirst.Length;
+        return HistoryPaging.FromNewestFirst(newestFirst.Select(ToEntry).ToArray(), limit);
     }
 
     public async ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default)

@@ -120,7 +120,11 @@ public static class HttpMapping
                 block.FallbackText,
                 block.AttachmentId,
                 block.ArtifactId)).ToArray(),
-            projected.FinishReason);
+            projected.FinishReason,
+            projected.Attachments?.Select(item => new HistoryAttachmentResponse(
+                item.AttachmentId.ToString(),
+                item.DisplayName,
+                item.ContentType)).ToArray());
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

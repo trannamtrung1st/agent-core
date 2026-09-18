@@ -118,6 +118,14 @@ public sealed class SessionManagerConcurrencyTests
             CancellationToken cancellationToken = default) =>
             inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public async ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,
             CancellationToken cancellationToken = default)
@@ -185,6 +193,14 @@ public sealed class SessionManagerConcurrencyTests
             int limit,
             CancellationToken cancellationToken = default) =>
             inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
 
         public ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,

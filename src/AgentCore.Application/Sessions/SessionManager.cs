@@ -334,20 +334,36 @@ public sealed class SessionManager
         && left.RuntimeEpoch == right.RuntimeEpoch
         && left.Status == right.Status;
 
-    public async Task<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+    public async Task<ConversationHistoryPage> ReadHistoryPageAsync(
         Guid sessionId,
-        long after,
+        long? after,
+        long? before,
         int limit,
         CancellationToken cancellationToken = default)
     {
-        if (after < 0 || limit is < 1 or > 100)
+        if (after is not null && before is not null)
         {
             throw AgentCoreErrors.Validation("History cursor is invalid.");
         }
 
-        _ = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return await _store.ReadHistoryAsync(sessionId, after, limit, cancellationToken).ConfigureAwait(false);
+        if (limit is < 1 or > 100
+            || after is < 0
+            || before is < 1)
+        {
+            throw AgentCoreErrors.Validation("History cursor is invalid.");
+        }
+
+        var page = await _store.ReadHistoryPageAsync(sessionId, after, before, limit, cancellationToken)
+            .ConfigureAwait(false);
+        return page ?? throw AgentCoreErrors.NotFound("Session was not found.");
     }
+
+    public async Task<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+        Guid sessionId,
+        long after,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        (await ReadHistoryPageAsync(sessionId, after, before: null, limit, cancellationToken).ConfigureAwait(false)).Items;
 
     public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {

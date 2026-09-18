@@ -774,6 +774,14 @@ internal sealed class GatedUserTurnStore(IMemoryStore inner) : IMemoryStore
         CancellationToken cancellationToken = default) =>
         inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         inner.LoadProfileAsync(profileId, cancellationToken);
 
@@ -903,6 +911,14 @@ internal sealed class GatedEndStore(IMemoryStore inner) : IMemoryStore
         int limit,
         CancellationToken cancellationToken = default) =>
         inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
 
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         inner.LoadProfileAsync(profileId, cancellationToken);
@@ -1055,6 +1071,14 @@ internal sealed class PauseAfterEndStore(IMemoryStore inner) : IMemoryStore
         CancellationToken cancellationToken = default) =>
         inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         inner.LoadProfileAsync(profileId, cancellationToken);
 
@@ -1171,6 +1195,14 @@ internal sealed class FailingEndStore(IMemoryStore inner) : IMemoryStore
         CancellationToken cancellationToken = default) =>
         inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         inner.LoadProfileAsync(profileId, cancellationToken);
 
@@ -1286,6 +1318,14 @@ internal sealed class FailingUserTurnStore(IMemoryStore inner) : IMemoryStore
         int limit,
         CancellationToken cancellationToken = default) =>
         inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
 
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         inner.LoadProfileAsync(profileId, cancellationToken);

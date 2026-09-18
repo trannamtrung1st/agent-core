@@ -69,20 +69,22 @@ public static class LegacySessionEndpoints
         group.MapGet("{sessionId:guid}/messages", async (
             Guid sessionId,
             SessionManager sessions,
-            long after,
+            long? after,
+            long? before,
             int? limit,
             CancellationToken cancellationToken) =>
         {
             try
             {
                 var pageLimit = limit ?? 50;
-                var items = await sessions.ReadHistoryAsync(sessionId, after, pageLimit, cancellationToken)
+                var page = await sessions.ReadHistoryPageAsync(sessionId, after, before, pageLimit, cancellationToken)
                     .ConfigureAwait(false);
-                var next = items.Count == 0 ? after : items[^1].Sequence;
                 return Results.Json(new HistoryPageResponse(
-                    items.Select(HttpMapping.ToHistoryItem).ToArray(),
-                    next,
-                    HasMore: items.Count == pageLimit));
+                    page.Items.Select(HttpMapping.ToHistoryItem).ToArray(),
+                    page.NextAfter,
+                    page.HasMore,
+                    page.HasOlder,
+                    page.NextBefore));
             }
             catch (AgentCoreException ex)
             {

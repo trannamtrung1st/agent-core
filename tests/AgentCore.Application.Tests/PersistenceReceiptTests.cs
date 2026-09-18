@@ -710,6 +710,14 @@ public sealed class PersistenceReceiptTests
             CancellationToken cancellationToken = default) =>
             _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,
             CancellationToken cancellationToken = default) =>
@@ -761,6 +769,14 @@ public sealed class PersistenceReceiptTests
             CancellationToken cancellationToken = default) =>
             Inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,
             CancellationToken cancellationToken = default) =>
@@ -807,6 +823,14 @@ public sealed class PersistenceReceiptTests
             CancellationToken cancellationToken = default) =>
             _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,
             CancellationToken cancellationToken = default) =>
@@ -850,6 +874,14 @@ public sealed class PersistenceReceiptTests
             int limit,
             CancellationToken cancellationToken = default) =>
             _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
 
         public ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,
@@ -895,6 +927,14 @@ public sealed class PersistenceReceiptTests
             CancellationToken cancellationToken = default) =>
             _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public ValueTask<UserProfile?> LoadProfileAsync(
             Guid profileId,
             CancellationToken cancellationToken = default) =>
@@ -934,6 +974,14 @@ public sealed class PersistenceReceiptTests
             int limit,
             CancellationToken cancellationToken = default) =>
             inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
 
         public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             inner.LoadProfileAsync(profileId, cancellationToken);
@@ -977,6 +1025,14 @@ public sealed class PersistenceReceiptTests
             CancellationToken cancellationToken = default) =>
             inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             inner.LoadProfileAsync(profileId, cancellationToken);
 
@@ -1015,6 +1071,14 @@ public sealed class PersistenceReceiptTests
             int limit,
             CancellationToken cancellationToken = default) =>
             Inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
 
         public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             Inner.LoadProfileAsync(profileId, cancellationToken);

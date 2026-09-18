@@ -33,6 +33,14 @@ public interface IMemoryStore
         int limit,
         CancellationToken cancellationToken = default);
 
+    ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("History paging is not implemented by this store.");
+
     ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
 
     ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default);
@@ -51,6 +59,13 @@ public sealed record SessionCatalogPage(
     IReadOnlyList<SessionSnapshot> Items,
     string? NextCursor,
     bool HasMore);
+
+public sealed record ConversationHistoryPage(
+    IReadOnlyList<ConversationEntry> Items,
+    long NextAfter,
+    bool HasMore,
+    bool HasOlder,
+    long? NextBefore);
 
 public interface IIdGenerator
 {

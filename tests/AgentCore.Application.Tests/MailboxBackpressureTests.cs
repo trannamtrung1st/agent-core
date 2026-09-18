@@ -108,6 +108,14 @@ public sealed class MailboxBackpressureTests
             CancellationToken cancellationToken = default) =>
             inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
 
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
         public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
             inner.LoadProfileAsync(profileId, cancellationToken);
 

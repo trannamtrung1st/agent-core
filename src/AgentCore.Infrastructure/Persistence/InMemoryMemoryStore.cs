@@ -90,6 +90,45 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         }
     }
 
+    public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+        Guid sessionId,
+        long? afterEntrySequence,
+        long? beforeEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var snapshot) || snapshot.DurablyDeletedAt is not null)
+            {
+                return ValueTask.FromResult<ConversationHistoryPage?>(null);
+            }
+
+            var entries = _entries.TryGetValue(sessionId, out var list)
+                ? list
+                : (IReadOnlyList<ConversationEntry>)[];
+            if (afterEntrySequence is { } after)
+            {
+                var forward = entries
+                    .Where(entry => entry.Sequence > after)
+                    .OrderBy(entry => entry.Sequence)
+                    .Take(limit)
+                    .ToArray();
+                return ValueTask.FromResult<ConversationHistoryPage?>(HistoryPaging.FromForward(forward, after, limit));
+            }
+
+            var filtered = beforeEntrySequence is { } before
+                ? entries.Where(entry => entry.Sequence < before)
+                : entries;
+            var newestFirst = filtered
+                .OrderByDescending(entry => entry.Sequence)
+                .Take(limit + 1)
+                .ToArray();
+            return ValueTask.FromResult<ConversationHistoryPage?>(HistoryPaging.FromNewestFirst(newestFirst, limit));
+        }
+    }
+
     public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

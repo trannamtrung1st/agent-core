@@ -37,6 +37,8 @@ public sealed record HistoryBlockResponse(
     string? AttachmentId,
     string? ArtifactId);
 
+public sealed record HistoryAttachmentResponse(string AttachmentId, string DisplayName, string ContentType);
+
 public sealed record HistoryItemResponse(
     string EntryId,
     long Sequence,
@@ -50,12 +52,15 @@ public sealed record HistoryItemResponse(
     int ReceivedTextEndExclusive,
     string CreatedAt,
     IReadOnlyList<HistoryBlockResponse>? Blocks = null,
-    string? FinishReason = null);
+    string? FinishReason = null,
+    IReadOnlyList<HistoryAttachmentResponse>? Attachments = null);
 
 public sealed record HistoryPageResponse(
     IReadOnlyList<HistoryItemResponse> Items,
     long NextAfter,
-    bool HasMore);
+    bool HasMore,
+    bool HasOlder = false,
+    long? NextBefore = null);
 
 public static class OwnerCapabilityHeaders
 {
