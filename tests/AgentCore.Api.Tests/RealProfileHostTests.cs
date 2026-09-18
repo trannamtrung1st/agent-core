@@ -37,22 +37,7 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "true";
         start.Environment["Providers__LanguageModels__primary-llm__Tools"] = "true";
         start.Environment["OPENROUTER_API_KEY"] = "test-key-not-for-live-calls";
-        _process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start API.");
-        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _process.OutputDataReceived += (_, args) =>
-        {
-            if (args.Data?.Contains("Application started", StringComparison.OrdinalIgnoreCase) == true
-                || args.Data?.Contains("Now listening", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                ready.TrySetResult();
-            }
-        };
-        _process.ErrorDataReceived += (_, _) => { };
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-        timeout.Token.Register(() => ready.TrySetException(new TimeoutException("Real profile API did not start.")));
-        await ready.Task.ConfigureAwait(false);
+        _process = await ProcessHostLauncher.StartApiAsync(start, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         for (var attempt = 0; attempt < 40; attempt++)
         {
@@ -110,19 +95,16 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
     }
 }
 
-public sealed class RealComposeHostTests : IClassFixture<RealComposeHostFixture>
+[CollectionDefinition("dotnet-host", DisableParallelization = true)]
+public sealed class DotnetHostCollection : ICollectionFixture<RealComposeHostFixture>;
+
+[Collection("dotnet-host")]
+public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
 {
-    private readonly RealComposeHostFixture _fixture;
-
-    public RealComposeHostTests(RealComposeHostFixture fixture)
-    {
-        _fixture = fixture;
-    }
-
     [Fact]
     public async Task Health_reports_real_and_voice_follows_resolvable_synthetic_speech_paths()
     {
-        using var client = new HttpClient { BaseAddress = new Uri(_fixture.BaseAddress) };
+        using var client = new HttpClient { BaseAddress = new Uri(fixture.BaseAddress) };
         client.DefaultRequestHeaders.TryAddWithoutValidation(
             OwnerCapabilityHeaders.Name,
             IssueOwnerCapability(client.BaseAddress!.ToString()));

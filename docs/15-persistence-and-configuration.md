@@ -162,7 +162,7 @@ Configuration fields for inactive adapters are ignored after structural validati
 
 **Effective capabilities** come from the selected adapter. Optional `RequiredCapabilities` lists flags that must be **true**. Optional `DisabledCapabilities` may turn off optional adapter features (for example disable partials to test `speechAndFinal`). Do not use `RequiredCapabilities: false` to describe a batch adapter; select `OpenAICompatibleBatch`, which reports streaming/partials as false. Do not use a configuration `Capabilities` object to make an adapter claim unimplemented behavior. Built-in `OpenAI`/`Synthetic`/`Scripted` adapters define their own capabilities (Synthetic may withhold partials via adapter-specific test options). Generic compatible/local adapters may document operator assertions validated by contract tests. `heuristic` is the built-in classifier alias. `MaxActiveSessions` applies to in-memory runtimes on attach/activation; durable Created/Paused/Ended rows do not consume a slot.
 
-Example .NET environment overrides for OpenRouter text plus an **optional batch-STT degraded speech configuration** (operator supplies actual secrets later; these are placeholders):
+AgentCore__Profile=Real selects hosted-oriented defaults. When `Persistence__Provider` is not set in the environment, the API host upgrades the base `InMemory` persistence entry to **Sqlite** so durable sessions survive restart; set `Persistence__Provider=InMemory` explicitly to keep ephemeral storage (for example Real Compose smoke). Example .NET environment overrides for OpenRouter text plus an **optional batch-STT degraded speech configuration** (operator supplies actual secrets later; these are placeholders):
 
 ```text
 AgentCore__Profile=Real

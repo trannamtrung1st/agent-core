@@ -273,7 +273,15 @@ function sendClientSpeechAck(
           ? "PlaybackCompleted"
           : "PlaybackStopped";
   const type = `playback.${report.kind}`;
-  void sendPlayback(method, type, responseId, 0, report.textEndExclusive);
+  const send = sendPlayback(method, type, responseId, 0, report.textEndExclusive);
+  if (report.kind === "completed" || report.kind === "stopped") {
+    void send.finally(() => {
+      scheduleClientTranscriptResumeAfterPlaybackIdle();
+    });
+    return;
+  }
+
+  void send;
 }
 
 function ensureClientSpeechPlayer(): ClientSpeechPlayer {
@@ -388,6 +396,10 @@ async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
   } else {
     publishCaptureLive();
   }
+}
+
+function scheduleClientTranscriptResumeAfterPlaybackIdle(): void {
+  void tryResumeClientTranscriptAfterAgentOutput();
 }
 
 function ensureTranscriptLife(): ClientTranscriptLifecycle {
@@ -1031,6 +1043,8 @@ async function interruptPlayback(responseId: string): Promise<void> {
 
         enqueueLiveAudio(item, id);
       }
+
+      scheduleClientTranscriptResumeAfterPlaybackIdle();
     }
   };
 
@@ -1070,6 +1084,7 @@ function maybeCompletePlayback(): void {
   syncVoicePlaybackResponseId(null);
   capture.setPlaybackListener(null);
   capture.setPlaybackCompleteListener(null);
+  scheduleClientTranscriptResumeAfterPlaybackIdle();
 }
 
 function stopProgress(): void {
@@ -1212,6 +1227,7 @@ function abortPlayback(): void {
     }
   ).finally(() => {
     flushing = false;
+    scheduleClientTranscriptResumeAfterPlaybackIdle();
   });
 }
 
@@ -1459,6 +1475,13 @@ export const realtimeTestHooks =
         attachAfterReconnect,
         attachWithBusyRetry,
         handleHubClosed,
+        setClientTranscriptHeldForAgent(held: boolean) {
+          clientTranscriptHeldForAgent = held;
+          publishVoiceInputHeldForAgentOutput(held);
+        },
+        interruptPlayback(responseId: string) {
+          return interruptPlayback(responseId);
+        },
         markOutputStarted(responseId: string) {
           outputGate.markStarted(responseId);
         },

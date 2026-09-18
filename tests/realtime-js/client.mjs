@@ -1300,14 +1300,12 @@ async function run() {
       if (!send.accepted) {
         throw new Error(JSON.stringify(send));
       }
-      const segments = [];
-      await waitForEvent((evt) => {
-        if (evt.type === "speech.output.segment") {
-          segments.push(evt);
-        }
-        return evt.type === "speech.output.completed";
-      });
-      const completed = events.find((evt) => evt.type === "speech.output.completed");
+      const completed = await waitForEvent((evt) => evt.type === "speech.output.completed");
+      const segments = events.filter(
+        (evt) =>
+          evt.type === "speech.output.segment" &&
+          evt.responseId === completed.responseId
+      );
       if (events.some((evt) => evt.type === "agent.response.completed")) {
         throw new Error("assistant completion must wait for playback ACK");
       }

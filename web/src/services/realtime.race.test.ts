@@ -687,6 +687,29 @@ describe("realtime race handling", () => {
     expect(ensureSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("resumes client transcript after interrupted server-audio playback finishes flushing", async () => {
+    vi.spyOn(capture, "flushPlayback").mockResolvedValue(120);
+    hooks.setConnection({ invoke: vi.fn().mockResolvedValue({ accepted: true }), send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      mode: "voice",
+      sttTransport: "clientTranscript",
+      ttsTransport: "serverAudio",
+      voiceInputHeldForAgentOutput: true,
+      liveResponseId: null,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    hooks.setClientTranscriptHeldForAgent!(true);
+    await hooks.interruptPlayback!("r1");
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().voiceInputHeldForAgentOutput).toBe(false);
+    });
+  });
+
   it("marks the connection failed when automatic reconnect attach is rejected", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Session is attached to another connection." } });
     hooks.setConnection({ invoke, send: vi.fn() } as never);

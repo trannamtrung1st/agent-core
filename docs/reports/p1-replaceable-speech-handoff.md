@@ -87,7 +87,9 @@ Flags: `AGENTCORE_LIVE_PROVIDER_TESTS=0`, `AGENTCORE_LIVE_OPENAI_STT=0`, `AGENTC
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 25 passed (synthetic + browser-stt + browser-browser) |
 
-## Post–Browser-STT-freeze gate (after batch 26; Browser STT frozen for MVP)
+## Post–Browser-STT-freeze gate (through live-browser stabilization `0ac23c4`)
+
+Additional contract coverage landed after batch 26 (`a8ec9b7`): half-duplex Browser STT during agent output, Chrome endpoint liveness, durable voice `transcript.final`, and reconnect/capability recovery. Further Browser STT work is observation-only (headset/live Web Speech), not speculative hardening.
 
 Same flags and ports. Final refresh after batches 21–26 (native Web Speech contracts, restart stitching, whole-word `mergeRestartContinuation`).
 

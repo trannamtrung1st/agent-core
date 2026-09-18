@@ -24,6 +24,8 @@ public class KestrelHostFixture : IAsyncLifetime
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["AgentCore__Profile"] = "Synthetic";
+        start.Environment["Providers__Speech__Recognition__Adapter"] = "Synthetic";
+        start.Environment["Providers__Speech__Synthesis__Adapter"] = "Synthetic";
         start.Environment["AgentCore__MaxActiveSessions"] = "1";
         start.Environment["AgentCore__AgentDirectory"] = Path.Combine(root, "agents");
         foreach (var pair in ExtraEnvironment)
@@ -37,22 +39,8 @@ public class KestrelHostFixture : IAsyncLifetime
                 start.Environment[pair.Key] = pair.Value;
             }
         }
-        _process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start API.");
-        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _process.OutputDataReceived += (_, args) =>
-        {
-            if (args.Data?.Contains("Application started", StringComparison.OrdinalIgnoreCase) == true
-                || args.Data?.Contains("Now listening", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                ready.TrySetResult();
-            }
-        };
-        _process.ErrorDataReceived += (_, _) => { };
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-        timeout.Token.Register(() => ready.TrySetException(new TimeoutException("API did not start.")));
-        await ready.Task.ConfigureAwait(false);
+
+        _process = await ProcessHostLauncher.StartApiAsync(start, TimeSpan.FromSeconds(45)).ConfigureAwait(false);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         for (var attempt = 0; attempt < 40; attempt++)
         {
@@ -139,7 +127,7 @@ public class KestrelHostFixture : IAsyncLifetime
         new Dictionary<string, string?>();
 }
 
-[CollectionDefinition("kestrel")]
+[CollectionDefinition("kestrel", DisableParallelization = true)]
 public sealed class KestrelCollection : ICollectionFixture<KestrelHostFixture>;
 
 [Collection("kestrel")]
@@ -183,7 +171,7 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }
 
-[CollectionDefinition("kestrel-client-speech")]
+[CollectionDefinition("kestrel-client-speech", DisableParallelization = true)]
 public sealed class ClientSpeechKestrelCollection : ICollectionFixture<ClientSpeechKestrelHostFixture>;
 
 public sealed class ClientSpeechKestrelHostFixture : KestrelHostFixture

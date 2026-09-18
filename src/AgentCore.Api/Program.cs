@@ -32,7 +32,7 @@ builder.Services.AddAgentCoreInfrastructure(
     agentDirectory,
     profile,
     languageModel,
-    builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions(),
+    ResolvePersistenceOptions(builder, profile),
     new InteractionPolicy(
         DegradedInterruptMs: builder.Configuration.GetValue("Interaction:DegradedInterruptMs", 250),
         PendingVoiceTimeoutMs: builder.Configuration.GetValue("Interaction:PendingVoiceTimeoutMs", 30_000),
@@ -178,6 +178,19 @@ static void MapSpaFallback(WebApplication app, string? index)
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.SendFileAsync(index).ConfigureAwait(false);
     });
+}
+
+static PersistenceOptions ResolvePersistenceOptions(WebApplicationBuilder builder, string profile)
+{
+    var persistence = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions();
+    if (string.Equals(profile, "Real", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(persistence.Provider, "InMemory", StringComparison.OrdinalIgnoreCase)
+        && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("Persistence__Provider")))
+    {
+        persistence.Provider = "Sqlite";
+    }
+
+    return persistence;
 }
 
 static async Task InitializePersistenceAsync(IServiceProvider services)
