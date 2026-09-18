@@ -50,6 +50,11 @@ public sealed record ResponseStartedOutput(Guid EntryId, long EntrySequence,
     TriggerKind Trigger) : OutputPayload;
 public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload;
 public sealed record TextCompletedOutput(int TextLength) : OutputPayload;
+public sealed record SpeechOutputSegmentOutput(int SegmentIndex, int TextStart,
+    string Text, string VoiceHint, string Language, double SpeakingRate)
+    : OutputPayload;
+public sealed record SpeechOutputCompletedOutput(int TextEndExclusive)
+    : OutputPayload;
 public sealed record PlaybackStopOutput(string Reason) : OutputPayload;
 public sealed record PlaybackGainOutput(Guid CandidateId, double Gain,
     int RampMs) : OutputPayload;

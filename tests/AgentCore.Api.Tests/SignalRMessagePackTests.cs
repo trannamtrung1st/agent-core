@@ -4,7 +4,7 @@ using System.Net.Sockets;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class KestrelHostFixture : IAsyncLifetime
+public class KestrelHostFixture : IAsyncLifetime
 {
     private Process? _process;
 
@@ -26,6 +26,17 @@ public sealed class KestrelHostFixture : IAsyncLifetime
         start.Environment["AgentCore__Profile"] = "Synthetic";
         start.Environment["AgentCore__MaxActiveSessions"] = "1";
         start.Environment["AgentCore__AgentDirectory"] = Path.Combine(root, "agents");
+        foreach (var pair in ExtraEnvironment)
+        {
+            if (pair.Value is null)
+            {
+                start.Environment.Remove(pair.Key);
+            }
+            else
+            {
+                start.Environment[pair.Key] = pair.Value;
+            }
+        }
         _process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start API.");
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _process.OutputDataReceived += (_, args) =>
@@ -123,6 +134,9 @@ public sealed class KestrelHostFixture : IAsyncLifetime
 
         throw new DirectoryNotFoundException();
     }
+
+    protected virtual IReadOnlyDictionary<string, string?> ExtraEnvironment { get; } =
+        new Dictionary<string, string?>();
 }
 
 [CollectionDefinition("kestrel")]
@@ -166,5 +180,26 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("cancel-response-stale")]
     [InlineData("cancel-response-active")]
     [InlineData("ready-transports")]
+    [InlineData("speech-evidence-kinds")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
+}
+
+[CollectionDefinition("kestrel-client-speech")]
+public sealed class ClientSpeechKestrelCollection : ICollectionFixture<ClientSpeechKestrelHostFixture>;
+
+public sealed class ClientSpeechKestrelHostFixture : KestrelHostFixture
+{
+    protected override IReadOnlyDictionary<string, string?> ExtraEnvironment { get; } =
+        new Dictionary<string, string?>
+        {
+            ["Providers__Speech__Synthesis__Adapter"] = "Browser"
+        };
+}
+
+[Collection("kestrel-client-speech")]
+public sealed class ClientSpeechMessagePackTests(ClientSpeechKestrelHostFixture host)
+{
+    [Theory]
+    [InlineData("speech-output-segments")]
+    public Task JavaScript_client_speech_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

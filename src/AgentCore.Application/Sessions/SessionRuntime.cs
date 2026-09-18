@@ -1909,7 +1909,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     .ConfigureAwait(false);
                 UpdateStreamingAssistant();
                 await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
-                if (UsesVoicePlayback)
+                if (UsesSpeechSegmentation)
                 {
                     if (_segmentPipelineStarted == 0)
                     {
@@ -1919,6 +1919,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     FeedTtsFromLockedSource();
                     ScheduleSegmentTimer();
                     KickTts(input.Context);
+                    await ReleaseClientSpeechAsync(input.Context, cancellationToken).ConfigureAwait(false);
                     if (_pendingSegments.Count >= 4)
                     {
                         _modelBackpressure = input.Processed;
@@ -1941,7 +1942,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: true, cancellationToken)
                     .ConfigureAwait(false);
                 UpdateStreamingAssistant();
-                if (UsesVoicePlayback)
+                if (UsesSpeechSegmentation)
                 {
                     _modelDone = true;
                     if (_segmentPipelineStarted == 0)
@@ -1952,7 +1953,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     FeedTtsFromLockedSource();
                     EnqueueSegments(_segmenter!.Complete());
                     KickTts(input.Context);
+                    await ReleaseClientSpeechAsync(input.Context, cancellationToken).ConfigureAwait(false);
                     await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+                    await TryCompleteClientSpeechAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -2331,6 +2334,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _envelope = _ttsSourceLocked && _ttsUsesSpeech && !string.IsNullOrEmpty(_envelope?.SpeechText)
             ? parsed with { SpeechText = _envelope.SpeechText }
             : parsed;
+        if (finalize && string.IsNullOrEmpty(_envelope.SpeechText))
+        {
+            var spoken = SpokenOutput.ForPlayback(null, _envelope.DisplayText);
+            if (!string.Equals(spoken, _envelope.DisplayText, StringComparison.Ordinal))
+            {
+                _envelope = _envelope with { SpeechText = spoken };
+            }
+        }
         var display = _envelope.DisplayText;
         if (display.Length > _publishedDisplayLength)
         {
@@ -2377,8 +2388,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return string.Empty;
             }
 
-            _ttsUsesSpeech = !string.IsNullOrEmpty(parsed.SpeechText)
-                || !string.Equals(playback, parsed.DisplayText, StringComparison.Ordinal);
+            _ttsUsesSpeech = !string.IsNullOrEmpty(parsed.SpeechText);
             _ttsSourceLocked = true;
             if (_ttsUsesSpeech)
             {
@@ -2391,7 +2401,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return _envelope?.SpeechText ?? playback;
         }
 
-        return parsed.DisplayText;
+        return SpokenOutput.ForPlayback(null, parsed.DisplayText);
     }
 
     private void FeedTtsFromLockedSource()

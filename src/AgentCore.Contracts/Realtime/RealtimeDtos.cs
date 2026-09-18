@@ -157,6 +157,31 @@ public sealed class SpeechEndedPayload
 }
 
 [MessagePackObject]
+public sealed class ClientSpeechEvidencePayload
+{
+    [Key("kind")]
+    public string Kind { get; set; } = "";
+
+    [Key("utteranceId")]
+    public string UtteranceId { get; set; } = "";
+
+    [Key("revision")]
+    public int? Revision { get; set; }
+
+    [Key("text")]
+    public string? Text { get; set; }
+
+    [Key("confidence")]
+    public double? Confidence { get; set; }
+
+    [Key("activityScore")]
+    public double? ActivityScore { get; set; }
+
+    [Key("durationMs")]
+    public double? DurationMs { get; set; }
+}
+
+[MessagePackObject]
 public sealed class PlaybackPayload
 {
     [Key("consumedSamples")]

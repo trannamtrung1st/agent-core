@@ -31,6 +31,13 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public void Spoken_output_strips_display_markdown_but_keeps_explicit_speech()
+    {
+        Assert.Equal("The architecture has three pieces.", SpokenOutput.ForPlayback(null, "The architecture has **three** pieces."));
+        Assert.Equal("Order 91 is delayed.", SpokenOutput.ForPlayback("Order 91 is delayed.", "Shown **bold**."));
+    }
+
+    [Fact]
     public async Task Tts_does_not_narrate_attachment_bytes_or_extracts()
     {
         var dump =

@@ -41,6 +41,9 @@ public sealed class SessionHub(SessionHost host) : Hub
     public Task<CommandAck> SpeechEnded(ClientCommand<SpeechEndedPayload> command) =>
         Complete(host.AdmitSpeechEndedAsync(Context.ConnectionId, command));
 
+    public Task<CommandAck> SpeechEvidence(ClientCommand<ClientSpeechEvidencePayload> command) =>
+        Complete(host.AdmitSpeechEvidenceAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+
     public async Task SendAudio(InputAudioDto dto)
     {
         if (await host.AdmitAudioAsync(Context.ConnectionId, dto).ConfigureAwait(false))

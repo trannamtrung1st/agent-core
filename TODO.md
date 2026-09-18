@@ -129,7 +129,7 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [ ] Keep the existing local AudioWorklet/VAD boundary path where useful for turn-taking/barge-in, but do not send PCM to backend STT when Browser STT is selected.
 
-- [ ] Add typed realtime commands for browser-recognized transcript evidence.
+- [x] Add typed realtime commands for browser-recognized transcript evidence.
 
   Normalize browser results into the same application-level speech evidence consumed by the Interaction Controller:
   - `utteranceId`;
@@ -175,7 +175,7 @@ Goal: inexpensive speech output without backend TTS cost while preserving the ex
   - interruption/flush;
   - normalized errors.
 
-- [ ] Add a server-to-client speech-text segment contract for Browser TTS.
+- [x] Add a server-to-client speech-text segment contract for Browser TTS.
 
   Do not synthesize directly from raw display Markdown.
 

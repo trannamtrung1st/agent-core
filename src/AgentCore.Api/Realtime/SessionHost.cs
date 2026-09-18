@@ -38,6 +38,14 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     private readonly ConcurrentDictionary<Guid, long> _terminateEpoch = new();
     private readonly ConcurrentDictionary<Guid, Task> _disposing = new();
     private readonly object _gate = new();
+    private static readonly HashSet<string> SpeechEvidenceKinds = new(StringComparer.Ordinal)
+    {
+        "started",
+        "partial",
+        "final",
+        "ended",
+        "failed"
+    };
     private bool _admitting = true;
 
     internal Func<Task>? AfterAdmitHold { get; set; }
@@ -1039,6 +1047,33 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         return AdmitSpeechAsync(connectionId, command, utteranceId, payload.StreamId, payload.SampleOffset, payload.ActivityScore, SpeechBoundary.Ended, payload.DurationMs);
     }
 
+    public Task<CommandAck> AdmitSpeechEvidenceAsync(
+        string connectionId,
+        ClientCommand<ClientSpeechEvidencePayload> command,
+        CancellationToken cancellationToken)
+    {
+        var envelope = Validate(command, attach: false, expectedType: "client.speech.evidence");
+        if (!envelope.Accepted)
+        {
+            return Task.FromResult(envelope);
+        }
+
+        var payload = command.Payload;
+        if (payload is null
+            || !SpeechEvidenceKinds.Contains(payload.Kind)
+            || !Guid.TryParse(payload.UtteranceId, out _)
+            || payload.Revision is < 0
+            || payload.Text is { Length: > 8000 }
+            || payload.Confidence is < 0 or > 1
+            || payload.ActivityScore is < 0 or > 1
+            || payload.DurationMs < 0)
+        {
+            return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "Speech evidence payload is invalid.", false, null));
+        }
+
+        return AdmitControlAsync(connectionId, command, _ => Task.FromResult(Accept(command.EventId)), cancellationToken);
+    }
+
     public async Task<bool> AdmitAudioAsync(string connectionId, InputAudioDto dto)
     {
         if (dto.ProtocolVersion != 1)
@@ -1900,6 +1935,19 @@ public static class SessionEventMapper
                 ["message"] = error.SafeMessage,
                 ["fatal"] = error.Fatal,
                 ["retryAfterMs"] = error.RetryAfter is { } retry ? (int)retry.TotalMilliseconds : null
+            }),
+            SpeechOutputSegmentOutput segment => ("speech.output.segment", new Dictionary<string, object?>
+            {
+                ["segmentIndex"] = segment.SegmentIndex,
+                ["textStart"] = segment.TextStart,
+                ["text"] = segment.Text,
+                ["voiceHint"] = segment.VoiceHint,
+                ["language"] = segment.Language,
+                ["speakingRate"] = segment.SpeakingRate
+            }),
+            SpeechOutputCompletedOutput speechCompleted => ("speech.output.completed", new Dictionary<string, object?>
+            {
+                ["textEndExclusive"] = speechCompleted.TextEndExclusive
             }),
             _ => ("error", new Dictionary<string, object?>
             {

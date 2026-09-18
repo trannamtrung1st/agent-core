@@ -86,7 +86,7 @@ Segment 1: " First, check the connection."
 Segment 2: " Then try again."
 ```
 
-Token boundaries such as `Sure`, `, there`, `are three` are not speech-job boundaries. Each segment becomes one SpeechRequest with the same Response ID and captured offsets. One TTS job streams at a time in segment order; browser playback begins with its first audio while later text/segments are still being generated. Keep at most 4 pending segments and stop advancing the model enumerator when that queue is full. Supersession invalidates the unsent text buffer, segment timer and pending jobs before any new job can start.
+Token boundaries such as `Sure`, `, there`, `are three` are not speech-job boundaries. Each segment becomes one SpeechRequest with the same Response ID and captured offsets when output transport is `serverAudio`. When output transport is `clientSpeech`, the same SpeechSegmenter releases become `speech.output.segment` events (speakable text, speech-text `textStart`, strictly increasing `segmentIndex`) followed by `speech.output.completed`; do not synthesize those segments on a backend port or change server-audio PCM DTOs. One TTS job streams at a time in segment order; browser playback begins with its first audio while later text/segments are still being generated. Keep at most 4 pending segments and stop advancing the model enumerator when that queue is full. Supersession invalidates the unsent text buffer, segment timer and pending jobs before any new job can start.
 
 ## Response generation and streaming speech
 

@@ -226,6 +226,16 @@ public sealed record AudioFrameOutput(
     bool IsFinal,
     byte[] Data) : OutputPayload;
 
+public sealed record SpeechOutputSegmentOutput(
+    int SegmentIndex,
+    int TextStart,
+    string Text,
+    string VoiceHint,
+    string Language,
+    double SpeakingRate) : OutputPayload;
+
+public sealed record SpeechOutputCompletedOutput(int TextEndExclusive) : OutputPayload;
+
 public sealed record ResponseCompletedOutput(
     bool Failed,
     int HeardTextEndExclusive,

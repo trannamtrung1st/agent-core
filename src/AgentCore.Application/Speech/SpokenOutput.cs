@@ -17,10 +17,10 @@ public static class SpokenOutput
         var display = displayText ?? string.Empty;
         if (!LooksLikeFileDump(display) && display.Length <= MaxChars)
         {
-            return display;
+            return Clip(StripMarkdown(display));
         }
 
-        var stripped = StripDump(display);
+        var stripped = StripMarkdown(StripDump(display));
         if (string.IsNullOrWhiteSpace(stripped))
         {
             return "I reviewed the attached file.";
@@ -96,6 +96,27 @@ public static class SpokenOutput
 
         return window.Trim();
     }
+
+    private static string StripMarkdown(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var stripped = MarkdownImage.Replace(text, " ");
+        stripped = MarkdownLink.Replace(stripped, "$1");
+        stripped = MarkdownHeading.Replace(stripped, "");
+        stripped = MarkdownFence.Replace(stripped, " ");
+        stripped = MarkdownEmphasis.Replace(stripped, "");
+        return stripped.Trim();
+    }
+
+    private static readonly Regex MarkdownImage = new(@"!\[[^\]]*\]\([^)]*\)", RegexOptions.Compiled);
+    private static readonly Regex MarkdownLink = new(@"\[([^\]]+)\]\([^)]*\)", RegexOptions.Compiled);
+    private static readonly Regex MarkdownHeading = new(@"^#{1,6}\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex MarkdownFence = new("```+", RegexOptions.Compiled);
+    private static readonly Regex MarkdownEmphasis = new(@"[*_`]{1,3}", RegexOptions.Compiled);
 
     private static readonly Regex Base64Like = new(
         "[A-Za-z0-9+/]{80,}={0,2}",

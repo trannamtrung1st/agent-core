@@ -1080,6 +1080,96 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "speech-evidence-kinds": {
+      const session = await createSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const utteranceId = uuid();
+      const kinds = [
+        { kind: "started", activityScore: 0.4 },
+        { kind: "partial", revision: 1, text: "hello" },
+        { kind: "final", text: "hello", confidence: 0.9 },
+        { kind: "ended", durationMs: 250, activityScore: 0.2 },
+        { kind: "failed" }
+      ];
+      for (let index = 0; index < kinds.length; index++) {
+        const ack = await connection.invoke(
+          "SpeechEvidence",
+          command(session.sessionId, index + 1, "client.speech.evidence", { utteranceId, ...kinds[index] }, { attachmentId })
+        );
+        if (!ack.accepted) {
+          throw new Error(JSON.stringify(ack));
+        }
+      }
+      const denied = await connection.invoke(
+        "SpeechEvidence",
+        command(session.sessionId, kinds.length + 1, "user.speech.started", { utteranceId, kind: "started" }, { attachmentId })
+      );
+      if (denied.accepted || denied.error?.code !== "ProtocolError") {
+        throw new Error(`type mismatch expected: ${JSON.stringify(denied)}`);
+      }
+      await connection.stop();
+      break;
+    }
+    case "speech-output-segments": {
+      const session = await fetch(`${base}/api/v1/sessions`, {
+        method: "POST",
+        headers: await ownerHeaders({ "content-type": "application/json" }),
+        body: JSON.stringify({ agentId: "examiner", mode: "voice" })
+      }).then((response) => {
+        if (!response.ok) {
+          throw new Error(`voice create failed ${response.status}`);
+        }
+        return response.json();
+      });
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      const ready = await waitForEvent((evt) => evt.type === "session.ready");
+      if (ready.payload?.capabilities?.tts?.transport !== "clientSpeech") {
+        throw new Error(`expected clientSpeech transport: ${JSON.stringify(ready.payload?.capabilities)}`);
+      }
+      const attachmentId = ready.attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      const segments = [];
+      await waitForEvent((evt) => {
+        if (evt.type === "speech.output.segment") {
+          segments.push(evt);
+        }
+        return evt.type === "speech.output.completed";
+      });
+      const completed = events.find((evt) => evt.type === "speech.output.completed");
+      const responseCompleted = await waitForEvent((evt) => evt.type === "agent.response.completed");
+      if (segments.length === 0) {
+        throw new Error("expected ordered speech.output.segment events");
+      }
+      for (let index = 1; index < segments.length; index++) {
+        if (segments[index].payload.segmentIndex <= segments[index - 1].payload.segmentIndex) {
+          throw new Error("segmentIndex must strictly increase");
+        }
+        if (segments[index].responseId !== segments[0].responseId) {
+          throw new Error("segments must share responseId");
+        }
+      }
+      if (completed?.type === responseCompleted.type) {
+        throw new Error("speech.output.completed must be distinct from agent.response.completed");
+      }
+      if (typeof completed.payload?.textEndExclusive !== "number") {
+        throw new Error("textEndExclusive must round-trip");
+      }
+      if (events.some((evt) => evt.type === "audio.output")) {
+        throw new Error("server-audio PCM must remain unchanged and unused on clientSpeech");
+      }
+      await connection.stop();
+      break;
+    }
     default:
       throw new Error(`unknown scenario ${scenario}`);
   }

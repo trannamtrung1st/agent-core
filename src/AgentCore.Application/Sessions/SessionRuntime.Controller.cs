@@ -515,7 +515,7 @@ public sealed partial class SessionRuntime
     {
         if (input.Kind == "segment")
         {
-            if (input.Generation != _segmentTimerGeneration || _segmenter is null || !UsesVoicePlayback)
+            if (input.Generation != _segmentTimerGeneration || _segmenter is null || !UsesSpeechSegmentation)
             {
                 return;
             }
@@ -528,7 +528,9 @@ public sealed partial class SessionRuntime
             }
 
             KickTts(input.Context);
+            await ReleaseClientSpeechAsync(input.Context, cancellationToken).ConfigureAwait(false);
             await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+            await TryCompleteClientSpeechAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
             return;
         }
 

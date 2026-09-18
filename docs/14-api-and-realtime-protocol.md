@@ -75,7 +75,7 @@ public sealed record OutputAudioDto(int ProtocolVersion, string SessionId,
     long SampleOffset, bool IsFinal, byte[] Data);
 ```
 
-Envelope record describes common metadata; each command has a statically typed payload DTO following the table, not an arbitrary dictionary. Implement SignalR hub `Attach(AttachCommand)`, `SendText(UserTextCommand)`, `CancelResponse(CancelResponseCommand)`, `SetMode(SetModeCommand)`, `SpeechStarted(SpeechStartedCommand)`, `SpeechEnded(SpeechEndedCommand)`, `SendAudio(InputAudioDto)`, `PlaybackStarted(PlaybackCommand)`, `PlaybackProgress(PlaybackCommand)`, `PlaybackCompleted(PlaybackCommand)`, `PlaybackStopped(PlaybackCommand)`, `ResponseReceived(ResponseReceiptCommand)`, `SetMuted(MuteCommand)`, `EndSession(EndCommand)`. All return `Task<CommandAck>` except SendAudio returns Task after local ingress admission. Browser uses ordered `connection.send("SendAudio", dto)` calls, not a round-trip `invoke` for every frame; audio rejection is reported through SessionEvent error. CommandAck is `{eventId,accepted,error}` with error nullable; a non-null error uses the category/code/message/fatal/retryAfterMs payload from the error table. Accepted means admitted/deduplicated, not durably completed.
+Envelope record describes common metadata; each command has a statically typed payload DTO following the table, not an arbitrary dictionary. Implement SignalR hub `Attach(AttachCommand)`, `SendText(UserTextCommand)`, `CancelResponse(CancelResponseCommand)`, `SetMode(SetModeCommand)`, `SpeechStarted(SpeechStartedCommand)`, `SpeechEnded(SpeechEndedCommand)`, `SpeechEvidence(SpeechEvidenceCommand)`, `SendAudio(InputAudioDto)`, `PlaybackStarted(PlaybackCommand)`, `PlaybackProgress(PlaybackCommand)`, `PlaybackCompleted(PlaybackCommand)`, `PlaybackStopped(PlaybackCommand)`, `ResponseReceived(ResponseReceiptCommand)`, `SetMuted(MuteCommand)`, `EndSession(EndCommand)`. All return `Task<CommandAck>` except SendAudio returns Task after local ingress admission. Browser uses ordered `connection.send("SendAudio", dto)` calls, not a round-trip `invoke` for every frame; audio rejection is reported through SessionEvent error. CommandAck is `{eventId,accepted,error}` with error nullable; a non-null error uses the category/code/message/fatal/retryAfterMs payload from the error table. Accepted means admitted/deduplicated, not durably completed.
 
 The client registers `SessionEvent` for typed server envelope maps and `AudioOutput` for OutputAudioDto. Hub sends one event argument, not positional payload fields. Include serialization fixtures to verify exact keys/casing/binary bytes. Use WebSocket transport and MaximumParallelInvocationsPerClient=4 so an audio method cannot monopolize control handling. Audio ingress uses immediate bounded TryWrite and reports overflow; it never waits for STT/network work. Control sequencing still comes from the browser connection service and mailbox admission. Configure maximum receive message size 32 KiB and reject text >8,000 UTF-16 code units or frame >1,920 bytes at application validation.
 
@@ -118,6 +118,7 @@ Every control uses metadata above plus payload below. Empty payload is `{}`.
 | agent.response.cancel | CancelResponse | empty `{}`; top-level `responseId` is the expected generation to stop (required UUID; creates no user entry) |
 | user.speech.started | SpeechStarted | streamId: UUID, utteranceId: UUID, sampleOffset: integer, activityScore: number 0..1 |
 | user.speech.ended | SpeechEnded | streamId, utteranceId, sampleOffset: integer, durationMs: nonnegative number |
+| client.speech.evidence | SpeechEvidence | kind: `started`\|`partial`\|`final`\|`ended`\|`failed`; utteranceId: UUID; revision?: integer >=0; text?: string <=8,000; confidence?: number 0..1; activityScore?: number 0..1; durationMs?: nonnegative number |
 | audio.input | SendAudio | Dedicated InputAudioDto, no envelope |
 | playback.started | PlaybackStarted | consumedSamples: 0, textEndExclusive: integer |
 | playback.progress | PlaybackProgress | consumedSamples: integer, textEndExclusive: integer |
@@ -143,6 +144,8 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | agent.text.completed | textLength: integer (display) |
 | agent.block.upsert | blockId, kind: markdown\|attachment\|artifact\|unknown, text, fallbackText, attachmentId?, artifactId? |
 | audio.output | Dedicated OutputAudioDto |
+| speech.output.segment | segmentIndex: integer starting at 0, textStart: UTF-16 **speech-text** offset, text: already-speakable string, voiceHint, language, speakingRate; `responseId` is on the envelope |
+| speech.output.completed | textEndExclusive: integer in speech-text coordinates; distinct from `agent.response.completed` |
 | playback.gain | gain: 0.2\|1.0, rampMs: 20, candidateId: UUID |
 | playback.stop | reason: interrupted\|disconnected\|ended\|providerFailed\|audioFailed\|modeChange |
 | agent.response.interrupted | reason: userBargeIn\|newText\|userStop\|disconnected\|ended\|modeChange, heardTextEndExclusive: integer |

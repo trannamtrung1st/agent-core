@@ -34,6 +34,8 @@ public sealed partial class SessionRuntime
     private int _ttsJobsStarted;
     private CancellationTokenSource? _ttsCts;
     private readonly SpokenUntilAccumulator _spokenUntil = new();
+    private bool _speechOutputCompleted;
+    private int _speechTextEndExclusive;
 
     public int TtsJobsStarted => _ttsJobsStarted;
 
@@ -43,6 +45,14 @@ public sealed partial class SessionRuntime
 
     private bool UsesVoicePlayback =>
         _snapshot.Mode == SessionMode.Voice && _synthesizer is not null && _activeResponseId is not null;
+
+    private bool UsesClientSpeech =>
+        _snapshot.Mode == SessionMode.Voice
+        && _synthesizer is null
+        && _voice.EffectivePlan.OutputTransport == SpeechTransport.ClientSpeech
+        && _activeResponseId is not null;
+
+    private bool UsesSpeechSegmentation => UsesVoicePlayback || UsesClientSpeech;
 
     private void ResetSpeechOutput()
     {
@@ -73,9 +83,11 @@ public sealed partial class SessionRuntime
         _segmentPipelineStarted = 0;
         _firstAudioReadyAt = 0;
         _firstFrameSentAt = 0;
+        _speechOutputCompleted = false;
+        _speechTextEndExclusive = 0;
         _segmenter = _activeResponseId is { } id
             && _snapshot.Mode == SessionMode.Voice
-            && _synthesizer is not null
+            && (_synthesizer is not null || _voice.EffectivePlan.OutputTransport == SpeechTransport.ClientSpeech)
                 ? new SpeechSegmenter(id)
                 : null;
     }
@@ -411,6 +423,57 @@ public sealed partial class SessionRuntime
                 ClearActive();
                 await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
             });
+    }
+
+    private async Task ReleaseClientSpeechAsync(EventContext context, CancellationToken cancellationToken)
+    {
+        if (!UsesClientSpeech || _activeResponseId is not { } responseId)
+        {
+            return;
+        }
+
+        while (_pendingSegments.Count > 0)
+        {
+            var segment = _pendingSegments.Dequeue();
+            _speechTextEndExclusive = segment.TextStart + segment.Text.Length;
+            await PublishAsync(
+                    new SessionOutput(
+                        context,
+                        responseId,
+                        new SpeechOutputSegmentOutput(
+                            segment.SegmentIndex,
+                            segment.TextStart,
+                            segment.Text,
+                            _snapshot.Definition.Voice.VoiceId,
+                            _snapshot.Definition.ConversationPolicy.Language,
+                            _snapshot.Definition.Voice.SpeakingRate)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task TryCompleteClientSpeechAsync(EventContext context, bool failed, CancellationToken cancellationToken)
+    {
+        if (!UsesClientSpeech
+            || _activeResponseId is not { } responseId
+            || _responseTerminal
+            || !_modelDone
+            || _pendingSegments.Count > 0
+            || _segmenter is { HasBuffered: true })
+        {
+            return;
+        }
+
+        if (!_speechOutputCompleted)
+        {
+            _speechOutputCompleted = true;
+            await PublishAsync(
+                    new SessionOutput(context, responseId, new SpeechOutputCompletedOutput(_speechTextEndExclusive)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await CompleteAsync(context, responseId, failed, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task FinishAudioIfReadyAsync(EventContext context, Guid responseId, CancellationToken cancellationToken)
