@@ -100,6 +100,51 @@ public sealed class SpeechFactoryTests
         Assert.False(speech.Plan.SynthesisResolvable);
     }
 
+    [Theory]
+    [InlineData("Synthetic", "Synthetic", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, true, true, true, true)]
+    [InlineData("Browser", "Browser", SpeechTransport.ClientTranscript, SpeechTransport.ClientSpeech, false, false, true, true)]
+    [InlineData("Browser", "OpenAI", SpeechTransport.ClientTranscript, SpeechTransport.ServerAudio, false, false, true, false)]
+    [InlineData("OpenAICompatibleBatch", "Browser", SpeechTransport.ServerAudio, SpeechTransport.ClientSpeech, false, false, false, true)]
+    [InlineData("OpenAI", "OpenAI", SpeechTransport.ServerAudio, SpeechTransport.ServerAudio, false, false, false, false)]
+    public void Required_mixed_combinations_resolve_without_paid_clients_or_synthetic_fallback(
+        string recognitionAdapter,
+        string synthesisAdapter,
+        string inputTransport,
+        string outputTransport,
+        bool recognitionPort,
+        bool synthesisPort,
+        bool recognitionResolvable,
+        bool synthesisResolvable)
+    {
+        foreach (var key in new[] { null, "not-a-live-key" })
+        {
+            using var provider = Build(new SpeechProvidersOptions
+            {
+                Recognition = new SpeechRecognitionProviderOptions { Adapter = recognitionAdapter, ApiKey = key },
+                Synthesis = new SpeechSynthesisProviderOptions { Adapter = synthesisAdapter, ApiKey = key }
+            });
+            var speech = provider.GetRequiredService<SpeechResolution>();
+            Assert.Equal(inputTransport, speech.Plan.InputTransport);
+            Assert.Equal(outputTransport, speech.Plan.OutputTransport);
+            Assert.Equal(recognitionResolvable, speech.Plan.RecognitionResolvable);
+            Assert.Equal(synthesisResolvable, speech.Plan.SynthesisResolvable);
+            Assert.Equal(recognitionPort, speech.Recognizer is not null);
+            Assert.Equal(synthesisPort, speech.Synthesizer is not null);
+            Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
+            Assert.False(speech.Recognizer is OpenAICompatibleBatchSpeechRecognizer);
+            Assert.False(speech.Synthesizer is OpenAiSpeechSynthesizer);
+            if (recognitionPort)
+            {
+                Assert.IsType<SyntheticSpeechRecognizer>(speech.Recognizer);
+            }
+
+            if (synthesisPort)
+            {
+                Assert.IsType<SyntheticSpeechSynthesizer>(speech.Synthesizer);
+            }
+        }
+    }
+
     [Fact]
     public void Unknown_adapter_is_not_silently_synthetic()
     {

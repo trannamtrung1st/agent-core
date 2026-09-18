@@ -103,6 +103,72 @@ public sealed class SpeechConfigurationHostTests
     }
 
     [Fact]
+    public async Task Default_synthetic_host_resolves_config_synthetic_adapters()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var options = factory.Services.GetRequiredService<SpeechProvidersOptions>();
+        Assert.Equal("Synthetic", options.Recognition.Adapter);
+        Assert.Equal("Synthetic", options.Synthesis.Adapter);
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.IsType<AgentCore.Infrastructure.Providers.Synthetic.SyntheticSpeechRecognizer>(resolution.Recognizer);
+        Assert.IsType<AgentCore.Infrastructure.Providers.Synthetic.SyntheticSpeechSynthesizer>(resolution.Synthesizer);
+        Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.OutputTransport);
+
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
+        Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
+    [Fact]
+    public async Task Batch_stt_and_browser_tts_do_not_start_paid_clients()
+    {
+        await using var factory = new SpeechHostFactory(new Dictionary<string, string?>
+        {
+            ["Providers:Speech:Recognition:Adapter"] = "OpenAICompatibleBatch",
+            ["Providers:Speech:Recognition:ApiKey"] = "not-a-live-key",
+            ["Providers:Speech:Synthesis:Adapter"] = "Browser"
+        });
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.Null(resolution.Recognizer);
+        Assert.Null(resolution.Synthesizer);
+        Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ClientSpeech, resolution.Plan.OutputTransport);
+        Assert.False(resolution.Plan.RecognitionResolvable);
+        Assert.True(resolution.Plan.SynthesisResolvable);
+
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var text = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        Assert.Equal(HttpStatusCode.Created, text.StatusCode);
+        var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
+        Assert.Equal(HttpStatusCode.Conflict, voice.StatusCode);
+        Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
+    [Fact]
+    public async Task Browser_stt_and_openai_tts_with_dummy_key_do_not_start_paid_clients()
+    {
+        await using var factory = new SpeechHostFactory(new Dictionary<string, string?>
+        {
+            ["Providers:Speech:Recognition:Adapter"] = "Browser",
+            ["Providers:Speech:Synthesis:Adapter"] = "OpenAI",
+            ["OPENAI_API_KEY"] = "not-a-live-key"
+        });
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.Null(resolution.Recognizer);
+        Assert.Null(resolution.Synthesizer);
+        Assert.Equal(SpeechTransport.ClientTranscript, resolution.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.OutputTransport);
+        Assert.False(string.IsNullOrWhiteSpace(factory.Services.GetRequiredService<SpeechProvidersOptions>().Synthesis.ApiKey));
+
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var text = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        Assert.Equal(HttpStatusCode.Created, text.StatusCode);
+        Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
+    }
+
+    [Fact]
     public async Task Gated_hosted_speech_does_not_advertise_voice_available()
     {
         await using var factory = new SpeechHostFactory(new Dictionary<string, string?>

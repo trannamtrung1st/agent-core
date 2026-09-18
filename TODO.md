@@ -104,7 +104,7 @@ Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthes
 
 - [ ] Keep provider/vendor details outside Session Runtime and Interaction Controller.
 
-- [ ] Add configuration validation and tests for mixed combinations.
+- [x] Add configuration validation and tests for mixed combinations.
 
   Important combinations:
   - Synthetic STT + Synthetic TTS;
