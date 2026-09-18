@@ -29,7 +29,9 @@ develop, document, docs-consistency, architecture, backend, frontend, realtime, 
 | 17 | Mixed host plans + mixed preflight | `bb1821d` |
 | 18 | Section-42 speech meters | `467fbbb` |
 | 19 | Final Synthetic/section-44 gate | none (evidence only; HEAD `467fbbb`) |
-| 20 | Canonical docs / TODO / this report | this commit |
+| 20 | Canonical docs / TODO / this report | prior handoff commit |
+| 21 | Native Web Speech corrective (`be0514c`) | `be0514c` |
+| 22 | Pending speechend + idle restart cap | this commit |
 
 Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-20260918T040554-90562c/` (gitignored).
 
@@ -65,11 +67,11 @@ Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-2
 
 No WebRTC, native speech-to-speech reasoning, vector/cross-session memory, WorkItems, background research, scheduled tasks, auth/tenancy, Kubernetes, OpenSandbox, marketplace, admin editor, billing, automatic paid-provider routing, or a second UI framework. Historical MVP Milestone 1–12 and P0-A–F records stay intact.
 
-## Final key-free gate (batch 19)
+## Final key-free gate (batch 19 baseline; post–`be0514c` refresh below)
 
 Flags: `AGENTCORE_LIVE_PROVIDER_TESTS=0`, `AGENTCORE_LIVE_OPENAI_STT=0`, `AGENTCORE_LIVE_OPENAI_TTS=0`. Playwright `CI=1` on isolated ports 5280/6273, 5281/6274, 5282/6275 with InMemory disposable roots.
 
-| Command | Observed |
+| Command | Observed (batch 19) |
 | --- | --- |
 | `npm ci --prefix tests/realtime-js` | exit 0 |
 | Domain tests | 22 passed |
@@ -81,10 +83,25 @@ Flags: `AGENTCORE_LIVE_PROVIDER_TESTS=0`, `AGENTCORE_LIVE_OPENAI_STT=0`, `AGENTC
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 25 passed (synthetic + browser-stt + browser-browser) |
 
-No new failures versus earlier P1 Playwright (25). Count growth is additional passing coverage.
+## Post–native-STT-hardening gate (after batch 22)
+
+Same flags and ports. Re-run after pending-`speechend` closure and idle `onend` restart-cap fixes.
+
+| Command | Observed |
+| --- | --- |
+| Domain tests | 22 passed |
+| Infrastructure tests | 101 passed, 9 skipped |
+| Application tests (`--blame-hang-timeout 5m`) | 292 passed |
+| API tests | 105 passed (one `SessionHostRaceTests` flake on first full run; isolated re-run passed) |
+| `pnpm run test --run` | 256 passed |
+| `pnpm run build` | exit 0 |
+| `CI=1 pnpm exec playwright test` | 26 passed |
+
+Count growth versus batch 19 is additional Browser-STT contract coverage, not regressions.
 
 ## Remaining work
 
 - Implement a real OpenAI realtime transcription session before Adapter=`OpenAI` recognition is selectable.
 - Run HOSTED-04 with explicit `AGENTCORE_LIVE_OPENAI_TTS`/`STT` plus `OPENAI_API_KEY` before claiming hosted live acceptance.
-- Optional headset/Web Speech observations remain manual. Native Web Speech adapter contracts (interim/`isFinal`, utterance bounds, bounded restart, serialized TTS) are covered by Vitest; they do not replace a live headset pass.
+- Optional headset/Web Speech observations remain manual. Native Web Speech adapter contracts (interim/`isFinal`, pending `speechend` closure, capped idle `onend` restart, serialized TTS) are covered by Vitest; they do not replace a live headset pass.
+- Browser TTS `playback.started` on enqueue (before `SpeechSynthesisUtterance.onstart`) remains a telemetry fidelity gap; heard-offset logic stays conservative.

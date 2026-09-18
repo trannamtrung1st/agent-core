@@ -1,4 +1,4 @@
-import { speechError, speechErrorFromRecognitionError } from "./errors";
+import { speechError, speechErrorFromRecognitionError, type SpeechErrorCode } from "./errors";
 import type {
   ClientSpeechRecognizer,
   ClientSpeechRecognizerListener,
@@ -28,6 +28,8 @@ type BrowserRecognition = {
 type RecognitionCtor = new () => BrowserRecognition;
 
 const RESTART_BACKOFF_MS = [0, 250, 500];
+const MAX_IDLE_ENDS_WITHOUT_PROGRESS = 3;
+const SPEECH_END_GRACE_MS = 300;
 
 function recognitionConstructor(): RecognitionCtor | null {
   const host = window as Window & {
@@ -59,6 +61,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
   private startedAt = 0;
   private consecutiveEnds = 0;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private speechEndedPending = false;
+  private speechEndGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private fatal = false;
 
   async start(listener: ClientSpeechRecognizerListener, options?: ClientSpeechRecognizerStartOptions): Promise<void> {
@@ -77,6 +81,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     this.wantRunning = true;
     this.fatal = false;
     this.consecutiveEnds = 0;
+    this.speechEndedPending = false;
+    this.clearSpeechEndGrace();
     this.beginNative(Ctor, this.generation);
   }
 
@@ -123,6 +129,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
 
       this.consecutiveEnds = 0;
       const results = event.results;
+      let sawFinal = false;
       for (let index = event.resultIndex; index < results.length; index += 1) {
         const result = results[index];
         const alternative = result?.[0];
@@ -135,6 +142,10 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
           this.beginUtterance();
         }
 
+        if (result.isFinal) {
+          sawFinal = true;
+        }
+
         this.revision += 1;
         this.listener?.onEvidence({
           kind: result.isFinal ? "final" : "partial",
@@ -144,13 +155,28 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
           confidence: alternative?.confidence
         });
       }
+
+      if (this.speechEndedPending) {
+        this.clearSpeechEndGrace();
+        if (sawFinal) {
+          this.speechEndedPending = false;
+          this.endUtterance();
+        } else {
+          this.scheduleSpeechEndGrace();
+        }
+      }
     };
     native.onspeechend = () => {
       if (this.generation !== generation) {
         return;
       }
 
-      this.endUtterance();
+      if (!this.utteranceOpen) {
+        return;
+      }
+
+      this.speechEndedPending = true;
+      this.scheduleSpeechEndGrace();
     };
     native.onerror = (event) => {
       if (this.generation !== generation) {
@@ -177,6 +203,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         return;
       }
 
+      this.flushPendingUtteranceEnd();
       this.native = null;
       if (!this.wantRunning || this.fatal) {
         return;
@@ -188,6 +215,11 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
       }
 
       this.consecutiveEnds += 1;
+      if (this.consecutiveEnds >= MAX_IDLE_ENDS_WITHOUT_PROGRESS) {
+        this.failRecognition("SpeechRecognitionRestartLimit");
+        return;
+      }
+
       const delay = RESTART_BACKOFF_MS[Math.min(this.consecutiveEnds - 1, RESTART_BACKOFF_MS.length - 1)] ?? 500;
       this.clearRestart();
       this.restartTimer = setTimeout(() => {
@@ -201,7 +233,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
 
   private beginUtterance(): void {
     if (this.utteranceOpen) {
-      this.endUtterance();
+      this.flushPendingUtteranceEnd();
     }
 
     this.utteranceId = crypto.randomUUID();
@@ -216,6 +248,8 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
       return;
     }
 
+    this.speechEndedPending = false;
+    this.clearSpeechEndGrace();
     const durationMs = Math.max(0, Math.round(performance.now() - this.startedAt));
     this.listener?.onEvidence({
       kind: "ended",
@@ -226,8 +260,42 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     this.utteranceOpen = false;
   }
 
+  private flushPendingUtteranceEnd(): void {
+    this.speechEndedPending = false;
+    this.clearSpeechEndGrace();
+    this.endUtterance();
+  }
+
+  private scheduleSpeechEndGrace(): void {
+    this.clearSpeechEndGrace();
+    this.speechEndGraceTimer = setTimeout(() => {
+      this.speechEndGraceTimer = null;
+      if (!this.speechEndedPending || !this.utteranceOpen) {
+        return;
+      }
+
+      this.speechEndedPending = false;
+      this.endUtterance();
+    }, SPEECH_END_GRACE_MS);
+  }
+
+  private failRecognition(code: SpeechErrorCode): void {
+    this.fatal = true;
+    this.wantRunning = false;
+    this.clearRestart();
+    this.clearSpeechEndGrace();
+    this.speechEndedPending = false;
+    this.listener?.onError(speechError(code));
+    if (this.utteranceOpen) {
+      this.listener?.onEvidence({ kind: "failed", utteranceId: this.utteranceId });
+      this.utteranceOpen = false;
+    }
+  }
+
   private stopNative(): void {
     this.clearRestart();
+    this.clearSpeechEndGrace();
+    this.speechEndedPending = false;
     try {
       this.native?.abort();
     } catch {
@@ -240,6 +308,13 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     if (this.restartTimer != null) {
       clearTimeout(this.restartTimer);
       this.restartTimer = null;
+    }
+  }
+
+  private clearSpeechEndGrace(): void {
+    if (this.speechEndGraceTimer != null) {
+      clearTimeout(this.speechEndGraceTimer);
+      this.speechEndGraceTimer = null;
     }
   }
 }

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { BrowserSpeechRecognizer } from "./browserSpeechRecognizer";
 import { FakeSpeechRecognizer } from "./fakeSpeechAdapters";
 import { createSpeechTransportService } from "./speechTransport";
 import { ClientTranscriptLifecycle } from "./clientTranscriptLifecycle";
@@ -14,6 +15,11 @@ function setup() {
 }
 
 describe("ClientTranscriptLifecycle", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
   it("mute abandons speculative partials without a final", async () => {
     const { sent, fake, life } = setup();
     await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
@@ -67,6 +73,51 @@ describe("ClientTranscriptLifecycle", () => {
     expect(life.isListening()).toBe(true);
     fake.fail("SpeechPermissionDenied");
     expect(errors).toEqual(["SpeechPermissionDenied"]);
+    expect(life.isListening()).toBe(false);
+    expect(life.isBlocked()).toBe(true);
+  });
+
+  it("blocks voice when the browser adapter hits the idle restart cap", async () => {
+    vi.useFakeTimers();
+    class MockRecognition {
+      onend: ((event: Event) => void) | null = null;
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onstart: ((event: Event) => void) | null = null;
+      onerror: ((event: { error?: string }) => void) | null = null;
+      onresult = null;
+      onspeechstart = null;
+      onspeechend = null;
+      start(): void {
+        this.onstart?.(new Event("start"));
+      }
+      stop(): void {
+        this.onend?.(new Event("end"));
+      }
+      abort(): void {
+        this.onend?.(new Event("end"));
+      }
+    }
+    const holder: { current: MockRecognition | null } = { current: null };
+    class TrackingRecognition extends MockRecognition {
+      constructor() {
+        super();
+        holder.current = this;
+      }
+    }
+    vi.stubGlobal("SpeechRecognition", TrackingRecognition);
+    const errors: string[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, () => undefined, (error) => errors.push(error.code));
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onend?.(new Event("end"));
+    await vi.advanceTimersByTimeAsync(0);
+    holder.current?.onend?.(new Event("end"));
+    await vi.advanceTimersByTimeAsync(250);
+    holder.current?.onend?.(new Event("end"));
+    expect(errors).toEqual(["SpeechRecognitionRestartLimit"]);
     expect(life.isListening()).toBe(false);
     expect(life.isBlocked()).toBe(true);
   });

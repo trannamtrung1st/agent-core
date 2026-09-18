@@ -77,6 +77,7 @@ describe("BrowserSpeechRecognizer", () => {
   });
 
   it("maps speech boundaries and native finals without treating session start as an utterance", async () => {
+    vi.useFakeTimers();
     const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
     const kinds: string[] = [];
@@ -98,11 +99,40 @@ describe("BrowserSpeechRecognizer", () => {
       results: [{ isFinal: false, 0: { transcript: "hello", confidence: 0.8 } }]
     });
     holder.current?.onspeechend?.(new Event("speechend"));
-    await adapter.stop();
+    expect(kinds).toEqual(["started", "partial"]);
+    await vi.advanceTimersByTimeAsync(300);
     expect(kinds).toEqual(["started", "partial", "ended"]);
+    await adapter.stop();
     expect(texts).toEqual(["hello"]);
     expect(holder.current?.continuous).toBe(true);
     expect(holder.current?.interimResults).toBe(true);
+  });
+
+  it("waits for a native final after speechend before closing the utterance", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const adapter = new BrowserSpeechRecognizer();
+    const events: ClientSpeechEvidence[] = [];
+    await adapter.start({
+      onEvidence: (evidence) => events.push(evidence),
+      onError: () => undefined
+    });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "hello" } }]
+    });
+    holder.current?.onspeechend?.(new Event("speechend"));
+    expect(events.map((item) => item.kind)).toEqual(["started", "partial"]);
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "hello world" } }]
+    });
+    expect(events.map((item) => item.kind)).toEqual(["started", "partial", "final", "ended"]);
+    expect(events.find((item) => item.kind === "final")?.text).toBe("hello world");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(events.filter((item) => item.kind === "ended")).toHaveLength(1);
+    await adapter.cancel();
   });
 
   it("emits native finals from every changed result", async () => {
@@ -157,6 +187,30 @@ describe("BrowserSpeechRecognizer", () => {
     await adapter.cancel();
   });
 
+  it("stops after three idle native onends without speech progress", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const adapter = new BrowserSpeechRecognizer();
+    const errors: string[] = [];
+    await adapter.start({
+      onEvidence: () => undefined,
+      onError: (error) => errors.push(error.code),
+      onRecognitionEnded: () => undefined
+    });
+    expect(holder.starts).toBe(1);
+    holder.current?.onend?.(new Event("end"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(holder.starts).toBe(2);
+    holder.current?.onend?.(new Event("end"));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(holder.starts).toBe(3);
+    holder.current?.onend?.(new Event("end"));
+    expect(errors).toEqual(["SpeechRecognitionRestartLimit"]);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(holder.starts).toBe(3);
+    await adapter.cancel();
+  });
+
   it("maps not-allowed to SpeechPermissionDenied", async () => {
     const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
@@ -179,6 +233,7 @@ describe("Browser STT native finals through the application accumulator", () => 
   });
 
   it("concatenates native finals into one application final", async () => {
+    vi.useFakeTimers();
     const holder = installMock();
     const sent: ClientSpeechEvidence[] = [];
     const adapter = new BrowserSpeechRecognizer();
@@ -206,7 +261,31 @@ describe("Browser STT native finals through the application accumulator", () => 
       ]
     });
     holder.current?.onspeechend?.(new Event("speechend"));
+    await vi.advanceTimersByTimeAsync(300);
     expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
     expect(sent.find((item) => item.kind === "final")?.text).toBe("this is a long sentence");
+  });
+
+  it("commits the late native final when speechend precedes the final result", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "hello" } }]
+    });
+    holder.current?.onspeechend?.(new Event("speechend"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "hello world" } }]
+    });
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("hello world");
+    await adapter.cancel();
   });
 });
