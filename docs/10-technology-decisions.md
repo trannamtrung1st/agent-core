@@ -54,6 +54,14 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Consequence:** Application depends on capability interfaces; configuration and DI select Infrastructure adapters. Capabilities may differ, so existing degraded interaction policies remain supported. Vendor-specific code stays at the edge. [Provider ports](04-backend-interfaces.md#speech-provider-replacement-rule) and [configuration](15-persistence-and-configuration.md#provider-selection-and-di) own the concrete contracts and examples.
 
+## Decision: speech provider is not speech transport
+
+**Decision:** Independently configured STT and TTS adapters are Infrastructure providers. The session's input and output **transports** are provider-neutral: `serverAudio` (backend port + PCM), `clientTranscript` (browser STT, no `ISpeechRecognizer`), and `clientSpeech` (browser TTS, no `ISpeechSynthesizer`). `SpeechFactory` produces an `EffectiveSpeechPlan` and optional backend ports. Browser is a client transport, not a fake backend adapter. A selected non-Synthetic adapter must not be silently replaced by Synthetic. The deferred OpenAI realtime recognizer is not selectable while its live session remains a no-op.
+
+**Rationale:** Session Runtime and Interaction Controller stay replaceable-provider-agnostic. Mixing Browser STT with a future hosted TTS (or the reverse) is a transport pair, not a vendor mash-up inside the mailbox.
+
+**Consequence:** [Architecture](03-system-architecture.md) owns the ownership split; [Interfaces](04-backend-interfaces.md#speech-provider-replacement-rule) owns ports versus Browser; [Voice](06-realtime-voice.md) owns how PCM versus client transcripts enter the pipeline; [Configuration](15-persistence-and-configuration.md#provider-selection-and-di) owns adapter binding.
+
 ## Decision: default verification is offline; live providers are explicit opt-in
 
 **Decision:** Default verification is fully offline and deterministic (Synthetic adapters plus HTTP/SSE fixtures). External-provider smoke tests run only when the operator explicitly opts in. Presence of `OPENROUTER_API_KEY` or `OPENAI_API_KEY` in the environment must not cause `dotnet test` or other default suites to call hosted APIs. Opt-in smokes skip cleanly when the required key is missing. Normal development/test loops must not silently spend API credits. Deferred live-provider testing does not weaken or skip synthetic contract tests. Do not introduce additional external services solely for testing.

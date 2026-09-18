@@ -19,6 +19,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure;
 
@@ -113,8 +114,15 @@ public static class InfrastructureServiceCollectionExtensions
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
-        services.TryAddSingleton<ISpeechRecognizer>(_ => new SyntheticSpeechRecognizer());
-        services.TryAddSingleton<ISpeechSynthesizer>(_ => new SyntheticSpeechSynthesizer());
+        services.TryAddSingleton(provider =>
+            SpeechFactory.Create(provider, provider.GetService<SpeechProvidersOptions>()));
+        services.TryAddSingleton(provider => provider.GetRequiredService<SpeechResolution>().Plan);
+        services.TryAddSingleton<ISpeechRecognizer>(provider =>
+            provider.GetRequiredService<SpeechResolution>().Recognizer
+            ?? throw new InvalidOperationException("No backend speech recognizer is registered for the selected speech plan."));
+        services.TryAddSingleton<ISpeechSynthesizer>(provider =>
+            provider.GetRequiredService<SpeechResolution>().Synthesizer
+            ?? throw new InvalidOperationException("No backend speech synthesizer is registered for the selected speech plan."));
         services.AddHttpClient(OpenAiSpeechSynthesizer.HttpClientName, client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
@@ -145,7 +153,26 @@ public static class InfrastructureServiceCollectionExtensions
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),
                 provider.GetService<IArtifactStore>()));
-        services.TryAddSingleton<SessionRuntimeFactory>();
+        services.TryAddSingleton(provider =>
+        {
+            var speech = provider.GetRequiredService<SpeechResolution>();
+            return new SessionRuntimeFactory(
+                provider.GetRequiredService<ILanguageModel>(),
+                provider.GetRequiredService<IAgentBrain>(),
+                provider.GetRequiredService<IMemoryStore>(),
+                provider.GetRequiredService<IIdGenerator>(),
+                provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ILoggerFactory>(),
+                provider.GetRequiredService<IInterruptionClassifier>(),
+                provider.GetRequiredService<InteractionPolicy>(),
+                speech.Recognizer,
+                speech.Synthesizer,
+                provider.GetRequiredService<VoiceAvailability>(),
+                provider.GetRequiredService<IAttachmentStore>(),
+                provider.GetRequiredService<IAttachmentProcessor>(),
+                provider.GetRequiredService<IArtifactReferenceAuthorizer>(),
+                provider.GetRequiredService<SessionToolExecutor>());
+        });
         return services;
     }
 }

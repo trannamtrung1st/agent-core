@@ -92,7 +92,7 @@ Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthes
 
   STT and TTS must be independently selectable.
 
-- [ ] Replace profile-only speech resolution with explicit provider factories/selection.
+- [x] Replace profile-only speech resolution with explicit provider factories/selection.
 
   - Synthetic remains the default deterministic path.
   - Real text mode must not require speech credentials.

@@ -18,6 +18,8 @@ ISpeechRecognizer                  ISpeechSynthesizer
 └── SyntheticSpeechRecognizer       └── SyntheticSpeechSynthesizer
 ```
 
+Browser is not a leaf of those ports. Selecting Adapter=`Browser` maps to client transports (`clientTranscript` / `clientSpeech`) with no backend recognizer or synthesizer. Do not register a stand-in `ISpeechRecognizer` that pretends to be the Web Speech API. An Infrastructure `SpeechFactory` (same responsibility as `LanguageModelFactory`) resolves an `EffectiveSpeechPlan` plus optional ports. Selected non-Synthetic adapters must not silently become Synthetic. `OpenAiSpeechRecognizer` remains unimplemented as a live session and is not a selectable runtime adapter until that path exists.
+
 Future names illustrate replaceable implementations, not mandatory projects/providers. Adapters normalize vendor behavior and payloads; no OpenAI request/response type crosses into Domain, Application, Agent Runtime, Interaction Controller or wire contracts. Capability differences select the existing [fallback policies](05-interaction-controller.md#stt-capability-fallback-and-local-ducking), not a runtime rewrite. STT `SpeechPartial`/`SpeechFinal` Confidence remains optional (null when unavailable); streaming input, partials, boundaries and cancellation must be reported honestly as **effective adapter capabilities**, never as operator-invented flags.
 
 SyntheticSpeechRecognizer, SyntheticSpeechSynthesizer and ScriptedLanguageModel remain mandatory for offline unit/conversation tests, frontend development, CI, latency simulation, cancellation and interruption tests. They require no API keys. [Configuration](15-persistence-and-configuration.md#provider-selection-and-di) owns adapter selection examples.

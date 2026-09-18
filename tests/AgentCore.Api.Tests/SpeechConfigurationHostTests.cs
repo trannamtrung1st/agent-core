@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AgentCore.Api.Http;
 using AgentCore.Contracts.Http;
+using AgentCore.Application.Sessions;
 using AgentCore.Infrastructure.Providers;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -24,6 +25,10 @@ public sealed class SpeechConfigurationHostTests
         var speech = factory.Services.GetRequiredService<SpeechProvidersOptions>();
         Assert.Equal("NotAThing", speech.Recognition.Adapter);
         Assert.Equal("Local", speech.Synthesis.Adapter);
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.Null(resolution.Recognizer);
+        Assert.Null(resolution.Synthesizer);
+        Assert.False(resolution.Plan.RecognitionResolvable);
 
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -55,6 +60,11 @@ public sealed class SpeechConfigurationHostTests
         Assert.Equal("OpenAI", speech.Synthesis.Adapter);
         Assert.True(string.IsNullOrWhiteSpace(speech.Recognition.ApiKey));
         Assert.True(string.IsNullOrWhiteSpace(speech.Synthesis.ApiKey));
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.Null(resolution.Recognizer);
+        Assert.Null(resolution.Synthesizer);
+        Assert.False(resolution.Plan.RecognitionResolvable);
+        Assert.False(resolution.Plan.SynthesisResolvable);
 
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -77,6 +87,12 @@ public sealed class SpeechConfigurationHostTests
         Assert.Equal("Browser", speech.Synthesis.Adapter);
         Assert.True(string.IsNullOrWhiteSpace(speech.Recognition.ApiKey));
         Assert.True(string.IsNullOrWhiteSpace(speech.Synthesis.ApiKey));
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.Null(resolution.Recognizer);
+        Assert.Null(resolution.Synthesizer);
+        Assert.Equal(SpeechTransport.ClientTranscript, resolution.Plan.InputTransport);
+        Assert.Equal(SpeechTransport.ClientSpeech, resolution.Plan.OutputTransport);
+        Assert.True(resolution.Plan.RecognitionResolvable);
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));

@@ -5,12 +5,16 @@
 The default and primary MVP is **STT → Interaction Controller → text Agent Runtime / LLM → TTS**. It continuously processes microphone input, including during TTS playback. It is full-duplex from the user's perspective even though reasoning is text-first. It must never alternate between disabling capture to play an answer and recording the next turn.
 
 ```text
-Browser microphone → PCM frames → ISpeechRecognizer
+Browser microphone → PCM frames → ISpeechRecognizer   (input transport serverAudio)
+Browser Web Speech → client transcripts                 (input transport clientTranscript)
     → speech/Partial Transcript/Final Transcript events
     → Interaction Controller → Agent Runtime → ILanguageModel
     → streamed text → ResponseTextAccumulator → SpeechSegmenter
-    → Speech Segment → ISpeechSynthesizer → streamed PCM → browser playback
+    → Speech Segment → ISpeechSynthesizer → streamed PCM → browser playback  (output transport serverAudio)
+                    or client speech playback                                 (output transport clientSpeech)
 ```
+
+A speech **provider** (Synthetic, OpenAI, batch, future local) is the Infrastructure adapter behind a port. A speech **transport** (`serverAudio`, `clientTranscript`, `clientSpeech`) is how the session moves audio or transcripts. Session Runtime must not branch on adapter names. Browser has no backend STT/TTS port. PCM admission for `serverAudio` still uses the hub ingress described below; `clientTranscript` does not push microphone PCM into `ISpeechRecognizer`.
 
 Stream every feasible stage. Partial Transcripts/VAD guide interruption immediately; a committed Final Transcript starts the normal user-turn model request. MVP does not speculatively generate answers to unstable partial text. This turn boundary is intentional, not a reason to buffer microphone input before sending it to streaming STT. Likewise do not wait for the full LLM response or entire-message TTS before playback. Non-streaming providers use the explicit degraded policies below.
 
