@@ -20,8 +20,8 @@ export type ClientTranscriptAccumulatorOptions = {
 const DEFAULT_PARTIAL_INTERVAL_MS = 100;
 const DEFAULT_MAX_RESTARTS = 3;
 
-/** Merge post-restart recognition onto a frozen prefix without dropping or duplicating overlap. */
-export function mergeRecognitionContinuation(prefix: string, incoming: string): string {
+/** Restart-only merge: whole-word overlap and full-prefix cases, never single-character overlap. */
+export function mergeRestartContinuation(prefix: string, incoming: string): string {
   const left = prefix.trim();
   const right = incoming.trim();
   if (!left) {
@@ -40,10 +40,16 @@ export function mergeRecognitionContinuation(prefix: string, incoming: string): 
     return left;
   }
 
-  const maxOverlap = Math.min(left.length, right.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (left.endsWith(right.slice(0, overlap))) {
-      return `${left}${right.slice(overlap)}`;
+  const leftWords = left.split(/\s+/);
+  const rightWords = right.split(/\s+/);
+  const maxWords = Math.min(leftWords.length, rightWords.length);
+  for (let count = maxWords; count >= 1; count -= 1) {
+    const suffix = leftWords.slice(-count).join(" ");
+    const head = rightWords.slice(0, count).join(" ");
+    if (suffix === head) {
+      const before = leftWords.slice(0, leftWords.length - count).join(" ");
+      const mergedRight = rightWords.join(" ");
+      return before ? `${before} ${mergedRight}` : mergedRight;
     }
   }
 
@@ -55,6 +61,7 @@ export class ClientTranscriptAccumulator {
   private utteranceId: string | null = null;
   private stable = "";
   private interim = "";
+  private restartPrefix: string | null = null;
   private revision = 0;
   private lastPartialAt = Number.NEGATIVE_INFINITY;
   private lastPartialText = "";
@@ -95,6 +102,7 @@ export class ClientTranscriptAccumulator {
     this.utteranceId = utteranceId ?? this.newUtteranceId();
     this.stable = "";
     this.interim = "";
+    this.restartPrefix = null;
     this.revision = 0;
     this.lastPartialText = "";
     this.startedSent = false;
@@ -123,7 +131,13 @@ export class ClientTranscriptAccumulator {
       return;
     }
 
-    this.stable = mergeRecognitionContinuation(this.stable, piece);
+    if (this.restartPrefix) {
+      this.stable = mergeRestartContinuation(this.restartPrefix, piece);
+      this.restartPrefix = null;
+    } else {
+      this.stable = this.stable ? `${this.stable} ${piece}` : piece;
+    }
+
     this.interim = "";
     this.maybeSendPartial();
   }
@@ -152,6 +166,7 @@ export class ClientTranscriptAccumulator {
     this.send({ kind: "ended", utteranceId: this.utteranceId, durationMs, activityScore: 0.2 });
     this.utteranceId = null;
     this.interim = "";
+    this.restartPrefix = null;
   }
 
   fail(): void {
@@ -162,6 +177,7 @@ export class ClientTranscriptAccumulator {
     this.send({ kind: "failed", utteranceId: this.utteranceId });
     this.utteranceId = null;
     this.interim = "";
+    this.restartPrefix = null;
     this.applicationFinalSent = false;
   }
 
@@ -189,8 +205,17 @@ export class ClientTranscriptAccumulator {
     return epoch === undefined || this.gate?.epoch === epoch;
   }
 
+  private sessionTailText(): string {
+    return `${this.stable}${this.interim ? (this.stable ? ` ${this.interim}` : this.interim) : ""}`.trim();
+  }
+
   private spokenText(): string {
-    return mergeRecognitionContinuation(this.stable, this.interim);
+    const tail = this.sessionTailText();
+    if (this.restartPrefix) {
+      return mergeRestartContinuation(this.restartPrefix, tail);
+    }
+
+    return tail;
   }
 
   private freezeSpokenPrefix(): void {
@@ -199,7 +224,8 @@ export class ClientTranscriptAccumulator {
       return;
     }
 
-    this.stable = prefix;
+    this.restartPrefix = prefix;
+    this.stable = "";
     this.interim = "";
     this.lastPartialText = "";
   }
@@ -234,6 +260,7 @@ export class ClientTranscriptAccumulator {
     this.utteranceId = null;
     this.stable = "";
     this.interim = "";
+    this.restartPrefix = null;
     this.revision = 0;
     this.lastPartialText = "";
     this.startedSent = false;

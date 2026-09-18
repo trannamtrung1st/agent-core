@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ClientTranscriptAccumulator, mergeRecognitionContinuation } from "./clientTranscriptAccumulator";
+import { ClientTranscriptAccumulator, mergeRestartContinuation } from "./clientTranscriptAccumulator";
 import { resetSpeechObservations, snapshotSpeechObservations } from "./speechObservability";
 
 const gate = { attachmentId: "att-1", epoch: 1, mode: "voice" as const, muted: false };
@@ -22,13 +22,33 @@ function create(now = { t: 0 }) {
   return { acc, sent, texts, errors, now };
 }
 
-describe("mergeRecognitionContinuation", () => {
+describe("mergeRestartContinuation", () => {
   it("appends continuation-only finals and dedupes repeated prefixes", () => {
-    expect(mergeRecognitionContinuation("I was saying", "something important")).toBe("I was saying something important");
-    expect(mergeRecognitionContinuation("I was saying", "I was saying something important")).toBe(
+    expect(mergeRestartContinuation("I was saying", "something important")).toBe("I was saying something important");
+    expect(mergeRestartContinuation("I was saying", "I was saying something important")).toBe(
       "I was saying something important"
     );
-    expect(mergeRecognitionContinuation("I was saying", "saying something important")).toBe("I was saying something important");
+    expect(mergeRestartContinuation("I was saying", "saying something important")).toBe("I was saying something important");
+  });
+
+  it("does not treat single-character overlaps as continuation", () => {
+    expect(mergeRestartContinuation("I like pizza", "and pasta")).toBe("I like pizza and pasta");
+    expect(mergeRestartContinuation("the car", "runs fast")).toBe("the car runs fast");
+  });
+});
+
+describe("ClientTranscriptAccumulator normal accumulation", () => {
+  beforeEach(() => {
+    resetSpeechObservations();
+  });
+
+  it("concatenates stable chunks with spaces without restart stitching", () => {
+    const { acc, texts } = create();
+    acc.startUtterance();
+    acc.ingestStableChunk("I like pizza");
+    acc.ingestStableChunk("and pasta");
+    acc.endUtterance();
+    expect(texts).toContain("I like pizza and pasta");
   });
 });
 

@@ -33,7 +33,8 @@ develop, document, docs-consistency, architecture, backend, frontend, realtime, 
 | 21 | Native Web Speech corrective (`be0514c`) | `be0514c` |
 | 22 | Pending speechend + idle restart cap | `26e9674` |
 | 23 | Mid-utterance native onend preservation | `6e83a59` |
-| 24 | Restart transcript stitching | this commit |
+| 24 | Restart transcript stitching | `0174c98` |
+| 25 | Restart-only word-boundary stitching | this commit |
 
 Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-20260918T040554-90562c/` (gitignored).
 
