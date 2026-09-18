@@ -192,10 +192,6 @@ export class ClientTranscriptLifecycle {
   }
 
   ingest(evidence: ClientSpeechEvidence, epoch = this.epoch): void {
-    if (this.suspendedForAgentOutput) {
-      return;
-    }
-
     if (evidence.kind === "started") {
       this.accumulator.startUtterance(evidence.utteranceId);
       return;

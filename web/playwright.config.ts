@@ -51,6 +51,8 @@ export default defineConfig({
       env: {
         ASPNETCORE_ENVIRONMENT: "Development",
         AgentCore__Profile: "Synthetic",
+        Providers__Speech__Recognition__Adapter: "Synthetic",
+        Providers__Speech__Synthesis__Adapter: "Synthetic",
         AGENTCORE_LIVE_PROVIDER_TESTS: process.env.AGENTCORE_LIVE_PROVIDER_TESTS ?? "0",
         AGENTCORE_LIVE_OPENAI_STT: process.env.AGENTCORE_LIVE_OPENAI_STT ?? "0",
         AGENTCORE_LIVE_OPENAI_TTS: process.env.AGENTCORE_LIVE_OPENAI_TTS ?? "0",

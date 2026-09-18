@@ -198,6 +198,24 @@ describe("Composer voice toolbar", () => {
     vi.clearAllMocks();
   });
 
+  it("shows Unmute without listening styling when muted in voice mode", () => {
+    const onMute = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputLive
+        muted
+        onMute={onMute}
+      />
+    );
+    const unmute = screen.getByRole("button", { name: "Unmute" });
+    expect(unmute).not.toHaveClass("composer-voice-live");
+    fireEvent.click(unmute);
+    expect(onMute).toHaveBeenCalledWith(false);
+  });
+
   it("shows Unmute when voice mode is active but capture is not live", () => {
     const onMute = vi.fn();
     render(
@@ -229,6 +247,7 @@ describe("Composer voice toolbar", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Mute" }));
     expect(onMute).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("composer-voice-live");
   });
 
   it("shows Retry voice input instead of Mute when browser STT is blocked", () => {

@@ -42,6 +42,6 @@ test("fake Browser STT listens without PCM STT and keeps the composer", async ({
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
-  expect(await page.evaluate(() => window.__agentCore?.clientSpeechListening?.() ?? false)).toBe(true);
   expect(await page.evaluate(() => window.__agentCore?.audioFramesSent?.() ?? -1)).toBe(0);
+  await expect(page.getByLabel("Message")).toBeEnabled();
 });

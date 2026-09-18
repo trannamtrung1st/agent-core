@@ -73,7 +73,7 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   expect(frames).toBe(0);
 
   await page.evaluate(() => window.__agentCore?.disconnect());
-  await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
+  await expect(page.getByTestId("connection")).toHaveText("Reconnecting to Agent Core…");
 });
 
 test("queued send and Stop keep the local queue without starting R2", async ({ page }) => {

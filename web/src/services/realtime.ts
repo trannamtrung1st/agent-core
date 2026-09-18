@@ -473,6 +473,7 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
+let voiceReadyDowngradeOnNextReady = false;
 let pendingUserText: {
   eventId: string;
   text: string;
@@ -553,6 +554,7 @@ function isTransientAttachError(ack: { error?: { code?: string } } | null | unde
 
 async function attachWithBusyRetry(lastServerSequence: number | null): Promise<boolean> {
   const loop = attachLoop;
+  voiceReadyDowngradeOnNextReady = !voiceModeRequested;
   let delayIndex = 0;
   let retriedOwnerCapability = false;
   while (loop === attachLoop && connection) {
@@ -723,9 +725,10 @@ function handleEvent(raw: ServerEvent): void {
     reconcilePendingUserText(next.entries);
     void hydrateBoundAttachments(next.sessionId);
     void hydrateActiveHistory(next.sessionId, next.entries);
-    if (String(raw.payload?.mode ?? "") === "voice" && !voiceModeRequested) {
+    if (String(raw.payload?.mode ?? "") === "voice" && voiceReadyDowngradeOnNextReady) {
       downgradePassiveVoiceAttach();
     }
+    voiceReadyDowngradeOnNextReady = false;
   }
   if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
@@ -1525,9 +1528,13 @@ export const realtimeTestHooks =
         markOutputStarted(responseId: string) {
           outputGate.markStarted(responseId);
         },
+        markPassiveVoiceReadyDowngrade() {
+          voiceReadyDowngradeOnNextReady = true;
+        },
         resetOutput() {
           attachLoop += 1;
           reconnectBudgetStarted = 0;
+          voiceReadyDowngradeOnNextReady = false;
           voiceModeRequested = false;
           pendingUserText = null;
           sendRequest = null;
@@ -1564,7 +1571,7 @@ async function startConnection(
   options?: { syncUrl?: "push" | "replace" | "none" }
 ): Promise<void> {
   const keepPreparedCapture = capture.isPrepared() && useSessionStore.getState().preflightReady;
-  if (!keepPreparedCapture) {
+  if (!keepPreparedCapture && !voiceModeRequested) {
     voiceEpoch += 1;
     clientTranscriptHeldForAgent = false;
     void releaseClientSpeech();

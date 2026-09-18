@@ -1199,6 +1199,7 @@ describe("realtime race handling", () => {
       agents: [],
       selectedAgentId: "examiner"
     });
+    hooks.markPassiveVoiceReadyDowngrade();
     hooks.handleEvent({
       protocolVersion: 1,
       sessionId: "s1",

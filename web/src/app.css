@@ -7,6 +7,8 @@
 :root {
   color-scheme: dark;
   --ac-color-primary: #1677ff;
+  --ac-color-success: #52c41a;
+  --ac-color-success-hover: #73d13d;
   --ac-color-text: rgba(255, 255, 255, 0.88);
   --ac-color-text-secondary: rgba(255, 255, 255, 0.65);
   --ac-color-text-tertiary: rgba(255, 255, 255, 0.45);
@@ -829,6 +831,16 @@ body,
 
 .composer-toolbar {
   min-height: 32px;
+}
+
+.composer-voice-live.ant-btn {
+  color: var(--ac-color-success-hover) !important;
+  background: rgba(82, 196, 26, 0.18) !important;
+}
+
+.composer-voice-live.ant-btn:not(:disabled):hover {
+  color: #95de64 !important;
+  background: rgba(82, 196, 26, 0.28) !important;
 }
 
 .composer-send.ant-btn {

@@ -204,6 +204,7 @@ describe("ChatApp accessibility", () => {
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Listening…");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("composer-voice-live");
   });
 
   it("shows voice unavailable instead of listening when browser STT is blocked", async () => {
@@ -268,6 +269,7 @@ describe("ChatApp accessibility", () => {
       renderChat();
     });
     expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unmute" })).not.toHaveClass("composer-voice-live");
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
   });
 
@@ -316,6 +318,7 @@ describe("ChatApp accessibility", () => {
       renderChat();
     });
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("composer-voice-live");
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
   });
 

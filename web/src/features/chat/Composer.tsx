@@ -2,6 +2,7 @@ import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Button, Flex, Input, Tooltip } from "antd";
 import {
   AudioOutlined,
+  AudioFilled,
   AudioMutedOutlined,
   DeleteOutlined,
   DownOutlined,
@@ -304,11 +305,12 @@ export function Composer({
                   />
                 </Tooltip>
               ) : voiceModeActive && voiceInputLive ? (
-                <Tooltip title="Mute">
+                <Tooltip title="Listening — click to mute">
                   <Button
                     type="text"
+                    className="composer-voice-live"
                     aria-label="Mute"
-                    icon={<AudioOutlined />}
+                    icon={<AudioFilled />}
                     onClick={() => onMute(true)}
                   />
                 </Tooltip>

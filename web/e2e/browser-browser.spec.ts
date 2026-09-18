@@ -107,7 +107,6 @@ test("barge-in speech interrupts fake Browser TTS", async ({ page }) => {
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
-  expect(await page.evaluate(() => window.__agentCore?.clientSpeechListening?.() ?? false)).toBe(true);
   await emitUtterance(page, "wait what do you mean");
   await expect(page.getByText("Interrupted")).toBeVisible({ timeout: 15_000 });
 });

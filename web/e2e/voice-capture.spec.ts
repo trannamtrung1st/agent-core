@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 async function startVoice(page: import("@playwright/test").Page): Promise<void> {
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
@@ -23,7 +24,7 @@ test("reconnect requires a fresh Voice click before capture streams", async ({ p
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.audioFramesSent() ?? 0), { timeout: 15_000 }).toBeGreaterThan(0);
 
   await page.evaluate(() => window.__agentCore?.disconnect());
-  await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
+  await expect(page.getByTestId("connection")).toHaveText("Reconnecting to Agent Core…");
   await page.evaluate(() => window.__agentCore?.reconnect?.());
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Voice" })).toBeVisible();

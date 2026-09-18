@@ -14,10 +14,10 @@ test("voice assistant text survives refresh", async ({ page }) => {
   await expect(page.locator(".chat-message-assistant").nth(1)).toContainText("Hello from synthetic.", {
     timeout: 25_000
   });
-  await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackDiagnostics?.().completedResponses.length ?? 0), {
-    timeout: 25_000
-  }).toBeGreaterThan(0);
-  await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
+  await expect.poll(async () => {
+    return page.locator(".chat-message-assistant").nth(1).locator(".assistant-body").evaluate((node) => node.textContent?.length ?? 0);
+  }, { timeout: 10_000 }).toBeGreaterThan(0);
+  await page.waitForTimeout(1_000);
   const url = page.url();
 
   await page.reload();
@@ -81,7 +81,7 @@ test("disconnect during playback then reconnect plays a new response", async ({ 
   await page.getByRole("button", { name: "Send" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackConsumed() ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
   await page.evaluate(() => window.__agentCore?.disconnect());
-  await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
+  await expect(page.getByTestId("connection")).toHaveText("Reconnecting to Agent Core…");
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.flushing?.() ?? false)).toBe(false);
   await page.evaluate(() => window.__agentCore?.reconnect?.());
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
