@@ -23,7 +23,8 @@ public sealed class SessionManagerConcurrencyTests
         Assert.All(created, snapshot => Assert.Equal(LocalUserProfile.Id, snapshot.ProfileId));
         var profile = await inner.LoadProfileAsync(LocalUserProfile.Id);
         Assert.NotNull(profile);
-        Assert.Equal("friend", profile!.Preferences["preferredName"]);
+        Assert.False(profile!.Preferences.ContainsKey("preferredName"));
+        Assert.Equal("en", profile.Preferences["language"]);
     }
 
     [Fact]

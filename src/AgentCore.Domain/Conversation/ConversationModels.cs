@@ -44,6 +44,67 @@ public static class LocalUserProfile
 
     public static readonly IReadOnlyList<string> AllowedKeys = ["language", "preferredName"];
 
+    /// <summary>
+    /// Historical local-demo seed. It is not a user-supplied name: there is no profile CRUD UI.
+    /// </summary>
+    public const string InventedPreferredNameSeed = "friend";
+
+    public static IReadOnlyDictionary<string, string> ForPrompt(IReadOnlyDictionary<string, string>? preferences)
+    {
+        if (preferences is null || preferences.Count == 0)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        var trusted = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in preferences)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Value))
+            {
+                continue;
+            }
+
+            if (string.Equals(pair.Key, "preferredName", StringComparison.Ordinal)
+                && string.Equals(pair.Value.Trim(), InventedPreferredNameSeed, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            trusted[pair.Key] = pair.Value;
+        }
+
+        return trusted;
+    }
+
+    public static bool HasPreferredName(IReadOnlyDictionary<string, string> trustedPreferences) =>
+        trustedPreferences.TryGetValue("preferredName", out var name) && !string.IsNullOrWhiteSpace(name);
+
+    public static bool InventedPreferredNameNeedsRemoval(IReadOnlyDictionary<string, string> preferences) =>
+        preferences.TryGetValue("preferredName", out var name)
+        && string.Equals(name.Trim(), InventedPreferredNameSeed, StringComparison.OrdinalIgnoreCase);
+
+    public static IReadOnlyDictionary<string, string> WithoutInventedPreferredName(
+        IReadOnlyDictionary<string, string> preferences)
+    {
+        if (!InventedPreferredNameNeedsRemoval(preferences))
+        {
+            return preferences;
+        }
+
+        var cleaned = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in preferences)
+        {
+            if (string.Equals(pair.Key, "preferredName", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            cleaned[pair.Key] = pair.Value;
+        }
+
+        return cleaned;
+    }
+
     public static void Validate(IReadOnlyDictionary<string, string> preferences)
     {
         if (preferences.Count > 16)

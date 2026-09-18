@@ -372,7 +372,36 @@ public sealed class SessionManager
         if (existing is not null)
         {
             LocalUserProfile.Validate(existing.Preferences);
-            return existing;
+            if (!LocalUserProfile.InventedPreferredNameNeedsRemoval(existing.Preferences))
+            {
+                return existing;
+            }
+
+            var cleaned = new UserProfile(
+                existing.ProfileId,
+                existing.Revision + 1,
+                LocalUserProfile.WithoutInventedPreferredName(existing.Preferences),
+                now);
+            LocalUserProfile.Validate(cleaned.Preferences);
+            try
+            {
+                await _store.SaveProfileAsync(cleaned, existing.Revision, cancellationToken).ConfigureAwait(false);
+                return cleaned;
+            }
+            catch (AgentCoreException ex) when (ex.Code == "Conflict")
+            {
+                var raced = await _store.LoadProfileAsync(LocalUserProfile.Id, cancellationToken).ConfigureAwait(false);
+                if (raced is null)
+                {
+                    throw;
+                }
+
+                LocalUserProfile.Validate(raced.Preferences);
+                return raced with
+                {
+                    Preferences = LocalUserProfile.WithoutInventedPreferredName(raced.Preferences)
+                };
+            }
         }
 
         var created = new UserProfile(
@@ -380,8 +409,7 @@ public sealed class SessionManager
             1,
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["language"] = "en",
-                ["preferredName"] = "friend"
+                ["language"] = "en"
             },
             now);
         LocalUserProfile.Validate(created.Preferences);

@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` through `7fe5b166` (`Fix false SpeechRecognitionRestartLimit during silent voice listening.`) on 2026-09-19.
+Reviewed against `main` through parent `215de23ecefe65560b0b7a666783122d6c67408c` plus this P0-3 preferred-name freeze on 2026-09-19. Exact Synthetic/Compose gates and the Chrome 153 `general-assistant` Voice checklist were re-run on this freeze working tree before commit.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
@@ -16,7 +16,7 @@ The current free-form rich-response parser plus runtime speech projection is acc
 
 This is a bounded verification/fix pass, not another voice redesign.
 
-- [ ] Run the complete key-free Synthetic/fake-browser gate on current HEAD, matching `.github/workflows/synthetic.yml`.
+- [x] Run the complete key-free Synthetic/fake-browser gate on current HEAD, matching `.github/workflows/synthetic.yml`.
 
   Cover:
   - Domain tests;
@@ -28,30 +28,17 @@ This is a bounded verification/fix pass, not another voice redesign.
   - Playwright Chromium suite;
   - Compose persistence/capability smoke where the workflow includes it.
 
-  The last documented green workflow baseline in the repo is older than the latest `7fe5b166` follow-up, so verify the actual current HEAD before moving on.
+  Observed on this freeze (parent `215de23`): Domain 23 passed; Infrastructure 101 passed / 9 skipped; Application 319 passed with `--blame-hang --blame-hang-timeout 5m`; API 114 passed; web 305 unit tests; production build; `CI=1` Playwright 27 passed; `scripts/compose-sqlite-volume.sh` passed. Live provider flags were 0. A broad `dotnet test AgentCore.sln` was not used.
 
-- [ ] Do one bounded live Chrome/Edge voice probe on current HEAD using `general-assistant`.
+- [x] Do one bounded live Chrome/Edge voice probe on current HEAD using `general-assistant`.
 
-  Verify:
-  - entering and leaving Voice mode;
-  - Voice and Mute remain separate controls;
-  - silence does not trigger a false `SpeechRecognitionRestartLimit`;
-  - multi-turn Browser STT still restarts correctly between utterances;
-  - long speech remains bounded by the configured maximum utterance duration;
-  - typed input while Voice mode is active cancels stale speech playback correctly;
-  - normal conversational Markdown is spoken naturally;
-  - code/table/list-heavy responses use the intended speech projection;
-  - Stop, Queue, reconnect, and session reopen do not replay stale speech;
-  - display text and persisted `SpeechText` stay consistent after reconnect/history load.
+  Observed 2026-09-18 on Google Chrome 153 against a disposable Browser/Browser Synthetic host (run `run-20260918T180704-c332dd` P0-2 evidence). Distinct from fake-browser Playwright. Checklist items passed, including native STT loopback turns, Voice vs Mute, silence without `SpeechRecognitionRestartLimit`, Stop/reconnect/reopen without speech replay.
 
-- [ ] Fix the unexpected preferred name `"friend"` behavior.
+- [x] Fix the unexpected preferred name `"friend"` behavior.
 
-  - identify whether it originates in agent instructions, prompt construction, memory/context, UI fallback, or provider behavior;
-  - do not guess a user name when none is known;
-  - use a neutral no-name fallback;
-  - add a regression test at the layer that actually caused it.
+  Provenance: agent JSON has no `friend`; frontend has no preferred-name fallback; Synthetic raw output does not invent the name. Originating layer is `SessionManager.EnsureLocalProfileAsync` seeding `preferredName=friend`, which `PromptContextBuilder` then emitted as trusted preferences. Create-time seed no longer includes a name; historical `friend` is stripped from trusted prompt preferences and from the durable local profile when Ensure runs. Absent name adds a generic prompt rule not to invent one. Regression: `PreferredNameProvenanceTests` plus Domain `Local_profile_treats_seeded_friend_as_absent`.
 
-- [ ] After the above is green, freeze conversation lifecycle and Browser voice again.
+- [x] After the above is green, freeze conversation lifecycle and Browser voice again.
 
   Further P0/Browser-STT work should require a reproducible regression or a concrete product requirement. Do not continue speculative hardening.
 
@@ -258,7 +245,7 @@ If user personalization grows beyond the current `"friend"` bug, define it delib
 
 - [ ] Distinguish known user profile data from conversational guesses.
 
-- [ ] Treat absent preferred name as absent, not as an invitation to invent one.
+- [x] Treat absent preferred name as absent, not as an invitation to invent one.
 
 - [ ] Keep personalization provenance explicit if/when memory later supplies it.
 

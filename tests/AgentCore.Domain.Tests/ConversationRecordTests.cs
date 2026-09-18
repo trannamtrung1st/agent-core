@@ -55,4 +55,22 @@ public sealed class ConversationRecordTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             LocalUserProfile.Validate(new Dictionary<string, string> { ["language"] = new string('a', 2001) }));
     }
+
+    [Fact]
+    public void Local_profile_treats_seeded_friend_as_absent_and_keeps_supplied_names()
+    {
+        var seeded = new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "friend" };
+        Assert.True(LocalUserProfile.InventedPreferredNameNeedsRemoval(seeded));
+        var cleaned = LocalUserProfile.WithoutInventedPreferredName(seeded);
+        Assert.False(cleaned.ContainsKey("preferredName"));
+        Assert.Equal("en", cleaned["language"]);
+
+        var prompt = LocalUserProfile.ForPrompt(seeded);
+        Assert.False(LocalUserProfile.HasPreferredName(prompt));
+        Assert.Equal("en", prompt["language"]);
+
+        var supplied = LocalUserProfile.ForPrompt(new Dictionary<string, string> { ["preferredName"] = "Pat" });
+        Assert.True(LocalUserProfile.HasPreferredName(supplied));
+        Assert.Equal("Pat", supplied["preferredName"]);
+    }
 }

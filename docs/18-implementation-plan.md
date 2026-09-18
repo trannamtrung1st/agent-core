@@ -168,6 +168,7 @@ Historical Milestones 0–12 and post-MVP A–H stay as recorded above. P0 is a 
 | P0-E | ResponseEnvelope DisplayText/blocks; SpeechText not visible; live-only thinking | Conversation/activityState tests; markdown reload Playwright |
 | P0-F | Full section-17 cases and minimum commands, including named `dotnet test AgentCore.sln` | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
 | P0 UI baseline closure | After structured-error UI, rich envelope regressions, and one bounded Impeccable harden pass, the same key-free Synthetic Domain/Infrastructure/Application/API/web/Playwright gate is green on that checkout. Distinct from P0-A–F lifecycle slices. P1/hosted/Browser speech is not claimed by this row. | TODO.md P0 checkboxes; this row. Local evidence: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/` (gitignored). |
+| P0 stabilization closeout (this freeze) | Exact live `synthetic.yml` plus Compose SQLite volume survival; real Chrome 153 `general-assistant` Voice checklist; preferred-name seed `friend` removed at `EnsureLocalProfileAsync` / trusted prompt preferences. Browser voice and current conversation-lifecycle behavior are frozen. Follow-on P1 history/lifecycle/speech in this run is still planned until verified. | TODO.md P0 checkboxes; Domain/Application preferred-name regressions; run evidence `local/tdp-workspace/evidence/p0-p1-history-lifecycle-speech/run-20260918T180704-c332dd/` (gitignored). Parent HEAD `215de23ecefe65560b0b7a666783122d6c67408c`. |
 
 ## P1 — Replaceable speech (observed)
 
