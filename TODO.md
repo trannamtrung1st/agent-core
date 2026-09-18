@@ -82,38 +82,85 @@ The current durable history works, but loading the whole conversation does not s
 
 - [ ] Add deterministic API/frontend/Playwright coverage for long histories.
 
-### P1B — Session goal / task / stop-condition semantics
+### P1B — Session purpose, completion, and termination policy
 
-Some sessions are ongoing conversations; others should represent a finite task or a condition-bound interaction. Define this before durable background work and scheduled automation depend on it.
+Some sessions are open-ended conversations; others represent a finite task, examination, interview, onboarding flow, or another condition-bound interaction. Agent Core should own the generic lifecycle capability, while integrating applications keep ownership of domain-specific completion rules.
 
-- [ ] Define a small session-purpose model.
+Core rule:
+
+> **The model may propose lifecycle intent; Agent Core policy and/or the host application owns lifecycle authority.**
+
+- [ ] Define a small generic session-purpose model.
 
   Support at least:
   - ongoing conversation;
   - goal/task-oriented session;
-  - optional explicit stop/completion condition.
+  - optional deadline / maximum duration;
+  - optional completion/termination policy.
 
-- [ ] Keep purpose separate from runtime lifecycle.
+  Keep the goal description and any domain metadata generic/opaque to Agent Core. Do not encode application-specific predicates such as exam scoring or submission rules in the runtime.
 
-  Distinguish:
-  - active conversation;
-  - paused/deactivated runtime;
-  - completed goal/task;
-  - explicitly ended session;
-  - later detached/background work.
+- [ ] Distinguish lifecycle states that have different meaning.
 
-- [ ] Persist the configured purpose/goal and completion state.
+  At minimum keep separate:
+  - Active;
+  - Paused/Deactivated;
+  - Completed;
+  - Expired;
+  - Cancelled;
+  - explicitly Ended/Archived where that remains useful.
 
-- [ ] Define who may mark a goal complete.
+  Do not collapse every terminal outcome into one generic `Stopped` state.
 
-  Prefer:
-  - the model may propose completion;
-  - runtime/policy validates the transition;
-  - explicit user completion/cancellation remains authoritative.
+- [ ] Add a model lifecycle intent such as `RequestComplete`.
+
+  Keep it semantically distinct from `RequestDeactivate`:
+  - `RequestDeactivate` = no useful action right now / pause runtime activity;
+  - `RequestComplete` = the agent believes the configured session purpose has been fulfilled.
+
+  A model request must not automatically terminate the session unless the configured policy explicitly grants that authority.
+
+- [ ] Define configurable completion authority.
+
+  Conceptually support:
+  - host-authoritative completion;
+  - agent may request completion but host/policy must approve;
+  - agent-requested completion allowed for low-risk autonomous workflows;
+  - user-requested completion/cancellation where permitted.
+
+  Avoid hard-coding these exact policy names until the domain model is implemented.
+
+- [ ] Support authoritative deterministic termination from Agent Core / host integration.
+
+  Examples:
+  - maximum duration/deadline reached;
+  - host application reports task/submission completion;
+  - administrator cancels the session.
+
+  Agent Core owns the generic transition invariants:
+  - cancel active generation;
+  - stop STT/TTS/playback;
+  - persist the terminal state/reason;
+  - reject or constrain future input appropriately;
+  - publish the corresponding lifecycle event.
+
+- [ ] Keep domain-specific stop conditions outside Agent Core.
+
+  Example examination integration:
+  - examination platform owns the 60-minute exam rule and assignment/submission state;
+  - deadline expiry can authoritatively transition the Agent Core session to `Expired`;
+  - early submission can authoritatively transition it to `Completed`;
+  - the examiner agent may emit `RequestComplete`, but in a high-stakes exam that request remains advisory unless the host validates it.
+
+- [ ] Persist session purpose, lifecycle policy, completion state, reason, and relevant timestamps.
+
+- [ ] Define reconnect/history behavior for terminal sessions.
+
+  A completed/expired/cancelled session should remain inspectable without accidentally reopening normal conversation unless an explicit product flow allows it.
 
 - [ ] Add minimal UI only after the domain contract is stable.
 
-  Avoid building a generic workflow editor here.
+  Avoid building a generic workflow/rules editor here.
 
 ### P1C — Multilingual STT/TTS
 
