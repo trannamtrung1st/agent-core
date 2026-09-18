@@ -411,6 +411,25 @@ public sealed class PromptContextBuilder
             throw new InvalidOperationException("Current user turn must appear once in prompt history.");
         }
 
+        IReadOnlyDictionary<Guid, int>? batchAttachmentBudget = null;
+        if (currentBatch.Count > 0)
+        {
+            var pooled = new List<AttachmentProcessResult>();
+            foreach (var entry in currentBatch)
+            {
+                pooled.AddRange(FilterAttachments(context.AttachmentContents, entry.Attachments));
+            }
+
+            if (pooled.Count > 0)
+            {
+                var distinct = pooled
+                    .GroupBy(item => item.AttachmentId)
+                    .Select(group => group.First())
+                    .ToArray();
+                batchAttachmentBudget = AllocateAttachmentTextBudget(distinct);
+            }
+        }
+
         return selected.Select(entry =>
             {
                 var role = entry.Role == ConversationRole.User ? ModelRole.User : ModelRole.Assistant;
@@ -424,10 +443,19 @@ public sealed class PromptContextBuilder
                     var contents = FilterAttachments(context.AttachmentContents, entry.Attachments);
                     if (contents.Count > 0)
                     {
+                        IReadOnlyDictionary<Guid, int>? allocations = null;
+                        if (batchAttachmentBudget is not null)
+                        {
+                            allocations = contents.ToDictionary(
+                                item => item.AttachmentId,
+                                item => batchAttachmentBudget.GetValueOrDefault(item.AttachmentId));
+                        }
+
                         return BuildCurrentUserMessage(
                             entry.Text,
                             contents,
-                            ToolCatalog.OffersAttachmentRead(context.Definition, context));
+                            ToolCatalog.OffersAttachmentRead(context.Definition, context),
+                            allocations);
                     }
                 }
 
@@ -452,7 +480,8 @@ public sealed class PromptContextBuilder
     public static ModelMessage BuildCurrentUserMessage(
         string userText,
         IReadOnlyList<AttachmentProcessResult>? attachments,
-        bool attachmentsReadAvailable = false)
+        bool attachmentsReadAvailable = false,
+        IReadOnlyDictionary<Guid, int>? allocations = null)
     {
         if (attachments is null || attachments.Count == 0)
         {
@@ -471,7 +500,7 @@ public sealed class PromptContextBuilder
             parts.Add(new ModelTextContent(userText));
         }
 
-        var allocations = AllocateAttachmentTextBudget(attachments);
+        allocations ??= AllocateAttachmentTextBudget(attachments);
         foreach (var item in attachments)
         {
             var header =

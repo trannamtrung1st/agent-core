@@ -225,7 +225,7 @@ describe("ChatApp accessibility", () => {
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Thinking…");
     expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Queue" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(cancelRenderedResponse).toHaveBeenCalled();
 

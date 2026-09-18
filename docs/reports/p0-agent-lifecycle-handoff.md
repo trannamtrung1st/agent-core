@@ -36,7 +36,7 @@ Exact hashes for 03–07 match `git log` on `main` after P0-B through P0-D. Batc
 | P0-AC02 | met | Evaluator prompt no longer ascribes wait to deactivate | P0-A |
 | P0-AC03 | met | Silent cap / inactivity pause, not end | `SessionPauseSemanticsTests`; P0-B |
 | P0-AC04 | met | Pause ≠ end in runtime, store, API, UI | P0-B; Playwright Resume |
-| P0-AC05 | met | First-party Send `behavior=queue` while live | `realtime.race.test.ts`; Playwright hold-the-line; JS `user-text-queue` |
+| P0-AC05 | met | First-party **client pending-send queue** while live (Send→Queue); Steer=`interrupt`; wire `behavior=queue` for external clients | `realtime.queue.test.ts`; Playwright hold-the-line/Steer; JS `user-text-queue` (backend contract) |
 | P0-AC06 | met | Omitted behavior = interrupt | JS `user-text-omit-interrupt-live`; `UserTextQueueTests.Omitted_behavior_interrupts_like_interrupt` |
 | P0-AC07 | met | `CancelResponse` / Stop, no user entry | JS `cancel-response-active` plus idempotent/stale; `UserTextQueueTests.CancelResponse_*`; Composer Stop |
 | P0-AC08 | met | Voice barge-in still interruptive | `voice-interrupt.spec.ts` (Stop then text); existing barge-in Application tests |

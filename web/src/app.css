@@ -607,6 +607,53 @@ body,
   padding: 0;
 }
 
+.pending-send-queue {
+  padding: var(--ac-space-compact) var(--ac-space-default);
+  border-radius: 12px;
+  border: 1px dashed var(--ac-color-border);
+  background: color-mix(in srgb, var(--ac-color-elevated) 88%, transparent);
+}
+
+.pending-send-queue-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ac-color-text-secondary);
+}
+
+.pending-send-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pending-send-queue-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  font-size: 13px;
+}
+
+.pending-send-queue-index {
+  color: var(--ac-color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-send-queue-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pending-send-queue-attachments {
+  color: var(--ac-color-text-secondary);
+  font-size: 12px;
+}
+
 .composer {
   position: relative;
 }

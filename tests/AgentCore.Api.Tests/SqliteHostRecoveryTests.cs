@@ -21,6 +21,79 @@ namespace AgentCore.Api.Tests;
 public sealed class SqliteHostRecoveryTests
 {
     [Fact(Timeout = 30_000)]
+    public async Task Lost_text_ack_retry_with_changed_payload_after_host_reconstruction_is_rejected()
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"agent-core-host-mismatch-{Guid.NewGuid():N}.db");
+        var backup = Path.Combine(Path.GetTempPath(), $"agent-core-host-mismatch-bak-{Guid.NewGuid():N}.db");
+        var eventId = Guid.NewGuid().ToString();
+        try
+        {
+            string sessionId;
+            await using (var first = new DurableSqliteHostFactory(db))
+            {
+                var client = first.CreateClient();
+                TestOwnerCapability.Apply(client, first.Services);
+                var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+                created.EnsureSuccessStatusCode();
+                var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+                sessionId = session.SessionId;
+                await using var hub = await ConnectFactoryAsync(first);
+                var ready = ReadyWaiter(hub);
+                var attached = await hub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
+                Assert.True(attached.Accepted, attached.Error?.Message);
+                var attachment = await ready;
+                var send = await hub.InvokeAsync<CommandAck>(
+                    "SendText",
+                    Text(sessionId, 1, attachment, "Hello", eventId));
+                Assert.True(send.Accepted, send.Error?.Message);
+                var store = first.Services.GetRequiredService<IMemoryStore>();
+                Assert.IsType<SqliteMemoryStore>(store);
+                await ((SqliteMemoryStore)store).BackupToAsync(backup);
+            }
+
+            await using var second = new DurableSqliteHostFactory(backup);
+            var retryClient = second.CreateClient();
+            TestOwnerCapability.Apply(retryClient, second.Services);
+            await using var retryHub = await ConnectFactoryAsync(second);
+            var retryReady = ReadyWaiter(retryHub);
+            await ReopenIfPausedAsync(retryClient, sessionId);
+            var retriedAttach = await retryHub.InvokeAsync<CommandAck>("Attach", Attach(sessionId));
+            Assert.True(retriedAttach.Accepted, retriedAttach.Error?.Message);
+            var retryAttachment = await retryReady;
+            var retry = await retryHub.InvokeAsync<CommandAck>(
+                "SendText",
+                Text(sessionId, 1, retryAttachment, "Different", eventId));
+            Assert.False(retry.Accepted);
+            Assert.Equal("ProtocolError", retry.Error?.Code);
+            Assert.True(retry.Error?.Fatal);
+            var history = await retryClient.GetFromJsonAsync<HistoryPageResponse>($"/api/v1/sessions/{sessionId}/messages?after=0");
+            Assert.Equal("Hello", history!.Items.Single(item => item.Role == "user").Text);
+        }
+        finally
+        {
+            using (var connection = new SqliteConnection($"Data Source={db}"))
+            {
+                SqliteConnection.ClearPool(connection);
+            }
+            using (var connection = new SqliteConnection($"Data Source={backup}"))
+            {
+                SqliteConnection.ClearPool(connection);
+            }
+            foreach (var path in new[] { db, db + "-wal", db + "-shm", backup, backup + "-wal", backup + "-shm" })
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+        }
+    }
+
+    [Fact(Timeout = 30_000)]
     public async Task Lost_text_ack_retry_after_host_reconstruction_keeps_one_user_entry()
     {
         var db = Path.Combine(Path.GetTempPath(), $"agent-core-host-{Guid.NewGuid():N}.db");

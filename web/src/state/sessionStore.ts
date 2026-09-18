@@ -49,6 +49,14 @@ export type ServerEvent = {
   payload: Record<string, unknown>;
 };
 
+export type PendingSendItem = {
+  localId: string;
+  eventId: string;
+  text: string;
+  attachmentIds: string[];
+  attachments: PendingAttachment[];
+};
+
 export type SessionView = {
   connection: ConnectionStatus;
   sessionId: string | null;
@@ -69,6 +77,7 @@ export type SessionView = {
   muted: boolean;
   draft: string;
   pendingAttachments: PendingAttachment[];
+  pendingSendQueue: PendingSendItem[];
   error: string | null;
   errorFatal: boolean;
   errorHoldSequence: number;
@@ -97,6 +106,7 @@ export const emptySession = (): SessionView => ({
   muted: false,
   draft: "",
   pendingAttachments: [],
+  pendingSendQueue: [],
   error: null,
   errorFatal: false,
   errorHoldSequence: 0,

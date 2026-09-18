@@ -113,6 +113,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private string _pendingPostResponseIdleClamp = "n/a";
     private TimeSpan? _lastArmedIdleDelay;
     private readonly HashSet<Guid> _environmentIds = [];
+    private readonly HashSet<Guid> _undurableUserEntryIds = [];
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
@@ -941,13 +942,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         _recordedLlm = false;
         var attachmentIds = NormalizeAttachmentIds(input.AttachmentIds);
-        if (_snapshot.Entries.Any(entry => entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User))
+        var fingerprint = UserTextAdmission.Fingerprint(null, input.Text ?? "", attachmentIds, input.Behavior);
+        if (_snapshot.Entries.FirstOrDefault(entry =>
+                entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User)
+            is { } existingByEvent)
         {
+            var storedFingerprint = existingByEvent.SourceAdmissionFingerprint
+                ?? UserTextAdmission.FingerprintFromStoredEntry(existingByEvent);
+            if (!string.Equals(storedFingerprint, fingerprint, StringComparison.Ordinal))
+            {
+                input.Persisted?.TrySetException(new AgentCoreException(
+                    "ProtocolError",
+                    "Repeated eventId with a different payload.",
+                    400,
+                    fatal: true));
+                return;
+            }
+
             if (attachmentIds.Count > 0 && _attachments is not null)
             {
-                var existing = _snapshot.Entries.First(entry =>
-                    entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User);
-                await _attachments.BindToEntryAsync(SessionId, existing.EntryId, attachmentIds, cancellationToken)
+                await _attachments.BindToEntryAsync(SessionId, existingByEvent.EntryId, attachmentIds, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -994,6 +1008,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var now = _time.GetUtcNow();
         var text = input.Text ?? "";
+        try
+        {
+            UserTextAdmission.ValidatePendingBatch(_snapshot.Entries, text);
+        }
+        catch (AgentCoreException)
+        {
+            input.Persisted?.TrySetResult(false);
+            return;
+        }
+
         var attachmentRefs = await BuildAttachmentRefsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         var userEntry = new ConversationEntry(
             input.Context.EventId,
@@ -1007,7 +1031,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             text.Length,
             text.Length,
             now,
-            Attachments: attachmentRefs.Count == 0 ? null : attachmentRefs);
+            Attachments: attachmentRefs.Count == 0 ? null : attachmentRefs,
+            SourceAdmissionFingerprint: fingerprint);
+
+        _undurableUserEntryIds.Add(userEntry.EntryId);
 
         var titleHints = await AttachmentTitleHintsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
@@ -1052,6 +1079,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (queued)
                     {
                         UserTextQueueTelemetry.Record(wire, queued: true);
+                        if (_activeResponseId is null)
+                        {
+                            await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
+                        }
+
                         return;
                     }
 
@@ -1296,7 +1328,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var suffix = TrailingUserSuffix.Of(_snapshot.Entries);
-        if (suffix.Count == 0)
+        if (suffix.Count == 0 || suffix.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId)))
         {
             return false;
         }
@@ -1889,14 +1921,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleCancelAsync(CancelResponseReceived input, CancellationToken cancellationToken)
     {
-        var started = Stopwatch.GetTimestamp();
         ResponseCancelTelemetry.RecordRequested();
         try
         {
             if (_activeResponseId == input.ResponseId)
             {
-                await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userBargeIn").ConfigureAwait(false);
-                RuntimeTelemetry.Record("bargein", RuntimeTelemetry.ElapsedMs(started));
+                await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userStop").ConfigureAwait(false);
                 input.Completed?.TrySetResult(ResponseCancelResult.Cancelled);
                 return;
             }
@@ -2654,6 +2684,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 _durableRevision = saved.Revision;
                 _durableSnapshot = saved;
                 AdoptPersisted(job.Proposed, saved, job.Kind);
+                foreach (var entry in saved.Entries)
+                {
+                    if (entry.Role == ConversationRole.User)
+                    {
+                        _undurableUserEntryIds.Remove(entry.EntryId);
+                    }
+                }
             }
 
             try

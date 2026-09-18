@@ -827,7 +827,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             }
             catch (AgentCoreException ex)
             {
-                return Reject(command.EventId, "Validation", ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
+                var category = string.Equals(ex.Code, "ProtocolError", StringComparison.Ordinal) ? "Protocol" : "Validation";
+                return Reject(command.EventId, category, ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
             }
         }, cancellationToken).ConfigureAwait(false);
     }

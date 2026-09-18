@@ -387,7 +387,30 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().entries).toHaveLength(1);
   });
 
-  it("sends first-party text with behavior queue while a response is live", async () => {
+  it("sends first-party text immediately when no response is live", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await sendDraft();
+    expect(invoke).toHaveBeenCalledWith(
+      "SendText",
+      expect.objectContaining({
+        type: "user.text",
+        payload: expect.objectContaining({ text: "Hello" })
+      })
+    );
+    expect(invoke.mock.calls[0][1].payload).not.toHaveProperty("behavior", "queue");
+  });
+
+  it("queues locally instead of SendText while a response is live", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
     useSessionStore.setState({
@@ -400,16 +423,10 @@ describe("realtime race handling", () => {
       agents: [],
       selectedAgentId: "examiner"
     });
-    expect(composerSendEnabled()).toBe(true);
     expect(composerStopEnabled()).toBe(true);
     await sendDraft();
-    expect(invoke).toHaveBeenCalledWith(
-      "SendText",
-      expect.objectContaining({
-        type: "user.text",
-        payload: expect.objectContaining({ text: "Hello", behavior: "queue" })
-      })
-    );
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
   });
 
   it("cancels the rendered responseId and ignores stale completion after a newer live response", async () => {

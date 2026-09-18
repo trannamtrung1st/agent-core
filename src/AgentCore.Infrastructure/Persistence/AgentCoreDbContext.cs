@@ -54,6 +54,7 @@ public sealed class EntryRecord
     public int ReceivedTextEndExclusive { get; set; }
     public string? EnvelopeJson { get; set; }
     public string? AttachmentRefsJson { get; set; }
+    public string? SourceAdmissionFingerprint { get; set; }
     public long CreatedAtUtc { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }

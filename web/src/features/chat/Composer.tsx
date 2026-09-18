@@ -11,8 +11,10 @@ import type { InputRef } from "antd";
 import {
   queueComposerFiles,
   removeComposerFile,
-  retryComposerFile
+  retryComposerFile,
+  removeQueuedSend
 } from "../../services/realtime";
+import type { PendingSendItem } from "../../state/sessionStore";
 import type { PendingAttachment } from "../../services/attachments";
 import { PendingAttachmentView } from "./AttachmentPreview";
 
@@ -20,6 +22,9 @@ export function Composer({
   draft,
   canSend,
   canStop,
+  canSteer,
+  sendLabel,
+  pendingSendQueue,
   ready,
   error,
   pendingAttachments,
@@ -31,6 +36,7 @@ export function Composer({
   placeholder,
   onDraftChange,
   onSend,
+  onSteer,
   onStop,
   onVoice,
   onCancelVoice,
@@ -40,6 +46,9 @@ export function Composer({
   draft: string;
   canSend: boolean;
   canStop: boolean;
+  canSteer: boolean;
+  sendLabel: string;
+  pendingSendQueue: PendingSendItem[];
   ready: boolean;
   error: string | null;
   pendingAttachments: PendingAttachment[];
@@ -51,6 +60,7 @@ export function Composer({
   placeholder: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
+  onSteer: () => void;
   onStop: () => void;
   onVoice: () => void;
   onCancelVoice: () => void;
@@ -93,6 +103,41 @@ export function Composer({
   return (
     <Flex vertical gap={8} className="dock">
       {error ? <Alert type="error" showIcon title={error} /> : null}
+
+      {pendingSendQueue.length > 0 ? (
+        <Flex vertical gap={4} className="pending-send-queue" aria-label="Queued messages">
+          <span className="pending-send-queue-label">Queued</span>
+          <ol className="pending-send-queue-list">
+            {pendingSendQueue.map((item, index) => (
+              <li key={item.localId} className="pending-send-queue-item">
+                <span className="pending-send-queue-index">{index + 1}.</span>
+                <span className="pending-send-queue-text">
+                  {item.text.trim().length > 0
+                    ? item.text.length > 120
+                      ? `${item.text.slice(0, 120)}…`
+                      : item.text
+                    : item.attachments.length > 0
+                      ? `Attachments (${item.attachments.length})`
+                      : "Empty message"}
+                </span>
+                {item.attachments.length > 0 ? (
+                  <span className="pending-send-queue-attachments">
+                    {item.attachments.map((file) => file.displayName).join(", ")}
+                  </span>
+                ) : null}
+                <Button
+                  type="text"
+                  size="small"
+                  aria-label={`Remove queue item ${index + 1}`}
+                  onClick={() => removeQueuedSend(item.localId)}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ol>
+        </Flex>
+      ) : null}
 
       <form
         className="composer composer-shell"
@@ -180,6 +225,13 @@ export function Composer({
                 Retry
               </Button>
             ) : null}
+            {canSteer ? (
+              <Tooltip title="Steer">
+                <Button htmlType="button" aria-label="Steer" onClick={onSteer}>
+                  Steer
+                </Button>
+              </Tooltip>
+            ) : null}
             {canStop ? (
               <Tooltip title="Stop">
                 <Button
@@ -194,12 +246,12 @@ export function Composer({
                 />
               </Tooltip>
             ) : null}
-            <Tooltip title="Send">
+            <Tooltip title={sendLabel}>
               <Button
                 type="primary"
                 htmlType="submit"
                 className="composer-send"
-                aria-label="Send"
+                aria-label={sendLabel}
                 disabled={!canSend}
                 icon={<SendOutlined />}
               />

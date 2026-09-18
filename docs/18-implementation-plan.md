@@ -164,7 +164,7 @@ Historical Milestones 0–12 and post-MVP A–H stay as recorded above. P0 is a 
 | P0-A | Dynamic `nextWaitMs` clamp, null fallback, deactivate ignores wait | Application InitiativePlan/Initiative tests; meter `initiative.next_wait_ms` tags `source|clamp|mode` only |
 | P0-B | Pause ≠ end; canonical pause reasons; explicit Resume; transport resume for disconnected/recovered | SessionPauseSemantics, catalog API, ChatApp pause/ended UI |
 | P0-C | `user.text` queue/interrupt; trailing durable suffix; CancelResponse; persist-before-ACK; pending user over initiative | Domain TrailingUserSuffix; UserTextQueueTests; Kestrel JS interrupt/queue/cancel-active; SQLite Recover_keeps_trailing |
-| P0-D | First-party Send always queues; Stop targets rendered `responseId` | Composer/ChatApp/realtime unit tests; Playwright queue/Stop |
+| P0-D | First-party client pending-send queue while live (idle Send immediate); Steer=`interrupt`; Stop targets rendered `responseId` | `realtime.queue.test.ts`, Composer/ChatApp; Playwright queue/Steer/Stop |
 | P0-E | ResponseEnvelope DisplayText/blocks; SpeechText not visible; live-only thinking | Conversation/activityState tests; markdown reload Playwright |
 | P0-F | Full section-17 cases and minimum commands, including named `dotnet test AgentCore.sln` | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
 

@@ -46,44 +46,43 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   await expect(page.getByTestId("connection")).toHaveText("Reconnecting…");
 });
 
-test("queued send and Stop keep history and the composer", async ({ page }) => {
+test("queued send and Stop keep the local queue without starting R2", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+  await expect(page.getByLabel("Queued messages")).toBeVisible();
+  await expect(page.getByLabel("Queued messages")).toContainText("Hello");
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByLabel("Queued messages")).toBeVisible();
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Please hold the line")).toBeVisible();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Stop" }).click();
-  await expect(page.getByLabel("Message")).toBeFocused();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Please hold the line")).toBeVisible();
-  await expect(page.getByLabel("Message")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
-  await expect(page).toHaveURL(/\/c\/[0-9a-f-]{36}$/i);
 });
 
-test("queued U2 and U3 do not interrupt R1 and produce one next reply", async ({ page }) => {
+test("Steer sends the queue head and auto-dispatch follows completion", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
-  await page.getByLabel("Message").fill("Alpha");
-  await page.getByRole("button", { name: "Send" }).click();
-  await page.getByLabel("Message").fill("Beta");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.locator(".chat-message-user").filter({ hasText: "Please hold the line" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Message" }).fill("Alpha");
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+  await page.getByRole("textbox", { name: "Message" }).fill("Beta");
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+  await expect(page.getByLabel("Queued messages")).toBeVisible();
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toHaveCount(0);
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Steer" }).click();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
-  await page.getByRole("button", { name: "Stop" }).click();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(".chat-message-assistant")).toHaveCount(2);
+  await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toBeVisible({ timeout: 25_000 });
+  await expect(page.locator(".chat-message-assistant").filter({ hasText: "Hello from synthetic." }).first()).toBeVisible({ timeout: 25_000 });
 });
 
-test("queued attachment stays bound to the live send", async ({ page }) => {
+test("queued attachment stays with the queued item until dispatch", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
@@ -94,12 +93,11 @@ test("queued attachment stays bound to the live send", async ({ page }) => {
     buffer: Buffer.from("queued file")
   });
   await expect(page.getByRole("button", { name: "Remove queued.txt" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.locator('button.composer-send[aria-label="Queue"]').click();
+  await expect(page.getByLabel("Queued messages")).toContainText("queued.txt");
+  await expect(page.getByRole("link", { name: "queued.txt" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Steer" }).click();
   await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
-  await page.getByRole("button", { name: "Stop" }).click();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible();
 });
 
 test("manual pause via deactivate shows Resume and keeps history", async ({ page }) => {

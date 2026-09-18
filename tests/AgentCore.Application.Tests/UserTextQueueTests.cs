@@ -182,7 +182,7 @@ public sealed class UserTextQueueTests
     }
 
     [Fact]
-    public async Task Queued_users_start_after_explicit_cancel()
+    public async Task Stop_does_not_start_trailing_user_suffix()
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
@@ -201,9 +201,9 @@ public sealed class UserTextQueueTests
         await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
         await runtime.SubmitPersistedUserTextAsync("U3", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
         Assert.Equal(ResponseCancelResult.Cancelled, await runtime.CancelResponseAsync(r1));
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
-        Assert.Equal(2, model.Calls);
-        Assert.Equal(["Hello", "U2", "U3"], runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        await Task.Delay(250);
+        Assert.Equal(1, model.Calls);
+        Assert.Null(runtime.ActiveResponseId);
         model.Release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
         await runtime.DisposeAsync();
