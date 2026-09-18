@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AgentDescriptor, CatalogItem } from "../services/api";
 import type { PendingAttachment } from "../services/attachments";
+import { sessionErrorFromMessage, sessionErrorFromWire, type SessionErrorView } from "../features/chat/sessionError";
 
 export type ConnectionStatus = "idle" | "connecting" | "ready" | "reconnecting" | "failed";
 
@@ -82,6 +83,7 @@ export type SessionView = {
   pendingAttachments: PendingAttachment[];
   pendingSendQueue: PendingSendItem[];
   error: string | null;
+  sessionError: SessionErrorView | null;
   errorFatal: boolean;
   errorHoldSequence: number;
   preflightReady: boolean;
@@ -112,6 +114,7 @@ export const emptySession = (): SessionView => ({
   pendingAttachments: [],
   pendingSendQueue: [],
   error: null,
+  sessionError: null,
   errorFatal: false,
   errorHoldSequence: 0,
   preflightReady: false,
@@ -240,9 +243,15 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
   }
 
   if (hasControlSequenceGap(state, event)) {
+    const sessionError = sessionErrorFromMessage("Control sequence gap. Reconnect required.", {
+      category: "Protocol",
+      code: "ControlSequenceGap",
+      fatal: false
+    });
     return {
       ...state,
-      error: "Control sequence gap. Reconnect required.",
+      error: sessionError.message,
+      sessionError,
       errorFatal: false,
       connection: "failed"
     };
@@ -276,6 +285,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         streamId: payload.streamId == null ? null : asString(payload.streamId),
         muted: Boolean(payload.muted),
         error: null,
+        sessionError: null,
         errorFatal: false,
         errorHoldSequence: 0,
         preflightReady: asString(payload.mode) === "voice" ? false : state.preflightReady,
@@ -411,6 +421,11 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
           ? state.error
           : event.sequence === state.errorHoldSequence + 1
             ? state.error
+            : null,
+        sessionError: state.errorFatal
+          ? state.sessionError
+          : event.sequence === state.errorHoldSequence + 1
+            ? state.sessionError
             : null
       };
     }
@@ -438,13 +453,14 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       return { ...state, lastServerSequence: event.sequence, entries: upsert(state.entries, entry) };
     }
     case "error": {
-      const fatal = event.payload.fatal === true;
+      const sessionError = sessionErrorFromWire(event.payload, asString(event.payload.message) || "The session reported a failure.");
       return {
         ...state,
         lastServerSequence: event.sequence,
-        error: asString(event.payload.message),
-        errorFatal: fatal,
-        errorHoldSequence: fatal ? 0 : event.sequence
+        error: sessionError.message,
+        sessionError,
+        errorFatal: sessionError.fatal,
+        errorHoldSequence: sessionError.fatal ? 0 : event.sequence
       };
     }
     default:

@@ -1,5 +1,7 @@
-import { Alert, Flex, Select, Typography } from "antd";
+import { Flex, Select, Typography } from "antd";
 import type { AgentDescriptor } from "../../services/api";
+import { SessionFailureAlert } from "./SessionFailureAlert";
+import type { SessionErrorView } from "./sessionError";
 
 export function AgentPicker({
   agents,
@@ -9,14 +11,14 @@ export function AgentPicker({
 }: {
   agents: AgentDescriptor[];
   selectedAgentId: string;
-  error: string | null;
+  error: SessionErrorView | string | null;
   onSelect: (agentId: string) => void;
 }) {
   const hasAgents = agents.length > 0;
 
   return (
     <Flex vertical gap={8} className="agent-picker">
-      {error ? <Alert type="error" showIcon title={error} /> : null}
+      {error ? <SessionFailureAlert error={error} /> : null}
       <Typography.Text>Identity</Typography.Text>
       <Select
         aria-label="Identity"

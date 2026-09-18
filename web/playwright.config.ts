@@ -37,7 +37,25 @@ export default defineConfig({
       cwd: root,
       env: {
         ASPNETCORE_ENVIRONMENT: "Development",
-        AgentCore__Profile: "Synthetic"
+        AgentCore__Profile: "Synthetic",
+        AGENTCORE_LIVE_PROVIDER_TESTS: process.env.AGENTCORE_LIVE_PROVIDER_TESTS ?? "0",
+        AGENTCORE_LIVE_OPENAI_STT: process.env.AGENTCORE_LIVE_OPENAI_STT ?? "0",
+        AGENTCORE_LIVE_OPENAI_TTS: process.env.AGENTCORE_LIVE_OPENAI_TTS ?? "0",
+        ...(process.env.Persistence__Provider
+          ? { Persistence__Provider: process.env.Persistence__Provider }
+          : {}),
+        ...(process.env.Persistence__ConnectionString
+          ? { Persistence__ConnectionString: process.env.Persistence__ConnectionString }
+          : {}),
+        ...(process.env.Persistence__AttachmentRoot
+          ? { Persistence__AttachmentRoot: process.env.Persistence__AttachmentRoot }
+          : {}),
+        ...(process.env.Persistence__WorkspaceRoot
+          ? { Persistence__WorkspaceRoot: process.env.Persistence__WorkspaceRoot }
+          : {}),
+        ...(process.env.Persistence__ArtifactRoot
+          ? { Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot }
+          : {})
       },
       url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,

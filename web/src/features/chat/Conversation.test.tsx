@@ -125,7 +125,57 @@ describe("Conversation", () => {
     expect(screen.queryByText("Interrupted")).not.toBeInTheDocument();
   });
 
-  it("renders unknown blocks as sanitized fallback text", () => {
+  it("renders extra markdown, attachment, and artifact blocks without speech text", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Shown display.",
+            heardTextEndExclusive: 13,
+            receivedTextEndExclusive: 14,
+            blocks: [
+              {
+                blockId: "b1",
+                kind: "markdown",
+                text: "**Extra block**",
+                fallbackText: "**Extra block**",
+                attachmentId: null,
+                artifactId: null
+              },
+              {
+                blockId: "b2",
+                kind: "attachment",
+                text: "notes.txt",
+                fallbackText: "notes.txt",
+                attachmentId: "att-1",
+                artifactId: null
+              },
+              {
+                blockId: "b3",
+                kind: "artifact",
+                text: "fixture-artifact-1",
+                fallbackText: "fixture-artifact-1",
+                attachmentId: null,
+                artifactId: "fixture-artifact-1"
+              }
+            ]
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Shown display.")).toBeInTheDocument();
+    expect(screen.getByText("Extra block")).toBeInTheDocument();
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Artifact fixture-artifact-1" })).toBeInTheDocument();
+    expect(screen.queryByText("Hidden speech")).not.toBeInTheDocument();
+  });
+
+  it("renders an unknown block as unsupported content", () => {
     render(
       <Conversation
         agentName="Alex"

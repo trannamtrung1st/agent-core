@@ -416,7 +416,7 @@ describe("applyServerEvent", () => {
       event({
         type: "error",
         sequence: 1,
-        payload: { message: "Protocol error.", fatal: true }
+        payload: { category: "Protocol", code: "ProtocolError", message: "Protocol error.", fatal: true }
       })
     );
     const next = applyServerEvent(
@@ -428,6 +428,44 @@ describe("applyServerEvent", () => {
       })
     );
     expect(next.error).toBe("Protocol error.");
+    expect(next.sessionError?.fatal).toBe(true);
+    expect(next.sessionError?.classId).toBe("validation/protocol");
+  });
+
+  it("keeps display receipts independent of heard offsets in live entries", () => {
+    const state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r1",
+        payload: { entryId: "e1", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    expect(state.entries[0]?.receivedTextEndExclusive).toBe(0);
+    expect(state.entries[0]?.heardTextEndExclusive).toBe(0);
+  });
+
+  it("maps error events to sanitized structured session errors", () => {
+    const next = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      event({
+        type: "error",
+        sequence: 1,
+        payload: {
+          category: "Sandbox",
+          code: "SandboxFailed",
+          message: "Sandbox command failed.",
+          fatal: false,
+          retryAfterMs: 250,
+          extensions: { apiKey: "sk-secret", retryable: true }
+        }
+      })
+    );
+    expect(next.sessionError?.classId).toBe("sandbox");
+    expect(next.sessionError?.code).toBe("SandboxFailed");
+    expect(next.sessionError?.retryAfterMs).toBe(250);
+    expect(next.sessionError?.extensions).toEqual({ retryable: true });
   });
 });
 
@@ -450,6 +488,27 @@ describe("historyFromPayload", () => {
       }
     ]);
     expect(entries[0]?.finishReason).toBe("lengthLimit");
+  });
+
+  it("keeps display receipts independent of heard offsets and omits thinking rows", () => {
+    const entries = historyFromPayload([
+      {
+        entryId: "e1",
+        sequence: 1,
+        role: "assistant",
+        text: "Shown display.",
+        responseId: "r1",
+        status: "completed",
+        deliveryMode: "voice",
+        heardTextEndExclusive: 13,
+        receivedTextEndExclusive: 14,
+        createdAt: "2026-09-18T00:00:00.000Z"
+      }
+    ]);
+    expect(entries[0]?.text).toBe("Shown display.");
+    expect(entries[0]?.receivedTextEndExclusive).toBe(14);
+    expect(entries[0]?.heardTextEndExclusive).toBe(13);
+    expect(entries.some((entry) => entry.text.includes("Thinking"))).toBe(false);
   });
 });
 

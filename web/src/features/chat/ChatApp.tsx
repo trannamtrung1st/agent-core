@@ -28,6 +28,7 @@ import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, paus
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
+import { SessionFailureAlert } from "./SessionFailureAlert";
 import { SessionRail } from "./SessionRail";
 
 const { Header, Sider, Content } = Layout;
@@ -109,6 +110,7 @@ export function ChatApp() {
   const activity = mapAgentActivity(statusSource);
   const connectionTone = conversationStatusTone(connectionText);
   const failedAlertTitle = readonly && state.error ? state.error : connectionText;
+  const sessionFailure = state.sessionError ?? state.error;
   const agentName = inSession ? state.agentName : selectedAgent?.name ?? "Agent Core";
   const composerReady = !readonly
     && state.status !== "paused"
@@ -206,11 +208,10 @@ export function ChatApp() {
               />
             ) : null}
             {state.connection === "failed" ? (
-              <Alert
-                type="error"
-                showIcon
+              <SessionFailureAlert
+                error={sessionFailure ?? failedAlertTitle}
+                fatal={state.errorFatal}
                 className="connection-alert"
-                title={failedAlertTitle}
                 action={
                   <Button size="small" aria-label="Retry" onClick={() => void retryConnection()}>
                     Retry
@@ -236,7 +237,7 @@ export function ChatApp() {
                           <AgentPicker
                             agents={state.agents}
                             selectedAgentId={state.selectedAgentId}
-                            error={state.error}
+                            error={state.sessionError ?? state.error}
                             onSelect={selectAgent}
                           />
                         </div>
@@ -282,7 +283,11 @@ export function ChatApp() {
                       sendLabel={sendLabel}
                       pendingSendQueue={state.pendingSendQueue}
                       ready={composerReady}
-                      error={inSession ? state.error : null}
+                      error={
+                        inSession && state.connection !== "failed"
+                          ? (state.sessionError ?? state.error)
+                          : null
+                      }
                       pendingAttachments={state.pendingAttachments}
                       voiceAvailable={voiceAvailable}
                       pendingVoice={pendingVoice}

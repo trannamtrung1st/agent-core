@@ -270,6 +270,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return _chunks;
         }
 
+        if (lastUser.Contains("[test:rich-envelope]", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+            [
+                "Shown display.[[speech:Hidden speech]][[md:**Extra block**]][[attachment:notes.txt]][[artifact:"
+                    + FixtureArtifactReferenceAuthorizer.AuthorizedId
+                    + "]][[xyz:nope]]"
+            ];
+        }
+
         if (lastUser.Contains("markdown", StringComparison.OrdinalIgnoreCase))
         {
             return MarkdownChunks;

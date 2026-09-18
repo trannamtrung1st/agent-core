@@ -1,5 +1,5 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
-import { Alert, Button, Flex, Input, Tooltip } from "antd";
+import { Button, Flex, Input, Tooltip } from "antd";
 import {
   AudioOutlined,
   AudioMutedOutlined,
@@ -23,6 +23,8 @@ import {
 import type { PendingSendItem } from "../../state/sessionStore";
 import type { PendingAttachment } from "../../services/attachments";
 import { PendingAttachmentView } from "./AttachmentPreview";
+import { SessionFailureAlert } from "./SessionFailureAlert";
+import type { SessionErrorView } from "./sessionError";
 
 const QUEUE_COLLAPSED_VISIBLE = 2;
 const QUEUE_EXPANDED_MAX = 6;
@@ -68,7 +70,7 @@ export function Composer({
   sendLabel: string;
   pendingSendQueue: PendingSendItem[];
   ready: boolean;
-  error: string | null;
+  error: SessionErrorView | string | null;
   pendingAttachments: PendingAttachment[];
   voiceAvailable: boolean;
   pendingVoice: boolean;
@@ -126,7 +128,7 @@ export function Composer({
 
   return (
     <Flex vertical gap={8} className="dock">
-      {error ? <Alert type="error" showIcon title={error} /> : null}
+      {error ? <SessionFailureAlert error={error} /> : null}
 
       {pendingSendQueue.length > 0 ? (
         <section className="pending-send-queue" aria-label="Queued messages">

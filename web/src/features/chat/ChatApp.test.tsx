@@ -98,6 +98,63 @@ describe("ChatApp accessibility", () => {
     expect(await screen.findByRole("menuitem", { name: "End" })).toBeInTheDocument();
   });
 
+  it("shows recoverable structured failure details from the chat owner", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        error: "Text exceeds 8000 UTF-16 code units.",
+        sessionError: {
+          category: "Validation",
+          code: "ValidationError",
+          message: "Text exceeds 8000 UTF-16 code units.",
+          fatal: false,
+          retryAfterMs: null,
+          classId: "validation/protocol"
+        },
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    const alert = screen.getByTestId("session-failure");
+    expect(alert).toHaveAttribute("data-error-fatal", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Failure details" }));
+    expect(await screen.findByTestId("session-failure-details")).toHaveTextContent("Recoverable");
+  });
+
+  it("shows fatal structured failure details on the connection owner", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "failed",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        error: "Unsupported protocol version.",
+        errorFatal: true,
+        sessionError: {
+          category: "Protocol",
+          code: "ProtocolError",
+          message: "Unsupported protocol version.",
+          fatal: true,
+          retryAfterMs: null,
+          classId: "validation/protocol"
+        },
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    const alert = screen.getByTestId("session-failure");
+    expect(alert).toHaveAttribute("data-error-fatal", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Failure details" }));
+    expect(await screen.findByTestId("session-failure-details")).toHaveTextContent("Fatal");
+  });
+
   it("hides Voice in session when ready reports voice unavailable", async () => {
     await act(async () => {
       useSessionStore.setState({

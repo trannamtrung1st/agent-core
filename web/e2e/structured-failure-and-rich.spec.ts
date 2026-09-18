@@ -1,0 +1,35 @@
+import { expect, test } from "@playwright/test";
+
+test("validation failures keep structured recoverable details", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("x".repeat(8001));
+  await page.getByRole("button", { name: "Send" }).click();
+  const alert = page.getByTestId("session-failure");
+  await expect(alert).toBeVisible({ timeout: 15_000 });
+  await expect(alert).toHaveAttribute("data-error-class", "validation/protocol");
+  await expect(alert).toHaveAttribute("data-error-code", "ValidationError");
+  await expect(alert).toHaveAttribute("data-error-fatal", "false");
+  await expect(alert).toContainText("Text exceeds 8000 UTF-16 code units.");
+  await page.getByRole("button", { name: "Failure details" }).click();
+  await expect(page.getByTestId("session-failure-details")).toContainText("Recoverable");
+  await expect(page.getByText("sk-")).toHaveCount(0);
+});
+
+test("rich envelope keeps speech text hidden and does not replay thinking after reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("[test:rich-envelope]");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Shown display.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Extra block")).toBeVisible();
+  await expect(page.getByText("notes.txt")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Artifact fixture-artifact-1/ })).toBeVisible();
+  await expect(page.getByText("[Unsupported content]")).toBeVisible();
+  await expect(page.getByText("Hidden speech")).toHaveCount(0);
+  await expect(page.getByText("Thinking…")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByText("Shown display.")).toBeVisible();
+  await expect(page.getByText("Thinking…")).toHaveCount(0);
+  await expect(page.getByText("Hidden speech")).toHaveCount(0);
+});

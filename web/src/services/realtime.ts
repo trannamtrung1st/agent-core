@@ -3,6 +3,7 @@ import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
 import { applyServerEvent, emptySession, hasControlSequenceGap, historyFromPayload, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
+import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
 import { createSession, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession, type HistoryPage } from "./api";
 import {
@@ -58,6 +59,35 @@ const MAX_USER_TEXT_UNITS = 8000;
 
 function uuid(): string {
   return crypto.randomUUID();
+}
+
+function sessionFailurePatch(
+  message: string,
+  options: {
+    fatal?: boolean;
+    wire?: WireError | null;
+    category?: string;
+    code?: string;
+    retryAfterMs?: number | null;
+  } = {}
+) {
+  const view = options.wire
+    ? sessionErrorFromWire(options.wire, message)
+    : sessionErrorFromMessage(message, {
+        fatal: options.fatal,
+        category: options.category,
+        code: options.code,
+        retryAfterMs: options.retryAfterMs
+      });
+  return {
+    error: view.message,
+    sessionError: view,
+    errorFatal: options.fatal ?? view.fatal
+  };
+}
+
+function clearSessionFailure() {
+  return { error: null as string | null, sessionError: null, errorFatal: false };
 }
 
 export function audioFramesSentCount(): number {
@@ -143,7 +173,7 @@ async function invoke(
 
   return connection.invoke(method, command(type, payload, sequence, responseId, eventId)) as Promise<{
     accepted?: boolean;
-    error?: { code?: string; message?: string; retryAfterMs?: number };
+    error?: WireError;
   }>;
 }
 
@@ -200,8 +230,7 @@ function markConnectionFailed(message: string): void {
   abortPlayback();
   capture.release();
   useSessionStore.setState({
-    error: message,
-    errorFatal: false,
+    ...sessionFailurePatch(message, { category: "Transport", code: "ReconnectFailed" }),
     errorHoldSequence: latest.lastServerSequence,
     connection: "failed",
     pendingMode: null,
@@ -1703,12 +1732,11 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
   }
 }
 
-function restoreDraft(text: string, error: string): void {
+function restoreDraft(text: string, error: string, wire?: WireError | null): void {
   const latest = useSessionStore.getState();
   useSessionStore.setState({
     draft: latest.draft === "" ? text : latest.draft,
-    error,
-    errorFatal: false
+    ...sessionFailurePatch(error, { wire, category: "Validation", code: "ValidationError" })
   });
 }
 
@@ -2049,8 +2077,10 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
   const snapshot = useSessionStore.getState();
   if (snapshot.pendingSendQueue.length >= MAX_PENDING_SEND_ITEMS) {
     useSessionStore.setState({
-      error: `You can queue at most ${MAX_PENDING_SEND_ITEMS} messages while the agent is responding.`,
-      errorFatal: false
+      ...sessionFailurePatch(`You can queue at most ${MAX_PENDING_SEND_ITEMS} messages while the agent is responding.`, {
+        category: "Resource",
+        code: "QueueLimit"
+      })
     });
     return false;
   }
@@ -2058,16 +2088,20 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
   const nextUnits = queuedTextUnits(snapshot.pendingSendQueue) + text.length;
   if (nextUnits > MAX_PENDING_SEND_TEXT_UNITS) {
     useSessionStore.setState({
-      error: `Queued messages exceed ${MAX_PENDING_SEND_TEXT_UNITS} characters.`,
-      errorFatal: false
+      ...sessionFailurePatch(`Queued messages exceed ${MAX_PENDING_SEND_TEXT_UNITS} characters.`, {
+        category: "Resource",
+        code: "QueueLimit"
+      })
     });
     return false;
   }
 
   if (text.length > MAX_USER_TEXT_UNITS) {
     useSessionStore.setState({
-      error: "Text exceeds 8000 UTF-16 code units.",
-      errorFatal: false
+      ...sessionFailurePatch("Text exceeds 8000 UTF-16 code units.", {
+        category: "Validation",
+        code: "ValidationError"
+      })
     });
     return false;
   }
@@ -2083,7 +2117,8 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
     pendingSendQueue: [...snapshot.pendingSendQueue, item],
     draft: "",
     pendingAttachments: [],
-    error: snapshot.errorFatal ? snapshot.error : null
+    error: snapshot.errorFatal ? snapshot.error : null,
+    sessionError: snapshot.errorFatal ? snapshot.sessionError : null
   });
   return true;
 }
@@ -2167,16 +2202,16 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         pendingUserText = null;
         removeOptimisticUserEntry(eventId);
         const errorMessage = ack?.error?.message ?? "Message was not accepted.";
+        const failure = sessionFailurePatch(errorMessage, { wire: ack?.error, category: "Validation", code: "ValidationError" });
         if (queueLocalId) {
           clearQueueItemDispatchState(queueLocalId);
           useSessionStore.setState((state) => ({
             pendingSendQueue: state.pendingSendQueue.map((item) =>
               item.localId === queueLocalId ? { ...item, error: errorMessage } : item),
-            error: state.errorFatal ? state.error : errorMessage,
-            errorFatal: false
+            ...(state.errorFatal ? {} : failure)
           }));
         } else {
-          restoreDraft(text, errorMessage);
+          restoreDraft(text, errorMessage, ack?.error);
         }
 
         return;
@@ -2190,7 +2225,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
 
       const latest = useSessionStore.getState();
       useSessionStore.setState({
-        error: latest.errorFatal ? latest.error : null
+        ...(latest.errorFatal ? {} : clearSessionFailure())
       });
       if (historyHasUserEvent(latest.entries, eventId)) {
         commitOptimisticUserEntry(eventId);
@@ -2203,14 +2238,12 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         useSessionStore.setState((state) => ({
           pendingSendQueue: state.pendingSendQueue.map((item) =>
             item.localId === queueLocalId ? { ...item, error: errorMessage } : item),
-          error: errorMessage,
-          errorFatal: false
+          ...sessionFailurePatch(errorMessage, { category: "Transport", code: "SendFailed" })
         }));
       } else {
         useSessionStore.setState({
           pendingAttachments: pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot,
-          error: errorMessage,
-          errorFatal: false
+          ...sessionFailurePatch(errorMessage, { category: "Transport", code: "SendFailed" })
         });
       }
     }
@@ -2358,6 +2391,16 @@ export async function sendDraft(): Promise<void> {
     return;
   }
 
+  if (snapshot.draft.length > MAX_USER_TEXT_UNITS) {
+    useSessionStore.setState({
+      ...sessionFailurePatch("Text exceeds 8000 UTF-16 code units.", {
+        category: "Validation",
+        code: "ValidationError"
+      })
+    });
+    return;
+  }
+
   if (!snapshot.sessionId) {
     const started = await startConversation();
     if (!started) {
@@ -2447,6 +2490,7 @@ async function cancelServerResponse(responseId: string): Promise<void> {
       if (latest.liveResponseId === responseId) {
         useSessionStore.setState({
           error: ack?.error?.message ?? "Stop was not accepted.",
+          sessionError: sessionErrorFromWire(ack?.error, ack?.error?.message ?? "Stop was not accepted."),
           errorFatal: false
         });
       }
@@ -2457,8 +2501,10 @@ async function cancelServerResponse(responseId: string): Promise<void> {
       }
 
       useSessionStore.setState({
-        error: error instanceof Error ? error.message : "Stop was not accepted.",
-        errorFatal: false
+        ...sessionFailurePatch(error instanceof Error ? error.message : "Stop was not accepted.", {
+          category: "Session",
+          code: "StopFailed"
+        })
       });
     } finally {
       pendingStops.delete(responseId);
@@ -2499,7 +2545,7 @@ export async function requestVoice(): Promise<void> {
 
   voiceRequest = (async () => {
     const epoch = ++voiceEpoch;
-    useSessionStore.setState({ preflightReady: true, error: null, errorFatal: false });
+    useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
     try {
       if (!capture.isPrepared()) {
         await capture.preflight();
@@ -2512,8 +2558,7 @@ export async function requestVoice(): Promise<void> {
       capture.release();
       useSessionStore.setState({
         preflightReady: false,
-        error: microphoneError(error),
-        errorFatal: false
+        ...sessionFailurePatch(microphoneError(error), { category: "Speech", code: "SpeechCaptureFailed" })
       });
       return;
     }
@@ -2543,8 +2588,11 @@ export async function requestVoice(): Promise<void> {
         capture.release();
         useSessionStore.setState({
           preflightReady: false,
-          error: ack?.error?.message ?? "Voice mode was rejected.",
-          errorFatal: false
+          ...sessionFailurePatch(ack?.error?.message ?? "Voice mode was rejected.", {
+            wire: ack?.error,
+            category: "Speech",
+            code: "VoiceUnavailable"
+          })
         });
       }
     } catch (error) {
@@ -2555,8 +2603,10 @@ export async function requestVoice(): Promise<void> {
       capture.release();
       useSessionStore.setState({
         preflightReady: false,
-        error: error instanceof Error ? error.message : "Voice mode failed.",
-        errorFatal: false
+        ...sessionFailurePatch(error instanceof Error ? error.message : "Voice mode failed.", {
+          category: "Speech",
+          code: "VoiceUnavailable"
+        })
       });
     }
   })();
@@ -2578,8 +2628,11 @@ export async function cancelVoice(): Promise<void> {
       useSessionStore.setState({
         preflightReady: false,
         muted: false,
-        error: ack?.error?.message ?? "Unable to cancel voice.",
-        errorFatal: false
+        ...sessionFailurePatch(ack?.error?.message ?? "Unable to cancel voice.", {
+          wire: ack?.error,
+          category: "Speech",
+          code: "VoiceCancelFailed"
+        })
       });
       return;
     }
@@ -2588,14 +2641,16 @@ export async function cancelVoice(): Promise<void> {
     useSessionStore.setState({
       preflightReady: false,
       muted: false,
-      error: error instanceof Error ? error.message : "Unable to cancel voice.",
-      errorFatal: false
+      ...sessionFailurePatch(error instanceof Error ? error.message : "Unable to cancel voice.", {
+        category: "Speech",
+        code: "VoiceCancelFailed"
+      })
     });
     return;
   }
 
   capture.release();
-  useSessionStore.setState({ preflightReady: false, muted: false, error: null, errorFatal: false });
+  useSessionStore.setState({ preflightReady: false, muted: false, ...clearSessionFailure() });
 }
 
 export async function setMuted(muted: boolean): Promise<void> {
@@ -2608,7 +2663,7 @@ export async function setMuted(muted: boolean): Promise<void> {
   try {
     const ack = await invoke("SetMuted", "session.mute", { muted }, commandSequence);
     if (!ack?.accepted) {
-      useSessionStore.setState({ error: ack?.error?.message ?? "Mute failed.", errorFatal: false });
+      useSessionStore.setState({ error: ack?.error?.message ?? "Mute failed.", sessionError: sessionErrorFromWire(ack?.error, ack?.error?.message ?? "Mute failed."), errorFatal: false });
       if (muted) {
         syncCapture();
       }
@@ -2616,8 +2671,7 @@ export async function setMuted(muted: boolean): Promise<void> {
     }
   } catch (error) {
     useSessionStore.setState({
-      error: error instanceof Error ? error.message : "Mute failed.",
-      errorFatal: false
+      ...sessionFailurePatch(error instanceof Error ? error.message : "Mute failed.", { category: "Speech", code: "MuteFailed" })
     });
     if (muted) {
       syncCapture();

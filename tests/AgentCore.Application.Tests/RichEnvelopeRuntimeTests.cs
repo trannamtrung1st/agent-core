@@ -148,6 +148,90 @@ public sealed class RichEnvelopeRuntimeTests
         await runtime.WaitUntilMailboxDrainedAsync();
     }
 
+    [Fact]
+    public async Task Speech_credit_does_not_rewrite_display_receipts()
+    {
+        var output = new CapturingSessionOutput();
+        var model = new ScriptedLanguageModel(["Hello[[speech:Spoken hello]]"]);
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = Create(
+            output,
+            new InMemoryMemoryStore(),
+            model,
+            synthesizer: synthesizer,
+            voice: true);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Hello");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(0, assistant.ReceivedTextEndExclusive);
+        Assert.True(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        var received = assistant.ReceivedTextEndExclusive;
+        Assert.Equal(assistant.Text.Length, received);
+        Assert.Equal(0, assistant.HeardTextEndExclusive);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(received, assistant.ReceivedTextEndExclusive);
+        Assert.True(assistant.HeardTextEndExclusive > 0);
+        Assert.Equal("Hello", assistant.Text);
+        var envelope = assistant.Envelope;
+        Assert.NotNull(envelope);
+        Assert.Equal("Spoken hello", envelope.SpeechText);
+        Assert.True(assistant.HeardTextEndExclusive <= (envelope.SpeechText ?? string.Empty).Length);
+    }
+
+    [Fact]
+    public async Task Attachment_reference_block_is_distinct_from_display_text()
+    {
+        var output = new CapturingSessionOutput();
+        var model = new ScriptedLanguageModel(["See file.[[attachment:notes.txt]]"]);
+        await using var runtime = Create(output, new InMemoryMemoryStore(), model);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("See file.", assistant.Text);
+        Assert.Contains(assistant.Envelope!.Blocks, block => block.Kind == ResponseBlockKind.AttachmentReference && block.AttachmentId == "notes.txt");
+        Assert.True(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length, blockIds: assistant.Envelope.Blocks.Select(block => block.BlockId).ToArray()));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var visible = PublicHistory.FromEntry(runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant));
+        Assert.Equal("See file.", visible.Text);
+        Assert.Contains(visible.Blocks, block => block.Kind == "attachment" && block.AttachmentId == "notes.txt");
+    }
+
+    [Fact]
+    public async Task Ready_history_does_not_include_live_thinking_activity()
+    {
+        var store = new InMemoryMemoryStore();
+        var first = new CapturingSessionOutput();
+        Guid sessionId;
+        await using (var runtime = Create(first, store, new ScriptedLanguageModel()))
+        {
+            await runtime.AttachAsync();
+            await runtime.SubmitUserTextAsync("Hello");
+            await runtime.WaitUntilIdleAsync();
+            sessionId = runtime.SessionId;
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var restoredOutput = new CapturingSessionOutput();
+        var paused = (await store.LoadAsync(sessionId))!;
+        var loaded = await PausedSessionReopen.ReopenAsync(store, paused, new FakeTimeProvider(DateTimeOffset.UtcNow));
+        await using var restored = Create(restoredOutput, store, new ScriptedLanguageModel(), loaded);
+        await restored.AttachAsync();
+        await restored.WaitUntilMailboxDrainedAsync();
+        var ready = Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.DoesNotContain(ready.Ready.History, entry => entry.Text.Contains("Thinking", StringComparison.OrdinalIgnoreCase));
+        Assert.All(ready.Ready.History, entry => Assert.NotEqual(EntryStatus.Streaming, entry.Status));
+    }
+
     private static SessionRuntime Create(
         ISessionOutput output,
         InMemoryMemoryStore store,
