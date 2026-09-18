@@ -1110,11 +1110,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (queued)
                     {
                         UserTextQueueTelemetry.Record(wire, queued: true);
-                        if (_activeResponseId is null)
-                        {
-                            await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
-                        }
-
                         return;
                     }
 

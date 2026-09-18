@@ -138,21 +138,23 @@ public sealed partial class SessionRuntime
 
         _segmentTimerArmed = true;
         var generation = _segmentTimerGeneration;
-        _ = Task.Run(async () =>
+        _ = WaitSegmentAsync(generation);
+    }
+
+    private async Task WaitSegmentAsync(int generation)
+    {
+        try
         {
-            try
+            await Task.Delay(SpeechSegmenter.Latency, _time, _lifetime.Token).ConfigureAwait(false);
+            BeginWork();
+            if (!TryMailbox(new TimerElapsedReceived(NewContext(), "segment", generation, null)))
             {
-                await Task.Delay(SpeechSegmenter.Latency, _time, _lifetime.Token).ConfigureAwait(false);
-                BeginWork();
-                if (!TryMailbox(new TimerElapsedReceived(NewContext(), "segment", generation, null)))
-                {
-                    EndWork();
-                }
+                EndWork();
             }
-            catch (OperationCanceledException)
-            {
-            }
-        }, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private void KickTts(EventContext cause)

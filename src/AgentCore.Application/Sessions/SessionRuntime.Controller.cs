@@ -264,23 +264,7 @@ public sealed partial class SessionRuntime
             _snapshot = _snapshot with { PendingMode = SessionMode.Voice, UpdatedAt = _time.GetUtcNow() };
             _pendingVoiceGeneration = ++_timerGeneration;
             RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
-            var generation = _pendingVoiceGeneration;
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromMilliseconds(_policy.PendingVoiceTimeoutMs), _time, _lifetime.Token)
-                        .ConfigureAwait(false);
-                    BeginWork();
-                    if (!TryMailbox(new TimerElapsedReceived(NewContext(), "pendingVoice", generation, null)))
-                    {
-                        EndWork();
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                }
-            }, CancellationToken.None);
+            SchedulePendingVoiceTimer(_pendingVoiceGeneration);
             return;
         }
 
@@ -806,42 +790,68 @@ public sealed partial class SessionRuntime
         var delay = _policy.BargeInPolicy == "semantic" && _recognition.PartialTranscripts
             ? TimeSpan.FromMilliseconds(_policy.SustainedInterruptMs)
             : TimeSpan.FromMilliseconds(_policy.DegradedInterruptMs);
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
-                BeginWork();
-                if (!TryMailbox(new TimerElapsedReceived(NewContext(), "candidate", generation, utteranceId)))
-                {
-                    EndWork();
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }, CancellationToken.None);
+        _ = WaitCandidateAsync(generation, utteranceId, delay);
     }
 
     private void ScheduleMaxUtteranceTimer(Guid utteranceId)
     {
         var generation = ++_maxUtteranceGeneration;
         var delay = TimeSpan.FromSeconds(Math.Max(1, _policy.MaxUtteranceSeconds));
-        _ = Task.Run(async () =>
+        _ = WaitMaxUtteranceAsync(generation, utteranceId, delay);
+    }
+
+    private async Task WaitPendingVoiceAsync(int generation)
+    {
+        try
         {
-            try
+            await Task.Delay(TimeSpan.FromMilliseconds(_policy.PendingVoiceTimeoutMs), _time, _lifetime.Token)
+                .ConfigureAwait(false);
+            BeginWork();
+            if (!TryMailbox(new TimerElapsedReceived(NewContext(), "pendingVoice", generation, null)))
             {
-                await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
-                BeginWork();
-                if (!TryMailbox(new TimerElapsedReceived(NewContext(), "maxUtterance", generation, utteranceId)))
-                {
-                    EndWork();
-                }
+                EndWork();
             }
-            catch (OperationCanceledException)
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task WaitCandidateAsync(int generation, Guid utteranceId, TimeSpan delay)
+    {
+        try
+        {
+            await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
+            BeginWork();
+            if (!TryMailbox(new TimerElapsedReceived(NewContext(), "candidate", generation, utteranceId)))
             {
+                EndWork();
             }
-        }, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task WaitMaxUtteranceAsync(int generation, Guid utteranceId, TimeSpan delay)
+    {
+        try
+        {
+            await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
+            BeginWork();
+            if (!TryMailbox(new TimerElapsedReceived(NewContext(), "maxUtterance", generation, utteranceId)))
+            {
+                EndWork();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void SchedulePendingVoiceTimer(int generation)
+    {
+        _ = WaitPendingVoiceAsync(generation);
     }
 
     private async Task PublishGainAsync(
