@@ -46,7 +46,7 @@ This is a bounded verification/fix pass, not another voice redesign.
 
 ## P1 — Conversation and session ergonomics
 
-Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). P1A/P1B/P1C implementation is observed. P1 is frozen on HEAD `df0a12cecb5b60a12499488eed9c101cb01b45b2`. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. Do not start P2.
+Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). P1A/P1B/P1C implementation is observed. P1 is frozen: exact Synthetic/Compose and the unedited Chrome 153 Voice re-run on HEAD `df0a12cecb5b60a12499488eed9c101cb01b45b2`; unedited `p1-final-fr-smoke-r2` `fr-FR` Browser STT/TTS on HEAD `5764010d989da965b252f5389e07669594c8bc29`. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. Do not start P2.
 
 ### P1A — Lazy-load old chat history
 
