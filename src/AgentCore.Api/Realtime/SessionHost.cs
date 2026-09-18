@@ -1908,7 +1908,8 @@ public static class SessionEventMapper
                 ["fallbackText"] = block.FallbackText,
                 ["attachmentId"] = block.AttachmentId,
                 ["artifactId"] = block.ArtifactId
-            }).ToArray()
+            }).ToArray(),
+            ["finishReason"] = entry.FinishReason
         }).ToArray();
 
         return new Dictionary<string, object?>

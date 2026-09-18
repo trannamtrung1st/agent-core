@@ -334,7 +334,7 @@ function handleEvent(raw: ServerEvent): void {
     void hydrateBoundAttachments(next.sessionId);
     void hydrateActiveHistory(next.sessionId, next.entries);
   }
-  if (raw.type === "agent.response.completed") {
+  if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
   }
   if (raw.type === "session.state.changed" && String(raw.payload.status ?? "") === "paused") {
@@ -1952,17 +1952,18 @@ export async function removeQueuedSend(localId: string): Promise<void> {
   }
 
   const sessionId = snapshot.sessionId;
-  for (const attachment of item.attachments) {
+  const attachments = item.attachments;
+  useSessionStore.setState({
+    pendingSendQueue: snapshot.pendingSendQueue.filter((queued) => queued.localId !== localId)
+  });
+
+  for (const attachment of attachments) {
     if (sessionId && attachment.attachmentId) {
-      await abortPendingAttachment(sessionId, attachment.attachmentId).catch(() => undefined);
+      void abortPendingAttachment(sessionId, attachment.attachmentId).catch(() => undefined);
     }
 
     releasePendingFile(attachment.localId);
   }
-
-  useSessionStore.setState({
-    pendingSendQueue: snapshot.pendingSendQueue.filter((queued) => queued.localId !== localId)
-  });
 }
 
 function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachmentIds: string[]): boolean {
@@ -2171,6 +2172,7 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
 export function composerSteerEnabled(localId: string): boolean {
   const snapshot = useSessionStore.getState();
   const item = snapshot.pendingSendQueue.find((queued) => queued.localId === localId);
+  const anyDispatching = snapshot.pendingSendQueue.some((queued) => queued.dispatching);
   return (
     !isReadonlySession(snapshot)
     && snapshot.status !== "paused"
@@ -2178,6 +2180,7 @@ export function composerSteerEnabled(localId: string): boolean {
     && snapshot.liveResponseId != null
     && item != null
     && !item.dispatching
+    && !anyDispatching
   );
 }
 

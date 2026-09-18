@@ -118,7 +118,8 @@ public static class HttpMapping
                 block.Text,
                 block.FallbackText,
                 block.AttachmentId,
-                block.ArtifactId)).ToArray());
+                block.ArtifactId)).ToArray(),
+            projected.FinishReason);
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyServerEvent, emptySession, isReadonlySession, type ServerEvent } from "./sessionStore";
+import { applyServerEvent, emptySession, historyFromPayload, isReadonlySession, type ServerEvent } from "./sessionStore";
 
 function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "sequence">): ServerEvent {
   return {
@@ -428,6 +428,28 @@ describe("applyServerEvent", () => {
       })
     );
     expect(next.error).toBe("Protocol error.");
+  });
+});
+
+describe("historyFromPayload", () => {
+  it("preserves finishReason on hydrated history rows", () => {
+    const entries = historyFromPayload([
+      {
+        entryId: "e1",
+        sequence: 1,
+        sourceEventId: null,
+        role: "assistant",
+        text: "Truncated",
+        responseId: "r1",
+        status: "completed",
+        deliveryMode: "text",
+        heardTextEndExclusive: 9,
+        receivedTextEndExclusive: 9,
+        createdAt: "2026-09-18T00:00:00.000Z",
+        finishReason: "lengthLimit"
+      }
+    ]);
+    expect(entries[0]?.finishReason).toBe("lengthLimit");
   });
 });
 

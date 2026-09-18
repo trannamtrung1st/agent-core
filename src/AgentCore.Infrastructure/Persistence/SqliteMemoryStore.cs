@@ -145,6 +145,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "ConversationEntries", "FinishReason", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260918013000_EntryFinishReason', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -430,6 +440,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.EnvelopeJson == SerializeEnvelope(entry.Envelope)
         && row.AttachmentRefsJson == SerializeAttachmentRefs(entry.Attachments)
         && row.SourceAdmissionFingerprint == entry.SourceAdmissionFingerprint
+        && row.FinishReason == entry.FinishReason
         && row.Role == entry.Role.ToString()
         && row.DeliveryMode == entry.DeliveryMode.ToString()
         && row.ResponseId == entry.ResponseId?.ToString("D")
@@ -497,6 +508,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.EnvelopeJson = SerializeEnvelope(entry.Envelope);
         row.AttachmentRefsJson = SerializeAttachmentRefs(entry.Attachments);
         row.SourceAdmissionFingerprint = entry.SourceAdmissionFingerprint;
+        row.FinishReason = entry.FinishReason;
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
 
@@ -545,7 +557,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             FromUnix(row.CreatedAtUtc),
             DeserializeEnvelope(row.EnvelopeJson),
             DeserializeAttachmentRefs(row.AttachmentRefsJson),
-            row.SourceAdmissionFingerprint);
+            row.SourceAdmissionFingerprint,
+            row.FinishReason);
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }

@@ -29,7 +29,8 @@ public sealed record ConversationEntry(
     DateTimeOffset CreatedAt,
     ResponseEnvelope? Envelope = null,
     IReadOnlyList<ConversationAttachmentRef>? Attachments = null,
-    string? SourceAdmissionFingerprint = null);
+    string? SourceAdmissionFingerprint = null,
+    string? FinishReason = null);
 
 public sealed record UserProfile(
     Guid ProfileId,

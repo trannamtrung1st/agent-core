@@ -185,7 +185,8 @@ public sealed record PublicHistoryEntry(
     SessionMode DeliveryMode,
     DateTimeOffset CreatedAt,
     IReadOnlyList<PublicResponseBlock> Blocks,
-    IReadOnlyList<PublicHistoryAttachment>? Attachments = null);
+    IReadOnlyList<PublicHistoryAttachment>? Attachments = null,
+    string? FinishReason = null);
 
 public sealed record SessionReadyProjection(
     SessionMode Mode,
@@ -308,7 +309,8 @@ public static class PublicHistory
             entry.DeliveryMode,
             entry.CreatedAt,
             blocks,
-            attachments);
+            attachments,
+            entry.FinishReason);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

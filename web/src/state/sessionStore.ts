@@ -172,7 +172,8 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       receivedTextEndExclusive: asNumber(row.receivedTextEndExclusive),
       createdAt: asString(row.createdAt),
       attachments: asAttachments(row.attachments),
-      blocks: asBlocks(row.blocks)
+      blocks: asBlocks(row.blocks),
+      finishReason: row.finishReason == null ? null : asString(row.finishReason)
     };
   });
 }

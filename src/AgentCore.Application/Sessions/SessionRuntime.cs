@@ -2191,7 +2191,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         Text = DisplayText(),
                         Status = status,
-                        Envelope = CurrentEnvelope(status != EntryStatus.Streaming)
+                        Envelope = CurrentEnvelope(status != EntryStatus.Streaming),
+                        FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null
                     }
                     : entry)
             .ToArray();

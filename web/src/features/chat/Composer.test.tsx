@@ -1,13 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { queueComposerFiles, removeComposerFile, retryComposerFile } from "../../services/realtime";
+import {
+  queueComposerFiles,
+  removeComposerFile,
+  retryComposerFile,
+  steerQueuedSend
+} from "../../services/realtime";
+import type { PendingSendItem } from "../../state/sessionStore";
 import { Composer } from "./Composer";
 
 vi.mock("../../services/realtime", () => ({
   queueComposerFiles: vi.fn().mockResolvedValue(undefined),
   removeComposerFile: vi.fn(),
   retryComposerFile: vi.fn(),
-  composerSteerEnabled: vi.fn(() => false),
+  composerSteerEnabled: vi.fn(() => true),
   steerQueuedSend: vi.fn(),
   removeQueuedSend: vi.fn()
 }));
@@ -132,5 +138,54 @@ describe("Composer attachment staging", () => {
     fireEvent.click(stop);
     expect(onStop).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Message")).toHaveFocus();
+  });
+});
+
+function queueItem(index: number, text: string): PendingSendItem {
+  return {
+    localId: `q${index}`,
+    eventId: `e${index}`,
+    text,
+    attachmentIds: [],
+    attachments: []
+  };
+}
+
+describe("Composer pending-send queue", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows two rows collapsed and expands to reveal the rest", () => {
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        pendingSendQueue={[queueItem(1, "A"), queueItem(2, "B"), queueItem(3, "C")]}
+      />
+    );
+    expect(screen.getByText("A")).toBeInTheDocument();
+    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.queryByText("C")).not.toBeInTheDocument();
+    expect(screen.getByText("1 more queued")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand queued messages" }));
+    expect(screen.getByText("C")).toBeInTheDocument();
+  });
+
+  it("uses a scrollable list when expanded with more than six items", () => {
+    const queue = Array.from({ length: 7 }, (_, index) => queueItem(index + 1, `M${index + 1}`));
+    render(<Composer {...emptyComposerProps()} pendingSendQueue={queue} />);
+    fireEvent.click(screen.getByRole("button", { name: "Expand queued messages" }));
+    expect(document.querySelector(".pending-send-queue-list-scroll")).not.toBeNull();
+  });
+
+  it("steers a non-head row through the row action", () => {
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        pendingSendQueue={[queueItem(1, "A"), queueItem(2, "B")]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Steer queued message 2" }));
+    expect(steerQueuedSend).toHaveBeenCalledWith("q2");
   });
 });

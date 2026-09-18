@@ -151,6 +151,45 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
   });
 
+  it("does not dispatch the queue head after failed completion", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        {
+          localId: "q1",
+          eventId: "e1",
+          text: "U2",
+          attachmentIds: [],
+          attachments: []
+        }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "evt",
+      sequence: 2,
+      timestamp: new Date().toISOString(),
+      correlationId: "evt",
+      causationId: null,
+      responseId: "r1",
+      type: "agent.response.completed",
+      payload: { status: "failed" }
+    });
+    await Promise.resolve();
+    expect(invoke.mock.calls.some((call) => call[0] === "SendText")).toBe(false);
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+  });
+
   it("does not dispatch the queue head after non-terminal interruption", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
@@ -229,6 +268,81 @@ describe("Codex-style pending send queue", () => {
       })
     );
     expect(useSessionStore.getState().pendingSendQueue.map((item) => item.text)).toEqual(["U3"]);
+  });
+
+  it("steers a middle queue item without reordering the rest", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        { localId: "qa", eventId: "ea", text: "A", attachmentIds: [], attachments: [] },
+        { localId: "qb", eventId: "eb", text: "B", attachmentIds: [], attachments: [] },
+        { localId: "qc", eventId: "ec", text: "C", attachmentIds: [], attachments: [] }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await steerQueuedSend("qb");
+    expect(invoke).toHaveBeenCalledWith(
+      "SendText",
+      expect.objectContaining({
+        eventId: "eb",
+        payload: expect.objectContaining({ text: "B", behavior: "interrupt" })
+      })
+    );
+    expect(useSessionStore.getState().pendingSendQueue.map((item) => item.text)).toEqual(["A", "C"]);
+  });
+
+  it("disables steer on other rows while any item is dispatching", () => {
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        { localId: "qa", eventId: "ea", text: "A", attachmentIds: [], attachments: [], dispatching: true },
+        { localId: "qb", eventId: "eb", text: "B", attachmentIds: [], attachments: [] }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    expect(composerSteerEnabled("qa")).toBe(false);
+    expect(composerSteerEnabled("qb")).toBe(false);
+  });
+
+  it("ignores a second steer while the first send is in flight", async () => {
+    let resolveSend: (value: { accepted: boolean }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ accepted: boolean }>((resolve) => {
+          resolveSend = resolve;
+        })
+    );
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        { localId: "qa", eventId: "ea", text: "A", attachmentIds: [], attachments: [] },
+        { localId: "qb", eventId: "eb", text: "B", attachmentIds: [], attachments: [] }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const first = steerQueuedSend("qa");
+    await Promise.resolve();
+    await steerQueuedSend("qb");
+    expect(invoke).toHaveBeenCalledTimes(1);
+    resolveSend({ accepted: true });
+    await first;
   });
 
   it("removing a queued item releases its attachment snapshot", async () => {

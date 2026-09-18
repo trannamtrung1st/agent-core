@@ -48,7 +48,8 @@ public sealed record HistoryItemResponse(
     int HeardTextEndExclusive,
     int ReceivedTextEndExclusive,
     string CreatedAt,
-    IReadOnlyList<HistoryBlockResponse>? Blocks = null);
+    IReadOnlyList<HistoryBlockResponse>? Blocks = null,
+    string? FinishReason = null);
 
 public sealed record HistoryPageResponse(
     IReadOnlyList<HistoryItemResponse> Items,
