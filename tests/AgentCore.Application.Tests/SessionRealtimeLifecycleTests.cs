@@ -179,7 +179,10 @@ public sealed class SessionRealtimeLifecycleTests
             item => item.Stage == "speech.input.transport" && item.Detail == SpeechTransport.ClientTranscript);
         Assert.Contains(
             RuntimeTelemetry.SnapshotTimeline(),
-            item => item.Stage == "speech.output.transport" && item.Detail == SpeechTransport.ClientSpeech);
+            item => item.Stage == "speech.input.capabilities" && item.Detail == "none");
+        Assert.Contains(
+            RuntimeTelemetry.SnapshotTimeline(),
+            item => item.Stage == "speech.output.capabilities" && item.Detail == "none");
     }
 
     [Fact]

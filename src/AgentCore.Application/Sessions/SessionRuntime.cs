@@ -2050,6 +2050,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
         _initiativeHeld = false;
+        SpeechTelemetry.RecordCancel(reason);
         var heard = UsesClientSpeech ? _ackedPlaybackText : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         InvalidateSpeechJobs();

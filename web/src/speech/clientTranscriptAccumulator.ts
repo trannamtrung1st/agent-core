@@ -1,4 +1,5 @@
 import { speechError } from "./errors";
+import { recordSpeechObservation } from "./speechObservability";
 import type { SessionErrorView } from "../features/chat/sessionError";
 import type { ClientSpeechEvidence } from "./clientSpeechRecognizer";
 
@@ -216,6 +217,13 @@ export class ClientTranscriptAccumulator {
 
     this.outgoing.push(evidence);
     this.emit(evidence);
+    if (evidence.kind === "partial") {
+      recordSpeechObservation({ name: "speech.partial.count", value: 1 });
+    }
+
+    if (evidence.kind === "failed") {
+      recordSpeechObservation({ name: "speech.error.code", code: "SpeechRecognitionUnavailable" });
+    }
   }
 }
 

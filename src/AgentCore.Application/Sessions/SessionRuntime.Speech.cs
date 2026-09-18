@@ -340,6 +340,7 @@ public sealed partial class SessionRuntime
                     new ErrorOutput("Transport", input.Code, input.Message, false, null)),
                 cancellationToken)
             .ConfigureAwait(false);
+        SpeechTelemetry.RecordError(input.Code);
         try
         {
             await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
@@ -380,6 +381,7 @@ public sealed partial class SessionRuntime
                             new ErrorOutput("Session", "VoiceUnavailable", "Voice capture could not start.", false, null)),
                         ct)
                     .ConfigureAwait(false);
+                SpeechTelemetry.RecordError("VoiceUnavailable");
                 await PublishStateAsync(context, ct).ConfigureAwait(false);
             });
     }

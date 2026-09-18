@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { ClientTranscriptAccumulator } from "./clientTranscriptAccumulator";
+import { resetSpeechObservations, snapshotSpeechObservations } from "./speechObservability";
 
 const gate = { attachmentId: "att-1", epoch: 1, mode: "voice" as const, muted: false };
 
@@ -22,6 +23,10 @@ function create(now = { t: 0 }) {
 }
 
 describe("ClientTranscriptAccumulator", () => {
+  beforeEach(() => {
+    resetSpeechObservations();
+  });
+
   it("streams interims and concatenates multiple browser-final chunks into one application final", () => {
     const { acc, sent, texts, now } = create();
     acc.startUtterance();
@@ -36,6 +41,9 @@ describe("ClientTranscriptAccumulator", () => {
     expect(texts.at(-1)).toBe("hello there friend");
     expect(sent.filter((kind) => kind === "partial").length).toBeGreaterThan(0);
     expect(sent.at(-1)).toBe("ended");
+    const observations = snapshotSpeechObservations();
+    expect(observations.some((item) => item.name === "speech.partial.count")).toBe(true);
+    expect(JSON.stringify(observations)).not.toContain("hello there");
   });
 
   it("emits one application final before ended without a second turn", () => {
@@ -70,6 +78,8 @@ describe("ClientTranscriptAccumulator", () => {
     expect(errors).toEqual(["SpeechRecognitionRestartLimit"]);
     expect(sent.filter((kind) => kind === "final")).toHaveLength(0);
     expect(sent.filter((kind) => kind === "failed")).toHaveLength(1);
+    expect(snapshotSpeechObservations().some((item) => item.name === "speech.error.code" && item.code === "SpeechRecognitionUnavailable")).toBe(true);
+    expect(JSON.stringify(snapshotSpeechObservations())).not.toContain("partial thought");
   });
 
   it("does not replay stale partials after a reconnect epoch", () => {

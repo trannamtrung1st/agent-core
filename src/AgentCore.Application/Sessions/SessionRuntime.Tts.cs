@@ -124,6 +124,8 @@ public sealed partial class SessionRuntime
             RuntimeTelemetry.Record(
                 "segmentation",
                 RuntimeTelemetry.ElapsedMs(_segmentPipelineStarted != 0 ? _segmentPipelineStarted : Stopwatch.GetTimestamp()));
+            SpeechTelemetry.RecordSegmentLatency(
+                _segmentPipelineStarted != 0 ? _segmentPipelineStarted : Stopwatch.GetTimestamp());
         }
     }
 
@@ -290,8 +292,8 @@ public sealed partial class SessionRuntime
                 break;
             case SpeechSynthesisFailed failed:
                 _ttsBusy = false;
+                SpeechTelemetry.RecordError(failed.Failure.Code.ToString());
                 await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken).ConfigureAwait(false);
-                _ = failed;
                 break;
         }
 
@@ -345,6 +347,7 @@ public sealed partial class SessionRuntime
                 RuntimeTelemetry.Record(
                     "playback",
                     RuntimeTelemetry.ElapsedMs(_firstFrameSentAt != 0 ? _firstFrameSentAt : _ttsStartedAt));
+                SpeechTelemetry.RecordPlaybackStart(_firstFrameSentAt != 0 ? _firstFrameSentAt : _ttsStartedAt);
             }
         }
 
@@ -373,6 +376,7 @@ public sealed partial class SessionRuntime
             }
 
             _playbackDone = true;
+            SpeechTelemetry.RecordPlaybackComplete();
             await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
         }
 
@@ -395,6 +399,13 @@ public sealed partial class SessionRuntime
             {
                 input.Admitted.TrySetResult(false);
                 return;
+            }
+
+            if (!_recordedPlayback)
+            {
+                _recordedPlayback = true;
+                SpeechTelemetry.RecordPlaybackStart(
+                    _segmentPipelineStarted != 0 ? _segmentPipelineStarted : Stopwatch.GetTimestamp());
             }
         }
         else if (string.Equals(kind, "progress", StringComparison.OrdinalIgnoreCase))
@@ -426,6 +437,7 @@ public sealed partial class SessionRuntime
             ApplyHeard(_ackedPlaybackText);
             await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
             _playbackDone = true;
+            SpeechTelemetry.RecordPlaybackComplete();
             await TryCompleteClientSpeechAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
         }
         else if (string.Equals(kind, "stopped", StringComparison.OrdinalIgnoreCase))

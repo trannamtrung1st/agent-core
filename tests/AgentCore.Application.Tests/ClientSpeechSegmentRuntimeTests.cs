@@ -1,3 +1,4 @@
+using AgentCore.Application.Observability;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
@@ -146,6 +147,8 @@ public sealed class ClientSpeechSegmentRuntimeTests
     [Fact]
     public async Task Completion_waits_for_client_speech_playback_ack()
     {
+        RuntimeTelemetry.Reset();
+        RuntimeTelemetry.Configure(64, contentLogging: false);
         var output = new CapturingSessionOutput();
         await using var runtime = Create(output, new ScriptedLanguageModel(["Hello from synthetic."]));
         await runtime.AttachAsync();
@@ -160,6 +163,12 @@ public sealed class ClientSpeechSegmentRuntimeTests
         await AckClientSpeechAsync(runtime, speechCompleted);
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(output.Items, item => item.Payload is ResponseCompletedOutput terminal && !terminal.Failed);
+        Assert.Contains(RuntimeTelemetry.SnapshotTimeline(), item => item.Stage == SpeechTelemetry.SegmentLatencyInstrument);
+        Assert.Contains(RuntimeTelemetry.SnapshotTimeline(), item => item.Stage == SpeechTelemetry.PlaybackStartLatencyInstrument);
+        Assert.Contains(RuntimeTelemetry.SnapshotTimeline(), item => item.Stage == SpeechTelemetry.PlaybackCompleteInstrument);
+        Assert.DoesNotContain(
+            RuntimeTelemetry.SnapshotTimeline(),
+            item => (item.Detail ?? string.Empty).Contains("synthetic", StringComparison.OrdinalIgnoreCase));
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         var end = Assert.IsType<SpeechOutputCompletedOutput>(speechCompleted.Payload).TextEndExclusive;
         Assert.Equal(end, assistant.HeardTextEndExclusive);

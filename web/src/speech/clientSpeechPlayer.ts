@@ -1,4 +1,5 @@
 import type { ClientSpeechSynthesizer } from "./clientSpeechSynthesizer";
+import { recordSpeechObservation } from "./speechObservability";
 
 export type ClientSpeechPlaybackAck = {
   kind: "started" | "progress" | "completed" | "stopped";
@@ -87,6 +88,7 @@ export function createClientSpeechPlayer(
 
     completedSent = true;
     report(responseId, "completed", outputEnd);
+    recordSpeechObservation({ name: "speech.playback.complete", value: 1 });
     responseId = null;
     started = false;
     outputCompleted = false;
@@ -145,6 +147,7 @@ export function createClientSpeechPlayer(
       await synthesizer.cancel();
       if (active && started && !completedSent) {
         report(active, "stopped", trusted);
+        recordSpeechObservation({ name: "speech.cancel.reason", reason: "clientCancel" });
       }
 
       responseId = null;

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSpeechSynthesizer } from "./fakeSpeechAdapters";
 import { createClientSpeechPlayer, type ClientSpeechPlaybackAck } from "./clientSpeechPlayer";
+import { resetSpeechObservations, snapshotSpeechObservations } from "./speechObservability";
 
 function collect() {
   const acks: { responseId: string; report: ClientSpeechPlaybackAck }[] = [];
@@ -10,6 +11,10 @@ function collect() {
 }
 
 describe("clientSpeechPlayer", () => {
+  beforeEach(() => {
+    resetSpeechObservations();
+  });
+
   it("queues ordered segments and ACKs started 0, clamped progress, then completed after output.completed", async () => {
     const { player, acks } = collect();
     player.enqueue({ responseId: "r1", segmentIndex: 0, textStart: 0, text: "Hello" });
@@ -24,6 +29,8 @@ describe("clientSpeechPlayer", () => {
     expect(acks[3]?.report).toEqual({ kind: "completed", consumedSamples: 0, textEndExclusive: 11 });
     expect(acks.every((item) => item.report.consumedSamples === 0)).toBe(true);
     expect(player.activeResponseId()).toBeNull();
+    expect(snapshotSpeechObservations().some((item) => item.name === "speech.playback.complete")).toBe(true);
+    expect(JSON.stringify(snapshotSpeechObservations())).not.toContain("Hello");
   });
 
   it("does not complete before speech.output.completed", async () => {
@@ -53,5 +60,7 @@ describe("clientSpeechPlayer", () => {
     await player.cancel("r1");
     expect(synth.cancelled).toBe(true);
     expect(acks.at(-1)?.report).toEqual({ kind: "stopped", consumedSamples: 0, textEndExclusive: 0 });
+    expect(snapshotSpeechObservations().some((item) => item.name === "speech.cancel.reason" && item.reason === "clientCancel")).toBe(true);
+    expect(JSON.stringify(snapshotSpeechObservations())).not.toContain("unheard");
   });
 });

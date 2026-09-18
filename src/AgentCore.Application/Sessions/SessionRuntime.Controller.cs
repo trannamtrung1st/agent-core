@@ -104,6 +104,8 @@ public sealed partial class SessionRuntime
                 var plan = _voice.EffectivePlan;
                 RuntimeTelemetry.RecordDiagnostic("speech.input.transport", 0, plan.InputTransport);
                 RuntimeTelemetry.RecordDiagnostic("speech.output.transport", 0, plan.OutputTransport);
+                RuntimeTelemetry.RecordDiagnostic("speech.input.capabilities", 0, SpeechTelemetry.FormatCapabilities(plan.RecognitionCapabilities));
+                RuntimeTelemetry.RecordDiagnostic("speech.output.capabilities", 0, SpeechTelemetry.FormatCapabilities(plan.SynthesisCapabilities));
                 _logger.LogInformation(
                     "Speech plan input {SpeechInputTransport} output {SpeechOutputTransport} recognitionResolvable {RecognitionResolvable} synthesisResolvable {SynthesisResolvable}",
                     plan.InputTransport,
@@ -213,6 +215,7 @@ public sealed partial class SessionRuntime
                         new ErrorOutput("Session", "VoiceUnavailable", "Voice is not available for this agent.", false, null)),
                     cancellationToken)
                 .ConfigureAwait(false);
+            SpeechTelemetry.RecordError("VoiceUnavailable");
             return;
         }
 
@@ -439,6 +442,10 @@ public sealed partial class SessionRuntime
             duration,
             _ids.NewId());
         await ApplyEvaluationAsync(input.Context, evaluation, cancellationToken).ConfigureAwait(false);
+        if (input.Evidence is RecognitionFailed failed)
+        {
+            SpeechTelemetry.RecordError(failed.Failure.Code.ToString());
+        }
         if (input.Evidence is SpeechStarted && _utteranceStarted is not null)
         {
             ScheduleMaxUtteranceTimer(input.Evidence.UtteranceId);
@@ -453,6 +460,7 @@ public sealed partial class SessionRuntime
         }
         if (input.Evidence is SpeechPartial partial)
         {
+            SpeechTelemetry.RecordPartial();
             if (!_recordedStt)
             {
                 _recordedStt = true;
@@ -469,6 +477,7 @@ public sealed partial class SessionRuntime
 
         if (input.Evidence is SpeechFinal final)
         {
+            SpeechTelemetry.RecordFinalLatency(_sttMark);
             if (!_recordedStt)
             {
                 _recordedStt = true;
@@ -648,6 +657,7 @@ public sealed partial class SessionRuntime
                             null)),
                     cancellationToken)
                 .ConfigureAwait(false);
+            SpeechTelemetry.RecordError("MaxUtterance");
             try
             {
                 await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);

@@ -2,6 +2,7 @@ import { ClientTranscriptAccumulator } from "./clientTranscriptAccumulator";
 import type { ClientSpeechEvidence } from "./clientSpeechRecognizer";
 import type { SessionErrorView } from "../features/chat/sessionError";
 import type { SpeechTransportService } from "./speechTransport";
+import { recordSpeechObservation } from "./speechObservability";
 
 export type TranscriptLifecycleGate = {
   attachmentId: string;
@@ -20,7 +21,14 @@ export class ClientTranscriptLifecycle {
     emit: (evidence: ClientSpeechEvidence) => void,
     onError: (error: SessionErrorView) => void
   ) {
-    this.accumulator = new ClientTranscriptAccumulator(emit, onError, { minPartialIntervalMs: 100 });
+    this.accumulator = new ClientTranscriptAccumulator(
+      emit,
+      (error) => {
+        recordSpeechObservation({ name: "speech.error.code", code: error.code });
+        onError(error);
+      },
+      { minPartialIntervalMs: 100 }
+    );
   }
 
   currentEpoch(): number {

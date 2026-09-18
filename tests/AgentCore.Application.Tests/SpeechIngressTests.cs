@@ -1,3 +1,4 @@
+using AgentCore.Application.Observability;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
@@ -19,6 +20,8 @@ public sealed class SpeechIngressTests
     public async Task Synthetic_voice_commits_one_user_turn_per_utterance()
     {
         var output = new CapturingSessionOutput();
+        RuntimeTelemetry.Reset();
+        RuntimeTelemetry.Configure(64, contentLogging: false);
         var recognizer = new SyntheticSpeechRecognizer(["Hello there"]);
         await using var runtime = Create(output, recognizer);
         await runtime.AttachAsync();
@@ -35,6 +38,11 @@ public sealed class SpeechIngressTests
         Assert.Equal(1, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.User && entry.Text == "Hello there"));
         Assert.Contains(output.Items, item => item.Payload is TranscriptPartialOutput);
         Assert.Single(output.Items.Select(item => item.Payload).OfType<TranscriptFinalOutput>());
+        Assert.Contains(RuntimeTelemetry.SnapshotTimeline(), item => item.Stage == SpeechTelemetry.PartialCountInstrument);
+        Assert.Contains(RuntimeTelemetry.SnapshotTimeline(), item => item.Stage == SpeechTelemetry.FinalLatencyInstrument);
+        Assert.DoesNotContain(
+            RuntimeTelemetry.SnapshotTimeline(),
+            item => (item.Detail ?? string.Empty).Contains("Hello there", StringComparison.Ordinal));
     }
 
     [Fact]
