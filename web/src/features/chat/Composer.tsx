@@ -1,28 +1,46 @@
-import { useRef, type ClipboardEvent, type DragEvent } from "react";
+import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Alert, Button, Flex, Input, Tooltip } from "antd";
 import {
   AudioOutlined,
   AudioMutedOutlined,
+  DeleteOutlined,
   PaperClipOutlined,
   SendOutlined,
-  StopOutlined
+  StopOutlined,
+  UnorderedListOutlined
 } from "@ant-design/icons";
 import type { InputRef } from "antd";
 import {
+  composerSteerEnabled,
   queueComposerFiles,
   removeComposerFile,
   retryComposerFile,
-  removeQueuedSend
+  removeQueuedSend,
+  steerQueuedSend
 } from "../../services/realtime";
 import type { PendingSendItem } from "../../state/sessionStore";
 import type { PendingAttachment } from "../../services/attachments";
 import { PendingAttachmentView } from "./AttachmentPreview";
 
+const QUEUE_COLLAPSED_VISIBLE = 2;
+const QUEUE_EXPANDED_MAX = 6;
+
+function queuePreview(item: PendingSendItem): string {
+  if (item.text.trim().length > 0) {
+    return item.text.trim();
+  }
+
+  if (item.attachments.length > 0) {
+    return item.attachments.map((file) => file.displayName).join(", ");
+  }
+
+  return "Empty message";
+}
+
 export function Composer({
   draft,
   canSend,
   canStop,
-  canSteer,
   sendLabel,
   pendingSendQueue,
   ready,
@@ -36,7 +54,6 @@ export function Composer({
   placeholder,
   onDraftChange,
   onSend,
-  onSteer,
   onStop,
   onVoice,
   onCancelVoice,
@@ -46,7 +63,6 @@ export function Composer({
   draft: string;
   canSend: boolean;
   canStop: boolean;
-  canSteer: boolean;
   sendLabel: string;
   pendingSendQueue: PendingSendItem[];
   ready: boolean;
@@ -60,7 +76,6 @@ export function Composer({
   placeholder: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
-  onSteer: () => void;
   onStop: () => void;
   onVoice: () => void;
   onCancelVoice: () => void;
@@ -69,6 +84,7 @@ export function Composer({
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const messageRef = useRef<InputRef>(null);
+  const [queueExpanded, setQueueExpanded] = useState(false);
 
   function focusMessage() {
     messageRef.current?.focus();
@@ -100,43 +116,89 @@ export function Composer({
     }
   }
 
+  const queueNeedsScroll = pendingSendQueue.length > QUEUE_EXPANDED_MAX;
+  const visibleQueue = queueExpanded
+    ? pendingSendQueue
+    : pendingSendQueue.slice(0, QUEUE_COLLAPSED_VISIBLE);
+  const hiddenCount = Math.max(0, pendingSendQueue.length - visibleQueue.length);
+
   return (
     <Flex vertical gap={8} className="dock">
       {error ? <Alert type="error" showIcon title={error} /> : null}
 
       {pendingSendQueue.length > 0 ? (
-        <Flex vertical gap={4} className="pending-send-queue" aria-label="Queued messages">
-          <span className="pending-send-queue-label">Queued</span>
-          <ol className="pending-send-queue-list">
-            {pendingSendQueue.map((item, index) => (
-              <li key={item.localId} className="pending-send-queue-item">
-                <span className="pending-send-queue-index">{index + 1}.</span>
-                <span className="pending-send-queue-text">
-                  {item.text.trim().length > 0
-                    ? item.text.length > 120
-                      ? `${item.text.slice(0, 120)}…`
-                      : item.text
-                    : item.attachments.length > 0
-                      ? `Attachments (${item.attachments.length})`
-                      : "Empty message"}
-                </span>
-                {item.attachments.length > 0 ? (
-                  <span className="pending-send-queue-attachments">
-                    {item.attachments.map((file) => file.displayName).join(", ")}
-                  </span>
-                ) : null}
-                <Button
-                  type="text"
-                  size="small"
-                  aria-label={`Remove queue item ${index + 1}`}
-                  onClick={() => removeQueuedSend(item.localId)}
-                >
-                  Remove
-                </Button>
-              </li>
-            ))}
-          </ol>
-        </Flex>
+        <section className="pending-send-queue" aria-label="Queued messages">
+          <Flex justify="space-between" align="center" className="pending-send-queue-header">
+            <span className="pending-send-queue-label">
+              Queued · {pendingSendQueue.length}
+            </span>
+            {pendingSendQueue.length > QUEUE_COLLAPSED_VISIBLE ? (
+              <Button
+                type="text"
+                size="small"
+                aria-expanded={queueExpanded}
+                aria-label={queueExpanded ? "Collapse queued messages" : "Expand queued messages"}
+                onClick={() => setQueueExpanded((value) => !value)}
+              >
+                {queueExpanded ? "Collapse" : "Expand"}
+              </Button>
+            ) : null}
+          </Flex>
+          <ul
+            className={`pending-send-queue-list${queueNeedsScroll && queueExpanded ? " pending-send-queue-list-scroll" : ""}`}
+          >
+            {visibleQueue.map((item) => {
+              const position = pendingSendQueue.findIndex((queued) => queued.localId === item.localId) + 1;
+              const steerEnabled = composerSteerEnabled(item.localId);
+              return (
+                <li key={item.localId} className="pending-send-queue-item">
+                  <UnorderedListOutlined className="pending-send-queue-icon" aria-hidden="true" />
+                  <div className="pending-send-queue-body">
+                    <span className="pending-send-queue-text" title={queuePreview(item)}>
+                      {queuePreview(item)}
+                    </span>
+                    {item.attachments.length > 0 ? (
+                      <span className="pending-send-queue-attachments">
+                        {item.attachments.map((file) => file.displayName).join(", ")}
+                      </span>
+                    ) : null}
+                    {item.dispatching ? (
+                      <span className="pending-send-queue-status">Sending…</span>
+                    ) : item.error ? (
+                      <span className="pending-send-queue-status pending-send-queue-status-error">{item.error}</span>
+                    ) : null}
+                  </div>
+                  <Flex gap={4} align="center" className="pending-send-queue-actions">
+                    <Tooltip title="Steer">
+                      <Button
+                        type="text"
+                        size="small"
+                        disabled={!steerEnabled}
+                        aria-label={`Steer queued message ${position}`}
+                        onClick={() => void steerQueuedSend(item.localId)}
+                      >
+                        Steer
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Remove">
+                      <Button
+                        type="text"
+                        size="small"
+                        disabled={item.dispatching}
+                        aria-label={`Remove queued message ${position}`}
+                        icon={<DeleteOutlined />}
+                        onClick={() => void removeQueuedSend(item.localId)}
+                      />
+                    </Tooltip>
+                  </Flex>
+                </li>
+              );
+            })}
+          </ul>
+          {!queueExpanded && hiddenCount > 0 ? (
+            <span className="pending-send-queue-more">{hiddenCount} more queued</span>
+          ) : null}
+        </section>
       ) : null}
 
       <form
@@ -224,13 +286,6 @@ export function Composer({
               <Button aria-label="Retry" onClick={onRetry}>
                 Retry
               </Button>
-            ) : null}
-            {canSteer ? (
-              <Tooltip title="Steer">
-                <Button htmlType="button" aria-label="Steer" onClick={onSteer}>
-                  Steer
-                </Button>
-              </Tooltip>
             ) : null}
             {canStop ? (
               <Tooltip title="Stop">

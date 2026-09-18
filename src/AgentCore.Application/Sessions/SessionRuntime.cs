@@ -78,6 +78,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _ttsUsesSpeech;
     private int _ttsFedLength;
     private bool _responseTerminal;
+    private string? _modelFinishReason;
     private CancellationTokenSource? _responseCts;
     private DateTimeOffset _lastCheckpoint = DateTimeOffset.MinValue;
     private int _inflight;
@@ -1888,7 +1889,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case ModelCompleted { Reason: ModelStopReason.ToolCalls }:
                 break;
-            case ModelCompleted:
+            case ModelCompleted completed:
+                _modelFinishReason = completed.Reason switch
+                {
+                    ModelStopReason.LengthLimit => "lengthLimit",
+                    ModelStopReason.ContentFiltered => "contentFiltered",
+                    _ => null
+                };
                 await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: true, cancellationToken)
                     .ConfigureAwait(false);
                 UpdateStreamingAssistant();
@@ -2007,6 +2014,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
         }
+        else if (reason is "userStop")
+        {
+            await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
+            SchedulePostResponseIdleTimer();
+            await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
@@ -2042,7 +2055,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         new SessionOutput(
                             context,
                             capturedResponseId,
-                            new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
+                            new ResponseCompletedOutput(
+                                failed,
+                                HeardTextEndExclusive: heard,
+                                FinishReason: failed ? null : _modelFinishReason)),
                         ct)
                     .ConfigureAwait(false);
                 ClearActive();
@@ -2389,6 +2405,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         _activeResponseId = null;
         _activeEntryId = null;
+        _modelFinishReason = null;
         _responseCts?.Dispose();
         _responseCts = null;
         _ttsCts?.Dispose();

@@ -41,6 +41,15 @@ public sealed class UserTextAdmissionTests
         Assert.NotEqual(interrupt, queue);
     }
 
+    [Fact]
+    public void FingerprintFromStoredEntry_assumes_interrupt_for_legacy_rows_without_fingerprint()
+    {
+        var entry = UserEntry(1, "queued legacy");
+        var fingerprint = UserTextAdmission.FingerprintFromStoredEntry(entry);
+        var expected = UserTextAdmission.Fingerprint(null, entry.Text, [], UserTextBehavior.Interrupt);
+        Assert.Equal(expected, fingerprint);
+    }
+
     private static ConversationEntry UserEntry(int sequence, string text) =>
         new(
             Guid.NewGuid(),

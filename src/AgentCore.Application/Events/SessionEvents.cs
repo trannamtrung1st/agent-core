@@ -226,7 +226,8 @@ public sealed record AudioFrameOutput(
 public sealed record ResponseCompletedOutput(
     bool Failed,
     int HeardTextEndExclusive,
-    string? InterruptReason = null) : OutputPayload;
+    string? InterruptReason = null,
+    string? FinishReason = null) : OutputPayload;
 
 public sealed record ResponseInterruptedOutput(string Reason, int HeardTextEndExclusive) : OutputPayload;
 

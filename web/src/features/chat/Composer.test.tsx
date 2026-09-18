@@ -6,7 +6,10 @@ import { Composer } from "./Composer";
 vi.mock("../../services/realtime", () => ({
   queueComposerFiles: vi.fn().mockResolvedValue(undefined),
   removeComposerFile: vi.fn(),
-  retryComposerFile: vi.fn()
+  retryComposerFile: vi.fn(),
+  composerSteerEnabled: vi.fn(() => false),
+  steerQueuedSend: vi.fn(),
+  removeQueuedSend: vi.fn()
 }));
 
 function emptyComposerProps() {
@@ -14,7 +17,6 @@ function emptyComposerProps() {
     draft: "",
     canSend: false,
     canStop: false,
-    canSteer: false,
     sendLabel: "Send",
     pendingSendQueue: [],
     ready: true,
@@ -28,7 +30,6 @@ function emptyComposerProps() {
     placeholder: "Message Agent Core...",
     onDraftChange: vi.fn(),
     onSend: vi.fn(),
-    onSteer: vi.fn(),
     onStop: vi.fn(),
     onVoice: vi.fn(),
     onCancelVoice: vi.fn(),

@@ -49,8 +49,7 @@ let captureStreamId: string | null = null;
 let voiceRequest: Promise<void> | null = null;
 let voiceEpoch = 0;
 let sendRequest: Promise<void> | null = null;
-let cancelRequest: Promise<void> | null = null;
-let stopPendingResponseId: string | null = null;
+const pendingStops = new Map<string, Promise<void>>();
 let startRequest: Promise<boolean> | null = null;
 
 const MAX_PENDING_SEND_ITEMS = 20;
@@ -260,7 +259,33 @@ function handleHubClosed(): void {
     return;
   }
 
-  markConnectionFailed("Connection lost. Retry to continue.");
+  void recoverFromTransientDisconnect();
+}
+
+async function recoverFromTransientDisconnect(): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (!connection || !snapshot.sessionId) {
+    markConnectionFailed("Connection lost. Retry to continue.");
+    return;
+  }
+
+  beginReconnectBudget();
+  dropLiveTransport("reconnecting");
+  try {
+    await connection.stop();
+  } catch {
+    // ignored
+  }
+
+  try {
+    await connection.start();
+    const attached = await attachWithBusyRetry(snapshot.lastServerSequence || null);
+    if (!attached && useSessionStore.getState().connection === "reconnecting") {
+      markConnectionFailed("Connection lost. Retry to continue.");
+    }
+  } catch (error) {
+    markConnectionFailed(error instanceof Error ? error.message : "Connection lost. Retry to continue.");
+  }
 }
 
 async function recoverFromSequenceGap(): Promise<void> {
@@ -309,10 +334,7 @@ function handleEvent(raw: ServerEvent): void {
     void hydrateBoundAttachments(next.sessionId);
     void hydrateActiveHistory(next.sessionId, next.entries);
   }
-  if (
-    raw.type === "agent.response.completed"
-    || (raw.type === "agent.response.interrupted" && String(raw.payload.reason ?? "") !== "userStop")
-  ) {
+  if (raw.type === "agent.response.completed") {
     void maybeAutoDispatchQueueHead();
   }
   if (raw.type === "session.state.changed" && String(raw.payload.status ?? "") === "paused") {
@@ -917,8 +939,7 @@ export const realtimeTestHooks =
           reconnectBudgetStarted = 0;
           pendingUserText = null;
           sendRequest = null;
-          cancelRequest = null;
-          stopPendingResponseId = null;
+          pendingStops.clear();
           voiceEpoch = 0;
           stoppedResponses.clear();
           flushing = false;
@@ -1923,14 +1944,22 @@ function releasePendingSendAttachments(item: PendingSendItem): void {
   }
 }
 
-export function removeQueuedSend(localId: string): void {
+export async function removeQueuedSend(localId: string): Promise<void> {
   const snapshot = useSessionStore.getState();
   const item = snapshot.pendingSendQueue.find((queued) => queued.localId === localId);
   if (!item) {
     return;
   }
 
-  releasePendingSendAttachments(item);
+  const sessionId = snapshot.sessionId;
+  for (const attachment of item.attachments) {
+    if (sessionId && attachment.attachmentId) {
+      await abortPendingAttachment(sessionId, attachment.attachmentId).catch(() => undefined);
+    }
+
+    releasePendingFile(attachment.localId);
+  }
+
   useSessionStore.setState({
     pendingSendQueue: snapshot.pendingSendQueue.filter((queued) => queued.localId !== localId)
   });
@@ -1979,13 +2008,23 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
   return true;
 }
 
+type DispatchSource = { kind: "composer" } | { kind: "queue"; localId: string };
+
 type OutgoingUserMessage = {
   text: string;
   attachmentIds: string[];
   attachments: PendingAttachment[];
   eventId?: string;
   behavior?: "interrupt";
+  source?: DispatchSource;
 };
+
+function clearQueueItemDispatchState(localId: string): void {
+  useSessionStore.setState((state) => ({
+    pendingSendQueue: state.pendingSendQueue.map((item) =>
+      item.localId === localId ? { ...item, dispatching: false } : item)
+  }));
+}
 
 async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promise<boolean> {
   if (sendRequest) {
@@ -2026,6 +2065,14 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     payload.behavior = "interrupt";
   }
 
+  const queueLocalId = message.source?.kind === "queue" ? message.source.localId : null;
+  if (queueLocalId) {
+    useSessionStore.setState((state) => ({
+      pendingSendQueue: state.pendingSendQueue.map((item) =>
+        item.localId === queueLocalId ? { ...item, dispatching: true, error: null } : item)
+    }));
+  }
+
   let accepted = false;
   sendRequest = (async () => {
     try {
@@ -2033,7 +2080,19 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
       if (!ack?.accepted) {
         pendingUserText = null;
         removeOptimisticUserEntry(eventId);
-        restoreDraft(text, ack?.error?.message ?? "Message was not accepted.");
+        const errorMessage = ack?.error?.message ?? "Message was not accepted.";
+        if (queueLocalId) {
+          clearQueueItemDispatchState(queueLocalId);
+          useSessionStore.setState((state) => ({
+            pendingSendQueue: state.pendingSendQueue.map((item) =>
+              item.localId === queueLocalId ? { ...item, error: errorMessage } : item),
+            error: state.errorFatal ? state.error : errorMessage,
+            errorFatal: false
+          }));
+        } else {
+          restoreDraft(text, errorMessage);
+        }
+
         return;
       }
 
@@ -2051,11 +2110,22 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         commitOptimisticUserEntry(eventId);
       }
     } catch (error) {
-      useSessionStore.setState({
-        pendingAttachments: pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot,
-        error: error instanceof Error ? error.message : "Message was not accepted.",
-        errorFatal: false
-      });
+      const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
+      if (queueLocalId) {
+        clearQueueItemDispatchState(queueLocalId);
+        useSessionStore.setState((state) => ({
+          pendingSendQueue: state.pendingSendQueue.map((item) =>
+            item.localId === queueLocalId ? { ...item, error: errorMessage } : item),
+          error: errorMessage,
+          errorFatal: false
+        }));
+      } else {
+        useSessionStore.setState({
+          pendingAttachments: pendingUserText?.pendingAttachments ?? pendingAttachmentSnapshot,
+          error: errorMessage,
+          errorFatal: false
+        });
+      }
     }
   })();
 
@@ -2085,7 +2155,8 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
     text: head.text,
     attachmentIds: head.attachmentIds,
     attachments: head.attachments,
-    eventId: head.eventId
+    eventId: head.eventId,
+    source: { kind: "queue", localId: head.localId }
   });
   if (!accepted) {
     return;
@@ -2097,14 +2168,16 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
   }));
 }
 
-export function composerSteerEnabled(): boolean {
+export function composerSteerEnabled(localId: string): boolean {
   const snapshot = useSessionStore.getState();
+  const item = snapshot.pendingSendQueue.find((queued) => queued.localId === localId);
   return (
     !isReadonlySession(snapshot)
     && snapshot.status !== "paused"
     && snapshot.connection === "ready"
     && snapshot.liveResponseId != null
-    && snapshot.pendingSendQueue.length > 0
+    && item != null
+    && !item.dispatching
   );
 }
 
@@ -2113,27 +2186,28 @@ export function composerSendLabel(): string {
   return snapshot.liveResponseId != null ? "Queue" : "Send";
 }
 
-export async function steerQueuedSend(): Promise<void> {
+export async function steerQueuedSend(localId: string): Promise<void> {
   const snapshot = useSessionStore.getState();
-  if (!composerSteerEnabled() || snapshot.pendingSendQueue.length === 0) {
+  const item = snapshot.pendingSendQueue.find((queued) => queued.localId === localId);
+  if (!item || !composerSteerEnabled(localId)) {
     return;
   }
 
-  const head = snapshot.pendingSendQueue[0];
   const accepted = await dispatchOutgoingUserMessage({
-    text: head.text,
-    attachmentIds: head.attachmentIds,
-    attachments: head.attachments,
-    eventId: head.eventId,
-    behavior: "interrupt"
+    text: item.text,
+    attachmentIds: item.attachmentIds,
+    attachments: item.attachments,
+    eventId: item.eventId,
+    behavior: "interrupt",
+    source: { kind: "queue", localId: item.localId }
   });
   if (!accepted) {
     return;
   }
 
-  releasePendingSendAttachments(head);
+  releasePendingSendAttachments(item);
   useSessionStore.setState((state) => ({
-    pendingSendQueue: state.pendingSendQueue.filter((item) => item.localId !== head.localId)
+    pendingSendQueue: state.pendingSendQueue.filter((queued) => queued.localId !== localId)
   }));
 }
 
@@ -2233,14 +2307,14 @@ export async function cancelRenderedResponse(): Promise<void> {
     return;
   }
 
-  if (cancelRequest && stopPendingResponseId === responseId) {
-    return cancelRequest;
+  const existing = pendingStops.get(responseId);
+  if (existing) {
+    return existing;
   }
 
   commandSequence += 1;
   const sequence = commandSequence;
-  stopPendingResponseId = responseId;
-  cancelRequest = (async () => {
+  const stopPromise = (async () => {
     try {
       const ack = await invoke("CancelResponse", "agent.response.cancel", {}, sequence, responseId);
       const latest = useSessionStore.getState();
@@ -2265,17 +2339,12 @@ export async function cancelRenderedResponse(): Promise<void> {
         errorFatal: false
       });
     } finally {
-      if (stopPendingResponseId === responseId) {
-        stopPendingResponseId = null;
-      }
+      pendingStops.delete(responseId);
     }
   })();
 
-  try {
-    await cancelRequest;
-  } finally {
-    cancelRequest = null;
-  }
+  pendingStops.set(responseId, stopPromise);
+  return stopPromise;
 }
 
 export async function requestVoice(): Promise<void> {

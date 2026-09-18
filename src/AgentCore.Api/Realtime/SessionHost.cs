@@ -1808,7 +1808,8 @@ public static class SessionEventMapper
             ResponseCompletedOutput terminal => ("agent.response.completed", new Dictionary<string, object?>
             {
                 ["status"] = terminal.Failed ? "failed" : "completed",
-                ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive
+                ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive,
+                ["finishReason"] = terminal.FinishReason
             }),
             PlaybackStopOutput stop => ("playback.stop", new Dictionary<string, object?>
             {

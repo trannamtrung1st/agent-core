@@ -10,7 +10,6 @@ import {
   navigateFromBrowserHistory,
   composerSendEnabled,
   composerSendLabel,
-  composerSteerEnabled,
   composerStopEnabled,
   hangUp,
   openCatalogSession,
@@ -20,7 +19,6 @@ import {
   resumePausedSession,
   selectAgent,
   sendDraft,
-  steerQueuedSend,
   cancelRenderedResponse,
   setDraft,
   setMuted
@@ -89,7 +87,6 @@ export function ChatApp() {
   const voiceLive = state.mode === "voice" && state.captureLive;
   const canSend = composerSendEnabled();
   const canStop = composerStopEnabled();
-  const canSteer = composerSteerEnabled();
   const sendLabel = composerSendLabel();
   const inSession = state.sessionId != null;
   const readonly = isReadonlySession(state);
@@ -282,7 +279,6 @@ export function ChatApp() {
                       draft={state.draft}
                       canSend={canSend}
                       canStop={canStop}
-                      canSteer={canSteer}
                       sendLabel={sendLabel}
                       pendingSendQueue={state.pendingSendQueue}
                       ready={composerReady}
@@ -295,7 +291,6 @@ export function ChatApp() {
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}
                       onSend={() => void sendDraft()}
-                      onSteer={() => void steerQueuedSend()}
                       onStop={() => void cancelRenderedResponse()}
                       onVoice={() => void requestVoice()}
                       onCancelVoice={() => void cancelVoice()}

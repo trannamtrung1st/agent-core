@@ -33,6 +33,7 @@ export type HistoryEntry = {
   createdAt: string;
   attachments?: HistoryAttachment[];
   blocks?: HistoryBlock[];
+  finishReason?: string | null;
 };
 
 export type ServerEvent = {
@@ -55,6 +56,8 @@ export type PendingSendItem = {
   text: string;
   attachmentIds: string[];
   attachments: PendingAttachment[];
+  dispatching?: boolean;
+  error?: string | null;
 };
 
 export type SessionView = {
@@ -360,6 +363,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const status = event.type === "agent.response.interrupted"
         ? "interrupted"
         : asString(event.payload.status) === "failed" ? "failed" : "completed";
+      const finishReason = event.type === "agent.response.completed"
+        ? asString(event.payload.finishReason) || null
+        : null;
       const tombstones = event.responseId
         ? { ...state.tombstones, [event.responseId]: status as "interrupted" | "completed" | "failed" }
         : state.tombstones;
@@ -371,7 +377,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         tombstones,
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) =>
-          entry.responseId === event.responseId ? { ...entry, status } : entry)
+          entry.responseId === event.responseId
+            ? { ...entry, status, finishReason: finishReason ?? entry.finishReason ?? null }
+            : entry)
       };
     }
     case "session.state.changed": {

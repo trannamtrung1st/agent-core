@@ -37,8 +37,17 @@ jobs:
         working-directory: tests/realtime-js
         run: npm ci
 
-      - name: Backend tests
-        run: dotnet test AgentCore.sln --nologo
+      - name: Backend Domain tests
+        run: dotnet test tests/AgentCore.Domain.Tests/AgentCore.Domain.Tests.csproj --nologo
+
+      - name: Backend Infrastructure tests
+        run: dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo
+
+      - name: Backend Application tests
+        run: dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --nologo --blame-hang --blame-hang-timeout 5m
+
+      - name: Backend API tests
+        run: dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
 
       - name: Frontend install, unit tests, and build
         working-directory: web

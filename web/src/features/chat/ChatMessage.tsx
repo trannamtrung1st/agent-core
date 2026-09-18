@@ -17,7 +17,7 @@ export function ChatMessage({
 }) {
   const isUser = entry.role === "user";
   const speaker = isUser ? "You" : agentName || "Agent";
-  const status = statusLabel(entry.status);
+  const status = statusLabel(entry.status, entry.finishReason);
   const timeLabel = formatChatTime(entry.createdAt);
   const hasFiles = Boolean(entry.attachments?.length && sessionId);
   const hasBlocks = Boolean(entry.blocks?.length);

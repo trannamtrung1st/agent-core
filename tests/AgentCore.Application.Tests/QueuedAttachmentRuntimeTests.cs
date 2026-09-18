@@ -67,7 +67,8 @@ public sealed class QueuedAttachmentRuntimeTests
         Assert.Equal("with file", queued.Text);
         Assert.Equal(uploaded.AttachmentId, queued.Attachments![0].AttachmentId);
         live.Gate.TrySetResult();
-        await live.Output.WaitForAsync(_ => live.Output.Terminals.Count >= 2);
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await WaitForModelRequestsAsync(live, 2, wait.Token);
         await live.Runtime.WaitUntilIdleAsync();
         Assert.Contains(
             live.Model.Requests.SelectMany(request => request.Messages),
@@ -107,7 +108,8 @@ public sealed class QueuedAttachmentRuntimeTests
                 [second.AttachmentId],
                 UserTextBehavior.Queue) is true);
         live.Gate.TrySetResult();
-        await live.Output.WaitForAsync(_ => live.Output.Terminals.Count >= 2);
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await WaitForModelRequestsAsync(live, 2, wait.Token);
         await live.Runtime.WaitUntilIdleAsync();
         var users = live.Runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).ToArray();
         Assert.Equal(["Please explain", "U2", "U3"], users.Select(entry => entry.Text).ToArray());
@@ -287,6 +289,23 @@ public sealed class QueuedAttachmentRuntimeTests
             NullLogger<SessionRuntime>.Instance,
             attachments: attachments,
             processor: processor);
+    }
+
+    private static async Task WaitForModelRequestsAsync(LiveHarness live, int minimum, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 750; attempt++)
+        {
+            if (live.Model.Requests.Count >= minimum)
+            {
+                return;
+            }
+
+            await Task.Delay(20, cancellationToken);
+        }
+
+        Assert.True(
+            live.Model.Requests.Count >= minimum,
+            $"Expected at least {minimum} model requests, observed {live.Model.Requests.Count}.");
     }
 
     private static async Task WaitForBoundAsync(IAttachmentStore attachments, Guid sessionId, Guid attachmentId)

@@ -4,6 +4,8 @@ namespace AgentCore.Application.Testing;
 
 public sealed class CapturingSessionOutput : ISessionOutput, ISessionAudioOutput
 {
+    public static TimeSpan DefaultWaitTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
     private readonly List<SessionOutput> _items = [];
     private readonly List<Waiter> _waiters = [];
 
@@ -63,6 +65,38 @@ public sealed class CapturingSessionOutput : ISessionOutput, ISessionAudioOutput
     public Task<SessionOutput> WaitForAsync(
         Func<SessionOutput, bool> match,
         CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.CanBeCanceled)
+        {
+            return WaitForCore(match, cancellationToken);
+        }
+
+        return WaitForWithTimeoutAsync(match, DefaultWaitTimeout);
+    }
+
+    public Task<SessionOutput> WaitForAsync(
+        Func<SessionOutput, bool> match,
+        TimeSpan timeout) =>
+        WaitForWithTimeoutAsync(match, timeout);
+
+    private async Task<SessionOutput> WaitForWithTimeoutAsync(
+        Func<SessionOutput, bool> match,
+        TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        try
+        {
+            return await WaitForCore(match, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Timed out after {timeout.TotalSeconds:0.#}s waiting for session output.");
+        }
+    }
+
+    private Task<SessionOutput> WaitForCore(
+        Func<SessionOutput, bool> match,
+        CancellationToken cancellationToken)
     {
         lock (_items)
         {

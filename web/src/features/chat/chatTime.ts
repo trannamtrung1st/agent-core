@@ -23,7 +23,10 @@ export function formatChatTime(
   }).format(date);
 }
 
-export function statusLabel(status: string): string | null {
+export function statusLabel(status: string, finishReason?: string | null): string | null {
+  if (status === "completed" && finishReason === "lengthLimit") {
+    return "Output limit reached";
+  }
   if (status === "interrupted") {
     return "Interrupted";
   }

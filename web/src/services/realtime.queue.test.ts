@@ -151,6 +151,45 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
   });
 
+  it("does not dispatch the queue head after non-terminal interruption", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        {
+          localId: "q1",
+          eventId: "e1",
+          text: "U2",
+          attachmentIds: [],
+          attachments: []
+        }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "evt",
+      sequence: 2,
+      timestamp: new Date().toISOString(),
+      correlationId: "evt",
+      causationId: null,
+      responseId: "r1",
+      type: "agent.response.interrupted",
+      payload: { reason: "newText" }
+    });
+    await Promise.resolve();
+    expect(invoke.mock.calls.some((call) => call[0] === "SendText")).toBe(false);
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+  });
+
   it("steers with interrupt semantics and leaves later queued items", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
@@ -179,8 +218,8 @@ describe("Codex-style pending send queue", () => {
       agents: [],
       selectedAgentId: "examiner"
     });
-    expect(composerSteerEnabled()).toBe(true);
-    await steerQueuedSend();
+    expect(composerSteerEnabled("q1")).toBe(true);
+    await steerQueuedSend("q1");
     expect(invoke).toHaveBeenCalledWith(
       "SendText",
       expect.objectContaining({
@@ -192,7 +231,7 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().pendingSendQueue.map((item) => item.text)).toEqual(["U3"]);
   });
 
-  it("removing a queued item releases its attachment snapshot", () => {
+  it("removing a queued item releases its attachment snapshot", async () => {
     useSessionStore.setState({
       ...emptySession(),
       pendingSendQueue: [
@@ -216,7 +255,7 @@ describe("Codex-style pending send queue", () => {
         }
       ]
     });
-    removeQueuedSend("q1");
+    await removeQueuedSend("q1");
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
   });
 

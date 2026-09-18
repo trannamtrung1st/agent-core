@@ -610,15 +610,17 @@ body,
 .pending-send-queue {
   padding: var(--ac-space-compact) var(--ac-space-default);
   border-radius: 12px;
-  border: 1px dashed var(--ac-color-border);
-  background: color-mix(in srgb, var(--ac-color-elevated) 88%, transparent);
+  border: 1px solid var(--ac-color-border);
+  background: var(--ac-color-elevated);
+}
+
+.pending-send-queue-header {
+  margin-bottom: 6px;
 }
 
 .pending-send-queue-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ac-color-text-secondary);
 }
 
@@ -628,30 +630,71 @@ body,
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.pending-send-queue-list-scroll {
+  max-height: 12.5rem;
+  overflow-y: auto;
 }
 
 .pending-send-queue-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ac-color-border) 70%, transparent);
   font-size: 13px;
 }
 
-.pending-send-queue-index {
+.pending-send-queue-item:last-child {
+  border-bottom: none;
+}
+
+.pending-send-queue-icon {
   color: var(--ac-color-text-secondary);
-  font-variant-numeric: tabular-nums;
+}
+
+.pending-send-queue-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .pending-send-queue-text {
-  flex: 1 1 auto;
-  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pending-send-queue-attachments {
   color: var(--ac-color-text-secondary);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-send-queue-status {
+  font-size: 12px;
+  color: var(--ac-color-text-secondary);
+}
+
+.pending-send-queue-status-error {
+  color: var(--ant-color-error);
+}
+
+.pending-send-queue-more {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ac-color-text-secondary);
+}
+
+.pending-send-queue-actions {
+  flex-shrink: 0;
 }
 
 .composer {

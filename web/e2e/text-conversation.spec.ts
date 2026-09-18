@@ -76,10 +76,12 @@ test("Steer sends the queue head and auto-dispatch follows completion", async ({
   await expect(page.getByLabel("Queued messages")).toBeVisible();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toHaveCount(0);
   await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Steer" }).click();
+  await page.getByRole("button", { name: "Steer queued message 1" }).click();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toBeVisible({ timeout: 25_000 });
-  await expect(page.locator(".chat-message-assistant").filter({ hasText: "Hello from synthetic." }).first()).toBeVisible({ timeout: 25_000 });
+  await expect(page.locator(".chat-message-assistant").filter({ hasText: "Hello from synthetic." })).toHaveCount(2, {
+    timeout: 25_000
+  });
 });
 
 test("queued attachment stays with the queued item until dispatch", async ({ page }) => {
@@ -96,7 +98,7 @@ test("queued attachment stays with the queued item until dispatch", async ({ pag
   await page.locator('button.composer-send[aria-label="Queue"]').click();
   await expect(page.getByLabel("Queued messages")).toContainText("queued.txt");
   await expect(page.getByRole("link", { name: "queued.txt" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Steer" }).click();
+  await page.getByRole("button", { name: "Steer queued message 1" }).click();
   await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible({ timeout: 15_000 });
 });
 
