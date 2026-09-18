@@ -14,6 +14,7 @@ import {
 import { sameSessionId } from "../../app/sessionRoute";
 import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
 import { formatChatTime } from "./chatTime";
+import { lifecycleOutcomeLabel } from "./sessionLifecycle";
 
 function agentLabel(agents: AgentDescriptor[], item: CatalogItem): string {
   const agent = agents.find((row) => row.id === item.agentId && row.version === item.agentVersion)
@@ -27,7 +28,7 @@ function agentLabel(agents: AgentDescriptor[], item: CatalogItem): string {
 
 function rowState(item: CatalogItem): string {
   if (item.ended) {
-    return "Ended";
+    return lifecycleOutcomeLabel(item.lifecycleStatus);
   }
   if (item.archived) {
     return "Archived";

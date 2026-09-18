@@ -737,11 +737,14 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
   }
-  if (raw.type === "session.state.changed" && String(raw.payload.status ?? "") === "paused") {
-    void stopConnection();
-    stopReceipts();
-    capture.release();
-    void releaseClientSpeech();
+  if (raw.type === "session.state.changed") {
+    const status = String(raw.payload.status ?? "");
+    if (status === "paused" || status === "ended") {
+      void stopConnection();
+      stopReceipts();
+      capture.release();
+      void releaseClientSpeech();
+    }
   }
   if (raw.type === "transcript.final") {
     void hydrateBoundAttachments(next.sessionId);
@@ -1867,7 +1870,8 @@ export async function openSessionById(
         status: view.status,
         archived: false,
         ended: view.status === "ended",
-        pauseReason: view.pauseReason ?? null
+        pauseReason: view.pauseReason ?? null,
+        lifecycleStatus: view.lifecycleStatus ?? null
       },
       options
     );
@@ -1891,6 +1895,7 @@ export async function openCatalogSession(
     archived: boolean;
     ended: boolean;
     pauseReason?: string | null;
+    lifecycleStatus?: string | null;
   },
   options?: { syncUrl?: boolean }
 ): Promise<OpenSessionResult> {
@@ -2052,6 +2057,7 @@ async function showPausedSession(
       agentRole: agent?.role ?? "",
       voiceAvailable: Boolean(agent?.voiceAvailable),
       status: "paused",
+      lifecycleStatus: view.lifecycleStatus ?? "paused",
       pauseReason: view.pauseReason ?? null,
       lastServerSequence: view.lastEntrySequence ?? 0,
       error: null,
@@ -2107,6 +2113,7 @@ async function showEndedSession(
     connection: "connecting",
     sessionId,
     status: "ended",
+    lifecycleStatus: "ended",
     routeNotice: null
   });
 
@@ -2139,6 +2146,7 @@ async function showEndedSession(
       agentRole: agent?.role ?? "",
       voiceAvailable: false,
       status: "ended",
+      lifecycleStatus: view.lifecycleStatus ?? "ended",
       lastServerSequence: view.lastEntrySequence ?? 0,
       error: null,
       errorFatal: false
@@ -2156,6 +2164,7 @@ async function showEndedSession(
     useSessionStore.setState({
       connection: "failed",
       status: "ended",
+      lifecycleStatus: "ended",
       error: error instanceof Error ? error.message : "Unable to open the conversation.",
       errorFatal: false
     });
@@ -2186,6 +2195,10 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
     const latest = useSessionStore.getState();
     if (!sameSessionId(latest.sessionId, sessionId) || latest.status !== "ended") {
       return;
+    }
+
+    if (view.lifecycleStatus && view.lifecycleStatus !== latest.lifecycleStatus) {
+      useSessionStore.setState({ lifecycleStatus: view.lifecycleStatus });
     }
 
     const sequence = view.lastEntrySequence ?? 0;
@@ -3261,6 +3274,7 @@ export async function hangUp(): Promise<void> {
     agentName: latest.agentName,
     agentRole: latest.agentRole,
     status: "ended",
+    lifecycleStatus: latest.lifecycleStatus ?? "ended",
     entries: latest.entries,
     lastServerSequence: latest.lastServerSequence,
     historyHasOlder: latest.historyHasOlder,

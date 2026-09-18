@@ -265,6 +265,23 @@ export async function listSessionMessages(
   return (await response.json()) as HistoryPage;
 }
 
+export async function transitionLifecycle(
+  sessionId: string,
+  target: string,
+  source = "host"
+): Promise<CatalogItem> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/lifecycle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target, source })
+  });
+  if (!response.ok) {
+    throw new Error("Unable to update the session lifecycle.");
+  }
+
+  return (await response.json()) as CatalogItem;
+}
+
 export async function reopenSession(sessionId: string): Promise<"reopened" | "in-use"> {
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}/reopen`, { method: "POST" });
   if (response.status === 409) {

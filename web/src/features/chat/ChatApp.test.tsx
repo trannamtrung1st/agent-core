@@ -530,6 +530,43 @@ describe("ChatApp accessibility", () => {
     expect(screen.queryByRole("button", { name: "Conversation actions" })).not.toBeInTheDocument();
   });
 
+  it("names completed sessions without Resume or composer", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "idle",
+        status: "ended",
+        lifecycleStatus: "completed",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner",
+        entries: [
+          {
+            entryId: "e1",
+            sequence: 1,
+            sourceEventId: "e1",
+            role: "user",
+            text: "Please explain.",
+            responseId: null,
+            status: "completed",
+            deliveryMode: "text",
+            heardTextEndExclusive: 15,
+            receivedTextEndExclusive: 15,
+            createdAt: "2026-09-16T00:00:00.000Z"
+          }
+        ]
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByTestId("connection")).toHaveTextContent("Completed");
+    expect(screen.getByText("This conversation is completed.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+  });
+
   it("shows reason-specific pause copy and a keyboard-operable Resume", async () => {
     await act(async () => {
       useSessionStore.setState({

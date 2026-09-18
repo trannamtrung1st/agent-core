@@ -21,6 +21,12 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, connection: "connecting" })).toBe("Connecting");
     expect(conversationStatus({ ...ready, connection: "idle" })).toBe("Ready");
     expect(conversationStatus({ ...ready, connection: "idle", sessionStatus: "ended" })).toBe("Ended");
+    expect(conversationStatus({
+      ...ready,
+      connection: "idle",
+      sessionStatus: "ended",
+      lifecycleStatus: "completed"
+    })).toBe("Completed");
     expect(conversationStatus({ ...ready, sessionStatus: "ending" })).toBe("Ready");
   });
 

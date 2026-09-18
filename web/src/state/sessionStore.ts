@@ -74,6 +74,7 @@ export type SessionView = {
   mode: "text" | "voice";
   pendingMode: "text" | "voice" | null;
   status: string;
+  lifecycleStatus: string | null;
   inputState: string;
   outputState: string;
   entries: HistoryEntry[];
@@ -113,6 +114,7 @@ export const emptySession = (): SessionView => ({
   mode: "text",
   pendingMode: null,
   status: "created",
+  lifecycleStatus: null,
   inputState: "idle",
   outputState: "idle",
   entries: [],
@@ -307,6 +309,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",
         status: asString(payload.status),
+        lifecycleStatus: asString(payload.lifecycleStatus) || null,
         inputState: asString(payload.inputState) || "idle",
         outputState: asString(payload.outputState) || "idle",
         entries: historyFromPayload(payload.history),
@@ -438,12 +441,15 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const status = asString(event.payload.status) || state.status;
       const pauseReason = event.payload.pauseReason == null ? null : asString(event.payload.pauseReason);
       const paused = status === "paused";
+      const terminal = status === "ended";
       return {
         ...state,
-        connection: paused ? "idle" : state.connection,
+        connection: paused || terminal ? "idle" : state.connection,
         lastServerSequence: event.sequence,
         status,
+        lifecycleStatus: asString(event.payload.lifecycleStatus) || (terminal ? state.lifecycleStatus ?? "ended" : state.lifecycleStatus),
         pauseReason: paused ? pauseReason : null,
+        voiceAvailable: terminal ? false : state.voiceAvailable,
         inputState: asString(event.payload.inputState) || state.inputState,
         outputState: asString(event.payload.outputState) || state.outputState,
         mode,

@@ -1,9 +1,12 @@
+import { lifecycleOutcomeLabel } from "./sessionLifecycle";
+
 export type StatusSource = {
   connection: string;
   pendingVoice: boolean;
   voiceLive: boolean;
   clientTranscriptBlocked: boolean;
   sessionStatus: string;
+  lifecycleStatus?: string | null;
   inputState: string;
   outputState: string;
   liveResponseId: string | null;
@@ -61,7 +64,7 @@ export function conversationStatus(source: StatusSource): string {
 
 function idleLabel(source: StatusSource): string {
   if (source.sessionStatus === "ended") {
-    return "Ended";
+    return lifecycleOutcomeLabel(source.lifecycleStatus);
   }
 
   if (source.sessionStatus === "paused") {
@@ -189,6 +192,9 @@ export function conversationStatusTone(text: string): "live" | "wait" | "alarm" 
     text === "Reconnecting…" ||
     text === "Reconnecting" ||
     text === "Ended" ||
+    text === "Completed" ||
+    text === "Expired" ||
+    text === "Cancelled" ||
     text === "Paused" ||
     text === "Starting voice…" ||
     text === "Thinking…" ||

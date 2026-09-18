@@ -26,6 +26,7 @@ import {
 } from "../../services/realtime";
 import { AgentPicker } from "./AgentPicker";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
+import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -107,6 +108,7 @@ export function ChatApp() {
     voiceLive,
     clientTranscriptBlocked: state.clientTranscriptBlocked,
     sessionStatus: state.status,
+    lifecycleStatus: state.lifecycleStatus,
     inputState: state.inputState,
     outputState: state.outputState,
     liveResponseId: state.liveResponseId,
@@ -276,7 +278,7 @@ export function ChatApp() {
                 <div className="conversation-column">
                   {readonly ? (
                     <Typography.Text type="secondary" className="conversation-ended-note">
-                      This conversation has ended.
+                      {terminalSessionNote(state.lifecycleStatus)}
                     </Typography.Text>
                   ) : state.status === "paused" ? (
                     <Flex

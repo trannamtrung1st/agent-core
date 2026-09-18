@@ -259,6 +259,30 @@ describe("applyServerEvent", () => {
     expect(muted.muted).toBe(true);
   });
 
+  it("records additive lifecycleStatus when the protocol status becomes ended", () => {
+    const ready = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: { mode: "text", pendingMode: null, status: "attached", lifecycleStatus: "active", agent: { name: "Alex" }, history: [] }
+      })
+    );
+    expect(ready.lifecycleStatus).toBe("active");
+    const completed = applyServerEvent(
+      ready,
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: { status: "ended", lifecycleStatus: "completed", mode: "text", pendingMode: null, muted: false }
+      })
+    );
+    expect(completed.status).toBe("ended");
+    expect(completed.lifecycleStatus).toBe("completed");
+    expect(completed.connection).toBe("idle");
+    expect(completed.voiceAvailable).toBe(false);
+  });
+
   it("records input and output activity from session.state.changed", () => {
     const ready = applyServerEvent(
       emptySession(),

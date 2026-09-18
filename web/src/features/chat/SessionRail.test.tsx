@@ -151,6 +151,23 @@ describe("SessionRail", () => {
     expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
   });
 
+  it("labels completed catalog rows without renaming them Ended", () => {
+    renderRail({
+      items: [{ ...ended, lifecycleStatus: "completed", title: "Done exam" }],
+      agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+      activeSessionId: null,
+      includeArchived: false,
+      hasMore: false,
+      capabilityLost: false,
+      error: null,
+      mutation: null,
+      onNewChat: vi.fn(),
+      onOpen: vi.fn()
+    });
+    expect(screen.getByText(/· Completed/)).toBeInTheDocument();
+    expect(screen.queryByText(/· Ended/)).not.toBeInTheDocument();
+  });
+
   it("fails closed when owner capability is lost", () => {
     renderRail({
       items: [],
