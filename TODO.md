@@ -141,6 +141,8 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
   Do not persist speculative partial transcripts.
 
+- [x] Admit client-transcript evidence through the existing Interaction Controller without opening an `ISpeechRecognizer` session.
+
 - [ ] Support long speech without waiting for a turn-by-turn submit.
 
   - partial recognition events stream to backend while speaking;
@@ -190,9 +192,9 @@ Goal: inexpensive speech output without backend TTS cost while preserving the ex
   - cancellation identity;
   - stale-response rejection.
 
-- [ ] Keep conservative heard/spoken semantics.
+- [x] Keep conservative heard/spoken semantics on the server for `clientSpeech` playback (`consumedSamples=0`, completion gated on ACK).
 
-  Browser `speechSynthesis` callbacks vary by platform. Only advance heard/spoken offsets from evidence that is actually available and trustworthy; otherwise stay conservative.
+  Browser `speechSynthesis` callbacks still vary by platform; only the later Browser TTS adapter may credit from trustworthy client events.
 
 - [ ] Stop browser speech immediately on:
   - user barge-in;

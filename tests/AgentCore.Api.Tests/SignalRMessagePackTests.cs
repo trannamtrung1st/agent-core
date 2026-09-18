@@ -180,7 +180,6 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("cancel-response-stale")]
     [InlineData("cancel-response-active")]
     [InlineData("ready-transports")]
-    [InlineData("speech-evidence-kinds")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }
 
@@ -192,6 +191,7 @@ public sealed class ClientSpeechKestrelHostFixture : KestrelHostFixture
     protected override IReadOnlyDictionary<string, string?> ExtraEnvironment { get; } =
         new Dictionary<string, string?>
         {
+            ["Providers__Speech__Recognition__Adapter"] = "Browser",
             ["Providers__Speech__Synthesis__Adapter"] = "Browser"
         };
 }
@@ -201,5 +201,9 @@ public sealed class ClientSpeechMessagePackTests(ClientSpeechKestrelHostFixture 
 {
     [Theory]
     [InlineData("speech-output-segments")]
+    [InlineData("client-speech-playback-ack")]
+    [InlineData("client-speech-queue-stop")]
+    [InlineData("speech-evidence-kinds")]
+    [InlineData("speech-evidence-admission")]
     public Task JavaScript_client_speech_scenarios(string scenario) => host.RunJsAsync(scenario);
 }

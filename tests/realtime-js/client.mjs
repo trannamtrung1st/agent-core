@@ -111,6 +111,56 @@ async function createSession() {
   return response.json();
 }
 
+async function createVoiceSession() {
+  await ensureOwner();
+  const response = await fetch(`${base}/api/v1/sessions`, {
+    method: "POST",
+    headers: await ownerHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ agentId: "examiner", mode: "voice" })
+  });
+  if (!response.ok) {
+    throw new Error(`voice create failed ${response.status}`);
+  }
+  return response.json();
+}
+
+async function ackClientSpeech(connection, sessionId, sequence, attachmentId, responseId, textEndExclusive) {
+  const started = await connection.invoke(
+    "PlaybackStarted",
+    command(sessionId, sequence, "playback.started", { consumedSamples: 0, textEndExclusive: 0 }, { attachmentId, responseId })
+  );
+  if (!started.accepted) {
+    throw new Error(JSON.stringify(started));
+  }
+  const progress = await connection.invoke(
+    "PlaybackProgress",
+    command(
+      sessionId,
+      sequence + 1,
+      "playback.progress",
+      { consumedSamples: 0, textEndExclusive },
+      { attachmentId, responseId }
+    )
+  );
+  if (!progress.accepted) {
+    throw new Error(JSON.stringify(progress));
+  }
+  const completed = await connection.invoke(
+    "PlaybackCompleted",
+    command(
+      sessionId,
+      sequence + 2,
+      "playback.completed",
+      { consumedSamples: 0, textEndExclusive },
+      { attachmentId, responseId }
+    )
+  );
+  if (!completed.accepted) {
+    throw new Error(JSON.stringify(completed));
+  }
+  return sequence + 3;
+}
+
 async function run() {
   switch (scenario) {
     case "text-roundtrip": {
@@ -1081,11 +1131,14 @@ async function run() {
       break;
     }
     case "speech-evidence-kinds": {
-      const session = await createSession();
+      const session = await createVoiceSession();
       const connection = await connect();
       await attachSession(connection, session.sessionId);
-      await waitFor((evt) => evt.type === "session.ready");
-      const attachmentId = events[0].attachmentId;
+      const ready = await waitForEvent((evt) => evt.type === "session.ready");
+      if (ready.payload?.capabilities?.stt?.transport !== "clientTranscript") {
+        throw new Error(`expected clientTranscript: ${JSON.stringify(ready.payload?.capabilities)}`);
+      }
+      const attachmentId = ready.attachmentId;
       const utteranceId = uuid();
       const kinds = [
         { kind: "started", activityScore: 0.4 },
@@ -1113,17 +1166,126 @@ async function run() {
       await connection.stop();
       break;
     }
-    case "speech-output-segments": {
-      const session = await fetch(`${base}/api/v1/sessions`, {
-        method: "POST",
-        headers: await ownerHeaders({ "content-type": "application/json" }),
-        body: JSON.stringify({ agentId: "examiner", mode: "voice" })
-      }).then((response) => {
-        if (!response.ok) {
-          throw new Error(`voice create failed ${response.status}`);
-        }
-        return response.json();
+    case "speech-evidence-admission": {
+      const session = await createVoiceSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      const ready = await waitForEvent((evt) => evt.type === "session.ready");
+      const attachmentId = ready.attachmentId;
+      const streamId = ready.payload?.streamId;
+      if (!streamId) {
+        throw new Error(`clientTranscript voice must issue streamId: ${JSON.stringify(ready.payload)}`);
+      }
+      await connection.invoke("SendAudio", {
+        protocolVersion: 1,
+        sessionId: session.sessionId,
+        attachmentId,
+        streamId,
+        frameSequence: 1,
+        sampleOffset: 0,
+        data: new Uint8Array(960)
       });
+      if (connection.state !== "Connected") {
+        throw new Error("PCM on clientTranscript must be ignored without aborting");
+      }
+      const utteranceId = uuid();
+      let sequence = 1;
+      const started = await connection.invoke(
+        "SpeechEvidence",
+        command(session.sessionId, sequence++, "client.speech.evidence", { utteranceId, kind: "started", activityScore: 0.8 }, { attachmentId })
+      );
+      if (!started.accepted) {
+        throw new Error(JSON.stringify(started));
+      }
+      const partial = await connection.invoke(
+        "SpeechEvidence",
+        command(
+          session.sessionId,
+          sequence++,
+          "client.speech.evidence",
+          { utteranceId, kind: "partial", revision: 1, text: "hel" },
+          { attachmentId }
+        )
+      );
+      if (!partial.accepted) {
+        throw new Error(JSON.stringify(partial));
+      }
+      const duplicate = await connection.invoke(
+        "SpeechEvidence",
+        command(
+          session.sessionId,
+          sequence++,
+          "client.speech.evidence",
+          { utteranceId, kind: "partial", revision: 1, text: "hel" },
+          { attachmentId }
+        )
+      );
+      if (!duplicate.accepted) {
+        throw new Error(JSON.stringify(duplicate));
+      }
+      const final = await connection.invoke(
+        "SpeechEvidence",
+        command(
+          session.sessionId,
+          sequence++,
+          "client.speech.evidence",
+          { utteranceId, kind: "final", text: "hello there", confidence: 0.9 },
+          { attachmentId }
+        )
+      );
+      if (!final.accepted) {
+        throw new Error(JSON.stringify(final));
+      }
+      await waitForEvent((evt) => evt.type === "transcript.final");
+      const ended = await connection.invoke(
+        "SpeechEvidence",
+        command(
+          session.sessionId,
+          sequence++,
+          "client.speech.evidence",
+          { utteranceId, kind: "ended", durationMs: 200, activityScore: 0.2 },
+          { attachmentId }
+        )
+      );
+      if (!ended.accepted) {
+        throw new Error(JSON.stringify(ended));
+      }
+      const mute = await connection.invoke(
+        "SetMuted",
+        command(session.sessionId, sequence++, "session.mute", { muted: true }, { attachmentId })
+      );
+      if (!mute.accepted) {
+        throw new Error(JSON.stringify(mute));
+      }
+      const mutedEvidence = await connection.invoke(
+        "SpeechEvidence",
+        command(
+          session.sessionId,
+          sequence++,
+          "client.speech.evidence",
+          { utteranceId: uuid(), kind: "started", activityScore: 0.9 },
+          { attachmentId }
+        )
+      );
+      if (mutedEvidence.accepted || mutedEvidence.error?.code !== "ValidationError") {
+        throw new Error(`muted evidence must be rejected: ${JSON.stringify(mutedEvidence)}`);
+      }
+      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`, {
+        headers: await ownerHeaders()
+      });
+      if (!page.ok) {
+        throw new Error(`history ${page.status}`);
+      }
+      const history = await page.json();
+      const users = history.items.filter((item) => item.role === "user");
+      if (users.length !== 1 || users[0].text !== "hello there") {
+        throw new Error(`expected one durable final: ${JSON.stringify(users)}`);
+      }
+      await connection.stop();
+      break;
+    }
+    case "speech-output-segments": {
+      const session = await createVoiceSession();
       const connection = await connect();
       await attachSession(connection, session.sessionId);
       const ready = await waitForEvent((evt) => evt.type === "session.ready");
@@ -1146,7 +1308,9 @@ async function run() {
         return evt.type === "speech.output.completed";
       });
       const completed = events.find((evt) => evt.type === "speech.output.completed");
-      const responseCompleted = await waitForEvent((evt) => evt.type === "agent.response.completed");
+      if (events.some((evt) => evt.type === "agent.response.completed")) {
+        throw new Error("assistant completion must wait for playback ACK");
+      }
       if (segments.length === 0) {
         throw new Error("expected ordered speech.output.segment events");
       }
@@ -1158,14 +1322,183 @@ async function run() {
           throw new Error("segments must share responseId");
         }
       }
-      if (completed?.type === responseCompleted.type) {
-        throw new Error("speech.output.completed must be distinct from agent.response.completed");
-      }
       if (typeof completed.payload?.textEndExclusive !== "number") {
         throw new Error("textEndExclusive must round-trip");
       }
       if (events.some((evt) => evt.type === "audio.output")) {
         throw new Error("server-audio PCM must remain unchanged and unused on clientSpeech");
+      }
+      await ackClientSpeech(
+        connection,
+        session.sessionId,
+        2,
+        attachmentId,
+        completed.responseId,
+        completed.payload.textEndExclusive
+      );
+      const responseCompleted = await waitForEvent((evt) => evt.type === "agent.response.completed");
+      if (completed.type === responseCompleted.type) {
+        throw new Error("speech.output.completed must be distinct from agent.response.completed");
+      }
+      if (responseCompleted.payload?.heardTextEndExclusive !== completed.payload.textEndExclusive) {
+        throw new Error(`heard must match speech length: ${JSON.stringify(responseCompleted.payload)}`);
+      }
+      await connection.stop();
+      break;
+    }
+    case "client-speech-playback-ack": {
+      const session = await createVoiceSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      const ready = await waitForEvent((evt) => evt.type === "session.ready");
+      const attachmentId = ready.attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Please hold the line" }, { attachmentId })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      const startedEvt = await waitForEvent((evt) => evt.type === "agent.response.started");
+      await waitForEvent((evt) => evt.type === "agent.text.delta");
+      let sequence = 2;
+      const earlyCompleted = await connection.invoke(
+        "PlaybackCompleted",
+        command(
+          session.sessionId,
+          sequence++,
+          "playback.completed",
+          { consumedSamples: 0, textEndExclusive: 5 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (earlyCompleted.accepted || earlyCompleted.error?.code !== "ValidationError") {
+        throw new Error(`completed before speech.output.completed: ${JSON.stringify(earlyCompleted)}`);
+      }
+      const samplesStarted = await connection.invoke(
+        "PlaybackStarted",
+        command(
+          session.sessionId,
+          sequence++,
+          "playback.started",
+          { consumedSamples: 1, textEndExclusive: 0 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (samplesStarted.accepted || samplesStarted.error?.code !== "ValidationError") {
+        throw new Error(`started samples must be 0: ${JSON.stringify(samplesStarted)}`);
+      }
+      const startedOffset = await connection.invoke(
+        "PlaybackStarted",
+        command(
+          session.sessionId,
+          sequence++,
+          "playback.started",
+          { consumedSamples: 0, textEndExclusive: 1 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (startedOffset.accepted || startedOffset.error?.code !== "ValidationError") {
+        throw new Error(`started textEndExclusive must be 0: ${JSON.stringify(startedOffset)}`);
+      }
+      const startedOk = await connection.invoke(
+        "PlaybackStarted",
+        command(
+          session.sessionId,
+          sequence++,
+          "playback.started",
+          { consumedSamples: 0, textEndExclusive: 0 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (!startedOk.accepted) {
+        throw new Error(JSON.stringify(startedOk));
+      }
+      const overProgress = await connection.invoke(
+        "PlaybackProgress",
+        command(
+          session.sessionId,
+          sequence++,
+          "playback.progress",
+          { consumedSamples: 0, textEndExclusive: 999999 },
+          { attachmentId, responseId: startedEvt.responseId }
+        )
+      );
+      if (overProgress.accepted || overProgress.error?.code !== "ValidationError") {
+        throw new Error(`progress must clamp to emitted speech: ${JSON.stringify(overProgress)}`);
+      }
+      const cancel = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, sequence++, "agent.response.cancel", {}, { attachmentId, responseId: startedEvt.responseId })
+      );
+      if (!cancel.accepted) {
+        throw new Error(JSON.stringify(cancel));
+      }
+      await waitForEvent((evt) => evt.type === "agent.response.interrupted");
+      await connection.stop();
+      break;
+    }
+    case "client-speech-queue-stop": {
+      const session = await createVoiceSession();
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      const ready = await waitForEvent((evt) => evt.type === "session.ready");
+      const attachmentId = ready.attachmentId;
+      const first = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!first.accepted) {
+        throw new Error(JSON.stringify(first));
+      }
+      const started = await waitForEvent((evt) => evt.type === "agent.response.started");
+      const queued = await connection.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "queued later", behavior: "queue" }, { attachmentId })
+      );
+      if (!queued.accepted) {
+        throw new Error(JSON.stringify(queued));
+      }
+      const speechDone = await waitForEvent((evt) => evt.type === "speech.output.completed");
+      const stopped = await connection.invoke(
+        "PlaybackStopped",
+        command(
+          session.sessionId,
+          3,
+          "playback.stopped",
+          { consumedSamples: 0, textEndExclusive: 0 },
+          { attachmentId, responseId: speechDone.responseId }
+        )
+      );
+      if (!stopped.accepted) {
+        throw new Error(JSON.stringify(stopped));
+      }
+      const cancel = await connection.invoke(
+        "CancelResponse",
+        command(
+          session.sessionId,
+          4,
+          "agent.response.cancel",
+          {},
+          { attachmentId, responseId: started.responseId }
+        )
+      );
+      if (!cancel.accepted) {
+        throw new Error(JSON.stringify(cancel));
+      }
+      await waitForEvent((evt) => evt.type === "agent.response.interrupted");
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      if (events.filter((evt) => evt.type === "agent.response.started").length !== 1) {
+        throw new Error("Stop must not dispatch queued text");
+      }
+      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`, {
+        headers: await ownerHeaders()
+      });
+      const history = await page.json();
+      const users = history.items.filter((item) => item.role === "user").map((item) => item.text);
+      const assistants = history.items.filter((item) => item.role === "assistant");
+      if (users[0] !== "Hello" || users[1] !== "queued later" || assistants.length !== 1) {
+        throw new Error(`queue after stop: ${JSON.stringify(history.items)}`);
       }
       await connection.stop();
       break;

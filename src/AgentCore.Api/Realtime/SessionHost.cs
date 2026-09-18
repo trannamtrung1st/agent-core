@@ -1061,7 +1061,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         var payload = command.Payload;
         if (payload is null
             || !SpeechEvidenceKinds.Contains(payload.Kind)
-            || !Guid.TryParse(payload.UtteranceId, out _)
+            || !Guid.TryParse(payload.UtteranceId, out var utteranceId)
             || payload.Revision is < 0
             || payload.Text is { Length: > 8000 }
             || payload.Confidence is < 0 or > 1
@@ -1071,7 +1071,41 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "Speech evidence payload is invalid.", false, null));
         }
 
-        return AdmitControlAsync(connectionId, command, _ => Task.FromResult(Accept(command.EventId)), cancellationToken);
+        SpeechRecognitionEvent? evidence = payload.Kind switch
+        {
+            "started" => new SpeechStarted(utteranceId),
+            "partial" when payload.Revision is int revision && payload.Text is not null =>
+                new SpeechPartial(utteranceId, revision, payload.Text, payload.Confidence),
+            "final" when payload.Text is not null =>
+                new SpeechFinal(utteranceId, payload.Text, payload.Confidence),
+            "ended" => new SpeechEnded(utteranceId),
+            "failed" => new RecognitionFailed(
+                utteranceId,
+                new ProviderFailure(ProviderErrorCode.Unknown, "Client transcript failed.")),
+            _ => null
+        };
+        if (evidence is null)
+        {
+            return Task.FromResult(Reject(command.EventId, "Validation", "ValidationError", "Speech evidence payload is invalid.", false, null));
+        }
+
+        return AdmitControlAsync(connectionId, command, async live =>
+        {
+            if (!live.Runtime.CanAdmitClientTranscriptEvidence())
+            {
+                return Reject(
+                    command.EventId,
+                    "Validation",
+                    "ValidationError",
+                    "Client transcript evidence requires an attached unmuted voice session with clientTranscript input.",
+                    false,
+                    null);
+            }
+
+            await live.Runtime.SubmitSpeechAsync(evidence, payload.ActivityScore).ConfigureAwait(false);
+            await live.Runtime.WaitUntilMailboxDrainedAsync().ConfigureAwait(false);
+            return Accept(command.EventId);
+        }, cancellationToken);
     }
 
     public async Task<bool> AdmitAudioAsync(string connectionId, InputAudioDto dto)

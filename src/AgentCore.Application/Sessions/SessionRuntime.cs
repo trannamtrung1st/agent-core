@@ -94,6 +94,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private int _turnGeneration;
     private Guid? _committedUtteranceId;
     private Guid? _activeUtteranceId;
+    private int _speechPartialRevision = -1;
     private DateTimeOffset? _utteranceStarted;
     private double? _activityScore;
     private Guid? _streamId;
@@ -441,6 +442,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Enqueue(new SpeechEvidenceReceived(context, evidence, activityScore, _speechEpoch), urgent: false);
         return Task.CompletedTask;
     }
+
+    public bool CanAdmitClientTranscriptEvidence() =>
+        _snapshot.Status == SessionStatus.Attached
+        && _snapshot.Mode == SessionMode.Voice
+        && !_muted
+        && _voice.EffectivePlan.InputTransport == SpeechTransport.ClientTranscript;
 
     public Task SubmitClassifierResultAsync(
         Guid candidateId,
@@ -2043,7 +2050,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
         _initiativeHeld = false;
-        var heard = _spokenUntil.Credit(_ackedSamples);
+        var heard = UsesClientSpeech ? _ackedPlaybackText : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         InvalidateSpeechJobs();
         await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);

@@ -378,7 +378,7 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSpeechAsync(SpeechEvidenceReceived input, CancellationToken cancellationToken)
     {
-        if (_snapshot.Status != SessionStatus.Attached || _snapshot.Mode != SessionMode.Voice)
+        if (_snapshot.Status != SessionStatus.Attached || _snapshot.Mode != SessionMode.Voice || _muted)
         {
             return;
         }
@@ -389,9 +389,31 @@ public sealed partial class SessionRuntime
         }
 
         if (input.Evidence is not SpeechStarted
+            && input.Evidence is not RecognitionFailed
             && input.Evidence.UtteranceId != _activeUtteranceId)
         {
             return;
+        }
+
+        if (input.Evidence is SpeechFinal alreadyCommitted
+            && _committedUtteranceId == alreadyCommitted.UtteranceId)
+        {
+            return;
+        }
+
+        if (input.Evidence is SpeechPartial partialRevision)
+        {
+            if (partialRevision.Revision < _speechPartialRevision)
+            {
+                return;
+            }
+
+            if (partialRevision.Revision == _speechPartialRevision && _speechPartialRevision >= 0)
+            {
+                return;
+            }
+
+            _speechPartialRevision = partialRevision.Revision;
         }
 
         _timerGeneration++;
@@ -402,6 +424,7 @@ public sealed partial class SessionRuntime
             _activityScore = input.ActivityScore;
             _sttMark = Stopwatch.GetTimestamp();
             _recordedStt = false;
+            _speechPartialRevision = -1;
         }
         else if (input.ActivityScore is { } score)
         {

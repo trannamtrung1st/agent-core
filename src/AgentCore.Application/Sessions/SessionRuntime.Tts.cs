@@ -306,6 +306,12 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (UsesClientSpeech)
+        {
+            await HandleClientSpeechPlaybackAsync(input, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (string.Equals(input.Kind, "started", StringComparison.OrdinalIgnoreCase) && input.ConsumedSamples != 0)
         {
             input.Admitted.TrySetResult(false);
@@ -368,6 +374,76 @@ public sealed partial class SessionRuntime
 
             _playbackDone = true;
             await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+        }
+
+        input.Admitted.TrySetResult(true);
+    }
+
+    private async Task HandleClientSpeechPlaybackAsync(PlaybackReportReceived input, CancellationToken cancellationToken)
+    {
+        if (input.ConsumedSamples != 0)
+        {
+            input.Admitted.TrySetResult(false);
+            return;
+        }
+
+        var emitted = _speechTextEndExclusive;
+        var kind = input.Kind;
+        if (string.Equals(kind, "started", StringComparison.OrdinalIgnoreCase))
+        {
+            if (input.TextEndExclusive != 0)
+            {
+                input.Admitted.TrySetResult(false);
+                return;
+            }
+        }
+        else if (string.Equals(kind, "progress", StringComparison.OrdinalIgnoreCase))
+        {
+            if (input.TextEndExclusive < _ackedPlaybackText || input.TextEndExclusive > emitted)
+            {
+                input.Admitted.TrySetResult(false);
+                return;
+            }
+
+            _ackedPlaybackText = input.TextEndExclusive;
+            ApplyHeard(_ackedPlaybackText);
+            await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
+            if (_outputActivity == OutputActivity.AgentGenerating)
+            {
+                _outputActivity = OutputActivity.AgentSpeaking;
+                await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else if (string.Equals(kind, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_speechOutputCompleted || input.TextEndExclusive != emitted)
+            {
+                input.Admitted.TrySetResult(false);
+                return;
+            }
+
+            _ackedPlaybackText = emitted;
+            ApplyHeard(_ackedPlaybackText);
+            await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
+            _playbackDone = true;
+            await TryCompleteClientSpeechAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+        }
+        else if (string.Equals(kind, "stopped", StringComparison.OrdinalIgnoreCase))
+        {
+            if (input.TextEndExclusive < 0 || input.TextEndExclusive > emitted || input.TextEndExclusive < _ackedPlaybackText)
+            {
+                input.Admitted.TrySetResult(false);
+                return;
+            }
+
+            _ackedPlaybackText = input.TextEndExclusive;
+            ApplyHeard(_ackedPlaybackText);
+            await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            input.Admitted.TrySetResult(false);
+            return;
         }
 
         input.Admitted.TrySetResult(true);
@@ -471,6 +547,11 @@ public sealed partial class SessionRuntime
                     new SessionOutput(context, responseId, new SpeechOutputCompletedOutput(_speechTextEndExclusive)),
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (!_playbackDone)
+        {
+            return;
         }
 
         await CompleteAsync(context, responseId, failed, cancellationToken).ConfigureAwait(false);

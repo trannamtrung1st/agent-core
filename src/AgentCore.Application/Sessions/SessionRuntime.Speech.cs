@@ -21,10 +21,15 @@ public sealed partial class SessionRuntime
             }
 
             if (_snapshot.Mode != SessionMode.Voice
-                || _recognitionSession is null
                 || _muted
                 || _streamId is null
                 || (streamId ?? _streamId) != _streamId)
+            {
+                return false;
+            }
+
+            if (_voice.EffectivePlan.InputTransport == SpeechTransport.ClientTranscript
+                || _recognitionSession is null)
             {
                 return false;
             }
@@ -155,6 +160,24 @@ public sealed partial class SessionRuntime
     private async Task StartRecognitionAsync(CancellationToken cancellationToken, Guid? rotateStreamId = null)
     {
         await StopRecognitionAsync(rotateStreamId, assignStreamId: rotateStreamId.HasValue).ConfigureAwait(false);
+        if (_voice.EffectivePlan.InputTransport == SpeechTransport.ClientTranscript)
+        {
+            lock (_audioGate)
+            {
+                _expectedFrameSequence = 1;
+                _expectedSampleOffset = 0;
+                _inputStreamFailed = false;
+                _ingress = new AudioIngress();
+                if (!rotateStreamId.HasValue)
+                {
+                    _streamId ??= _ids.NewId();
+                }
+            }
+
+            _input = InputActivity.Listening;
+            return;
+        }
+
         if (_recognizer is null)
         {
             return;
@@ -287,6 +310,7 @@ public sealed partial class SessionRuntime
         _maxUtteranceGeneration++;
         _candidate = null;
         _activeUtteranceId = null;
+        _speechPartialRevision = -1;
         _utteranceStarted = null;
         _input = _snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
     }
