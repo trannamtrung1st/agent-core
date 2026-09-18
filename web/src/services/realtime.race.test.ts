@@ -454,6 +454,39 @@ describe("realtime race handling", () => {
     );
   });
 
+  it("does not dequeue or SendText when Stop only flushes voice playback", async () => {
+    vi.spyOn(capture, "playbackResponseId").mockReturnValue("r1");
+    vi.spyOn(capture, "playbackClosed").mockReturnValue(false);
+    vi.spyOn(capture, "playbackQueued").mockReturnValue(1);
+    vi.spyOn(capture, "playbackEpoch").mockReturnValue(1);
+    vi.spyOn(capture, "flushPlayback").mockResolvedValue(100);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const queued = {
+      localId: "q1",
+      eventId: "e-wait",
+      text: "Wait",
+      attachmentIds: [] as string[],
+      attachments: []
+    };
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      mode: "voice",
+      liveResponseId: null,
+      voicePlaybackResponseId: "r1",
+      pendingSendQueue: [queued],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await cancelRenderedResponse();
+    expect(capture.flushPlayback).toHaveBeenCalledWith("r1");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().pendingSendQueue).toEqual([queued]);
+  });
+
   it("queues locally instead of SendText while a response is live", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);
