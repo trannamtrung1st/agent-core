@@ -402,4 +402,47 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().liveResponseId).toBe("r2");
     expect(composerStopEnabled()).toBe(true);
   });
+
+  it("reconciles an uncertain queued steer without duplicating through sendDraft", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("network"));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      liveResponseId: "r1",
+      pendingSendQueue: [
+        {
+          localId: "q1",
+          eventId: "e-steer",
+          text: "Steer me",
+          attachmentIds: [],
+          attachments: []
+        }
+      ],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await steerQueuedSend("q1");
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+    expect(useSessionStore.getState().pendingSendQueue[0]?.dispatching).toBe(false);
+    invoke.mockClear();
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: new Date().toISOString(),
+      correlationId: "ready",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: { history: [] }
+    });
+    await Promise.resolve();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+  });
 });

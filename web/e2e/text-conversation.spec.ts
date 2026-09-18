@@ -94,14 +94,16 @@ test("queued send and Stop keep the local queue without starting R2", async ({ p
   await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toBeVisible({ timeout: 15_000 });
 });
 
+const STEER_PROBE = "[test:steer-probe]";
+
 test("Steer interrupts R1 promptly and auto-dispatch follows completion", async ({ page }) => {
   await page.goto("/");
   await startLongHoldResponse(page);
   const r1Length = await assistantBodyTextLength(page, 0);
 
-  await page.getByRole("textbox", { name: "Message" }).fill("Alpha");
+  await page.getByRole("textbox", { name: "Message" }).fill(`${STEER_PROBE} Alpha`);
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await page.getByRole("textbox", { name: "Message" }).fill("Beta");
+  await page.getByRole("textbox", { name: "Message" }).fill(`${STEER_PROBE} Beta`);
   await page.locator('button.composer-send[aria-label="Queue"]').click();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toHaveCount(0);
   await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toHaveCount(0);
@@ -126,11 +128,11 @@ test("Steer middle queue item keeps head and tail queued", async ({ page }) => {
   await startLongHoldResponse(page);
   const r1Length = await assistantBodyTextLength(page, 0);
 
-  await page.getByRole("textbox", { name: "Message" }).fill("Alpha");
+  await page.getByRole("textbox", { name: "Message" }).fill(`${STEER_PROBE} Alpha`);
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await page.getByRole("textbox", { name: "Message" }).fill("Bravo");
+  await page.getByRole("textbox", { name: "Message" }).fill(`${STEER_PROBE} Bravo`);
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await page.getByRole("textbox", { name: "Message" }).fill("Charlie");
+  await page.getByRole("textbox", { name: "Message" }).fill(`${STEER_PROBE} Charlie`);
   await page.locator('button.composer-send[aria-label="Queue"]').click();
 
   await page.getByRole("button", { name: "Steer queued message 2" }).click();

@@ -185,8 +185,33 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await source.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var destination = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={destinationPath}");
         await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
-        source.BackupDatabase(destination);
+        await BackupDatabaseWithRetryAsync(source, destination, cancellationToken).ConfigureAwait(false);
     }
+
+    private static async Task BackupDatabaseWithRetryAsync(
+        SqliteConnection source,
+        SqliteConnection destination,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 100;
+        var delay = TimeSpan.FromMilliseconds(50);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                source.BackupDatabase(destination);
+                return;
+            }
+            catch (SqliteException ex) when (IsBusyOrLocked(ex) && attempt < maxAttempts)
+            {
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static bool IsBusyOrLocked(SqliteException ex) =>
+        ex.SqliteErrorCode is 5 or 6;
 
     public async ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {

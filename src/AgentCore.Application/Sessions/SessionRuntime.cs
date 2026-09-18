@@ -960,14 +960,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return;
             }
 
-            if (attachmentIds.Count > 0 && _attachments is not null)
+            if (_undurableUserEntryIds.Contains(existingByEvent.EntryId))
             {
-                await _attachments.BindToEntryAsync(SessionId, existingByEvent.EntryId, attachmentIds, cancellationToken)
-                    .ConfigureAwait(false);
+                RollbackAdmittedUserEntry(existingByEvent.EntryId);
             }
+            else
+            {
+                if (attachmentIds.Count > 0 && _attachments is not null)
+                {
+                    await _attachments.BindToEntryAsync(SessionId, existingByEvent.EntryId, attachmentIds, cancellationToken)
+                        .ConfigureAwait(false);
+                }
 
-            input.Persisted?.TrySetResult(true);
-            return;
+                input.Persisted?.TrySetResult(true);
+                return;
+            }
         }
 
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused)
@@ -1002,6 +1009,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
         }
         catch (AgentCoreException)
+        {
+            input.Persisted?.TrySetResult(false);
+            return;
+        }
+
+        if (_snapshot.Entries.Count >= 1000)
         {
             input.Persisted?.TrySetResult(false);
             return;
@@ -1108,9 +1121,36 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (AgentCoreException)
         {
+            RollbackAdmittedUserEntry(userEntry.EntryId);
             input.Persisted?.TrySetResult(false);
             return;
         }
+    }
+
+    private void RollbackAdmittedUserEntry(Guid entryId)
+    {
+        if (!_undurableUserEntryIds.Remove(entryId))
+        {
+            return;
+        }
+
+        if (_snapshot.Entries.All(entry => entry.EntryId != entryId))
+        {
+            return;
+        }
+
+        var entries = _snapshot.Entries.Where(entry => entry.EntryId != entryId).ToArray();
+        var (summary, through) = ConversationSummary.Refresh(
+            entries,
+            _snapshot.Summary,
+            _snapshot.SummarizedThroughEntrySequence);
+        _snapshot = _snapshot with
+        {
+            Entries = entries,
+            Summary = summary,
+            SummarizedThroughEntrySequence = through,
+            UpdatedAt = _time.GetUtcNow()
+        };
     }
 
     private async Task HandleBrainAsync(BrainReturned input, CancellationToken cancellationToken)

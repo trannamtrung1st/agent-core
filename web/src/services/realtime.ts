@@ -147,6 +147,7 @@ let pendingUserText: {
   text: string;
   attachmentIds: string[];
   pendingAttachments: PendingAttachment[];
+  queueLocalId?: string;
 } | null = null;
 
 function delay(ms: number): Promise<void> {
@@ -2050,7 +2051,14 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     && pendingUserText.attachmentIds.join() === readyAttachmentIds.join();
   const eventId = reusePending ? pendingUserText!.eventId : message.eventId ?? uuid();
   const pendingAttachmentSnapshot = message.attachments.slice();
-  pendingUserText = { eventId, text, attachmentIds: readyAttachmentIds, pendingAttachments: pendingAttachmentSnapshot };
+  const queueLocalId = message.source?.kind === "queue" ? message.source.localId : null;
+  pendingUserText = {
+    eventId,
+    text,
+    attachmentIds: readyAttachmentIds,
+    pendingAttachments: pendingAttachmentSnapshot,
+    queueLocalId: queueLocalId ?? undefined
+  };
   const refs: HistoryAttachment[] = message.attachments
     .filter((item) => item.attachmentId)
     .map((item) => ({
@@ -2066,7 +2074,6 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     payload.behavior = "interrupt";
   }
 
-  const queueLocalId = message.source?.kind === "queue" ? message.source.localId : null;
   if (queueLocalId) {
     useSessionStore.setState((state) => ({
       pendingSendQueue: state.pendingSendQueue.map((item) =>
@@ -2112,6 +2119,8 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
+      pendingUserText = null;
+      removeOptimisticUserEntry(eventId);
       if (queueLocalId) {
         clearQueueItemDispatchState(queueLocalId);
         useSessionStore.setState((state) => ({
@@ -2216,6 +2225,22 @@ export async function steerQueuedSend(localId: string): Promise<void> {
 
 function reconcilePendingUserText(entries: { sourceEventId: string | null; role: string }[]): void {
   if (!pendingUserText) {
+    return;
+  }
+
+  const queueLocalId = pendingUserText.queueLocalId;
+  if (queueLocalId) {
+    const eventId = pendingUserText.eventId;
+    if (historyHasUserEvent(entries, eventId)) {
+      pendingUserText = null;
+      useSessionStore.setState((state) => ({
+        pendingSendQueue: state.pendingSendQueue.filter((item) => item.localId !== queueLocalId)
+      }));
+      return;
+    }
+
+    clearQueueItemDispatchState(queueLocalId);
+    pendingUserText = null;
     return;
   }
 

@@ -77,7 +77,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             }
 
             yield return new ModelTextDelta(chunks[index]);
-            if (index == 0 && IsSteerQueueProbeUser(lastUser))
+            if (index == 0 && lastUser.Contains(SteerProbeMarker, StringComparison.OrdinalIgnoreCase))
             {
                 await Task.Delay(4000, cancellationToken).ConfigureAwait(false);
             }
@@ -261,8 +261,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return end < 0 ? FixtureArtifactReferenceAuthorizer.AuthorizedId : toolJson[start..end];
     }
 
-    private static bool IsSteerQueueProbeUser(string lastUser) =>
-        lastUser is "Alpha" or "Beta" or "Bravo" or "Charlie";
+    internal const string SteerProbeMarker = "[test:steer-probe]";
 
     private IReadOnlyList<string> Select(string lastUser)
     {

@@ -109,6 +109,56 @@ public sealed class UserTextQueueTests
     }
 
     [Fact]
+    public async Task Interrupt_terminalizes_before_persistence_completes_and_starts_R2_after()
+    {
+        var persistGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new GatedPersistStore(persistGate);
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new HoldingLanguageModel();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text,
+            store: store);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T1");
+        var r1 = runtime.ActiveResponseId;
+        Assert.NotNull(r1);
+
+        var u2Event = Guid.NewGuid();
+        var persistTask = runtime.SubmitPersistedUserTextAsync(
+            "take over",
+            u2Event,
+            CancellationToken.None,
+            null,
+            UserTextBehavior.Interrupt);
+
+        await store.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(runtime.ActiveResponseId);
+        Assert.Contains(
+            output.Items,
+            item => item.ResponseId == r1
+                && item.Payload is ResponseCompletedOutput completed
+                && completed.InterruptReason == "newText");
+        Assert.Equal(1, model.Calls);
+        Assert.DoesNotContain(output.Items, item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
+
+        persistGate.TrySetResult();
+        Assert.True(await persistTask);
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
+        Assert.Equal(2, model.Calls);
+
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
     public async Task CancelResponse_is_idempotent_stale_and_unknown()
     {
         var time = Clock();
@@ -467,12 +517,13 @@ public sealed class UserTextQueueTests
         IAgentBrain brain,
         IInterruptionClassifier classifier,
         SessionMode mode,
-        AgentDefinition? definition = null)
+        AgentDefinition? definition = null,
+        IMemoryStore? store = null)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
-        var store = new InMemoryMemoryStore();
+        var memory = store ?? new InMemoryMemoryStore();
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
             1,
@@ -489,12 +540,12 @@ public sealed class UserTextQueueTests
             null,
             now,
             now);
-        store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         return new SessionRuntime(
             snapshot,
             model,
             brain,
-            store,
+            memory,
             output,
             ids,
             time,
@@ -528,6 +579,45 @@ file sealed class HoldingLanguageModel : ILanguageModel
     }
 
     private int _calls;
+}
+
+file sealed class GatedPersistStore(TaskCompletionSource persistGate) : IMemoryStore
+{
+    private readonly InMemoryMemoryStore _inner = new();
+    public TaskCompletionSource SaveStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        _inner.LoadAsync(sessionId, cancellationToken);
+
+    public async ValueTask SaveAsync(
+        SessionSnapshot snapshot,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        if (snapshot.Entries.Any(entry => entry.Role == ConversationRole.User && entry.Text == "take over"))
+        {
+            SaveStarted.TrySetResult();
+            await persistGate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await _inner.SaveAsync(snapshot, expectedRevision, cancellationToken).ConfigureAwait(false);
+    }
+
+    public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+        Guid sessionId,
+        long afterEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+    public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+        _inner.LoadProfileAsync(profileId, cancellationToken);
+
+    public ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default) =>
+        _inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+    public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+        _inner.RecoverCrashedSessionsAsync(cancellationToken);
 }
 
 file sealed class FailThenSpeakModel : ILanguageModel
