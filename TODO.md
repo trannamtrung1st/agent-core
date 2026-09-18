@@ -139,7 +139,7 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [x] Support long speech without waiting for a turn-by-turn submit.
 
-  Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, bounded mid-utterance restart, and drops stale partials on reconnect. Browser adapter treats `onspeechend` as pending (final may follow), caps idle native `onend` loops, and restarts recognition between turns; session `onend` is not an utterance boundary. Voice-mode wiring remains. Permission/device/service errors mark recognition inactive and surface the structured speech error.
+  Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, freezes and overlap-stitches spoken prefix across bounded mid-utterance restart, and drops stale partials on reconnect. Browser adapter treats `onspeechend` as pending (final may follow), caps idle native `onend` loops, and restarts recognition between turns; session `onend` is not an utterance boundary. Voice-mode wiring remains. Permission/device/service errors mark recognition inactive and surface the structured speech error.
 
 - [x] Preserve interruption semantics.
 

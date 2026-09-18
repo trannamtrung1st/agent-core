@@ -321,6 +321,33 @@ describe("Browser STT native finals through the application accumulator", () => 
     holder.current?.onspeechstart?.(new Event("speechstart"));
     holder.current?.onresult?.({
       resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "something important" } }]
+    });
+    holder.current?.onspeechend?.(new Event("speechend"));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("I was saying something important");
+    await adapter.cancel();
+  });
+
+  it("dedupes a repeated-prefix final after mid-utterance native onend restart", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "I was saying" } }]
+    });
+    holder.current?.onend?.(new Event("end"));
+    await vi.advanceTimersByTimeAsync(0);
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
       results: [{ isFinal: true, 0: { transcript: "I was saying something important" } }]
     });
     holder.current?.onspeechend?.(new Event("speechend"));

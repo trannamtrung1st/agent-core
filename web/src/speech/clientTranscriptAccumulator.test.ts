@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ClientTranscriptAccumulator } from "./clientTranscriptAccumulator";
+import { ClientTranscriptAccumulator, mergeRecognitionContinuation } from "./clientTranscriptAccumulator";
 import { resetSpeechObservations, snapshotSpeechObservations } from "./speechObservability";
 
 const gate = { attachmentId: "att-1", epoch: 1, mode: "voice" as const, muted: false };
@@ -21,6 +21,16 @@ function create(now = { t: 0 }) {
   acc.setGate(gate);
   return { acc, sent, texts, errors, now };
 }
+
+describe("mergeRecognitionContinuation", () => {
+  it("appends continuation-only finals and dedupes repeated prefixes", () => {
+    expect(mergeRecognitionContinuation("I was saying", "something important")).toBe("I was saying something important");
+    expect(mergeRecognitionContinuation("I was saying", "I was saying something important")).toBe(
+      "I was saying something important"
+    );
+    expect(mergeRecognitionContinuation("I was saying", "saying something important")).toBe("I was saying something important");
+  });
+});
 
 describe("ClientTranscriptAccumulator", () => {
   beforeEach(() => {
@@ -66,6 +76,19 @@ describe("ClientTranscriptAccumulator", () => {
     expect(sent.filter((kind) => kind === "started")).toHaveLength(1);
     expect(sent.filter((kind) => kind === "final")).toHaveLength(1);
     expect(texts).toContain("keep me");
+  });
+
+  it("stitches interim prefix across unexpected restart onto continuation-only finals", () => {
+    const { acc, sent, texts, now } = create();
+    acc.startUtterance();
+    acc.ingestInterim("I was saying");
+    now.t += 100;
+    expect(acc.unexpectedRestart()).toBe(true);
+    acc.ingestStableChunk("something important");
+    acc.endUtterance();
+    expect(sent.filter((kind) => kind === "started")).toHaveLength(1);
+    expect(sent.filter((kind) => kind === "final")).toHaveLength(1);
+    expect(texts).toContain("I was saying something important");
   });
 
   it("surfaces SpeechRecognitionRestartLimit without a duplicate turn", () => {

@@ -32,7 +32,8 @@ develop, document, docs-consistency, architecture, backend, frontend, realtime, 
 | 20 | Canonical docs / TODO / this report | prior handoff commit |
 | 21 | Native Web Speech corrective (`be0514c`) | `be0514c` |
 | 22 | Pending speechend + idle restart cap | `26e9674` |
-| 23 | Mid-utterance native onend preservation | this commit |
+| 23 | Mid-utterance native onend preservation | `6e83a59` |
+| 24 | Restart transcript stitching | this commit |
 
 Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-20260918T040554-90562c/` (gitignored).
 
@@ -84,17 +85,17 @@ Flags: `AGENTCORE_LIVE_PROVIDER_TESTS=0`, `AGENTCORE_LIVE_OPENAI_STT=0`, `AGENTC
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 25 passed (synthetic + browser-stt + browser-browser) |
 
-## Post–native-STT-hardening gate (after batch 22)
+## Post–Browser-STT-freeze gate (after batch 24)
 
-Same flags and ports. Re-run after pending-`speechend` closure and idle `onend` restart-cap fixes.
+Same flags and ports. Latest refresh after pending-`speechend`, idle restart cap, mid-utterance `onend` preservation, and restart transcript stitching.
 
 | Command | Observed |
 | --- | --- |
 | Domain tests | 22 passed |
 | Infrastructure tests | 101 passed, 9 skipped |
 | Application tests (`--blame-hang-timeout 5m`) | 292 passed |
-| API tests | 105 passed (one `SessionHostRaceTests` flake on first full run; isolated re-run passed) |
-| `pnpm run test --run` | 256 passed |
+| API tests | 105 passed |
+| `pnpm run test --run` | 261 passed |
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 26 passed |
 

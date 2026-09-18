@@ -20,6 +20,36 @@ export type ClientTranscriptAccumulatorOptions = {
 const DEFAULT_PARTIAL_INTERVAL_MS = 100;
 const DEFAULT_MAX_RESTARTS = 3;
 
+/** Merge post-restart recognition onto a frozen prefix without dropping or duplicating overlap. */
+export function mergeRecognitionContinuation(prefix: string, incoming: string): string {
+  const left = prefix.trim();
+  const right = incoming.trim();
+  if (!left) {
+    return right;
+  }
+
+  if (!right) {
+    return left;
+  }
+
+  if (right.startsWith(left)) {
+    return right;
+  }
+
+  if (left.startsWith(right)) {
+    return left;
+  }
+
+  const maxOverlap = Math.min(left.length, right.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (left.endsWith(right.slice(0, overlap))) {
+      return `${left}${right.slice(overlap)}`;
+    }
+  }
+
+  return `${left} ${right}`;
+}
+
 export class ClientTranscriptAccumulator {
   private gate: AccumulatorGate | null = null;
   private utteranceId: string | null = null;
@@ -79,7 +109,7 @@ export class ClientTranscriptAccumulator {
       return;
     }
 
-    this.interim = text;
+    this.interim = text.trim();
     this.maybeSendPartial();
   }
 
@@ -93,7 +123,7 @@ export class ClientTranscriptAccumulator {
       return;
     }
 
-    this.stable = this.stable ? `${this.stable} ${piece}` : piece;
+    this.stable = mergeRecognitionContinuation(this.stable, piece);
     this.interim = "";
     this.maybeSendPartial();
   }
@@ -144,6 +174,7 @@ export class ClientTranscriptAccumulator {
       return false;
     }
 
+    this.freezeSpokenPrefix();
     this.restarts += 1;
     if (this.restarts > this.maxRestarts) {
       this.onError(speechError("SpeechRecognitionRestartLimit"));
@@ -159,7 +190,18 @@ export class ClientTranscriptAccumulator {
   }
 
   private spokenText(): string {
-    return `${this.stable}${this.interim ? (this.stable ? ` ${this.interim}` : this.interim) : ""}`.trim();
+    return mergeRecognitionContinuation(this.stable, this.interim);
+  }
+
+  private freezeSpokenPrefix(): void {
+    const prefix = this.spokenText();
+    if (!prefix) {
+      return;
+    }
+
+    this.stable = prefix;
+    this.interim = "";
+    this.lastPartialText = "";
   }
 
   private maybeSendPartial(): void {
