@@ -388,6 +388,48 @@ describe("applyServerEvent", () => {
     expect(finalState.entries.some((entry) => entry.text === "My favorite book is Dune")).toBe(true);
   });
 
+  it("does not add durable history when transcript.final omits entryId", () => {
+    const partial = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      event({
+        type: "transcript.partial",
+        sequence: 1,
+        payload: { utteranceId: "u1", revision: 1, text: "hello" }
+      })
+    );
+    const finalState = applyServerEvent(
+      partial,
+      event({
+        type: "transcript.final",
+        sequence: 2,
+        payload: { utteranceId: "u1", text: "hello" }
+      })
+    );
+    expect(finalState.liveUserTranscript).toBeNull();
+    expect(finalState.entries).toHaveLength(0);
+  });
+
+  it("clears live user transcript on transcript.discarded", () => {
+    const partial = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      event({
+        type: "transcript.partial",
+        sequence: 1,
+        payload: { utteranceId: "u1", revision: 1, text: "mhm" }
+      })
+    );
+    const discarded = applyServerEvent(
+      partial,
+      event({
+        type: "transcript.discarded",
+        sequence: 2,
+        payload: { utteranceId: "u1" }
+      })
+    );
+    expect(discarded.liveUserTranscript).toBeNull();
+    expect(discarded.entries).toHaveLength(0);
+  });
+
   it("lets a later state.changed replace inferred interrupted output", () => {
     const interrupted = applyServerEvent(
       {

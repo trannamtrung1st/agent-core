@@ -261,7 +261,9 @@ public sealed record PlaybackGainOutput(double Gain, int RampMs, Guid? Candidate
 
 public sealed record TranscriptPartialOutput(Guid UtteranceId, int Revision, string Text) : OutputPayload;
 
-public sealed record TranscriptFinalOutput(Guid UtteranceId, string Text, Guid? EntryId, long? EntrySequence) : OutputPayload;
+public sealed record TranscriptFinalOutput(Guid UtteranceId, string Text, Guid EntryId, long EntrySequence) : OutputPayload;
+
+public sealed record TranscriptDiscardedOutput(Guid UtteranceId) : OutputPayload;
 
 public sealed record ErrorOutput(
     string Category,

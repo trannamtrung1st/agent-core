@@ -466,16 +466,21 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       };
     }
     case "transcript.final": {
-      const utteranceId = asString(event.payload.utteranceId);
+      const entryIdRaw = event.payload.entryId;
+      const sequenceRaw = event.payload.entrySequence;
+      if (entryIdRaw == null || sequenceRaw == null) {
+        return { ...state, lastServerSequence: event.sequence, liveUserTranscript: null };
+      }
+
       const text = asString(event.payload.text);
-      const entryId = event.payload.entryId == null ? utteranceId : asString(event.payload.entryId);
+      const entryId = asString(entryIdRaw);
       if (state.entries.some((entry) => entry.entryId === entryId && entry.role === "user")) {
         return { ...state, lastServerSequence: event.sequence, liveUserTranscript: null };
       }
 
       const entry: HistoryEntry = {
         entryId,
-        sequence: asNumber(event.payload.entrySequence) || (state.entries.at(-1)?.sequence ?? 0) + 1,
+        sequence: asNumber(sequenceRaw),
         sourceEventId: event.eventId,
         role: "user",
         text,
@@ -487,6 +492,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         createdAt: event.timestamp
       };
       return { ...state, lastServerSequence: event.sequence, entries: upsert(state.entries, entry), liveUserTranscript: null };
+    }
+    case "transcript.discarded":
+    case "transcript.cleared": {
+      return { ...state, lastServerSequence: event.sequence, liveUserTranscript: null };
     }
     case "error": {
       const sessionError = sessionErrorFromWire(event.payload, asString(event.payload.message) || "The session reported a failure.");

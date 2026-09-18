@@ -2023,8 +2023,12 @@ public static class SessionEventMapper
             {
                 ["utteranceId"] = final.UtteranceId.ToString(),
                 ["text"] = final.Text,
-                ["entryId"] = final.EntryId?.ToString(),
+                ["entryId"] = final.EntryId.ToString(),
                 ["entrySequence"] = final.EntrySequence
+            }),
+            TranscriptDiscardedOutput discarded => ("transcript.discarded", new Dictionary<string, object?>
+            {
+                ["utteranceId"] = discarded.UtteranceId.ToString()
             }),
             ErrorOutput error => ("error", new Dictionary<string, object?>
             {

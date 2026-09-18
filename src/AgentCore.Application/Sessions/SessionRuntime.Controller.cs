@@ -469,15 +469,17 @@ public sealed partial class SessionRuntime
                 _recordedStt = true;
                 RuntimeTelemetry.Record("stt", RuntimeTelemetry.ElapsedMs(_sttMark));
             }
-            var committed = _snapshot.Entries.LastOrDefault(entry =>
-                entry.Role == ConversationRole.User && entry.Text == final.Text);
-            await PublishAsync(
-                    new SessionOutput(
-                        input.Context,
-                        null,
-                        new TranscriptFinalOutput(final.UtteranceId, final.Text, committed?.EntryId, committed?.Sequence)),
-                    cancellationToken)
-                .ConfigureAwait(false);
+
+            if (evaluation.DiscardUtterance)
+            {
+                await PublishAsync(
+                        new SessionOutput(
+                            input.Context,
+                            null,
+                            new TranscriptDiscardedOutput(final.UtteranceId)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         if (input.Evidence is SpeechEnded && _committedUtteranceId == input.Evidence.UtteranceId)
@@ -718,6 +720,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        var utteranceId = _activeUtteranceId ?? context.EventId;
         _committedUtteranceId = _activeUtteranceId;
         NoteUserActivity();
         _environmentQueue.Clear();
@@ -752,11 +755,20 @@ public sealed partial class SessionRuntime
                 : null);
         var titleHints = await AttachmentTitleHintsAsync(staged, cancellationToken).ConfigureAwait(false);
         _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
+        _undurableUserEntryIds.Add(userEntry.EntryId);
         var cause = context;
         RequestPersist(
             _snapshot,
-            then: async _ =>
+            then: async ct =>
             {
+                await PublishAsync(
+                        new SessionOutput(
+                            cause,
+                            null,
+                            new TranscriptFinalOutput(utteranceId, text, userEntry.EntryId, userEntry.Sequence)),
+                        ct)
+                    .ConfigureAwait(false);
+
                 if (staged.Count > 0 && _attachments is not null)
                 {
                     await _attachments.BindToEntryAsync(SessionId, userEntry.EntryId, staged, CancellationToken.None)

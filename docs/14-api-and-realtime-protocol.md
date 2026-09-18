@@ -138,7 +138,8 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | --- | --- |
 | session.ready | mode, pendingMode: text\|voice\|null, status, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), activeResponseId: null |
 | transcript.partial | utteranceId, revision: integer, text |
-| transcript.final | utteranceId, text, entryId: UUID\|null, entrySequence: integer\|null |
+| transcript.final | utteranceId, text, entryId: UUID, entrySequence: integer |
+| transcript.discarded | utteranceId |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
 | agent.text.delta | text, textStart: UTF-16 offset of **display** text |
 | agent.text.completed | textLength: integer (display) |
@@ -153,7 +154,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | session.state.changed | status, mode: text\|voice, pendingMode: text\|voice\|null, inputState, outputState, muted: boolean, streamId: UUID\|null |
 | error | category, code, message, fatal: boolean, retryAfterMs: integer\|null |
 
-For transcript.final, entryId/entrySequence are null for ignored backchannels/noise and present for an accepted user turn; SourceEventId for that entry is utteranceId. Its persistence acknowledgement gates generation. `agent.response.started` identifies the new assistant entry even before its first periodic checkpoint.
+For transcript.final, the server publishes only after the user entry is durably saved; entryId and entrySequence identify the committed turn and gate client history. Ignored or discarded recognition finals emit transcript.discarded instead (clear ephemeral live transcript only; no durable user entry). `agent.response.started` identifies the new assistant entry even before its first periodic checkpoint.
 
 session.ready audioFormat is `{encoding:"pcm_s16le",sampleRateHz:24000,channels:1,frameDurationMs:20}` in voice, null in text. The agent descriptor includes additive `language` (conversation BCP-47). capabilities is `{stt:{streamingAudio,partialTranscripts,speechBoundaryEvents,cancellation,transport:"serverAudio"|"clientTranscript"},tts:{streamingAudio,timingMarks,cancellation,voiceSelection,speakingRate,supportedFormats,transport:"serverAudio"|"clientSpeech"},bargeInPolicy:"semantic"|"speechAndFinal"|"speechActivity"|"none"}`. `transport` fields are additive under protocol v1 and may be ignored by older clients. Existing STT/TTS booleans remain for `serverAudio` so current server-audio clients keep working. For `clientTranscript`, voice-mode `session.ready` advertises the effective client facts (`partialTranscripts=true`, `speechBoundaryEvents=true`, `streamingAudio=false`); do not send all-false STT flags merely because no backend `ISpeechRecognizer` exists. Do not omit or invert `voiceAvailable` to force old clients to refuse Browser hosts. Capabilities contain **effective** adapter facts plus those transports; they never include secrets, endpoints or adapter names. Speech booleans are false and supportedFormats is empty in text mode. In voice mode supportedFormats lists canonical encoding/sampleRateHz/channels records that a server-audio adapter can produce. ready has no live response: attaching never replays or continues interrupted output. Ready history items use the same public fields as GET `/messages` (including `deliveryMode` and both text-end offsets); it is not a persistence snapshot and must not include session summary.
 
