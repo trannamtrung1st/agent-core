@@ -31,7 +31,7 @@ Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-
 
 ## Follow-on P1 history, lifecycle, and speech locale
 
-History paging, additive semantic lifecycle (`TransitionLifecycle`, RequestComplete, terminal UI), and provider-neutral speech locale (Application + adapters + Speech locale Select) are observed. P1 freeze is **blocked** until the real non-English Chrome/Edge Browser STT/TTS smoke is recorded; fake-browser Playwright is not that probe. Optional hosted multilingual checks are unverified. P2 has not started. Decisions: [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence). Gates: [Implementation Plan](18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). Do not treat this table row as replacing observed P1 replaceable speech.
+History paging, additive semantic lifecycle (`TransitionLifecycle`, RequestComplete, terminal UI), and provider-neutral speech locale (Application + adapters + Speech locale Select) are observed. P1 is **frozen** after the real Chrome 153 `fr-FR` Browser STT/TTS smoke and Voice checklist re-run on HEAD `df0a12c`; fake-browser Playwright is not that probe. Optional hosted multilingual checks are unverified. P2 has not started. Decisions: [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence). Gates: [Implementation Plan](18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). Do not treat this table row as replacing observed P1 replaceable speech.
 
 ## Post-MVP planned until verified
 

@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against this run through P1-Final (2026-09-19): exact live `synthetic.yml` plus Compose on the P1-Final working tree (parent implementation `505ab77` plus Playwright catalog isolation in this commit). Domain 40; Infrastructure 112/9 skip; Application 346 with blame-hang; API 120; web 324 unit tests; Playwright 34; Compose `8e2467bf-7db9-4520-851a-146584761cb7`. Live flags 0. P0-2 Chrome 153 Voice checklist was **not** re-run; it remains the last recorded real-browser Voice evidence (`215de23`). P1C-3 real non-English Browser smoke remains **BLOCKED**. Optional hosted multilingual checks were not run. **P1 freeze is blocked.** P2 has not started.
+Reviewed against this run through P1-Final (2026-09-19): exact live `synthetic.yml` plus Compose on HEAD `df0a12cecb5b60a12499488eed9c101cb01b45b2` (parent implementation `505ab77` plus Playwright catalog isolation). Domain 40; Infrastructure 112/9 skip; Application 346 with blame-hang; API 120; web 324 unit tests; Playwright 34; Compose `8e2467bf-7db9-4520-851a-146584761cb7`. Live flags 0. P0 Voice checklist was **re-run** on that HEAD in Chrome 153 `general-assistant` (all items pass, including queued-text via Queued messages region + Steer). P1C-3 real non-English Browser STT/TTS smoke **observed** (`fr-FR`, native STT `Bonjour`, TTS `Daniel (French (France))`). Optional hosted multilingual checks were not run and are unverified. **P1 is frozen.** P2 has not started.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
@@ -32,7 +32,7 @@ This is a bounded verification/fix pass, not another voice redesign.
 
 - [x] Do one bounded live Chrome/Edge voice probe on current HEAD using `general-assistant`.
 
-  Observed 2026-09-18 on Google Chrome 153 against a disposable Browser/Browser Synthetic host (run `run-20260918T180704-c332dd` P0-2 evidence). Distinct from fake-browser Playwright. Checklist items passed, including native STT loopback turns, Voice vs Mute, silence without `SpeechRecognitionRestartLimit`, Stop/reconnect/reopen without speech replay.
+  Observed 2026-09-18 on Google Chrome 153 against a disposable Browser/Browser Synthetic host (run `run-20260918T180704-c332dd` P0-2 evidence on HEAD `215de23`). Re-run 2026-09-19 on HEAD `df0a12c` (same Chrome 153, disposable ports 18081/15174). Distinct from fake-browser Playwright. Checklist items passed, including queued-text (Queued messages region + two Steer controls; `getByText("queued follow up")` remains a preview locator miss). Native STT loopback turns, Voice vs Mute, silence without `SpeechRecognitionRestartLimit`, Stop/reconnect/reopen without speech replay.
 
 - [x] Fix the unexpected preferred name `"friend"` behavior.
 
@@ -46,7 +46,7 @@ This is a bounded verification/fix pass, not another voice redesign.
 
 ## P1 — Conversation and session ergonomics
 
-Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). P1A/P1B/P1C implementation is observed. P1 freeze remains blocked on the real non-English Browser smoke. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. Do not start P2.
+Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). P1A/P1B/P1C implementation is observed. P1 is frozen on HEAD `df0a12cecb5b60a12499488eed9c101cb01b45b2`. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. Do not start P2.
 
 ### P1A — Lazy-load old chat history
 
@@ -173,9 +173,9 @@ Add this as provider-neutral language configuration, not provider-specific branc
 
 - [x] Do not require automatic language detection initially.
 
-- [ ] Add deterministic tests for configuration/fallback; keep real multilingual voice checks opt-in/manual.
+- [x] Add deterministic tests for configuration/fallback; keep real multilingual voice checks opt-in/manual.
 
-  Deterministic Application/adapter/Playwright locale coverage is observed. Real non-English Chrome/Edge STT/TTS smoke is **BLOCKED** (no operator-attended Browser + microphone + locale voices). Fake-device Playwright is not that probe. Optional hosted multilingual checks were not run.
+  Deterministic Application/adapter/Playwright locale coverage is observed. Real non-English Chrome 153 STT/TTS smoke is **observed** on HEAD `df0a12c` (`fr-FR`; STT `Bonjour`; TTS Daniel French France). Fake-device Playwright is not that probe. Optional hosted multilingual checks were not run and remain unverified.
 
 ---
 
