@@ -232,13 +232,21 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         return;
       }
 
-      this.consecutiveEnds += 1;
-      if (this.consecutiveEnds >= MAX_IDLE_ENDS_WITHOUT_PROGRESS) {
-        this.failRecognition("SpeechRecognitionRestartLimit");
-        return;
+      // Chrome ends idle recognition sessions often; only cap restarts mid-utterance.
+      if (this.utteranceOpen) {
+        this.consecutiveEnds += 1;
+        if (this.consecutiveEnds >= MAX_IDLE_ENDS_WITHOUT_PROGRESS) {
+          this.failRecognition("SpeechRecognitionRestartLimit");
+          return;
+        }
+      } else {
+        this.consecutiveEnds = 0;
       }
 
-      const delay = RESTART_BACKOFF_MS[Math.min(this.consecutiveEnds - 1, RESTART_BACKOFF_MS.length - 1)] ?? 500;
+      const delay =
+        this.utteranceOpen
+          ? (RESTART_BACKOFF_MS[Math.min(this.consecutiveEnds - 1, RESTART_BACKOFF_MS.length - 1)] ?? 500)
+          : 0;
       this.clearRestart();
       this.restartTimer = setTimeout(() => {
         this.restartTimer = null;

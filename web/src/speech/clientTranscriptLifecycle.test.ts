@@ -140,7 +140,7 @@ describe("ClientTranscriptLifecycle", () => {
     expect(life.isListening()).toBe(false);
   });
 
-  it("blocks voice when the browser adapter hits the idle restart cap", async () => {
+  it("blocks voice when the browser adapter hits the restart cap during an open utterance", async () => {
     vi.useFakeTimers();
     class MockRecognition {
       onend: ((event: Event) => void) | null = null;
@@ -175,6 +175,7 @@ describe("ClientTranscriptLifecycle", () => {
     const transport = createSpeechTransportService(adapter);
     const life = new ClientTranscriptLifecycle(transport, () => undefined, (error) => errors.push(error.code));
     await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
     holder.current?.onend?.(new Event("end"));
     await vi.advanceTimersByTimeAsync(0);
     holder.current?.onend?.(new Event("end"));

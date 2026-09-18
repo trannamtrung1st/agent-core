@@ -223,7 +223,7 @@ describe("BrowserSpeechRecognizer", () => {
     await adapter.cancel();
   });
 
-  it("stops after three idle native onends without speech progress", async () => {
+  it("keeps restarting through idle native onends while no utterance is open", async () => {
     vi.useFakeTimers();
     const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
@@ -234,6 +234,27 @@ describe("BrowserSpeechRecognizer", () => {
       onRecognitionEnded: () => undefined
     });
     expect(holder.starts).toBe(1);
+    for (let index = 0; index < 8; index += 1) {
+      holder.current?.onend?.(new Event("end"));
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(errors).toEqual([]);
+    expect(holder.starts).toBe(9);
+    await adapter.cancel();
+  });
+
+  it("stops after three idle native onends without speech progress during an open utterance", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const adapter = new BrowserSpeechRecognizer();
+    const errors: string[] = [];
+    await adapter.start({
+      onEvidence: () => undefined,
+      onError: (error) => errors.push(error.code),
+      onRecognitionEnded: () => undefined
+    });
+    expect(holder.starts).toBe(1);
+    holder.current?.onspeechstart?.(new Event("speechstart"));
     holder.current?.onend?.(new Event("end"));
     await vi.advanceTimersByTimeAsync(0);
     expect(holder.starts).toBe(2);
