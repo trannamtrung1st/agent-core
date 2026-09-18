@@ -47,6 +47,12 @@ public sealed record Speak(
 
 public sealed record RequestDeactivate(string Reason) : AgentDecision;
 
+public abstract record CompletionDecision;
+
+public sealed record ContinueSession(string Reason) : CompletionDecision;
+
+public sealed record RequestComplete(string Reason) : CompletionDecision;
+
 public interface IAgentBrain
 {
     ValueTask<AgentDecision> DecideAsync(

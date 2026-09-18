@@ -11,17 +11,23 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly TaskCompletionSource? _release;
     private readonly bool _emitAfterCancel;
     private readonly bool _alwaysToolCall;
+    private readonly string? _completionDecision;
+    private readonly bool _completionProviderFailed;
 
     public ScriptedLanguageModel(
         IReadOnlyList<string>? chunks = null,
         TaskCompletionSource? releaseAfterFirstChunk = null,
         bool emitAfterCancel = false,
-        bool alwaysToolCall = false)
+        bool alwaysToolCall = false,
+        string? completionDecision = null,
+        bool completionProviderFailed = false)
     {
         _chunks = chunks ?? DefaultChunks;
         _release = releaseAfterFirstChunk;
         _emitAfterCancel = emitAfterCancel;
         _alwaysToolCall = alwaysToolCall;
+        _completionDecision = completionDecision;
+        _completionProviderFailed = completionProviderFailed;
     }
 
     public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
@@ -43,6 +49,19 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         if (TryInitiativeDecision(request, out var initiativeJson))
         {
             yield return new ModelTextDelta(initiativeJson);
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
+        if (TryCompletionDecision(request, out var completionJson, out var completionFailed))
+        {
+            if (completionFailed)
+            {
+                yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Synthetic completion failure."));
+                yield break;
+            }
+
+            yield return new ModelTextDelta(completionJson);
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
         }
@@ -320,6 +339,27 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             json = """{"decision":"staySilent","reason":"Synthetic initiative fallback."}""";
             return true;
         }
+    }
+
+    private bool TryCompletionDecision(ModelRequest request, out string json, out bool failed)
+    {
+        json = string.Empty;
+        failed = false;
+        var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+        if (system is null || !system.Contains(CompletionEvaluator.Marker, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (_completionProviderFailed)
+        {
+            failed = true;
+            return true;
+        }
+
+        json = _completionDecision
+            ?? """{"decision":"continue","reason":"Synthetic completion continue."}""";
+        return true;
     }
 }
 

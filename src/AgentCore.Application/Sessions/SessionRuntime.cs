@@ -110,6 +110,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _pendingUploadHold;
     private bool _deactivated;
     private bool _proactiveBrainInFlight;
+    private int _completionGeneration;
+    private CancellationTokenSource? _completionCts;
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private TimeSpan? _pendingPostResponseIdleDelay;
@@ -755,6 +757,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case TimerElapsedReceived timer:
                     await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
+                    break;
+                case CompletionReturned completion:
+                    try
+                    {
+                        await HandleCompletionReturnedAsync(completion, cancellationToken).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        completion.Processed.TrySetResult();
+                    }
+
                     break;
                 case AttachReceived attach:
                     await HandleAttachAsync(attach, cancellationToken).ConfigureAwait(false);
@@ -1415,6 +1428,150 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
         SchedulePostResponseIdleTimer();
         await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        LaunchCompletionEvaluation(context);
+    }
+
+    private void LaunchCompletionEvaluation(EventContext cause)
+    {
+        if (_deactivated
+            || _activeResponseId is not null
+            || HasPendingUserBatch()
+            || !CompletionEvaluator.ShouldEvaluate(_snapshot))
+        {
+            return;
+        }
+
+        var lastAssistant = _snapshot.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant);
+        if (lastAssistant is null || lastAssistant.Status != EntryStatus.Completed)
+        {
+            return;
+        }
+
+        CancelCompletionEvaluation();
+        var generation = ++_completionGeneration;
+        _completionCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var token = _completionCts.Token;
+        var snapshot = _snapshot;
+        BeginWork();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                CompletionDecision decision;
+                try
+                {
+                    decision = await CompletionEvaluator.EvaluateAsync(
+                            _languageModel,
+                            snapshot,
+                            _time.GetUtcNow(),
+                            token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception)
+                {
+                    decision = new ContinueSession("Completion evaluation failed.");
+                }
+
+                if (generation != _completionGeneration)
+                {
+                    return;
+                }
+
+                var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                BeginWork();
+                if (!TryMailbox(new CompletionReturned(NewContext(cause.EventId), generation, decision, processed)))
+                {
+                    EndWork();
+                    return;
+                }
+
+                await processed.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                EndWork();
+            }
+        }, CancellationToken.None);
+    }
+
+    private async Task HandleCompletionReturnedAsync(CompletionReturned input, CancellationToken cancellationToken)
+    {
+        if (input.Generation != _completionGeneration
+            || _deactivated
+            || _activeResponseId is not null
+            || HasPendingUserBatch()
+            || LifecycleTransition.IsTerminal(_snapshot)
+            || !CompletionEvaluator.ShouldEvaluate(_snapshot))
+        {
+            return;
+        }
+
+        if (input.Decision is not RequestComplete complete)
+        {
+            return;
+        }
+
+        var policy = _snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
+        if (policy.AgentCompletion == AgentCompletionAuthority.Advisory)
+        {
+            _snapshot = _snapshot with
+            {
+                LifecycleReason = complete.Reason,
+                LifecycleSource = LifecycleTransitionSource.Agent,
+                LifecycleChangedAt = _time.GetUtcNow(),
+                UpdatedAt = _time.GetUtcNow()
+            };
+            RequestPersist(
+                _snapshot,
+                then: async ct =>
+                {
+                    await PublishAsync(
+                            new SessionOutput(input.Context, null, new CompletionIntentOutput(complete.Reason, Advisory: true)),
+                            ct)
+                        .ConfigureAwait(false);
+                    await PublishStateAsync(input.Context, ct).ConfigureAwait(false);
+                });
+            return;
+        }
+
+        if (policy.AgentCompletion != AgentCompletionAuthority.Allowed)
+        {
+            return;
+        }
+
+        await TerminalizeAsync(
+                input.Context,
+                SessionLifecycleStatus.Completed,
+                LifecycleTransitionSource.Agent,
+                complete.Reason,
+                persisted: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private void CancelCompletionEvaluation()
+    {
+        _completionGeneration++;
+        var cts = _completionCts;
+        if (cts is null)
+        {
+            return;
+        }
+
+        _completionCts = null;
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        cts.Dispose();
     }
 
     private bool HasPendingUserBatch() => TrailingUserSuffix.HasPending(_snapshot.Entries);
@@ -2638,6 +2795,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         Interlocked.Increment(ref _terminalFence);
         _deadlineTimerGeneration++;
+        CancelCompletionEvaluation();
         _deactivated = true;
         SessionSnapshot applied;
         try

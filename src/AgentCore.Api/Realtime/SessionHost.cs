@@ -2090,6 +2090,11 @@ public static class SessionEventMapper
             {
                 ["utteranceId"] = discarded.UtteranceId.ToString()
             }),
+            CompletionIntentOutput intent => ("session.completion.intent", new Dictionary<string, object?>
+            {
+                ["reason"] = intent.Reason,
+                ["advisory"] = intent.Advisory
+            }),
             ErrorOutput error => ("error", new Dictionary<string, object?>
             {
                 ["category"] = error.Category,

@@ -239,6 +239,7 @@ public sealed partial class SessionRuntime
         }
 
         CancelBrainEvaluation();
+        CancelCompletionEvaluation();
         _deactivated = true;
         _timerGeneration++;
         _turnGeneration++;
@@ -300,6 +301,7 @@ public sealed partial class SessionRuntime
     private void NoteUserActivity()
     {
         CancelBrainEvaluation();
+        CancelCompletionEvaluation();
         var now = _time.GetUtcNow();
         _helpOfferedDuringSilence = false;
         _consecutiveProactiveSpeaks = 0;
