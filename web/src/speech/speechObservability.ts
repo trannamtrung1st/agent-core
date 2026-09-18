@@ -5,6 +5,9 @@ export type SpeechObservation = {
   code?: string;
 };
 
+/** Matches the default Application RuntimeTelemetry timeline cap. */
+export const SPEECH_OBSERVATION_CAPACITY = 64;
+
 const events: SpeechObservation[] = [];
 
 export function resetSpeechObservations(): void {
@@ -22,4 +25,7 @@ export function recordSpeechObservation(event: SpeechObservation): void {
     reason: event.reason,
     code: event.code
   });
+  while (events.length > SPEECH_OBSERVATION_CAPACITY) {
+    events.shift();
+  }
 }
