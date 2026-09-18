@@ -6,6 +6,7 @@ import type {
   SpeechInputTransport,
   SpeechOutputTransport
 } from "./clientSpeechRecognizer";
+import type { ClientSpeechSpeakRequest, ClientSpeechSynthesizer, SpeechVoiceHint } from "./clientSpeechSynthesizer";
 
 export type SpeechTransportHooks = {
   onEvidence?: (evidence: ClientSpeechEvidence) => void;
@@ -15,19 +16,26 @@ export type SpeechTransportHooks = {
 export type SpeechTransportService = {
   setInputRecognizer: (recognizer: ClientSpeechRecognizer | null) => void;
   inputRecognizerAdapterId: () => "browser" | "fake" | null;
+  setOutputSynthesizer: (synthesizer: ClientSpeechSynthesizer | null) => void;
+  outputSynthesizerAdapterId: () => "browser" | "fake" | null;
   setActiveInputTransport: (transport: SpeechInputTransport | null) => void;
   activeInputTransport: () => SpeechInputTransport | null;
   setActiveOutputTransport: (transport: SpeechOutputTransport | null) => void;
   activeOutputTransport: () => SpeechOutputTransport | null;
+  resolveOutputVoice: (hint?: SpeechVoiceHint) => ReturnType<ClientSpeechSynthesizer["resolveVoice"]>;
+  speakOutput: (request: ClientSpeechSpeakRequest) => Promise<void>;
+  cancelOutput: () => Promise<void>;
   startInput: (hooks?: SpeechTransportHooks) => Promise<void>;
   stopInput: () => Promise<void>;
   cancelInput: () => Promise<void>;
 };
 
 export function createSpeechTransportService(
-  inputRecognizer: ClientSpeechRecognizer | null = null
+  inputRecognizer: ClientSpeechRecognizer | null = null,
+  outputSynthesizer: ClientSpeechSynthesizer | null = null
 ): SpeechTransportService {
   let recognizer = inputRecognizer;
+  let synthesizer = outputSynthesizer;
   let inputTransport: SpeechInputTransport | null = null;
   let outputTransport: SpeechOutputTransport | null = null;
   let started = false;
@@ -38,6 +46,12 @@ export function createSpeechTransportService(
     },
     inputRecognizerAdapterId() {
       return recognizer?.adapterId ?? null;
+    },
+    setOutputSynthesizer(next) {
+      synthesizer = next;
+    },
+    outputSynthesizerAdapterId() {
+      return synthesizer?.adapterId ?? null;
     },
     setActiveInputTransport(transport) {
       inputTransport = transport;
@@ -50,6 +64,19 @@ export function createSpeechTransportService(
     },
     activeOutputTransport() {
       return outputTransport;
+    },
+    resolveOutputVoice(hint) {
+      return synthesizer?.resolveVoice(hint) ?? null;
+    },
+    async speakOutput(request) {
+      if (outputTransport !== "clientSpeech" || !synthesizer) {
+        return;
+      }
+
+      await synthesizer.speak(request);
+    },
+    async cancelOutput() {
+      await synthesizer?.cancel();
     },
     async startInput(hooks = {}) {
       if (inputTransport !== "clientTranscript" || !recognizer) {

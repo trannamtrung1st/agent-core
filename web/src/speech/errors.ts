@@ -5,7 +5,10 @@ export const SPEECH_ERROR_CODES = [
   "SpeechPermissionDenied",
   "SpeechDeviceUnavailable",
   "SpeechRecognitionUnavailable",
-  "SpeechRecognitionRestartLimit"
+  "SpeechRecognitionRestartLimit",
+  "SpeechSynthesisUnavailable",
+  "SpeechVoiceUnavailable",
+  "SpeechPlaybackFailed"
 ] as const;
 
 export type SpeechErrorCode = (typeof SPEECH_ERROR_CODES)[number];
@@ -15,7 +18,10 @@ const MESSAGES: Record<SpeechErrorCode, string> = {
   SpeechPermissionDenied: "Microphone permission was denied.",
   SpeechDeviceUnavailable: "No speech input device is available.",
   SpeechRecognitionUnavailable: "Speech recognition is unavailable.",
-  SpeechRecognitionRestartLimit: "Speech recognition restarted too many times."
+  SpeechRecognitionRestartLimit: "Speech recognition restarted too many times.",
+  SpeechSynthesisUnavailable: "Speech synthesis is not available in this browser.",
+  SpeechVoiceUnavailable: "No matching speech synthesis voice is available.",
+  SpeechPlaybackFailed: "Speech playback failed."
 };
 
 export function speechError(code: SpeechErrorCode, message?: string): SessionErrorView {

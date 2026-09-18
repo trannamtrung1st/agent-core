@@ -4,6 +4,14 @@ import type {
   ClientSpeechRecognizer,
   ClientSpeechRecognizerListener
 } from "./clientSpeechRecognizer";
+import type {
+  ClientSpeechSpeakRequest,
+  ClientSpeechSynthesizer,
+  ClientSpeechSynthesizerListener,
+  SpeechVoice,
+  SpeechVoiceHint
+} from "./clientSpeechSynthesizer";
+import { resolveSpeechVoice } from "./resolveSpeechVoice";
 
 export class FakeSpeechRecognizer implements ClientSpeechRecognizer {
   readonly adapterId = "fake" as const;
@@ -55,4 +63,49 @@ export class FakeSpeechRecognizer implements ClientSpeechRecognizer {
 
 export function createFakeSpeechRecognizer(): FakeSpeechRecognizer {
   return new FakeSpeechRecognizer();
+}
+
+export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
+  readonly adapterId = "fake" as const;
+  voices: SpeechVoice[];
+  readonly spoken: { text: string; voice: SpeechVoice | null }[] = [];
+  cancelled = false;
+  private speaking = false;
+
+  constructor(voices: SpeechVoice[] = [
+    { voiceURI: "fake-en", name: "Fake English", lang: "en-US", default: true },
+    { voiceURI: "fake-fr", name: "Fake French", lang: "fr-FR" }
+  ]) {
+    this.voices = voices;
+  }
+
+  listVoices(): SpeechVoice[] {
+    return this.voices;
+  }
+
+  resolveVoice(hint?: SpeechVoiceHint): SpeechVoice | null {
+    return resolveSpeechVoice(this.voices, hint);
+  }
+
+  async speak(request: ClientSpeechSpeakRequest, listener?: ClientSpeechSynthesizerListener): Promise<void> {
+    this.cancelled = false;
+    this.speaking = true;
+    const voice = this.resolveVoice(request.hint);
+    this.spoken.push({ text: request.text, voice });
+    this.speaking = false;
+    listener?.onEnd?.();
+  }
+
+  async cancel(): Promise<void> {
+    this.cancelled = true;
+    this.speaking = false;
+  }
+
+  get isSpeaking(): boolean {
+    return this.speaking;
+  }
+}
+
+export function createFakeSpeechSynthesizer(voices?: SpeechVoice[]): FakeSpeechSynthesizer {
+  return new FakeSpeechSynthesizer(voices);
 }

@@ -137,13 +137,9 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [x] Admit client-transcript evidence through the existing Interaction Controller without opening an `ISpeechRecognizer` session.
 
-- [ ] Support long speech without waiting for a turn-by-turn submit.
+- [x] Support long speech without waiting for a turn-by-turn submit.
 
-  - partial recognition events stream to backend while speaking;
-  - final segments are admitted incrementally;
-  - dedupe repeated browser results;
-  - bound text/event rate and payload size;
-  - reconnect never replays stale partial speech.
+  Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, bounded restart, and drops stale partials on reconnect. Voice-mode wiring remains.
 
 - [ ] Preserve interruption semantics.
 
@@ -161,15 +157,9 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 Goal: inexpensive speech output without backend TTS cost while preserving the existing display/speech separation.
 
-- [ ] Add a frontend speech-synthesis adapter around `speechSynthesis`.
+- [x] Add a frontend ClientSpeechSynthesizer port with Browser and fake adapters, voiceURI/name/language/default fallback, and the shared speech-transport service owning output.
 
-  - voice/capability discovery;
-  - start;
-  - boundary/progress where the browser provides trustworthy events;
-  - completion;
-  - cancellation;
-  - interruption/flush;
-  - normalized errors.
+- [ ] Queue, ACK, and immediately cancel Browser TTS (speechSynthesis playback, conservative offsets, preflight).
 
 - [x] Add a server-to-client speech-text segment contract for Browser TTS.
 
