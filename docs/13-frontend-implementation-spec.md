@@ -4,7 +4,7 @@
 
 React SPA, Vite, pnpm, strict TypeScript, Zustand, @microsoft/signalr, @microsoft/signalr-protocol-msgpack, browser fetch, Ant Design v6 (product components import AntD directly), and minimal app-specific CSS. Vitest and React Testing Library test behavior; Playwright tests synthetic end-to-end flows. No SSR, Next.js, heavy data cache, Ant Design Pro/ProComponents/X, or a second component/CSS framework.
 
-Shipped web modules include `app` (routing/composition, `AppShell`, session path helpers), `features/chat`, services (`api`, `realtime`, `attachments`, `catalog`, `audio`), and `state/sessionStore`. Wire types are hand-maintained against [Protocol](14-api-and-realtime-protocol.md) with serialization fixtures; no generated types are created during this docs task. Browser services own long-lived connections/audio; React components subscribe, issue commands and render state.
+Shipped web modules include `app` (routing/composition, `AppShell`, session path helpers), `features/chat`, services (`api`, `realtime`, `attachments`, `catalog`, `audio`), `speech` (client recognizer port, Browser/fake adapters, and one speech-transport orchestration service), and `state/sessionStore`. Wire types are hand-maintained against [Protocol](14-api-and-realtime-protocol.md) with serialization fixtures; no generated types are created during this docs task. Browser services own long-lived connections/audio; React components subscribe, issue commands and render state. Native `SpeechRecognition` / `speechSynthesis` objects stay in speech adapters, never Zustand.
 
 Future modules may add `features/voice` composition splits and `contracts` packaging without changing the routing model below.
 

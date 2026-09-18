@@ -1,0 +1,58 @@
+import { speechError, type SpeechErrorCode } from "./errors";
+import type {
+  ClientSpeechEvidence,
+  ClientSpeechRecognizer,
+  ClientSpeechRecognizerListener
+} from "./clientSpeechRecognizer";
+
+export class FakeSpeechRecognizer implements ClientSpeechRecognizer {
+  readonly adapterId = "fake" as const;
+  private listener: ClientSpeechRecognizerListener | null = null;
+  private running = false;
+  readonly evidence: ClientSpeechEvidence[] = [];
+
+  get isRunning(): boolean {
+    return this.running;
+  }
+
+  async start(listener: ClientSpeechRecognizerListener): Promise<void> {
+    this.listener = listener;
+    this.running = true;
+    this.evidence.length = 0;
+  }
+
+  async stop(): Promise<void> {
+    if (!this.running) {
+      return;
+    }
+
+    this.running = false;
+    this.emit({ kind: "ended", utteranceId: this.lastUtteranceId(), durationMs: 0, activityScore: 0 });
+    this.listener = null;
+  }
+
+  async cancel(): Promise<void> {
+    this.running = false;
+    this.listener = null;
+  }
+
+  emit(evidence: ClientSpeechEvidence): void {
+    this.evidence.push(evidence);
+    this.listener?.onEvidence(evidence);
+  }
+
+  fail(code: SpeechErrorCode, utteranceId?: string): void {
+    const error = speechError(code);
+    this.listener?.onError(error);
+    this.emit({ kind: "failed", utteranceId: utteranceId ?? this.lastUtteranceId() });
+    this.running = false;
+  }
+
+  private lastUtteranceId(): string {
+    return this.evidence.at(-1)?.utteranceId ?? "00000000-0000-0000-0000-000000000000";
+  }
+}
+
+export function createFakeSpeechRecognizer(): FakeSpeechRecognizer {
+  return new FakeSpeechRecognizer();
+}
