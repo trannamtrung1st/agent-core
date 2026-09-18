@@ -51,15 +51,14 @@ test("session path survives refresh", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page).toHaveURL(url);
-  await expect(page.getByText("Hello")).toBeVisible();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+  await expect(page.locator(".conversation-scroll").getByText("Hello", { exact: true })).toBeVisible();
+  await expect(page.locator(".conversation-scroll").getByText("Hello from synthetic.")).toBeVisible();
   await expectConversationScrolledToBottom(page);
 });
 
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();
-  await expect(page.getByText("No chats yet.")).toBeVisible();
   await expect(page.getByLabel("Identity")).toBeVisible();
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();

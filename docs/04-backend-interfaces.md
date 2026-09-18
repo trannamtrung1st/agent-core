@@ -262,7 +262,7 @@ SessionSnapshot/UserProfile fields and atomic save semantics are specified in [P
 
 **Observed speech locale:** Application `SpeechLocale` resolves session override > agent conversation-language default > provider fallback (`en`), validates BCP-47-like tags, and persists `SpeechLocaleOverride` without rewriting agent text language. Effective locale is public on session views and `session.ready` `capabilities.speechLocale`. `ISpeechLocaleSupport` evaluates recognition/synthesis support; `SessionRuntime` has no Browser/OpenAI locale branches. Browser STT uses the effective tag; Browser TTS selects exact locale, then base language, then a compatible configured/default voice, or fails Voice without speaking the wrong language. Hosted batch STT sends an adapter-local language hint; hosted TTS locale/voice compatibility stays in adapter configuration.
 
-**Follow-on P1 planned until verified:** Speech locale/voice selection in Browser and hosted adapters. See [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
+**Follow-on P1 planned until verified:** Speech locale/voice selection in Browser and hosted adapters is observed. Real non-English Browser smoke remains blocked. See [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
 Environment data enters Application only through this narrow ingress. It is not a message bus and is not a public HTTP `/events` endpoint:
 

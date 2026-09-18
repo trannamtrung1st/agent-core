@@ -88,7 +88,7 @@ A created session is inactive until attached. One connection owns a session at a
 
 ## Follow-on P1 planned until verified
 
-Observed mailbox ownership and protocol-v1 attach/pause/end stay as above. Follow-on P1 does not add a second Session Runtime or put raw audio on the domain mailbox. Observed: bounded `IMemoryStore` restore plus durable `LastEntrySequence`; additive `lifecycleStatus` beside protocol-v1 `status` with `LifecycleTransition`; Application effective speech locale outside SessionRuntime vendor branches; Browser/hosted adapter locale/voice selection; Speech locale Select. Planned: real non-English Browser smoke. Owners: [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
+Observed mailbox ownership and protocol-v1 attach/pause/end stay as above. Follow-on P1 does not add a second Session Runtime or put raw audio on the domain mailbox. Observed: bounded `IMemoryStore` restore plus durable `LastEntrySequence`; additive `lifecycleStatus` beside protocol-v1 `status` with `LifecycleTransition`; Application effective speech locale outside SessionRuntime vendor branches; Browser/hosted adapter locale/voice selection; Speech locale Select. Real non-English Browser smoke remains **BLOCKED**; P1 freeze is blocked. Owners: [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
 ## Post-MVP planned until verified
 

@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` through parent `215de23ecefe65560b0b7a666783122d6c67408c` plus the P0-3 preferred-name freeze (`5ff60bd`) and this P1-0 docs-only contract pass on 2026-09-19. Exact Synthetic/Compose gates and the Chrome 153 `general-assistant` Voice checklist were re-run on the P0 freeze working tree before that freeze commit. Follow-on P1A/P1B/P1C remain planned until verified.
+Reviewed against this run through P1-Final (2026-09-19): exact live `synthetic.yml` plus Compose on the P1-Final working tree (parent implementation `505ab77` plus Playwright catalog isolation in this commit). Domain 40; Infrastructure 112/9 skip; Application 346 with blame-hang; API 120; web 324 unit tests; Playwright 34; Compose `8e2467bf-7db9-4520-851a-146584761cb7`. Live flags 0. P0-2 Chrome 153 Voice checklist was **not** re-run; it remains the last recorded real-browser Voice evidence (`215de23`). P1C-3 real non-English Browser smoke remains **BLOCKED**. Optional hosted multilingual checks were not run. **P1 freeze is blocked.** P2 has not started.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
@@ -46,7 +46,7 @@ This is a bounded verification/fix pass, not another voice redesign.
 
 ## P1 — Conversation and session ergonomics
 
-Authoritative contracts for this follow-on work are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech-planned-until-verified). They are **planned until verified**. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. P1-0 records contracts only; later batches implement P1A–P1C.
+Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). P1A/P1B/P1C implementation is observed. P1 freeze remains blocked on the real non-English Browser smoke. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. Do not start P2.
 
 ### P1A — Lazy-load old chat history
 
@@ -104,7 +104,7 @@ Core rule:
 
   Keep protocol-v1 `status` (`created|attached|paused|ending|ended`) compatible during migration. Archive (`ArchivedAt`) stays orthogonal. Do not collapse every terminal outcome into one generic `Stopped` state. One Application `TransitionLifecycle` owns the graph (P1B-2, not yet the execution path). Existing sessions migrate Created/Attached→Active, Paused→Paused, Ended→Ended; Ending recovery is Ended.
 
-- [ ] Add a model lifecycle intent such as `RequestComplete`.
+- [x] Add a model lifecycle intent such as `RequestComplete`.
 
   Keep it semantically distinct from `RequestDeactivate`:
   - `RequestDeactivate` = no useful action right now / pause runtime activity;
@@ -112,7 +112,7 @@ Core rule:
 
   A model request must not automatically terminate the session unless the configured policy explicitly grants that authority.
 
-- [ ] Define configurable completion authority.
+- [x] Define configurable completion authority.
 
   Conceptually support:
   - host-authoritative completion;
@@ -122,7 +122,7 @@ Core rule:
 
   Avoid hard-coding these exact policy names until the domain model is implemented. P1B-1 persists agent disabled/advisory/allowed plus user complete/cancel allowed/denied; host/system authority remains always allowed at the transition layer (P1B-2).
 
-- [ ] Support authoritative deterministic termination from Agent Core / host integration.
+- [x] Support authoritative deterministic termination from Agent Core / host integration.
 
   Examples:
   - maximum duration/deadline reached;
@@ -136,7 +136,7 @@ Core rule:
   - reject or constrain future input appropriately;
   - publish the corresponding lifecycle event.
 
-- [ ] Keep domain-specific stop conditions outside Agent Core.
+- [x] Keep domain-specific stop conditions outside Agent Core.
 
   Example examination integration:
   - examination platform owns the 60-minute exam rule and assignment/submission state;
@@ -144,13 +144,13 @@ Core rule:
   - early submission can authoritatively transition it to `Completed`;
   - the examiner agent may emit `RequestComplete`, but in a high-stakes exam that request remains advisory unless the host validates it.
 
-- [ ] Persist session purpose, lifecycle policy, completion state, reason, and relevant timestamps.
+- [x] Persist session purpose, lifecycle policy, completion state, reason, and relevant timestamps.
 
-- [ ] Define reconnect/history behavior for terminal sessions.
+- [x] Define reconnect/history behavior for terminal sessions.
 
   A completed/expired/cancelled session should remain inspectable without accidentally reopening normal conversation unless an explicit product flow allows it.
 
-- [ ] Add minimal UI only after the domain contract is stable.
+- [x] Add minimal UI only after the domain contract is stable.
 
   Avoid building a generic workflow/rules editor here.
 
@@ -158,7 +158,7 @@ Core rule:
 
 Add this as provider-neutral language configuration, not provider-specific branching in Session Runtime.
 
-- [ ] Define effective speech language/locale selection.
+- [x] Define effective speech language/locale selection.
 
   Precedence: session override > agent conversation-language default > provider/default fallback. Validate BCP-47-like tags at the Application boundary. Persist the override without rewriting agent text-language settings. Expose the resolved locale on session readiness/capability data.
 
@@ -169,11 +169,13 @@ Add this as provider-neutral language configuration, not provider-specific branc
   - hosted TTS voice/language compatibility in adapters;
   - no Browser/OpenAI locale branches in SessionRuntime.
 
-- [ ] Keep text mode usable even when a selected speech provider does not support the requested language.
+- [x] Keep text mode usable even when a selected speech provider does not support the requested language.
 
-- [ ] Do not require automatic language detection initially.
+- [x] Do not require automatic language detection initially.
 
 - [ ] Add deterministic tests for configuration/fallback; keep real multilingual voice checks opt-in/manual.
+
+  Deterministic Application/adapter/Playwright locale coverage is observed. Real non-English Chrome/Edge STT/TTS smoke is **BLOCKED** (no operator-attended Browser + microphone + locale voices). Fake-device Playwright is not that probe. Optional hosted multilingual checks were not run.
 
 ---
 
