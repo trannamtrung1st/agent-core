@@ -8,6 +8,10 @@ const apiPort = process.env.PLAYWRIGHT_API_PORT ?? "5080";
 const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? "5173";
 const apiUrl = `http://127.0.0.1:${apiPort}`;
 const webUrl = `http://127.0.0.1:${webPort}`;
+const browserSttApiPort = process.env.PLAYWRIGHT_BROWSER_STT_API_PORT ?? "5081";
+const browserSttWebPort = process.env.PLAYWRIGHT_BROWSER_STT_WEB_PORT ?? "5174";
+const browserSttApiUrl = `http://127.0.0.1:${browserSttApiPort}`;
+const browserSttWebUrl = `http://127.0.0.1:${browserSttWebPort}`;
 
 const chromium = devices["Desktop Chrome"];
 
@@ -31,6 +35,10 @@ export default defineConfig({
       ]
     }
   },
+  projects: [
+    { name: "synthetic", testIgnore: /browser-stt\.spec\.ts/ },
+    { name: "browser-stt", testMatch: /browser-stt\.spec\.ts/, use: { baseURL: browserSttWebUrl } }
+  ],
   webServer: [
     {
       command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${apiUrl}`,
@@ -70,6 +78,33 @@ export default defineConfig({
       },
       url: webUrl,
       reuseExistingServer: !process.env.CI,
+      timeout: 120_000
+    },
+    {
+      command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${browserSttApiUrl}`,
+      cwd: root,
+      env: {
+        ASPNETCORE_ENVIRONMENT: "Development",
+        AgentCore__Profile: "Synthetic",
+        Persistence__Provider: "InMemory",
+        Providers__Speech__Recognition__Adapter: "Browser",
+        AGENTCORE_LIVE_PROVIDER_TESTS: "0",
+        AGENTCORE_LIVE_OPENAI_STT: "0",
+        AGENTCORE_LIVE_OPENAI_TTS: "0"
+      },
+      url: `${browserSttApiUrl}/health`,
+      reuseExistingServer: false,
+      timeout: 120_000
+    },
+    {
+      command: `pnpm exec vite --host 127.0.0.1 --port ${browserSttWebPort}`,
+      cwd: webDir,
+      env: {
+        VITE_API_PROXY_TARGET: browserSttApiUrl,
+        VITE_DEV_PORT: browserSttWebPort
+      },
+      url: browserSttWebUrl,
+      reuseExistingServer: false,
       timeout: 120_000
     }
   ]

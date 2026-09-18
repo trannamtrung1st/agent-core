@@ -33,6 +33,37 @@ describe("capture preflight", () => {
     expect(capture.isPrepared()).toBe(false);
   });
 
+  it("skips getUserMedia when microphone preflight is disabled", async () => {
+    const getUserMedia = vi.fn();
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia }
+    });
+    vi.stubGlobal("MediaStream", class {
+      getTracks() {
+        return [];
+      }
+    });
+    const port = { onmessage: null as ((event: MessageEvent) => void) | null, postMessage: vi.fn() };
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      destination = {};
+      resume = vi.fn();
+      close = vi.fn();
+      audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
+      createGain = () => ({ gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() });
+      createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+    });
+    vi.stubGlobal("AudioWorkletNode", class {
+      port = port;
+      connect = vi.fn();
+      disconnect = vi.fn();
+    });
+    await capture.preflight({ microphone: false });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(capture.isPrepared()).toBe(true);
+    expect(capture.usedMicrophone()).toBe(false);
+  });
+
   it("muteInput stops streaming without releasing the graph", async () => {
     const stop = vi.fn();
     vi.stubGlobal("navigator", {

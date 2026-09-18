@@ -68,6 +68,8 @@ export type SessionView = {
   agentName: string;
   agentRole: string;
   voiceAvailable: boolean;
+  sttTransport: "serverAudio" | "clientTranscript" | null;
+  ttsTransport: "serverAudio" | "clientSpeech" | null;
   mode: "text" | "voice";
   pendingMode: "text" | "voice" | null;
   status: string;
@@ -99,6 +101,8 @@ export const emptySession = (): SessionView => ({
   agentName: "",
   agentRole: "",
   voiceAvailable: false,
+  sttTransport: null,
+  ttsTransport: null,
   mode: "text",
   pendingMode: null,
   status: "created",
@@ -129,6 +133,19 @@ function asString(value: unknown): string {
 
 function asNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
+}
+
+function transportsFromPayload(payload: Record<string, unknown>): {
+  sttTransport: SessionView["sttTransport"];
+  ttsTransport: SessionView["ttsTransport"];
+} {
+  const capabilities = (payload.capabilities ?? {}) as Record<string, unknown>;
+  const stt = (capabilities.stt ?? {}) as Record<string, unknown>;
+  const tts = (capabilities.tts ?? {}) as Record<string, unknown>;
+  return {
+    sttTransport: asString(stt.transport) === "clientTranscript" ? "clientTranscript" : asString(stt.transport) === "serverAudio" ? "serverAudio" : null,
+    ttsTransport: asString(tts.transport) === "clientSpeech" ? "clientSpeech" : asString(tts.transport) === "serverAudio" ? "serverAudio" : null
+  };
 }
 
 function isInFlightOutput(value: string): boolean {
@@ -273,6 +290,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         agentName: asString(agent.name),
         agentRole: asString(agent.role),
         voiceAvailable: Boolean(agent.voiceAvailable),
+        ...transportsFromPayload(payload),
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",
         status: asString(payload.status),

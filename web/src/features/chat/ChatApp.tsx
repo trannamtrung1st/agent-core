@@ -30,6 +30,8 @@ import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import { SessionRail } from "./SessionRail";
+import { voiceControlEnabled } from "../../speech/voiceEnablement";
+import { clientRecognitionSupported, clientSynthesisSupported } from "../../speech/clientSpeechSupport";
 
 const { Header, Sider, Content } = Layout;
 const NARROW_QUERY = "(max-width: 767px)";
@@ -115,7 +117,13 @@ export function ChatApp() {
   const composerReady = !readonly
     && state.status !== "paused"
     && (state.connection === "ready" || (!inSession && state.connection === "idle"));
-  const voiceAvailable = inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable);
+  const voiceAvailable = voiceControlEnabled({
+    voiceAvailable: inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable),
+    inputTransport: state.sttTransport,
+    outputTransport: state.ttsTransport,
+    recognitionSupported: clientRecognitionSupported(),
+    synthesisSupported: clientSynthesisSupported()
+  });
   const headerTimestamp = inSession
     ? state.entries.at(-1)?.createdAt
       ?? state.catalogItems.find((item) => item.sessionId === state.sessionId)?.updatedAt
@@ -232,6 +240,7 @@ export function ChatApp() {
                     entries={state.entries}
                     activity={inSession ? activity : { kind: "idle" }}
                     voiceAvailable={voiceAvailable}
+                    sttTransport={state.sttTransport}
                     empty={
                       inSession ? undefined : (
                         <div className="new-chat-intro">

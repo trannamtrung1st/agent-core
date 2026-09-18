@@ -46,6 +46,7 @@ class MicrophoneCapture {
   private hooks: CaptureHooks | null = null;
   private outbound: Promise<void> = Promise.resolve();
   private startChain: Promise<void> = Promise.resolve();
+  private microphoneUsed = false;
   outgoingHold: (() => Promise<void>) | null = null;
 
   isPrepared(): boolean {
@@ -54,6 +55,10 @@ class MicrophoneCapture {
 
   isStreaming(): boolean {
     return this.streaming;
+  }
+
+  usedMicrophone(): boolean {
+    return this.microphoneUsed;
   }
 
   workletLoaded(): boolean {
@@ -104,21 +109,25 @@ class MicrophoneCapture {
     this.onOverflow = listener;
   }
 
-  async preflight(): Promise<void> {
+  async preflight(options?: { microphone?: boolean }): Promise<void> {
     this.release();
     if (typeof AudioWorkletNode === "undefined") {
       throw new Error("AudioWorklet is not available.");
     }
 
-    const stream = await Promise.race([
-      navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false
-      }),
-      new Promise<MediaStream>((_, reject) => {
-        window.setTimeout(() => reject(new Error("getUserMedia timed out.")), 4000);
-      })
-    ]);
+    const wantMicrophone = options?.microphone !== false;
+    const stream = wantMicrophone
+      ? await Promise.race([
+          navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            video: false
+          }),
+          new Promise<MediaStream>((_, reject) => {
+            window.setTimeout(() => reject(new Error("getUserMedia timed out.")), 4000);
+          })
+        ])
+      : new MediaStream();
+    this.microphoneUsed = wantMicrophone;
     const context = new AudioContext();
     if (context.state === "suspended") {
       await Promise.race([
@@ -330,6 +339,7 @@ class MicrophoneCapture {
     this.hooks = null;
     this.workletReady = false;
     this.outputReady = false;
+    this.microphoneUsed = false;
     const stoppedAt = this.consumedSamples;
     this.consumedSamples = 0;
     this.queuedSamples = 0;

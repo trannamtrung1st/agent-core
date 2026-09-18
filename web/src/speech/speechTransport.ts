@@ -6,7 +6,7 @@ import type {
   SpeechInputTransport,
   SpeechOutputTransport
 } from "./clientSpeechRecognizer";
-import type { ClientSpeechSpeakRequest, ClientSpeechSynthesizer, SpeechVoiceHint } from "./clientSpeechSynthesizer";
+import type { ClientSpeechSpeakRequest, ClientSpeechSynthesizer, ClientSpeechSynthesizerListener, SpeechVoiceHint } from "./clientSpeechSynthesizer";
 
 export type SpeechTransportHooks = {
   onEvidence?: (evidence: ClientSpeechEvidence) => void;
@@ -23,7 +23,7 @@ export type SpeechTransportService = {
   setActiveOutputTransport: (transport: SpeechOutputTransport | null) => void;
   activeOutputTransport: () => SpeechOutputTransport | null;
   resolveOutputVoice: (hint?: SpeechVoiceHint) => ReturnType<ClientSpeechSynthesizer["resolveVoice"]>;
-  speakOutput: (request: ClientSpeechSpeakRequest) => Promise<void>;
+  speakOutput: (request: ClientSpeechSpeakRequest, listener?: ClientSpeechSynthesizerListener) => Promise<void>;
   cancelOutput: () => Promise<void>;
   startInput: (hooks?: SpeechTransportHooks) => Promise<void>;
   stopInput: () => Promise<void>;
@@ -68,12 +68,12 @@ export function createSpeechTransportService(
     resolveOutputVoice(hint) {
       return synthesizer?.resolveVoice(hint) ?? null;
     },
-    async speakOutput(request) {
+    async speakOutput(request, listener) {
       if (outputTransport !== "clientSpeech" || !synthesizer) {
         return;
       }
 
-      await synthesizer.speak(request);
+      await synthesizer.speak(request, listener);
     },
     async cancelOutput() {
       await synthesizer?.cancel();

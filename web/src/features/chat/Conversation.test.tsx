@@ -41,6 +41,20 @@ describe("Conversation", () => {
     expect(screen.queryByText("Send a message or start voice.")).not.toBeInTheDocument();
   });
 
+  it("does not describe Browser STT as offline", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[]}
+        activity={{ kind: "idle" }}
+        sttTransport="clientTranscript"
+      />
+    );
+    expect(screen.getByText("Send a message or start voice. Speech recognition runs in this browser tab.")).toBeInTheDocument();
+    expect(screen.queryByText(/offline/i)).not.toBeInTheDocument();
+  });
+
   it("lays out user bubbles and open assistant messages with status labels", () => {
     render(
       <Conversation

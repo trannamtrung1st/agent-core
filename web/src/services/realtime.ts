@@ -19,10 +19,26 @@ import {
 } from "./attachments";
 import { catalogShell, refreshCatalog } from "./catalog";
 import { requiresExplicitResume } from "./sessionPauseSemantics";
+import { createBrowserSpeechRecognizer } from "../speech/browserSpeechRecognizer";
+import { createBrowserSpeechSynthesizer } from "../speech/browserSpeechSynthesizer";
+import { createClientSpeechPlayer, type ClientSpeechPlayer } from "../speech/clientSpeechPlayer";
+import type { ClientSpeechEvidence } from "../speech/clientSpeechRecognizer";
+import type { ClientSpeechSynthesizer } from "../speech/clientSpeechSynthesizer";
+import { clientRecognitionSupported, clientSynthesisSupported, speechTestSeam } from "../speech/clientSpeechSupport";
+import { ClientTranscriptLifecycle } from "../speech/clientTranscriptLifecycle";
+import { createFakeSpeechRecognizer, createFakeSpeechSynthesizer, type FakeSpeechRecognizer } from "../speech/fakeSpeechAdapters";
+import { speechTransport } from "../speech/speechTransport";
+import { voiceControlEnabled } from "../speech/voiceEnablement";
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
 let commandSequence = 0;
+let clientSpeechPlayer: ClientSpeechPlayer | null = null;
+let transcriptLife: ClientTranscriptLifecycle | null = null;
+let injectedRecognizer: FakeSpeechRecognizer | null = null;
+let transcriptStart: Promise<void> | null = null;
+let speechEvidenceChain: Promise<void> = Promise.resolve();
+let speechEvidenceAttempts = 0;
 let audioFramesSent = 0;
 let audioOutputsReceived = 0;
 let playbackConsumed = 0;
@@ -179,6 +195,165 @@ async function invoke(
   }>;
 }
 
+function bindSpeechTransports(): void {
+  const snapshot = useSessionStore.getState();
+  speechTransport.setActiveInputTransport(
+    snapshot.sttTransport === "clientTranscript" || snapshot.sttTransport === "serverAudio"
+      ? snapshot.sttTransport
+      : null
+  );
+  speechTransport.setActiveOutputTransport(
+    snapshot.ttsTransport === "clientSpeech" || snapshot.ttsTransport === "serverAudio"
+      ? snapshot.ttsTransport
+      : null
+  );
+}
+
+function ensureSpeechAdapters(): void {
+  const seam = speechTestSeam();
+  if (!speechTransport.inputRecognizerAdapterId()) {
+    if (seam.recognizer) {
+      speechTransport.setInputRecognizer(seam.recognizer);
+      injectedRecognizer = seam.recognizer instanceof Object && "emit" in seam.recognizer
+        ? seam.recognizer as FakeSpeechRecognizer
+        : injectedRecognizer;
+    } else if (seam.fakeRecognizer) {
+      injectedRecognizer = createFakeSpeechRecognizer();
+      speechTransport.setInputRecognizer(injectedRecognizer);
+    } else {
+      speechTransport.setInputRecognizer(createBrowserSpeechRecognizer());
+    }
+  }
+
+  if (!speechTransport.outputSynthesizerAdapterId()) {
+    if (seam.synthesizer) {
+      speechTransport.setOutputSynthesizer(seam.synthesizer);
+    } else if (seam.fakeSynthesizer) {
+      speechTransport.setOutputSynthesizer(createFakeSpeechSynthesizer());
+    } else {
+      speechTransport.setOutputSynthesizer(createBrowserSpeechSynthesizer());
+    }
+  }
+
+  bindSpeechTransports();
+}
+
+function transportSynthesizer(): ClientSpeechSynthesizer {
+  ensureSpeechAdapters();
+  return {
+    adapterId: speechTransport.outputSynthesizerAdapterId() ?? "fake",
+    listVoices: () => [],
+    resolveVoice: (hint) => speechTransport.resolveOutputVoice(hint),
+    speak: (request, listener) => speechTransport.speakOutput(request, listener),
+    cancel: () => speechTransport.cancelOutput()
+  };
+}
+
+function sendClientSpeechAck(
+  responseId: string,
+  report: { kind: "started" | "progress" | "completed" | "stopped"; textEndExclusive: number }
+): void {
+  const method =
+    report.kind === "started"
+      ? "PlaybackStarted"
+      : report.kind === "progress"
+        ? "PlaybackProgress"
+        : report.kind === "completed"
+          ? "PlaybackCompleted"
+          : "PlaybackStopped";
+  const type = `playback.${report.kind}`;
+  void sendPlayback(method, type, responseId, 0, report.textEndExclusive);
+}
+
+function ensureClientSpeechPlayer(): ClientSpeechPlayer {
+  if (!clientSpeechPlayer) {
+    clientSpeechPlayer = createClientSpeechPlayer(transportSynthesizer(), sendClientSpeechAck);
+  }
+
+  return clientSpeechPlayer;
+}
+
+function sendSpeechEvidence(evidence: ClientSpeechEvidence): void {
+  const snapshot = useSessionStore.getState();
+  if (!connection || snapshot.sttTransport !== "clientTranscript" || snapshot.mode !== "voice") {
+    return;
+  }
+
+  const payload: Record<string, unknown> = {
+    kind: evidence.kind,
+    utteranceId: evidence.utteranceId
+  };
+  if (evidence.revision != null) {
+    payload.revision = evidence.revision;
+  }
+  if (evidence.text != null) {
+    payload.text = evidence.text;
+  }
+  if (evidence.confidence != null) {
+    payload.confidence = evidence.confidence;
+  }
+  if (evidence.activityScore != null) {
+    payload.activityScore = evidence.activityScore;
+  }
+  if (evidence.durationMs != null) {
+    payload.durationMs = evidence.durationMs;
+  }
+
+  speechEvidenceAttempts += 1;
+  commandSequence += 1;
+  const sequence = commandSequence;
+  speechEvidenceChain = speechEvidenceChain.then(async () => {
+    const ack = await invoke("SpeechEvidence", "client.speech.evidence", payload, sequence);
+    if (ack?.accepted) {
+      return;
+    }
+
+    useSessionStore.setState({
+      error: ack?.error?.message ?? "Speech evidence was not accepted.",
+      sessionError: sessionErrorFromWire(ack?.error, ack?.error?.message ?? "Speech evidence was not accepted."),
+      errorFatal: false
+    });
+  }).catch((error: unknown) => {
+    useSessionStore.setState({
+      ...sessionFailurePatch(error instanceof Error ? error.message : "Speech evidence failed.", {
+        category: "Speech",
+        code: "SpeechEvidenceFailed"
+      })
+    });
+  });
+}
+
+function ensureTranscriptLife(): ClientTranscriptLifecycle {
+  ensureSpeechAdapters();
+  if (!transcriptLife) {
+    transcriptLife = new ClientTranscriptLifecycle(speechTransport, sendSpeechEvidence, (error) => {
+      useSessionStore.setState({
+        error: error.message,
+        sessionError: error,
+        errorFatal: false
+      });
+    });
+  }
+
+  return transcriptLife;
+}
+
+async function releaseClientSpeech(): Promise<void> {
+  await clientSpeechPlayer?.reset();
+  await transcriptLife?.disconnect();
+}
+
+function sessionVoiceEnabled(): boolean {
+  const snapshot = useSessionStore.getState();
+  return voiceControlEnabled({
+    voiceAvailable: snapshot.voiceAvailable,
+    inputTransport: snapshot.sttTransport,
+    outputTransport: snapshot.ttsTransport,
+    recognitionSupported: clientRecognitionSupported(),
+    synthesisSupported: clientSynthesisSupported()
+  });
+}
+
 const RECONNECT_BUDGET_MS = 60_000;
 const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 
@@ -212,6 +387,7 @@ function reconnectBudgetRemaining(): number {
 
 function dropLiveTransport(connection: "reconnecting" | "failed"): void {
   abortPlayback();
+  void releaseClientSpeech();
   capture.release();
   useSessionStore.setState({
     connection,
@@ -230,6 +406,7 @@ function markConnectionFailed(message: string): void {
     }
   }
   abortPlayback();
+  void releaseClientSpeech();
   capture.release();
   useSessionStore.setState({
     ...sessionFailurePatch(message, { category: "Transport", code: "ReconnectFailed" }),
@@ -366,12 +543,32 @@ function handleEvent(raw: ServerEvent): void {
   }
 
   const next = applyServerEvent(prior, raw);
+  if (
+    (prior.ttsTransport === "clientSpeech" || next.ttsTransport === "clientSpeech")
+    && raw.responseId
+    && (raw.type === "speech.output.segment" || raw.type === "speech.output.completed")
+  ) {
+    bindSpeechTransports();
+    if (raw.type === "speech.output.segment") {
+      ensureClientSpeechPlayer().enqueue({
+        responseId: raw.responseId,
+        segmentIndex: asEventNumber(raw.payload.segmentIndex),
+        textStart: asEventNumber(raw.payload.textStart),
+        text: String(raw.payload.text ?? ""),
+        voiceHint: typeof raw.payload.voiceHint === "string" ? raw.payload.voiceHint : undefined
+      });
+    } else {
+      ensureClientSpeechPlayer().markOutputCompleted(raw.responseId, asEventNumber(raw.payload.textEndExclusive));
+    }
+  }
+
   if (next === prior) {
     return;
   }
 
   useSessionStore.setState(next);
   if (raw.type === "session.ready") {
+    bindSpeechTransports();
     reconcilePendingUserText(next.entries);
     void hydrateBoundAttachments(next.sessionId);
     void hydrateActiveHistory(next.sessionId, next.entries);
@@ -383,6 +580,7 @@ function handleEvent(raw: ServerEvent): void {
     void stopConnection();
     stopReceipts();
     capture.release();
+    void releaseClientSpeech();
   }
   if (raw.type === "transcript.final") {
     void hydrateBoundAttachments(next.sessionId);
@@ -415,6 +613,10 @@ function handleEvent(raw: ServerEvent): void {
   }
 
   syncCapture();
+}
+
+function asEventNumber(value: unknown): number {
+  return typeof value === "number" ? value : Number(value ?? 0);
 }
 
 function bytesOf(data: unknown): Uint8Array {
@@ -453,6 +655,10 @@ function handleAudioOutput(dto: {
   audioOutputsReceived += 1;
   const responseId = dto.responseId ?? (dto as { ResponseId?: string }).ResponseId;
   if (!responseId || !connection || isReadonlySession(useSessionStore.getState())) {
+    return;
+  }
+
+  if (useSessionStore.getState().ttsTransport === "clientSpeech") {
     return;
   }
 
@@ -661,6 +867,11 @@ async function stopVoicePlayback(responseId: string): Promise<void> {
 }
 
 async function interruptPlayback(responseId: string): Promise<void> {
+  if (useSessionStore.getState().ttsTransport === "clientSpeech") {
+    await ensureClientSpeechPlayer().cancel(responseId);
+    return;
+  }
+
   const run = async () => {
     stoppedResponses.add(responseId);
     flushing = true;
@@ -837,9 +1048,18 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
   );
 }
 
-async function sendPlayback(method: string, type: string, responseId: string, consumed: number): Promise<void> {
+async function sendPlayback(method: string, type: string, responseId: string, consumed: number, textEndExclusive?: number): Promise<void> {
   commandSequence += 1;
-  await invoke(method, type, { consumedSamples: consumed, textEndExclusive: renderedTextOffset(responseId) }, commandSequence, responseId);
+  await invoke(
+    method,
+    type,
+    {
+      consumedSamples: consumed,
+      textEndExclusive: textEndExclusive ?? renderedTextOffset(responseId)
+    },
+    commandSequence,
+    responseId
+  );
 }
 
 function abortPlayback(): void {
@@ -859,6 +1079,7 @@ function abortPlayback(): void {
   playbackConsumed = 0;
   capture.setPlaybackListener(null);
   capture.setPlaybackCompleteListener(null);
+  void clientSpeechPlayer?.reset();
   playbackInterrupt = playbackInterrupt.then(
     async () => {
       await capture.flushPlayback("");
@@ -883,6 +1104,15 @@ function stopPlayback(responseId?: string): void {
 
 function publishCaptureLive(): void {
   const state = useSessionStore.getState();
+  if (state.sttTransport === "clientTranscript" && state.mode === "voice") {
+    const live = !state.muted && Boolean(transcriptLife?.isListening());
+    if (state.captureLive !== live) {
+      useSessionStore.setState({ captureLive: live });
+    }
+
+    return;
+  }
+
   const live = capture.isPrepared() && (capture.isStreaming() || state.muted || state.mode === "voice");
   if (state.captureLive !== live) {
     useSessionStore.setState({ captureLive: live });
@@ -914,7 +1144,15 @@ function syncVoicePlaybackFromCapture(): void {
 
 function voicePlaybackHoldActive(): boolean {
   const state = useSessionStore.getState();
-  if (state.mode !== "voice" || state.voicePlaybackResponseId == null) {
+  if (state.mode !== "voice") {
+    return false;
+  }
+
+  if (state.ttsTransport === "clientSpeech") {
+    return clientSpeechPlayer?.activeResponseId() != null;
+  }
+
+  if (state.voicePlaybackResponseId == null) {
     return false;
   }
 
@@ -936,12 +1174,50 @@ function syncCapture(): void {
     captureStreamId = null;
     if (!state.preflightReady && state.pendingMode !== "voice") {
       capture.release();
+      void transcriptLife?.disconnect();
     }
     publishCaptureLive();
     return;
   }
 
   if (state.mode === "voice" && state.streamId && connection) {
+    if (state.sttTransport === "clientTranscript") {
+      ensureSpeechAdapters();
+      const life = ensureTranscriptLife();
+      if (state.muted) {
+        if (life.isListening()) {
+          void life.mute().then(() => publishCaptureLive());
+        } else {
+          publishCaptureLive();
+        }
+        return;
+      }
+
+      if (!life.isListening()) {
+        if (!state.attachmentId) {
+          publishCaptureLive();
+          return;
+        }
+
+        if (!transcriptStart) {
+          transcriptStart = life
+            .enterVoice({
+              attachmentId: state.attachmentId ?? "",
+              mode: "voice",
+              muted: false
+            })
+            .finally(() => {
+              transcriptStart = null;
+              publishCaptureLive();
+            });
+        }
+        return;
+      }
+
+      publishCaptureLive();
+      return;
+    }
+
     if (state.muted) {
       if (capture.isStreaming()) {
         void capture.muteInput();
@@ -1026,6 +1302,7 @@ function syncCapture(): void {
 
   captureStreamId = null;
   capture.release();
+  void transcriptLife?.exitVoice();
   publishCaptureLive();
 }
 
@@ -2460,7 +2737,9 @@ export async function cancelRenderedResponse(): Promise<void> {
 
   const liveTarget = snapshot.liveResponseId;
   let playbackTarget: string | null = null;
-  if (snapshot.mode === "voice" && voicePlaybackHoldActive()) {
+  if (snapshot.mode === "voice" && snapshot.ttsTransport === "clientSpeech") {
+    await ensureClientSpeechPlayer().cancel(liveTarget ?? clientSpeechPlayer?.activeResponseId() ?? undefined);
+  } else if (snapshot.mode === "voice" && voicePlaybackHoldActive()) {
     playbackTarget = capture.playbackResponseId() ?? playbackResponseId ?? snapshot.voicePlaybackResponseId;
   }
 
@@ -2533,6 +2812,10 @@ export async function requestVoice(): Promise<void> {
     return;
   }
 
+  if (snapshot.sessionId && !sessionVoiceEnabled()) {
+    return;
+  }
+
   if (snapshot.sessionId && snapshot.connection !== "ready") {
     return;
   }
@@ -2541,16 +2824,20 @@ export async function requestVoice(): Promise<void> {
     return;
   }
 
-  if (snapshot.mode === "voice" && capture.isPrepared()) {
+  if (snapshot.mode === "voice" && (capture.isPrepared() || transcriptLife?.isListening())) {
     return;
   }
 
   voiceRequest = (async () => {
     const epoch = ++voiceEpoch;
     useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
+    ensureSpeechAdapters();
     try {
-      if (!capture.isPrepared()) {
-        await capture.preflight();
+      const current = useSessionStore.getState();
+      const skipCapture = current.sttTransport === "clientTranscript" && current.ttsTransport === "clientSpeech";
+      const microphone = current.sttTransport !== "clientTranscript";
+      if (!skipCapture && !capture.isPrepared()) {
+        await capture.preflight(microphone ? undefined : { microphone: false });
       }
     } catch (error) {
       if (epoch !== voiceEpoch) {
@@ -2627,6 +2914,7 @@ export async function cancelVoice(): Promise<void> {
     const ack = await invoke("SetMode", "session.mode.set", { mode: "text" }, commandSequence);
     if (!ack?.accepted) {
       capture.release();
+      void releaseClientSpeech();
       useSessionStore.setState({
         preflightReady: false,
         muted: false,
@@ -2640,6 +2928,7 @@ export async function cancelVoice(): Promise<void> {
     }
   } catch (error) {
     capture.release();
+    void releaseClientSpeech();
     useSessionStore.setState({
       preflightReady: false,
       muted: false,
@@ -2652,12 +2941,18 @@ export async function cancelVoice(): Promise<void> {
   }
 
   capture.release();
+  void releaseClientSpeech();
   useSessionStore.setState({ preflightReady: false, muted: false, ...clearSessionFailure() });
 }
 
 export async function setMuted(muted: boolean): Promise<void> {
+  const clientTranscript = useSessionStore.getState().sttTransport === "clientTranscript";
   if (muted) {
-    await capture.muteInput();
+    if (clientTranscript) {
+      await ensureTranscriptLife().mute();
+    } else {
+      await capture.muteInput();
+    }
     publishCaptureLive();
   }
 
@@ -2682,6 +2977,9 @@ export async function setMuted(muted: boolean): Promise<void> {
   }
 
   if (!muted) {
+    if (clientTranscript) {
+      await ensureTranscriptLife().unmute(useSessionStore.getState().attachmentId ?? "");
+    }
     syncCapture();
   }
 }
@@ -2718,6 +3016,7 @@ export async function hangUp(): Promise<void> {
   await stopConnection();
   stopReceipts();
   capture.release();
+  void releaseClientSpeech();
   releaseAllPendingFiles();
   useSessionStore.setState({
     ...emptySession(),
@@ -2756,6 +3055,7 @@ if (typeof window !== "undefined") {
     disconnect: async () => {
       abortPlayback();
       capture.release();
+      void releaseClientSpeech();
       await stopConnection();
       useSessionStore.setState({
         connection: "reconnecting",
@@ -2778,6 +3078,24 @@ if (typeof window !== "undefined") {
     playbackDiagnostics,
     audioOutputsReceived: audioOutputsReceivedCount,
     captureStreaming: () => capture.isStreaming(),
-    flushing: () => flushing
+    flushing: () => flushing,
+    emitClientSpeech: async (evidence: ClientSpeechEvidence) => {
+      ensureTranscriptLife().ingest(evidence);
+      await speechEvidenceChain;
+    },
+    clientSpeechListening: () => Boolean(transcriptLife?.isListening()),
+    getUserMediaUsed: () => capture.usedMicrophone(),
+    speechDebug: () => {
+      const snapshot = useSessionStore.getState();
+      return {
+        sttTransport: snapshot.sttTransport,
+        ttsTransport: snapshot.ttsTransport,
+        mode: snapshot.mode,
+        attachmentId: snapshot.attachmentId,
+        error: snapshot.error,
+        evidenceAttempts: speechEvidenceAttempts,
+        userTexts: snapshot.entries.filter((entry) => entry.role === "user").map((entry) => entry.text)
+      };
+    }
   };
 }

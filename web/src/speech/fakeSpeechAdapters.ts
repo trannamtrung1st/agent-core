@@ -71,6 +71,7 @@ export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
   readonly spoken: { text: string; voice: SpeechVoice | null }[] = [];
   cancelled = false;
   private speaking = false;
+  hold: Promise<void> | null = null;
 
   constructor(voices: SpeechVoice[] = [
     { voiceURI: "fake-en", name: "Fake English", lang: "en-US", default: true },
@@ -92,8 +93,14 @@ export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
     this.speaking = true;
     const voice = this.resolveVoice(request.hint);
     this.spoken.push({ text: request.text, voice });
+    if (this.hold) {
+      await this.hold;
+    }
+
     this.speaking = false;
-    listener?.onEnd?.();
+    if (!this.cancelled) {
+      listener?.onEnd?.();
+    }
   }
 
   async cancel(): Promise<void> {

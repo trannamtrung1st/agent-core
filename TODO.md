@@ -119,9 +119,9 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [x] Add a frontend ClientSpeechRecognizer port with Browser and fake adapters, plus one speech-transport orchestration service (native recognition objects stay out of Zustand).
 
-- [ ] Wire Browser STT into voice mode: capability detection, continuous recognition, interim/final mapping, start/stop/cancel, and bounded unexpected restart.
+- [x] Wire Browser STT into voice mode: capability detection, continuous recognition, interim/final mapping, start/stop/cancel, and bounded unexpected restart.
 
-- [ ] Keep the existing local AudioWorklet/VAD boundary path where useful for turn-taking/barge-in, but do not send PCM to backend STT when Browser STT is selected.
+- [x] Keep the existing local AudioWorklet/VAD boundary path where useful for turn-taking/barge-in, but do not send PCM to backend STT when Browser STT is selected.
 
 - [x] Add typed realtime commands for browser-recognized transcript evidence.
 
@@ -141,7 +141,7 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
   Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, bounded restart, and drops stale partials on reconnect. Voice-mode wiring remains.
 
-- [ ] Preserve interruption semantics.
+- [x] Preserve interruption semantics.
 
   Browser STT evidence must be able to trigger:
   - Continue;
@@ -149,9 +149,9 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
   - Interrupt/barge-in;
   - final user turn.
 
-- [ ] Add deterministic frontend/backend tests using a fake Browser STT adapter; keep real browser speech manual/opt-in.
+- [x] Add deterministic frontend/backend tests using a fake Browser STT adapter; keep real browser speech manual/opt-in.
 
-- [ ] Gracefully fall back to text or another configured STT provider when the browser API is unavailable.
+- [x] Gracefully fall back to text or another configured STT provider when the browser API is unavailable.
 
 ### P1C — Browser TTS
 
@@ -159,7 +159,7 @@ Goal: inexpensive speech output without backend TTS cost while preserving the ex
 
 - [x] Add a frontend ClientSpeechSynthesizer port with Browser and fake adapters, voiceURI/name/language/default fallback, and the shared speech-transport service owning output.
 
-- [ ] Queue, ACK, and immediately cancel Browser TTS (speechSynthesis playback, conservative offsets, preflight).
+- [x] Queue, ACK, and immediately cancel Browser TTS (speechSynthesis playback, conservative offsets, preflight).
 
 - [x] Add a server-to-client speech-text segment contract for Browser TTS.
 
@@ -180,7 +180,7 @@ Goal: inexpensive speech output without backend TTS cost while preserving the ex
 
   Browser `speechSynthesis` callbacks still vary by platform; only the later Browser TTS adapter may credit from trustworthy client events.
 
-- [ ] Stop browser speech immediately on:
+- [x] Stop browser speech immediately on:
   - user barge-in;
   - explicit Stop;
   - mode change;
@@ -188,7 +188,7 @@ Goal: inexpensive speech output without backend TTS cost while preserving the ex
   - response supersession;
   - session end.
 
-- [ ] Add fake Browser TTS tests for segment ordering, Stop, supersession, completion, and conservative heard offsets.
+- [x] Add fake Browser TTS tests for segment ordering, Stop, supersession, completion, and conservative heard offsets.
 
 ### P1D — Hosted speech completion and real-mode verification
 

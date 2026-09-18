@@ -14,6 +14,7 @@ export function Conversation({
   entries,
   activity,
   voiceAvailable = true,
+  sttTransport = null,
   empty
 }: {
   agentName: string;
@@ -21,6 +22,7 @@ export function Conversation({
   entries: HistoryEntry[];
   activity: AgentActivityState;
   voiceAvailable?: boolean;
+  sttTransport?: "serverAudio" | "clientTranscript" | null;
   empty?: ReactNode;
 }) {
   const windowRef = useRef<HTMLElement>(null);
@@ -101,7 +103,11 @@ export function Conversation({
   }, [activity, entries, lastUserId]);
 
   const safeReplySpace = Number.isFinite(replySpace) ? Math.max(0, replySpace) : 0;
-  const emptyHint = voiceAvailable ? "Send a message or start voice." : "Send a message.";
+  const emptyHint = voiceAvailable
+    ? (sttTransport === "clientTranscript"
+      ? "Send a message or start voice. Speech recognition runs in this browser tab."
+      : "Send a message or start voice.")
+    : "Send a message.";
 
   return (
     <section ref={windowRef} className="conversation-window" aria-label="Conversation">

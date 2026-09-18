@@ -192,6 +192,29 @@ describe("applyServerEvent", () => {
     expect(state.entries).toHaveLength(1);
   });
 
+  it("reads session.ready speech transports", () => {
+    const state = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: {
+          mode: "text",
+          pendingMode: null,
+          status: "attached",
+          agent: { name: "Alex", voiceAvailable: true },
+          history: [],
+          capabilities: {
+            stt: { transport: "clientTranscript" },
+            tts: { transport: "serverAudio" }
+          }
+        }
+      })
+    );
+    expect(state.sttTransport).toBe("clientTranscript");
+    expect(state.ttsTransport).toBe("serverAudio");
+  });
+
   it("applies mute from session.state.changed without dropping voice mode", () => {
     const ready = applyServerEvent(
       emptySession(),

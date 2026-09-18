@@ -23,5 +23,29 @@ interface Window {
     audioOutputsReceived: () => number;
     captureStreaming: () => boolean;
     flushing?: () => boolean;
+    emitClientSpeech?: (evidence: {
+      kind: "started" | "partial" | "final" | "ended" | "failed";
+      utteranceId: string;
+      revision?: number;
+      text?: string;
+      confidence?: number;
+      activityScore?: number;
+      durationMs?: number;
+    }) => Promise<void> | void;
+    clientSpeechListening?: () => boolean;
+    getUserMediaUsed?: () => boolean;
+    speechDebug?: () => {
+      sttTransport: string | null;
+      ttsTransport: string | null;
+      mode: string;
+      attachmentId: string | null;
+      error: string | null;
+      evidenceAttempts?: number;
+      userTexts?: string[];
+    };
+  };
+  __agentCoreSpeechTest?: {
+    fakeRecognizer?: boolean;
+    fakeSynthesizer?: boolean;
   };
 }

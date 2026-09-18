@@ -69,7 +69,7 @@ export class ClientTranscriptAccumulator {
     this.startedSent = false;
     this.applicationFinalSent = false;
     this.restarts = 0;
-    this.send({ kind: "started", utteranceId: this.utteranceId, activityScore: 0.5 });
+    this.send({ kind: "started", utteranceId: this.utteranceId, activityScore: 0.8 });
     this.startedSent = true;
   }
 
@@ -109,7 +109,7 @@ export class ClientTranscriptAccumulator {
 
     this.flushPartial(true);
     this.applicationFinalSent = true;
-    this.send({ kind: "final", utteranceId: this.utteranceId, text, confidence: 0.9 });
+    this.send({ kind: "final", utteranceId: this.utteranceId, text, confidence: 0.9, activityScore: 0.8 });
   }
 
   endUtterance(durationMs = 0): void {
@@ -180,7 +180,7 @@ export class ClientTranscriptAccumulator {
     this.lastPartialAt = now;
     this.lastPartialText = text;
     this.revision += 1;
-    this.send({ kind: "partial", utteranceId: this.utteranceId, revision: this.revision, text });
+    this.send({ kind: "partial", utteranceId: this.utteranceId, revision: this.revision, text, activityScore: 0.8 });
   }
 
   private dropPending(): void {
@@ -195,7 +195,7 @@ export class ClientTranscriptAccumulator {
   }
 
   private canSend(): boolean {
-    return this.gate?.mode === "voice" && this.gate.muted === false && this.gate.attachmentId.length > 0;
+    return this.gate?.mode === "voice" && this.gate.muted === false;
   }
 
   private send(evidence: ClientSpeechEvidence): void {
