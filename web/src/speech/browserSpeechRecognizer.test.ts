@@ -187,6 +187,42 @@ describe("BrowserSpeechRecognizer", () => {
     await adapter.cancel();
   });
 
+  it("does not end an open utterance on native onend without a pending speechend", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const adapter = new BrowserSpeechRecognizer();
+    const events: ClientSpeechEvidence[] = [];
+    let recognitionEnded = 0;
+    await adapter.start({
+      onEvidence: (evidence) => events.push(evidence),
+      onError: () => undefined,
+      onRecognitionEnded: () => {
+        recognitionEnded += 1;
+      }
+    });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    const utteranceId = events.find((item) => item.kind === "started")?.utteranceId;
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "I was saying" } }]
+    });
+    holder.current?.onend?.(new Event("end"));
+    expect(recognitionEnded).toBe(1);
+    expect(events.some((item) => item.kind === "ended")).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "I was saying something important" } }]
+    });
+    holder.current?.onspeechend?.(new Event("speechend"));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(events.filter((item) => item.kind === "started")).toHaveLength(1);
+    expect(events.at(-1)?.kind).toBe("ended");
+    expect(events.filter((item) => item.kind === "started")[0]?.utteranceId).toBe(utteranceId);
+    await adapter.cancel();
+  });
+
   it("stops after three idle native onends without speech progress", async () => {
     vi.useFakeTimers();
     const holder = installMock();
@@ -264,6 +300,34 @@ describe("Browser STT native finals through the application accumulator", () => 
     await vi.advanceTimersByTimeAsync(300);
     expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
     expect(sent.find((item) => item.kind === "final")?.text).toBe("this is a long sentence");
+  });
+
+  it("preserves one application final across mid-utterance native onend restart", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "I was saying" } }]
+    });
+    holder.current?.onend?.(new Event("end"));
+    expect(sent.some((item) => item.kind === "ended")).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "I was saying something important" } }]
+    });
+    holder.current?.onspeechend?.(new Event("speechend"));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("I was saying something important");
+    await adapter.cancel();
   });
 
   it("commits the late native final when speechend precedes the final result", async () => {

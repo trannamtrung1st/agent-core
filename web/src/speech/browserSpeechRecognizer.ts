@@ -29,6 +29,7 @@ type RecognitionCtor = new () => BrowserRecognition;
 
 const RESTART_BACKOFF_MS = [0, 250, 500];
 const MAX_IDLE_ENDS_WITHOUT_PROGRESS = 3;
+/** Heuristic only: Web Speech does not bound speechend→result delay. */
 const SPEECH_END_GRACE_MS = 300;
 
 function recognitionConstructor(): RecognitionCtor | null {
@@ -203,7 +204,10 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         return;
       }
 
-      this.flushPendingUtteranceEnd();
+      this.clearSpeechEndGrace();
+      if (this.speechEndedPending) {
+        this.flushPendingUtteranceEnd();
+      }
       this.native = null;
       if (!this.wantRunning || this.fatal) {
         return;
@@ -233,6 +237,10 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
 
   private beginUtterance(): void {
     if (this.utteranceOpen) {
+      if (!this.speechEndedPending) {
+        return;
+      }
+
       this.flushPendingUtteranceEnd();
     }
 
@@ -261,6 +269,10 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
   }
 
   private flushPendingUtteranceEnd(): void {
+    if (!this.speechEndedPending || !this.utteranceOpen) {
+      return;
+    }
+
     this.speechEndedPending = false;
     this.clearSpeechEndGrace();
     this.endUtterance();

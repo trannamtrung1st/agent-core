@@ -31,7 +31,8 @@ develop, document, docs-consistency, architecture, backend, frontend, realtime, 
 | 19 | Final Synthetic/section-44 gate | none (evidence only; HEAD `467fbbb`) |
 | 20 | Canonical docs / TODO / this report | prior handoff commit |
 | 21 | Native Web Speech corrective (`be0514c`) | `be0514c` |
-| 22 | Pending speechend + idle restart cap | this commit |
+| 22 | Pending speechend + idle restart cap | `26e9674` |
+| 23 | Mid-utterance native onend preservation | this commit |
 
 Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-20260918T040554-90562c/` (gitignored).
 

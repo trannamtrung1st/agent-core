@@ -119,7 +119,7 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [x] Add a frontend ClientSpeechRecognizer port with Browser and fake adapters, plus one speech-transport orchestration service (native recognition objects stay out of Zustand).
 
-- [x] Wire Browser STT into voice mode: capability detection, continuous recognition, native interim/`isFinal` mapping, pending `onspeechend` closure (final-after-speechend safe), start/stop/cancel, capped idle native `onend` restart, and mid-utterance unexpected restart via the accumulator.
+- [x] Wire Browser STT into voice mode: capability detection, continuous recognition, native interim/`isFinal` mapping, pending `onspeechend` closure (final-after-speechend safe), start/stop/cancel, capped idle native `onend` restart, mid-utterance native `onend` preservation (no premature `ended`), and mid-utterance unexpected restart via the accumulator.
 
 - [x] Keep the existing local AudioWorklet/VAD boundary path where useful for turn-taking/barge-in, but do not send PCM to backend STT when Browser STT is selected.
 
