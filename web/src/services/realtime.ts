@@ -2119,9 +2119,9 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
-      pendingUserText = null;
-      removeOptimisticUserEntry(eventId);
       if (queueLocalId) {
+        pendingUserText = null;
+        removeOptimisticUserEntry(eventId);
         clearQueueItemDispatchState(queueLocalId);
         useSessionStore.setState((state) => ({
           pendingSendQueue: state.pendingSendQueue.map((item) =>
