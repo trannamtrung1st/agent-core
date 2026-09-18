@@ -20,7 +20,21 @@ export type ClientTranscriptAccumulatorOptions = {
 const DEFAULT_PARTIAL_INTERVAL_MS = 100;
 const DEFAULT_MAX_RESTARTS = 3;
 
-/** Restart-only merge: whole-word overlap and full-prefix cases, never single-character overlap. */
+function wordsMatchPrefix(haystack: string[], needle: string[]): boolean {
+  if (needle.length > haystack.length) {
+    return false;
+  }
+
+  for (let index = 0; index < needle.length; index += 1) {
+    if (haystack[index] !== needle[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** Restart-only merge: whole-word prefix and overlap reconciliation only. */
 export function mergeRestartContinuation(prefix: string, incoming: string): string {
   const left = prefix.trim();
   const right = incoming.trim();
@@ -32,16 +46,17 @@ export function mergeRestartContinuation(prefix: string, incoming: string): stri
     return left;
   }
 
-  if (right.startsWith(left)) {
+  const leftWords = left.split(/\s+/);
+  const rightWords = right.split(/\s+/);
+
+  if (wordsMatchPrefix(rightWords, leftWords)) {
     return right;
   }
 
-  if (left.startsWith(right)) {
+  if (wordsMatchPrefix(leftWords, rightWords)) {
     return left;
   }
 
-  const leftWords = left.split(/\s+/);
-  const rightWords = right.split(/\s+/);
   const maxWords = Math.min(leftWords.length, rightWords.length);
   for (let count = maxWords; count >= 1; count -= 1) {
     const suffix = leftWords.slice(-count).join(" ");

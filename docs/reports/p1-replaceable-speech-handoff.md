@@ -34,7 +34,8 @@ develop, document, docs-consistency, architecture, backend, frontend, realtime, 
 | 22 | Pending speechend + idle restart cap | `26e9674` |
 | 23 | Mid-utterance native onend preservation | `6e83a59` |
 | 24 | Restart transcript stitching | `0174c98` |
-| 25 | Restart-only word-boundary stitching | this commit |
+| 25 | Restart-only word-boundary stitching | `804bb50` |
+| 26 | Whole-word restart prefix reconciliation | this commit |
 
 Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-20260918T040554-90562c/` (gitignored).
 
@@ -86,9 +87,9 @@ Flags: `AGENTCORE_LIVE_PROVIDER_TESTS=0`, `AGENTCORE_LIVE_OPENAI_STT=0`, `AGENTC
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 25 passed (synthetic + browser-stt + browser-browser) |
 
-## Post–Browser-STT-freeze gate (after batch 24)
+## Post–Browser-STT-freeze gate (after batch 26; Browser STT frozen for MVP)
 
-Same flags and ports. Latest refresh after pending-`speechend`, idle restart cap, mid-utterance `onend` preservation, and restart transcript stitching.
+Same flags and ports. Final refresh after batches 21–26 (native Web Speech contracts, restart stitching, whole-word `mergeRestartContinuation`).
 
 | Command | Observed |
 | --- | --- |
@@ -96,11 +97,11 @@ Same flags and ports. Latest refresh after pending-`speechend`, idle restart cap
 | Infrastructure tests | 101 passed, 9 skipped |
 | Application tests (`--blame-hang-timeout 5m`) | 292 passed |
 | API tests | 105 passed |
-| `pnpm run test --run` | 261 passed |
+| `pnpm run test --run` | 264 passed |
 | `pnpm run build` | exit 0 |
 | `CI=1 pnpm exec playwright test` | 26 passed |
 
-Count growth versus batch 19 is additional Browser-STT contract coverage, not regressions.
+Count growth versus batch 19 is additional Browser-STT contract coverage, not regressions. Further Browser STT work is observation-only (headset/live Web Speech), not speculative hardening.
 
 ## Remaining work
 

@@ -35,6 +35,12 @@ describe("mergeRestartContinuation", () => {
     expect(mergeRestartContinuation("I like pizza", "and pasta")).toBe("I like pizza and pasta");
     expect(mergeRestartContinuation("the car", "runs fast")).toBe("the car runs fast");
   });
+
+  it("does not confuse whole words with character-prefix substrings", () => {
+    expect(mergeRestartContinuation("candy", "can")).toBe("candy can");
+    expect(mergeRestartContinuation("station", "stat")).toBe("station stat");
+    expect(mergeRestartContinuation("I like", "I liked")).toBe("I like I liked");
+  });
 });
 
 describe("ClientTranscriptAccumulator normal accumulation", () => {
