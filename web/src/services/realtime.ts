@@ -26,7 +26,7 @@ import type { ClientSpeechEvidence } from "../speech/clientSpeechRecognizer";
 import type { ClientSpeechSynthesizer } from "../speech/clientSpeechSynthesizer";
 import { clientRecognitionSupported, clientSynthesisSupported, speechTestSeam } from "../speech/clientSpeechSupport";
 import { ClientTranscriptLifecycle } from "../speech/clientTranscriptLifecycle";
-import { createFakeSpeechRecognizer, createFakeSpeechSynthesizer, type FakeSpeechRecognizer } from "../speech/fakeSpeechAdapters";
+import { createFakeSpeechRecognizer, createFakeSpeechSynthesizer, type FakeSpeechRecognizer, type FakeSpeechSynthesizer } from "../speech/fakeSpeechAdapters";
 import { speechTransport } from "../speech/speechTransport";
 import { voiceControlEnabled } from "../speech/voiceEnablement";
 
@@ -36,6 +36,7 @@ let commandSequence = 0;
 let clientSpeechPlayer: ClientSpeechPlayer | null = null;
 let transcriptLife: ClientTranscriptLifecycle | null = null;
 let injectedRecognizer: FakeSpeechRecognizer | null = null;
+let injectedSynthesizer: FakeSpeechSynthesizer | null = null;
 let transcriptStart: Promise<void> | null = null;
 let speechEvidenceChain: Promise<void> = Promise.resolve();
 let speechEvidenceAttempts = 0;
@@ -228,8 +229,10 @@ function ensureSpeechAdapters(): void {
   if (!speechTransport.outputSynthesizerAdapterId()) {
     if (seam.synthesizer) {
       speechTransport.setOutputSynthesizer(seam.synthesizer);
+      injectedSynthesizer = "armHold" in seam.synthesizer ? seam.synthesizer as FakeSpeechSynthesizer : injectedSynthesizer;
     } else if (seam.fakeSynthesizer) {
-      speechTransport.setOutputSynthesizer(createFakeSpeechSynthesizer());
+      injectedSynthesizer = createFakeSpeechSynthesizer();
+      speechTransport.setOutputSynthesizer(injectedSynthesizer);
     } else {
       speechTransport.setOutputSynthesizer(createBrowserSpeechSynthesizer());
     }
@@ -3096,6 +3099,15 @@ if (typeof window !== "undefined") {
         evidenceAttempts: speechEvidenceAttempts,
         userTexts: snapshot.entries.filter((entry) => entry.role === "user").map((entry) => entry.text)
       };
-    }
+    },
+    holdFakeSpeechOutput: () => {
+      ensureSpeechAdapters();
+      injectedSynthesizer?.armHold();
+    },
+    releaseFakeSpeechOutput: () => {
+      injectedSynthesizer?.releaseHold();
+    },
+    spokenClientSpeech: () => injectedSynthesizer?.spoken.map((item) => item.text) ?? [],
+    clientSpeechActive: () => clientSpeechPlayer?.activeResponseId() ?? null
   };
 }

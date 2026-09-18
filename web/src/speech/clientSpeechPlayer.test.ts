@@ -23,6 +23,7 @@ describe("clientSpeechPlayer", () => {
     expect(acks[2]?.report.textEndExclusive).toBe(11);
     expect(acks[3]?.report).toEqual({ kind: "completed", consumedSamples: 0, textEndExclusive: 11 });
     expect(acks.every((item) => item.report.consumedSamples === 0)).toBe(true);
+    expect(player.activeResponseId()).toBeNull();
   });
 
   it("does not complete before speech.output.completed", async () => {

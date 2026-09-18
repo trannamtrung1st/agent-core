@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FakeSpeechRecognizer } from "./fakeSpeechAdapters";
+import { FakeSpeechRecognizer, FakeSpeechSynthesizer } from "./fakeSpeechAdapters";
 import { sessionErrorClass } from "../features/chat/sessionError";
 import { speechError } from "./errors";
 
@@ -45,5 +45,20 @@ describe("FakeSpeechRecognizer", () => {
     expect(speechError("SpeechPermissionDenied").classId).toBe("speech/capture/playback");
     expect(speechError("SpeechDeviceUnavailable").fatal).toBe(false);
     expect(speechError("SpeechRecognitionRestartLimit").code).toBe("SpeechRecognitionRestartLimit");
+  });
+});
+
+describe("FakeSpeechSynthesizer", () => {
+  it("cancel releases a hold without invoking onEnd", async () => {
+    const synth = new FakeSpeechSynthesizer();
+    synth.armHold();
+    let ended = false;
+    const speaking = synth.speak({ text: "Hi" }, { onEnd: () => {
+      ended = true;
+    } });
+    await synth.cancel();
+    await speaking;
+    expect(ended).toBe(false);
+    expect(synth.cancelled).toBe(true);
   });
 });

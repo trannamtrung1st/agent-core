@@ -87,6 +87,9 @@ export function createClientSpeechPlayer(
 
     completedSent = true;
     report(responseId, "completed", outputEnd);
+    responseId = null;
+    started = false;
+    outputCompleted = false;
   }
 
   function begin(id: string): void {

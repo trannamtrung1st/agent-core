@@ -72,6 +72,7 @@ export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
   cancelled = false;
   private speaking = false;
   hold: Promise<void> | null = null;
+  private holdResolve: (() => void) | null = null;
 
   constructor(voices: SpeechVoice[] = [
     { voiceURI: "fake-en", name: "Fake English", lang: "en-US", default: true },
@@ -103,9 +104,22 @@ export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
     }
   }
 
+  armHold(): void {
+    this.hold = new Promise((resolve) => {
+      this.holdResolve = resolve;
+    });
+  }
+
+  releaseHold(): void {
+    this.holdResolve?.();
+    this.holdResolve = null;
+    this.hold = null;
+  }
+
   async cancel(): Promise<void> {
     this.cancelled = true;
     this.speaking = false;
+    this.releaseHold();
   }
 
   get isSpeaking(): boolean {

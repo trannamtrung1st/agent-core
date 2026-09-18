@@ -43,6 +43,10 @@ interface Window {
       evidenceAttempts?: number;
       userTexts?: string[];
     };
+    holdFakeSpeechOutput?: () => void;
+    releaseFakeSpeechOutput?: () => void;
+    spokenClientSpeech?: () => string[];
+    clientSpeechActive?: () => string | null;
   };
   __agentCoreSpeechTest?: {
     fakeRecognizer?: boolean;
