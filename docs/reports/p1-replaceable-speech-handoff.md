@@ -35,7 +35,7 @@ develop, document, docs-consistency, architecture, backend, frontend, realtime, 
 | 23 | Mid-utterance native onend preservation | `6e83a59` |
 | 24 | Restart transcript stitching | `0174c98` |
 | 25 | Restart-only word-boundary stitching | `804bb50` |
-| 26 | Whole-word restart prefix reconciliation | this commit |
+| 26 | Whole-word restart prefix reconciliation | `a8ec9b7` |
 
 Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-20260918T040554-90562c/` (gitignored).
 
