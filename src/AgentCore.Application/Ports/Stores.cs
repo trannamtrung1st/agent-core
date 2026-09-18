@@ -17,6 +17,11 @@ public interface IMemoryStore
 {
     ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
+    ValueTask<SessionSnapshot?> LoadMetadataAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default) =>
+        LoadAsync(sessionId, cancellationToken);
+
     ValueTask SaveAsync(
         SessionSnapshot snapshot,
         long expectedRevision,

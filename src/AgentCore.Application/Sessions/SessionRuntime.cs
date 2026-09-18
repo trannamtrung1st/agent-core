@@ -2608,6 +2608,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             Entries = entries,
             Title = title,
+            LastEntrySequence = Math.Max(_snapshot.DurableLastEntrySequence, entry.Sequence),
             UpdatedAt = _time.GetUtcNow()
         };
     }
@@ -2709,8 +2710,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private sealed record AttachmentTitleHints(IReadOnlyList<string> Names, bool ImageOnly);
 
-    private long NextSequence() =>
-        _snapshot.Entries.Count == 0 ? 1 : _snapshot.Entries[^1].Sequence + 1;
+    private long NextSequence() => _snapshot.DurableLastEntrySequence + 1;
 
     private static readonly TimeSpan[] PersistRetryDelays =
         [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
@@ -3143,6 +3143,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 : saved.Summary,
             SummarizedThroughEntrySequence = Math.Max(saved.SummarizedThroughEntrySequence, live.SummarizedThroughEntrySequence),
             Entries = MergeEntryOffsets(saved.Entries, live.Entries),
+            LastEntrySequence = Math.Max(saved.DurableLastEntrySequence, live.DurableLastEntrySequence),
             Status = live.Status is SessionStatus.Ending or SessionStatus.Ended or SessionStatus.Attached
                 ? live.Status
                 : saved.Status

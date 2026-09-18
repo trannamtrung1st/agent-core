@@ -206,4 +206,4 @@ Observed container sandbox: `ISandboxExecutor` registered as `DockerSandboxExecu
 
 ## Follow-on P1 planned until verified
 
-Observed `LoadAsync` still returns the snapshot used for restore; do not assume a bounded window is already implemented. Planned: Application load/save paths use evolved `IMemoryStore` operations (metadata, restore window, one history page) without a generic repository; `TransitionLifecycle` is an Application service invoked from the mailbox reader; speech locale is validated at the Application boundary and resolved on the speech plan. SessionRuntime still has no provider DTOs and no Browser/OpenAI locale branches. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+Observed `LoadMetadataAsync` / bounded `LoadAsync` restore windows; `LastEntrySequence` is durable. Planned: HTTP newest/`before` paging; `TransitionLifecycle`; speech locale at the Application boundary. SessionRuntime still has no provider DTOs and no Browser/OpenAI locale branches. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).

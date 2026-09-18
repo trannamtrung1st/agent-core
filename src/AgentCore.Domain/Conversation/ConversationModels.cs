@@ -192,4 +192,24 @@ public sealed record SessionSnapshot(
     long RuntimeEpoch = 0,
     bool WorkspaceOwned = true,
     DateTimeOffset? ArchivedAt = null,
-    DateTimeOffset? DurablyDeletedAt = null);
+    DateTimeOffset? DurablyDeletedAt = null,
+    long LastEntrySequence = 0)
+{
+    public long DurableLastEntrySequence
+    {
+        get
+        {
+            var fromEntries = 0L;
+            for (var index = 0; index < Entries.Count; index++)
+            {
+                var sequence = Entries[index].Sequence;
+                if (sequence > fromEntries)
+                {
+                    fromEntries = sequence;
+                }
+            }
+
+            return LastEntrySequence >= fromEntries ? LastEntrySequence : fromEntries;
+        }
+    }
+}

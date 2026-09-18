@@ -228,7 +228,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 SessionSnapshot snapshot;
                 if (needCreate)
                 {
-                    snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    snapshot = await _sessions.LoadRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
                     var invalid = RejectIfAttachSnapshotInvalid(snapshot);
                     if (invalid is not null)
                     {
@@ -238,7 +238,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     if (AfterAttachDurableSnapshotRead is not null)
                     {
                         await AfterAttachDurableSnapshotRead(cancellationToken).ConfigureAwait(false);
-                        snapshot = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                        snapshot = await _sessions.LoadRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
                         invalid = RejectIfAttachSnapshotInvalid(snapshot);
                         if (invalid is not null)
                         {
@@ -358,7 +358,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
                 if (live.Runtime.Snapshot.Status == SessionStatus.Paused)
                 {
-                    var durable = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    var durable = await _sessions.LoadRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
                     var invalid = RejectIfAttachSnapshotInvalid(durable);
                     if (invalid is not null)
                     {

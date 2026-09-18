@@ -234,6 +234,8 @@ public interface IAgentDefinitionStore
 public interface IMemoryStore
 {
     ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default);
+    ValueTask<SessionSnapshot?> LoadMetadataAsync(Guid sessionId,
+        CancellationToken cancellationToken = default);
     ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision,
         CancellationToken cancellationToken = default);
     ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(Guid sessionId,
@@ -251,7 +253,9 @@ public interface ISessionOutput
 
 SessionSnapshot/UserProfile fields and atomic save semantics are specified in [Persistence](15-persistence-and-configuration.md); SessionOutput is the application output family in [Event Model](07-event-model.md). Save with expectedRevision=0 inserts; subsequent saves compare stored revision and write expectedRevision+1. Conflict is an application persistence conflict, not last-write-wins. `RecoverCrashedSessionsAsync` runs at process startup for SQLite: Attached becomes Paused, Ending becomes Ended, Streaming entries become Interrupted, and PendingMode is cleared. There is no generic repository interface. Definition lookup returns null for missing versions, throws a normalized validation failure for malformed data, and pins a version for the full session.
 
-**Observed history load:** `LoadAsync` returns the snapshot used for attach/restore; `ReadHistoryAsync` is forward-only (`after`, `limit`). **Follow-on P1 planned until verified:** evolve this port rather than adding a repository framework. Metadata, one bounded runtime restore window, and one public history page must be loadable without materializing the full transcript. Keep `LastEntrySequence` durable and independent of the in-memory `Entries` window. Extend history reads for newest, `before`, and existing `after` pages; reject `before`+`after`. Speech locale/voice support is evaluated on speech abstractions/adapters, not with Browser/OpenAI branches in SessionRuntime. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+**Observed history load:** `LoadMetadataAsync` returns session/snapshot coordinates without conversation rows. `LoadAsync` restores a bounded runtime window (prompt keep plus the complete trailing unresolved user suffix and any streaming rows). `ReadHistoryAsync` is forward-only (`after`, `limit`) and pages from durable rows. `LastEntrySequence` is stored on the snapshot and must not be derived from a window's last in-memory entry. Bounded `SaveAsync` upserts supplied entries and does not delete or renumber older `ConversationEntries` rows.
+
+**Follow-on P1 planned until verified:** extend history reads for newest, `before`, and existing `after` pages; reject `before`+`after`. Speech locale/voice support is evaluated on speech abstractions/adapters, not with Browser/OpenAI branches in SessionRuntime. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
 
 Environment data enters Application only through this narrow ingress. It is not a message bus and is not a public HTTP `/events` endpoint:
 

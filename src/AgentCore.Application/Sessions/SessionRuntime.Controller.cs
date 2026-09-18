@@ -335,7 +335,7 @@ public sealed partial class SessionRuntime
                     ?? new SynthesisCapabilities(false, false, false, false, false, [])
                 : new SynthesisCapabilities(false, false, false, false, false, []),
             voice ? _policy.BargeInPolicy : "none",
-            _snapshot.Entries.Count == 0 ? 0 : _snapshot.Entries[^1].Sequence,
+            _snapshot.DurableLastEntrySequence,
             history,
             ActiveResponseId: null,
             _voice.EffectivePlan.InputTransport,

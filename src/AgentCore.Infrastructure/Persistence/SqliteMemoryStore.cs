@@ -18,6 +18,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     public int EntryUpdates { get; set; }
 
+    public int MaterializedEntryRows { get; private set; }
+
     public async ValueTask EnsureCreatedAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -215,15 +217,36 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     public async ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
         var row = await db.Sessions
             .AsNoTracking()
             .Include(item => item.Snapshot)
-            .Include(item => item.Entries)
             .SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
             .ConfigureAwait(false);
-        return row is null ? null : ToSnapshot(row);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var entries = await LoadRestoreEntryRowsAsync(db, key, cancellationToken).ConfigureAwait(false);
+        return ToSnapshot(row, entries);
+    }
+
+    public async ValueTask<SessionSnapshot?> LoadMetadataAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        MaterializedEntryRows = 0;
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var key = sessionId.ToString("D");
+        var row = await db.Sessions
+            .AsNoTracking()
+            .Include(item => item.Snapshot)
+            .SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
+            .ConfigureAwait(false);
+        return row is null ? null : ToSnapshot(row, []);
     }
 
     public async ValueTask SaveAsync(
@@ -231,12 +254,12 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
+        MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var key = snapshot.SessionId.ToString("D");
         var existing = await db.Sessions
             .Include(item => item.Snapshot)
-            .Include(item => item.Entries)
             .SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
             .ConfigureAwait(false);
         if (existing is null)
@@ -247,12 +270,15 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
 
             db.Sessions.Add(ToRecord(snapshot));
+            MaterializedEntryRows += snapshot.Entries.Count;
             await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        var current = ToSnapshot(existing);
+        var matched = await LoadMatchingEntryRowsAsync(db, key, snapshot.Entries, cancellationToken)
+            .ConfigureAwait(false);
+        var current = ToSnapshot(existing, matched);
         if (existing.Revision == snapshot.Revision && MemoryStoreSemantics.SameContent(current, snapshot))
         {
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -265,7 +291,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         }
 
         ApplySession(existing, snapshot);
-        UpsertEntries(db, existing, snapshot);
+        await UpsertEntriesAsync(db, existing, snapshot, cancellationToken).ConfigureAwait(false);
         await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
         await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -276,6 +302,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         int limit,
         CancellationToken cancellationToken = default)
     {
+        MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
         var rows = await db.Entries.AsNoTracking()
@@ -284,6 +311,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             .Take(limit)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
+        MaterializedEntryRows += rows.Length;
         return rows.Select(ToEntry).ToArray();
     }
 
@@ -367,8 +395,9 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     public async ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default)
     {
+        MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.Sessions.Include(item => item.Snapshot).Include(item => item.Entries)
+        var rows = await db.Sessions.Include(item => item.Snapshot)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         var now = time.GetUtcNow();
@@ -379,14 +408,19 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 continue;
             }
 
-            var recovered = MemoryStoreSemantics.Recover(ToSnapshot(row), now);
+            var streaming = await db.Entries
+                .Where(entry => entry.SessionId == row.SessionId && entry.Status == nameof(EntryStatus.Streaming))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            MaterializedEntryRows += streaming.Count;
+            var recovered = MemoryStoreSemantics.Recover(ToSnapshot(row, streaming), now);
             if (recovered.Revision == row.Revision)
             {
                 continue;
             }
 
             ApplySession(row, recovered);
-            UpsertEntries(db, row, recovered);
+            await UpsertEntriesAsync(db, row, recovered, cancellationToken).ConfigureAwait(false);
         }
 
         await SaveChangesOrThrowAsync(db, cancellationToken).ConfigureAwait(false);
@@ -428,15 +462,107 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             .ConfigureAwait(false);
         var hasMore = rows.Length > limit;
         var page = (hasMore ? rows.Take(limit) : rows)
-            .Select(ToSnapshot)
+            .Select(row => ToSnapshot(row, []))
             .ToArray();
         var next = hasMore ? CatalogCursor.Encode(page[^1].UpdatedAt, page[^1].SessionId) : null;
         return new SessionCatalogPage(page, next, hasMore);
     }
 
-    private void UpsertEntries(AgentCoreDbContext db, SessionRecord session, SessionSnapshot snapshot)
+    private async Task<List<EntryRecord>> LoadRestoreEntryRowsAsync(
+        AgentCoreDbContext db,
+        string sessionId,
+        CancellationToken cancellationToken)
     {
-        var existing = session.Entries.ToDictionary(entry => entry.EntryId, StringComparer.Ordinal);
+        var newest = await db.Entries.AsNoTracking()
+            .Where(entry => entry.SessionId == sessionId)
+            .OrderByDescending(entry => entry.EntrySequence)
+            .Take(HistoryRestoreWindow.PromptKeep)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        MaterializedEntryRows += newest.Count;
+        newest.Reverse();
+        while (newest.Count > 0)
+        {
+            var mapped = newest.Select(ToEntry).ToArray();
+            var suffix = TrailingUserSuffix.Of(mapped);
+            if (suffix.Count < mapped.Length)
+            {
+                break;
+            }
+
+            var oldest = newest[0].EntrySequence;
+            var more = await db.Entries.AsNoTracking()
+                .Where(entry => entry.SessionId == sessionId && entry.EntrySequence < oldest)
+                .OrderByDescending(entry => entry.EntrySequence)
+                .Take(50)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            MaterializedEntryRows += more.Count;
+            if (more.Count == 0)
+            {
+                break;
+            }
+
+            more.Reverse();
+            more.AddRange(newest);
+            newest = more;
+        }
+
+        var loadedIds = newest.Select(entry => entry.EntryId).ToHashSet(StringComparer.Ordinal);
+        var streaming = await db.Entries.AsNoTracking()
+            .Where(entry => entry.SessionId == sessionId && entry.Status == nameof(EntryStatus.Streaming))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var row in streaming)
+        {
+            if (loadedIds.Add(row.EntryId))
+            {
+                MaterializedEntryRows++;
+                newest.Add(row);
+            }
+        }
+
+        return newest;
+    }
+
+    private async Task<List<EntryRecord>> LoadMatchingEntryRowsAsync(
+        AgentCoreDbContext db,
+        string sessionId,
+        IReadOnlyList<ConversationEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        if (entries.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = entries.Select(entry => entry.EntryId.ToString("D")).ToArray();
+        var rows = await db.Entries
+            .Where(entry => entry.SessionId == sessionId && ids.Contains(entry.EntryId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        MaterializedEntryRows += rows.Count;
+        return rows;
+    }
+
+    private async Task UpsertEntriesAsync(
+        AgentCoreDbContext db,
+        SessionRecord session,
+        SessionSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        if (snapshot.Entries.Count == 0)
+        {
+            return;
+        }
+
+        var ids = snapshot.Entries.Select(entry => entry.EntryId.ToString("D")).ToArray();
+        var existingRows = await db.Entries
+            .Where(entry => entry.SessionId == session.SessionId && ids.Contains(entry.EntryId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        MaterializedEntryRows += existingRows.Count;
+        var existing = existingRows.ToDictionary(entry => entry.EntryId, StringComparer.Ordinal);
         foreach (var entry in snapshot.Entries)
         {
             var key = entry.EntryId.ToString("D");
@@ -494,7 +620,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Snapshot.SummarizedThroughEntrySequence = snapshot.SummarizedThroughEntrySequence;
         row.Snapshot.PendingTopic = snapshot.PendingTopic;
         row.Snapshot.ProfileId = snapshot.ProfileId?.ToString("D");
-        row.Snapshot.LastEntrySequence = snapshot.Entries.Count == 0 ? 0 : snapshot.Entries[^1].Sequence;
+        row.Snapshot.LastEntrySequence = snapshot.DurableLastEntrySequence;
         row.Snapshot.UpdatedAtUtc = snapshot.UpdatedAt.ToUnixTimeMilliseconds();
         row.Snapshot.LastUserActivityAtUtc = snapshot.LastUserActivityAt?.ToUnixTimeMilliseconds();
     }
@@ -537,12 +663,12 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
 
-    private static SessionSnapshot ToSnapshot(SessionRecord row)
+    private static SessionSnapshot ToSnapshot(SessionRecord row, IReadOnlyList<EntryRecord> entryRows)
     {
         var definition = JsonSerializer.Deserialize<AgentDefinition>(row.DefinitionJson, Json)
             ?? throw AgentCoreErrors.Persistence("Stored agent definition was empty.");
         var snapshot = row.Snapshot ?? new SnapshotRecord { SessionId = row.SessionId };
-        var entries = row.Entries.OrderBy(entry => entry.EntrySequence).Select(ToEntry).ToArray();
+        var entries = entryRows.OrderBy(entry => entry.EntrySequence).Select(ToEntry).ToArray();
         return new SessionSnapshot(
             snapshot.SchemaVersion,
             Guid.Parse(row.SessionId),
@@ -564,7 +690,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.RuntimeEpoch,
             row.WorkspaceOwned,
             row.ArchivedAtUtc is { } archived ? FromUnix(archived) : null,
-            row.DurablyDeletedAtUtc is { } deleted ? FromUnix(deleted) : null);
+            row.DurablyDeletedAtUtc is { } deleted ? FromUnix(deleted) : null,
+            snapshot.LastEntrySequence);
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>

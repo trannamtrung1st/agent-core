@@ -54,7 +54,7 @@ The current durable history works, but loading the whole conversation does not s
 
 - [ ] Add paginated/cursor-based history reads.
 
-  Requirements:
+  Backend restore/metadata (P1A-1) is implemented: `LoadMetadataAsync`, bounded `LoadAsync`, durable `LastEntrySequence`, older rows retained. Remaining:
   - newest page is enough to open/reopen a session;
   - older pages can be requested explicitly (`before`); existing `after` remains;
   - `before`+`after` is rejected;

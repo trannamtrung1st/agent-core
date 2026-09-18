@@ -29,7 +29,7 @@ public static class HttpMapping
             ToStatus(snapshot.Status),
             Format(snapshot.CreatedAt),
             Format(snapshot.UpdatedAt),
-            snapshot.Entries.Count == 0 ? 0 : snapshot.Entries[^1].Sequence,
+            snapshot.DurableLastEntrySequence,
             activeResponseId?.ToString(),
             ProtocolVersion,
             snapshot.PauseReason);

@@ -163,6 +163,88 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Long_transcript_metadata_restore_and_history_page_do_not_materialize_all_rows()
+    {
+        await using var harness = await SqliteAsync();
+        var entries = LongTranscript(250, trailingUsers: 35);
+        var first = First() with { Entries = entries };
+        await harness.Store.SaveAsync(first, 0);
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            Assert.Equal(250, await db.Entries.CountAsync());
+        }
+
+        var meta = await harness.Store.LoadMetadataAsync(first.SessionId);
+        Assert.Equal(250, meta!.DurableLastEntrySequence);
+        Assert.Empty(meta.Entries);
+        Assert.Equal(0, harness.Store.MaterializedEntryRows);
+
+        var restored = await harness.Store.LoadAsync(first.SessionId);
+        Assert.Equal(250, restored!.DurableLastEntrySequence);
+        Assert.True(restored.Entries.Count < 250);
+        Assert.Equal(35, TrailingUserSuffix.Of(restored.Entries).Count);
+        Assert.Contains(restored.Entries, entry => entry.Sequence == 250);
+        Assert.DoesNotContain(restored.Entries, entry => entry.Sequence == 1);
+        Assert.True(harness.Store.MaterializedEntryRows < 250);
+
+        var page = await harness.Store.ReadHistoryAsync(first.SessionId, 200, 50);
+        Assert.Equal(50, page.Count);
+        Assert.Equal(50, harness.Store.MaterializedEntryRows);
+
+        var window = restored with { Revision = 2, Summary = "bounded-save" };
+        await harness.Store.SaveAsync(window, 1);
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            var sequences = await db.Entries.OrderBy(entry => entry.EntrySequence)
+                .Select(entry => entry.EntrySequence)
+                .ToArrayAsync();
+            Assert.Equal(250, sequences.Length);
+            Assert.Equal(Enumerable.Range(1, 250).Select(i => (long)i), sequences);
+        }
+
+        var afterSave = await harness.Store.LoadMetadataAsync(first.SessionId);
+        Assert.Equal(250, afterSave!.LastEntrySequence);
+        Assert.Equal("bounded-save", afterSave.Summary);
+    }
+
+    [Fact]
+    public async Task Recover_on_long_transcript_does_not_materialize_every_entry()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        var entries = LongTranscript(220, trailingUsers: 4).ToArray();
+        entries[215] = entries[215] with { Status = EntryStatus.Streaming, Role = ConversationRole.Assistant };
+        var first = First() with { Status = SessionStatus.Attached, Entries = entries };
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(first, 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        await reopened.Store.RecoverCrashedSessionsAsync();
+        Assert.True(reopened.Store.MaterializedEntryRows < 220);
+        var loaded = await reopened.Store.LoadAsync(first.SessionId);
+        Assert.Equal(SessionStatus.Paused, loaded!.Status);
+        Assert.Equal(220, loaded.DurableLastEntrySequence);
+        Assert.Equal(EntryStatus.Interrupted, loaded.Entries.Single(entry => entry.Sequence == 216).Status);
+    }
+
+    [Fact]
+    public async Task In_memory_bounded_save_retains_older_entries()
+    {
+        var store = new InMemoryMemoryStore();
+        var entries = LongTranscript(80, trailingUsers: 5);
+        await store.SaveAsync(First() with { Entries = entries }, 0);
+        var restored = await store.LoadAsync(First().SessionId);
+        Assert.True(restored!.Entries.Count < 80);
+        await store.SaveAsync(restored with { Revision = 2 }, 1);
+        var page = await store.ReadHistoryAsync(First().SessionId, 0, 80);
+        Assert.Equal(80, page.Count);
+        Assert.Equal(80, (await store.LoadMetadataAsync(First().SessionId))!.LastEntrySequence);
+    }
+
+    [Fact]
     public async Task Checkpoint_does_not_rewrite_unchanged_completed_rows()
     {
         await using var harness = await SqliteAsync();
@@ -623,6 +705,27 @@ public sealed class MemoryStoreContractTests
         Assert.True(Assert.Single(restored.Envelope.Blocks).DisplayDelivered);
         Assert.Equal(3, restored.HeardTextEndExclusive);
         Assert.Equal(5, restored.ReceivedTextEndExclusive);
+    }
+
+    private static IReadOnlyList<ConversationEntry> LongTranscript(int count, int trailingUsers)
+    {
+        var entries = new ConversationEntry[count];
+        for (var sequence = 1; sequence <= count; sequence++)
+        {
+            var id = Guid.Parse($"019944af-0000-7000-8000-{sequence:D12}");
+            var trailing = sequence > count - trailingUsers;
+            entries[sequence - 1] = Entry(
+                    id,
+                    sequence,
+                    EntryStatus.Completed,
+                    trailing ? $"U{sequence}" : $"A{sequence}") with
+                {
+                    Role = trailing ? ConversationRole.User : ConversationRole.Assistant,
+                    ResponseId = trailing ? null : id
+                };
+        }
+
+        return entries;
     }
 
     private static ConversationEntry Entry(Guid id, long sequence, EntryStatus status, string text) =>

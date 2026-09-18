@@ -21,8 +21,29 @@ internal static class MemoryStoreSemantics
         && left.WorkspaceOwned == right.WorkspaceOwned
         && left.ArchivedAt == right.ArchivedAt
         && left.DurablyDeletedAt == right.DurablyDeletedAt
-        && left.Entries.Count == right.Entries.Count
-        && left.Entries.Zip(right.Entries).All(pair => pair.First == pair.Second);
+        && left.DurableLastEntrySequence == right.DurableLastEntrySequence
+        && IncomingEntriesMatch(left.Entries, right.Entries);
+
+    private static bool IncomingEntriesMatch(
+        IReadOnlyList<ConversationEntry> stored,
+        IReadOnlyList<ConversationEntry> incoming)
+    {
+        if (incoming.Count == 0)
+        {
+            return true;
+        }
+
+        var byId = stored.ToDictionary(entry => entry.EntryId);
+        foreach (var entry in incoming)
+        {
+            if (!byId.TryGetValue(entry.EntryId, out var existing) || existing != entry)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public static SessionSnapshot Recover(SessionSnapshot snapshot, DateTimeOffset now)
     {

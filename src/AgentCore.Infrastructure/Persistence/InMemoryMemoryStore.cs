@@ -8,6 +8,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, SessionSnapshot> _sessions = [];
+    private readonly Dictionary<Guid, List<ConversationEntry>> _entries = [];
     private readonly Dictionary<Guid, UserProfile> _profiles = [];
 
     public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -16,7 +17,20 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         lock (_gate)
         {
             return _sessions.TryGetValue(sessionId, out var snapshot)
-                ? ValueTask.FromResult<SessionSnapshot?>(Clone(snapshot))
+                ? ValueTask.FromResult<SessionSnapshot?>(CloneWindow(snapshot, sessionId))
+                : ValueTask.FromResult<SessionSnapshot?>(null);
+        }
+    }
+
+    public ValueTask<SessionSnapshot?> LoadMetadataAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            return _sessions.TryGetValue(sessionId, out var snapshot)
+                ? ValueTask.FromResult<SessionSnapshot?>(CloneMeta(snapshot))
                 : ValueTask.FromResult<SessionSnapshot?>(null);
         }
     }
@@ -33,11 +47,12 @@ public sealed class InMemoryMemoryStore : IMemoryStore
                     throw AgentCoreErrors.Conflict("Insert requires expectedRevision 0 and snapshot.Revision 1.");
                 }
 
-                _sessions[snapshot.SessionId] = Clone(snapshot);
+                Store(snapshot, replaceEntries: snapshot.DurablyDeletedAt is not null);
                 return ValueTask.CompletedTask;
             }
 
-            if (existing.Revision == snapshot.Revision && SameContent(existing, snapshot))
+            var storedWindow = CloneForCompare(existing, snapshot.SessionId, snapshot.Entries);
+            if (existing.Revision == snapshot.Revision && SameContent(storedWindow, snapshot))
             {
                 return ValueTask.CompletedTask;
             }
@@ -47,7 +62,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
                 throw AgentCoreErrors.Conflict("Stale session revision.");
             }
 
-            _sessions[snapshot.SessionId] = Clone(snapshot);
+            Store(snapshot, replaceEntries: snapshot.DurablyDeletedAt is not null);
             return ValueTask.CompletedTask;
         }
     }
@@ -61,13 +76,14 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            if (!_sessions.TryGetValue(sessionId, out var snapshot))
+            if (!_entries.TryGetValue(sessionId, out var entries))
             {
                 return ValueTask.FromResult<IReadOnlyList<ConversationEntry>>([]);
             }
 
-            var page = snapshot.Entries
+            var page = entries
                 .Where(entry => entry.Sequence > afterEntrySequence)
+                .OrderBy(entry => entry.Sequence)
                 .Take(limit)
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<ConversationEntry>>(page);
@@ -119,7 +135,9 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         {
             foreach (var id in _sessions.Keys.ToArray())
             {
-                _sessions[id] = MemoryStoreSemantics.Recover(_sessions[id], DateTimeOffset.UtcNow);
+                var snapshot = Full(id);
+                var recovered = MemoryStoreSemantics.Recover(snapshot, DateTimeOffset.UtcNow);
+                Store(recovered, replaceEntries: true);
             }
         }
 
@@ -135,12 +153,82 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            return ValueTask.FromResult(CatalogCursor.Page(_sessions.Values, cursor, limit, includeArchived));
+            var items = _sessions.Values.Select(CloneMeta).ToArray();
+            return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, includeArchived));
         }
     }
 
-    private static SessionSnapshot Clone(SessionSnapshot snapshot) =>
-        snapshot with { Entries = snapshot.Entries.ToArray() };
+    private void Store(SessionSnapshot snapshot, bool replaceEntries = false)
+    {
+        var merged = MergeEntries(snapshot.SessionId, snapshot.Entries, replaceEntries);
+        _entries[snapshot.SessionId] = merged;
+        _sessions[snapshot.SessionId] = snapshot with
+        {
+            Entries = [],
+            LastEntrySequence = snapshot.DurableLastEntrySequence
+        };
+    }
+
+    private List<ConversationEntry> MergeEntries(
+        Guid sessionId,
+        IReadOnlyList<ConversationEntry> incoming,
+        bool replace)
+    {
+        if (replace)
+        {
+            return incoming.OrderBy(entry => entry.Sequence).ToList();
+        }
+
+        if (!_entries.TryGetValue(sessionId, out var existing))
+        {
+            return incoming.OrderBy(entry => entry.Sequence).ToList();
+        }
+
+        var byId = existing.ToDictionary(entry => entry.EntryId);
+        foreach (var entry in incoming)
+        {
+            byId[entry.EntryId] = entry;
+        }
+
+        return byId.Values.OrderBy(entry => entry.Sequence).ToList();
+    }
+
+    private SessionSnapshot Full(Guid sessionId)
+    {
+        var meta = _sessions[sessionId];
+        var entries = _entries.TryGetValue(sessionId, out var list) ? list.ToArray() : [];
+        return meta with { Entries = entries };
+    }
+
+    private SessionSnapshot CloneWindow(SessionSnapshot snapshot, Guid sessionId)
+    {
+        var entries = _entries.TryGetValue(sessionId, out var list) ? list : (IReadOnlyList<ConversationEntry>)[];
+        return snapshot with
+        {
+            Entries = HistoryRestoreWindow.Select(entries),
+            LastEntrySequence = snapshot.LastEntrySequence
+        };
+    }
+
+    private SessionSnapshot CloneMeta(SessionSnapshot snapshot) =>
+        snapshot with { Entries = [] };
+
+    private SessionSnapshot CloneForCompare(
+        SessionSnapshot existing,
+        Guid sessionId,
+        IReadOnlyList<ConversationEntry> incoming)
+    {
+        var stored = _entries.TryGetValue(sessionId, out var list) ? list : [];
+        var byId = stored.ToDictionary(entry => entry.EntryId);
+        var matched = incoming
+            .Select(entry => byId.TryGetValue(entry.EntryId, out var found) ? found : entry)
+            .ToArray();
+        return existing with
+        {
+            Entries = matched,
+            LastEntrySequence = existing.LastEntrySequence
+        };
+    }
 
     private static bool SameContent(SessionSnapshot left, SessionSnapshot right) =>
         MemoryStoreSemantics.SameContent(left, right);

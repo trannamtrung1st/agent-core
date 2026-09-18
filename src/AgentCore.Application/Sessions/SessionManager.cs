@@ -91,6 +91,18 @@ public sealed class SessionManager
 
     public async Task<SessionSnapshot> GetAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
+        var snapshot = await _store.LoadMetadataAsync(sessionId, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Session was not found.");
+        if (snapshot.DurablyDeletedAt is not null)
+        {
+            throw AgentCoreErrors.NotFound("Session was not found.");
+        }
+
+        return snapshot;
+    }
+
+    public async Task<SessionSnapshot> LoadRuntimeAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
         var snapshot = await _store.LoadAsync(sessionId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Session was not found.");
         if (snapshot.DurablyDeletedAt is not null)
