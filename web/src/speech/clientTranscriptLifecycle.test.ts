@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { speechError } from "./errors";
 import { BrowserSpeechRecognizer } from "./browserSpeechRecognizer";
 import { FakeSpeechRecognizer } from "./fakeSpeechAdapters";
 import { createSpeechTransportService } from "./speechTransport";
@@ -75,6 +76,57 @@ describe("ClientTranscriptLifecycle", () => {
     expect(errors).toEqual(["SpeechPermissionDenied"]);
     expect(life.isListening()).toBe(false);
     expect(life.isBlocked()).toBe(true);
+  });
+
+  it("retryRecognition restarts listening after a block and stays blocked when retry fails", async () => {
+    class FailOnStartRecognizer extends FakeSpeechRecognizer {
+      async start(listener: Parameters<FakeSpeechRecognizer["start"]>[0]): Promise<void> {
+        listener.onError(speechError("SpeechRecognitionUnavailable"));
+      }
+    }
+
+    const errors: string[] = [];
+    const fake = new FailOnStartRecognizer();
+    const transport = createSpeechTransportService(fake);
+    transport.setActiveInputTransport("clientTranscript");
+    const life = new ClientTranscriptLifecycle(transport, () => undefined, (error) => errors.push(error.code));
+
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
+    expect(life.isBlocked()).toBe(true);
+
+    const recovered = await life.retryRecognition();
+    expect(recovered).toBe(false);
+    expect(life.isBlocked()).toBe(true);
+    expect(life.isListening()).toBe(false);
+  });
+
+  it("retryRecognition clears blocked when recognition restarts", async () => {
+    const { fake, life } = setup();
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
+    fake.fail("SpeechRecognitionUnavailable");
+    expect(life.isBlocked()).toBe(true);
+
+    const recovered = await life.retryRecognition();
+    expect(recovered).toBe(true);
+    expect(life.isBlocked()).toBe(false);
+    expect(life.isListening()).toBe(true);
+  });
+
+  it("enterVoice leaves blocked when startInput throws after reporting an error", async () => {
+    class ThrowOnStartRecognizer extends FakeSpeechRecognizer {
+      async start(listener: Parameters<FakeSpeechRecognizer["start"]>[0]): Promise<void> {
+        listener.onError(speechError("SpeechUnsupported"));
+        throw new Error("start failed");
+      }
+    }
+
+    const fake = new ThrowOnStartRecognizer();
+    const transport = createSpeechTransportService(fake);
+    transport.setActiveInputTransport("clientTranscript");
+    const life = new ClientTranscriptLifecycle(transport, () => undefined, () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
+    expect(life.isBlocked()).toBe(true);
+    expect(life.isListening()).toBe(false);
   });
 
   it("blocks voice when the browser adapter hits the idle restart cap", async () => {

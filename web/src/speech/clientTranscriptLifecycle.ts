@@ -22,7 +22,8 @@ export class ClientTranscriptLifecycle {
   constructor(
     private readonly transport: SpeechTransportService,
     emit: (evidence: ClientSpeechEvidence) => void,
-    onError: (error: SessionErrorView) => void
+    onError: (error: SessionErrorView) => void,
+    private readonly onStateChange?: () => void
   ) {
     this.reportError = onError;
     this.accumulator = new ClientTranscriptAccumulator(
@@ -54,6 +55,25 @@ export class ClientTranscriptLifecycle {
     this.accumulator.beginSession({ ...gate, epoch: this.epoch, mode: "voice", muted: false });
     this.transport.setActiveInputTransport("clientTranscript");
     await this.startListening();
+    this.notifyStateChange();
+  }
+
+  async retryRecognition(): Promise<boolean> {
+    if (!this.blocked || this.gate?.mode !== "voice" || this.gate.muted || !this.gate.attachmentId) {
+      return false;
+    }
+
+    this.blocked = false;
+    this.epoch += 1;
+    this.accumulator.beginSession({
+      attachmentId: this.gate.attachmentId,
+      epoch: this.epoch,
+      mode: "voice",
+      muted: false
+    });
+    await this.startListening();
+    this.notifyStateChange();
+    return !this.blocked && this.listening;
   }
 
   async mute(): Promise<void> {
@@ -65,6 +85,7 @@ export class ClientTranscriptLifecycle {
       muted: true
     });
     await this.transport.cancelInput();
+    this.notifyStateChange();
   }
 
   async unmute(attachmentId: string): Promise<void> {
@@ -73,6 +94,7 @@ export class ClientTranscriptLifecycle {
     this.epoch += 1;
     this.accumulator.beginSession({ attachmentId, epoch: this.epoch, mode: "voice", muted: false });
     await this.startListening();
+    this.notifyStateChange();
   }
 
   async exitVoice(): Promise<void> {
@@ -85,6 +107,7 @@ export class ClientTranscriptLifecycle {
       mode: "text",
       muted: false
     });
+    this.notifyStateChange();
   }
 
   async disconnect(): Promise<void> {
@@ -97,6 +120,7 @@ export class ClientTranscriptLifecycle {
       mode: "text",
       muted: true
     });
+    this.notifyStateChange();
   }
 
   async reconnect(gate: TranscriptLifecycleGate): Promise<void> {
@@ -105,6 +129,7 @@ export class ClientTranscriptLifecycle {
     this.epoch += 1;
     this.accumulator.beginSession({ ...gate, epoch: this.epoch, mode: "voice", muted: false });
     await this.startListening();
+    this.notifyStateChange();
   }
 
   ingest(evidence: ClientSpeechEvidence, epoch = this.epoch): void {
@@ -148,7 +173,12 @@ export class ClientTranscriptLifecycle {
       this.listening = false;
       this.blocked = true;
       await this.transport.cancelInput();
+      this.notifyStateChange();
     }
+  }
+
+  private notifyStateChange(): void {
+    this.onStateChange?.();
   }
 
   private async startListening(): Promise<void> {
@@ -156,19 +186,29 @@ export class ClientTranscriptLifecycle {
       return;
     }
 
-    await this.transport.startInput({
-      onEvidence: (evidence) => this.ingest(evidence, this.epoch),
-      onError: (error) => {
-        this.listening = false;
-        this.blocked = true;
-        this.accumulator.fail();
-        this.reportError(error);
-      },
-      onRecognitionEnded: () => {
-        void this.handleRecognitionEnded();
-      },
-      language: this.gate?.language
-    });
-    this.listening = true;
+    try {
+      await this.transport.startInput({
+        onEvidence: (evidence) => this.ingest(evidence, this.epoch),
+        onError: (error) => {
+          this.listening = false;
+          this.blocked = true;
+          this.accumulator.fail();
+          this.reportError(error);
+          this.notifyStateChange();
+        },
+        onRecognitionEnded: () => {
+          void this.handleRecognitionEnded();
+        },
+        language: this.gate?.language
+      });
+      if (!this.blocked) {
+        this.listening = true;
+      }
+    } catch {
+      this.listening = false;
+      this.blocked = true;
+      this.accumulator.fail();
+      this.notifyStateChange();
+    }
   }
 }

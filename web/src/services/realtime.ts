@@ -106,12 +106,14 @@ function sessionFailurePatch(
 }
 
 function clearSessionFailure() {
-  return {
-    error: null as string | null,
-    sessionError: null,
-    errorFatal: false,
-    clientTranscriptBlocked: false
-  };
+  return { error: null as string | null, sessionError: null, errorFatal: false };
+}
+
+function syncClientTranscriptBlockedFromLifecycle(): void {
+  const blocked = Boolean(transcriptLife?.isBlocked());
+  if (useSessionStore.getState().clientTranscriptBlocked !== blocked) {
+    useSessionStore.setState({ clientTranscriptBlocked: blocked });
+  }
 }
 
 export function audioFramesSentCount(): number {
@@ -334,15 +336,23 @@ function sendSpeechEvidence(evidence: ClientSpeechEvidence): void {
 function ensureTranscriptLife(): ClientTranscriptLifecycle {
   ensureSpeechAdapters();
   if (!transcriptLife) {
-    transcriptLife = new ClientTranscriptLifecycle(speechTransport, sendSpeechEvidence, (error) => {
-      useSessionStore.setState({
-        error: error.message,
-        sessionError: error,
-        errorFatal: false,
-        clientTranscriptBlocked: true
-      });
-      publishCaptureLive();
-    });
+    transcriptLife = new ClientTranscriptLifecycle(
+      speechTransport,
+      sendSpeechEvidence,
+      (error) => {
+        useSessionStore.setState({
+          error: error.message,
+          sessionError: error,
+          errorFatal: false
+        });
+        syncClientTranscriptBlockedFromLifecycle();
+        publishCaptureLive();
+      },
+      () => {
+        syncClientTranscriptBlockedFromLifecycle();
+        publishCaptureLive();
+      }
+    );
   }
 
   return transcriptLife;
@@ -351,6 +361,7 @@ function ensureTranscriptLife(): ClientTranscriptLifecycle {
 async function releaseClientSpeech(): Promise<void> {
   await clientSpeechPlayer?.reset();
   await transcriptLife?.disconnect();
+  syncClientTranscriptBlockedFromLifecycle();
 }
 
 function sessionVoiceEnabled(): boolean {
@@ -1116,12 +1127,15 @@ function stopPlayback(responseId?: string): void {
 
 function publishCaptureLive(): void {
   const state = useSessionStore.getState();
+  if (state.sttTransport === "clientTranscript") {
+    syncClientTranscriptBlockedFromLifecycle();
+  }
+
   if (state.sttTransport === "clientTranscript" && state.mode === "voice") {
     const live =
       !state.muted
       && Boolean(transcriptLife?.isListening())
-      && !transcriptLife?.isBlocked()
-      && !state.clientTranscriptBlocked;
+      && !transcriptLife?.isBlocked();
     if (state.captureLive !== live) {
       useSessionStore.setState({ captureLive: live });
     }
@@ -1226,7 +1240,7 @@ function syncCapture(): void {
             })
             .finally(() => {
               transcriptStart = null;
-              useSessionStore.setState({ clientTranscriptBlocked: false });
+              syncClientTranscriptBlockedFromLifecycle();
               publishCaptureLive();
             });
         }
@@ -2847,6 +2861,28 @@ export async function requestVoice(): Promise<void> {
     return;
   }
 
+  if (
+    snapshot.sessionId
+    && snapshot.mode === "voice"
+    && snapshot.sttTransport === "clientTranscript"
+    && snapshot.connection === "ready"
+    && transcriptLife?.isBlocked()
+  ) {
+    voiceRequest = (async () => {
+      useSessionStore.setState(clearSessionFailure());
+      ensureSpeechAdapters();
+      await ensureTranscriptLife().retryRecognition();
+    })();
+
+    try {
+      await voiceRequest;
+    } finally {
+      voiceRequest = null;
+    }
+
+    return;
+  }
+
   voiceRequest = (async () => {
     const epoch = ++voiceEpoch;
     useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
@@ -2999,7 +3035,6 @@ export async function setMuted(muted: boolean): Promise<void> {
   if (!muted) {
     if (clientTranscript) {
       await ensureTranscriptLife().unmute(useSessionStore.getState().attachmentId ?? "");
-      useSessionStore.setState({ clientTranscriptBlocked: false });
     }
     syncCapture();
   }
