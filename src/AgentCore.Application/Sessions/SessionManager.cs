@@ -94,6 +94,15 @@ public sealed class SessionManager
             CompletionPolicy: resolvedPolicy,
             LifecycleSource: LifecycleTransitionSource.System,
             LifecycleChangedAt: now);
+        if (SessionLifecycle.DeadlineElapsed(resolvedPurpose, now))
+        {
+            snapshot = LifecycleTransition.Apply(
+                snapshot,
+                SessionLifecycleStatus.Expired,
+                LifecycleTransitionSource.System,
+                now,
+                "deadline");
+        }
 
         await _store.SaveAsync(snapshot, expectedRevision: 0, cancellationToken).ConfigureAwait(false);
         return snapshot;
@@ -108,7 +117,7 @@ public sealed class SessionManager
             throw AgentCoreErrors.NotFound("Session was not found.");
         }
 
-        return snapshot;
+        return await PersistDeadlineExpiryAsync(snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<SessionSnapshot> LoadRuntimeAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -120,7 +129,7 @@ public sealed class SessionManager
             throw AgentCoreErrors.NotFound("Session was not found.");
         }
 
-        return snapshot;
+        return await PersistDeadlineExpiryAsync(snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<SessionCatalogPage> ListCatalogAsync(
@@ -173,7 +182,7 @@ public sealed class SessionManager
                 sessionId,
                 snapshot =>
                 {
-                    if (snapshot.Status == SessionStatus.Ended)
+                    if (LifecycleTransition.IsTerminal(snapshot))
                     {
                         throw AgentCoreErrors.Validation("Ended sessions cannot be reopened.");
                     }
@@ -195,15 +204,12 @@ public sealed class SessionManager
                         return snapshot;
                     }
 
-                    var now = _time.GetUtcNow();
-                    return snapshot with
-                    {
-                        Status = SessionStatus.Created,
-                        PauseReason = null,
-                        RuntimeEpoch = snapshot.RuntimeEpoch + 1,
-                        LastUserActivityAt = now,
-                        UpdatedAt = now
-                    };
+                    return LifecycleTransition.Apply(
+                        snapshot,
+                        SessionLifecycleStatus.Active,
+                        LifecycleTransitionSource.Host,
+                        _time.GetUtcNow(),
+                        "reopen");
                 },
                 cancellationToken,
                 touchCatalogOrder: false)
@@ -217,7 +223,7 @@ public sealed class SessionManager
                 sessionId,
                 snapshot =>
                 {
-                    if (snapshot.Status == SessionStatus.Ended)
+                    if (LifecycleTransition.IsTerminal(snapshot))
                     {
                         throw AgentCoreErrors.Validation("Ended sessions cannot be deactivated.");
                     }
@@ -232,13 +238,12 @@ public sealed class SessionManager
                         return snapshot;
                     }
 
-                    var paused = snapshot with
-                    {
-                        Status = SessionStatus.Paused,
-                        PendingMode = null,
-                        RuntimeEpoch = snapshot.RuntimeEpoch + 1,
-                        PauseReason = "manual"
-                    };
+                    var paused = LifecycleTransition.Apply(
+                        snapshot,
+                        SessionLifecycleStatus.Paused,
+                        LifecycleTransitionSource.User,
+                        _time.GetUtcNow(),
+                        "manual");
                     SessionPauseTelemetry.Record("manual");
                     return paused;
                 },
@@ -342,7 +347,8 @@ public sealed class SessionManager
         left.Title == right.Title
         && left.ArchivedAt == right.ArchivedAt
         && left.RuntimeEpoch == right.RuntimeEpoch
-        && left.Status == right.Status;
+        && left.Status == right.Status
+        && left.LifecycleStatus == right.LifecycleStatus;
 
     public async Task<ConversationHistoryPage> ReadHistoryPageAsync(
         Guid sessionId,
@@ -375,32 +381,96 @@ public sealed class SessionManager
         CancellationToken cancellationToken = default) =>
         (await ReadHistoryPageAsync(sessionId, after, before: null, limit, cancellationToken).ConfigureAwait(false)).Items;
 
-    public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        await TransitionLifecycleAsync(
+                sessionId,
+                SessionLifecycleStatus.Ended,
+                LifecycleTransitionSource.Legacy,
+                cancellationToken,
+                "ended")
+            .ConfigureAwait(false);
+
+    public async Task<SessionSnapshot> TransitionLifecycleAsync(
+        Guid sessionId,
+        SessionLifecycleStatus target,
+        LifecycleTransitionSource source,
+        CancellationToken cancellationToken = default,
+        string? reason = null)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (snapshot.Status == SessionStatus.Ended)
+        if (target == SessionLifecycleStatus.Ended && LifecycleTransition.IsTerminal(snapshot))
         {
-            return;
+            return snapshot;
         }
 
-        var ended = snapshot with
+        var next = LifecycleTransition.Apply(snapshot, target, source, _time.GetUtcNow(), reason);
+        if (ReferenceEquals(next, snapshot) || MemoryStoreEqual(snapshot, next))
         {
-            Status = SessionStatus.Ended,
-            PendingMode = null,
-            Revision = snapshot.Revision + 1,
-            UpdatedAt = _time.GetUtcNow()
-        };
+            if (next.Revision == snapshot.Revision && next.UpdatedAt == snapshot.UpdatedAt)
+            {
+                return snapshot;
+            }
+        }
+
+        if (next.Revision == snapshot.Revision)
+        {
+            next = next with { Revision = snapshot.Revision + 1 };
+        }
+
         try
         {
-            await _store.SaveAsync(ended, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+            await _store.SaveAsync(next, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+            return next;
         }
         catch (AgentCoreException ex) when (ex.Code is "SessionPersistenceUnavailable" or "Conflict")
         {
             var loaded = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-            if (loaded.Status != SessionStatus.Ended)
+            if (loaded.LifecycleStatus == target || (target == SessionLifecycleStatus.Ended && LifecycleTransition.IsTerminal(loaded)))
             {
-                throw;
+                return loaded;
             }
+
+            throw;
+        }
+    }
+
+    private async Task<SessionSnapshot> PersistDeadlineExpiryAsync(
+        SessionSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        var now = _time.GetUtcNow();
+        if (LifecycleTransition.IsTerminal(snapshot) || !SessionLifecycle.DeadlineElapsed(snapshot.Purpose, now))
+        {
+            return snapshot;
+        }
+
+        var expired = LifecycleTransition.Apply(
+            snapshot,
+            SessionLifecycleStatus.Expired,
+            LifecycleTransitionSource.System,
+            now,
+            "deadline");
+        if (expired.Revision == snapshot.Revision)
+        {
+            expired = expired with { Revision = snapshot.Revision + 1 };
+        }
+
+        try
+        {
+            await _store.SaveAsync(expired, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+            return expired;
+        }
+        catch (AgentCoreException ex) when (ex.Code is "SessionPersistenceUnavailable" or "Conflict")
+        {
+            var loaded = snapshot.Entries.Count > 0
+                ? await _store.LoadAsync(snapshot.SessionId, cancellationToken).ConfigureAwait(false)
+                : await _store.LoadMetadataAsync(snapshot.SessionId, cancellationToken).ConfigureAwait(false);
+            if (loaded is not null && LifecycleTransition.IsTerminal(loaded))
+            {
+                return loaded;
+            }
+
+            throw;
         }
     }
 

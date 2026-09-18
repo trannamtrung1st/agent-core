@@ -4,6 +4,8 @@ public sealed record HealthResponse(string Status, string Profile, int ProtocolV
 
 public sealed record CreateSessionRequest(string AgentId, int? AgentVersion, string? Mode);
 
+public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
+
 public sealed record SessionViewResponse(
     string SessionId,
     string AgentId,
@@ -16,7 +18,8 @@ public sealed record SessionViewResponse(
     long LastEntrySequence,
     string? ActiveResponseId,
     int ProtocolVersion,
-    string? PauseReason = null);
+    string? PauseReason = null,
+    string? LifecycleStatus = null);
 
 public sealed record AgentDescriptorResponse(
     string Id,
@@ -86,7 +89,8 @@ public sealed record SessionCatalogItemResponse(
     long Revision,
     string CreatedAt,
     string UpdatedAt,
-    string? PauseReason = null);
+    string? PauseReason = null,
+    string? LifecycleStatus = null);
 
 public sealed record SessionCatalogPageResponse(
     IReadOnlyList<SessionCatalogItemResponse> Items,

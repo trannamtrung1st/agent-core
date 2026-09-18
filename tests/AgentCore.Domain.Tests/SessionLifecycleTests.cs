@@ -86,4 +86,26 @@ public sealed class SessionLifecycleTests
         Assert.True(policy.UserCompletionAllowed);
         Assert.True(policy.UserCancellationAllowed);
     }
+
+    [Theory]
+    [InlineData(SessionLifecycleStatus.Active, SessionLifecycleStatus.Paused)]
+    [InlineData(SessionLifecycleStatus.Paused, SessionLifecycleStatus.Active)]
+    [InlineData(SessionLifecycleStatus.Active, SessionLifecycleStatus.Completed)]
+    [InlineData(SessionLifecycleStatus.Paused, SessionLifecycleStatus.Expired)]
+    [InlineData(SessionLifecycleStatus.Active, SessionLifecycleStatus.Cancelled)]
+    [InlineData(SessionLifecycleStatus.Active, SessionLifecycleStatus.Ended)]
+    public void Graph_allows_pause_resume_and_terminalization(
+        SessionLifecycleStatus from,
+        SessionLifecycleStatus to)
+    {
+        Assert.True(SessionLifecycle.Allows(from, to));
+    }
+
+    [Fact]
+    public void Terminal_outcomes_cannot_change_to_a_different_outcome()
+    {
+        Assert.False(SessionLifecycle.Allows(SessionLifecycleStatus.Completed, SessionLifecycleStatus.Cancelled));
+        Assert.False(SessionLifecycle.Allows(SessionLifecycleStatus.Expired, SessionLifecycleStatus.Active));
+        Assert.True(SessionLifecycle.Allows(SessionLifecycleStatus.Completed, SessionLifecycleStatus.Completed));
+    }
 }

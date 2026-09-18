@@ -126,6 +126,13 @@ public sealed record ResponseReceiptReceived(
 
 public sealed record EndSessionReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
+public sealed record LifecycleTransitionReceived(
+    EventContext Context,
+    SessionLifecycleStatus Target,
+    LifecycleTransitionSource Source,
+    string? Reason,
+    TaskCompletionSource<bool> Persisted) : SessionInput(Context);
+
 public sealed record DeactivateReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
 public sealed record RenameReceived(
@@ -203,7 +210,8 @@ public sealed record SessionReadyProjection(
     IReadOnlyList<PublicHistoryEntry> History,
     Guid? ActiveResponseId,
     string InputTransport,
-    string OutputTransport);
+    string OutputTransport,
+    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 
@@ -253,7 +261,8 @@ public sealed record StateChangedOutput(
     string OutputState,
     bool Muted,
     Guid? StreamId,
-    string? PauseReason = null) : OutputPayload;
+    string? PauseReason = null,
+    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active) : OutputPayload;
 
 public sealed record PlaybackStopOutput(string Reason) : OutputPayload;
 

@@ -96,6 +96,38 @@ public static class SessionLifecycle
         return resolved;
     }
 
+    public static bool IsTerminal(SessionLifecycleStatus status) =>
+        status is SessionLifecycleStatus.Completed
+            or SessionLifecycleStatus.Expired
+            or SessionLifecycleStatus.Cancelled
+            or SessionLifecycleStatus.Ended;
+
+    public static bool DeadlineElapsed(SessionPurpose? purpose, DateTimeOffset now) =>
+        purpose?.DeadlineAt is { } deadline && deadline <= now;
+
+    public static bool Allows(SessionLifecycleStatus from, SessionLifecycleStatus to)
+    {
+        if (from == to)
+        {
+            return true;
+        }
+
+        return from switch
+        {
+            SessionLifecycleStatus.Active => to is SessionLifecycleStatus.Paused
+                or SessionLifecycleStatus.Completed
+                or SessionLifecycleStatus.Expired
+                or SessionLifecycleStatus.Cancelled
+                or SessionLifecycleStatus.Ended,
+            SessionLifecycleStatus.Paused => to is SessionLifecycleStatus.Active
+                or SessionLifecycleStatus.Completed
+                or SessionLifecycleStatus.Expired
+                or SessionLifecycleStatus.Cancelled
+                or SessionLifecycleStatus.Ended,
+            _ => false
+        };
+    }
+
     public static void Validate(SessionPurpose purpose)
     {
         if (purpose.Description is { Length: > MaxPurposeDescriptionLength })

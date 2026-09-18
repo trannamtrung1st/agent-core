@@ -23,6 +23,7 @@ export type SessionResponse = {
   status: string;
   lastEntrySequence?: number;
   pauseReason?: string | null;
+  lifecycleStatus?: string | null;
 };
 
 export type HistoryPage = {
@@ -54,6 +55,7 @@ export type CatalogItem = {
   createdAt: string;
   updatedAt: string;
   pauseReason?: string | null;
+  lifecycleStatus?: string | null;
 };
 
 export type CatalogPage = {

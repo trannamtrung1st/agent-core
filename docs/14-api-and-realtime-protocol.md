@@ -35,10 +35,10 @@ POST request:
 201 / GET session response:
 
 ```json
-{"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","agentId":"examiner","agentVersion":1,"mode":"text","pendingMode":null,"status":"created","createdAt":"2026-09-15T00:00:00.000Z","updatedAt":"2026-09-15T00:00:00.000Z","lastEntrySequence":0,"activeResponseId":null,"protocolVersion":1,"pauseReason":null}
+{"sessionId":"873f07d1-e264-4c81-a31b-7e59e940b842","agentId":"examiner","agentVersion":1,"mode":"text","pendingMode":null,"status":"created","createdAt":"2026-09-15T00:00:00.000Z","updatedAt":"2026-09-15T00:00:00.000Z","lastEntrySequence":0,"activeResponseId":null,"protocolVersion":1,"pauseReason":null,"lifecycleStatus":"active"}
 ```
 
-status is `created|attached|paused|ending|ended`; `pendingMode` is `text|voice` while a mode change is queued, otherwise null. `pauseReason` is null unless `status` is `paused`, then one of `manual|inactivity|silentEvaluation|initiative|disconnected|recovered|persistence` (extensible string). Semantic pauses (`manual|inactivity|silentEvaluation|initiative|persistence`) require explicit `POST .../reopen` before attach and refresh `lastUserActivityAt`. Transport pauses (`disconnected|recovered`) resume through attach/reconnect alone and preserve `lastUserActivityAt`. activeResponseId is required and nullable. GET reads the current runtime projection when active, durable snapshot otherwise. Session summary is server-only and never appears on this view. Initial mode is honored only after attach; creation performs no provider calls. The browser opens semantic pauses read-only until the user resumes; transport pauses reconnect automatically from the catalog or deep link.
+status is `created|attached|paused|ending|ended`; additive `lifecycleStatus` is `active|paused|completed|expired|cancelled|ended`. Purpose metadata and completion-authority policy are not public. `pendingMode` is `text|voice` while a mode change is queued, otherwise null. `pauseReason` is null unless `status` is `paused`, then one of `manual|inactivity|silentEvaluation|initiative|disconnected|recovered|persistence` (extensible string). Semantic pauses (`manual|inactivity|silentEvaluation|initiative|persistence`) require explicit `POST .../reopen` before attach and refresh `lastUserActivityAt`. Transport pauses (`disconnected|recovered`) resume through attach/reconnect alone and preserve `lastUserActivityAt`. activeResponseId is required and nullable. GET reads the current runtime projection when active, durable snapshot otherwise. Session summary is server-only and never appears on this view. Initial mode is honored only after attach; creation performs no provider calls. The browser opens semantic pauses read-only until the user resumes; transport pauses reconnect automatically from the catalog or deep link.
 
 History response (all listed entry fields required; nullable responseId/sourceEventId):
 
@@ -48,7 +48,7 @@ History response (all listed entry fields required; nullable responseId/sourceEv
 
 Roles `user|assistant`; statuses `completed|interrupted|failed|streaming`; deliveryMode `text|voice` is the mode in which that entry was produced (prompt builder: text assistant entries use received prefix; voice assistant entries use heard prefix). A pending local user entry is reconciled by sourceEventId (the original user.text eventId or voice utteranceId); assistant entries are reconciled by responseId. Public assistant text is limited to ReceivedTextEndExclusive; backend-only generated tails are never exposed by reconnect. Public heardTextEndExclusive is clamped to the projected text length; the internal heard offset remains available for model context even if a last text receipt was lost. History is ordered by stable entry sequence; a streaming entry is updated in place, so reconnect fetches a fresh snapshot, not merely entries after its old sequence. Omit `after` and `before` for the newest page; `before` requests the immediately older page; `after` remains a forward cursor. `before`+`after` is rejected. Newest and backward pages take `limit+1` internally, return items ascending, and set `hasOlder` plus `nextBefore`. `after` is an entry sequence, not an event cursor. No persisted PCM or speculative partial user transcript appears here.
 
-**Follow-on P1 planned until verified:** Protocol-v1 `status` stays `created|attached|paused|ending|ended`; additive `lifecycleStatus` and purpose/deadline/completion fields are extra, not replacements. Session readiness exposes resolved speech locale (not only the public agent `language`). See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+**Follow-on P1 planned until verified:** Protocol-v1 `status` stays `created|attached|paused|ending|ended`; additive `lifecycleStatus` is observed on session views, catalog items, `session.ready`, and `session.state.changed`. Purpose/deadline/completion policy stay private. Session readiness exposing resolved speech locale (not only the public agent `language`) remains planned. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
 
 Health: `{"status":"healthy","profile":"Synthetic","protocolVersion":1}`. Check local startup/SQLite access, not remote LLM billing or an active model call. Use built-in ASP.NET Core OpenAPI at /openapi/v1.json in development; no admin UI required.
 
@@ -138,7 +138,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 
 | Type | Required payload fields |
 | --- | --- |
-| session.ready | mode, pendingMode: text\|voice\|null, status, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), activeResponseId: null |
+| session.ready | mode, pendingMode: text\|voice\|null, status, lifecycleStatus, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), activeResponseId: null |
 | transcript.partial | utteranceId, revision: integer, text |
 | transcript.final | utteranceId, text, entryId: UUID, entrySequence: integer |
 | transcript.discarded | utteranceId |
@@ -153,7 +153,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | playback.stop | reason: interrupted\|disconnected\|ended\|providerFailed\|audioFailed\|modeChange |
 | agent.response.interrupted | reason: userBargeIn\|newText\|userStop\|disconnected\|ended\|modeChange, heardTextEndExclusive: integer |
 | agent.response.completed | status: completed\|failed, heardTextEndExclusive: integer, finishReason: lengthLimit\|contentFiltered\|null |
-| session.state.changed | status, mode: text\|voice, pendingMode: text\|voice\|null, inputState, outputState, muted: boolean, streamId: UUID\|null |
+| session.state.changed | status, lifecycleStatus, mode: text\|voice, pendingMode: text\|voice\|null, inputState, outputState, muted: boolean, streamId: UUID\|null |
 | error | category, code, message, fatal: boolean, retryAfterMs: integer\|null |
 
 For transcript.final, the server publishes only after the user entry is durably saved; entryId and entrySequence identify the committed turn and gate client history. Ignored or discarded recognition finals emit transcript.discarded instead (clear ephemeral live transcript only; no durable user entry). `agent.response.started` identifies the new assistant entry even before its first periodic checkpoint.
@@ -217,6 +217,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | POST /api/v2/sessions/{id}/rename \| archive \| unarchive | Persist catalog mutation in the runtime revision stream |
 | POST /api/v2/sessions/{id}/reopen | When `paused`, clears pause, bumps `runtimeEpoch`, and refreshes `LastUserActivityAt`; reconciles a detached in-memory runtime when present. No-op on `created` (epoch unchanged). Rejected with `SessionInUse` when status is `attached` or a hub lease is active. Not the same as `session.attach` |
 | POST /api/v2/sessions/{id}/deactivate | Runtime deactivation: cancel live output, persist Paused, increment RuntimeEpoch; not archive and not v1 end; idempotent |
+| POST /api/v2/sessions/{id}/lifecycle | Authoritative `LifecycleTransition`: `target` Active/Paused/Completed/Expired/Cancelled/Ended; optional `source`/`reason`. Persist-before-ACK; protocol-v1 `status` stays `paused` or `ended`. Idempotent same-outcome repeats |
 | GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
 | GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query, default `/`); owner capability |
 | GET /api/v2/sessions/{id}/workspace/content?path= | Read logical path (`/agent`, `/attachments`, `/workspace`); host paths never returned |

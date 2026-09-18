@@ -46,8 +46,25 @@ public sealed partial class SessionRuntime
     {
         using var activity = RuntimeTelemetry.Activity.StartActivity("attach");
         var started = Stopwatch.GetTimestamp();
-        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
+            || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
         {
+            input.Attached.TrySetResult(false);
+            return;
+        }
+
+        if (SessionLifecycle.DeadlineElapsed(_snapshot.Purpose, _time.GetUtcNow()))
+        {
+            var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await TerminalizeAsync(
+                    input.Context,
+                    SessionLifecycleStatus.Expired,
+                    LifecycleTransitionSource.System,
+                    "deadline",
+                    persisted,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await persisted.Task.ConfigureAwait(false);
             input.Attached.TrySetResult(false);
             return;
         }
@@ -68,6 +85,7 @@ public sealed partial class SessionRuntime
         _snapshot = _snapshot with
         {
             Status = SessionStatus.Attached,
+            LifecycleStatus = SessionLifecycleStatus.Active,
             PendingMode = null,
             PauseReason = null
         };
@@ -117,6 +135,8 @@ public sealed partial class SessionRuntime
                 {
                     ScheduleIdleTimer(SilenceThreshold());
                 }
+
+                ScheduleDeadlineTimer();
             },
             ended: input.Attached);
     }
@@ -153,12 +173,12 @@ public sealed partial class SessionRuntime
             return;
         }
 
-        _snapshot = _snapshot with
-        {
-            Status = SessionStatus.Paused,
-            PendingMode = null,
-            PauseReason = "disconnected"
-        };
+        _snapshot = LifecycleTransition.Apply(
+            _snapshot,
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.System,
+            _time.GetUtcNow(),
+            "disconnected");
         SessionPauseTelemetry.Record("disconnected");
         _muted = false;
         _environmentQueue.Clear();
@@ -339,7 +359,8 @@ public sealed partial class SessionRuntime
             history,
             ActiveResponseId: null,
             _voice.EffectivePlan.InputTransport,
-            _voice.EffectivePlan.OutputTransport);
+            _voice.EffectivePlan.OutputTransport,
+            _snapshot.LifecycleStatus);
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
@@ -361,7 +382,8 @@ public sealed partial class SessionRuntime
                         _outputActivity.ToString(),
                         Muted: _muted,
                         _streamId,
-                        pauseReason)),
+                        pauseReason,
+                        _snapshot.LifecycleStatus)),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -574,6 +596,30 @@ public sealed partial class SessionRuntime
                 RequestPersist(_snapshot, then: ct => PublishStateAsync(input.Context, ct));
             }
 
+            return;
+        }
+
+        if (input.Kind == "deadline")
+        {
+            if (input.Generation != _deadlineTimerGeneration)
+            {
+                return;
+            }
+
+            _deadlineTimerGeneration++;
+            if (LifecycleTransition.IsTerminal(_snapshot))
+            {
+                return;
+            }
+
+            await TerminalizeAsync(
+                    input.Context,
+                    SessionLifecycleStatus.Expired,
+                    LifecycleTransitionSource.System,
+                    "deadline",
+                    persisted: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -920,5 +966,44 @@ public sealed partial class SessionRuntime
                 EndWork();
             }
         }, CancellationToken.None);
+    }
+
+    private void ScheduleDeadlineTimer()
+    {
+        var deadline = _snapshot.Purpose?.DeadlineAt;
+        if (deadline is null || LifecycleTransition.IsTerminal(_snapshot))
+        {
+            return;
+        }
+
+        var delay = deadline.Value - _time.GetUtcNow();
+        var generation = ++_deadlineTimerGeneration;
+        _ = WaitDeadlineAsync(delay, generation);
+    }
+
+    private async Task WaitDeadlineAsync(TimeSpan delay, int generation)
+    {
+        try
+        {
+            if (delay <= TimeSpan.Zero)
+            {
+                delay = TimeSpan.FromMilliseconds(1);
+            }
+
+            await Task.Delay(delay, _time, _lifetime.Token).ConfigureAwait(false);
+            if (generation != _deadlineTimerGeneration)
+            {
+                return;
+            }
+
+            BeginWork();
+            if (!TryMailbox(new TimerElapsedReceived(NewContext(), "deadline", generation, null)))
+            {
+                EndWork();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 }

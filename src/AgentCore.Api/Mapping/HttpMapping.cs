@@ -33,7 +33,8 @@ public static class HttpMapping
             snapshot.DurableLastEntrySequence,
             activeResponseId?.ToString(),
             ProtocolVersion,
-            snapshot.PauseReason);
+            snapshot.PauseReason,
+            LifecycleTransition.ToWire(snapshot.LifecycleStatus));
 
     public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
         new(
@@ -49,7 +50,8 @@ public static class HttpMapping
             snapshot.Revision,
             Format(snapshot.CreatedAt),
             Format(snapshot.UpdatedAt),
-            snapshot.PauseReason);
+            snapshot.PauseReason,
+            LifecycleTransition.ToWire(snapshot.LifecycleStatus));
 
     public static AttachmentResponse ToAttachment(AgentCore.Application.Ports.AttachmentRecord record) =>
         new(

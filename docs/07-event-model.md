@@ -64,7 +64,8 @@ public sealed record ResponseCompletedOutput(bool Failed,
     int HeardTextEndExclusive) : OutputPayload;
 public sealed record StateChangedOutput(SessionStatus Status, SessionMode Mode,
     SessionMode? PendingMode, string InputState, string OutputState, bool Muted,
-    Guid? StreamId) : OutputPayload;
+    Guid? StreamId, string? PauseReason = null,
+    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active) : OutputPayload;
 public sealed record ErrorOutput(string Category, string Code, string SafeMessage,
     bool Fatal, TimeSpan? RetryAfter) : OutputPayload;
 ```
@@ -98,6 +99,7 @@ Required additional mailbox cases and their owned data:
 | PlaybackObserved | responseId, consumedSamples, phase, acknowledged text offset |
 | EnvironmentReceived | eventId, allowlisted kind and validated string data (from IEnvironmentEventIngress) |
 | TimerElapsed | timer kind, timer generation |
+| LifecycleTransitionRequested | target lifecycleStatus, source, optional reason |
 | PersistenceCompleted/Failed | write revision, normalized failure |
 | VoiceFailed | streamId, normalized audio/recognition failure |
 
@@ -117,7 +119,7 @@ Keep a bounded 500-event developer timeline per runtime without raw audio or con
 
 ## Follow-on P1 planned until verified
 
-Observed event families stay as above. Planned: one lifecycle event for additive `lifecycleStatus` transitions (including RequestComplete evaluation outcomes that policy accepts), distinct from `RequestDeactivate` pause. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).
+Observed event families stay as above, including mailbox `LifecycleTransitionReceived` and additive `lifecycleStatus` on `StateChanged` / `session.ready`. RequestComplete evaluation outcomes remain planned. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).
 
 ## Post-MVP planned until verified
 

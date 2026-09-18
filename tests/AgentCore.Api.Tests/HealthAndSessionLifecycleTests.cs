@@ -72,6 +72,34 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
+    public async Task Session_view_exposes_lifecycle_status_without_private_policy()
+    {
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        Assert.Equal("active", createdDoc.RootElement.GetProperty("lifecycleStatus").GetString());
+        Assert.False(createdDoc.RootElement.TryGetProperty("completionPolicy", out _));
+        Assert.False(createdDoc.RootElement.TryGetProperty("purpose", out _));
+        Assert.False(createdDoc.RootElement.TryGetProperty("userCompletionAllowed", out _));
+
+        var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
+        var complete = await client.PostAsJsonAsync(
+            $"/api/v2/sessions/{view!.SessionId}/lifecycle",
+            new TransitionLifecycleRequest("completed", "user", "finished"));
+        complete.EnsureSuccessStatusCode();
+        var catalog = await complete.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
+        Assert.Equal("ended", catalog!.Status);
+        Assert.Equal("completed", catalog.LifecycleStatus);
+
+        using var fetchedDoc = JsonDocument.Parse(
+            await (await client.GetAsync($"/api/v2/sessions/{view.SessionId}")).Content.ReadAsStringAsync());
+        Assert.Equal("ended", fetchedDoc.RootElement.GetProperty("status").GetString());
+        Assert.Equal("completed", fetchedDoc.RootElement.GetProperty("lifecycleStatus").GetString());
+        Assert.False(fetchedDoc.RootElement.TryGetProperty("completionPolicy", out _));
+    }
+
+    [Fact]
     public async Task Synthetic_voice_create_is_available()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);

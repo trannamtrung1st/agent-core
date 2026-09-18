@@ -136,7 +136,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         {
             CommandAck? RejectIfAttachSnapshotInvalid(SessionSnapshot snap)
             {
-                if (snap.Status == SessionStatus.Ended)
+                if (snap.Status == SessionStatus.Ended || SessionLifecycle.IsTerminal(snap.LifecycleStatus))
                 {
                     return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
                 }
@@ -540,6 +540,65 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
 
         await CancelLiveRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SessionSnapshot> TransitionLifecycleAsync(
+        Guid sessionId,
+        SessionLifecycleStatus target,
+        LifecycleTransitionSource source,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        if (_live.TryGetValue(sessionId, out var live))
+        {
+            var persisted = false;
+            try
+            {
+                persisted = await live.Runtime.RequestLifecycleTransitionAsync(target, source, reason, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            if (!persisted)
+            {
+                SessionSnapshot? current = null;
+                try
+                {
+                    current = await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                if (current?.LifecycleStatus != target && !cancellationToken.IsCancellationRequested)
+                {
+                    throw AgentCoreErrors.Persistence("Failed to persist lifecycle transition.");
+                }
+            }
+
+            if (SessionLifecycle.IsTerminal(target))
+            {
+                var extracted = ExtractLive(sessionId, live.ConnectionId);
+                if (extracted is not null)
+                {
+                    using var shutdownBudget = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await ShutdownLiveAsync(
+                            extracted,
+                            sessionId,
+                            detachRuntime: false,
+                            joinDispatcher: !extracted.InDispatchAction,
+                            shutdownBudget.Token)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            return await _sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await _sessions.TransitionLifecycleAsync(sessionId, target, source, cancellationToken, reason)
+            .ConfigureAwait(false);
     }
 
     public async Task<SessionSnapshot> RenameAsync(
@@ -2005,6 +2064,7 @@ public static class SessionEventMapper
             StateChangedOutput state => ("session.state.changed", new Dictionary<string, object?>
             {
                 ["status"] = HttpMapping.ToStatus(state.Status),
+                ["lifecycleStatus"] = LifecycleTransition.ToWire(state.LifecycleStatus),
                 ["mode"] = HttpMapping.ToMode(state.Mode),
                 ["pendingMode"] = state.PendingMode is { } pending ? HttpMapping.ToMode(pending) : null,
                 ["inputState"] = ToInput(state.InputState),
@@ -2115,6 +2175,7 @@ public static class SessionEventMapper
             ["mode"] = HttpMapping.ToMode(ready.Mode),
             ["pendingMode"] = ready.PendingMode is { } pending ? HttpMapping.ToMode(pending) : null,
             ["status"] = HttpMapping.ToStatus(ready.Status),
+            ["lifecycleStatus"] = LifecycleTransition.ToWire(ready.LifecycleStatus),
             ["agent"] = new Dictionary<string, object?>
             {
                 ["id"] = ready.Agent.Id,

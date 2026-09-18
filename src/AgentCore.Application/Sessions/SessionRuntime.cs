@@ -89,6 +89,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private InterruptionCandidate? _candidate;
     private ResponseLifecycle? _responseLifecycle;
     private int _timerGeneration = 1;
+    private int _deadlineTimerGeneration;
     private int _speechEpoch;
     private int _maxUtteranceGeneration;
     private int _turnGeneration;
@@ -400,6 +401,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var context = NewContext();
         BeginWork();
         if (!Enqueue(new DeactivateReceived(context, persisted), urgent: true))
+        {
+            persisted.TrySetResult(false);
+            return false;
+        }
+
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> RequestLifecycleTransitionAsync(
+        SessionLifecycleStatus target,
+        LifecycleTransitionSource source,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new LifecycleTransitionReceived(context, target, source, reason, persisted), urgent: true))
         {
             persisted.TrySetResult(false);
             return false;
@@ -767,6 +786,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case EndSessionReceived ended:
                     await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
                     break;
+                case LifecycleTransitionReceived lifecycle:
+                    await HandleLifecycleTransitionAsync(lifecycle, cancellationToken).ConfigureAwait(false);
+                    break;
                 case DeactivateReceived deactivate:
                     await HandleDeactivateAsync(deactivate, cancellationToken).ConfigureAwait(false);
                     break;
@@ -796,7 +818,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-            if (input is AttachReceived or EndSessionReceived or DeactivateReceived or RenameReceived or DetachReceived)
+            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or DeactivateReceived or RenameReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
             }
@@ -887,6 +909,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             case EndSessionReceived ended:
                 ended.Persisted.TrySetResult(value);
+                break;
+            case LifecycleTransitionReceived lifecycle:
+                lifecycle.Persisted.TrySetResult(value);
                 break;
             case DeactivateReceived deactivate:
                 deactivate.Persisted.TrySetResult(value);
@@ -990,7 +1015,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
         }
 
-        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused)
+        if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused
+            || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
         {
             input.Persisted?.TrySetResult(false);
             return;
@@ -2565,7 +2591,66 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private async Task HandleEndAsync(EndSessionReceived input, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _terminalFence);
-        _snapshot = _snapshot with
+        await TerminalizeAsync(
+                input.Context,
+                SessionLifecycleStatus.Ended,
+                LifecycleTransitionSource.Legacy,
+                "ended",
+                input.Persisted,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task HandleLifecycleTransitionAsync(
+        LifecycleTransitionReceived input,
+        CancellationToken cancellationToken)
+    {
+        if (input.Target == SessionLifecycleStatus.Paused)
+        {
+            await ApplyDeactivateAsync(input.Context, cancellationToken, input.Persisted, input.Reason ?? "manual")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        await TerminalizeAsync(
+                input.Context,
+                input.Target,
+                input.Source,
+                input.Reason,
+                input.Persisted,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task TerminalizeAsync(
+        EventContext context,
+        SessionLifecycleStatus target,
+        LifecycleTransitionSource source,
+        string? reason,
+        TaskCompletionSource<bool>? persisted,
+        CancellationToken cancellationToken)
+    {
+        if (LifecycleTransition.IsTerminal(_snapshot) && _snapshot.LifecycleStatus == target)
+        {
+            persisted?.TrySetResult(true);
+            return;
+        }
+
+        Interlocked.Increment(ref _terminalFence);
+        _deadlineTimerGeneration++;
+        _deactivated = true;
+        SessionSnapshot applied;
+        try
+        {
+            applied = LifecycleTransition.Apply(_snapshot, target, source, _time.GetUtcNow(), reason);
+        }
+        catch (AgentCoreException ex)
+        {
+            persisted?.TrySetException(ex);
+            return;
+        }
+
+        _snapshot = applied with
         {
             Status = SessionStatus.Ending,
             PendingMode = null,
@@ -2574,21 +2659,31 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AbandonLiveSpeech(rotateEpoch: true);
         _input = InputActivity.Idle;
         await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+        InvalidateSpeechJobs();
+        _ttsCts?.Cancel();
+        CancelBrainEvaluation();
+        ClearPendingPostResponseIdleDelay();
         if (_activeResponseId is { } live)
         {
-            await SupersedeAsync(input.Context, live, cancellationToken, "ended").ConfigureAwait(false);
+            await SupersedeAsync(context, live, cancellationToken, "ended").ConfigureAwait(false);
         }
 
         Signal(ref _abandonPersist);
         RequestPersist(
-            _snapshot with { Status = SessionStatus.Ended, PendingMode = null, UpdatedAt = _time.GetUtcNow() },
+            _snapshot with
+            {
+                Status = SessionStatus.Ended,
+                LifecycleStatus = applied.LifecycleStatus,
+                PendingMode = null,
+                UpdatedAt = _time.GetUtcNow()
+            },
             PersistKind.TerminalEnd,
             then: async ct =>
             {
-                await PublishStateAsync(input.Context, ct).ConfigureAwait(false);
-                input.Persisted.TrySetResult(true);
+                await PublishStateAsync(context, ct).ConfigureAwait(false);
+                persisted?.TrySetResult(true);
             },
-            ended: input.Persisted);
+            ended: persisted);
     }
 
     private SessionSnapshot Append(ConversationEntry entry, AttachmentTitleHints? attachments = null)
@@ -3052,7 +3147,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var toSave = job.Kind switch
         {
-            PersistKind.TerminalEnd => RebaseForPersist(job.Proposed, SessionStatus.Ended, now),
+            PersistKind.TerminalEnd => RebaseForPersist(job.Proposed, SessionStatus.Ended, now) with
+            {
+                LifecycleStatus = job.Proposed.LifecycleStatus,
+                LifecycleReason = job.Proposed.LifecycleReason,
+                LifecycleSource = job.Proposed.LifecycleSource,
+                LifecycleChangedAt = job.Proposed.LifecycleChangedAt,
+                RuntimeEpoch = job.Proposed.RuntimeEpoch
+            },
             PersistKind.Pause => RebaseForPersist(job.Proposed, SessionStatus.Paused, _durableSnapshot.UpdatedAt),
             _ => job.Proposed with
             {
@@ -3098,6 +3200,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot = MergePersisted(saved, _snapshot) with
             {
                 Status = SessionStatus.Ended,
+                LifecycleStatus = saved.LifecycleStatus,
                 PendingMode = null
             };
             return;

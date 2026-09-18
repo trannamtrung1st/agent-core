@@ -256,15 +256,15 @@ public sealed partial class SessionRuntime
             await SupersedeAsync(context, live, cancellationToken, "deactivated").ConfigureAwait(false);
         }
 
+        _deadlineTimerGeneration++;
         _outputActivity = OutputActivity.Idle;
         _initiativeHeld = false;
-        _snapshot = _snapshot with
-        {
-            Status = SessionStatus.Paused,
-            PendingMode = null,
-            RuntimeEpoch = _snapshot.RuntimeEpoch + 1,
-            PauseReason = pauseReason
-        };
+        _snapshot = LifecycleTransition.Apply(
+            _snapshot,
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.System,
+            _time.GetUtcNow(),
+            pauseReason);
         SessionPauseTelemetry.Record(pauseReason);
         RequestPersist(
             _snapshot,
@@ -399,6 +399,7 @@ public sealed partial class SessionRuntime
     private bool CanArmIdleTimer() =>
         !_deactivated
         && _snapshot.Status == SessionStatus.Attached
+        && !SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
         && _snapshot.Definition.InitiativePolicy.Enabled
         && HasTrigger("longSilence")
         && !_initiativeHeld

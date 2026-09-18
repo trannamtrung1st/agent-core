@@ -213,6 +213,34 @@ public static class SessionCatalogEndpoints
             }
         });
 
+        group.MapPost("{sessionId:guid}/lifecycle", async (
+            Guid sessionId,
+            TransitionLifecycleRequest? body,
+            SessionHost host,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (body is null || string.IsNullOrWhiteSpace(body.Target))
+                {
+                    throw AgentCoreErrors.Validation("target is required.");
+                }
+
+                var snapshot = await host.TransitionLifecycleAsync(
+                        sessionId,
+                        LifecycleTransition.Parse(body.Target),
+                        LifecycleTransition.ParseSource(body.Source),
+                        body.Reason,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(HttpMapping.ToCatalogItem(snapshot));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapGet("{sessionId:guid}/knowledge/{identity}", async (
             Guid sessionId,
             string identity,
