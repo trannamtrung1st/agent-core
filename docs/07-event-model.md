@@ -118,7 +118,7 @@ Every operation captures epoch, responseId/utteranceId and logical generation be
 
 Keep a bounded 500-event developer timeline per runtime without raw audio or conversation text by default. It is a diagnostic projection of events, not a broker or persistence requirement.
 
-## Follow-on P1 planned until verified
+## Follow-on P1 observed and frozen
 
 Observed event families stay as above, including mailbox `LifecycleTransitionReceived`, `CompletionReturned`, additive `lifecycleStatus` on `StateChanged` / `session.ready`, and `session.completion.intent` for advisory RequestComplete. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).
 

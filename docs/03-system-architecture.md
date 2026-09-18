@@ -86,7 +86,7 @@ A created session is inactive until attached. One connection owns a session at a
 - Conversation continuity is per Session, independent of the current text/voice mode. Delivery metadata on each assistant entry selects heard vs received prefix for future context; unseen/unheard tails never enter the model. Phase C stores an optional response envelope (speech + blocks) with those receipts.
 - No mutable state, transient audio, provider handles or CancellationTokenSource is stored in an Agent Definition.
 
-## Follow-on P1 planned until verified
+## Follow-on P1 observed and frozen
 
 Observed mailbox ownership and protocol-v1 attach/pause/end stay as above. Follow-on P1 does not add a second Session Runtime or put raw audio on the domain mailbox. Observed: bounded `IMemoryStore` restore plus durable `LastEntrySequence`; additive `lifecycleStatus` beside protocol-v1 `status` with `LifecycleTransition`; Application effective speech locale outside SessionRuntime vendor branches; Browser/hosted adapter locale/voice selection; Speech locale Select. Real Chrome 153 `fr-FR` Browser STT/TTS smoke is observed (unedited `p1-final-fr-smoke-r2`); **P1 is frozen**. Owners: [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
