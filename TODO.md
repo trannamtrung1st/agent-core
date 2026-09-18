@@ -4,7 +4,7 @@ Ordered by current dependency and product value.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, and the P0 conversation-lifecycle work (adaptive wait, inactivity pause/deactivation, queued sends/Steer/Stop semantics, and rich turn presentation).
 
-The next product slice is **cheap, replaceable browser speech**, after one bounded stabilization pass on the current conversation/session behavior.
+The next product slice is **cheap, replaceable browser speech**. The P0 conversation/UI stabilization pass is a frozen baseline unless a real regression appears.
 
 ---
 
@@ -16,7 +16,7 @@ The next product slice is **cheap, replaceable browser speech**, after one bound
 
 Do this before starting the next feature slice. Do not keep expanding P0 after these gates are clean.
 
-- [ ] Run the complete key-free Synthetic gate on current HEAD, matching `.github/workflows/synthetic.yml`.
+- [x] Run the complete key-free Synthetic gate on current HEAD, matching `.github/workflows/synthetic.yml`.
 
   - Domain tests.
   - Infrastructure tests.
@@ -27,7 +27,7 @@ Do this before starting the next feature slice. Do not keep expanding P0 after t
   - Playwright Chromium suite.
   - Fix regressions before starting P1.
 
-- [ ] Do one bounded Impeccable `audit` / `harden` pass over the existing chat UI, not another redesign.
+- [x] Do one bounded Impeccable `audit` / `harden` pass over the existing chat UI, not another redesign.
 
   Verify representative desktop/mobile states:
   - normal text conversation;
@@ -43,7 +43,7 @@ Do this before starting the next feature slice. Do not keep expanding P0 after t
   - reconnect/recovery;
   - recoverable and fatal failures.
 
-- [ ] Improve failure presentation in chat.
+- [x] Improve failure presentation in chat.
 
   The current failure status is too generic. Preserve safe user-facing messages, but expose enough structured detail to distinguish:
   - provider failure;
@@ -55,7 +55,7 @@ Do this before starting the next feature slice. Do not keep expanding P0 after t
 
   Prefer a compact status plus tooltip/popover/details surface. Never expose provider bodies, stack traces, secrets, or credentials.
 
-- [ ] Add/confirm regression coverage for rich response-envelope presentation together with normal reply and voice behavior.
+- [x] Add/confirm regression coverage for rich response-envelope presentation together with normal reply and voice behavior.
 
   Cover:
   - display Markdown;
@@ -67,7 +67,7 @@ Do this before starting the next feature slice. Do not keep expanding P0 after t
   - reconnect/history behavior;
   - voice spoken/heard semantics remain conservative.
 
-- [ ] When the above is green, treat conversation lifecycle P0 as frozen baseline unless a real regression appears.
+- [x] When the above is green, treat conversation lifecycle P0 as frozen baseline unless a real regression appears.
 
 ---
 

@@ -167,6 +167,7 @@ Historical Milestones 0–12 and post-MVP A–H stay as recorded above. P0 is a 
 | P0-D | First-party client pending-send queue while live (idle Send immediate); Steer=`interrupt`; Stop targets rendered `responseId` | `realtime.queue.test.ts`, Composer/ChatApp; Playwright queue/Steer/Stop |
 | P0-E | ResponseEnvelope DisplayText/blocks; SpeechText not visible; live-only thinking | Conversation/activityState tests; markdown reload Playwright |
 | P0-F | Full section-17 cases and minimum commands, including named `dotnet test AgentCore.sln` | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
+| P0 UI baseline closure | After structured-error UI, rich envelope regressions, and one bounded Impeccable harden pass, the same key-free Synthetic Domain/Infrastructure/Application/API/web/Playwright gate is green on that checkout. Distinct from P0-A–F lifecycle slices. P1/hosted/Browser speech is not claimed. | TODO.md P0 checkboxes; this row. Local evidence: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/` (gitignored). |
 
 ## Handoff rule
 
