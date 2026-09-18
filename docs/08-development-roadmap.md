@@ -29,6 +29,10 @@ Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-
 | P0 | Conversation/UI baseline freeze | Complete: key-free Synthetic gate, Impeccable harden, structured failures, rich envelope regressions ([Implementation Plan](18-implementation-plan.md#p0--conversation-lifecycle-observed)) |
 | P1 | Independently selectable STT/TTS, Browser client transports, hosted OpenAI TTS and batch STT | Deterministic coverage green; HOSTED-04 live non-Synthetic smoke **unverified** ([P1 handoff](reports/p1-replaceable-speech-handoff.md)) |
 
+## Follow-on P1 planned until verified
+
+History paging, additive session lifecycle, and provider-neutral speech locale are **not shipped**. Decisions: [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence). Gates: [Implementation Plan](18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech-planned-until-verified). Do not treat this table row as replacing observed P1 replaceable speech.
+
 ## Post-MVP planned until verified
 
 Phases A–H are observed in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). Phase I is recorded not-applicable with a future trigger there and in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified).

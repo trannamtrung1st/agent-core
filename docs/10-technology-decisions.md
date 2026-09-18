@@ -19,6 +19,9 @@ These decisions are the implementation baseline. Resolve package patches at impl
 | Client state/API | Zustand; fetch wrapper; @microsoft/signalr + @microsoft/signalr-protocol-msgpack | Small active state store, few HTTP endpoints | Add data caching only with evidence |
 | Observability | Microsoft.Extensions.Logging, OpenTelemetry via ActivitySource/Meter | Correlate conversational latency with privacy defaults | Optional OTLP export |
 | Tests | xUnit, WebApplicationFactory; Vitest, React Testing Library, Playwright | Offline deterministic behavior and boundary tests | Explicit opt-in live-provider smokes; skip when keys are missing |
+| Follow-on history | Evolve `IMemoryStore`; durable `LastEntrySequence`; newest/`before`/`after` pages | Open long sessions without a full transcript | Implement in follow-on P1A ([decision](#decision-bounded-history-and-durable-lastentrysequence)); **planned until verified** |
+| Follow-on lifecycle | Additive `lifecycleStatus`; one `TransitionLifecycle` | Semantic outcomes stay distinct from protocol-v1 `status` | Implement in follow-on P1B ([decision](#decision-additive-semantic-lifecycle-beside-protocol-v1-status)); **planned until verified** |
+| Follow-on speech locale | Effective locale: session override > agent default > fallback | Speech locale stays independent of text language and of SessionRuntime vendor branches | Implement in follow-on P1C ([decision](#decision-provider-neutral-effective-speech-locale)); **planned until verified** |
 
 MessagePack is case-sensitive; use explicit camelCase string keys and binary DTOs tested with the JavaScript client, as described in [Microsoft's SignalR MessagePack documentation](https://learn.microsoft.com/en-us/aspnet/core/signalr/messagepackhubprotocol?view=aspnetcore-10.0). Http resilience policies must explicitly account for unsafe methods; see [Microsoft HTTP resilience guidance](https://learn.microsoft.com/en-us/dotnet/core/resilience/http-resilience). Project-specific timeout/retry choices are specified in [Backend Implementation](12-backend-implementation-spec.md), not implied library defaults.
 
@@ -109,6 +112,36 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 **Rationale:** A parallel queue table would have to stay reconciled with history. Ordered entries already express arrival, attachments, and recovery without command replay.
 
 **Consequence:** [Interaction Controller](05-interaction-controller.md) and [Protocol](14-api-and-realtime-protocol.md) own the live contracts. After a response is durably terminal (complete, fail, or explicit cancel), the runtime starts at most one next user-turn for the current trailing user suffix. Restart/attach uses the same helper on durable history. A second store remains forbidden unless a later proven invariant is documented first.
+
+## Decision: bounded history and durable LastEntrySequence
+
+**Decision:** Evolve `IMemoryStore` rather than adding a repository framework. Session metadata, one bounded runtime restore window, and one public history page must be loadable without materializing the full transcript. `LastEntrySequence` is a first-class durable snapshot coordinate, independent of the in-memory `Entries` window. Bounded saves retain older `ConversationEntries` rows and must not renumber them. Runtime restore includes required prompt context, interrupted response/delivery coordinates, and the complete trailing unresolved user suffix. The existing messages HTTP endpoint is extended for limit-only newest, `before` older, and existing `after` forward pages; `before`+`after` is rejected; newest/backward pages take `limit+1` internally, return items ascending, and expose `hasOlder` plus the next older cursor. One public history projection applies to active, paused, and terminal sessions. The first-party UI opens on the newest page and uses an explicit Load earlier messages control with merge/dedup by stable identity/sequence and scroll-anchor preservation on prepend.
+
+**Status:** **Planned until verified.** Observed behavior still eagerly loads transcripts for metadata/history in several paths; do not treat this decision as shipped.
+
+**Rationale:** Opening a long session must not transfer or materialize the entire transcript. Deriving the cursor from `Entries[^1]` is wrong once `Entries` is a window.
+
+**Consequence:** [Interfaces](04-backend-interfaces.md) owns store operations; [Persistence](15-persistence-and-configuration.md) owns durable cursor and row retention; [Protocol](14-api-and-realtime-protocol.md) owns paging query shape; [Frontend](13-frontend-implementation-spec.md) owns lazy history UX; [Testing](16-testing-strategy.md) and [Implementation Plan](18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech-planned-until-verified) own gates.
+
+## Decision: additive semantic lifecycle beside protocol-v1 status
+
+**Decision:** Do not extend today's `created|attached|paused|ending|ended` enum as the semantic model. Introduce durable `lifecycleStatus` conceptually Active/Paused/Completed/Expired/Cancelled/Ended additively, while protocol-v1 `status` remains compatible during migration. Archive (`ArchivedAt`) stays orthogonal. Generic `SessionPurpose` is Ongoing|Goal with optional description (context, not an executable rule), optional absolute `deadlineAt` (resolve `maxDuration` once at create), and optional bounded opaque host metadata that is not public. Completion-authority policy covers agent disabled/advisory/allowed, user complete/cancel allowed/denied; host/system authority is always allowed. One Application `TransitionLifecycle` owns the graph, terminalization obligations, and idempotent same-outcome repeats. Attached deadlines use TimeProvider mailbox timers; detached admission checks expiry atomically with no durable scheduler. A separate configured completion evaluator may yield `continue` or `RequestComplete`; it is not `RequestDeactivate` and is not an inline response marker. Domain-specific completion rules stay in host integrations.
+
+**Status:** **Planned until verified.** Observed lifecycle remains protocol-v1 `SessionStatus` plus catalog archive.
+
+**Rationale:** Mixing transport attachment with semantic outcomes would break protocol-v1 clients and collapse Completed/Expired/Cancelled into one Stopped state.
+
+**Consequence:** [Controller](05-interaction-controller.md) owns transition behavior; [Events](07-event-model.md) owns the corresponding lifecycle event; [Protocol](14-api-and-realtime-protocol.md) owns additive wire fields; [Persistence](15-persistence-and-configuration.md) owns migration including Ending recovery; [Frontend](13-frontend-implementation-spec.md) owns minimal terminal UI.
+
+## Decision: provider-neutral effective speech locale
+
+**Decision:** Effective speech locale precedence is session override > agent conversation-language default > provider/default fallback. Validate BCP-47-like tags at the Application boundary. Persist the session override without rewriting agent text-language settings. Expose the resolved locale on session readiness/capability data, not only the public agent descriptor. Evaluate language/voice support in speech abstractions/adapters; `SessionRuntime` has no Browser/OpenAI locale branches. Browser STT uses the effective tag. Browser TTS selects exact locale, then reasonable base language, then compatible configured/default voice, or fails Voice clearly. Hosted batch STT receives locale hints where supported; hosted TTS compatibility stays in adapters. Unsupported speech locale disables or fails Voice while text remains usable. Realtime OpenAI STT remains unselectable. No automatic language detection.
+
+**Status:** **Planned until verified.** Observed Browser STT already sets native `lang`; current Browser TTS may fall through to a default/first voice when no match exists.
+
+**Rationale:** Conversation language and speech locale must stay independent so missing voices never silently speak the wrong language or break text chat.
+
+**Consequence:** [Voice](06-realtime-voice.md) owns Browser/hosted speech behavior; [Interfaces](04-backend-interfaces.md) owns capability evaluation; [Protocol](14-api-and-realtime-protocol.md) owns readiness fields; [Frontend](13-frontend-implementation-spec.md) owns override/fallback presentation.
 
 ## Explicit non-goals
 

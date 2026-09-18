@@ -115,6 +115,10 @@ Every operation captures epoch, responseId/utteranceId and logical generation be
 
 Keep a bounded 500-event developer timeline per runtime without raw audio or conversation text by default. It is a diagnostic projection of events, not a broker or persistence requirement.
 
+## Follow-on P1 planned until verified
+
+Observed event families stay as above. Planned: one lifecycle event for additive `lifecycleStatus` transitions (including RequestComplete evaluation outcomes that policy accepts), distinct from `RequestDeactivate` pause. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).
+
 ## Post-MVP planned until verified
 
 Observed: catalog lifecycle; pending/bound attachment bind; off-mailbox extraction with `processingAttachments`; off-mailbox typed tools with `runningTools` and epoch/response rejection of late results; rich envelope parse (`[[speech:]]`, `[[md:]]`, `[[artifact:]]`, unknown fallback), `BlockUpsert` live visibility, independent display vs speech receipts (late receipts after supersession/disconnect do not revise the parent); optional persisted `SpeechText` when model `[[speech:]]` or playback coordinates differ from display (structured lead-in, markdown stripping, etc.), not when spoken and display strings are identical; StaySilent/Speak/RequestDeactivate with definition-owned consecutive/silence/silent-evaluation bounds and runtime deactivation (Paused, new epoch, not archive/delete); lazy session workspace provision with RO `/agent`/`/attachments` and RW `/workspace`; explicit attachment materialize into artifacts with preserved hash; `sandbox.run` tool JSON (`ok`, `exitCode`, `output`, `artifactId`, `message`) after a completed sandbox. There is no WorkItem event stream. Do not log raw attachment bytes or host sandbox transcripts.

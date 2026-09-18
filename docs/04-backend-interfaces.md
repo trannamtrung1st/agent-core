@@ -251,6 +251,8 @@ public interface ISessionOutput
 
 SessionSnapshot/UserProfile fields and atomic save semantics are specified in [Persistence](15-persistence-and-configuration.md); SessionOutput is the application output family in [Event Model](07-event-model.md). Save with expectedRevision=0 inserts; subsequent saves compare stored revision and write expectedRevision+1. Conflict is an application persistence conflict, not last-write-wins. `RecoverCrashedSessionsAsync` runs at process startup for SQLite: Attached becomes Paused, Ending becomes Ended, Streaming entries become Interrupted, and PendingMode is cleared. There is no generic repository interface. Definition lookup returns null for missing versions, throws a normalized validation failure for malformed data, and pins a version for the full session.
 
+**Observed history load:** `LoadAsync` returns the snapshot used for attach/restore; `ReadHistoryAsync` is forward-only (`after`, `limit`). **Follow-on P1 planned until verified:** evolve this port rather than adding a repository framework. Metadata, one bounded runtime restore window, and one public history page must be loadable without materializing the full transcript. Keep `LastEntrySequence` durable and independent of the in-memory `Entries` window. Extend history reads for newest, `before`, and existing `after` pages; reject `before`+`after`. Speech locale/voice support is evaluated on speech abstractions/adapters, not with Browser/OpenAI branches in SessionRuntime. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+
 Environment data enters Application only through this narrow ingress. It is not a message bus and is not a public HTTP `/events` endpoint:
 
 ```csharp

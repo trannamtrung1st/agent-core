@@ -190,6 +190,17 @@ P0 stays closed only because its gates passed. This table records observed P1 be
 | Final key-free gate | Domain 22, Infrastructure 101+9 skip, Application 291, API 105, Vitest 242, Playwright 25 | [P1 handoff](reports/p1-replaceable-speech-handoff.md); run evidence gitignored |
 | HOSTED-04 | Opt-in non-Synthetic real voice smoke | **Unverified** on this checkout (`AGENTCORE_LIVE_*=0`) |
 
+## Follow-on P1 history, lifecycle and multilingual speech (planned until verified)
+
+This table is **not** observed. It does not reopen historical Milestones 0–12, post-MVP A–H, P0 conversation-lifecycle, or P1 replaceable-speech rows. P1-0 is docs-only; later code batches must not start until this contract is recorded. Decisions: [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+
+| Slice | Planned production behavior | Gate when implemented |
+| --- | --- | --- |
+| P1A history | Evolve `IMemoryStore`; durable `LastEntrySequence` independent of the `Entries` window; retain older rows; messages newest/`before`/`after` with `hasOlder`; one public history projection; UI Load earlier messages with scroll-anchor preservation | SQLite paging tests; API 400 on `before`+`after`; frontend/Playwright long-history without claiming full-transcript load |
+| P1B lifecycle | Additive `lifecycleStatus` Active/Paused/Completed/Expired/Cancelled/Ended; protocol-v1 `status` compatible; `SessionPurpose` Ongoing\|Goal; one `TransitionLifecycle`; TimeProvider attached deadlines and detached atomic expiry; RequestComplete evaluator distinct from RequestDeactivate | Domain/Application transition tests; Ending→Ended recovery; no durable scheduler |
+| P1C speech locale | Effective locale session override > agent default > fallback; Application BCP-47 validation; Browser STT tag / TTS exact-then-base-then-compatible; hosted hints in adapters; Voice fails clearly, text remains; realtime OpenAI STT unselectable | Adapter/plan tests; SessionRuntime has no vendor locale branches; real non-English smoke is distinct from fake-browser |
+| P1-Final | Exact live `synthetic.yml` plus Compose; real Chrome/Edge Voice; opt-in non-English smoke | Same isolation/key-free rules as P0; do not substitute fake-browser for the real Voice probe |
+
 ## Handoff rule
 
 Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter uses `openrouter/free` for **opt-in adapter smoke only**; the Real/demo profile uses a fixed model ID; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).

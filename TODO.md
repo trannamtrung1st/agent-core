@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` through parent `215de23ecefe65560b0b7a666783122d6c67408c` plus this P0-3 preferred-name freeze on 2026-09-19. Exact Synthetic/Compose gates and the Chrome 153 `general-assistant` Voice checklist were re-run on this freeze working tree before commit.
+Reviewed against `main` through parent `215de23ecefe65560b0b7a666783122d6c67408c` plus the P0-3 preferred-name freeze (`5ff60bd`) and this P1-0 docs-only contract pass on 2026-09-19. Exact Synthetic/Compose gates and the Chrome 153 `general-assistant` Voice checklist were re-run on the P0 freeze working tree before that freeze commit. Follow-on P1A/P1B/P1C remain planned until verified.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
@@ -46,26 +46,31 @@ This is a bounded verification/fix pass, not another voice redesign.
 
 ## P1 — Conversation and session ergonomics
 
+Authoritative contracts for this follow-on work are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech-planned-until-verified). They are **planned until verified**. Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. P1-0 records contracts only; later batches implement P1A–P1C.
+
 ### P1A — Lazy-load old chat history
 
-The current durable history works, but loading the whole conversation does not scale.
+The current durable history works, but loading the whole conversation does not scale. Evolve `IMemoryStore` (no repository framework). `LastEntrySequence` is durable and independent of the in-memory `Entries` window. Bounded saves retain older rows.
 
 - [ ] Add paginated/cursor-based history reads.
 
   Requirements:
   - newest page is enough to open/reopen a session;
-  - older pages can be requested explicitly;
+  - older pages can be requested explicitly (`before`); existing `after` remains;
+  - `before`+`after` is rejected;
+  - newest/backward pages expose `hasOlder` plus the next older cursor;
   - stable ordering and no duplicate entries;
   - attachment, artifact, rich-block, `SpeechText`, interrupted/failed status, and entry identity survive pagination;
   - ended read-only sessions use the same history contract.
 
-- [ ] Add frontend "load older history" behavior.
+- [ ] Add frontend "Load earlier messages" behavior.
 
   Requirements:
   - preserve visual scroll position when older entries are prepended;
   - do not jump to the newest message merely because history was hydrated;
   - live entries arriving while older history loads remain correctly ordered;
-  - session switch/reconnect cancels stale page requests.
+  - session switch/reconnect cancels stale page requests;
+  - one controller owns history merge/dedup.
 
 - [ ] Add deterministic API/frontend/Playwright coverage for long histories.
 
@@ -89,15 +94,15 @@ Core rule:
 
 - [ ] Distinguish lifecycle states that have different meaning.
 
-  At minimum keep separate:
+  Introduce additive durable `lifecycleStatus` conceptually:
   - Active;
   - Paused/Deactivated;
   - Completed;
   - Expired;
   - Cancelled;
-  - explicitly Ended/Archived where that remains useful.
+  - Ended.
 
-  Do not collapse every terminal outcome into one generic `Stopped` state.
+  Keep protocol-v1 `status` (`created|attached|paused|ending|ended`) compatible during migration. Archive (`ArchivedAt`) stays orthogonal. Do not collapse every terminal outcome into one generic `Stopped` state. One Application `TransitionLifecycle` owns the graph.
 
 - [ ] Add a model lifecycle intent such as `RequestComplete`.
 
@@ -155,13 +160,14 @@ Add this as provider-neutral language configuration, not provider-specific branc
 
 - [ ] Define effective speech language/locale selection.
 
+  Precedence: session override > agent conversation-language default > provider/default fallback. Validate BCP-47-like tags at the Application boundary. Persist the override without rewriting agent text-language settings. Expose the resolved locale on session readiness/capability data.
+
   Consider:
-  - agent default;
-  - session override;
-  - Browser STT `lang`;
-  - Browser TTS voice/language selection;
+  - Browser STT `lang` uses the effective tag;
+  - Browser TTS exact locale, then base language, then compatible configured/default voice, or fail Voice clearly;
   - hosted STT language hints where supported;
-  - hosted TTS voice/language compatibility.
+  - hosted TTS voice/language compatibility in adapters;
+  - no Browser/OpenAI locale branches in SessionRuntime.
 
 - [ ] Keep text mode usable even when a selected speech provider does not support the requested language.
 
