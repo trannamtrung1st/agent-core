@@ -106,7 +106,12 @@ function sessionFailurePatch(
 }
 
 function clearSessionFailure() {
-  return { error: null as string | null, sessionError: null, errorFatal: false };
+  return {
+    error: null as string | null,
+    sessionError: null,
+    errorFatal: false,
+    clientTranscriptBlocked: false
+  };
 }
 
 export function audioFramesSentCount(): number {
@@ -333,8 +338,10 @@ function ensureTranscriptLife(): ClientTranscriptLifecycle {
       useSessionStore.setState({
         error: error.message,
         sessionError: error,
-        errorFatal: false
+        errorFatal: false,
+        clientTranscriptBlocked: true
       });
+      publishCaptureLive();
     });
   }
 
@@ -1110,7 +1117,11 @@ function stopPlayback(responseId?: string): void {
 function publishCaptureLive(): void {
   const state = useSessionStore.getState();
   if (state.sttTransport === "clientTranscript" && state.mode === "voice") {
-    const live = !state.muted && Boolean(transcriptLife?.isListening());
+    const live =
+      !state.muted
+      && Boolean(transcriptLife?.isListening())
+      && !transcriptLife?.isBlocked()
+      && !state.clientTranscriptBlocked;
     if (state.captureLive !== live) {
       useSessionStore.setState({ captureLive: live });
     }
@@ -1215,6 +1226,7 @@ function syncCapture(): void {
             })
             .finally(() => {
               transcriptStart = null;
+              useSessionStore.setState({ clientTranscriptBlocked: false });
               publishCaptureLive();
             });
         }
@@ -2831,7 +2843,7 @@ export async function requestVoice(): Promise<void> {
     return;
   }
 
-  if (snapshot.mode === "voice" && (capture.isPrepared() || transcriptLife?.isListening())) {
+  if (snapshot.mode === "voice" && !transcriptLife?.isBlocked() && (capture.isPrepared() || transcriptLife?.isListening())) {
     return;
   }
 
@@ -2987,6 +2999,7 @@ export async function setMuted(muted: boolean): Promise<void> {
   if (!muted) {
     if (clientTranscript) {
       await ensureTranscriptLife().unmute(useSessionStore.getState().attachmentId ?? "");
+      useSessionStore.setState({ clientTranscriptBlocked: false });
     }
     syncCapture();
   }

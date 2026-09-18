@@ -91,6 +91,7 @@ export type SessionView = {
   errorHoldSequence: number;
   preflightReady: boolean;
   captureLive: boolean;
+  clientTranscriptBlocked: boolean;
   voicePlaybackResponseId: string | null;
   pauseReason: string | null;
 };
@@ -125,6 +126,7 @@ export const emptySession = (): SessionView => ({
   errorHoldSequence: 0,
   preflightReady: false,
   captureLive: false,
+  clientTranscriptBlocked: false,
   voicePlaybackResponseId: null,
   pauseReason: null
 });

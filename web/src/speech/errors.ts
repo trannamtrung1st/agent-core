@@ -24,12 +24,26 @@ const MESSAGES: Record<SpeechErrorCode, string> = {
   SpeechPlaybackFailed: "Speech playback failed."
 };
 
-export function speechError(code: SpeechErrorCode, message?: string): SessionErrorView {
+export function speechError(
+  code: SpeechErrorCode,
+  message?: string,
+  extras?: Pick<SessionErrorView, "extensions">
+): SessionErrorView {
   return sessionErrorFromMessage(message ?? MESSAGES[code], {
     category: "Speech",
     code,
-    fatal: false
+    fatal: false,
+    extensions: extras?.extensions
   });
+}
+
+function safeRecognitionError(raw: string | undefined): string {
+  const trimmed = raw?.trim() ?? "";
+  if (/^[a-z0-9-]{1,64}$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return trimmed ? "unrecognized" : "unknown";
 }
 
 export function speechErrorFromRecognitionError(raw: string | undefined): SessionErrorView {
@@ -38,11 +52,21 @@ export function speechErrorFromRecognitionError(raw: string | undefined): Sessio
       return speechError("SpeechPermissionDenied");
     case "audio-capture":
       return speechError("SpeechDeviceUnavailable");
-    case "service-not-allowed":
     case "network":
-    case "no-speech":
-      return speechError("SpeechRecognitionUnavailable");
+      return speechError(
+        "SpeechRecognitionUnavailable",
+        "Speech recognition service could not be reached.",
+        { extensions: { recognitionError: "network" } }
+      );
+    case "service-not-allowed":
+      return speechError(
+        "SpeechRecognitionUnavailable",
+        "Speech recognition is not allowed in this browser profile.",
+        { extensions: { recognitionError: "service-not-allowed" } }
+      );
     default:
-      return speechError("SpeechRecognitionUnavailable");
+      return speechError("SpeechRecognitionUnavailable", undefined, {
+        extensions: { recognitionError: safeRecognitionError(raw) }
+      });
   }
 }

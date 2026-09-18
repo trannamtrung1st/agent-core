@@ -101,6 +101,7 @@ export function ChatApp() {
     connection: state.connection,
     pendingVoice,
     voiceLive,
+    clientTranscriptBlocked: state.clientTranscriptBlocked,
     sessionStatus: state.status,
     inputState: state.inputState,
     outputState: state.outputState,

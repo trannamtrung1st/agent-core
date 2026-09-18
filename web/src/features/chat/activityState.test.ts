@@ -5,6 +5,7 @@ describe("agent activity mapping", () => {
     connection: "ready",
     pendingVoice: false,
     voiceLive: false,
+    clientTranscriptBlocked: false,
     sessionStatus: "attached",
     inputState: "idle",
     outputState: "idle",
@@ -37,6 +38,9 @@ describe("agent activity mapping", () => {
     expect(conversationStatus({ ...ready, outputState: "runningTools" })).toBe("Running tools…");
     expect(conversationStatus({ ...ready, liveResponseId: "r1" })).toBe("Thinking…");
     expect(conversationStatus({ ...ready, voiceLive: true })).toBe("Listening…");
+    expect(
+      conversationStatus({ ...ready, voiceLive: true, clientTranscriptBlocked: true })
+    ).toBe("Voice input unavailable");
     expect(conversationStatus(ready)).toBe("Ready");
   });
 
@@ -77,6 +81,7 @@ describe("agent activity mapping", () => {
     expect(conversationStatusTone("Generating response…")).toBe("wait");
     expect(conversationStatusTone("Reconnecting…")).toBe("wait");
     expect(conversationStatusTone("Interrupted")).toBe("alarm");
+    expect(conversationStatusTone("Voice input unavailable")).toBe("alarm");
     expect(conversationStatusTone("Connection failed. Check the network and try again.")).toBe("alarm");
     expect(conversationStatus({ ...ready, sessionStatus: "paused" })).toBe("Paused");
     expect(conversationStatus({ ...ready, connection: "idle", sessionStatus: "ended" })).toBe("Ended");

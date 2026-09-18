@@ -204,6 +204,43 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
   });
 
+  it("shows voice unavailable instead of listening when browser STT is blocked", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s1",
+        connection: "ready",
+        mode: "voice",
+        captureLive: true,
+        clientTranscriptBlocked: true,
+        muted: false,
+        voiceAvailable: true,
+        sttTransport: "clientTranscript",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        error: "Speech recognition service could not be reached.",
+        sessionError: {
+          category: "Speech",
+          code: "SpeechRecognitionUnavailable",
+          message: "Speech recognition service could not be reached.",
+          fatal: false,
+          retryAfterMs: null,
+          classId: "speech/capture/playback",
+          extensions: { recognitionError: "network" }
+        },
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => {
+      renderChat();
+    });
+    expect(screen.getByTestId("connection")).toHaveTextContent("Voice input unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Failure details" }));
+    expect(await screen.findByTestId("session-failure-details")).toHaveTextContent("recognitionError");
+    expect(screen.getByTestId("session-failure-details")).toHaveTextContent("network");
+  });
+
   it("shows Mute while voice is prepared even if capture is not streaming", async () => {
     await act(async () => {
       useSessionStore.setState({

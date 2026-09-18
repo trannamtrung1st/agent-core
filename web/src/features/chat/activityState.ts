@@ -2,6 +2,7 @@ export type StatusSource = {
   connection: string;
   pendingVoice: boolean;
   voiceLive: boolean;
+  clientTranscriptBlocked: boolean;
   sessionStatus: string;
   inputState: string;
   outputState: string;
@@ -55,6 +56,10 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
 
   if (source.pendingVoice) {
     return { kind: "thinking", label: "Starting voice…" };
+  }
+
+  if (source.clientTranscriptBlocked && source.connection === "ready") {
+    return { kind: "error", label: "Voice input unavailable" };
   }
 
   if (source.connection === "connecting") {
@@ -137,7 +142,7 @@ export function pausedSessionMessage(reason: string | null | undefined): string 
 }
 
 export function conversationStatusTone(text: string): "live" | "wait" | "alarm" {
-  if (text.startsWith("Connection failed") || text === "Interrupted") {
+  if (text.startsWith("Connection failed") || text === "Interrupted" || text === "Voice input unavailable") {
     return "alarm";
   }
 
