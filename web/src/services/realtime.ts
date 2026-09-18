@@ -1172,6 +1172,14 @@ export async function startConversation(): Promise<boolean> {
   return startRequest;
 }
 
+export async function disconnectForSessionDelete(): Promise<void> {
+  disposed = true;
+  await stopConnection();
+  stopReceipts();
+  capture.release();
+  disposed = false;
+}
+
 export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "push" | "replace" }): Promise<void> {
   disposed = true;
   await stopConnection();

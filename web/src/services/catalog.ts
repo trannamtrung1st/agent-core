@@ -1,5 +1,4 @@
 import {
-  CatalogRevisionConflictError,
   OwnerCapabilityError,
   archiveSession,
   durableDeleteSession,
@@ -148,15 +147,7 @@ export async function unarchiveCatalogItem(sessionId: string): Promise<boolean> 
 
 export async function deleteCatalogItem(item: CatalogItem): Promise<boolean> {
   return runCatalogMutation(item.sessionId, "delete", async () => {
-    try {
-      await durableDeleteSession(item.sessionId, item.revision);
-    } catch (error) {
-      if (error instanceof CatalogRevisionConflictError) {
-        await refreshCatalog(true);
-        throw error;
-      }
-      throw error;
-    }
+    await durableDeleteSession(item.sessionId);
     await refreshCatalog(true);
   });
 }

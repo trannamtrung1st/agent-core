@@ -70,9 +70,9 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         var epoch = await reopened.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
         Assert.Equal(0, epoch!.RuntimeEpoch);
 
-        var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={epoch.Revision}");
+        var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
-        var again = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={epoch.Revision}");
+        var again = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
         var missing = await client.GetAsync($"/api/v2/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
@@ -120,7 +120,7 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         var row = Assert.Single(listed!.Items, item => item.SessionId == view.SessionId);
         Assert.True(row.Ended);
 
-        var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={row.Revision}");
+        var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
 
         var after = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
@@ -161,6 +161,27 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
         var archived = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/archive", null);
         archived.EnsureSuccessStatusCode();
         Assert.Null(_factory.Services.GetRequiredService<SessionHost>().LiveSnapshot(Guid.Parse(view.SessionId)));
+    }
+
+    [Fact]
+    public async Task V2_delete_removes_attached_session_without_stale_revision()
+    {
+        var client = OwnerClient();
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
+        await using var hub = CreateHubConnection();
+        await hub.StartAsync();
+        var attached = await AttachAsync(hub, view!.SessionId);
+        Assert.True(attached.Accepted, attached.Error?.Message);
+        var host = _factory.Services.GetRequiredService<SessionHost>();
+        var sessionId = Guid.Parse(view.SessionId);
+        Assert.NotNull(host.LiveSnapshot(sessionId));
+
+        var deleted = await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        Assert.Null(host.LiveSnapshot(sessionId));
+        var missing = await client.GetAsync($"/api/v2/sessions/{view.SessionId}");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
     [Fact]

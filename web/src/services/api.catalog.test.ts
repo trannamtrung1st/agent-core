@@ -37,21 +37,12 @@ describe("catalog owner fetch", () => {
     expect(window.localStorage.getItem("agent-core.owner-capability")).toBeNull();
   });
 
-  it("uses versioned durable delete", async () => {
+  it("uses server-owned durable delete", async () => {
     window.localStorage.setItem("agent-core.owner-capability", "tok");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", fetchMock);
-    await durableDeleteSession("s1", 4);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/v2/sessions/s1?expectedRevision=4");
+    await durableDeleteSession("s1");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v2/sessions/s1");
     expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
-  });
-
-  it("maps stale revision delete to a conflict error", async () => {
-    window.localStorage.setItem("agent-core.owner-capability", "tok");
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 409 });
-    vi.stubGlobal("fetch", fetchMock);
-    await expect(durableDeleteSession("s1", 4)).rejects.toThrow(
-      "Session changed. Review it and confirm delete again."
-    );
   });
 });

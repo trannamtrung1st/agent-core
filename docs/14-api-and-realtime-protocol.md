@@ -219,7 +219,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | GET /api/v2/sessions/{id}/artifacts | List session-owned artifacts; owner capability |
 | GET /api/v2/sessions/{id}/artifacts/{artifactId} | Artifact metadata; cross-session 404 |
 | GET /api/v2/sessions/{id}/artifacts/{artifactId}/content | Authorized download; SessionId is not a credential |
-| DELETE /api/v2/sessions/{id} | Versioned durable deletion of session-owned data including workspace files and artifact blobs |
+| DELETE /api/v2/sessions/{id} | Server-owned durable deletion of session-owned data (no client revision); tears down live runtime first |
 | DELETE /api/v1/sessions/{id} | Unchanged terminal-end |
 
 Ended rows: reopen/rename/archive/unarchive fail closed or no-op without resurrecting a runtime. GET session and GET `/messages` remain available for a read-only UI. GET attachment list/metadata/content remains available for that view; upload, stage, abort, and materialize stay rejected. Versioned durable delete remains available.

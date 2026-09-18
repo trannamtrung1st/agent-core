@@ -412,6 +412,54 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             .ConfigureAwait(false);
     }
 
+    public async Task DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            _terminating.Add(sessionId);
+        }
+
+        try
+        {
+            if (_live.TryGetValue(sessionId, out var live))
+            {
+                var connectionId = live.ConnectionId;
+                live.StopDispatch();
+                try
+                {
+                    await live.Runtime.CancelActiveResponseAsync(cancellationToken).ConfigureAwait(false);
+                    await live.Runtime.WaitUntilIdleAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                var extracted = ExtractLive(sessionId, connectionId);
+                if (extracted is not null)
+                {
+                    using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    budget.CancelAfter(TimeSpan.FromSeconds(5));
+                    await ShutdownLiveAsync(
+                            extracted,
+                            sessionId,
+                            detachRuntime: false,
+                            joinDispatcher: true,
+                            budget.Token)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            await _sessions.DurablyDeleteAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _terminating.Remove(sessionId);
+            }
+        }
+    }
+
     public async Task DeactivateAsync(Guid sessionId, CancellationToken cancellationToken)
     {
         if (_live.TryGetValue(sessionId, out var live))

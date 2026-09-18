@@ -6,7 +6,6 @@ import {
   renameCatalogItem
 } from "./catalog";
 import {
-  CatalogRevisionConflictError,
   archiveSession,
   durableDeleteSession,
   listCatalog,
@@ -68,18 +67,11 @@ describe("catalog mutations", () => {
     expect(useSessionStore.getState().catalogMutation).toBeNull();
   });
 
-  it("refreshes the catalog and surfaces a conflict message on stale delete", async () => {
-    vi.mocked(durableDeleteSession).mockRejectedValue(new CatalogRevisionConflictError());
-    vi.mocked(listCatalog).mockResolvedValue({
-      items: [{ ...live, revision: 5 }],
-      nextCursor: null,
-      hasMore: false
-    });
+  it("surfaces delete failures and clears mutation state", async () => {
+    vi.mocked(durableDeleteSession).mockRejectedValue(new Error("Storage failed."));
     const ok = await deleteCatalogItem(live);
     expect(ok).toBe(false);
-    expect(listCatalog).toHaveBeenCalled();
-    expect(useSessionStore.getState().catalogItems[0]?.revision).toBe(5);
-    expect(useSessionStore.getState().catalogError).toBe("Session changed. Review it and confirm delete again.");
+    expect(useSessionStore.getState().catalogError).toBe("Storage failed.");
     expect(useSessionStore.getState().catalogMutation).toBeNull();
   });
 

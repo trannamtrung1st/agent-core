@@ -40,7 +40,7 @@ public sealed class SessionWorkspaceLifecycleTests
         var kept = await manager.ReadWorkspaceAsync(created.SessionId, "/workspace/working/note.txt");
         Assert.Equal("keep"u8.ToArray(), kept.Bytes);
 
-        await manager.DurablyDeleteAsync(created.SessionId, reopened.Revision);
+        await manager.DurablyDeleteAsync(created.SessionId);
         Assert.False(Directory.Exists(physical));
         var missing = await Assert.ThrowsAsync<AgentCoreException>(
             () => manager.WriteWorkspaceAsync(created.SessionId, "/workspace/working/late.txt", "no"u8.ToArray()));

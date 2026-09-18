@@ -88,22 +88,20 @@ public sealed class SessionCatalogTests
         var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
         await manager.EndAsync(created.SessionId);
         var ended = await manager.GetAsync(created.SessionId);
-        await manager.DurablyDeleteAsync(created.SessionId, ended.Revision);
+        await manager.DurablyDeleteAsync(created.SessionId);
         var page = await manager.ListCatalogAsync(null, 50, false);
         Assert.Empty(page.Items);
     }
 
     [Fact]
-    public async Task Durable_delete_is_versioned_and_hides_the_session()
+    public async Task Durable_delete_uses_latest_revision_and_is_idempotent()
     {
         var store = new InMemoryMemoryStore();
         var manager = CreateManager(store);
         var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
-        var stale = await Assert.ThrowsAsync<AgentCoreException>(
-            () => manager.DurablyDeleteAsync(created.SessionId, created.Revision + 1));
-        Assert.Equal("Conflict", stale.Code);
-        await manager.DurablyDeleteAsync(created.SessionId, created.Revision);
-        await manager.DurablyDeleteAsync(created.SessionId, created.Revision);
+        await manager.RenameAsync(created.SessionId, "Renamed");
+        await manager.DurablyDeleteAsync(created.SessionId);
+        await manager.DurablyDeleteAsync(created.SessionId);
         var missing = await Assert.ThrowsAsync<AgentCoreException>(() => manager.GetAsync(created.SessionId));
         Assert.Equal("NotFound", missing.Code);
         var page = await manager.ListCatalogAsync(null, 50, true);

@@ -227,18 +227,13 @@ public sealed class SessionManager
         return result;
     }
 
-    public async Task DurablyDeleteAsync(Guid sessionId, long expectedRevision, CancellationToken cancellationToken = default)
+    public async Task DurablyDeleteAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var started = Stopwatch.GetTimestamp();
         var snapshot = await _store.LoadAsync(sessionId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Session was not found.");
         if (snapshot.DurablyDeletedAt is null)
         {
-            if (snapshot.Revision != expectedRevision)
-            {
-                throw AgentCoreErrors.Conflict("Stale session revision.");
-            }
-
             var deleted = snapshot with
             {
                 Entries = [],

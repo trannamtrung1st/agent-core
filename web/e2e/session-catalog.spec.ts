@@ -38,6 +38,41 @@ test("narrow viewport opens the chat list in a drawer", async ({ page }) => {
   await expect(page.locator(".session-rail-heading")).not.toContainText("Chats");
 });
 
+test("deletes the active chat in one confirmation without revision conflict", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/c\/[0-9a-f-]{36}$/i);
+  const sessionUrl = page.url();
+  const sessionId = sessionUrl.match(/\/c\/([0-9a-f-]{36})/i)?.[1];
+  expect(sessionId).toBeTruthy();
+
+  const row = page.locator(".session-row").first();
+  await row.getByRole("button", { name: /Actions for / }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Delete" }).click();
+
+  await expect(page.getByText("Session changed")).not.toBeVisible({ timeout: 5_000 });
+  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await expect(page).not.toHaveURL(/\/c\//);
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(row).not.toBeVisible({ timeout: 15_000 });
+
+  const missing = await page.evaluate(async (id) => {
+    const token = window.localStorage.getItem("agent-core.owner-capability");
+    if (!token) {
+      return 0;
+    }
+    const response = await fetch(`/api/v2/sessions/${id}`, {
+      headers: { "X-AgentCore-Owner-Capability": token }
+    });
+    return response.status;
+  }, sessionId);
+  expect(missing).toBe(404);
+});
+
 test("session catalog orders by latest update, renames, and deletes ended sessions", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();

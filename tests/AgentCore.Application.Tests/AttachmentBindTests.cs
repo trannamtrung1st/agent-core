@@ -92,7 +92,7 @@ public sealed class AttachmentBindTests
             "text/plain",
             new MemoryStream("x"u8.ToArray()),
             false);
-        await manager.DurablyDeleteAsync(created.SessionId, created.Revision);
+        await manager.DurablyDeleteAsync(created.SessionId);
         Assert.Null(await attachments.GetAsync(created.SessionId, uploaded.AttachmentId));
     }
 

@@ -230,15 +230,12 @@ public static class SessionCatalogEndpoints
 
         group.MapDelete("{sessionId:guid}", async (
             Guid sessionId,
-            long expectedRevision,
-            SessionManager sessions,
             SessionHost host,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                await host.CancelLiveRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
-                await sessions.DurablyDeleteAsync(sessionId, expectedRevision, cancellationToken).ConfigureAwait(false);
+                await host.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
                 return Results.NoContent();
             }
             catch (AgentCoreException ex)

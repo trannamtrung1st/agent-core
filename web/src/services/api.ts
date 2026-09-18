@@ -245,14 +245,8 @@ export async function reopenSession(sessionId: string): Promise<"reopened" | "in
   return "reopened";
 }
 
-export async function durableDeleteSession(sessionId: string, expectedRevision: number): Promise<void> {
-  const response = await ownerFetch(
-    `/api/v2/sessions/${sessionId}?expectedRevision=${expectedRevision}`,
-    { method: "DELETE" }
-  );
-  if (response.status === 409) {
-    throw new CatalogRevisionConflictError();
-  }
+export async function durableDeleteSession(sessionId: string): Promise<void> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}`, { method: "DELETE" });
   if (!response.ok) {
     throw new Error("Unable to delete the session.");
   }

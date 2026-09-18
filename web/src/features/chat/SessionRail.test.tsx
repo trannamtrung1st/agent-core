@@ -23,6 +23,10 @@ vi.mock("../../services/catalog", () => ({
   unarchiveCatalogItem: vi.fn()
 }));
 
+vi.mock("../../services/realtime", () => ({
+  disconnectForSessionDelete: vi.fn().mockResolvedValue(undefined)
+}));
+
 const live: CatalogItem = {
   sessionId: "s1",
   title: "Planning notes",
@@ -296,7 +300,6 @@ describe("SessionRail", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteCatalogItem).toHaveBeenCalledWith(live));
-    expect(await screen.findByText("Session deleted.")).toBeInTheDocument();
     expect(onNewChat).toHaveBeenCalledTimes(1);
     expect(onNewChat).toHaveBeenCalledWith({ urlMode: "replace" });
   });

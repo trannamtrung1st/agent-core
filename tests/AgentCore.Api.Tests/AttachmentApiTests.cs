@@ -82,7 +82,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
 
         var unarchived = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/unarchive", null);
         var item = await unarchived.Content.ReadFromJsonAsync<SessionCatalogItemResponse>();
-        await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}?expectedRevision={item!.Revision}");
+        await client.DeleteAsync($"/api/v2/sessions/{view.SessionId}");
         var missing = await client.PostAsync(
             $"/api/v2/sessions/{view.SessionId}/attachments",
             FileContent("a.txt", "hi"));

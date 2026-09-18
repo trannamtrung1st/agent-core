@@ -47,7 +47,7 @@ public sealed class ArtifactMaterializeTests
         Assert.True(authorizer.IsAuthorized(created.SessionId, first.ArtifactId.ToString()));
         Assert.True(authorizer.IsAuthorized(created.SessionId, FixtureArtifactReferenceAuthorizer.AuthorizedId));
 
-        await manager.DurablyDeleteAsync(created.SessionId, (await manager.GetAsync(created.SessionId)).Revision);
+        await manager.DurablyDeleteAsync(created.SessionId);
         var missing = await Assert.ThrowsAsync<AgentCoreException>(
             () => manager.GetArtifactAsync(created.SessionId, first.ArtifactId));
         Assert.Equal("NotFound", missing.Code);

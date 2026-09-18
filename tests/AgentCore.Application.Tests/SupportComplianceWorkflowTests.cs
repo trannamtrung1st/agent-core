@@ -95,8 +95,8 @@ public sealed class SupportComplianceWorkflowTests
         {
             var snapshot = await manager.GetAsync(sessionId);
             var physical = Path.Combine(dir.WorkspaceRoot, sessionId.ToString("N"));
-            await manager.DurablyDeleteAsync(sessionId, snapshot.Revision);
-            await manager.DurablyDeleteAsync(sessionId, snapshot.Revision);
+            await manager.DurablyDeleteAsync(sessionId);
+            await manager.DurablyDeleteAsync(sessionId);
             Assert.False(Directory.Exists(physical));
             await Assert.ThrowsAsync<AgentCoreException>(() => manager.GetAsync(sessionId));
             await Assert.ThrowsAsync<AgentCoreException>(
@@ -120,9 +120,9 @@ public sealed class SupportComplianceWorkflowTests
         await manager.WriteWorkspaceAsync(created.SessionId, "/workspace/working/note.txt", "keep"u8.ToArray());
         var physical = Path.Combine(dir.WorkspaceRoot, created.SessionId.ToString("N"));
         Assert.True(Directory.Exists(physical));
-        await Assert.ThrowsAsync<IOException>(() => manager.DurablyDeleteAsync(created.SessionId, created.Revision));
+        await Assert.ThrowsAsync<IOException>(() => manager.DurablyDeleteAsync(created.SessionId));
         Assert.True(Directory.Exists(physical));
-        await manager.DurablyDeleteAsync(created.SessionId, created.Revision);
+        await manager.DurablyDeleteAsync(created.SessionId);
         Assert.False(Directory.Exists(physical));
         await Assert.ThrowsAsync<AgentCoreException>(
             () => inner.WriteAsync(created.SessionId, "/workspace/working/late.txt", "no"u8.ToArray()).AsTask());
