@@ -53,6 +53,7 @@ let progressTimer: number | null = null;
 let receiptTimer: number | null = null;
 let lastReceiptOffset = 0;
 let lastReceiptResponseId: string | null = null;
+let lastReceiptBlockSignature = "";
 let disposed = false;
 let duckTimer: number | null = null;
 let flushing = false;
@@ -752,6 +753,7 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "agent.response.started" && raw.responseId) {
     lastReceiptOffset = 0;
     lastReceiptResponseId = raw.responseId;
+    lastReceiptBlockSignature = "";
     startReceipts(raw.responseId);
   }
   if ((raw.type === "agent.response.completed" || raw.type === "agent.response.interrupted") && raw.responseId) {
@@ -1136,6 +1138,10 @@ function renderedTextOffset(responseId: string | null): number {
   return committedText.get(responseId) ?? 0;
 }
 
+function receiptBlockSignature(responseId: string | null): string {
+  return renderedBlockIds(responseId).join("\n");
+}
+
 export function reportCommittedEntries(
   entries: Array<{
     role: string;
@@ -1193,12 +1199,19 @@ async function sendReceipt(finalRender: boolean, responseId?: string): Promise<v
   }
 
   const offset = renderedTextOffset(id);
-  if (!finalRender && offset === lastReceiptOffset && lastReceiptResponseId === id) {
+  const blockSignature = receiptBlockSignature(id);
+  if (
+    !finalRender
+    && offset === lastReceiptOffset
+    && lastReceiptResponseId === id
+    && blockSignature === lastReceiptBlockSignature
+  ) {
     return;
   }
 
   lastReceiptOffset = offset;
   lastReceiptResponseId = id;
+  lastReceiptBlockSignature = blockSignature;
   await dispatchHubCommand((sequence) =>
     invoke(
       "ResponseReceived",
@@ -1556,6 +1569,7 @@ export const realtimeTestHooks =
           stopReceipts();
           lastReceiptOffset = 0;
           lastReceiptResponseId = null;
+          lastReceiptBlockSignature = "";
           commandSequence = 0;
           commandDispatchChain = Promise.resolve();
           capture.setOverflowListener(null);
@@ -3097,81 +3111,81 @@ export async function requestVoice(): Promise<void> {
   voiceRequest = (async () => {
     voiceModeRequested = true;
     const epoch = ++voiceEpoch;
-    useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
-    ensureSpeechAdapters();
-    if (!useSessionStore.getState().sessionId) {
-      const started = await startConversation();
-      if (!started || epoch !== voiceEpoch) {
-        capture.release();
-        useSessionStore.setState({ preflightReady: false });
-        voiceModeRequested = false;
-        return;
-      }
-    }
-
     try {
-      const current = useSessionStore.getState();
-      const microphone = current.sttTransport !== "clientTranscript";
-      const playback = current.ttsTransport !== "clientSpeech";
-      const skipCapture = !microphone && !playback;
-      if (!skipCapture && !capture.isPrepared()) {
-        await capture.preflight({ microphone, playback });
-      }
-    } catch (error) {
-      if (epoch !== voiceEpoch) {
-        return;
-      }
-
-      capture.release();
-      useSessionStore.setState({
-        preflightReady: false,
-        ...sessionFailurePatch(microphoneError(error), { category: "Speech", code: "SpeechCaptureFailed" })
-      });
-      voiceModeRequested = false;
-      return;
-    }
-    if (epoch !== voiceEpoch) {
-      capture.release();
-      useSessionStore.setState({ preflightReady: false });
-      voiceModeRequested = false;
-      return;
-    }
-
-    try {
-      const ack = await dispatchHubCommand((sequence) =>
-        invoke("SetMode", "session.mode.set", { mode: "voice" }, sequence)
-      );
-      if (epoch !== voiceEpoch) {
-        return;
+      useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
+      ensureSpeechAdapters();
+      if (!useSessionStore.getState().sessionId) {
+        const started = await startConversation();
+        if (!started || epoch !== voiceEpoch) {
+          capture.release();
+          useSessionStore.setState({ preflightReady: false });
+          return;
+        }
       }
 
-      if (!ack?.accepted) {
+      try {
+        const current = useSessionStore.getState();
+        const microphone = current.sttTransport !== "clientTranscript";
+        const playback = current.ttsTransport !== "clientSpeech";
+        const skipCapture = !microphone && !playback;
+        if (!skipCapture && !capture.isPrepared()) {
+          await capture.preflight({ microphone, playback });
+        }
+      } catch (error) {
+        if (epoch !== voiceEpoch) {
+          return;
+        }
+
         capture.release();
-        voiceModeRequested = false;
         useSessionStore.setState({
           preflightReady: false,
-          ...sessionFailurePatch(ack?.error?.message ?? "Voice mode was rejected.", {
-            wire: ack?.error,
+          ...sessionFailurePatch(microphoneError(error), { category: "Speech", code: "SpeechCaptureFailed" })
+        });
+        return;
+      }
+      if (epoch !== voiceEpoch) {
+        capture.release();
+        useSessionStore.setState({ preflightReady: false });
+        return;
+      }
+
+      try {
+        const ack = await dispatchHubCommand((sequence) =>
+          invoke("SetMode", "session.mode.set", { mode: "voice" }, sequence)
+        );
+        if (epoch !== voiceEpoch) {
+          return;
+        }
+
+        if (!ack?.accepted) {
+          capture.release();
+          useSessionStore.setState({
+            preflightReady: false,
+            ...sessionFailurePatch(ack?.error?.message ?? "Voice mode was rejected.", {
+              wire: ack?.error,
+              category: "Speech",
+              code: "VoiceUnavailable"
+            })
+          });
+        }
+      } catch (error) {
+        if (epoch !== voiceEpoch) {
+          return;
+        }
+
+        capture.release();
+        useSessionStore.setState({
+          preflightReady: false,
+          ...sessionFailurePatch(error instanceof Error ? error.message : "Voice mode failed.", {
             category: "Speech",
             code: "VoiceUnavailable"
           })
         });
-      } else {
+      }
+    } finally {
+      if (epoch === voiceEpoch) {
         voiceModeRequested = false;
       }
-    } catch (error) {
-      if (epoch !== voiceEpoch) {
-        return;
-      }
-
-      capture.release();
-      useSessionStore.setState({
-        preflightReady: false,
-        ...sessionFailurePatch(error instanceof Error ? error.message : "Voice mode failed.", {
-          category: "Speech",
-          code: "VoiceUnavailable"
-        })
-      });
     }
   })();
 
@@ -3183,6 +3197,7 @@ export async function requestVoice(): Promise<void> {
 }
 
 export async function cancelVoice(): Promise<void> {
+  voiceModeRequested = false;
   voiceEpoch += 1;
   try {
     const ack = await dispatchHubCommand((sequence) =>

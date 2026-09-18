@@ -119,7 +119,7 @@ Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthes
 
 Goal: inexpensive Chrome/Edge development/demo speech input that can stream recognition results to the backend while the user speaks for a long time.
 
-**Status:** Live-browser stabilization through `0ac23c4` (half-duplex suspend, endpoint liveness, durable `transcript.final`, reconnect latch). Further Browser STT work is live Chrome/Edge/headset observation only unless a reproducible defect appears.
+**Status:** Live-browser stabilization through `8d78b8b` plus the follow-up Voice-latch, block-aware display-receipt, and long-structured speech-fallback fixes on this checkout (half-duplex suspend, endpoint liveness, durable `transcript.final`, reconnect latch, mode-independent display receipts). Further Browser STT work is live Chrome/Edge/headset observation only unless a reproducible defect appears.
 
 - [x] Add a frontend ClientSpeechRecognizer port with Browser and fake adapters, plus one speech-transport orchestration service (native recognition objects stay out of Zustand).
 

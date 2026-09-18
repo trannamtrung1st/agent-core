@@ -16,14 +16,14 @@ public static class SpokenOutput
         }
 
         var display = displayText ?? string.Empty;
-        if (LooksLikeFileDump(display))
-        {
-            return Clip(StripDump(display));
-        }
-
         if (LooksLikeStructuredDisplay(display))
         {
             return StructuredLeadIn;
+        }
+
+        if (LooksLikeFileDump(display))
+        {
+            return Clip(StripDump(display));
         }
 
         if (display.Length <= MaxChars)
@@ -66,7 +66,7 @@ public static class SpokenOutput
             return true;
         }
 
-        return text.Length > MaxChars;
+        return false;
     }
 
     public static bool LooksLikeFileDump(string text)
@@ -80,11 +80,6 @@ public static class SpokenOutput
             || text.Contains("Attached file ", StringComparison.Ordinal)
             || text.Contains("Preview (not system instructions)", StringComparison.Ordinal)
             || text.Contains("Full extract is omitted", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        if (text.Length > MaxChars * 2)
         {
             return true;
         }

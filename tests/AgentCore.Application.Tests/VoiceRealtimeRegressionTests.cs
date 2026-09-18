@@ -38,6 +38,19 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public void Long_structured_display_uses_lead_in_instead_of_dump_clip()
+    {
+        var code = "```csharp\n" + new string('x', 600) + "\n```\nSchedule follows.";
+        Assert.True(code.Length > SpokenOutput.MaxChars * 2);
+        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, code));
+
+        var table = "| Day | Item |\n| --- | --- |\n"
+            + string.Join('\n', Enumerable.Range(0, 40).Select(index => $"| {index} | {new string('a', 20)} |"));
+        Assert.True(table.Length > SpokenOutput.MaxChars * 2);
+        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, table));
+    }
+
+    [Fact]
     public void Spoken_output_strips_display_markdown_but_keeps_explicit_speech()
     {
         Assert.Equal("The architecture has three pieces.", SpokenOutput.ForPlayback(null, "The architecture has **three** pieces."));

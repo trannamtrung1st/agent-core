@@ -211,6 +211,96 @@ describe("realtime race handling", () => {
     expect(invoke.mock.calls.some(([method]) => method === "PlaybackProgress" || method === "PlaybackCompleted")).toBe(false);
   });
 
+  it("sends a display receipt when committed blocks change without more text", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      lastServerSequence: 1,
+      liveResponseId: "r-blocks",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "started",
+      sequence: 2,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r-blocks",
+      type: "agent.response.started",
+      payload: { entryId: "e1", entrySequence: 1 }
+    });
+
+    reportCommittedEntries([
+      {
+        role: "assistant",
+        responseId: "r-blocks",
+        text: "Hello from synthetic.",
+        status: "streaming"
+      }
+    ]);
+
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "ResponseReceived",
+        expect.objectContaining({
+          type: "response.received",
+          responseId: "r-blocks",
+          payload: expect.objectContaining({
+            textEndExclusive: "Hello from synthetic.".length,
+            blockIds: []
+          })
+        })
+      );
+    });
+
+    invoke.mockClear();
+    reportCommittedEntries([
+      {
+        role: "assistant",
+        responseId: "r-blocks",
+        text: "Hello from synthetic.",
+        status: "streaming",
+        blocks: [{ blockId: "md-1" }]
+      }
+    ]);
+
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "ResponseReceived",
+        expect.objectContaining({
+          type: "response.received",
+          responseId: "r-blocks",
+          payload: expect.objectContaining({
+            textEndExclusive: "Hello from synthetic.".length,
+            blockIds: ["md-1"]
+          })
+        })
+      );
+    });
+
+    invoke.mockClear();
+    reportCommittedEntries([
+      {
+        role: "assistant",
+        responseId: "r-blocks",
+        text: "Hello from synthetic.",
+        status: "streaming",
+        blocks: [{ blockId: "md-1" }]
+      }
+    ]);
+    await Promise.resolve();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("duplicate-sequence playback.stop does not start a second flush", async () => {
     const flush = vi.spyOn(capture, "flushPlayback").mockResolvedValue(0);
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
@@ -828,6 +918,66 @@ describe("realtime race handling", () => {
     await pending;
     expect(invoke.mock.calls.some((call) => call[1]?.payload?.mode === "voice")).toBe(false);
     expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "text" } }));
+  });
+
+  it("clears the voice-request latch when cancel races an in-flight SetMode ACK", async () => {
+    let resolveVoiceAck: ((value: { accepted: boolean }) => void) | undefined;
+    const invoke = vi.fn().mockImplementation((_method: string, envelope: { payload?: { mode?: string } }) => {
+      if (envelope?.payload?.mode === "voice") {
+        return new Promise<{ accepted: boolean }>((resolve) => {
+          resolveVoiceAck = resolve;
+        });
+      }
+
+      return Promise.resolve({ accepted: true });
+    });
+    vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      voiceAvailable: true,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    const pending = requestVoice();
+    await vi.waitFor(() => expect(resolveVoiceAck).toBeDefined());
+    const cancel = cancelVoice();
+    resolveVoiceAck?.({ accepted: true });
+    await Promise.all([pending, cancel]);
+
+    const attached = await hooks.attachWithBusyRetry!(null);
+    expect(attached).toBe(true);
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready",
+      sequence: 1,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "voice",
+        pendingMode: null,
+        status: "attached",
+        streamId: "stream-1",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [],
+        capabilities: {
+          stt: { transport: "serverAudio" },
+          tts: { transport: "serverAudio" }
+        }
+      }
+    });
+    expect(useSessionStore.getState().mode).toBe("text");
+    expect(useSessionStore.getState().streamId).toBeNull();
   });
 
   it("preflights serverAudio input without playback worklet for clientSpeech output", async () => {
