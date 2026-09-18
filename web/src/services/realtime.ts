@@ -79,10 +79,12 @@ function sessionFailurePatch(
         code: options.code,
         retryAfterMs: options.retryAfterMs
       });
+  const fatal = options.fatal ?? view.fatal;
   return {
     error: view.message,
     sessionError: view,
-    errorFatal: options.fatal ?? view.fatal
+    errorFatal: fatal,
+    errorHoldSequence: fatal ? 0 : useSessionStore.getState().lastServerSequence
   };
 }
 

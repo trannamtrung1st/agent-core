@@ -197,27 +197,31 @@ export function ChatApp() {
             </Flex>
           </Header>
           <Content className="app-content">
-            {state.routeNotice ? (
-              <Alert
-                type="info"
-                showIcon
-                closable
-                className="connection-alert"
-                title={state.routeNotice}
-                onClose={clearRouteNotice}
-              />
-            ) : null}
-            {state.connection === "failed" ? (
-              <SessionFailureAlert
-                error={sessionFailure ?? failedAlertTitle}
-                fatal={state.errorFatal}
-                className="connection-alert"
-                action={
-                  <Button size="small" aria-label="Retry" onClick={() => void retryConnection()}>
-                    Retry
-                  </Button>
-                }
-              />
+            {state.routeNotice || state.connection === "failed" ? (
+              <div className="conversation-column conversation-banners">
+                {state.routeNotice ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    closable
+                    className="connection-alert"
+                    title={state.routeNotice}
+                    onClose={clearRouteNotice}
+                  />
+                ) : null}
+                {state.connection === "failed" ? (
+                  <SessionFailureAlert
+                    error={sessionFailure ?? failedAlertTitle}
+                    fatal={state.errorFatal}
+                    className="connection-alert"
+                    action={
+                      <Button size="small" aria-label="Retry" onClick={() => void retryConnection()}>
+                        Retry
+                      </Button>
+                    }
+                  />
+                ) : null}
+              </div>
             ) : null}
             <div className="conversation-pane">
               <div className="conversation-scroll">

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Alert, Button, Descriptions, Popover, Typography } from "antd";
+import { Alert, Button, Descriptions, Flex, Popover, Typography } from "antd";
 import {
   classLabel,
   resolveSessionError,
@@ -61,7 +61,7 @@ export function SessionFailureAlert({
     <Alert
       type="error"
       showIcon
-      className={className}
+      className={["session-failure", className].filter(Boolean).join(" ")}
       data-testid="session-failure"
       data-error-class={view.classId}
       data-error-code={view.code}
@@ -73,10 +73,10 @@ export function SessionFailureAlert({
         </Typography.Text>
       }
       action={
-        <>
+        <Flex wrap gap={8} className="session-failure-actions">
           {details}
           {action}
-        </>
+        </Flex>
       }
     />
   );

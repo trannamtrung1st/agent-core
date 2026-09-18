@@ -151,6 +151,7 @@ describe("ChatApp accessibility", () => {
     await act(async () => renderChat());
     const alert = screen.getByTestId("session-failure");
     expect(alert).toHaveAttribute("data-error-fatal", "true");
+    expect(alert.closest(".conversation-column")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Failure details" }));
     expect(await screen.findByTestId("session-failure-details")).toHaveTextContent("Fatal");
   });
