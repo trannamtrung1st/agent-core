@@ -38,16 +38,46 @@ export function Conversation({
     : entries;
   const lastUserIndex = lastUserEntryIndex(visibleEntries);
   const lastUserId = lastUserIndex >= 0 ? visibleEntries[lastUserIndex]?.entryId ?? null : null;
+  const firstEntryId = visibleEntries[0]?.entryId ?? null;
+  const scrollAnchorKey =
+    visibleEntries.length === 0
+      ? null
+      : `${sessionId ?? ""}:${firstEntryId ?? ""}:${lastUserId ?? ""}`;
 
   useLayoutEffect(() => {
     const root = windowRef.current;
     const spacer = spacerRef.current;
     const scroll = root?.closest(".conversation-scroll");
-    if (!root || !scroll || lastUserId == null) {
+    if (!root || !scroll || scrollAnchorKey == null) {
       scrolledFor.current = null;
       setReplySpace(0);
       return;
     }
+
+    const scrollToLatest = (): boolean => {
+      if (scroll.clientHeight <= 0) {
+        return false;
+      }
+
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const target = spacer ?? root;
+      target.scrollIntoView?.({
+        block: "end",
+        inline: "nearest",
+        behavior: reduceMotion ? "auto" : "smooth"
+      });
+      return true;
+    };
+
+    const maybeScrollToLatest = (): void => {
+      if (scrolledFor.current === scrollAnchorKey) {
+        return;
+      }
+
+      if (scrollToLatest()) {
+        scrolledFor.current = scrollAnchorKey;
+      }
+    };
 
     const measure = (): HTMLElement | null => {
       const scrollHeight = scroll.clientHeight;
@@ -83,26 +113,22 @@ export function Conversation({
       return anchor;
     };
 
-    const anchor = measure();
-    if (anchor && spacer && scroll.clientHeight > 0 && scrolledFor.current !== lastUserId) {
-      scrolledFor.current = lastUserId;
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      spacer.scrollIntoView?.({
-        block: "end",
-        inline: "nearest",
-        behavior: reduceMotion ? "auto" : "smooth"
-      });
-    }
+    const runMeasure = (): void => {
+      measure();
+      maybeScrollToLatest();
+    };
 
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    runMeasure();
+
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(runMeasure);
     observer?.observe(scroll);
     observer?.observe(root);
-    window.addEventListener("resize", measure);
+    window.addEventListener("resize", runMeasure);
     return () => {
       observer?.disconnect();
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", runMeasure);
     };
-  }, [activity, entries, lastUserId, liveUserTranscript]);
+  }, [activity, entries, lastUserId, firstEntryId, liveUserTranscript, scrollAnchorKey, sessionId]);
 
   const safeReplySpace = Number.isFinite(replySpace) ? Math.max(0, replySpace) : 0;
   const emptyHint = voiceAvailable

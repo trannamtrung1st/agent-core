@@ -195,7 +195,7 @@ describe("ChatApp accessibility", () => {
     });
     const view = await act(async () => renderChat());
     expect(screen.getByTestId("connection")).toHaveTextContent("Ready");
-    expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
 
     await act(async () => {
@@ -203,6 +203,7 @@ describe("ChatApp accessibility", () => {
       rerenderChat(view);
     });
     expect(screen.getByTestId("connection")).toHaveTextContent("Listening…");
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("composer-voice-live");
   });
@@ -244,6 +245,7 @@ describe("ChatApp accessibility", () => {
     expect(await screen.findByTestId("session-failure-details")).toHaveTextContent("recognitionError");
     expect(screen.getByTestId("session-failure-details")).toHaveTextContent("network");
     expect(screen.getByRole("button", { name: "Retry voice input" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
   });
 
@@ -270,7 +272,7 @@ describe("ChatApp accessibility", () => {
     });
     expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Unmute" })).not.toHaveClass("composer-voice-live");
-    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows Voice (not Mute) when voice mode is active but capture is not live", async () => {
@@ -294,7 +296,7 @@ describe("ChatApp accessibility", () => {
     await act(async () => {
       renderChat();
     });
-    expect(screen.getByRole("button", { name: "Voice" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
   });
 
@@ -317,9 +319,9 @@ describe("ChatApp accessibility", () => {
     await act(async () => {
       renderChat();
     });
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("composer-voice-live");
-    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
   });
 
   it("renders the health profile from bootstrap", async () => {

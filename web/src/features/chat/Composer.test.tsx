@@ -129,10 +129,12 @@ describe("Composer attachment staging", () => {
     expect(removeComposerFile).toHaveBeenCalledWith("l1");
   });
 
-  it("keeps Send available and shows Stop without labeling Send as Interrupt", () => {
+  it("keeps Queue available and shows Stop without labeling Send as Interrupt", () => {
     const onStop = vi.fn();
-    render(<Composer {...emptyComposerProps()} canSend canStop onStop={onStop} draft="Next" />);
-    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    render(
+      <Composer {...emptyComposerProps()} canSend canStop sendLabel="Queue" onStop={onStop} draft="Next" />
+    );
+    expect(screen.getByRole("button", { name: "Queue" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: /interrupt/i })).not.toBeInTheDocument();
     const stop = screen.getByRole("button", { name: "Stop" });
     expect(stop).toBeEnabled();
@@ -141,6 +143,21 @@ describe("Composer attachment staging", () => {
     fireEvent.click(stop);
     expect(onStop).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Message")).toHaveFocus();
+  });
+
+  it("keeps compact Stop beside Queue when a response is active and the draft has content", () => {
+    render(
+      <Composer {...emptyComposerProps()} canSend canStop sendLabel="Queue" draft="Next" />
+    );
+    expect(screen.getByRole("button", { name: "Queue" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+  });
+
+  it("uses Stop as the primary action when a response is active and the draft is empty", () => {
+    render(<Composer {...emptyComposerProps()} canStop sendLabel="Queue" />);
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Queue" })).not.toBeInTheDocument();
   });
 });
 
@@ -210,6 +227,7 @@ describe("Composer voice toolbar", () => {
         onMute={onMute}
       />
     );
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toHaveAttribute("aria-pressed", "true");
     const unmute = screen.getByRole("button", { name: "Unmute" });
     expect(unmute).not.toHaveClass("composer-voice-live");
     fireEvent.click(unmute);
@@ -230,11 +248,12 @@ describe("Composer voice toolbar", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
     expect(onMute).toHaveBeenCalledWith(false);
-    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toBeInTheDocument();
   });
 
-  it("shows Mute when voice input is live and not blocked", () => {
+  it("keeps Voice mode separate from Mute while listening", () => {
     const onMute = vi.fn();
+    const onCancelVoice = vi.fn();
     render(
       <Composer
         {...emptyComposerProps()}
@@ -243,8 +262,13 @@ describe("Composer voice toolbar", () => {
         voiceInputLive
         muted={false}
         onMute={onMute}
+        onCancelVoice={onCancelVoice}
       />
     );
+    const voice = screen.getByRole("button", { name: /^Voice$/ });
+    expect(voice).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(voice);
+    expect(onCancelVoice).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Mute" }));
     expect(onMute).toHaveBeenCalledWith(true);
     expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("composer-voice-live");
@@ -263,12 +287,13 @@ describe("Composer voice toolbar", () => {
         onVoice={onVoice}
       />
     );
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry voice input" }));
     expect(onVoice).toHaveBeenCalledTimes(1);
   });
 
-  it("disables voice input control while browser STT is held for agent output", () => {
+  it("disables the microphone while browser STT is held for agent output", () => {
     const onVoice = vi.fn();
     const onMute = vi.fn();
     render(
@@ -283,11 +308,11 @@ describe("Composer voice toolbar", () => {
         onMute={onMute}
       />
     );
+    expect(screen.getByRole("button", { name: /^Voice$/ })).toBeEnabled();
     const paused = screen.getByRole("button", { name: "Voice input paused while agent speaks" });
     expect(paused).toBeDisabled();
     fireEvent.click(paused);
     expect(onVoice).not.toHaveBeenCalled();
     expect(onMute).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
   });
 });

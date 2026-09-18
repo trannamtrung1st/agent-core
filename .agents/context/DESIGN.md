@@ -63,7 +63,7 @@ Ant Design v6 owns generic controls (Layout, Select, Button, Input, Empty, Spin,
 
 ## Personality
 
-Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Send, Stop, Voice, Cancel voice, Mute, Unmute, End, Attach, Resume).
+Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Send, Stop, Queue, Voice, Cancel voice, Mute, Unmute, End, Attach, Resume). Voice is a session-mode control and stays visible while voice is on; Mute/Unmute is a separate microphone control. Accent (primary blue) means Voice mode is on; green means the microphone is actively listening.
 
 ## Tone
 
@@ -83,7 +83,7 @@ Use Ant Design type and spacing. Do not self-host a display face or recreate pho
 - Conversation meta shows a compact timestamp next to the agent name and above user bubbles. Interrupted/failed entries use an Ant Design Tag chip, not a full-width banner.
 - After a user send, leave about half the conversation pane below that bubble for the incoming reply so prior turns can stay in view. Shrink that space as the reply grows. Historical turns stay compact.
 - Preserve testids `connection` and `profile`.
-- Show the Voice control only when `voiceAvailable` is true (catalog list before attach; `session.ready` agent after attach).
+- Show the Voice control only when `voiceAvailable` is true (catalog list before attach; `session.ready` agent after attach). Keep Voice visible in voice mode; do not replace it with Mute.
 - Keep the labeled composer available while voice is live until `/docs` and tests change together.
 - Ended conversations keep the same reading column; the composer slot is a quiet “This conversation has ended.” note, not a disabled input.
 

@@ -7,6 +7,8 @@ import {
   DeleteOutlined,
   DownOutlined,
   PaperClipOutlined,
+  PhoneFilled,
+  PhoneOutlined,
   RightOutlined,
   SendOutlined,
   StopOutlined,
@@ -40,6 +42,109 @@ function queuePreview(item: PendingSendItem): string {
   }
 
   return "Empty message";
+}
+
+function VoiceModeControl({
+  pendingVoice,
+  voiceModeActive,
+  onVoice,
+  onCancelVoice
+}: {
+  pendingVoice: boolean;
+  voiceModeActive: boolean;
+  onVoice: () => void;
+  onCancelVoice: () => void;
+}) {
+  if (pendingVoice) {
+    return (
+      <Button aria-label="Cancel voice" onClick={onCancelVoice}>
+        Cancel
+      </Button>
+    );
+  }
+
+  return (
+    <Tooltip title={voiceModeActive ? "Turn off voice" : "Voice"}>
+      <Button
+        type={voiceModeActive ? "primary" : "text"}
+        className="composer-icon"
+        aria-label="Voice"
+        aria-pressed={voiceModeActive}
+        icon={voiceModeActive ? <PhoneFilled /> : <PhoneOutlined />}
+        onClick={voiceModeActive ? onCancelVoice : onVoice}
+      />
+    </Tooltip>
+  );
+}
+
+function MicrophoneControl({
+  voiceInputLive,
+  voiceInputBlocked,
+  voiceInputHeldForAgentOutput,
+  muted,
+  onVoice,
+  onMute
+}: {
+  voiceInputLive: boolean;
+  voiceInputBlocked: boolean;
+  voiceInputHeldForAgentOutput: boolean;
+  muted: boolean;
+  onVoice: () => void;
+  onMute: (muted: boolean) => void;
+}) {
+  if (voiceInputBlocked) {
+    return (
+      <Tooltip title="Retry microphone">
+        <Button
+          type="text"
+          className="composer-icon"
+          aria-label="Retry voice input"
+          icon={<AudioOutlined />}
+          onClick={onVoice}
+        />
+      </Tooltip>
+    );
+  }
+
+  if (voiceInputHeldForAgentOutput) {
+    return (
+      <Tooltip title="Microphone resumes after the agent finishes speaking">
+        <Button
+          type="text"
+          className="composer-icon"
+          aria-label="Voice input paused while agent speaks"
+          icon={<AudioOutlined />}
+          disabled
+        />
+      </Tooltip>
+    );
+  }
+
+  if (muted || !voiceInputLive) {
+    return (
+      <Tooltip title="Unmute">
+        <Button
+          type="text"
+          className="composer-icon"
+          aria-label="Unmute"
+          icon={<AudioMutedOutlined />}
+          onClick={() => onMute(false)}
+        />
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip title="Listening — click to mute">
+      <Button
+        type="text"
+        className="composer-icon composer-voice-live"
+        aria-label="Mute"
+        icon={<AudioFilled />}
+        onClick={() => onMute(true)}
+      />
+    </Tooltip>
+  );
 }
 
 export function Composer({
@@ -267,69 +372,50 @@ export function Composer({
           }}
         />
         <Flex justify="space-between" align="center" gap={8} className="composer-toolbar">
-          <Tooltip title="Attach">
-            <Button
-              type="text"
-              aria-label="Attach"
-              disabled={!ready}
-              icon={<PaperClipOutlined />}
-              onClick={() => fileInput.current?.click()}
-            />
-          </Tooltip>
-          <Flex gap={8} align="center">
+          <Flex gap={8} align="center" className="composer-toolbar-start">
+            <Tooltip title="Attach">
+              <Button
+                type="text"
+                className="composer-icon"
+                aria-label="Attach"
+                disabled={!ready}
+                icon={<PaperClipOutlined />}
+                onClick={() => fileInput.current?.click()}
+              />
+            </Tooltip>
             {voiceAvailable ? (
-              pendingVoice ? (
-                <Button aria-label="Cancel voice" onClick={onCancelVoice}>
-                  Cancel
-                </Button>
-              ) : voiceModeActive && voiceInputBlocked ? (
-                <Tooltip title="Retry voice input">
-                  <Button type="text" aria-label="Retry voice input" icon={<AudioOutlined />} onClick={onVoice} />
-                </Tooltip>
-              ) : voiceModeActive && voiceInputHeldForAgentOutput ? (
-                <Tooltip title="Voice input resumes after the agent finishes speaking">
-                  <Button
-                    type="text"
-                    aria-label="Voice input paused while agent speaks"
-                    icon={<AudioOutlined />}
-                    disabled
+              <>
+                <VoiceModeControl
+                  pendingVoice={pendingVoice}
+                  voiceModeActive={voiceModeActive}
+                  onVoice={onVoice}
+                  onCancelVoice={onCancelVoice}
+                />
+                {voiceModeActive && !pendingVoice ? (
+                  <MicrophoneControl
+                    voiceInputLive={voiceInputLive}
+                    voiceInputBlocked={voiceInputBlocked}
+                    voiceInputHeldForAgentOutput={voiceInputHeldForAgentOutput}
+                    muted={muted}
+                    onVoice={onVoice}
+                    onMute={onMute}
                   />
-                </Tooltip>
-              ) : voiceModeActive && muted ? (
-                <Tooltip title="Unmute">
-                  <Button
-                    type="text"
-                    aria-label="Unmute"
-                    icon={<AudioMutedOutlined />}
-                    onClick={() => onMute(false)}
-                  />
-                </Tooltip>
-              ) : voiceModeActive && voiceInputLive ? (
-                <Tooltip title="Listening — click to mute">
-                  <Button
-                    type="text"
-                    className="composer-voice-live"
-                    aria-label="Mute"
-                    icon={<AudioFilled />}
-                    onClick={() => onMute(true)}
-                  />
-                </Tooltip>
-              ) : (
-                <Tooltip title="Voice">
-                  <Button type="text" aria-label="Voice" icon={<AudioOutlined />} onClick={onVoice} />
-                </Tooltip>
-              )
+                ) : null}
+              </>
             ) : null}
+          </Flex>
+          <Flex gap={4} align="center" className="composer-toolbar-end">
             {canRetry ? (
               <Button aria-label="Retry" onClick={onRetry}>
                 Retry
               </Button>
             ) : null}
-            {canStop ? (
+            {canStop && canSend ? (
               <Tooltip title="Stop">
                 <Button
                   htmlType="button"
-                  className="composer-stop"
+                  type="text"
+                  className="composer-icon composer-stop"
                   aria-label="Stop"
                   icon={<StopOutlined />}
                   onClick={() => {
@@ -339,16 +425,31 @@ export function Composer({
                 />
               </Tooltip>
             ) : null}
-            <Tooltip title={sendLabel}>
-              <Button
-                type="primary"
-                htmlType="submit"
-                className="composer-send"
-                aria-label={sendLabel}
-                disabled={!canSend}
-                icon={<SendOutlined />}
-              />
-            </Tooltip>
+            {canStop && !canSend ? (
+              <Tooltip title="Stop">
+                <Button
+                  htmlType="button"
+                  className="composer-icon composer-stop"
+                  aria-label="Stop"
+                  icon={<StopOutlined />}
+                  onClick={() => {
+                    onStop();
+                    focusMessage();
+                  }}
+                />
+              </Tooltip>
+            ) : (
+              <Tooltip title={sendLabel}>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  className="composer-icon composer-send"
+                  aria-label={sendLabel}
+                  disabled={!canSend}
+                  icon={<SendOutlined />}
+                />
+              </Tooltip>
+            )}
           </Flex>
         </Flex>
       </form>

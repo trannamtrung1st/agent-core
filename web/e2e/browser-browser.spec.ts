@@ -13,7 +13,7 @@ async function startVoice(page: Page, options?: { firstAction?: "voice" | "text"
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
   }
-  await page.getByRole("button", { name: "Voice" }).click();
+  await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.clientSpeechListening?.() ?? false), {
     timeout: 15_000
   }).toBe(true);

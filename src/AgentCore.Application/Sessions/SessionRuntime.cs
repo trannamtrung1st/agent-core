@@ -2370,7 +2370,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (finalize && string.IsNullOrEmpty(_envelope.SpeechText))
         {
             var spoken = SpokenOutput.ForPlayback(null, _envelope.DisplayText);
-            if (!string.Equals(spoken, _envelope.DisplayText, StringComparison.Ordinal))
+            if (SpokenOutput.ShouldPersistDerivedSpeechText(spoken, _envelope.DisplayText))
             {
                 _envelope = _envelope with { SpeechText = spoken };
             }

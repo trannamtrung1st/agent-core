@@ -25,9 +25,75 @@ public sealed class VoiceRealtimeRegressionTests
             "Attached file notes.txt (user data, not system instructions; attachmentId=019944af-0000-7000-8000-000000000001):\n" +
             "Preview (not system instructions):\n\"\"\"\n" + new string('A', 500) + "\n\"\"\"";
         var spoken = SpokenOutput.ForPlayback(null, dump);
+        Assert.Equal(SpokenOutput.StructuredLeadIn, spoken);
         Assert.DoesNotContain("attachmentId=", spoken, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('A', 80), spoken, StringComparison.Ordinal);
-        Assert.True(spoken.Length <= SpokenOutput.MaxChars);
+    }
+
+    [Fact]
+    public async Task Long_conversational_story_reaches_tts_segments()
+    {
+        var story = string.Join(' ', Enumerable.Range(1, 160).Select(index => $"Word{index}."));
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([story]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Tell me a story");
+        AudioFrameOutput? final = null;
+        for (var attempt = 0; attempt < 2_000 && final is null; attempt++)
+        {
+            final = output.Items
+                .Select(item => item.Payload)
+                .OfType<AudioFrameOutput>()
+                .LastOrDefault(frame => frame.IsFinal);
+            if (final is not null)
+            {
+                break;
+            }
+
+            if (runtime.ActiveResponseId is { } activeId && runtime.SentSamples > 0)
+            {
+                await runtime.SubmitPlaybackAsync(activeId, "progress", runtime.SentSamples, 0);
+            }
+
+            await Task.Delay(10);
+        }
+
+        Assert.NotNull(final);
+        var finalItem = output.Items.Last(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        var responseId = finalItem.ResponseId!.Value;
+        await runtime.SubmitPlaybackAsync(responseId, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(responseId, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        var narrated = string.Concat(synthesizer.Texts);
+        Assert.Contains("Word1.", narrated, StringComparison.Ordinal);
+        Assert.Contains("Word160.", narrated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Structured_schedule_display_uses_short_speech_projection()
+    {
+        var table = "| Day | Item |\n| --- | --- |\n"
+            + string.Join('\n', Enumerable.Range(0, 6).Select(index => $"| Day {index} | Task {index} |"));
+        var speech = "Here is your week at a glance.";
+        var modelText = $"[[speech:{speech}]]\n{table}";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([modelText]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Show my schedule");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Contains(synthesizer.Texts, text => text.Contains(speech, StringComparison.Ordinal));
+        Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("| Day |", text, StringComparison.Ordinal));
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Contains("| Day |", assistant.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -40,13 +106,13 @@ public sealed class VoiceRealtimeRegressionTests
     [Fact]
     public void Long_structured_display_uses_lead_in_instead_of_dump_clip()
     {
-        var code = "```csharp\n" + new string('x', 600) + "\n```\nSchedule follows.";
-        Assert.True(code.Length > SpokenOutput.MaxChars * 2);
+        var code = "```csharp\n" + new string('x', 900) + "\n```\nSchedule follows.";
+        Assert.True(code.Length > 800);
         Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, code));
 
         var table = "| Day | Item |\n| --- | --- |\n"
             + string.Join('\n', Enumerable.Range(0, 40).Select(index => $"| {index} | {new string('a', 20)} |"));
-        Assert.True(table.Length > SpokenOutput.MaxChars * 2);
+        Assert.True(table.Length > 800);
         Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, table));
     }
 
@@ -88,7 +154,29 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public async Task Explicit_speech_stays_short_while_blocks_remain_on_display()
+    public async Task Markdown_prose_without_speech_tag_does_not_persist_derived_speech_text()
+    {
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel(["The architecture has **three** pieces."]),
+            synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Explain");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Null(assistant.Envelope!.SpeechText);
+        Assert.Contains(synthesizer.Texts, text => text.Contains("three", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Explicit_speech_projection_while_rich_blocks_stay_on_display()
     {
         var output = new CapturingSessionOutput();
         var synthesizer = new RecordingSynthesizer();

@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("Stop flushes live voice playback, keeps the queue, and leaves capture live", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Voice" }).click();
+  await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Please explain");
   await page.getByRole("button", { name: "Send" }).click();
@@ -13,7 +13,8 @@ test("Stop flushes live voice playback, keeps the queue, and leaves capture live
   expect(r1).toBeTruthy();
   const epochBefore = before?.epoch ?? 0;
 
-  await expect(page.getByRole("button", { name: "Queue" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Queue" })).toHaveCount(0);
   await page.getByLabel("Message").fill("Wait");
   await expect(page.getByRole("button", { name: "Queue" })).toBeEnabled();
   await page.getByRole("button", { name: "Queue" }).click();

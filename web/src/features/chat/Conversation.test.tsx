@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HistoryEntry } from "../../state/sessionStore";
 import { Conversation } from "./Conversation";
 
@@ -366,5 +366,47 @@ describe("Conversation", () => {
     const items = screen.getAllByRole("listitem");
     expect(items[0]).not.toHaveAttribute("data-turn-anchor");
     expect(items[2]).toHaveAttribute("data-turn-anchor", "true");
+  });
+
+  it("re-scrolls when older history is prepended after the initial render", () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const clientHeight = vi.spyOn(Element.prototype, "clientHeight", "get");
+    clientHeight.mockImplementation(function clientHeightStub(this: Element) {
+      if (this.classList.contains("conversation-scroll")) {
+        return 400;
+      }
+      return 0;
+    });
+
+    function ScrollShell({
+      entries: history
+    }: {
+      entries: HistoryEntry[];
+    }) {
+      return (
+        <div className="conversation-scroll">
+          <Conversation agentName="Alex" sessionId="s1" entries={history} activity={{ kind: "idle" }} />
+        </div>
+      );
+    }
+
+    const initial = [
+      entry({ entryId: "u2", role: "user", text: "latest?" }),
+      entry({ entryId: "a2", role: "assistant", text: "Yes." })
+    ];
+    const hydrated = [
+      entry({ entryId: "u1", role: "user", text: "older" }),
+      entry({ entryId: "a1", role: "assistant", text: "Earlier." }),
+      ...initial
+    ];
+
+    const { rerender } = render(<ScrollShell entries={initial} />);
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    scrollIntoView.mockClear();
+    rerender(<ScrollShell entries={hydrated} />);
+    expect(scrollIntoView).toHaveBeenCalled();
+    clientHeight.mockRestore();
   });
 });

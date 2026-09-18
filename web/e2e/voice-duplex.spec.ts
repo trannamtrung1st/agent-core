@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("voice stays full-duplex; mute is input-only; disconnect releases capture", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Voice" }).click();
+  await expect(page.getByRole("button", { name: /^Voice$/ })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Listening…", { timeout: 15_000 });
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
 

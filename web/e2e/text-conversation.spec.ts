@@ -21,6 +21,17 @@ async function expectAssistantTextLengthStable(
   }
 }
 
+async function expectConversationScrolledToBottom(page: Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      page.locator(".conversation-scroll").evaluate((element) => {
+        const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+        return distance <= 2;
+      })
+    )
+    .toBe(true);
+}
+
 async function startLongHoldResponse(page: Page): Promise<void> {
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
@@ -42,6 +53,7 @@ test("session path survives refresh", async ({ page }) => {
   await expect(page).toHaveURL(url);
   await expect(page.getByText("Hello")).toBeVisible();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+  await expectConversationScrolledToBottom(page);
 });
 
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
@@ -66,7 +78,7 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".chat-message").filter({ hasText: "Hello" }).last()).toBeVisible();
-  await page.getByRole("button", { name: "Voice" }).click();
+  await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Starting voice…", { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   const frames = await page.evaluate(() => window.__agentCore?.audioFramesSent() ?? -1);

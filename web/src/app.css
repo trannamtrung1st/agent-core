@@ -833,16 +833,12 @@ body,
   min-height: 32px;
 }
 
-.composer-voice-live.ant-btn {
-  color: var(--ac-color-success-hover) !important;
-  background: rgba(82, 196, 26, 0.18) !important;
+.composer-toolbar-start,
+.composer-toolbar-end {
+  min-width: 0;
 }
 
-.composer-voice-live.ant-btn:not(:disabled):hover {
-  color: #95de64 !important;
-  background: rgba(82, 196, 26, 0.28) !important;
-}
-
+.composer-icon.ant-btn,
 .composer-send.ant-btn {
   display: inline-flex !important;
   align-items: center;
@@ -855,6 +851,7 @@ body,
   line-height: 0;
 }
 
+.composer-icon .anticon,
 .composer-send .anticon {
   display: inline-flex;
   align-items: center;
@@ -862,8 +859,19 @@ body,
   line-height: 0;
 }
 
+.composer-icon .anticon > svg,
 .composer-send .anticon > svg {
   display: block;
+}
+
+.composer-voice-live.ant-btn {
+  color: var(--ac-color-success-hover) !important;
+  background: rgba(82, 196, 26, 0.18) !important;
+}
+
+.composer-voice-live.ant-btn:not(:disabled):hover {
+  color: #95de64 !important;
+  background: rgba(82, 196, 26, 0.28) !important;
 }
 
 @media (max-width: 767px) {
@@ -892,6 +900,7 @@ body,
     min-height: 44px;
   }
 
+  .composer-icon.ant-btn,
   .composer-send.ant-btn {
     width: 44px;
     min-width: 44px;

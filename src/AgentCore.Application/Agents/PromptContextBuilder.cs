@@ -201,7 +201,7 @@ public sealed class PromptContextBuilder
         if (context.Mode == SessionMode.Voice)
         {
             lines.Add(
-                "Voice output contract: when the visible answer is long or structured (lists, tables, code, schedules, rich blocks, attachment details), emit [[speech:...]] first with one or two concise sentences the user should hear, then provide the full display text and blocks. Speech is heard; display text may be richer than speech.");
+                "Voice output contract: conversational content is normally intended to be spoken in full and shown the same way. Emit [[speech:...]] only when the spoken response should intentionally differ from the richer visual response, such as code, tables, schedules, long reference lists, artifacts, attachment details, or detailed visual material. Do not shorten stories, explanations, dialogue, coaching, or content the user explicitly asks to hear merely because it is long. When using a separate speech projection, emit [[speech:...]] before display-only material. Absent [[speech:...]], display prose is the spoken answer unless the runtime classifies it as visual-heavy or unsafe to narrate; markdown formatting alone does not create a separate speech projection.");
         }
         if (!string.IsNullOrEmpty(context.InterruptedHeardText))
         {

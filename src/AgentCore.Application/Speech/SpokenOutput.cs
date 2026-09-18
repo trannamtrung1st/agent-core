@@ -1,43 +1,53 @@
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace AgentCore.Application.Speech;
 
 public static class SpokenOutput
 {
-    public const int MaxChars = 280;
+    /// <summary>
+    /// Pathological runtime safety bound only; conversational length is not clipped here.
+    /// </summary>
+    public const int SafetyMaxChars = 32_000;
+
     public const string StructuredLeadIn = "I've put the detailed answer on screen.";
 
     public static string ForPlayback(string? speechText, string displayText)
     {
-        if (!string.IsNullOrWhiteSpace(speechText) && !LooksLikeFileDump(speechText))
+        if (!string.IsNullOrWhiteSpace(speechText))
         {
-            return Clip(speechText.Trim());
+            var explicitSpeech = speechText.Trim();
+            if (LooksLikeFileDump(explicitSpeech))
+            {
+                return StructuredLeadIn;
+            }
+
+            return ApplySafetyCap(explicitSpeech);
         }
 
         var display = displayText ?? string.Empty;
-        if (LooksLikeStructuredDisplay(display))
+        if (LooksLikeStructuredDisplay(display) || LooksLikeFileDump(display))
         {
             return StructuredLeadIn;
         }
 
-        if (LooksLikeFileDump(display))
+        var prose = StripMarkdown(display);
+        if (string.IsNullOrWhiteSpace(prose))
         {
-            return Clip(StripDump(display));
+            return string.Empty;
         }
 
-        if (display.Length <= MaxChars)
-        {
-            return Clip(StripMarkdown(display));
-        }
+        return ApplySafetyCap(prose);
+    }
 
-        var stripped = StripMarkdown(StripDump(display));
-        if (string.IsNullOrWhiteSpace(stripped))
-        {
-            return StructuredLeadIn;
-        }
-
-        return Clip(stripped);
+    /// <summary>
+    /// True when the runtime should persist a derived <c>SpeechText</c> on the envelope
+    /// (model omitted <c>[[speech:]]</c> but playback intentionally differs from display).
+    /// Markdown stripping alone does not create a persisted speech projection.
+    /// </summary>
+    public static bool ShouldPersistDerivedSpeechText(string spoken, string displayText)
+    {
+        _ = displayText;
+        return string.Equals(spoken, StructuredLeadIn, StringComparison.Ordinal);
     }
 
     public static bool LooksLikeStructuredDisplay(string text)
@@ -58,10 +68,21 @@ public static class SpokenOutput
         }
 
         var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var nonEmptyLines = lines.Count(line => !string.IsNullOrWhiteSpace(line));
+        if (nonEmptyLines == 0)
+        {
+            return false;
+        }
+
         var listLines = lines.Count(line => line.TrimStart().StartsWith("- ", StringComparison.Ordinal)
             || line.TrimStart().StartsWith("* ", StringComparison.Ordinal)
             || Regex.IsMatch(line.TrimStart(), @"^\d+\.\s"));
-        if (listLines >= 3)
+        if (listLines >= 3 && listLines == nonEmptyLines)
+        {
+            return true;
+        }
+
+        if (listLines >= 4 && listLines * 2 >= nonEmptyLines)
         {
             return true;
         }
@@ -87,49 +108,14 @@ public static class SpokenOutput
         return text.IndexOfAny(['+', '/', '=']) >= 0 && Base64Like.IsMatch(text);
     }
 
-    private static string StripDump(string text)
+    private static string ApplySafetyCap(string text)
     {
-        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-        var kept = new StringBuilder();
-        foreach (var line in lines)
-        {
-            if (LooksLikeFileDump(line)
-                || line.Trim() is "\"\"\"" or "```"
-                || (line.Length > 80 && !line.Contains(' ')))
-            {
-                continue;
-            }
-
-            if (kept.Length > 0)
-            {
-                kept.Append(' ');
-            }
-
-            kept.Append(line.Trim());
-            if (kept.Length >= MaxChars)
-            {
-                break;
-            }
-        }
-
-        return kept.ToString().Trim();
-    }
-
-    private static string Clip(string text)
-    {
-        if (text.Length <= MaxChars)
+        if (text.Length <= SafetyMaxChars)
         {
             return text;
         }
 
-        var window = text[..MaxChars];
-        var end = window.LastIndexOfAny(['.', '!', '?']);
-        if (end >= 40)
-        {
-            return window[..(end + 1)].Trim();
-        }
-
-        return window.Trim();
+        return text[..SafetyMaxChars];
     }
 
     private static string StripMarkdown(string text)
