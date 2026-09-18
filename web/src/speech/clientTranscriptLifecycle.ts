@@ -17,6 +17,7 @@ export class ClientTranscriptLifecycle {
   private readonly accumulator: ClientTranscriptAccumulator;
   private listening = false;
   private blocked = false;
+  private suspendedForAgentOutput = false;
   private gate: TranscriptLifecycleGate | null = null;
   private readonly reportError: (error: SessionErrorView) => void;
 
@@ -24,7 +25,8 @@ export class ClientTranscriptLifecycle {
     private readonly transport: SpeechTransportService,
     emit: (evidence: ClientSpeechEvidence) => void,
     onError: (error: SessionErrorView) => void,
-    private readonly onStateChange?: () => void
+    private readonly onStateChange?: () => void,
+    private readonly onLiveTranscriptClear?: () => void
   ) {
     this.reportError = onError;
     this.accumulator = new ClientTranscriptAccumulator(
@@ -49,7 +51,50 @@ export class ClientTranscriptLifecycle {
     return this.blocked;
   }
 
+  isSuspendedForAgentOutput(): boolean {
+    return this.suspendedForAgentOutput;
+  }
+
+  async suspendForAgentOutput(): Promise<void> {
+    if (this.suspendedForAgentOutput) {
+      return;
+    }
+
+    this.suspendedForAgentOutput = true;
+    this.listening = false;
+    if (this.accumulator.hasOpenUtterance()) {
+      this.accumulator.fail();
+      this.onLiveTranscriptClear?.();
+    }
+
+    await this.transport.cancelInput();
+    this.notifyStateChange();
+  }
+
+  async resumeAfterAgentOutput(): Promise<void> {
+    if (!this.suspendedForAgentOutput) {
+      return;
+    }
+
+    this.suspendedForAgentOutput = false;
+    if (this.gate?.mode !== "voice" || this.gate.muted || this.blocked || !this.gate.attachmentId) {
+      this.notifyStateChange();
+      return;
+    }
+
+    this.epoch += 1;
+    this.accumulator.beginSession({
+      attachmentId: this.gate.attachmentId,
+      epoch: this.epoch,
+      mode: "voice",
+      muted: false
+    });
+    await this.startListening();
+    this.notifyStateChange();
+  }
+
   async enterVoice(gate: TranscriptLifecycleGate): Promise<void> {
+    this.suspendedForAgentOutput = false;
     this.gate = gate;
     this.blocked = false;
     this.epoch += 1;
@@ -79,6 +124,10 @@ export class ClientTranscriptLifecycle {
 
   async mute(): Promise<void> {
     this.listening = false;
+    if (this.accumulator.hasOpenUtterance()) {
+      this.accumulator.fail();
+      this.onLiveTranscriptClear?.();
+    }
     this.gate = this.gate
       ? { ...this.gate, muted: true }
       : { attachmentId: this.attachment(), mode: "voice", muted: true };
@@ -104,6 +153,11 @@ export class ClientTranscriptLifecycle {
   async exitVoice(): Promise<void> {
     this.listening = false;
     this.blocked = false;
+    this.suspendedForAgentOutput = false;
+    if (this.accumulator.hasOpenUtterance()) {
+      this.accumulator.fail();
+      this.onLiveTranscriptClear?.();
+    }
     await this.transport.cancelInput();
     this.accumulator.beginSession({
       attachmentId: this.attachment(),
@@ -117,6 +171,8 @@ export class ClientTranscriptLifecycle {
   async disconnect(): Promise<void> {
     this.listening = false;
     this.blocked = false;
+    this.suspendedForAgentOutput = false;
+    this.onLiveTranscriptClear?.();
     await this.transport.cancelInput();
     this.accumulator.beginSession({
       attachmentId: "",
@@ -137,6 +193,10 @@ export class ClientTranscriptLifecycle {
   }
 
   ingest(evidence: ClientSpeechEvidence, epoch = this.epoch): void {
+    if (this.suspendedForAgentOutput) {
+      return;
+    }
+
     if (evidence.kind === "started") {
       this.accumulator.startUtterance(evidence.utteranceId);
       return;
@@ -158,14 +218,20 @@ export class ClientTranscriptLifecycle {
     }
 
     this.accumulator.fail();
+    this.onLiveTranscriptClear?.();
+  }
+
+  private shouldListen(): boolean {
+    return (
+      this.listening
+      && !this.suspendedForAgentOutput
+      && this.gate?.mode === "voice"
+      && this.gate.muted === false
+    );
   }
 
   private attachment(): string {
     return this.gate?.attachmentId ?? "";
-  }
-
-  private shouldListen(): boolean {
-    return this.listening && this.gate?.mode === "voice" && this.gate.muted === false;
   }
 
   private async handleRecognitionEnded(): Promise<void> {
@@ -199,6 +265,7 @@ export class ClientTranscriptLifecycle {
           this.listening = false;
           this.blocked = true;
           this.accumulator.fail();
+          this.onLiveTranscriptClear?.();
           this.reportError(error);
           this.notifyStateChange();
         },
@@ -214,6 +281,7 @@ export class ClientTranscriptLifecycle {
       this.listening = false;
       this.blocked = true;
       this.accumulator.fail();
+      this.onLiveTranscriptClear?.();
       if (!recognitionErrorReported) {
         this.reportError(speechError("SpeechRecognitionUnavailable"));
       }

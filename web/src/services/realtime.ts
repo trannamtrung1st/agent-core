@@ -35,6 +35,7 @@ let connectionEpoch = 0;
 let commandSequence = 0;
 let clientSpeechPlayer: ClientSpeechPlayer | null = null;
 let transcriptLife: ClientTranscriptLifecycle | null = null;
+let clientTranscriptHeldForAgent = false;
 let injectedRecognizer: FakeSpeechRecognizer | null = null;
 let injectedSynthesizer: FakeSpeechSynthesizer | null = null;
 let transcriptStart: Promise<void> | null = null;
@@ -333,6 +334,43 @@ function sendSpeechEvidence(evidence: ClientSpeechEvidence): void {
   });
 }
 
+function clearLiveUserTranscript(): void {
+  if (useSessionStore.getState().liveUserTranscript !== null) {
+    useSessionStore.setState({ liveUserTranscript: null });
+  }
+}
+
+async function suspendClientTranscriptForAgentOutput(): Promise<void> {
+  const state = useSessionStore.getState();
+  if (state.sttTransport !== "clientTranscript" || state.mode !== "voice") {
+    return;
+  }
+
+  clientTranscriptHeldForAgent = true;
+  clearLiveUserTranscript();
+  await ensureTranscriptLife().suspendForAgentOutput();
+  publishCaptureLive();
+}
+
+async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
+  if (!clientTranscriptHeldForAgent) {
+    return;
+  }
+
+  const state = useSessionStore.getState();
+  if (state.sttTransport !== "clientTranscript" || state.mode !== "voice" || state.muted) {
+    return;
+  }
+
+  if (state.liveResponseId != null || voicePlaybackHoldActive()) {
+    return;
+  }
+
+  clientTranscriptHeldForAgent = false;
+  await ensureTranscriptLife().resumeAfterAgentOutput();
+  syncCapture();
+}
+
 function ensureTranscriptLife(): ClientTranscriptLifecycle {
   ensureSpeechAdapters();
   if (!transcriptLife) {
@@ -345,12 +383,16 @@ function ensureTranscriptLife(): ClientTranscriptLifecycle {
           sessionError: error,
           errorFatal: false
         });
+        clearLiveUserTranscript();
         syncClientTranscriptBlockedFromLifecycle();
         publishCaptureLive();
       },
       () => {
         syncClientTranscriptBlockedFromLifecycle();
         publishCaptureLive();
+      },
+      () => {
+        clearLiveUserTranscript();
       }
     );
   }
@@ -582,6 +624,7 @@ function handleEvent(raw: ServerEvent): void {
       });
     } else {
       ensureClientSpeechPlayer().markOutputCompleted(raw.responseId, asEventNumber(raw.payload.textEndExclusive));
+      void tryResumeClientTranscriptAfterAgentOutput();
     }
   }
 
@@ -611,6 +654,9 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "agent.response.started" && raw.responseId) {
     outputGate.markStarted(raw.responseId);
     flushEarlyAudio(raw.responseId);
+    if (useSessionStore.getState().sttTransport === "clientTranscript") {
+      void suspendClientTranscriptForAgentOutput();
+    }
   }
   if (raw.type === "agent.response.started" && useSessionStore.getState().mode === "text" && raw.responseId) {
     lastReceiptOffset = 0;
@@ -620,6 +666,7 @@ function handleEvent(raw: ServerEvent): void {
   if ((raw.type === "agent.response.completed" || raw.type === "agent.response.interrupted") && raw.responseId) {
     void sendReceipt(true, raw.responseId);
     stopReceipts();
+    void tryResumeClientTranscriptAfterAgentOutput();
   }
   if (raw.type === "playback.gain") {
     const gain = typeof raw.payload.gain === "number" ? raw.payload.gain : 1;
@@ -1214,9 +1261,17 @@ function syncCapture(): void {
     if (state.sttTransport === "clientTranscript") {
       ensureSpeechAdapters();
       const life = ensureTranscriptLife();
+      if (clientTranscriptHeldForAgent || life.isSuspendedForAgentOutput()) {
+        publishCaptureLive();
+        return;
+      }
+
       if (state.muted) {
         if (life.isListening()) {
-          void life.mute().then(() => publishCaptureLive());
+          void life.mute().then(() => {
+            clearLiveUserTranscript();
+            publishCaptureLive();
+          });
         } else {
           publishCaptureLive();
         }

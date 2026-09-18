@@ -71,6 +71,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
   private readonly transcriptInactivityMs: number;
   private readonly noTextCloseMs: number;
   private sawTranscriptText = false;
+  private lastProgressText = "";
   private fatal = false;
 
   constructor(options?: { transcriptInactivityMs?: number; noTextCloseMs?: number }) {
@@ -119,7 +120,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
       return;
     }
 
-    this.stopNative();
+    this.stopNative(this.utteranceOpen);
     const native = new Ctor();
     native.continuous = true;
     native.interimResults = true;
@@ -160,7 +161,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         }
 
         this.revision += 1;
-        this.noteTranscriptActivity();
+        this.noteTranscriptProgress(text);
         this.listener?.onEvidence({
           kind: result.isFinal ? "final" : "partial",
           utteranceId: this.utteranceId,
@@ -262,12 +263,18 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     this.startedAt = performance.now();
     this.utteranceOpen = true;
     this.sawTranscriptText = false;
+    this.lastProgressText = "";
     this.clearTranscriptEndpointTimers();
     this.scheduleNoTextTimer();
     this.listener?.onEvidence({ kind: "started", utteranceId: this.utteranceId, activityScore: 0.5 });
   }
 
-  private noteTranscriptActivity(): void {
+  private noteTranscriptProgress(text: string): void {
+    if (text === this.lastProgressText) {
+      return;
+    }
+
+    this.lastProgressText = text;
     this.sawTranscriptText = true;
     this.clearNoTextTimer();
     this.scheduleTranscriptInactivityTimer();
@@ -391,10 +398,14 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     }
   }
 
-  private stopNative(): void {
+  private stopNative(preserveUtteranceTimers = false): void {
     this.clearRestart();
     this.clearSpeechEndGrace();
-    this.clearTranscriptEndpointTimers();
+    if (!preserveUtteranceTimers) {
+      this.clearTranscriptEndpointTimers();
+      this.lastProgressText = "";
+    }
+
     this.speechEndedPending = false;
     try {
       this.native?.abort();

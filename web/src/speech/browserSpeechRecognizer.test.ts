@@ -317,6 +317,111 @@ describe("Browser STT application endpointing through lifecycle", () => {
     expect(sent.filter((item) => item.kind === "ended")).toHaveLength(0);
     await adapter.cancel();
   });
+  it("finalizes after inactivity when Chrome repeats identical interim text", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer({ transcriptInactivityMs: 1800 });
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    for (let index = 0; index < 6; index += 1) {
+      holder.current?.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: false, 0: { transcript: "it" } }]
+      });
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("it");
+    await adapter.cancel();
+  });
+
+  it("still finalizes after native restart without clearing inactivity timing", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer({ transcriptInactivityMs: 1800 });
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "it" } }]
+    });
+    await vi.advanceTimersByTimeAsync(900);
+    holder.current?.onend?.(new Event("end"));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("it");
+    await adapter.cancel();
+  });
+});
+
+describe("Browser STT agent-output suspension", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not ingest user evidence while suspended for agent output", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(
+      transport,
+      (evidence) => sent.push(evidence),
+      () => undefined,
+      undefined,
+      () => undefined
+    );
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "hello" } }]
+    });
+    await life.suspendForAgentOutput();
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "agent echo" } }]
+    });
+    expect(sent.some((item) => item.text === "agent echo")).toBe(false);
+    await adapter.cancel();
+  });
+
+  it("resumes with a fresh epoch and recognizes the next user turn", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer({ transcriptInactivityMs: 1800 });
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "first" } }]
+    });
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    await life.suspendForAgentOutput();
+    await life.resumeAfterAgentOutput();
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "second turn" } }]
+    });
+    const started = sent.filter((item) => item.kind === "started");
+    expect(started.length).toBeGreaterThanOrEqual(2);
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(sent.filter((item) => item.kind === "final").map((item) => item.text)).toContain("second turn");
+    await adapter.cancel();
+  });
 });
 
 describe("Browser STT native finals through the application accumulator", () => {
