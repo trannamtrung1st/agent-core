@@ -30,6 +30,8 @@ function mapVoice(voice: NativeVoice): SpeechVoice {
 
 export class BrowserSpeechSynthesizer implements ClientSpeechSynthesizer {
   readonly adapterId = "browser" as const;
+  private speaking: SpeechSynthesisUtterance | null = null;
+  private cancelled = false;
 
   listVoices(): SpeechVoice[] {
     const synth = synthesisHost();
@@ -52,9 +54,18 @@ export class BrowserSpeechSynthesizer implements ClientSpeechSynthesizer {
       throw error;
     }
 
-    const chosen = this.resolveVoice(request.hint);
-    this.cancelNative();
+    const hint = request.hint?.lang
+      ? request.hint
+      : { ...request.hint, lang: request.language };
+    const chosen = this.resolveVoice(hint);
+    this.cancelled = false;
     const utterance = new SpeechSynthesisUtterance(request.text);
+    if (request.language) {
+      utterance.lang = request.language;
+    }
+    if (typeof request.speakingRate === "number" && Number.isFinite(request.speakingRate)) {
+      utterance.rate = request.speakingRate;
+    }
     if (chosen) {
       const native = synth.getVoices().find((voice) => voice.voiceURI === chosen.voiceURI);
       if (native) {
@@ -62,20 +73,38 @@ export class BrowserSpeechSynthesizer implements ClientSpeechSynthesizer {
       }
     }
 
-    utterance.onend = () => {
-      listener?.onEnd?.();
-    };
-    utterance.onerror = () => {
-      listener?.onError?.(speechError("SpeechPlaybackFailed"));
-    };
-    synth.speak(utterance);
+    this.speaking = utterance;
+    await new Promise<void>((resolve, reject) => {
+      utterance.onend = () => {
+        if (this.speaking === utterance) {
+          this.speaking = null;
+        }
+        listener?.onEnd?.();
+        resolve();
+      };
+      utterance.onerror = (event) => {
+        if (this.speaking === utterance) {
+          this.speaking = null;
+        }
+        const interrupted = this.cancelled
+          || event.error === "interrupted"
+          || event.error === "canceled";
+        if (interrupted) {
+          resolve();
+          return;
+        }
+
+        const error = speechError("SpeechPlaybackFailed");
+        listener?.onError?.(error);
+        reject(error);
+      };
+      synth.speak(utterance);
+    });
   }
 
   async cancel(): Promise<void> {
-    this.cancelNative();
-  }
-
-  private cancelNative(): void {
+    this.cancelled = true;
+    this.speaking = null;
     const synth = synthesisHost();
     try {
       synth?.cancel();

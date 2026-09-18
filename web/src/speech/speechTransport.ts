@@ -11,6 +11,8 @@ import type { ClientSpeechSpeakRequest, ClientSpeechSynthesizer, ClientSpeechSyn
 export type SpeechTransportHooks = {
   onEvidence?: (evidence: ClientSpeechEvidence) => void;
   onError?: (error: SessionErrorView) => void;
+  onRecognitionEnded?: () => void;
+  language?: string;
 };
 
 export type SpeechTransportService = {
@@ -86,9 +88,10 @@ export function createSpeechTransportService(
 
       const listener: ClientSpeechRecognizerListener = {
         onEvidence: (evidence) => hooks.onEvidence?.(evidence),
-        onError: (error) => hooks.onError?.(error)
+        onError: (error) => hooks.onError?.(error),
+        onRecognitionEnded: () => hooks.onRecognitionEnded?.()
       };
-      await recognizer.start(listener);
+      await recognizer.start(listener, { language: hooks.language });
       started = true;
     },
     async stopInput() {

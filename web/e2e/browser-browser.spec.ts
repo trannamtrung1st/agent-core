@@ -6,11 +6,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-async function startVoice(page: Page): Promise<void> {
+async function startVoice(page: Page, options?: { firstAction?: "voice" | "text" }): Promise<void> {
   await page.goto("/");
-  await page.getByLabel("Message").fill("Hello");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  if (options?.firstAction !== "voice") {
+    await page.getByLabel("Message").fill("Hello");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  }
   await page.getByRole("button", { name: "Voice" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.clientSpeechListening?.() ?? false), {
     timeout: 15_000
@@ -58,6 +60,15 @@ test("Browser/Browser preflight skips PCM and fake TTS speaks segments", async (
     timeout: 15_000
   }).toBe(true);
   await expect(page.getByRole("button", { name: "Stop" })).toBeHidden({ timeout: 15_000 });
+});
+
+test("Voice as the first action still skips getUserMedia for Browser/Browser", async ({ page }) => {
+  await startVoice(page, { firstAction: "voice" });
+  expect(await page.evaluate(() => window.__agentCore?.getUserMediaUsed?.() ?? true)).toBe(false);
+  expect(await page.evaluate(() => window.__agentCore?.audioFramesSent?.() ?? -1)).toBe(0);
+  const debug = await page.evaluate(() => window.__agentCore?.speechDebug?.());
+  expect(debug?.sttTransport).toBe("clientTranscript");
+  expect(debug?.ttsTransport).toBe("clientSpeech");
 });
 
 test("Stop during fake Browser TTS keeps the queued draft", async ({ page }) => {

@@ -74,14 +74,16 @@ public sealed class DockerSandboxExecutor(
             linked.CancelAfter(SandboxLimits.Timeout);
             string output;
             int exit;
+            var truncated = false;
             try
             {
                 var started = await DockerAsync(["start", "-a", name], linked.Token, SandboxLimits.MaxOutputBytes)
                     .ConfigureAwait(false);
                 output = started.Output;
-                // Killing the docker client after the output budget is reached can yield a
-                // non-zero process exit even though the sandbox command itself produced output.
-                exit = started.Truncated ? 0 : started.ExitCode;
+                truncated = started.Truncated;
+                exit = truncated
+                    ? await ReadContainerExitCodeAsync(name, linked.Token).ConfigureAwait(false)
+                    : started.ExitCode;
             }
             catch (OperationCanceledException)
             {
@@ -112,12 +114,56 @@ public sealed class DockerSandboxExecutor(
                 artifactId = created.ArtifactId;
             }
 
-            return new SandboxResult(exit == 0, exit, output, artifactId, exit == 0 ? "ok" : "Sandbox command failed.");
+            return new SandboxResult(
+                exit == 0,
+                exit,
+                output,
+                artifactId,
+                exit == 0 ? "ok" : "Sandbox command failed.",
+                truncated);
         }
         finally
         {
             await TryDockerAsync(["rm", "-f", name], CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private async Task<int> ReadContainerExitCodeAsync(string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var waited = await DockerAsync(["wait", name], cancellationToken).ConfigureAwait(false);
+            if (int.TryParse(waited.Output.Trim(), out var waitedCode))
+            {
+                return waitedCode;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            await TryDockerAsync(["kill", name], CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Fall through to inspect.
+        }
+
+        try
+        {
+            var inspect = await DockerAsync(
+                    ["inspect", "-f", "{{.State.ExitCode}}", name],
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            if (int.TryParse(inspect.Output.Trim(), out var inspected))
+            {
+                return inspected;
+            }
+        }
+        catch (Exception)
+        {
+            // The attach-client status is not the container's exit code.
+        }
+
+        return -1;
     }
 
     private Task<DockerExec> DockerAsync(

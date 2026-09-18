@@ -71,7 +71,8 @@ public static class HttpMapping
             descriptor.Name,
             descriptor.Role,
             descriptor.Description,
-            descriptor.VoiceAvailable);
+            descriptor.VoiceAvailable,
+            descriptor.Language);
 
     public static KnowledgeDocumentResponse ToKnowledge(KnowledgeDocument document) =>
         new(

@@ -18,11 +18,19 @@ export type ClientSpeechEvidence = {
 export type ClientSpeechRecognizerListener = {
   onEvidence: (evidence: ClientSpeechEvidence) => void;
   onError: (error: SessionErrorView) => void;
+  onRecognitionEnded?: () => void;
+};
+
+export type ClientSpeechRecognizerStartOptions = {
+  language?: string;
 };
 
 export type ClientSpeechRecognizer = {
   readonly adapterId: "browser" | "fake";
-  start: (listener: ClientSpeechRecognizerListener) => Promise<void>;
+  start: (
+    listener: ClientSpeechRecognizerListener,
+    options?: ClientSpeechRecognizerStartOptions
+  ) => Promise<void>;
   stop: () => Promise<void>;
   cancel: () => Promise<void>;
 };

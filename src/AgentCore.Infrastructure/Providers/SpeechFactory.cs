@@ -30,8 +30,8 @@ internal static class SpeechFactory
                 synthesis.Transport,
                 recognition.Resolvable,
                 synthesis.Resolvable,
-                recognition.Adapter?.Capabilities,
-                synthesis.Adapter?.Capabilities)
+                recognition.Capabilities,
+                synthesis.Capabilities)
         };
     }
 
@@ -41,32 +41,34 @@ internal static class SpeechFactory
     {
         if (SpeechAdapterCatalog.IsBrowser(options.Adapter))
         {
-            return new ResolvedRecognition(null, SpeechTransport.ClientTranscript, true);
+            return new ResolvedRecognition(
+                null,
+                SpeechTransport.ClientTranscript,
+                true,
+                ClientSpeechCapabilities.Recognition);
         }
 
         if (SpeechAdapterCatalog.EqualsName(options.Adapter, SpeechAdapterCatalog.Synthetic))
         {
             var adapter = new SyntheticSpeechRecognizer();
-            return new ResolvedRecognition(adapter, SpeechTransport.ServerAudio, true);
+            return new ResolvedRecognition(adapter, SpeechTransport.ServerAudio, true, adapter.Capabilities);
         }
 
         if (SpeechAdapterCatalog.EqualsName(options.Adapter, SpeechAdapterCatalog.OpenAICompatibleBatch))
         {
             if (string.IsNullOrWhiteSpace(options.ApiKey))
             {
-                return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false);
+                return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false, null);
             }
 
             var http = provider.GetRequiredService<IHttpClientFactory>()
                 .CreateClient(OpenAICompatibleBatchSpeechRecognizer.HttpClientName);
-            return new ResolvedRecognition(
-                new OpenAICompatibleBatchSpeechRecognizer(http, options),
-                SpeechTransport.ServerAudio,
-                true);
+            var adapter = new OpenAICompatibleBatchSpeechRecognizer(http, options);
+            return new ResolvedRecognition(adapter, SpeechTransport.ServerAudio, true, adapter.Capabilities);
         }
 
         // OpenAI realtime STT remains a deferred no-op and is not selectable.
-        return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false);
+        return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false, null);
     }
 
     private static ResolvedSynthesis ResolveSynthesis(
@@ -75,40 +77,44 @@ internal static class SpeechFactory
     {
         if (SpeechAdapterCatalog.IsBrowser(options.Adapter))
         {
-            return new ResolvedSynthesis(null, SpeechTransport.ClientSpeech, true);
+            return new ResolvedSynthesis(
+                null,
+                SpeechTransport.ClientSpeech,
+                true,
+                ClientSpeechCapabilities.Synthesis);
         }
 
         if (SpeechAdapterCatalog.EqualsName(options.Adapter, SpeechAdapterCatalog.Synthetic))
         {
             var adapter = new SyntheticSpeechSynthesizer();
-            return new ResolvedSynthesis(adapter, SpeechTransport.ServerAudio, true);
+            return new ResolvedSynthesis(adapter, SpeechTransport.ServerAudio, true, adapter.Capabilities);
         }
 
         if (SpeechAdapterCatalog.EqualsName(options.Adapter, SpeechAdapterCatalog.OpenAI))
         {
             if (string.IsNullOrWhiteSpace(options.ApiKey))
             {
-                return new ResolvedSynthesis(null, SpeechTransport.ServerAudio, false);
+                return new ResolvedSynthesis(null, SpeechTransport.ServerAudio, false, null);
             }
 
             var http = provider.GetRequiredService<IHttpClientFactory>()
                 .CreateClient(OpenAiSpeechSynthesizer.HttpClientName);
-            return new ResolvedSynthesis(
-                new OpenAiSpeechSynthesizer(http, options),
-                SpeechTransport.ServerAudio,
-                true);
+            var adapter = new OpenAiSpeechSynthesizer(http, options);
+            return new ResolvedSynthesis(adapter, SpeechTransport.ServerAudio, true, adapter.Capabilities);
         }
 
-        return new ResolvedSynthesis(null, SpeechTransport.ServerAudio, false);
+        return new ResolvedSynthesis(null, SpeechTransport.ServerAudio, false, null);
     }
 
     private readonly record struct ResolvedRecognition(
         ISpeechRecognizer? Adapter,
         string Transport,
-        bool Resolvable);
+        bool Resolvable,
+        RecognitionCapabilities? Capabilities);
 
     private readonly record struct ResolvedSynthesis(
         ISpeechSynthesizer? Adapter,
         string Transport,
-        bool Resolvable);
+        bool Resolvable,
+        SynthesisCapabilities? Capabilities);
 }

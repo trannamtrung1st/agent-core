@@ -632,7 +632,9 @@ public sealed class SessionRuntimeFactory(
             time,
             loggers.CreateLogger(typeof(SessionRuntime).FullName!),
             classifier,
-            recognition: recognizer?.Capabilities ?? new RecognitionCapabilities(false, false, false, false),
+            recognition: voice.EffectivePlan.RecognitionCapabilities
+                ?? recognizer?.Capabilities
+                ?? new RecognitionCapabilities(false, false, false, false),
             policy,
             recognizer,
             synthesizer,

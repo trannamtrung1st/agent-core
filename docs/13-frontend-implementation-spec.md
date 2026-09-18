@@ -18,16 +18,18 @@ Text chat: compact agent header, scrollable conversation (user messages as right
 
 Voice call: agent name, single human-readable status (Listening…, User speaking, Thinking…, Speaking…, Interrupted, Reconnecting…), conversation history, Mute and End. Microphone remains active while the agent speaks when input is `serverAudio`. When input is `clientTranscript`, recognition stays running during agent speech without sending PCM to backend STT. That does not mean the browser vendor keeps recognition on-device; Web Speech may use a cloud service. Browser TTS privacy is platform-dependent. Choose another configured STT/TTS adapter for backend-controlled or local speech. Keep the labeled composer available while voice is live. Keep the call layout simple, accessible buttons with labels, keyboard support and visible focus. Error text explains the next action. An optional developer-only panel shows event timeline, latencies, IDs, transcript evidence and controller decisions without dominating the call UI.
 
-The voice-call control is a **mode transition on the same session**, not a new conversation. Follow [voice preflight](#voice-preflight) so browser user activation is used before any async wait. End call (or Cancel while Starting voice…) sends `session.mode.set(text)`, disposes prepared tracks/AudioContext/worklets, and returns to the same conversation's text composer. History, drafts and identity remain. Mute only affects input. If voice is unavailable, show `VoiceUnavailable` and stay in text. Follow [mode-transition safety](05-interaction-controller.md#mode-transitions): the server may queue voice until a live text response ends; leaving voice while the agent is speaking supersedes that voice response.
+The voice-call control is a **mode transition on the same session**, not a new conversation. Follow [voice preflight](#voice-preflight). When a session already exists, preflight uses the Voice gesture immediately. When Voice is the first action on a new chat, create/attach first so `session.ready` can advertise transports; Browser/Browser then skips getUserMedia. End call (or Cancel while Starting voice…) sends `session.mode.set(text)`, disposes prepared tracks/AudioContext/worklets, and returns to the same conversation's text composer. History, drafts and identity remain. Mute only affects input. If voice is unavailable, show `VoiceUnavailable` and stay in text. Follow [mode-transition safety](05-interaction-controller.md#mode-transitions): the server may queue voice until a live text response ends; leaving voice while the agent is speaking supersedes that voice response.
 
 ## Voice preflight
 
-User activation may expire before a queued `pendingMode=voice` wait finishes. The Voice click must therefore prepare audio **locally first**, then ask the server to change mode, and only then send PCM.
+User activation may expire before a queued `pendingMode=voice` wait finishes. When a session already exists, the Voice click prepares audio locally first. When Voice is the first action, create/attach first so preflight can use `session.ready` transports and skip getUserMedia for Browser/Browser; then ask the server to change mode, and only then send PCM.
 
 ```text
 User clicks Voice
     ↓
-local audio preflight while the gesture is active
+if no session exists: create and attach a text session, then wait for session.ready transports
+    ↓
+local audio preflight using advertised transports
     ├── if stt.transport is clientTranscript: do not call getUserMedia for STT PCM
     ├── if tts.transport is serverAudio (including mixed clientTranscript+serverAudio): create/resume AudioContext and initialize playback worklets
     ├── if tts.transport is clientSpeech and stt.transport is serverAudio: request microphone and input worklets; do not load PCM playback worklets
@@ -45,10 +47,10 @@ if pending:
 server Mode becomes voice (streamId issued)
     ↓
 if serverAudio STT: start sending microphone PCM
-if clientTranscript: start ClientSpeechRecognizer and emit client.speech.evidence (partials ephemeral; one application final per utterance)
+if clientTranscript: start ClientSpeechRecognizer and emit client.speech.evidence (partials ephemeral; one application final per utterance). Native `SpeechRecognition` `isFinal` chunks are application-stable pieces, not utterance boundaries; `onspeechstart`/`onspeechend` (or first result) bound the user turn. Native `onend` is recognition-session termination: bounded restart/backoff while voice, unmuted, and current-epoch; do not treat it as `ended`. Permission/device/service errors mark recognition inactive and surface the structured speech error.
     ↓
 if serverAudio TTS: play AudioWorklet PCM
-if clientSpeech: queue speech.output.segment, ACK playback.* with consumedSamples=0, cancel immediately on Stop/Steer/barge-in/playback.stop/disconnect
+if clientSpeech: queue speech.output.segment (including language and speakingRate), await each utterance `onend` before the next segment, ACK playback.* with consumedSamples=0, and call speechSynthesis.cancel only on explicit Stop/Steer/barge-in/playback.stop/disconnect
 ```
 
 If preflight fails (permission denied, missing AudioWorklet, suspended context that cannot resume), do not send `session.mode.set`. If the mode request fails, is cancelled, the connection drops, or `PendingVoiceTimeoutMs` elapses, release prepared resources and return to the text composer. After reconnect, `pendingMode` is null; the user must press Voice again so a new gesture can preflight.

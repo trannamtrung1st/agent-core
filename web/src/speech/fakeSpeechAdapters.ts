@@ -68,7 +68,7 @@ export function createFakeSpeechRecognizer(): FakeSpeechRecognizer {
 export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
   readonly adapterId = "fake" as const;
   voices: SpeechVoice[];
-  readonly spoken: { text: string; voice: SpeechVoice | null }[] = [];
+  readonly spoken: { text: string; voice: SpeechVoice | null; language?: string; speakingRate?: number }[] = [];
   cancelled = false;
   private speaking = false;
   hold: Promise<void> | null = null;
@@ -93,7 +93,12 @@ export class FakeSpeechSynthesizer implements ClientSpeechSynthesizer {
     this.cancelled = false;
     this.speaking = true;
     const voice = this.resolveVoice(request.hint);
-    this.spoken.push({ text: request.text, voice });
+    this.spoken.push({
+      text: request.text,
+      voice,
+      ...(request.language ? { language: request.language } : {}),
+      ...(request.speakingRate != null ? { speakingRate: request.speakingRate } : {})
+    });
     if (this.hold) {
       await this.hold;
     }

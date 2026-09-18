@@ -790,6 +790,22 @@ describe("realtime race handling", () => {
     expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "voice" } }));
   });
 
+  it("does not preflight PCM before a new session advertises transports", async () => {
+    const preflight = vi.spyOn(capture, "preflight").mockResolvedValue(undefined);
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "idle",
+      sessionId: null,
+      voiceAvailable: true,
+      agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+      selectedAgentId: "examiner"
+    });
+    await requestVoice();
+    expect(preflight).not.toHaveBeenCalled();
+  });
+
   it("marks the connection failed when gap reattach throws", async () => {
     const stop = vi.fn().mockResolvedValue(undefined);
     const start = vi.fn().mockResolvedValue(undefined);

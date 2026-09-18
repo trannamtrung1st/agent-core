@@ -135,6 +135,10 @@ export class ClientTranscriptAccumulator {
     this.applicationFinalSent = false;
   }
 
+  hasOpenUtterance(): boolean {
+    return this.utteranceId != null && this.startedSent && !this.applicationFinalSent;
+  }
+
   unexpectedRestart(): boolean {
     if (!this.utteranceId || this.applicationFinalSent || !this.startedSent) {
       return false;

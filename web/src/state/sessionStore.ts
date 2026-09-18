@@ -68,6 +68,7 @@ export type SessionView = {
   agentName: string;
   agentRole: string;
   voiceAvailable: boolean;
+  conversationLanguage: string | null;
   sttTransport: "serverAudio" | "clientTranscript" | null;
   ttsTransport: "serverAudio" | "clientSpeech" | null;
   mode: "text" | "voice";
@@ -101,6 +102,7 @@ export const emptySession = (): SessionView => ({
   agentName: "",
   agentRole: "",
   voiceAvailable: false,
+  conversationLanguage: null,
   sttTransport: null,
   ttsTransport: null,
   mode: "text",
@@ -290,6 +292,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         agentName: asString(agent.name),
         agentRole: asString(agent.role),
         voiceAvailable: Boolean(agent.voiceAvailable),
+        conversationLanguage: asString(agent.language) || null,
         ...transportsFromPayload(payload),
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",

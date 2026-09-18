@@ -181,6 +181,7 @@ P0 stays closed only because its gates passed. This table records observed P1 be
 | Client transcript | Additive `client.speech.evidence`; one durable final; no PCM STT | ClientTranscriptAdmissionTests; MessagePack Kestrel fixtures |
 | Client speech | Shared SpeechSegmenter → `speech.output.segment`; playback ACK gates completion; Stop does not dequeue | ClientSpeechSegmentRuntimeTests; ClientSpeechMessagePackTests |
 | Fake Browser CI | Injected recognizer/synthesizer; no live Web Speech | Vitest speech/*; Playwright `browser-stt` + `browser-browser` |
+| Native Web Speech contracts | Interim/final mapping, speechstart/speechend utterance bounds, bounded native restart, serialized Browser TTS | Vitest `browserSpeechRecognizer` / `BrowserSpeechSynthesizer`; Playwright Voice-first Browser/Browser |
 | Hosted TTS | `OpenAiSpeechSynthesizer` when Adapter=OpenAI and key present | SpeechFactory; live HTTP skipped unless `AGENTCORE_LIVE_OPENAI_TTS=1` |
 | Hosted STT | Selectable `OpenAICompatibleBatch` only; Adapter=OpenAI recognition unselectable | SpeechFactory; live HTTP skipped unless opt-in |
 | Mixed plans | Synthetic/Synthetic, Browser/Browser, Browser/OpenAI, batch/Browser, batch/OpenAI | Host tests with dummy keys, zero outbound HTTP |

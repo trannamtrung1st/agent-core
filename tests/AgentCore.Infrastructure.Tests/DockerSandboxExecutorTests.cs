@@ -178,6 +178,9 @@ public sealed class DockerSandboxExecutorTests
             new SandboxRequest(session, Guid.CreateVersion7(), Examiner(), "cat", ["/workspace/working/large.txt"]));
         Assert.True(result.Succeeded);
         Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(result.Output), 0, SandboxLimits.MaxOutputBytes);
+        Assert.True(result.Truncated);
+        Assert.True(result.Succeeded);
+        Assert.Equal(0, result.ExitCode);
     }
 
     private static string[] Leftover(Guid runId)

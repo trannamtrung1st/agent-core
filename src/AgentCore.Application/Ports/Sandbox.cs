@@ -15,7 +15,8 @@ public sealed record SandboxResult(
     int ExitCode,
     string Output,
     Guid? ArtifactId,
-    string SafeMessage);
+    string SafeMessage,
+    bool Truncated = false);
 
 public interface ISandboxExecutor
 {

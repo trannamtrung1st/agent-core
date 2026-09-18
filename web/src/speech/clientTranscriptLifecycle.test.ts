@@ -6,10 +6,11 @@ import type { ClientSpeechEvidence } from "./clientSpeechRecognizer";
 
 function setup() {
   const sent: ClientSpeechEvidence[] = [];
+  const errors: string[] = [];
   const fake = new FakeSpeechRecognizer();
   const transport = createSpeechTransportService(fake);
-  const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
-  return { sent, fake, life };
+  const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), (error) => errors.push(error.code));
+  return { sent, fake, life, errors };
 }
 
 describe("ClientTranscriptLifecycle", () => {
@@ -58,5 +59,15 @@ describe("ClientTranscriptLifecycle", () => {
     await life.reconnect({ attachmentId: "a2", mode: "voice", muted: false });
     expect(sent.length).toBe(previous);
     expect(sent.some((item) => item.kind === "final" && item.text === "old")).toBe(false);
+  });
+
+  it("surfaces recognizer errors and stops listening", async () => {
+    const { fake, life, errors } = setup();
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false });
+    expect(life.isListening()).toBe(true);
+    fake.fail("SpeechPermissionDenied");
+    expect(errors).toEqual(["SpeechPermissionDenied"]);
+    expect(life.isListening()).toBe(false);
+    expect(life.isBlocked()).toBe(true);
   });
 });

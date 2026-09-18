@@ -119,7 +119,7 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [x] Add a frontend ClientSpeechRecognizer port with Browser and fake adapters, plus one speech-transport orchestration service (native recognition objects stay out of Zustand).
 
-- [x] Wire Browser STT into voice mode: capability detection, continuous recognition, interim/final mapping, start/stop/cancel, and bounded unexpected restart.
+- [x] Wire Browser STT into voice mode: capability detection, continuous recognition, native interim/`isFinal` mapping, `onspeechstart`/`onspeechend` utterance bounds, start/stop/cancel, and bounded unexpected native restart.
 
 - [x] Keep the existing local AudioWorklet/VAD boundary path where useful for turn-taking/barge-in, but do not send PCM to backend STT when Browser STT is selected.
 
@@ -139,7 +139,7 @@ Goal: inexpensive Chrome/Edge development/demo speech input that can stream reco
 
 - [x] Support long speech without waiting for a turn-by-turn submit.
 
-  Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, bounded restart, and drops stale partials on reconnect. Voice-mode wiring remains.
+  Frontend accumulator concatenates stable browser-final chunks plus current interim text, coalesces partials, emits exactly one application final per utterance, preserves final-before-ended, bounded restart, and drops stale partials on reconnect. Native `onend` restarts recognition; it is not an utterance boundary. Voice-mode wiring remains. Permission/device/service errors mark recognition inactive and surface the structured speech error.
 
 - [x] Preserve interruption semantics.
 
@@ -159,7 +159,7 @@ Goal: inexpensive speech output without backend TTS cost while preserving the ex
 
 - [x] Add a frontend ClientSpeechSynthesizer port with Browser and fake adapters, voiceURI/name/language/default fallback, and the shared speech-transport service owning output.
 
-- [x] Queue, ACK, and immediately cancel Browser TTS (speechSynthesis playback, conservative offsets, preflight).
+- [x] Queue, ACK, and immediately cancel Browser TTS (`speak()` waits for `utterance.onend`, conservative offsets, transport-specific preflight after `session.ready`).
 
 - [x] Add a server-to-client speech-text segment contract for Browser TTS.
 

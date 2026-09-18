@@ -49,7 +49,7 @@ Local command logs: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/run-2
 | Speech telemetry dimensions | Implemented + deterministic | No transcript/PCM/keys in tags or details |
 | Full key-free CI gate | Deterministically verified | See commands below |
 | HOSTED-04 live non-Synthetic voice | **Unverified** | `AGENTCORE_LIVE_*` unset/0; live facts skipped |
-| Live Web Speech / headset | **Unverified** | CI uses fakes and fake media devices |
+| Live Web Speech / headset | **Unverified** | CI uses fakes and fake media devices; native adapter contracts are unit-tested |
 | OpenAI realtime STT | Not selectable | No-op must not be chosen |
 
 ## Privacy (canonical)
@@ -87,4 +87,4 @@ No new failures versus earlier P1 Playwright (25). Count growth is additional pa
 
 - Implement a real OpenAI realtime transcription session before Adapter=`OpenAI` recognition is selectable.
 - Run HOSTED-04 with explicit `AGENTCORE_LIVE_OPENAI_TTS`/`STT` plus `OPENAI_API_KEY` before claiming hosted live acceptance.
-- Optional headset/Web Speech observations remain manual.
+- Optional headset/Web Speech observations remain manual. Native Web Speech adapter contracts (interim/`isFinal`, utterance bounds, bounded restart, serialized TTS) are covered by Vitest; they do not replace a live headset pass.

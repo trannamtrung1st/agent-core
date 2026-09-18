@@ -157,7 +157,8 @@ public sealed record PublicAgentDescriptor(
     string Name,
     string Role,
     string Description,
-    bool VoiceAvailable);
+    bool VoiceAvailable,
+    string Language = "en");
 
 public sealed record PublicResponseBlock(
     string BlockId,
@@ -347,5 +348,6 @@ public static class PublicHistory
             definition.Identity.Name,
             definition.Identity.Role,
             definition.Identity.Description,
-            voiceAvailable);
+            voiceAvailable,
+            definition.ConversationPolicy.Language);
 }

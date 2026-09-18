@@ -186,6 +186,67 @@ public sealed class SessionRealtimeLifecycleTests
     }
 
     [Fact]
+    public async Task Ready_voice_uses_browser_client_capabilities_for_partials_and_boundaries()
+    {
+        var output = new CapturingSessionOutput();
+        var now = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var created = now.GetUtcNow();
+        var snapshot = new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Voice,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            created,
+            created);
+        var store = new InMemoryMemoryStore();
+        await store.SaveAsync(snapshot, 0);
+        await using var runtime = new SessionRuntime(
+            snapshot,
+            new ScriptedLanguageModel(),
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            output,
+            ids,
+            now,
+            NullLogger<SessionRuntime>.Instance,
+            policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000),
+            voice: new VoiceAvailability
+            {
+                Plan = new EffectiveSpeechPlan(
+                    SpeechTransport.ClientTranscript,
+                    SpeechTransport.ClientSpeech,
+                    RecognitionResolvable: true,
+                    SynthesisResolvable: true,
+                    ClientSpeechCapabilities.Recognition,
+                    ClientSpeechCapabilities.Synthesis)
+            });
+        await runtime.AttachAsync();
+        var ready = Assert.IsType<ReadyOutput>(output.Items.Single(item => item.Payload is ReadyOutput).Payload);
+        Assert.True(ready.Ready.Recognition.PartialTranscripts);
+        Assert.True(ready.Ready.Recognition.SpeechBoundaryEvents);
+        Assert.False(ready.Ready.Recognition.StreamingAudio);
+        Assert.True(ready.Ready.Synthesis.Cancellation);
+        Assert.True(ready.Ready.Synthesis.VoiceSelection);
+        Assert.True(ready.Ready.Synthesis.SpeakingRate);
+        Assert.False(ready.Ready.Synthesis.StreamingAudio);
+        Assert.Equal("en", ready.Ready.Agent.Language);
+        Assert.Contains(
+            RuntimeTelemetry.SnapshotTimeline(),
+            item => item.Stage == "speech.input.capabilities" && item.Detail == "stream=0,partial=1,bound=1,cancel=1");
+    }
+
+    [Fact]
     public async Task Ready_voice_available_for_browser_stt_and_server_audio_tts()
     {
         var output = new CapturingSessionOutput();

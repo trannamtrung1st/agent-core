@@ -558,7 +558,9 @@ function handleEvent(raw: ServerEvent): void {
         segmentIndex: asEventNumber(raw.payload.segmentIndex),
         textStart: asEventNumber(raw.payload.textStart),
         text: String(raw.payload.text ?? ""),
-        voiceHint: typeof raw.payload.voiceHint === "string" ? raw.payload.voiceHint : undefined
+        voiceHint: typeof raw.payload.voiceHint === "string" ? raw.payload.voiceHint : undefined,
+        language: typeof raw.payload.language === "string" ? raw.payload.language : undefined,
+        speakingRate: typeof raw.payload.speakingRate === "number" ? raw.payload.speakingRate : undefined
       });
     } else {
       ensureClientSpeechPlayer().markOutputCompleted(raw.responseId, asEventNumber(raw.payload.textEndExclusive));
@@ -1197,17 +1199,19 @@ function syncCapture(): void {
       }
 
       if (!life.isListening()) {
-        if (!state.attachmentId) {
+        if (life.isBlocked() || !state.attachmentId) {
           publishCaptureLive();
           return;
         }
 
         if (!transcriptStart) {
+          const selected = state.agents.find((item) => item.id === state.selectedAgentId) ?? state.agents[0];
           transcriptStart = life
             .enterVoice({
               attachmentId: state.attachmentId ?? "",
               mode: "voice",
-              muted: false
+              muted: false,
+              language: state.conversationLanguage ?? selected?.language ?? "en"
             })
             .finally(() => {
               transcriptStart = null;
@@ -2835,6 +2839,15 @@ export async function requestVoice(): Promise<void> {
     const epoch = ++voiceEpoch;
     useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
     ensureSpeechAdapters();
+    if (!useSessionStore.getState().sessionId) {
+      const started = await startConversation();
+      if (!started || epoch !== voiceEpoch) {
+        capture.release();
+        useSessionStore.setState({ preflightReady: false });
+        return;
+      }
+    }
+
     try {
       const current = useSessionStore.getState();
       const microphone = current.sttTransport !== "clientTranscript";
@@ -2859,15 +2872,6 @@ export async function requestVoice(): Promise<void> {
       capture.release();
       useSessionStore.setState({ preflightReady: false });
       return;
-    }
-
-    if (!useSessionStore.getState().sessionId) {
-      const started = await startConversation();
-      if (!started || epoch !== voiceEpoch) {
-        capture.release();
-        useSessionStore.setState({ preflightReady: false });
-        return;
-      }
     }
 
     commandSequence += 1;

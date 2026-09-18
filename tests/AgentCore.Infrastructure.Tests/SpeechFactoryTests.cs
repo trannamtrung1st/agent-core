@@ -42,8 +42,15 @@ public sealed class SpeechFactoryTests
         Assert.Equal(SpeechTransport.ClientSpeech, speech.Plan.OutputTransport);
         Assert.True(speech.Plan.RecognitionResolvable);
         Assert.True(speech.Plan.SynthesisResolvable);
-        Assert.Null(speech.Plan.RecognitionCapabilities);
-        Assert.Null(speech.Plan.SynthesisCapabilities);
+        Assert.Equal(ClientSpeechCapabilities.Recognition, speech.Plan.RecognitionCapabilities);
+        Assert.Equal(ClientSpeechCapabilities.Synthesis, speech.Plan.SynthesisCapabilities);
+        Assert.True(speech.Plan.RecognitionCapabilities?.PartialTranscripts);
+        Assert.True(speech.Plan.RecognitionCapabilities?.SpeechBoundaryEvents);
+        Assert.False(speech.Plan.RecognitionCapabilities?.StreamingAudio);
+        Assert.True(speech.Plan.SynthesisCapabilities?.Cancellation);
+        Assert.True(speech.Plan.SynthesisCapabilities?.VoiceSelection);
+        Assert.True(speech.Plan.SynthesisCapabilities?.SpeakingRate);
+        Assert.False(speech.Plan.SynthesisCapabilities?.StreamingAudio);
         Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISpeechRecognizer>());
         Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISpeechSynthesizer>());
     }
@@ -145,6 +152,7 @@ public sealed class SpeechFactoryTests
         Assert.Equal(SpeechTransport.ServerAudio, speech.Plan.OutputTransport);
         Assert.True(speech.Plan.RecognitionResolvable);
         Assert.True(speech.Plan.SynthesisResolvable);
+        Assert.Equal(ClientSpeechCapabilities.Recognition, speech.Plan.RecognitionCapabilities);
         Assert.False(speech.Synthesizer is SyntheticSpeechSynthesizer);
     }
 
@@ -163,6 +171,7 @@ public sealed class SpeechFactoryTests
         Assert.Equal(SpeechTransport.ClientSpeech, speech.Plan.OutputTransport);
         Assert.True(speech.Plan.RecognitionResolvable);
         Assert.True(speech.Plan.SynthesisResolvable);
+        Assert.Equal(ClientSpeechCapabilities.Synthesis, speech.Plan.SynthesisCapabilities);
         Assert.False(speech.Plan.RecognitionCapabilities?.PartialTranscripts);
         Assert.False(speech.Recognizer is OpenAiSpeechRecognizer);
         Assert.False(speech.Recognizer is SyntheticSpeechRecognizer);

@@ -13,6 +13,8 @@ export type ClientSpeechSegment = {
   textStart: number;
   text: string;
   voiceHint?: string;
+  language?: string;
+  speakingRate?: number;
 };
 
 export type ClientSpeechPlayer = {
@@ -61,19 +63,36 @@ export function createClientSpeechPlayer(
       }
 
       busy = true;
-      await synthesizer.speak(
-        { text: next.text, hint: next.voiceHint ? { name: next.voiceHint } : undefined },
-        {
-          onEnd: () => {
-            if (gen !== generation || responseId !== current) {
-              return;
-            }
+      try {
+        await synthesizer.speak(
+          {
+            text: next.text,
+            hint: next.voiceHint ? { name: next.voiceHint, lang: next.language } : next.language ? { lang: next.language } : undefined,
+            language: next.language,
+            speakingRate: next.speakingRate
+          },
+          {
+            onEnd: () => {
+              if (gen !== generation || responseId !== current) {
+                return;
+              }
 
-            trusted = Math.max(trusted, next.textStart + next.text.length);
-            report(current, "progress", trusted);
+              trusted = Math.max(trusted, next.textStart + next.text.length);
+              report(current, "progress", trusted);
+            }
           }
+        );
+      } catch {
+        busy = false;
+        if (gen === generation && current && started && !completedSent) {
+          report(current, "stopped", trusted);
+          recordSpeechObservation({ name: "speech.cancel.reason", reason: "clientCancel" });
+          completedSent = true;
+          responseId = null;
+          started = false;
         }
-      );
+        return;
+      }
       busy = false;
       if (gen !== generation) {
         return;

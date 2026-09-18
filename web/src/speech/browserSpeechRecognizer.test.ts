@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrowserSpeechRecognizer, browserSpeechRecognitionSupported } from "./browserSpeechRecognizer";
+import { createSpeechTransportService } from "./speechTransport";
+import { ClientTranscriptLifecycle } from "./clientTranscriptLifecycle";
+import type { ClientSpeechEvidence } from "./clientSpeechRecognizer";
 
 class MockRecognition {
   continuous = false;
@@ -12,6 +15,8 @@ class MockRecognition {
     resultIndex: number;
     results: ArrayLike<{ isFinal: boolean; 0?: { transcript?: string; confidence?: number } }>;
   }) => void) | null = null;
+  onspeechstart: ((event: Event) => void) | null = null;
+  onspeechend: ((event: Event) => void) | null = null;
   startCalls = 0;
   stopCalls = 0;
   abortCalls = 0;
@@ -32,8 +37,27 @@ class MockRecognition {
   }
 }
 
+function installMock() {
+  const holder: { current: MockRecognition | null; starts: number } = { current: null, starts: 0 };
+  class TrackingRecognition extends MockRecognition {
+    constructor() {
+      super();
+      holder.current = this;
+    }
+
+    override start(): void {
+      holder.starts += 1;
+      super.start();
+    }
+  }
+  vi.stubGlobal("SpeechRecognition", TrackingRecognition);
+  vi.stubGlobal("webkitSpeechRecognition", undefined);
+  return holder;
+}
+
 describe("BrowserSpeechRecognizer", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -52,17 +76,8 @@ describe("BrowserSpeechRecognizer", () => {
     expect(errors).toEqual(["SpeechUnsupported"]);
   });
 
-  it("maps mock recognition events without a speech cloud", async () => {
-    const holder: { current: MockRecognition | null } = { current: null };
-    class TrackingRecognition extends MockRecognition {
-      constructor() {
-        super();
-        holder.current = this;
-      }
-    }
-    vi.stubGlobal("SpeechRecognition", TrackingRecognition);
-    vi.stubGlobal("webkitSpeechRecognition", undefined);
-    expect(browserSpeechRecognitionSupported()).toBe(true);
+  it("maps speech boundaries and native finals without treating session start as an utterance", async () => {
+    const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
     const kinds: string[] = [];
     const texts: string[] = [];
@@ -74,11 +89,15 @@ describe("BrowserSpeechRecognizer", () => {
         }
       },
       onError: () => undefined
-    });
+    }, { language: "en" });
+    expect(holder.current?.lang).toBe("en");
+    expect(kinds).toEqual([]);
+    holder.current?.onspeechstart?.(new Event("speechstart"));
     holder.current?.onresult?.({
       resultIndex: 0,
       results: [{ isFinal: false, 0: { transcript: "hello", confidence: 0.8 } }]
     });
+    holder.current?.onspeechend?.(new Event("speechend"));
     await adapter.stop();
     expect(kinds).toEqual(["started", "partial", "ended"]);
     expect(texts).toEqual(["hello"]);
@@ -86,15 +105,60 @@ describe("BrowserSpeechRecognizer", () => {
     expect(holder.current?.interimResults).toBe(true);
   });
 
-  it("maps not-allowed to SpeechPermissionDenied", async () => {
-    const holder: { current: MockRecognition | null } = { current: null };
-    class TrackingRecognition extends MockRecognition {
-      constructor() {
-        super();
-        holder.current = this;
+  it("emits native finals from every changed result", async () => {
+    const holder = installMock();
+    const adapter = new BrowserSpeechRecognizer();
+    const events: ClientSpeechEvidence[] = [];
+    await adapter.start({
+      onEvidence: (evidence) => events.push(evidence),
+      onError: () => undefined
+    });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "this is" } }]
+    });
+    holder.current?.onresult?.({
+      resultIndex: 1,
+      results: [
+        { isFinal: true, 0: { transcript: "this is" } },
+        { isFinal: true, 0: { transcript: "a long" } }
+      ]
+    });
+    holder.current?.onresult?.({
+      resultIndex: 2,
+      results: [
+        { isFinal: true, 0: { transcript: "this is" } },
+        { isFinal: true, 0: { transcript: "a long" } },
+        { isFinal: false, 0: { transcript: "sentence" } }
+      ]
+    });
+    expect(events.filter((item) => item.kind === "final").map((item) => item.text)).toEqual(["this is", "a long"]);
+    expect(events.filter((item) => item.kind === "partial").map((item) => item.text)).toEqual(["sentence"]);
+  });
+
+  it("restarts after unexpected native onend while still wanted", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const adapter = new BrowserSpeechRecognizer();
+    let recognitionEnded = 0;
+    await adapter.start({
+      onEvidence: () => undefined,
+      onError: () => undefined,
+      onRecognitionEnded: () => {
+        recognitionEnded += 1;
       }
-    }
-    vi.stubGlobal("SpeechRecognition", TrackingRecognition);
+    });
+    expect(holder.starts).toBe(1);
+    holder.current?.onend?.(new Event("end"));
+    expect(recognitionEnded).toBe(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(holder.starts).toBe(2);
+    await adapter.cancel();
+  });
+
+  it("maps not-allowed to SpeechPermissionDenied", async () => {
+    const holder = installMock();
     const adapter = new BrowserSpeechRecognizer();
     const errors: string[] = [];
     const kinds: string[] = [];
@@ -102,8 +166,47 @@ describe("BrowserSpeechRecognizer", () => {
       onEvidence: (evidence) => kinds.push(evidence.kind),
       onError: (error) => errors.push(error.code)
     });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
     holder.current?.onerror?.({ error: "not-allowed" });
     expect(errors).toEqual(["SpeechPermissionDenied"]);
     expect(kinds).toContain("failed");
+  });
+});
+
+describe("Browser STT native finals through the application accumulator", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("concatenates native finals into one application final", async () => {
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: "this is" } }]
+    });
+    holder.current?.onresult?.({
+      resultIndex: 1,
+      results: [
+        { isFinal: true, 0: { transcript: "this is" } },
+        { isFinal: true, 0: { transcript: "a long" } }
+      ]
+    });
+    holder.current?.onresult?.({
+      resultIndex: 2,
+      results: [
+        { isFinal: true, 0: { transcript: "this is" } },
+        { isFinal: true, 0: { transcript: "a long" } },
+        { isFinal: false, 0: { transcript: "sentence" } }
+      ]
+    });
+    holder.current?.onspeechend?.(new Event("speechend"));
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("this is a long sentence");
   });
 });

@@ -5,6 +5,7 @@ export type AgentDescriptor = {
   role: string;
   description: string;
   voiceAvailable: boolean;
+  language?: string;
 };
 
 export type HealthResponse = {

@@ -31,7 +31,7 @@ public sealed record SessionOutput(EventContext Context, Guid? ResponseId,
     OutputPayload Payload);
 public abstract record OutputPayload;
 public sealed record PublicAgentDescriptor(string Id, int Version, string Name,
-    string Role, string Description, bool VoiceAvailable);
+    string Role, string Description, bool VoiceAvailable, string Language = "en");
 public sealed record PublicHistoryEntry(Guid EntryId, long Sequence,
     Guid? SourceEventId, ConversationRole Role, string Text, Guid? ResponseId,
     EntryStatus Status, int HeardTextEndExclusive, int ReceivedTextEndExclusive,

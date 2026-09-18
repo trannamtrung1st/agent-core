@@ -395,7 +395,7 @@ public sealed class SessionToolExecutor(
                 ok = result.Succeeded,
                 exitCode = result.ExitCode,
                 output,
-                truncated,
+                truncated = truncated || result.Truncated,
                 artifactId = result.ArtifactId,
                 message = result.SafeMessage
             }));

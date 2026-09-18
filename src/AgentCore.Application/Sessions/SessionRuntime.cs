@@ -168,7 +168,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
-        _recognition = recognition ?? recognizer?.Capabilities ?? new RecognitionCapabilities(true, true, true, true);
+        _recognition = recognition
+            ?? _voice.EffectivePlan.RecognitionCapabilities
+            ?? recognizer?.Capabilities
+            ?? new RecognitionCapabilities(true, true, true, true);
         _policy = policy ?? new InteractionPolicy();
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         _lastMeaningfulActivityAt = snapshot.LastUserActivityAt ?? snapshot.CreatedAt;

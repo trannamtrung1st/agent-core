@@ -16,6 +16,8 @@ export type SpeechVoice = {
 export type ClientSpeechSpeakRequest = {
   text: string;
   hint?: SpeechVoiceHint;
+  language?: string;
+  speakingRate?: number;
 };
 
 export type ClientSpeechSynthesizerListener = {

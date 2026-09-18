@@ -346,7 +346,9 @@ public sealed partial class SessionRuntime
                 ? _recognition
                 : new RecognitionCapabilities(false, false, false, false),
             voice
-                ? _synthesizer?.Capabilities ?? new SynthesisCapabilities(false, false, false, false, false, [])
+                ? _synthesizer?.Capabilities
+                    ?? _voice.EffectivePlan.SynthesisCapabilities
+                    ?? new SynthesisCapabilities(false, false, false, false, false, [])
                 : new SynthesisCapabilities(false, false, false, false, false, []),
             voice ? _policy.BargeInPolicy : "none",
             _snapshot.Entries.Count == 0 ? 0 : _snapshot.Entries[^1].Sequence,

@@ -2054,7 +2054,8 @@ public static class SessionEventMapper
                 ["name"] = ready.Agent.Name,
                 ["role"] = ready.Agent.Role,
                 ["description"] = ready.Agent.Description,
-                ["voiceAvailable"] = ready.Agent.VoiceAvailable
+                ["voiceAvailable"] = ready.Agent.VoiceAvailable,
+                ["language"] = ready.Agent.Language
             },
             ["streamId"] = ready.StreamId?.ToString(),
             ["audioFormat"] = ready.AudioFormat is { } format

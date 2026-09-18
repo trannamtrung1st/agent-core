@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSpeechSynthesizer } from "./fakeSpeechAdapters";
 import { resolveSpeechVoice } from "./resolveSpeechVoice";
 import { speechError } from "./errors";
@@ -49,12 +49,81 @@ describe("speechTransport output", () => {
 });
 
 describe("BrowserSpeechSynthesizer", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("fails closed when speechSynthesis is missing", async () => {
+    vi.stubGlobal("speechSynthesis", undefined);
+    vi.stubGlobal("SpeechSynthesisUtterance", undefined);
     const adapter = new BrowserSpeechSynthesizer();
     const errors: string[] = [];
     await expect(
       adapter.speak({ text: "x" }, { onError: (error) => errors.push(error.code) })
     ).rejects.toMatchObject({ code: "SpeechSynthesisUnavailable" });
     expect(errors).toEqual(["SpeechSynthesisUnavailable"]);
+  });
+
+  it("resolves speak on utterance end and does not cancel the previous segment", async () => {
+    class MockUtterance {
+      lang = "";
+      rate = 1;
+      voice: SpeechSynthesisVoice | null = null;
+      onend: ((event: Event) => void) | null = null;
+      onerror: ((event: { error?: string }) => void) | null = null;
+      constructor(public text: string) {}
+    }
+    const spoken: MockUtterance[] = [];
+    const cancel = vi.fn();
+    vi.stubGlobal("SpeechSynthesisUtterance", MockUtterance);
+    vi.stubGlobal("speechSynthesis", {
+      getVoices: () => [],
+      speak(utterance: MockUtterance) {
+        spoken.push(utterance);
+      },
+      cancel
+    });
+    const adapter = new BrowserSpeechSynthesizer();
+    const first = adapter.speak({ text: "one", language: "en", speakingRate: 1.25 });
+    expect(spoken).toHaveLength(1);
+    expect(spoken[0]?.lang).toBe("en");
+    expect(spoken[0]?.rate).toBe(1.25);
+    expect(cancel).not.toHaveBeenCalled();
+    spoken[0]?.onend?.(new Event("end"));
+    await first;
+    const second = adapter.speak({ text: "two", language: "en", speakingRate: 1 });
+    expect(spoken).toHaveLength(2);
+    expect(cancel).not.toHaveBeenCalled();
+    spoken[1]?.onend?.(new Event("end"));
+    await second;
+    expect(spoken.map((item) => item.text)).toEqual(["one", "two"]);
+  });
+
+  it("cancels only on explicit cancel", async () => {
+    class MockUtterance {
+      lang = "";
+      rate = 1;
+      voice: SpeechSynthesisVoice | null = null;
+      onend: ((event: Event) => void) | null = null;
+      onerror: ((event: { error?: string }) => void) | null = null;
+      constructor(public text: string) {}
+    }
+    const cancel = vi.fn(() => {
+      spoken[0]?.onerror?.({ error: "interrupted" });
+    });
+    const spoken: MockUtterance[] = [];
+    vi.stubGlobal("SpeechSynthesisUtterance", MockUtterance);
+    vi.stubGlobal("speechSynthesis", {
+      getVoices: () => [],
+      speak(utterance: MockUtterance) {
+        spoken.push(utterance);
+      },
+      cancel
+    });
+    const adapter = new BrowserSpeechSynthesizer();
+    const pending = adapter.speak({ text: "hold" });
+    await adapter.cancel();
+    await pending;
+    expect(cancel).toHaveBeenCalled();
   });
 });

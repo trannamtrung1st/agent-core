@@ -215,6 +215,28 @@ describe("applyServerEvent", () => {
     expect(state.ttsTransport).toBe("serverAudio");
   });
 
+  it("reads session.ready conversation language", () => {
+    const state = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: {
+          mode: "text",
+          pendingMode: null,
+          status: "attached",
+          agent: { name: "Alex", voiceAvailable: true, language: "en" },
+          history: [],
+          capabilities: {
+            stt: { transport: "clientTranscript" },
+            tts: { transport: "clientSpeech" }
+          }
+        }
+      })
+    );
+    expect(state.conversationLanguage).toBe("en");
+  });
+
   it("applies mute from session.state.changed without dropping voice mode", () => {
     const ready = applyServerEvent(
       emptySession(),

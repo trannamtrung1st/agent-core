@@ -24,7 +24,8 @@ public sealed record AgentDescriptorResponse(
     string Name,
     string Role,
     string Description,
-    bool VoiceAvailable);
+    bool VoiceAvailable,
+    string Language = "en");
 
 public sealed record AgentListResponse(IReadOnlyList<AgentDescriptorResponse> Agents);
 

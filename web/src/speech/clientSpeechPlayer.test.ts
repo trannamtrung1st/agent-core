@@ -63,4 +63,18 @@ describe("clientSpeechPlayer", () => {
     expect(snapshotSpeechObservations().some((item) => item.name === "speech.cancel.reason" && item.reason === "clientCancel")).toBe(true);
     expect(JSON.stringify(snapshotSpeechObservations())).not.toContain("unheard");
   });
+
+  it("passes language and speakingRate through to the synthesizer", async () => {
+    const { player, synth } = collect();
+    player.enqueue({
+      responseId: "r1",
+      segmentIndex: 0,
+      textStart: 0,
+      text: "Hello",
+      language: "en",
+      speakingRate: 1.2
+    });
+    await Promise.resolve();
+    expect(synth.spoken[0]).toMatchObject({ text: "Hello", language: "en", speakingRate: 1.2 });
+  });
 });

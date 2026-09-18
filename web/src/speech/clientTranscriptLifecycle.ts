@@ -8,19 +8,23 @@ export type TranscriptLifecycleGate = {
   attachmentId: string;
   mode: "text" | "voice";
   muted: boolean;
+  language?: string;
 };
 
 export class ClientTranscriptLifecycle {
   private epoch = 0;
   private readonly accumulator: ClientTranscriptAccumulator;
   private listening = false;
+  private blocked = false;
   private gate: TranscriptLifecycleGate | null = null;
+  private readonly reportError: (error: SessionErrorView) => void;
 
   constructor(
     private readonly transport: SpeechTransportService,
     emit: (evidence: ClientSpeechEvidence) => void,
     onError: (error: SessionErrorView) => void
   ) {
+    this.reportError = onError;
     this.accumulator = new ClientTranscriptAccumulator(
       emit,
       (error) => {
@@ -39,8 +43,13 @@ export class ClientTranscriptLifecycle {
     return this.listening;
   }
 
+  isBlocked(): boolean {
+    return this.blocked;
+  }
+
   async enterVoice(gate: TranscriptLifecycleGate): Promise<void> {
     this.gate = gate;
+    this.blocked = false;
     this.epoch += 1;
     this.accumulator.beginSession({ ...gate, epoch: this.epoch, mode: "voice", muted: false });
     this.transport.setActiveInputTransport("clientTranscript");
@@ -48,6 +57,7 @@ export class ClientTranscriptLifecycle {
   }
 
   async mute(): Promise<void> {
+    this.listening = false;
     this.accumulator.setGate({
       attachmentId: this.attachment(),
       epoch: this.epoch,
@@ -55,19 +65,20 @@ export class ClientTranscriptLifecycle {
       muted: true
     });
     await this.transport.cancelInput();
-    this.listening = false;
   }
 
   async unmute(attachmentId: string): Promise<void> {
-    this.gate = { attachmentId, mode: "voice", muted: false };
+    this.gate = { attachmentId, mode: "voice", muted: false, language: this.gate?.language };
+    this.blocked = false;
     this.epoch += 1;
     this.accumulator.beginSession({ attachmentId, epoch: this.epoch, mode: "voice", muted: false });
     await this.startListening();
   }
 
   async exitVoice(): Promise<void> {
-    await this.transport.cancelInput();
     this.listening = false;
+    this.blocked = false;
+    await this.transport.cancelInput();
     this.accumulator.beginSession({
       attachmentId: this.attachment(),
       epoch: this.epoch,
@@ -77,8 +88,9 @@ export class ClientTranscriptLifecycle {
   }
 
   async disconnect(): Promise<void> {
-    await this.transport.cancelInput();
     this.listening = false;
+    this.blocked = false;
+    await this.transport.cancelInput();
     this.accumulator.beginSession({
       attachmentId: "",
       epoch: this.epoch + 1,
@@ -89,6 +101,7 @@ export class ClientTranscriptLifecycle {
 
   async reconnect(gate: TranscriptLifecycleGate): Promise<void> {
     this.gate = gate;
+    this.blocked = false;
     this.epoch += 1;
     this.accumulator.beginSession({ ...gate, epoch: this.epoch, mode: "voice", muted: false });
     await this.startListening();
@@ -122,6 +135,22 @@ export class ClientTranscriptLifecycle {
     return this.gate?.attachmentId ?? "";
   }
 
+  private shouldListen(): boolean {
+    return this.listening && this.gate?.mode === "voice" && this.gate.muted === false;
+  }
+
+  private async handleRecognitionEnded(): Promise<void> {
+    if (!this.shouldListen()) {
+      return;
+    }
+
+    if (this.accumulator.hasOpenUtterance() && !this.accumulator.unexpectedRestart()) {
+      this.listening = false;
+      this.blocked = true;
+      await this.transport.cancelInput();
+    }
+  }
+
   private async startListening(): Promise<void> {
     if (this.listening) {
       return;
@@ -129,7 +158,16 @@ export class ClientTranscriptLifecycle {
 
     await this.transport.startInput({
       onEvidence: (evidence) => this.ingest(evidence, this.epoch),
-      onError: () => undefined
+      onError: (error) => {
+        this.listening = false;
+        this.blocked = true;
+        this.accumulator.fail();
+        this.reportError(error);
+      },
+      onRecognitionEnded: () => {
+        void this.handleRecognitionEnded();
+      },
+      language: this.gate?.language
     });
     this.listening = true;
   }
