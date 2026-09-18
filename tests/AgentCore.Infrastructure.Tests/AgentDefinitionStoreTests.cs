@@ -16,8 +16,11 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal("Alex", examiner!.Identity.Name);
         var support = await store.GetAsync("customer-support", 1);
         var compliance = await store.GetAsync("compliance", 1);
+        var general = await store.GetAsync("general-assistant", 1);
         Assert.NotNull(support);
         Assert.NotNull(compliance);
+        Assert.NotNull(general);
+        Assert.Equal("Riley", general!.Identity.Name);
         Assert.Equal(1, examiner.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support.InitiativePolicy.MaxPerSilencePeriod);

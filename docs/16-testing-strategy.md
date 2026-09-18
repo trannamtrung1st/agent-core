@@ -10,6 +10,8 @@ Default verification is fully offline and deterministic: Synthetic/scripted adap
 
 OpenRouter live smoke, when opted in, may use `openrouter/free`. Do not use that router as the Real/demo DefaultModel. Do not assert catalog quality, exact phrasing or structured-output correctness. OpenAI STT/TTS live integration and manual headset/speaker verification may wait until `OPENAI_API_KEY` is supplied; missing that key must not fail normal build/test. Prioritize verifying the text-conversation path with Synthetic and, optionally, OpenRouter.
 
+For manual Real-profile checks of **display versus speech** (for example long on-screen prose with a short spoken summary), prefer the `general-assistant` definition so role-specific goals do not fight the harness contract. Role agents (examiner, customer support, compliance) remain the right fixtures for identity and workflow demos, not for isolating `[[speech:]]` adherence.
+
 ## Runtime evidence for development and review
 
 Frontend and backend behavior changes should be verified by executing a representative affected use case when the environment supports it, alongside applicable unit/build and milestone gates. Behavior reviews should also reproduce or exercise the relevant path where practical. Frontend verification interacts with the running Synthetic app and observes the resulting UI state; backend verification uses an integration fixture or a local Synthetic host to assert observable outputs and relevant state effects. Cover a relevant failure/recovery or boundary case when the changed behavior warrants it. An existing scenario suffices if it exercises the change; add or extend regression coverage when a behavior change lacks it.

@@ -13,7 +13,7 @@ P0 conversation/UI stabilization is a frozen baseline unless a real regression a
 - [ ] Multilang STT/TTS support. [TBD]
 - [ ] Task/goal/stop condition for agent session? configurable, some agent/session is ongoing, some has a specific goal/task, some has a stop condition [TBD]
 - [ ] Show intermediate message then conclude final message like chatgpt or codex? [TBD]
-- [ ] Structured output (JSON, markdown, etc.) [TBD]
+- [ ] **Model response envelope (display vs speech).** Replace free-form `[[speech:]]` inline markers with a validated structured generation contract (`displayText`, optional `speechText`, `blocks`). Runtime owns validation, fallback, segmentation, and delivery; the model owns what to show versus hear. Do not close this with more `SpokenOutput` heuristics. Use `general-assistant` (not Sam/Alex) for manual hosted display/speech probes. [P1+ / post-stabilization]
 - [ ] Lazy load old chat history
 
 
