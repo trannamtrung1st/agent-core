@@ -77,7 +77,9 @@ describe("session route navigation", () => {
         }
       ],
       nextAfter: 1,
-      hasMore: false
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
     });
     window.history.replaceState(null, "", `/c/${endedId}`);
     useSessionStore.setState({
@@ -154,7 +156,7 @@ describe("session route navigation", () => {
     expect(useSessionStore.getState().error).toBeNull();
   });
 
-  it("loads full ended history beyond fifty entries across pages", async () => {
+  it("opens ended history on the newest page only", async () => {
     const makeEntry = (sequence: number, text: string) => ({
       entryId: `e${sequence}`,
       sequence,
@@ -168,8 +170,7 @@ describe("session route navigation", () => {
       receivedTextEndExclusive: text.length,
       createdAt: "2026-01-01T00:00:00Z"
     });
-    const firstPage = Array.from({ length: 50 }, (_, index) => makeEntry(index + 1, `Message ${index + 1}`));
-    const secondPage = Array.from({ length: 12 }, (_, index) => makeEntry(index + 51, `Message ${index + 51}`));
+    const newest = Array.from({ length: 50 }, (_, index) => makeEntry(index + 13, `Message ${index + 13}`));
 
     vi.mocked(getSession).mockResolvedValue({
       sessionId: endedId,
@@ -180,27 +181,25 @@ describe("session route navigation", () => {
       status: "ended",
       lastEntrySequence: 62
     });
-    vi.mocked(listSessionMessages)
-      .mockResolvedValueOnce({
-        items: firstPage,
-        nextAfter: 50,
-        hasMore: true
-      })
-      .mockResolvedValueOnce({
-        items: secondPage,
-        nextAfter: 62,
-        hasMore: false
-      });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: newest,
+      nextAfter: 62,
+      hasMore: false,
+      hasOlder: true,
+      nextBefore: 13
+    });
 
     await applyRouteFromLocation();
 
-    expect(listSessionMessages).toHaveBeenCalledTimes(2);
-    expect(useSessionStore.getState().entries).toHaveLength(62);
-    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 1");
-    expect(useSessionStore.getState().entries[61]?.text).toBe("Message 62");
+    expect(listSessionMessages).toHaveBeenCalledTimes(1);
+    expect(listSessionMessages).toHaveBeenCalledWith(endedId, expect.objectContaining({ limit: 50 }));
+    expect(useSessionStore.getState().entries).toHaveLength(50);
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 13");
+    expect(useSessionStore.getState().entries[49]?.text).toBe("Message 62");
+    expect(useSessionStore.getState().historyHasOlder).toBe(true);
   });
 
-  it("loads all ended history pages before rendering read-only transcript", async () => {
+  it("does not walk forward pages when opening a long ended transcript", async () => {
     vi.mocked(getSession).mockResolvedValue({
       sessionId: endedId,
       agentId: "examiner",
@@ -210,23 +209,36 @@ describe("session route navigation", () => {
       status: "ended",
       lastEntrySequence: 120
     });
-    vi.mocked(listSessionMessages)
-      .mockResolvedValueOnce({
-        items: [{ entryId: "e1", sequence: 1, sourceEventId: "e1", role: "user", text: "First", responseId: null, status: "completed", deliveryMode: "text", heardTextEndExclusive: 5, receivedTextEndExclusive: 5, createdAt: "2026-01-01T00:00:00Z" }],
-        nextAfter: 50,
-        hasMore: true
-      })
-      .mockResolvedValueOnce({
-        items: [{ entryId: "e2", sequence: 120, sourceEventId: "e2", role: "assistant", text: "Last", responseId: "r1", status: "completed", deliveryMode: "text", heardTextEndExclusive: 4, receivedTextEndExclusive: 4, createdAt: "2026-01-02T00:00:00Z" }],
-        nextAfter: 120,
-        hasMore: false
-      });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [{
+        entryId: "e2",
+        sequence: 120,
+        sourceEventId: "e2",
+        role: "assistant",
+        text: "Last",
+        responseId: "r1",
+        status: "completed",
+        deliveryMode: "text",
+        heardTextEndExclusive: 4,
+        receivedTextEndExclusive: 4,
+        createdAt: "2026-01-02T00:00:00Z"
+      }],
+      nextAfter: 120,
+      hasMore: false,
+      hasOlder: true,
+      nextBefore: 71
+    });
 
     await applyRouteFromLocation();
 
-    expect(listSessionMessages).toHaveBeenNthCalledWith(1, endedId, 0, 50);
-    expect(listSessionMessages).toHaveBeenNthCalledWith(2, endedId, 50, 50);
-    expect(useSessionStore.getState().entries.map((entry) => entry.text)).toEqual(["First", "Last"]);
+    expect(listSessionMessages).toHaveBeenCalledTimes(1);
+    expect(listSessionMessages).toHaveBeenCalledWith(
+      endedId,
+      expect.objectContaining({ limit: 50 })
+    );
+    expect(vi.mocked(listSessionMessages).mock.calls[0]?.[1]).not.toHaveProperty("after");
+    expect(useSessionStore.getState().entries.map((entry) => entry.text)).toEqual(["Last"]);
+    expect(useSessionStore.getState().historyHasOlder).toBe(true);
   });
 
   it("opens paused catalog sessions without reopening the runtime", async () => {
@@ -258,7 +270,9 @@ describe("session route navigation", () => {
         }
       ],
       nextAfter: 1,
-      hasMore: false
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
     });
 
     const result = await openCatalogSession(

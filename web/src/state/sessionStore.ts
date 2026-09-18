@@ -96,6 +96,8 @@ export type SessionView = {
   voicePlaybackResponseId: string | null;
   pauseReason: string | null;
   liveUserTranscript: string | null;
+  historyHasOlder: boolean;
+  historyOlderLoading: boolean;
 };
 
 export const emptySession = (): SessionView => ({
@@ -132,7 +134,9 @@ export const emptySession = (): SessionView => ({
   voiceInputHeldForAgentOutput: false,
   voicePlaybackResponseId: null,
   pauseReason: null,
-  liveUserTranscript: null
+  liveUserTranscript: null,
+  historyHasOlder: false,
+  historyOlderLoading: false
 });
 
 function asString(value: unknown): string {
@@ -317,7 +321,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         errorHoldSequence: 0,
         preflightReady: false,
         voicePlaybackResponseId: null,
-        liveUserTranscript: null
+        liveUserTranscript: null,
+        historyHasOlder: false,
+        historyOlderLoading: false
       };
     }
     case "agent.response.started": {

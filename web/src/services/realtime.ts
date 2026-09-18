@@ -2,10 +2,11 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microso
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, historyFromPayload, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
+import { applyServerEvent, emptySession, hasControlSequenceGap, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listSessionMessages, reopenSession, type HistoryPage } from "./api";
+import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, reopenSession } from "./api";
+import { loadNewestHistoryPage, loadOlderHistoryPage, beginSessionHistory } from "./sessionHistory";
 import {
   abortPendingAttachment,
   listAttachments,
@@ -725,7 +726,9 @@ function handleEvent(raw: ServerEvent): void {
     bindSpeechTransports();
     reconcilePendingUserText(next.entries);
     void hydrateBoundAttachments(next.sessionId);
-    void hydrateActiveHistory(next.sessionId, next.entries);
+    if (next.sessionId) {
+      void loadNewestHistoryPage(next.sessionId, { replaceWindow: true });
+    }
     if (String(raw.payload?.mode ?? "") === "voice" && voiceReadyDowngradeOnNextReady) {
       downgradePassiveVoiceAttach();
     }
@@ -1816,6 +1819,7 @@ export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "pus
   voiceEpoch += 1;
   voiceModeRequested = false;
   clientTranscriptHeldForAgent = false;
+  beginSessionHistory();
   await stopConnection();
   stopReceipts();
   capture.release();
@@ -1987,67 +1991,8 @@ export async function retryConnection(): Promise<void> {
   await startConnection(snapshot.sessionId);
 }
 
-const ENDED_HISTORY_PAGE_SIZE = 50;
-
-function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryEntry[]): HistoryEntry[] {
-  const byId = new Map<string, HistoryEntry>();
-  for (const entry of [...incoming, ...existing]) {
-    byId.set(entry.entryId, entry);
-  }
-
-  return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
-}
-
-async function hydrateActiveHistory(sessionId: string | null, bootstrap: HistoryEntry[]): Promise<void> {
-  if (!sessionId || bootstrap.length === 0) {
-    return;
-  }
-
-  const firstSeq = bootstrap[0]?.sequence ?? 1;
-  if (firstSeq <= 1) {
-    return;
-  }
-
-  let after = 0;
-  let prefix: HistoryEntry[] = [];
-  for (;;) {
-    const page = await listSessionMessages(sessionId, after, ENDED_HISTORY_PAGE_SIZE);
-    const chunk = historyFromPayload(page.items);
-    prefix = mergeHistoryEntries(prefix, chunk.filter((entry) => entry.sequence < firstSeq));
-    const highestFetched = prefix.reduce((max, entry) => Math.max(max, entry.sequence), 0);
-    if (!page.hasMore || highestFetched >= firstSeq - 1) {
-      break;
-    }
-
-    after = page.nextAfter;
-  }
-
-  if (prefix.length === 0) {
-    return;
-  }
-
-  const latest = useSessionStore.getState();
-  if (!sameSessionId(latest.sessionId, sessionId)) {
-    return;
-  }
-
-  useSessionStore.setState({
-    entries: mergeHistoryEntries(prefix, latest.entries)
-  });
-}
-
-async function loadAllSessionHistory(sessionId: string): Promise<HistoryPage["items"]> {
-  const items: HistoryPage["items"] = [];
-  let after = 0;
-  for (;;) {
-    const page = await listSessionMessages(sessionId, after, ENDED_HISTORY_PAGE_SIZE);
-    items.push(...page.items);
-    if (!page.hasMore) {
-      return items;
-    }
-
-    after = page.nextAfter;
-  }
+export async function loadOlderHistory(): Promise<void> {
+  await loadOlderHistoryPage();
 }
 
 async function showPausedSession(
@@ -2094,7 +2039,6 @@ async function showPausedSession(
       return showEndedSession(sessionId, options);
     }
 
-    const historyItems = await loadAllSessionHistory(sessionId);
     const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
       ?? agents.find((row) => row.id === view.agentId);
     const latest = useSessionStore.getState();
@@ -2109,11 +2053,11 @@ async function showPausedSession(
       voiceAvailable: Boolean(agent?.voiceAvailable),
       status: "paused",
       pauseReason: view.pauseReason ?? null,
-      entries: historyFromPayload(historyItems),
       lastServerSequence: view.lastEntrySequence ?? 0,
       error: null,
       errorFatal: false
     });
+    await loadNewestHistoryPage(sessionId, { replaceWindow: true });
     await refreshCatalog(true);
     return "paused";
   } catch (error) {
@@ -2181,7 +2125,6 @@ async function showEndedSession(
       return useSessionStore.getState().connection === "ready" ? "ready" : "failed";
     }
 
-    const historyItems = await loadAllSessionHistory(sessionId);
     const agent = agents.find((row) => row.id === view.agentId && row.version === view.agentVersion)
       ?? agents.find((row) => row.id === view.agentId);
     const latest = useSessionStore.getState();
@@ -2196,11 +2139,11 @@ async function showEndedSession(
       agentRole: agent?.role ?? "",
       voiceAvailable: false,
       status: "ended",
-      entries: historyFromPayload(historyItems),
       lastServerSequence: view.lastEntrySequence ?? 0,
       error: null,
       errorFatal: false
     });
+    await loadNewestHistoryPage(sessionId, { replaceWindow: true });
     void hydrateBoundAttachments(sessionId);
     await refreshCatalog(true);
     return "ended";
@@ -2240,7 +2183,6 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
       return;
     }
 
-    const historyItems = await loadAllSessionHistory(sessionId);
     const latest = useSessionStore.getState();
     if (!sameSessionId(latest.sessionId, sessionId) || latest.status !== "ended") {
       return;
@@ -2252,16 +2194,15 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
       return;
     }
 
-    const nextEntries = historyFromPayload(historyItems);
-    if (sequence === latest.lastServerSequence && nextEntries.length < latest.entries.length) {
+    await loadNewestHistoryPage(sessionId, { replaceWindow: false });
+    const afterLoad = useSessionStore.getState();
+    if (sequence === afterLoad.lastServerSequence && afterLoad.entries.length < latest.entries.length) {
+      useSessionStore.setState({ entries: latest.entries });
       void hydrateBoundAttachments(sessionId);
       return;
     }
 
-    useSessionStore.setState({
-      entries: nextEntries,
-      lastServerSequence: sequence
-    });
+    useSessionStore.setState({ lastServerSequence: sequence });
     void hydrateBoundAttachments(sessionId);
   } catch {
     // Keep the in-memory transcript if durable history cannot be refreshed.
@@ -3322,6 +3263,8 @@ export async function hangUp(): Promise<void> {
     status: "ended",
     entries: latest.entries,
     lastServerSequence: latest.lastServerSequence,
+    historyHasOlder: latest.historyHasOlder,
+    historyOlderLoading: false,
     routeNotice: null
   });
   void refreshCatalog(true);

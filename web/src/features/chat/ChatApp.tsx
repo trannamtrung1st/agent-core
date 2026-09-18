@@ -12,6 +12,7 @@ import {
   composerSendLabel,
   composerStopEnabled,
   hangUp,
+  loadOlderHistory,
   openCatalogSession,
   reportCommittedEntries,
   requestVoice,
@@ -250,6 +251,9 @@ export function ChatApp() {
                     activity={inSession ? activity : { kind: "idle" }}
                     voiceAvailable={voiceAvailable}
                     sttTransport={state.sttTransport}
+                    hasOlder={state.historyHasOlder}
+                    olderLoading={state.historyOlderLoading}
+                    onLoadOlder={() => void loadOlderHistory()}
                     empty={
                       inSession ? undefined : (
                         <div className="new-chat-intro">

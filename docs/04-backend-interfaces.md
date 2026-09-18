@@ -258,7 +258,7 @@ SessionSnapshot/UserProfile fields and atomic save semantics are specified in [P
 
 **Observed history load:** `LoadMetadataAsync` returns session/snapshot coordinates without conversation rows. `LoadAsync` restores a bounded runtime window (prompt keep plus the complete trailing unresolved user suffix and any streaming rows). `ReadHistoryPageAsync` serves newest/`before`/`after` pages from durable rows (`before`+`after` rejected at SessionManager). `LastEntrySequence` is stored on the snapshot and must not be derived from a window's last in-memory entry. Bounded `SaveAsync` upserts supplied entries and does not delete or renumber older `ConversationEntries` rows.
 
-**Follow-on P1 planned until verified:** frontend Load earlier messages. Speech locale/voice support is evaluated on speech abstractions/adapters, not with Browser/OpenAI branches in SessionRuntime. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+**Follow-on P1 planned until verified:** Speech locale/voice support is evaluated on speech abstractions/adapters, not with Browser/OpenAI branches in SessionRuntime. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
 
 Environment data enters Application only through this narrow ingress. It is not a message bus and is not a public HTTP `/events` endpoint:
 

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Empty, Flex, Typography } from "antd";
+import { Button, Empty, Flex, Typography } from "antd";
 import type { HistoryEntry } from "../../state/sessionStore";
 import { AgentActivity } from "./AgentActivity";
 import type { AgentActivityState } from "./activityState";
@@ -16,7 +16,10 @@ export function Conversation({
   activity,
   voiceAvailable = true,
   sttTransport = null,
-  empty
+  empty,
+  hasOlder = false,
+  olderLoading = false,
+  onLoadOlder
 }: {
   agentName: string;
   sessionId: string | null;
@@ -26,6 +29,9 @@ export function Conversation({
   voiceAvailable?: boolean;
   sttTransport?: "serverAudio" | "clientTranscript" | null;
   empty?: ReactNode;
+  hasOlder?: boolean;
+  olderLoading?: boolean;
+  onLoadOlder?: () => void;
 }) {
   const windowRef = useRef<HTMLElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -38,11 +44,17 @@ export function Conversation({
     : entries;
   const lastUserIndex = lastUserEntryIndex(visibleEntries);
   const lastUserId = lastUserIndex >= 0 ? visibleEntries[lastUserIndex]?.entryId ?? null : null;
-  const firstEntryId = visibleEntries[0]?.entryId ?? null;
+  const lastEntryId = visibleEntries.at(-1)?.entryId ?? null;
+  const oldestEntryId = visibleEntries[0]?.entryId ?? null;
   const scrollAnchorKey =
     visibleEntries.length === 0
       ? null
-      : `${sessionId ?? ""}:${firstEntryId ?? ""}:${lastUserId ?? ""}`;
+      : `${sessionId ?? ""}:${lastUserId ?? ""}:${lastEntryId ?? ""}`;
+  const sessionRef = useRef<string | null>(null);
+  const oldestRef = useRef<string | null>(null);
+  const lastEntryRef = useRef<string | null>(null);
+  const scrollHeightRef = useRef(0);
+  const scrollTopRef = useRef(0);
 
   useLayoutEffect(() => {
     const root = windowRef.current;
@@ -51,6 +63,9 @@ export function Conversation({
     if (!root || !scroll || scrollAnchorKey == null) {
       scrolledFor.current = null;
       setReplySpace(0);
+      sessionRef.current = sessionId;
+      oldestRef.current = oldestEntryId;
+      lastEntryRef.current = lastEntryId;
       return;
     }
 
@@ -69,66 +84,91 @@ export function Conversation({
       return true;
     };
 
-    const maybeScrollToLatest = (): void => {
-      if (scrolledFor.current === scrollAnchorKey) {
-        return;
-      }
+    const sessionChanged = sessionRef.current !== sessionId;
+    const prepended = !sessionChanged
+      && oldestEntryId != null
+      && oldestEntryId !== oldestRef.current
+      && lastEntryId === lastEntryRef.current;
+    const appended = !sessionChanged && lastEntryId !== lastEntryRef.current;
 
-      if (scrollToLatest()) {
-        scrolledFor.current = scrollAnchorKey;
-      }
-    };
+    if (prepended) {
+      const delta = scroll.scrollHeight - scrollHeightRef.current;
+      scroll.scrollTop = scrollTopRef.current + delta;
+      scrolledFor.current = scrollAnchorKey;
+    } else {
+      const maybeScrollToLatest = (): void => {
+        if (!sessionChanged && !appended && scrolledFor.current === scrollAnchorKey) {
+          return;
+        }
 
-    const measure = (): HTMLElement | null => {
-      const scrollHeight = scroll.clientHeight;
-      if (scrollHeight <= 0) {
-        setReplySpace(0);
-        return null;
-      }
+        if (scrollToLatest()) {
+          scrolledFor.current = scrollAnchorKey;
+        }
+      };
 
-      const anchor = root.querySelector<HTMLElement>("[data-turn-anchor='true']");
-      if (!anchor) {
-        setReplySpace(0);
-        return null;
-      }
+      const measure = (): HTMLElement | null => {
+        const scrollHeight = scroll.clientHeight;
+        if (scrollHeight <= 0) {
+          setReplySpace(0);
+          return null;
+        }
 
-      const paddingBottom = Number.parseFloat(getComputedStyle(root).paddingBottom);
-      const padding = Number.isFinite(paddingBottom) ? paddingBottom : 0;
-      const rootBox = root.getBoundingClientRect();
-      const anchorBox = anchor.getBoundingClientRect();
-      const spacerHeight = spacer?.getBoundingClientRect().height ?? 0;
-      const safeSpacerHeight = Number.isFinite(spacerHeight) ? spacerHeight : 0;
+        const anchor = root.querySelector<HTMLElement>("[data-turn-anchor='true']");
+        if (!anchor) {
+          setReplySpace(0);
+          return null;
+        }
 
-      if (!Number.isFinite(rootBox.bottom) || !Number.isFinite(anchorBox.bottom)) {
-        setReplySpace(0);
+        const paddingBottom = Number.parseFloat(getComputedStyle(root).paddingBottom);
+        const padding = Number.isFinite(paddingBottom) ? paddingBottom : 0;
+        const rootBox = root.getBoundingClientRect();
+        const anchorBox = anchor.getBoundingClientRect();
+        const spacerHeight = spacer?.getBoundingClientRect().height ?? 0;
+        const safeSpacerHeight = Number.isFinite(spacerHeight) ? spacerHeight : 0;
+
+        if (!Number.isFinite(rootBox.bottom) || !Number.isFinite(anchorBox.bottom)) {
+          setReplySpace(0);
+          return anchor;
+        }
+
+        const below = rootBox.bottom - padding - anchorBox.bottom;
+        const following = Math.max(0, (Number.isFinite(below) ? below : 0) - safeSpacerHeight);
+        const budget = scrollHeight * REPLY_SPACE_RATIO;
+        const raw = budget - following;
+        const next = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+        setReplySpace((current) => (current === next ? current : next));
         return anchor;
-      }
+      };
 
-      const below = rootBox.bottom - padding - anchorBox.bottom;
-      const following = Math.max(0, (Number.isFinite(below) ? below : 0) - safeSpacerHeight);
-      const budget = scrollHeight * REPLY_SPACE_RATIO;
-      const raw = budget - following;
-      const next = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
-      setReplySpace((current) => (current === next ? current : next));
-      return anchor;
-    };
+      const runMeasure = (): void => {
+        measure();
+        maybeScrollToLatest();
+      };
 
-    const runMeasure = (): void => {
-      measure();
-      maybeScrollToLatest();
-    };
+      runMeasure();
 
-    runMeasure();
+      const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(runMeasure);
+      observer?.observe(scroll);
+      observer?.observe(root);
+      window.addEventListener("resize", runMeasure);
+      sessionRef.current = sessionId;
+      oldestRef.current = oldestEntryId;
+      lastEntryRef.current = lastEntryId;
+      scrollHeightRef.current = scroll.scrollHeight;
+      scrollTopRef.current = scroll.scrollTop;
+      return () => {
+        observer?.disconnect();
+        window.removeEventListener("resize", runMeasure);
+      };
+    }
 
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(runMeasure);
-    observer?.observe(scroll);
-    observer?.observe(root);
-    window.addEventListener("resize", runMeasure);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", runMeasure);
-    };
-  }, [activity, entries, lastUserId, firstEntryId, liveUserTranscript, scrollAnchorKey, sessionId]);
+    sessionRef.current = sessionId;
+    oldestRef.current = oldestEntryId;
+    lastEntryRef.current = lastEntryId;
+    scrollHeightRef.current = scroll.scrollHeight;
+    scrollTopRef.current = scroll.scrollTop;
+    return undefined;
+  }, [activity, entries, lastUserId, lastEntryId, oldestEntryId, liveUserTranscript, scrollAnchorKey, sessionId]);
 
   const safeReplySpace = Number.isFinite(replySpace) ? Math.max(0, replySpace) : 0;
   const emptyHint = voiceAvailable
@@ -139,6 +179,20 @@ export function Conversation({
 
   return (
     <section ref={windowRef} className="conversation-window" aria-label="Conversation">
+      {hasOlder || olderLoading ? (
+        <Flex justify="center" className="conversation-history-pager">
+          <Button
+            size="small"
+            htmlType="button"
+            loading={olderLoading}
+            disabled={olderLoading || !hasOlder}
+            aria-label="Load earlier messages"
+            onClick={() => onLoadOlder?.()}
+          >
+            Load earlier messages
+          </Button>
+        </Flex>
+      ) : null}
       <ol className="conversation-list">
         {entries.length === 0 ? (
           <li className="chat-message chat-message-empty">

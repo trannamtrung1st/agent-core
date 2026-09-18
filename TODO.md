@@ -52,9 +52,9 @@ Authoritative contracts for this follow-on work are in [Technology Decisions](do
 
 The current durable history works, but loading the whole conversation does not scale. Evolve `IMemoryStore` (no repository framework). `LastEntrySequence` is durable and independent of the in-memory `Entries` window. Bounded saves retain older rows.
 
-- [ ] Add paginated/cursor-based history reads.
+- [x] Add paginated/cursor-based history reads.
 
-  HTTP newest/`before`/`after` paging (P1A-2) is implemented with `hasOlder`/`nextBefore`. Remaining frontend:
+  HTTP newest/`before`/`after` paging (P1A-2) is implemented with `hasOlder`/`nextBefore`. Frontend (P1A-3):
   - newest page is enough to open/reopen a session;
   - older pages can be requested explicitly (`before`); existing `after` remains;
   - `before`+`after` is rejected;
@@ -63,7 +63,7 @@ The current durable history works, but loading the whole conversation does not s
   - attachment, artifact, rich-block, `SpeechText`, interrupted/failed status, and entry identity survive pagination;
   - ended read-only sessions use the same history contract.
 
-- [ ] Add frontend "Load earlier messages" behavior.
+- [x] Add frontend "Load earlier messages" behavior.
 
   Requirements:
   - preserve visual scroll position when older entries are prepended;
@@ -72,7 +72,7 @@ The current durable history works, but loading the whole conversation does not s
   - session switch/reconnect cancels stale page requests;
   - one controller owns history merge/dedup.
 
-- [ ] Add deterministic API/frontend/Playwright coverage for long histories.
+- [x] Add deterministic API/frontend/Playwright coverage for long histories.
 
 ### P1B — Session purpose, completion, and termination policy
 

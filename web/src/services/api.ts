@@ -29,6 +29,15 @@ export type HistoryPage = {
   items: unknown[];
   nextAfter: number;
   hasMore: boolean;
+  hasOlder?: boolean;
+  nextBefore?: number | null;
+};
+
+export type SessionHistoryQuery = {
+  after?: number;
+  before?: number;
+  limit?: number;
+  signal?: AbortSignal;
 };
 
 export type CatalogItem = {
@@ -234,11 +243,19 @@ export async function getSession(sessionId: string): Promise<SessionResponse> {
 
 export async function listSessionMessages(
   sessionId: string,
-  after = 0,
-  limit = 50
+  query: SessionHistoryQuery = {}
 ): Promise<HistoryPage> {
-  const params = new URLSearchParams({ after: String(after), limit: String(limit) });
-  const response = await ownerFetch(`/api/v1/sessions/${sessionId}/messages?${params}`);
+  const params = new URLSearchParams();
+  if (query.after != null) {
+    params.set("after", String(query.after));
+  }
+  if (query.before != null) {
+    params.set("before", String(query.before));
+  }
+  params.set("limit", String(query.limit ?? 50));
+  const response = await ownerFetch(`/api/v1/sessions/${sessionId}/messages?${params}`, {
+    signal: query.signal
+  });
   if (!response.ok) {
     throw new Error("Unable to load the conversation.");
   }

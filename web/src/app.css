@@ -247,6 +247,10 @@ body,
   padding-block: var(--ac-space-section);
 }
 
+.conversation-history-pager {
+  flex: 0 0 auto;
+}
+
 .conversation-list {
   list-style: none;
   margin: 0;

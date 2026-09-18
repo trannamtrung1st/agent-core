@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { HistoryEntry } from "../../state/sessionStore";
 import { Conversation } from "./Conversation";
@@ -368,7 +368,7 @@ describe("Conversation", () => {
     expect(items[2]).toHaveAttribute("data-turn-anchor", "true");
   });
 
-  it("re-scrolls when older history is prepended after the initial render", () => {
+  it("preserves scrollTop when older history is prepended", () => {
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
     const clientHeight = vi.spyOn(Element.prototype, "clientHeight", "get");
@@ -401,12 +401,47 @@ describe("Conversation", () => {
       ...initial
     ];
 
-    const { rerender } = render(<ScrollShell entries={initial} />);
+    const { rerender, container } = render(<ScrollShell entries={initial} />);
     expect(scrollIntoView).toHaveBeenCalled();
-
+    const scroller = container.querySelector(".conversation-scroll") as HTMLElement;
+    let height = 800;
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => height });
+    scroller.scrollTop = 120;
+    rerender(<ScrollShell entries={initial} />);
     scrollIntoView.mockClear();
+    height = 1400;
     rerender(<ScrollShell entries={hydrated} />);
-    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(scroller.scrollTop).toBe(720);
     clientHeight.mockRestore();
+  });
+
+  it("shows Load earlier messages for active, paused, and terminal transcripts", () => {
+    const onLoadOlder = vi.fn();
+    const { rerender } = render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "u1", role: "user", text: "Hi" })]}
+        activity={{ kind: "idle" }}
+        hasOlder
+        onLoadOlder={onLoadOlder}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier messages" }));
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "u1", role: "user", text: "Hi" })]}
+        activity={{ kind: "idle" }}
+        hasOlder
+        olderLoading
+        onLoadOlder={onLoadOlder}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Load earlier messages" })).toBeDisabled();
   });
 });

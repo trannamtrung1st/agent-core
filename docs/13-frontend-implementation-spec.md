@@ -87,7 +87,7 @@ The Sessions rail is `UpdatedAt` descending with cursor **Load more**, an empty 
 
 ## Follow-on P1 planned until verified
 
-Observed history is the reconnect snapshot plus `after`/`limit` pages; Ended rows already use the same GET session/messages contract read-only. Planned: open on the newest page; one explicit Load earlier messages control; merge/dedup by stable identity/sequence; preserve scroll anchor on prepend; cancel stale page requests on session switch/reconnect; one controller owns history. Generation-in-progress and live appends stay correctly ordered against older pages. Minimal terminal UI for Completed/Expired/Cancelled comes after the lifecycle contract is stable; do not build a workflow editor. Speech locale override/fallback presentation must not hide text chat when Voice is unavailable. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+Observed history is the reconnect restore window plus one newest GET `/messages?limit=` page (`hasOlder` / `nextBefore`). Active, paused, and terminal sessions share that page. **Load earlier messages** requests `before` pages, merges by entry identity/sequence, preserves the scroll anchor on prepend, and ignores stale pages after session switch or reconnect. Generation-in-progress and live appends stay correctly ordered against older pages. Minimal terminal UI for Completed/Expired/Cancelled comes after the lifecycle contract is stable; do not build a workflow editor. Speech locale override/fallback presentation must not hide text chat when Voice is unavailable. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
 
 ## Client routing (observed)
 

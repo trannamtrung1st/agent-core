@@ -1465,7 +1465,7 @@ describe("realtime race handling", () => {
     });
   });
 
-  it("hydrates older pages after session.ready when bootstrap is only the latest fifty entries", async () => {
+  it("replaces session.ready bootstrap with one newest history page", async () => {
     const makeHistoryRow = (sequence: number) => ({
       entryId: `e${sequence}`,
       sequence,
@@ -1479,11 +1479,14 @@ describe("realtime race handling", () => {
       receivedTextEndExclusive: 8,
       createdAt: "2026-01-01T00:00:00Z"
     });
-    const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 13));
+    const bootstrap = Array.from({ length: 20 }, (_, index) => makeHistoryRow(index + 431));
+    const newest = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 451));
     vi.mocked(listSessionMessages).mockResolvedValue({
-      items: Array.from({ length: 12 }, (_, index) => makeHistoryRow(index + 1)),
-      nextAfter: 12,
-      hasMore: false
+      items: newest,
+      nextAfter: 500,
+      hasMore: false,
+      hasOlder: true,
+      nextBefore: 451
     });
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
@@ -1517,14 +1520,20 @@ describe("realtime race handling", () => {
     });
 
     await vi.waitFor(() => {
-      expect(useSessionStore.getState().entries).toHaveLength(62);
+      expect(useSessionStore.getState().entries).toHaveLength(50);
     });
-    expect(listSessionMessages).toHaveBeenCalledWith("s-active", 0, 50);
-    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 1");
-    expect(useSessionStore.getState().entries[61]?.text).toBe("Message 62");
+    expect(listSessionMessages).toHaveBeenCalledTimes(1);
+    expect(listSessionMessages).toHaveBeenCalledWith(
+      "s-active",
+      expect.objectContaining({ limit: 50 })
+    );
+    expect(vi.mocked(listSessionMessages).mock.calls[0]?.[1]).not.toHaveProperty("after");
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 451");
+    expect(useSessionStore.getState().entries[49]?.text).toBe("Message 500");
+    expect(useSessionStore.getState().historyHasOlder).toBe(true);
   });
 
-  it("hydrates all missing history pages when bootstrap starts above sequence fifty", async () => {
+  it("does not fetch additional pages when bootstrap starts above sequence fifty", async () => {
     const makeHistoryRow = (sequence: number) => ({
       entryId: `e${sequence}`,
       sequence,
@@ -1539,11 +1548,14 @@ describe("realtime race handling", () => {
       createdAt: "2026-01-01T00:00:00Z"
     });
     const bootstrap = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 101));
-    const firstPage = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 1));
-    const secondPage = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 51));
-    vi.mocked(listSessionMessages)
-      .mockResolvedValueOnce({ items: firstPage, nextAfter: 50, hasMore: true })
-      .mockResolvedValueOnce({ items: secondPage, nextAfter: 100, hasMore: false });
+    const newest = Array.from({ length: 50 }, (_, index) => makeHistoryRow(index + 101));
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: newest,
+      nextAfter: 150,
+      hasMore: false,
+      hasOlder: true,
+      nextBefore: 101
+    });
     hooks.setConnection({ invoke: vi.fn(), send: vi.fn() } as never);
     useSessionStore.setState({
       ...emptySession(),
@@ -1576,11 +1588,11 @@ describe("realtime race handling", () => {
     });
 
     await vi.waitFor(() => {
-      expect(useSessionStore.getState().entries).toHaveLength(150);
+      expect(listSessionMessages).toHaveBeenCalledTimes(1);
     });
-    expect(listSessionMessages).toHaveBeenCalledTimes(2);
-    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 1");
-    expect(useSessionStore.getState().entries[149]?.text).toBe("Message 150");
+    expect(useSessionStore.getState().entries).toHaveLength(50);
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Message 101");
+    expect(useSessionStore.getState().entries[49]?.text).toBe("Message 150");
   });
 
   it("surfaces start conversation failures", async () => {
