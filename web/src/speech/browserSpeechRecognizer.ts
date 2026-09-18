@@ -31,6 +31,8 @@ const RESTART_BACKOFF_MS = [0, 250, 500];
 const MAX_IDLE_ENDS_WITHOUT_PROGRESS = 3;
 /** Heuristic only: Web Speech does not bound speechend→result delay. */
 const SPEECH_END_GRACE_MS = 300;
+export const DEFAULT_TRANSCRIPT_INACTIVITY_MS = 1800;
+export const DEFAULT_NO_TEXT_CLOSE_MS = 4000;
 
 function recognitionConstructor(): RecognitionCtor | null {
   const host = window as Window & {
@@ -64,7 +66,17 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private speechEndedPending = false;
   private speechEndGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  private transcriptInactivityTimer: ReturnType<typeof setTimeout> | null = null;
+  private noTextTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly transcriptInactivityMs: number;
+  private readonly noTextCloseMs: number;
+  private sawTranscriptText = false;
   private fatal = false;
+
+  constructor(options?: { transcriptInactivityMs?: number; noTextCloseMs?: number }) {
+    this.transcriptInactivityMs = options?.transcriptInactivityMs ?? DEFAULT_TRANSCRIPT_INACTIVITY_MS;
+    this.noTextCloseMs = options?.noTextCloseMs ?? DEFAULT_NO_TEXT_CLOSE_MS;
+  }
 
   async start(listener: ClientSpeechRecognizerListener, options?: ClientSpeechRecognizerStartOptions): Promise<void> {
     const Ctor = recognitionConstructor();
@@ -148,6 +160,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
         }
 
         this.revision += 1;
+        this.noteTranscriptActivity();
         this.listener?.onEvidence({
           kind: result.isFinal ? "final" : "partial",
           utteranceId: this.utteranceId,
@@ -248,7 +261,80 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
     this.revision = 0;
     this.startedAt = performance.now();
     this.utteranceOpen = true;
+    this.sawTranscriptText = false;
+    this.clearTranscriptEndpointTimers();
+    this.scheduleNoTextTimer();
     this.listener?.onEvidence({ kind: "started", utteranceId: this.utteranceId, activityScore: 0.5 });
+  }
+
+  private noteTranscriptActivity(): void {
+    this.sawTranscriptText = true;
+    this.clearNoTextTimer();
+    this.scheduleTranscriptInactivityTimer();
+  }
+
+  private scheduleNoTextTimer(): void {
+    this.clearNoTextTimer();
+    this.noTextTimer = setTimeout(() => {
+      this.noTextTimer = null;
+      this.onNoTextTimeout();
+    }, this.noTextCloseMs);
+  }
+
+  private scheduleTranscriptInactivityTimer(): void {
+    this.clearTranscriptInactivityTimer();
+    if (!this.utteranceOpen || !this.sawTranscriptText) {
+      return;
+    }
+
+    this.transcriptInactivityTimer = setTimeout(() => {
+      this.transcriptInactivityTimer = null;
+      if (!this.utteranceOpen || !this.sawTranscriptText) {
+        return;
+      }
+
+      this.endUtterance();
+    }, this.transcriptInactivityMs);
+  }
+
+  private onNoTextTimeout(): void {
+    if (!this.utteranceOpen || this.sawTranscriptText) {
+      return;
+    }
+
+    this.discardNoiseUtterance();
+  }
+
+  private discardNoiseUtterance(): void {
+    if (!this.utteranceOpen) {
+      return;
+    }
+
+    this.speechEndedPending = false;
+    this.clearSpeechEndGrace();
+    this.clearTranscriptEndpointTimers();
+    const utteranceId = this.utteranceId;
+    this.listener?.onEvidence({ kind: "failed", utteranceId });
+    this.utteranceOpen = false;
+  }
+
+  private clearNoTextTimer(): void {
+    if (this.noTextTimer != null) {
+      clearTimeout(this.noTextTimer);
+      this.noTextTimer = null;
+    }
+  }
+
+  private clearTranscriptInactivityTimer(): void {
+    if (this.transcriptInactivityTimer != null) {
+      clearTimeout(this.transcriptInactivityTimer);
+      this.transcriptInactivityTimer = null;
+    }
+  }
+
+  private clearTranscriptEndpointTimers(): void {
+    this.clearNoTextTimer();
+    this.clearTranscriptInactivityTimer();
   }
 
   private endUtterance(): void {
@@ -258,6 +344,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
 
     this.speechEndedPending = false;
     this.clearSpeechEndGrace();
+    this.clearTranscriptEndpointTimers();
     const durationMs = Math.max(0, Math.round(performance.now() - this.startedAt));
     this.listener?.onEvidence({
       kind: "ended",
@@ -307,6 +394,7 @@ export class BrowserSpeechRecognizer implements ClientSpeechRecognizer {
   private stopNative(): void {
     this.clearRestart();
     this.clearSpeechEndGrace();
+    this.clearTranscriptEndpointTimers();
     this.speechEndedPending = false;
     try {
       this.native?.abort();

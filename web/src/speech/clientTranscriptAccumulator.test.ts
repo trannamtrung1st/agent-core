@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { ClientTranscriptAccumulator, mergeRestartContinuation } from "./clientTranscriptAccumulator";
 import { resetSpeechObservations, snapshotSpeechObservations } from "./speechObservability";
 
@@ -161,52 +161,5 @@ describe("ClientTranscriptAccumulator", () => {
     now.t += 100;
     acc.ingestInterim("secret");
     expect(acc.sent.some((item) => item.text === "secret")).toBe(false);
-  });
-});
-
-describe("ClientTranscriptAccumulator application endpointing", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    resetSpeechObservations();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("commits an application final after transcript inactivity without browser speechend", () => {
-    const { acc, sent, now } = create();
-    acc.startUtterance();
-    now.t += 100;
-    acc.ingestInterim("my favorite book");
-    now.t += 100;
-    vi.advanceTimersByTime(1800);
-    expect(sent.filter((kind) => kind === "final")).toEqual(["final"]);
-    expect(sent.at(-1)).toBe("ended");
-    expect(acc.hasOpenUtterance()).toBe(false);
-  });
-
-  it("discards a noise-only utterance after no recognized text", () => {
-    const { acc, sent } = create();
-    acc.startUtterance();
-    vi.advanceTimersByTime(4000);
-    expect(sent.filter((kind) => kind === "final")).toHaveLength(0);
-    expect(sent.at(-1)).toBe("ended");
-    expect(acc.hasOpenUtterance()).toBe(false);
-  });
-
-  it("resets inactivity when new partial text arrives", () => {
-    const { acc, sent, now } = create();
-    acc.startUtterance();
-    now.t += 100;
-    acc.ingestInterim("hello");
-    now.t += 100;
-    vi.advanceTimersByTime(1500);
-    acc.ingestInterim("hello there");
-    now.t += 100;
-    vi.advanceTimersByTime(1500);
-    expect(sent.filter((kind) => kind === "final")).toHaveLength(0);
-    vi.advanceTimersByTime(400);
-    expect(sent.filter((kind) => kind === "final")).toEqual(["final"]);
   });
 });

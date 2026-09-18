@@ -263,6 +263,62 @@ describe("BrowserSpeechRecognizer", () => {
   });
 });
 
+describe("Browser STT application endpointing through lifecycle", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("commits two turns without native speechend when transcript inactivity closes each utterance", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "first answer" } }]
+    });
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(1);
+    expect(sent.find((item) => item.kind === "final")?.text).toBe("first answer");
+    const firstUtterance = sent.find((item) => item.kind === "started")?.utteranceId;
+
+    holder.current?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript: "second answer" } }]
+    });
+    const started = sent.filter((item) => item.kind === "started");
+    expect(started).toHaveLength(2);
+    expect(started[1]?.utteranceId).not.toBe(firstUtterance);
+
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(2);
+    expect(sent.filter((item) => item.kind === "final")[1]?.text).toBe("second answer");
+    await adapter.cancel();
+  });
+
+  it("discards a noise-only utterance with failed evidence after no recognized text", async () => {
+    vi.useFakeTimers();
+    const holder = installMock();
+    const sent: ClientSpeechEvidence[] = [];
+    const adapter = new BrowserSpeechRecognizer();
+    const transport = createSpeechTransportService(adapter);
+    const life = new ClientTranscriptLifecycle(transport, (evidence) => sent.push(evidence), () => undefined);
+    await life.enterVoice({ attachmentId: "a1", mode: "voice", muted: false, language: "en" });
+    holder.current?.onspeechstart?.(new Event("speechstart"));
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sent.filter((item) => item.kind === "final")).toHaveLength(0);
+    expect(sent.filter((item) => item.kind === "failed")).toHaveLength(1);
+    expect(sent.filter((item) => item.kind === "ended")).toHaveLength(0);
+    await adapter.cancel();
+  });
+});
+
 describe("Browser STT native finals through the application accumulator", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

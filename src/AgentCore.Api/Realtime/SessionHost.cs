@@ -216,17 +216,6 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                             return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
                         }
 
-                        if (_live.Count >= Math.Max(1, _options.MaxActiveSessions))
-                        {
-                            return Reject(
-                                command.EventId,
-                                "Session",
-                                "SessionCapacityExceeded",
-                                "Maximum active sessions reached.",
-                                false,
-                                5000);
-                        }
-
                         needCreate = true;
                     }
                 }
@@ -272,6 +261,17 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                             if (_terminating.Contains(sessionId) || !_admitting)
                             {
                                 return Reject(command.EventId, "Session", "NotFound", "Session has ended.", true, null);
+                            }
+
+                            if (_live.Count >= Math.Max(1, _options.MaxActiveSessions))
+                            {
+                                return Reject(
+                                    command.EventId,
+                                    "Session",
+                                    "SessionCapacityExceeded",
+                                    "Maximum active sessions reached.",
+                                    false,
+                                    5000);
                             }
 
                             live = new Live(_factory.Create(snapshot, this));
