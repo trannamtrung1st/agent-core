@@ -22,6 +22,13 @@ Cancellation/response IDs start in the synthetic slice; Milestone 8 proves full-
 
 [Testing Strategy](16-testing-strategy.md) defines offline fixtures and suites. [Demo Scenarios](09-demo-scenarios.md) defines the product demonstration. [Operations](17-observability-and-operations.md) defines latency measurements and future run/deployment instructions.
 
+## Follow-on observed slices
+
+| Slice | Deliverable | Acceptance gate |
+| --- | --- | --- |
+| P0 | Conversation/UI baseline freeze | Complete: key-free Synthetic gate, Impeccable harden, structured failures, rich envelope regressions ([Implementation Plan](18-implementation-plan.md#p0--conversation-lifecycle-observed)) |
+| P1 | Independently selectable STT/TTS, Browser client transports, hosted OpenAI TTS and batch STT | Deterministic coverage green; HOSTED-04 live non-Synthetic smoke **unverified** ([P1 handoff](reports/p1-replaceable-speech-handoff.md)) |
+
 ## Post-MVP planned until verified
 
 Phases A–H are observed in [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified). Phase I is recorded not-applicable with a future trigger there and in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified).

@@ -12,7 +12,8 @@ flowchart TD
     Browser -->|REST lifecycle| Api[Minimal APIs / SessionManager]
     Api --> Session[Session Runtime: single state owner]
     Hub -->|UI commands| Session
-    Hub -->|Binary PCM: separate audio ingress| STT[ISpeechRecognizer / STT]
+    Hub -->|Binary PCM: serverAudio ingress only| STT[ISpeechRecognizer / STT]
+    Hub -->|client.speech.evidence: clientTranscript| Session
     STT -->|Speech activity and partial/final transcripts| Session
     Session --> Controller[Interaction Controller]
     Controller -->|Arbitrated interaction| Agent[Agent Runtime: identity and text context]
@@ -24,11 +25,12 @@ flowchart TD
     LLM -->|Normalized text stream via session mailbox| Acc[ResponseTextAccumulator]
     Acc --> Segmenter[SpeechSegmenter]
     Segmenter -->|Speech Segment| TTS[ISpeechSynthesizer / TTS]
-    TTS -->|Separate binary audio output| Hub
+    Segmenter -->|speech.output.segment: clientSpeech| Hub
+    TTS -->|Separate binary audio output: serverAudio| Hub
     Session --> Store[IMemoryStore / EF Core + SQLite]
 ```
 
-The adapter's outgoing edges are deployment choices, not three simultaneous requests. The selected endpoint's normalized response returns through ILanguageModel. STT and TTS each independently select hosted, local or synthetic adapters. **Adapter names are not transports:** Session Runtime sees optional backend `ISpeechRecognizer`/`ISpeechSynthesizer` plus provider-neutral input/output transports (`serverAudio`, `clientTranscript`, `clientSpeech`). Browser speech is a client transport with no backend port; it is not a fake `ISpeechRecognizer`. OpenRouter model IDs and provider payloads stay in Infrastructure configuration/mapping. [Technology Decisions](10-technology-decisions.md) explains hosted/on-prem choices; [Voice](06-realtime-voice.md) owns streaming and segmentation.
+The adapter's outgoing edges are deployment choices, not three simultaneous requests. The selected endpoint's normalized response returns through ILanguageModel. STT and TTS each independently select hosted, local or synthetic adapters. **Adapter names are not transports:** Session Runtime sees optional backend `ISpeechRecognizer`/`ISpeechSynthesizer` plus provider-neutral input/output transports (`serverAudio`, `clientTranscript`, `clientSpeech`). Browser speech is a client transport with no backend port; it is not a fake `ISpeechRecognizer`. PCM hub ingress exists only for `serverAudio`. `clientTranscript` never opens a backend recognizer; `clientSpeech` never opens a backend synthesizer. OpenRouter model IDs and provider payloads stay in Infrastructure configuration/mapping. [Technology Decisions](10-technology-decisions.md) explains hosted/on-prem choices; [Voice](06-realtime-voice.md) owns streaming, segmentation, and Browser privacy limits.
 
 
 [Repository Structure](11-repository-structure.md) specifies project references. [Backend Interfaces](04-backend-interfaces.md) owns C# ports. [Protocol](14-api-and-realtime-protocol.md) owns browser DTOs; no universal event bus DTO bridges every layer.
@@ -77,7 +79,7 @@ A created session is inactive until attached. One connection owns a session at a
 - Cancellation plus identity checks are mandatory at mailbox acceptance, output send, browser reduction and audio playback.
 - Agent output and user input coexist; the microphone remains active during playback except explicit mute/end/disconnect.
 - Speech activity may produce Continue rather than Interrupt.
-- Raw microphone frames are neither normal domain events nor persisted data.
+- Raw microphone frames are neither normal domain events nor persisted data. Browser STT does not send PCM to backend STT; that is not a guarantee that the browser vendor keeps recognition on-device.
 - Initiative policy gates every proactive response; StaySilent is valid.
 - Synthetic mode requires no network or AI credentials; the entire composed pipeline is testable offline without a microphone, speaker or GPU.
 - One response is live per session, but historical responses and an in-progress user utterance may coexist.

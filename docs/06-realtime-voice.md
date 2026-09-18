@@ -16,6 +16,10 @@ Browser Web Speech → client transcripts                 (input transport clien
 
 A speech **provider** (Synthetic, OpenAI, batch, future local) is the Infrastructure adapter behind a port. A speech **transport** (`serverAudio`, `clientTranscript`, `clientSpeech`) is how the session moves audio or transcripts. Session Runtime must not branch on adapter names. Browser has no backend STT/TTS port. PCM admission for `serverAudio` still uses the hub ingress described below; `clientTranscript` does not push microphone PCM into `ISpeechRecognizer`.
 
+### Browser speech privacy
+
+Selecting Browser STT does not send PCM to a backend STT adapter. The browser vendor’s Speech Recognition implementation may still use a cloud recognizer; Agent Core does not claim Browser STT is local or offline. Browser TTS (`speechSynthesis`) privacy is platform-dependent. Operators who need backend-controlled or on-device speech should select another STT/TTS adapter. Default `LogConversationContent` remains `false`; speech meters and timeline stages do not carry transcript, PCM, keys, or vendor bodies.
+
 Stream every feasible stage. Partial Transcripts/VAD guide interruption immediately; a committed Final Transcript starts the normal user-turn model request. MVP does not speculatively generate answers to unstable partial text. This turn boundary is intentional, not a reason to buffer microphone input before sending it to streaming STT. Likewise do not wait for the full LLM response or entire-message TTS before playback. Non-streaming providers use the explicit degraded policies below.
 
 ## Transport and canonical format

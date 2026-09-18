@@ -167,7 +167,26 @@ Historical Milestones 0–12 and post-MVP A–H stay as recorded above. P0 is a 
 | P0-D | First-party client pending-send queue while live (idle Send immediate); Steer=`interrupt`; Stop targets rendered `responseId` | `realtime.queue.test.ts`, Composer/ChatApp; Playwright queue/Steer/Stop |
 | P0-E | ResponseEnvelope DisplayText/blocks; SpeechText not visible; live-only thinking | Conversation/activityState tests; markdown reload Playwright |
 | P0-F | Full section-17 cases and minimum commands, including named `dotnet test AgentCore.sln` | [P0 agent-lifecycle handoff](reports/p0-agent-lifecycle-handoff.md) |
-| P0 UI baseline closure | After structured-error UI, rich envelope regressions, and one bounded Impeccable harden pass, the same key-free Synthetic Domain/Infrastructure/Application/API/web/Playwright gate is green on that checkout. Distinct from P0-A–F lifecycle slices. P1/hosted/Browser speech is not claimed. | TODO.md P0 checkboxes; this row. Local evidence: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/` (gitignored). |
+| P0 UI baseline closure | After structured-error UI, rich envelope regressions, and one bounded Impeccable harden pass, the same key-free Synthetic Domain/Infrastructure/Application/API/web/Playwright gate is green on that checkout. Distinct from P0-A–F lifecycle slices. P1/hosted/Browser speech is not claimed by this row. | TODO.md P0 checkboxes; this row. Local evidence: `local/tdp-workspace/evidence/p0-p1-replaceable-speech/` (gitignored). |
+
+## P1 — Replaceable speech (observed)
+
+P0 stays closed only because its gates passed. This table records observed P1 behavior, not intended realtime STT.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| Independent STT/TTS | Nested `Providers.Speech.Recognition` / `Synthesis`; `SpeechFactory` `EffectiveSpeechPlan`; no silent Synthetic fallback | Infrastructure SpeechFactory tests; API SpeechConfigurationHostTests |
+| Transports vs providers | `serverAudio` / `clientTranscript` / `clientSpeech`; Browser is not a backend port | docs 03/04/10; SessionRuntime has no vendor adapter names |
+| `voiceAvailable` | Voice.Enabled AND structurally resolvable STT AND TTS | Catalog + `session.ready`; missing hosted key → false |
+| Client transcript | Additive `client.speech.evidence`; one durable final; no PCM STT | ClientTranscriptAdmissionTests; MessagePack Kestrel fixtures |
+| Client speech | Shared SpeechSegmenter → `speech.output.segment`; playback ACK gates completion; Stop does not dequeue | ClientSpeechSegmentRuntimeTests; ClientSpeechMessagePackTests |
+| Fake Browser CI | Injected recognizer/synthesizer; no live Web Speech | Vitest speech/*; Playwright `browser-stt` + `browser-browser` |
+| Hosted TTS | `OpenAiSpeechSynthesizer` when Adapter=OpenAI and key present | SpeechFactory; live HTTP skipped unless `AGENTCORE_LIVE_OPENAI_TTS=1` |
+| Hosted STT | Selectable `OpenAICompatibleBatch` only; Adapter=OpenAI recognition unselectable | SpeechFactory; live HTTP skipped unless opt-in |
+| Mixed plans | Synthetic/Synthetic, Browser/Browser, Browser/OpenAI, batch/Browser, batch/OpenAI | Host tests with dummy keys, zero outbound HTTP |
+| Observability | `speech.partial.count`, final/segment/playback latencies, `speech.playback.complete`, `speech.cancel.reason`, `speech.error.code`; `LogConversationContent=false` | SpeechTelemetrySurfaceTests; docs 17 |
+| Final key-free gate | Domain 22, Infrastructure 101+9 skip, Application 291, API 105, Vitest 242, Playwright 25 | [P1 handoff](reports/p1-replaceable-speech-handoff.md); run evidence gitignored |
+| HOSTED-04 | Opt-in non-Synthetic real voice smoke | **Unverified** on this checkout (`AGENTCORE_LIVE_*=0`) |
 
 ## Handoff rule
 

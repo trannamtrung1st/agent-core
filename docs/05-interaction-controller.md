@@ -2,6 +2,8 @@
 
 The Interaction Controller asks “What is happening in the conversation?” It observes speech activity, partial/final transcripts, agent/playback state, idle timers and environment events, then arbitrates Ignore/Continue/Queue/Interrupt/InjectEvent/RequestInterruptionClassification/RequestAgentDecision. It does not perform general agent reasoning. Agent Runtime asks “What should the agent do about it?” and owns identity, policy, context, text-model reasoning, response generation and initiative decisions. Controller evaluations run synchronously inside the Session Runtime mailbox; optional classification and brain decisions run outside it against snapshots. [Architecture](03-system-architecture.md) defines ownership and queues.
 
+Client-transcript evidence uses the same mailbox rows as backend STT after Session Runtime admits `client.speech.evidence`. Admission requires matching attachment, epoch, voice mode, and monotonically increasing per-utterance revision; mute, stale identity, and PCM frames on this transport are rejected. Input transport `clientTranscript` does not open `ISpeechRecognizer`. The controller does not branch on adapter names.
+
 ## State representation
 
 Avoid a single enum that incorrectly forbids simultaneous user input and agent output. Store these orthogonal fields:
@@ -24,7 +26,7 @@ All rows run in mailbox admission order. Missing/old epoch, attachment, utteranc
 
 | Event and guard | Decision | State/action |
 | --- | --- | --- |
-| Attach Created/Paused | InjectEvent | Attached using stored Mode (attach payload has no mode); text Input=Idle, voice Input=Listening; start recognition if voice |
+| Attach Created/Paused | InjectEvent | Attached using stored Mode (attach payload has no mode); text Input=Idle, voice Input=Listening; start backend recognition only when voice and input transport is `serverAudio` |
 | session.mode.set | See [mode transitions](#mode-transitions) | Queue or apply; never a second session |
 | user.text while attached | `behavior=interrupt` or omitted: Interrupt if response live, else InjectEvent. `behavior=queue`: persist the user entry; Interrupt only when no response is live | Persist the user turn before ACK. Queue keeps the live response. After the live response is durably terminal, the trailing user suffix is one next turn. Interrupt supersedes after persist so earlier queued user entries stay ordered. Unknown behavior is rejected |
 | SpeechStarted while no output | InjectEvent | UserSpeaking; reset silence generation |

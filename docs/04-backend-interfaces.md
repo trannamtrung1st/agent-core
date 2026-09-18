@@ -8,14 +8,15 @@ ILanguageModel, ISpeechRecognizer and ISpeechSynthesizer are independent portabl
 
 ### Speech provider replacement rule
 
-Changing the STT, LLM or TTS provider must not require changes to Agent Runtime or Interaction Controller. Provider selection uses application configuration and dependency injection; concrete adapters belong in Infrastructure. OpenAI realtime transcription and OpenAI TTS are the first hosted speech adapters, not special cases inside Agent Core. Batch `/audio/transcriptions` is a separate degraded adapter.
+Changing the STT, LLM or TTS provider must not require changes to Agent Runtime or Interaction Controller. Provider selection uses application configuration and dependency injection; concrete adapters belong in Infrastructure. Observed selectable hosted speech is OpenAI TTS plus `OpenAICompatibleBatch` STT. OpenAI realtime transcription remains a planned adapter, not a selectable runtime path, while its live session is a no-op.
 
 ```text
-ISpeechRecognizer                  ISpeechSynthesizer
-├── OpenAiSpeechRecognizer          ├── OpenAiSpeechSynthesizer
-├── LocalSpeechRecognizer           ├── LocalSpeechSynthesizer
-├── FutureHostedSpeechRecognizer    ├── FutureHostedSpeechSynthesizer
-└── SyntheticSpeechRecognizer       └── SyntheticSpeechSynthesizer
+ISpeechRecognizer                         ISpeechSynthesizer
+├── OpenAICompatibleBatchSpeechRecognizer ├── OpenAiSpeechSynthesizer
+├── SyntheticSpeechRecognizer             ├── SyntheticSpeechSynthesizer
+├── OpenAiSpeechRecognizer (unselectable) ├── LocalSpeechSynthesizer (future)
+├── LocalSpeechRecognizer (future)        └── FutureHostedSpeechSynthesizer
+└── FutureHostedSpeechRecognizer
 ```
 
 Browser is not a leaf of those ports. Selecting Adapter=`Browser` maps to client transports (`clientTranscript` / `clientSpeech`) with no backend recognizer or synthesizer. Do not register a stand-in `ISpeechRecognizer` that pretends to be the Web Speech API. An Infrastructure `SpeechFactory` (same responsibility as `LanguageModelFactory`) resolves an `EffectiveSpeechPlan` plus optional ports. Selected non-Synthetic adapters must not silently become Synthetic. `OpenAiSpeechSynthesizer` is selectable when Synthesis Adapter=`OpenAI` and a backend API key is structurally present. `OpenAICompatibleBatch` is the supported hosted STT adapter when Recognition Adapter=`OpenAICompatibleBatch` and a backend API key is present; it reports no streaming input and no interim partials. `OpenAiSpeechRecognizer` remains unimplemented as a live session and is not a selectable runtime adapter.
@@ -141,7 +142,7 @@ voiceAvailable =
     && configured TTS path is structurally resolvable
 ```
 
-Resolvable includes Synthetic `serverAudio` adapters and Browser `clientTranscript`/`clientSpeech` paths. It does not mean “a Synthetic backend port happens to be registered.” Gated or unselectable hosted adapters (deferred OpenAI realtime STT, unwired batch STT/TTS) are not resolvable. Server-advertised `voiceAvailable` for Browser does not require browser feature detection; clients AND that later.
+Resolvable includes Synthetic `serverAudio` adapters, Browser `clientTranscript`/`clientSpeech` paths, `OpenAICompatibleBatch` when Recognition Adapter and a backend API key are present, and OpenAI TTS when Synthesis Adapter=`OpenAI` and a backend API key are present. It does not mean “a Synthetic backend port happens to be registered.” Gated adapters (deferred OpenAI realtime STT; hosted names without a structurally present key) are not resolvable. Server-advertised `voiceAvailable` for Browser does not require browser feature detection; clients AND that later.
 
 A backend with a valid text-only configuration must start without STT/TTS adapters. Creating or switching to voice when `voiceAvailable` is false yields typed recoverable `VoiceUnavailable`; the session remains in text mode. Apply the same gate for `session.mode.set` while attached or paused (pending voice is not queued when unavailable). Public availability follows the effective speech plan, not the process profile.
 

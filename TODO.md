@@ -4,7 +4,7 @@ Ordered by current dependency and product value.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, and the P0 conversation-lifecycle work (adaptive wait, inactivity pause/deactivation, queued sends/Steer/Stop semantics, and rich turn presentation).
 
-The next product slice is **cheap, replaceable browser speech**. The P0 conversation/UI stabilization pass is a frozen baseline unless a real regression appears.
+P0 conversation/UI stabilization is a frozen baseline unless a real regression appears. P1 replaceable speech (independent STT/TTS, Browser client transports, selectable OpenAI TTS and batch hosted STT) is observed on the key-free Synthetic/fake-browser gate. Remaining speech work is the deferred OpenAI realtime STT session and opt-in **HOSTED-04** live smoke.
 
 ---
 
@@ -102,7 +102,7 @@ Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthes
 
 - [x] Make `voiceAvailable` and `session.ready.capabilities` represent the **effective selected** STT/TTS path rather than only the currently registered backend implementation.
 
-- [ ] Keep provider/vendor details outside Session Runtime and Interaction Controller.
+- [x] Keep provider/vendor details outside Session Runtime and Interaction Controller.
 
 - [x] Add configuration validation and tests for mixed combinations.
 
@@ -200,11 +200,11 @@ Do this after Browser voice works so normal development remains cheap.
 
 - [x] Wire `OpenAiSpeechSynthesizer` through the new explicit provider selection.
 
-- [ ] Verify Real-mode voice end to end with at least one actual non-Synthetic configuration.
+- [ ] Verify Real-mode voice end to end with at least one actual non-Synthetic configuration (**HOSTED-04**; unverified — live flags off, no opted-in smoke).
 
-- [ ] Keep hosted-provider tests explicit opt-in.
+- [x] Keep hosted-provider tests explicit opt-in.
 
-- [ ] Keep Browser and Synthetic paths fully usable without OpenAI/OpenRouter speech credentials.
+- [x] Keep Browser and Synthetic paths fully usable without OpenAI/OpenRouter speech credentials.
 
 ---
 
@@ -567,6 +567,7 @@ Introduce this only when work must outlive the active Session Runtime.
 - [x] Knowledge, attachment, workspace, artifact and sandbox tools.
 - [x] Docker-backed `sandbox.run` with isolation/resource limits.
 - [x] Synthetic STT/TTS and full-duplex voice pipeline.
+- [x] Independent STT/TTS configuration, Browser client transports, selectable OpenAI TTS and OpenAI-compatible batch STT (OpenAI realtime STT still unselectable; HOSTED-04 unverified).
 - [x] Interruption/barge-in and conservative spoken/heard handling.
 - [x] Ant Design v6 conversation-first UI.
 - [x] Impeccable skill integrated for bounded UI audit/polish/hardening.
