@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
@@ -140,6 +141,11 @@ public sealed record RenameReceived(
     string Title,
     TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
+public sealed record SpeechLocaleReceived(
+    EventContext Context,
+    string? Locale,
+    TaskCompletionSource<bool> Persisted) : SessionInput(Context);
+
 public sealed record InitiativeHoldReceived(EventContext Context, bool Held) : SessionInput(Context);
 
 public sealed record ReopenedSnapshotReceived(
@@ -217,7 +223,8 @@ public sealed record SessionReadyProjection(
     Guid? ActiveResponseId,
     string InputTransport,
     string OutputTransport,
-    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active);
+    SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
+    SpeechLocaleResolution? SpeechLocale = null);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

@@ -81,7 +81,8 @@ public static class SessionCatalogEndpoints
                         body.AgentId,
                         body.AgentVersion,
                         HttpMapping.ParseMode(body.Mode),
-                        cancellationToken)
+                        cancellationToken,
+                        speechLocaleOverride: body.SpeechLocale)
                     .ConfigureAwait(false);
                 var view = HttpMapping.ToView(snapshot, activeResponseId: null);
                 http.Response.Headers.Location = $"/api/v2/sessions/{view.SessionId}";
@@ -234,6 +235,24 @@ public static class SessionCatalogEndpoints
                         cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(HttpMapping.ToCatalogItem(snapshot));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("{sessionId:guid}/speech-locale", async (
+            Guid sessionId,
+            SetSpeechLocaleRequest? body,
+            SessionHost host,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var snapshot = await host.SetSpeechLocaleAsync(sessionId, body?.Locale, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(HttpMapping.ToView(snapshot, activeResponseId: null));
             }
             catch (AgentCoreException ex)
             {

@@ -24,6 +24,7 @@ export type SessionResponse = {
   lastEntrySequence?: number;
   pauseReason?: string | null;
   lifecycleStatus?: string | null;
+  speechLocale?: { effective?: string; source?: string; override?: string | null } | null;
 };
 
 export type HistoryPage = {

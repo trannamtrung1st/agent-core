@@ -47,6 +47,7 @@ public sealed class SnapshotRecord
     public string? LifecycleReason { get; set; }
     public string? LifecycleSource { get; set; }
     public long? LifecycleChangedAtUtc { get; set; }
+    public string? SpeechLocaleOverride { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 

@@ -1,6 +1,7 @@
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Sessions;
@@ -128,6 +129,51 @@ public sealed partial class SessionRuntime
             },
             ended: input.Persisted);
         return Task.CompletedTask;
+    }
+
+    private async Task HandleSpeechLocaleAsync(SpeechLocaleReceived input, CancellationToken cancellationToken)
+    {
+        if (string.Equals(_snapshot.SpeechLocaleOverride, input.Locale, StringComparison.Ordinal))
+        {
+            input.Persisted.TrySetResult(true);
+            return;
+        }
+
+        _snapshot = _snapshot with
+        {
+            SpeechLocaleOverride = input.Locale,
+            UpdatedAt = _time.GetUtcNow()
+        };
+
+        var effective = SpeechLocale.Resolve(_snapshot).Effective;
+        if (_snapshot.Mode == SessionMode.Voice && !_voice.IsAvailable(_snapshot.Definition, effective))
+        {
+            _snapshot = _snapshot with
+            {
+                Mode = SessionMode.Text,
+                PendingMode = null,
+                UpdatedAt = _time.GetUtcNow()
+            };
+            await PublishAsync(
+                    new SessionOutput(
+                        input.Context,
+                        null,
+                        new ErrorOutput("Session", "VoiceUnavailable", "Voice is not available for this speech locale.", false, null)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            SpeechTelemetry.RecordError("VoiceUnavailable");
+            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+        }
+
+        RequestPersist(
+            _snapshot,
+            then: async ct =>
+            {
+                input.Persisted.TrySetResult(true);
+                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
+                    .ConfigureAwait(false);
+            },
+            ended: input.Persisted);
     }
 
     private void HandleReopenedSnapshot(ReopenedSnapshotReceived input)

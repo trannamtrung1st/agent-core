@@ -69,6 +69,7 @@ export type SessionView = {
   agentRole: string;
   voiceAvailable: boolean;
   conversationLanguage: string | null;
+  speechLocale: string | null;
   sttTransport: "serverAudio" | "clientTranscript" | null;
   ttsTransport: "serverAudio" | "clientSpeech" | null;
   mode: "text" | "voice";
@@ -109,6 +110,7 @@ export const emptySession = (): SessionView => ({
   agentRole: "",
   voiceAvailable: false,
   conversationLanguage: null,
+  speechLocale: null,
   sttTransport: null,
   ttsTransport: null,
   mode: "text",
@@ -147,6 +149,12 @@ function asString(value: unknown): string {
 
 function asNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
+}
+
+function speechLocaleFromPayload(payload: Record<string, unknown>): string | null {
+  const capabilities = (payload.capabilities ?? {}) as Record<string, unknown>;
+  const speechLocale = (capabilities.speechLocale ?? payload.speechLocale ?? {}) as Record<string, unknown>;
+  return asString(speechLocale.effective) || null;
 }
 
 function transportsFromPayload(payload: Record<string, unknown>): {
@@ -305,6 +313,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         agentRole: asString(agent.role),
         voiceAvailable: Boolean(agent.voiceAvailable),
         conversationLanguage: asString(agent.language) || null,
+        speechLocale: speechLocaleFromPayload(payload) ?? (asString(agent.language) || null),
         ...transportsFromPayload(payload),
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",

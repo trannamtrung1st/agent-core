@@ -3,6 +3,7 @@ using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Sessions;
@@ -185,7 +186,7 @@ public sealed partial class SessionRuntime
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var session = await _recognizer
-            .OpenAsync(new RecognitionOptions(CanonicalAudio.Format, _snapshot.Definition.ConversationPolicy.Language), cancellationToken)
+            .OpenAsync(new RecognitionOptions(CanonicalAudio.Format, SpeechLocale.Resolve(_snapshot).Effective), cancellationToken)
             .ConfigureAwait(false);
         ChannelReader<IngressMessage> reader;
         int epoch;

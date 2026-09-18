@@ -29,6 +29,7 @@ internal static class MemoryStoreSemantics
         && left.LifecycleReason == right.LifecycleReason
         && left.LifecycleSource == right.LifecycleSource
         && left.LifecycleChangedAt == right.LifecycleChangedAt
+        && left.SpeechLocaleOverride == right.SpeechLocaleOverride
         && IncomingEntriesMatch(left.Entries, right.Entries);
 
     private static bool PurposeEquals(SessionPurpose? left, SessionPurpose? right)

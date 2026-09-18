@@ -2,6 +2,7 @@ using System.Globalization;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Speech;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 
@@ -34,7 +35,8 @@ public static class HttpMapping
             activeResponseId?.ToString(),
             ProtocolVersion,
             snapshot.PauseReason,
-            LifecycleTransition.ToWire(snapshot.LifecycleStatus));
+            LifecycleTransition.ToWire(snapshot.LifecycleStatus),
+            ToSpeechLocale(snapshot));
 
     public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
         new(
@@ -150,6 +152,15 @@ public static class HttpMapping
         EntryStatus.Failed => "failed",
         _ => status.ToString().ToLowerInvariant()
     };
+
+    public static SpeechLocaleResponse ToSpeechLocale(SessionSnapshot snapshot)
+    {
+        var resolved = SpeechLocale.Resolve(snapshot);
+        return new SpeechLocaleResponse(
+            resolved.Effective,
+            SpeechLocale.ToWire(resolved.Source),
+            resolved.Override);
+    }
 
     public static string Format(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);

@@ -238,6 +238,30 @@ describe("applyServerEvent", () => {
     expect(state.conversationLanguage).toBe("en");
   });
 
+  it("reads session.ready effective speech locale from capabilities, not only agent language", () => {
+    const state = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: {
+          mode: "text",
+          pendingMode: null,
+          status: "attached",
+          agent: { name: "Alex", voiceAvailable: true, language: "en" },
+          history: [],
+          capabilities: {
+            speechLocale: { effective: "vi-VN", source: "sessionOverride", override: "vi-VN" },
+            stt: { transport: "clientTranscript" },
+            tts: { transport: "clientSpeech" }
+          }
+        }
+      })
+    );
+    expect(state.conversationLanguage).toBe("en");
+    expect(state.speechLocale).toBe("vi-VN");
+  });
+
   it("applies mute from session.state.changed without dropping voice mode", () => {
     const ready = applyServerEvent(
       emptySession(),

@@ -365,6 +365,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("SchemaVersion")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SpeechLocaleOverride")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("SummarizedThroughEntrySequence")
                         .HasColumnType("INTEGER");
 

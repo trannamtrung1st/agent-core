@@ -2,9 +2,13 @@ namespace AgentCore.Contracts.Http;
 
 public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion);
 
-public sealed record CreateSessionRequest(string AgentId, int? AgentVersion, string? Mode);
+public sealed record CreateSessionRequest(string AgentId, int? AgentVersion, string? Mode, string? SpeechLocale = null);
 
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
+
+public sealed record SetSpeechLocaleRequest(string? Locale);
+
+public sealed record SpeechLocaleResponse(string Effective, string Source, string? Override);
 
 public sealed record SessionViewResponse(
     string SessionId,
@@ -19,7 +23,8 @@ public sealed record SessionViewResponse(
     string? ActiveResponseId,
     int ProtocolVersion,
     string? PauseReason = null,
-    string? LifecycleStatus = null);
+    string? LifecycleStatus = null,
+    SpeechLocaleResponse? SpeechLocale = null);
 
 public sealed record AgentDescriptorResponse(
     string Id,

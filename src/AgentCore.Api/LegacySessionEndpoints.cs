@@ -35,7 +35,8 @@ public static class LegacySessionEndpoints
                         body.AgentId,
                         body.AgentVersion,
                         HttpMapping.ParseMode(body.Mode),
-                        cancellationToken)
+                        cancellationToken,
+                        speechLocaleOverride: body.SpeechLocale)
                     .ConfigureAwait(false);
                 var view = HttpMapping.ToView(snapshot, activeResponseId: null);
                 var location = $"/api/v1/sessions/{view.SessionId}";

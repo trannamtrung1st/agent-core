@@ -199,7 +199,8 @@ public sealed record SessionSnapshot(
     SessionCompletionPolicy? CompletionPolicy = null,
     string? LifecycleReason = null,
     LifecycleTransitionSource? LifecycleSource = null,
-    DateTimeOffset? LifecycleChangedAt = null)
+    DateTimeOffset? LifecycleChangedAt = null,
+    string? SpeechLocaleOverride = null)
 {
     public long DurableLastEntrySequence
     {

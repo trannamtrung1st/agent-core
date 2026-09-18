@@ -171,6 +171,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "SessionSnapshots", "SpeechLocaleOverride", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260919040000_SpeechLocaleOverride', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -697,6 +707,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Snapshot.LifecycleReason = snapshot.LifecycleReason;
         row.Snapshot.LifecycleSource = snapshot.LifecycleSource?.ToString();
         row.Snapshot.LifecycleChangedAtUtc = snapshot.LifecycleChangedAt?.ToUnixTimeMilliseconds();
+        row.Snapshot.SpeechLocaleOverride = snapshot.SpeechLocaleOverride;
     }
 
     private static SessionRecord ToRecord(SessionSnapshot snapshot)
@@ -771,7 +782,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ReadPolicy(snapshot),
             snapshot.LifecycleReason,
             ParseEnumOrNull<LifecycleTransitionSource>(snapshot.LifecycleSource),
-            snapshot.LifecycleChangedAtUtc is { } changed ? FromUnix(changed) : null);
+            snapshot.LifecycleChangedAtUtc is { } changed ? FromUnix(changed) : null,
+            snapshot.SpeechLocaleOverride);
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>

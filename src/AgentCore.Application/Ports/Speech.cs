@@ -30,6 +30,21 @@ public sealed record RecognitionOptions(AudioFormat Format, string Language);
 
 public enum SpeechBoundary { Started, Ended }
 
+public interface ISpeechLocaleSupport
+{
+    bool CanRecognize(string locale);
+    bool CanSynthesize(string locale);
+}
+
+public sealed class UnrestrictedSpeechLocaleSupport : ISpeechLocaleSupport
+{
+    public static UnrestrictedSpeechLocaleSupport Instance { get; } = new();
+
+    public bool CanRecognize(string locale) => true;
+
+    public bool CanSynthesize(string locale) => true;
+}
+
 public interface ISpeechRecognizer
 {
     RecognitionCapabilities Capabilities { get; }

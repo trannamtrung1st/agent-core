@@ -260,7 +260,9 @@ SessionSnapshot/UserProfile fields and atomic save semantics are specified in [P
 
 **Observed additive lifecycle fields:** Session snapshots persist `lifecycleStatus`, generic `SessionPurpose`, completion-authority policy, and lifecycle source/reason/timestamps. Protocol-v1 `status` remains. Purpose metadata and policy are not public session-view fields. `RecoverCrashedSessionsAsync` still maps Ending → Ended (and `lifecycleStatus` Ended). Application `LifecycleTransition` is the persist path for pause/resume/terminal outcomes, attached TimeProvider deadline timers, and detached create/get/attach/reopen expiry. RequestComplete evaluation runs after a completed assistant turn when a Goal session has agent completion Advisory or Allowed.
 
-**Follow-on P1 planned until verified:** Speech locale/voice support is evaluated on speech abstractions/adapters, not with Browser/OpenAI branches in SessionRuntime. See [Technology Decisions](10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence).
+**Observed speech locale:** Application `SpeechLocale` resolves session override > agent conversation-language default > provider fallback (`en`), validates BCP-47-like tags, and persists `SpeechLocaleOverride` without rewriting agent text language. Effective locale is public on session views and `session.ready` `capabilities.speechLocale`. `ISpeechLocaleSupport` evaluates recognition/synthesis support; `SessionRuntime` has no Browser/OpenAI locale branches. Browser/hosted adapter voice selection remains planned.
+
+**Follow-on P1 planned until verified:** Speech locale/voice selection in Browser and hosted adapters. See [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
 Environment data enters Application only through this narrow ingress. It is not a message bus and is not a public HTTP `/events` endpoint:
 

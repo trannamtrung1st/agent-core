@@ -6,6 +6,7 @@ using AgentCore.Api.Mapping;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Speech;
 using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Conversation;
 using Microsoft.AspNetCore.SignalR;
@@ -617,6 +618,24 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
 
         return await _sessions.RenameAsync(sessionId, title, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SessionSnapshot> SetSpeechLocaleAsync(
+        Guid sessionId,
+        string? locale,
+        CancellationToken cancellationToken = default)
+    {
+        if (_live.TryGetValue(sessionId, out var live))
+        {
+            if (!await live.Runtime.RequestSpeechLocaleAsync(locale, cancellationToken).ConfigureAwait(false))
+            {
+                throw AgentCoreErrors.Persistence("Speech locale update failed.");
+            }
+
+            return live.Runtime.Snapshot;
+        }
+
+        return await _sessions.SetSpeechLocaleAsync(sessionId, locale, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DetachAsync(string connectionId)
@@ -2221,8 +2240,16 @@ public static class SessionEventMapper
                     ["supportedFormats"] = Array.Empty<object>(),
                     ["transport"] = ready.OutputTransport
                 },
-                ["bargeInPolicy"] = ready.BargeInPolicy
-            },
+                    ["bargeInPolicy"] = ready.BargeInPolicy,
+                    ["speechLocale"] = ready.SpeechLocale is { } locale
+                        ? new Dictionary<string, object?>
+                        {
+                            ["effective"] = locale.Effective,
+                            ["source"] = SpeechLocale.ToWire(locale.Source),
+                            ["override"] = locale.Override
+                        }
+                        : null
+                },
             ["lastEntrySequence"] = ready.LastEntrySequence,
             ["history"] = history,
             ["activeResponseId"] = ready.ActiveResponseId?.ToString()

@@ -449,6 +449,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> RequestSpeechLocaleAsync(string? locale, CancellationToken cancellationToken = default)
+    {
+        var normalized = SpeechLocale.NormalizeOverride(locale);
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new SpeechLocaleReceived(context, normalized, persisted), urgent: true))
+        {
+            persisted.TrySetResult(false);
+            return false;
+        }
+
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+    }
+
     public Task SubmitInitiativeHoldAsync(bool held, CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
@@ -808,6 +823,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case RenameReceived rename:
                     await HandleRenameAsync(rename, cancellationToken).ConfigureAwait(false);
                     break;
+                case SpeechLocaleReceived speechLocale:
+                    await HandleSpeechLocaleAsync(speechLocale, cancellationToken).ConfigureAwait(false);
+                    break;
                 case InitiativeHoldReceived hold:
                     HandleInitiativeHold(hold);
                     break;
@@ -831,7 +849,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or DeactivateReceived or RenameReceived or DetachReceived)
+            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or DeactivateReceived or RenameReceived or SpeechLocaleReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
             }
@@ -931,6 +949,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case RenameReceived rename:
                 rename.Persisted.TrySetResult(value);
+                break;
+            case SpeechLocaleReceived speechLocale:
+                speechLocale.Persisted.TrySetResult(value);
                 break;
             case AttachReceived attach:
                 attach.Attached.TrySetResult(value);

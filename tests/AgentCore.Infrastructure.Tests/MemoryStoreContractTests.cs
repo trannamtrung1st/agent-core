@@ -556,6 +556,21 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Speech_locale_override_round_trips_without_changing_definition_language()
+    {
+        await using var harness = await SqliteAsync();
+        IMemoryStore[] stores = [new InMemoryMemoryStore(), harness.Store];
+        foreach (var store in stores)
+        {
+            var snapshot = First() with { SpeechLocaleOverride = "vi-VN" };
+            await store.SaveAsync(snapshot, 0);
+            var loaded = await store.LoadMetadataAsync(snapshot.SessionId);
+            Assert.Equal("vi-VN", loaded!.SpeechLocaleOverride);
+            Assert.Equal(snapshot.Definition.ConversationPolicy.Language, loaded.Definition.ConversationPolicy.Language);
+        }
+    }
+
+    [Fact]
     public async Task Purpose_policy_and_private_metadata_round_trip()
     {
         await using var harness = await SqliteAsync();

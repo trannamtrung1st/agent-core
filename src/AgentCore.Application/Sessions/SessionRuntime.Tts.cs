@@ -535,7 +535,7 @@ public sealed partial class SessionRuntime
                             segment.TextStart,
                             segment.Text,
                             _snapshot.Definition.Voice.VoiceId,
-                            _snapshot.Definition.ConversationPolicy.Language,
+                            SpeechLocale.Resolve(_snapshot).Effective,
                             _snapshot.Definition.Voice.SpeakingRate)),
                     cancellationToken)
                 .ConfigureAwait(false);

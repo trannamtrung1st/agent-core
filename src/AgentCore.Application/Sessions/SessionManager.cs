@@ -3,6 +3,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
@@ -50,7 +51,8 @@ public sealed class SessionManager
         CancellationToken cancellationToken = default,
         SessionPurpose? purpose = null,
         SessionCompletionPolicy? policy = null,
-        TimeSpan? maxDuration = null)
+        TimeSpan? maxDuration = null,
+        string? speechLocaleOverride = null)
     {
         if (string.IsNullOrWhiteSpace(agentId))
         {
@@ -60,7 +62,9 @@ public sealed class SessionManager
         var definition = await _definitions.GetAsync(agentId, agentVersion, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound($"Agent '{agentId}' was not found.");
 
-        var voiceAvailable = _voice.IsAvailable(definition);
+        var localeOverride = SpeechLocale.NormalizeOverride(speechLocaleOverride);
+        var effectiveLocale = SpeechLocale.Resolve(localeOverride, definition.ConversationPolicy.Language).Effective;
+        var voiceAvailable = _voice.IsAvailable(definition, effectiveLocale);
         if (mode == SessionMode.Voice && !voiceAvailable)
         {
             throw AgentCoreErrors.VoiceUnavailable();
@@ -93,7 +97,8 @@ public sealed class SessionManager
             Purpose: resolvedPurpose,
             CompletionPolicy: resolvedPolicy,
             LifecycleSource: LifecycleTransitionSource.System,
-            LifecycleChangedAt: now);
+            LifecycleChangedAt: now,
+            SpeechLocaleOverride: localeOverride);
         if (SessionLifecycle.DeadlineElapsed(resolvedPurpose, now))
         {
             snapshot = LifecycleTransition.Apply(
@@ -434,6 +439,28 @@ public sealed class SessionManager
         }
     }
 
+    public async Task<SessionSnapshot> SetSpeechLocaleAsync(
+        Guid sessionId,
+        string? locale,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var normalized = SpeechLocale.NormalizeOverride(locale);
+        if (string.Equals(snapshot.SpeechLocaleOverride, normalized, StringComparison.Ordinal))
+        {
+            return snapshot;
+        }
+
+        var next = snapshot with
+        {
+            SpeechLocaleOverride = normalized,
+            Revision = snapshot.Revision + 1,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        await _store.SaveAsync(next, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+        return next;
+    }
+
     private async Task<SessionSnapshot> PersistDeadlineExpiryAsync(
         SessionSnapshot snapshot,
         CancellationToken cancellationToken)
@@ -722,6 +749,7 @@ public sealed class VoiceAvailability
 {
     public EffectiveSpeechPlan? Plan { get; init; }
     public bool SpeechAdaptersResolved { get; init; } = true;
+    public ISpeechLocaleSupport LocaleSupport { get; init; } = UnrestrictedSpeechLocaleSupport.Instance;
 
     public EffectiveSpeechPlan EffectivePlan =>
         Plan ?? new EffectiveSpeechPlan(
@@ -732,12 +760,24 @@ public sealed class VoiceAvailability
             RecognitionCapabilities: null,
             SynthesisCapabilities: null);
 
-    public bool IsAvailable(AgentDefinition definition) =>
-        definition.Voice.Enabled
-        && !string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechRecognizer)
-        && !string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechSynthesizer)
-        && EffectivePlan.RecognitionResolvable
-        && EffectivePlan.SynthesisResolvable;
+    public bool IsAvailable(AgentDefinition definition, string? locale = null)
+    {
+        if (!definition.Voice.Enabled
+            || string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechRecognizer)
+            || string.IsNullOrWhiteSpace(definition.ProviderPreferences.SpeechSynthesizer)
+            || !EffectivePlan.RecognitionResolvable
+            || !EffectivePlan.SynthesisResolvable)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(locale))
+        {
+            return true;
+        }
+
+        return LocaleSupport.CanRecognize(locale) && LocaleSupport.CanSynthesize(locale);
+    }
 }
 
 public sealed class SessionRuntimeFactory(
