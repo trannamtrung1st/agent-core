@@ -72,7 +72,7 @@ Bind/validate on startup with standard .NET options and ValidateOnStart. These o
 | Options type/section | Fields and purpose |
 | --- | --- |
 | AgentCoreOptions / AgentCore | Profile (Synthetic default), definition directory, session limits (`MaxActiveSessions` counts in-memory runtimes only), reconnect grace, mailbox capacity, context budgets |
-| ProvidersOptions / Providers | LanguageModels, SpeechRecognizers, SpeechSynthesizers maps keyed by logical aliases; each has Adapter and capability-specific configuration |
+| ProvidersOptions / Providers | LanguageModels map plus independent `Speech.Recognition` / `Speech.Synthesis` records (defaults Adapter=Synthetic). SpeechRecognizers / SpeechSynthesizers maps remain aliases: `primary-stt` / `primary-tts` bind when the nested Speech Adapter is unset. Recognition names after P1: Synthetic, Browser, OpenAI, OpenAICompatibleBatch. Synthesis: Synthetic, Browser, OpenAI. |
 | InteractionOptions / Interaction | Candidate thresholds, classifier deadline, ducking, degraded policy, `PendingVoiceTimeoutMs` (default 30000) |
 | VoiceOptions / Voice | Canonical format, frame size, queue budgets, utterance limit, playback progress |
 | PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout, attachment blob root (`data/attachments`), workspace root (`data/workspaces`), template root (`agents/templates`), artifact blob root (`data/artifacts`); never under `local/` |
@@ -103,18 +103,16 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
       }
     },
-    "SpeechRecognizers": {
-      "primary-stt": {
+    "Speech": {
+      "Recognition": {
         "Adapter": "Synthetic",
         "BaseUrl": "https://speech.example/v1/",
         "ApiKey": "",
         "DefaultModel": "configured-stt-model",
         "AdditionalHeaders": {},
         "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
-      }
-    },
-    "SpeechSynthesizers": {
-      "primary-tts": {
+      },
+      "Synthesis": {
         "Adapter": "Synthetic",
         "BaseUrl": "https://speech.example/v1/",
         "ApiKey": "",
@@ -174,9 +172,9 @@ Providers__LanguageModels__primary-llm__Adapter=OpenAICompatible
 Providers__LanguageModels__primary-llm__BaseUrl=https://openrouter.ai/api/v1/
 Providers__LanguageModels__primary-llm__DefaultModel=<operator-fixed-openrouter-model-id>
 OPENROUTER_API_KEY=<backend-secret>
-Providers__SpeechRecognizers__primary-stt__Adapter=OpenAICompatibleBatch
-Providers__SpeechSynthesizers__primary-tts__Adapter=OpenAICompatibleSpeech
-Providers__SpeechSynthesizers__primary-tts__DisabledCapabilities__TimingMarks=true
+Providers__Speech__Recognition__Adapter=OpenAICompatibleBatch
+Providers__Speech__Synthesis__Adapter=OpenAI
+Providers__Speech__Synthesis__DisabledCapabilities__TimingMarks=true
 OPENAI_API_KEY=<backend-secret-when-using-openai-speech>
 Hosting__AllowedOrigins__0=http://localhost:5173
 ```
@@ -191,7 +189,7 @@ Repository root `local/` is gitignored scratch (personal notes, temp files). Not
 
 ## Hosted and on-prem provider configurations
 
-Portable capability aliases live in Agent Definition/provider selection; concrete endpoints, model IDs, headers and secrets live only in backend Infrastructure options. Keep the existing LanguageModels/SpeechRecognizers/SpeechSynthesizers maps: each capability can be selected independently and several text aliases can target different models for different identities. Do not replace them with one gateway-wide AI provider.
+Portable capability aliases live in Agent Definition/provider selection; concrete endpoints, model IDs, headers and secrets live only in backend Infrastructure options. Independent `Providers.Speech.Recognition` and `Providers.Speech.Synthesis` records are the primary speech selection. Keep LanguageModels plus optional SpeechRecognizers/SpeechSynthesizers maps: several text aliases can target different models for different identities, and `primary-stt`/`primary-tts` remain map fallbacks when nested Speech Adapter is unset. Do not replace them with one gateway-wide AI provider.
 
 Preferred hosted text override (merge into the synthetic example when Profile=Real; configure speech separately):
 
@@ -219,13 +217,13 @@ To migrate text inference on-prem, retain Adapter=OpenAICompatible and replace B
 For STT and TTS, initially choose the OpenAI adapters (STT: realtime transcription, recommended DefaultModel `gpt-live-transcribe`), then independently replace the adapter alias, endpoint, model, credentials and required/disabled capability constraints as needed. Prefer streaming STT with partials and streaming TTS; effective capabilities come from the adapter. Implement those adapters on schedule, but default automated tests keep Synthetic speech until `OPENAI_API_KEY` is supplied. Local speech may need a different concrete adapter if its protocol differs, but never changes ISpeechRecognizer/ISpeechSynthesizer or controller logic. All secrets/endpoints can be overridden using the same .NET double-underscore syntax, including:
 
 ```text
-Providers__SpeechRecognizers__primary-stt__BaseUrl=<hosted-or-local-stt-endpoint>
-Providers__SpeechRecognizers__primary-stt__DefaultModel=<stt-model>
-Providers__SpeechRecognizers__primary-stt__ApiKey=<backend-secret-or-empty>
-Providers__SpeechSynthesizers__primary-tts__BaseUrl=<hosted-or-local-tts-endpoint>
-Providers__SpeechSynthesizers__primary-tts__DefaultModel=<tts-model>
-Providers__SpeechSynthesizers__primary-tts__ApiKey=<backend-secret-or-empty>
-Providers__SpeechSynthesizers__primary-tts__Voices__default=<tts-voice>
+Providers__Speech__Recognition__BaseUrl=<hosted-or-local-stt-endpoint>
+Providers__Speech__Recognition__DefaultModel=<stt-model>
+Providers__Speech__Recognition__ApiKey=<backend-secret-or-empty>
+Providers__Speech__Synthesis__BaseUrl=<hosted-or-local-tts-endpoint>
+Providers__Speech__Synthesis__DefaultModel=<tts-model>
+Providers__Speech__Synthesis__ApiKey=<backend-secret-or-empty>
+Providers__Speech__Synthesis__Voices__default=<tts-voice>
 ```
 
 [Technology Decisions](10-technology-decisions.md) owns the provider rationale. No actual configuration files are created by this documentation update; React receives only safe effective capabilities, never credentials, model IDs or endpoints.
@@ -233,7 +231,7 @@ Providers__SpeechSynthesizers__primary-tts__Voices__default=<tts-voice>
 
 ## Provider selection and DI
 
-Bind strongly typed SpeechRecognitionProviderOptions, LanguageModelProviderOptions and SpeechSynthesisProviderOptions as the values of the existing SpeechRecognizers, LanguageModels and SpeechSynthesizers option maps. At startup the API composition root resolves each Adapter value to an Infrastructure implementation and registers the corresponding capability through DI. Within the speech maps, `OpenAI` selects OpenAiSpeechRecognizer/OpenAiSpeechSynthesizer; `Synthetic` selects their synthetic counterparts. `Local` below denotes a future installed local adapter, not automatic compatibility with every local server. An unknown/uninstalled adapter fails configuration validation.
+Bind strongly typed SpeechRecognitionProviderOptions and SpeechSynthesisProviderOptions on `Providers.Speech.Recognition` / `Providers.Speech.Synthesis`, and LanguageModelProviderOptions as the values of the LanguageModels map. SpeechRecognizers / SpeechSynthesizers maps still bind the same option types for `primary-stt` / `primary-tts` when nested Speech Adapter is unset. At startup the API composition root binds those Adapter names from configuration; Infrastructure still registers Synthetic `ISpeechRecognizer` / `ISpeechSynthesizer` until provider factories resolve the selected adapters. Within speech, `OpenAI` names OpenAiSpeechRecognizer/OpenAiSpeechSynthesizer; `Synthetic` names their synthetic counterparts; `Browser` is a client-owned path and does not require an Agent Core API key. `Local` below denotes a future installed local adapter, not automatic compatibility with every local server. An unknown or uninstalled **speech** adapter, or a hosted speech adapter without `OPENAI_API_KEY`, must not abort Synthetic or Real **text-only** host startup. Language-model selection remains independent of speech.
 
 These are Markdown-only selection overrides merged with the existing full options example, not additional configuration schemas or actual files. Each selected adapter reports effective capabilities; optional RequiredCapabilities/DisabledCapabilities and timeouts/model/voice configuration still apply. Provider-specific model IDs and secrets stay in backend options.
 
@@ -242,9 +240,11 @@ Initial hosted configuration:
 ```json
 {
   "Providers": {
-    "SpeechRecognizers": {"primary-stt": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "gpt-live-transcribe", "ApiKey": "<OPENAI_API_KEY>"}},
     "LanguageModels": {"primary-llm": {"Adapter": "OpenAICompatible", "BaseUrl": "https://openrouter.ai/api/v1/", "DefaultModel": "<operator-fixed-openrouter-model-id>", "ApiKey": "<OPENROUTER_API_KEY>"}},
-    "SpeechSynthesizers": {"primary-tts": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<OPENAI_API_KEY>"}}
+    "Speech": {
+      "Recognition": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "gpt-live-transcribe", "ApiKey": "<OPENAI_API_KEY>"},
+      "Synthesis": {"Adapter": "OpenAI", "BaseUrl": "https://api.openai.com/v1/", "DefaultModel": "<tts-model>", "Voices": {"default": "<voice>"}, "ApiKey": "<OPENAI_API_KEY>"}
+    }
   }
 }
 ```
@@ -254,9 +254,8 @@ Synthetic configuration (Profile=Synthetic; no keys or external calls):
 ```json
 {
   "Providers": {
-    "SpeechRecognizers": {"primary-stt": {"Adapter": "Synthetic"}},
     "LanguageModels": {"primary-llm": {"Adapter": "Scripted"}},
-    "SpeechSynthesizers": {"primary-tts": {"Adapter": "Synthetic"}}
+    "Speech": {"Recognition": {"Adapter": "Synthetic"}, "Synthesis": {"Adapter": "Synthetic"}}
   }
 }
 ```

@@ -16,6 +16,7 @@ using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -29,9 +30,24 @@ public static class InfrastructureServiceCollectionExtensions
         string profile = "Synthetic",
         LanguageModelProviderOptions? languageModel = null,
         PersistenceOptions? persistence = null,
-        InteractionPolicy? interaction = null)
+        InteractionPolicy? interaction = null,
+        SpeechProvidersOptions? speech = null)
     {
         persistence ??= new PersistenceOptions();
+        if (speech is not null)
+        {
+            services.TryAddSingleton(speech);
+        }
+        else
+        {
+            services.TryAddSingleton(provider =>
+            {
+                var configuration = provider.GetService<IConfiguration>();
+                return configuration is null
+                    ? new SpeechProvidersOptions()
+                    : SpeechProviderBinder.Bind(configuration).Options;
+            });
+        }
         services.TryAddSingleton(persistence);
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(SyntheticProviderAliases.Default);

@@ -6,6 +6,9 @@ namespace AgentCore.Api.Tests;
 
 public class AgentCoreApiFactory : WebApplicationFactory<Program>
 {
+    protected virtual IReadOnlyDictionary<string, string?> ExtraConfiguration =>
+        new Dictionary<string, string?>();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         var repo = FindRepoRoot();
@@ -13,14 +16,20 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var values = new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:WorkspaceRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-ws", Guid.NewGuid().ToString("N")),
                 ["Persistence:TemplateRoot"] = Path.Combine(repo, "agents", "templates"),
                 ["Persistence:ArtifactRoot"] = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"))
-            });
+            };
+            foreach (var pair in ExtraConfiguration)
+            {
+                values[pair.Key] = pair.Value;
+            }
+
+            config.AddInMemoryCollection(values);
         });
         TestHttpDefaults.UseLoopbackCaller(builder);
     }

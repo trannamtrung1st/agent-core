@@ -1,3 +1,6 @@
+using AgentCore.Infrastructure.Providers;
+using AgentCore.Infrastructure.Providers.OpenAI;
+
 namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 
 public sealed class LanguageModelProviderOptions
@@ -22,4 +25,7 @@ public sealed class ProviderTimeoutOptions
 public sealed class ProvidersOptions
 {
     public Dictionary<string, LanguageModelProviderOptions> LanguageModels { get; set; } = [];
+    public Dictionary<string, SpeechRecognitionProviderOptions> SpeechRecognizers { get; set; } = [];
+    public Dictionary<string, SpeechSynthesisProviderOptions> SpeechSynthesizers { get; set; } = [];
+    public SpeechProvidersOptions Speech { get; set; } = new();
 }

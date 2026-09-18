@@ -84,7 +84,7 @@ Synthetic implementations exist. OpenAI TTS exists. OpenAI-compatible batch STT 
 
 Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthesizer`. Browser speech is client-owned; keep the server adapters and browser adapters as two implementations behind one effective session capability/selection model.
 
-- [ ] Add explicit independent speech configuration.
+- [x] Add explicit independent speech configuration.
 
   Example conceptual selection:
   - STT: `Synthetic | Browser | OpenAI | OpenAICompatibleBatch | future local`

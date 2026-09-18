@@ -1,4 +1,5 @@
 using AgentCore.Application.Observability;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.Extensions.Configuration;
 
@@ -46,6 +47,14 @@ public sealed class HostingTopologyOptionsTests
         Assert.Equal("Local", hybrid["Providers:SpeechRecognizers:primary-stt:Adapter"]);
         Assert.StartsWith("http://127.0.0.1:8000", onPrem["Providers:LanguageModels:primary-llm:BaseUrl"]);
         Assert.Null(hosted["Providers:LanguageModels:primary-llm:ApiKey"]);
+        var nestedSpeech = SpeechProviderBinder.Bind(Build(new Dictionary<string, string?>
+        {
+            ["Providers:Speech:Recognition:Adapter"] = "Browser",
+            ["Providers:Speech:Synthesis:Adapter"] = "OpenAI"
+        }));
+        Assert.Equal("Browser", nestedSpeech.Options.Recognition.Adapter);
+        Assert.Equal("OpenAI", nestedSpeech.Options.Synthesis.Adapter);
+        Assert.True(string.IsNullOrWhiteSpace(nestedSpeech.Options.Recognition.ApiKey));
         var observability = hosted.GetSection("Observability").Get<ObservabilityOptions>();
         Assert.NotNull(observability);
         Assert.InRange(observability.TimelineCapacity, 1, 1000);

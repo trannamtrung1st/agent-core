@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 
 namespace AgentCore.Infrastructure.Providers.OpenAI;
 
@@ -14,6 +15,10 @@ public sealed class SpeechSynthesisProviderOptions
     public string? ApiKey { get; set; }
     public string? DefaultModel { get; set; } = "tts-1";
     public string DefaultVoice { get; set; } = "alloy";
+    public Dictionary<string, string> Voices { get; set; } = [];
+    public Dictionary<string, string> AdditionalHeaders { get; set; } = [];
+    public ProviderTimeoutOptions Timeouts { get; set; } = new();
+    public Dictionary<string, bool> DisabledCapabilities { get; set; } = [];
 }
 
 public static class OpenAiSpeechPayload

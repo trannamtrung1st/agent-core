@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 
 namespace AgentCore.Infrastructure.Providers.OpenAI;
 
@@ -11,6 +12,9 @@ public sealed class SpeechRecognitionProviderOptions
     public string? ApiKey { get; set; }
     public string? DefaultModel { get; set; } = "gpt-live-transcribe";
     public bool IncludeTranscriptionDelay { get; set; }
+    public Dictionary<string, string> AdditionalHeaders { get; set; } = [];
+    public ProviderTimeoutOptions Timeouts { get; set; } = new();
+    public Dictionary<string, bool> DisabledCapabilities { get; set; } = [];
 }
 
 public static class OpenAiRealtimeTranscriptionPayload
