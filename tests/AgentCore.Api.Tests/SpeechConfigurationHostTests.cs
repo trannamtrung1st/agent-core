@@ -131,18 +131,20 @@ public sealed class SpeechConfigurationHostTests
             ["Providers:Speech:Synthesis:Adapter"] = "Browser"
         });
         var resolution = factory.Services.GetRequiredService<SpeechResolution>();
-        Assert.Null(resolution.Recognizer);
+        Assert.IsType<AgentCore.Infrastructure.Providers.OpenAICompatible.OpenAICompatibleBatchSpeechRecognizer>(resolution.Recognizer);
         Assert.Null(resolution.Synthesizer);
         Assert.Equal(SpeechTransport.ServerAudio, resolution.Plan.InputTransport);
         Assert.Equal(SpeechTransport.ClientSpeech, resolution.Plan.OutputTransport);
-        Assert.False(resolution.Plan.RecognitionResolvable);
+        Assert.True(resolution.Plan.RecognitionResolvable);
         Assert.True(resolution.Plan.SynthesisResolvable);
+        Assert.False(resolution.Plan.RecognitionCapabilities?.StreamingAudio);
+        Assert.False(resolution.Plan.RecognitionCapabilities?.PartialTranscripts);
 
         var client = TestOwnerCapability.CreateOwnerClient(factory);
         var text = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, text.StatusCode);
         var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
-        Assert.Equal(HttpStatusCode.Conflict, voice.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, voice.StatusCode);
         Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
 
@@ -183,6 +185,25 @@ public sealed class SpeechConfigurationHostTests
         var client = TestOwnerCapability.CreateOwnerClient(factory);
         var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
         Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && !agent.VoiceAvailable);
+    }
+
+    [Fact]
+    public async Task OpenAI_realtime_stt_with_key_does_not_become_selectable_noop()
+    {
+        await using var factory = new SpeechHostFactory(new Dictionary<string, string?>
+        {
+            ["Providers:Speech:Recognition:Adapter"] = "OpenAI",
+            ["Providers:Speech:Synthesis:Adapter"] = "OpenAI",
+            ["OPENAI_API_KEY"] = "not-a-live-key"
+        });
+        var resolution = factory.Services.GetRequiredService<SpeechResolution>();
+        Assert.Null(resolution.Recognizer);
+        Assert.False(resolution.Plan.RecognitionResolvable);
+        Assert.IsType<AgentCore.Infrastructure.Providers.OpenAI.OpenAiSpeechSynthesizer>(resolution.Synthesizer);
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        Assert.Contains(agents!.Agents, agent => agent.Id == "examiner" && !agent.VoiceAvailable);
+        Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
 
     private sealed class SpeechHostFactory(Dictionary<string, string?> extra) : AgentCoreApiFactory

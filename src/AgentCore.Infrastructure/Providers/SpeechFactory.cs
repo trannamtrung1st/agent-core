@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Infrastructure.Providers.OpenAI;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +19,7 @@ internal static class SpeechFactory
     public static SpeechResolution Create(IServiceProvider provider, SpeechProvidersOptions? options)
     {
         options ??= provider.GetService<SpeechProvidersOptions>() ?? new SpeechProvidersOptions();
-        var recognition = ResolveRecognition(options.Recognition);
+        var recognition = ResolveRecognition(provider, options.Recognition);
         var synthesis = ResolveSynthesis(provider, options.Synthesis);
         return new SpeechResolution
         {
@@ -34,7 +35,9 @@ internal static class SpeechFactory
         };
     }
 
-    private static ResolvedRecognition ResolveRecognition(SpeechRecognitionProviderOptions options)
+    private static ResolvedRecognition ResolveRecognition(
+        IServiceProvider provider,
+        SpeechRecognitionProviderOptions options)
     {
         if (SpeechAdapterCatalog.IsBrowser(options.Adapter))
         {
@@ -47,8 +50,22 @@ internal static class SpeechFactory
             return new ResolvedRecognition(adapter, SpeechTransport.ServerAudio, true);
         }
 
-        // OpenAI realtime STT is a deferred no-op and must not be selectable.
-        // OpenAICompatibleBatch stays gated until hosted speech wiring.
+        if (SpeechAdapterCatalog.EqualsName(options.Adapter, SpeechAdapterCatalog.OpenAICompatibleBatch))
+        {
+            if (string.IsNullOrWhiteSpace(options.ApiKey))
+            {
+                return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false);
+            }
+
+            var http = provider.GetRequiredService<IHttpClientFactory>()
+                .CreateClient(OpenAICompatibleBatchSpeechRecognizer.HttpClientName);
+            return new ResolvedRecognition(
+                new OpenAICompatibleBatchSpeechRecognizer(http, options),
+                SpeechTransport.ServerAudio,
+                true);
+        }
+
+        // OpenAI realtime STT remains a deferred no-op and is not selectable.
         return new ResolvedRecognition(null, SpeechTransport.ServerAudio, false);
     }
 

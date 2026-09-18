@@ -80,7 +80,7 @@ The core backend ports already exist:
 - `ISpeechRecognizer`
 - `ISpeechSynthesizer`
 
-Synthetic implementations exist. OpenAI TTS exists. OpenAI-compatible batch STT exists. The realtime `OpenAiSpeechRecognizer` contract exists but its live session is still deferred/no-op, and Infrastructure currently resolves Synthetic speech for every profile.
+Synthetic implementations exist. OpenAI TTS exists. OpenAI-compatible batch STT exists and is the selectable hosted STT path. The realtime `OpenAiSpeechRecognizer` contract exists but its live session is still deferred/no-op and is not selectable.
 
 Do **not** force browser APIs into backend `ISpeechRecognizer` / `ISpeechSynthesizer`. Browser speech is client-owned; keep the server adapters and browser adapters as two implementations behind one effective session capability/selection model.
 
@@ -196,7 +196,7 @@ Do this after Browser voice works so normal development remains cheap.
 
 - [ ] Finish or replace the deferred realtime `OpenAiSpeechRecognizer` session with a real streaming implementation.
 
-  If realtime transcription is not worth the complexity yet, keep `OpenAICompatibleBatchSpeechRecognizer` as the supported hosted STT fallback and document the capability difference.
+- [x] Keep `OpenAICompatibleBatchSpeechRecognizer` as the supported hosted STT fallback and document the capability difference (no streaming input, no interim partials).
 
 - [x] Wire `OpenAiSpeechSynthesizer` through the new explicit provider selection.
 
