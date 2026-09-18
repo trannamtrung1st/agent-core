@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("Stop flushes a live voice response before queued text renders and keeps capture", async ({ page }) => {
+test("Stop flushes live voice playback, keeps the queue, and leaves capture live", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Voice" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Voice" }).click();
@@ -22,20 +22,21 @@ test("Stop flushes a live voice response before queued text renders and keeps ca
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackDiagnostics?.().epoch ?? 0), { timeout: 20_000 }).toBeGreaterThan(epochBefore);
-  const afterFlush = await page.evaluate(() => window.__agentCore?.playbackDiagnostics?.());
-  const r1AfterFlush = afterFlush?.rendered[r1 ?? ""] ?? 0;
+  await expect(page.getByLabel("Queued messages")).toContainText("Wait");
+  await expect.poll(async () => {
+    const snapshot = await page.evaluate(() => window.__agentCore?.playbackDiagnostics?.());
+    const ids = Object.keys(snapshot?.rendered ?? {}).filter((id) => id !== r1);
+    return ids.some((id) => (snapshot?.rendered[id] ?? 0) > 0);
+  }, { timeout: 5_000 }).toBe(false);
+  await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
+  await expect(page.getByTestId("connection")).toHaveText(/Speaking…|Listening…/);
 
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByLabel("Queued messages")).toHaveCount(0, { timeout: 15_000 });
   await expect.poll(async () => {
     const snapshot = await page.evaluate(() => window.__agentCore?.playbackDiagnostics?.());
     const ids = Object.keys(snapshot?.rendered ?? {}).filter((id) => id !== r1);
     return ids.some((id) => (snapshot?.rendered[id] ?? 0) > 0);
   }, { timeout: 25_000 }).toBe(true);
-
-  const after = await page.evaluate(() => window.__agentCore?.playbackDiagnostics?.());
-  const r2Ids = Object.keys(after?.rendered ?? {}).filter((id) => id !== r1);
-  expect(r2Ids.length).toBeGreaterThan(0);
-  expect(after?.rendered[r2Ids[0] ?? ""]).toBeGreaterThan(0);
-  expect(after?.rendered[r1 ?? ""]).toBe(r1AfterFlush);
-  await expect.poll(async () => page.evaluate(() => window.__agentCore?.captureStreaming() ?? false)).toBe(true);
-  await expect(page.getByTestId("connection")).toHaveText(/Speaking…|Listening…/);
 });

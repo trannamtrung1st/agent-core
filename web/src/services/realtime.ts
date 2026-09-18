@@ -611,20 +611,22 @@ function duckLocally(): void {
   }, 600);
 }
 
-async function stopVoicePlayback(preferredResponseId: string | null): Promise<void> {
+async function stopVoicePlayback(responseId: string): Promise<void> {
   const epochBefore = capture.playbackEpoch();
-  const target = capture.playbackResponseId() ?? playbackResponseId ?? preferredResponseId;
+  const target = capture.playbackResponseId() ?? playbackResponseId ?? responseId;
   if (target) {
     await interruptPlayback(target);
   }
 
-  if (capture.playbackEpoch() === epochBefore && voicePlaybackHoldActive()) {
+  if (capture.playbackEpoch() === epochBefore && (capture.playbackQueued() > 0 || !capture.playbackClosed())) {
     abortPlayback();
     await playbackInterrupt;
   } else if (!target) {
     abortPlayback();
     await playbackInterrupt;
   }
+
+  syncVoicePlaybackFromCapture();
 }
 
 async function interruptPlayback(responseId: string): Promise<void> {
@@ -650,6 +652,8 @@ async function interruptPlayback(responseId: string): Promise<void> {
         capture.setPlaybackListener(null);
         capture.setPlaybackCompleteListener(null);
         void sendPlayback("PlaybackStopped", "playback.stopped", responseId, stoppedAt);
+      } else if (useSessionStore.getState().voicePlaybackResponseId === responseId) {
+        syncVoicePlaybackResponseId(null);
       }
     } finally {
       flushing = false;
@@ -866,54 +870,28 @@ function syncVoicePlaybackFromCapture(): void {
     return;
   }
 
-  const responseId = capture.playbackResponseId() ?? playbackResponseId;
-  if (!responseId) {
+  if (!voicePlaybackHoldActive()) {
     syncVoicePlaybackResponseId(null);
     return;
   }
 
-  const rendered = capture.playbackRendered()[responseId] ?? 0;
-  const consumed = capture.playbackConsumed();
-  const active = capture.playbackQueued() > 0 || rendered > consumed;
-  syncVoicePlaybackResponseId(active ? responseId : null);
-}
-
-function voicePlaybackStopId(): string | null {
-  const direct = capture.playbackResponseId() ?? playbackResponseId;
-  if (direct) {
-    return direct;
+  const captureId = capture.playbackResponseId() ?? playbackResponseId;
+  if (captureId) {
+    syncVoicePlaybackResponseId(captureId);
   }
-
-  const rendered = capture.playbackRendered();
-  let fallback: string | null = null;
-  let bestRendered = 0;
-  for (const [id, count] of Object.entries(rendered)) {
-    if (count > bestRendered) {
-      bestRendered = count;
-      fallback = id;
-    }
-  }
-
-  return fallback;
 }
 
 function voicePlaybackHoldActive(): boolean {
-  const snapshot = useSessionStore.getState();
-  if (snapshot.mode !== "voice") {
+  const state = useSessionStore.getState();
+  if (state.mode !== "voice" || state.voicePlaybackResponseId == null) {
     return false;
   }
 
-  const responseId = voicePlaybackStopId();
-  if (!responseId) {
-    return false;
-  }
-
-  if (capture.playbackQueued() > 0 || !capture.playbackClosed()) {
-    return true;
-  }
-
-  const rendered = capture.playbackRendered()[responseId] ?? 0;
-  return rendered > capture.playbackConsumed();
+  return (
+    capture.playbackResponseId() === state.voicePlaybackResponseId
+    || capture.playbackQueued() > 0
+    || !capture.playbackClosed()
+  );
 }
 
 function composerOutputBusy(): boolean {
@@ -1840,7 +1818,7 @@ export function composerStopEnabled(): boolean {
     !isReadonlySession(snapshot)
     && snapshot.status !== "paused"
     && snapshot.connection === "ready"
-    && (snapshot.liveResponseId != null || voicePlaybackHoldActive() || snapshot.voicePlaybackResponseId != null)
+    && (snapshot.liveResponseId != null || voicePlaybackHoldActive())
   );
 }
 
@@ -2247,19 +2225,16 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   return accepted;
 }
 
-async function maybeAutoDispatchQueueHead(options?: { ignorePlaybackHold?: boolean }): Promise<void> {
+async function maybeAutoDispatchQueueHead(): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (
     isReadonlySession(snapshot)
     || snapshot.connection !== "ready"
     || snapshot.liveResponseId != null
+    || voicePlaybackHoldActive()
     || snapshot.pendingSendQueue.length === 0
     || sendRequest
   ) {
-    return;
-  }
-
-  if (!options?.ignorePlaybackHold && voicePlaybackHoldActive()) {
     return;
   }
 
@@ -2438,26 +2413,18 @@ export async function cancelRenderedResponse(): Promise<void> {
     return;
   }
 
-  const playbackResponseId = voicePlaybackStopId();
-  const liveResponseId = snapshot.liveResponseId;
-
-  if (snapshot.mode === "voice" && voicePlaybackHoldActive() && playbackResponseId) {
-    await stopVoicePlayback(playbackResponseId);
-    if (liveResponseId == null || liveResponseId === playbackResponseId) {
-      if (liveResponseId === playbackResponseId) {
-        await cancelServerResponse(liveResponseId);
-      }
-
-      void maybeAutoDispatchQueueHead({ ignorePlaybackHold: true });
-      return;
-    }
-
-    void maybeAutoDispatchQueueHead({ ignorePlaybackHold: true });
-    return;
+  const liveTarget = snapshot.liveResponseId;
+  let playbackTarget: string | null = null;
+  if (snapshot.mode === "voice" && voicePlaybackHoldActive()) {
+    playbackTarget = capture.playbackResponseId() ?? playbackResponseId ?? snapshot.voicePlaybackResponseId;
   }
 
-  if (liveResponseId) {
-    return cancelServerResponse(liveResponseId);
+  if (playbackTarget) {
+    await stopVoicePlayback(playbackTarget);
+  }
+
+  if (liveTarget) {
+    await cancelServerResponse(liveTarget);
   }
 }
 

@@ -411,6 +411,9 @@ describe("realtime race handling", () => {
   });
 
   it("enables Stop while voice playback continues after the live response completes", () => {
+    vi.spyOn(capture, "playbackResponseId").mockReturnValue("r1");
+    vi.spyOn(capture, "playbackClosed").mockReturnValue(false);
+    vi.spyOn(capture, "playbackQueued").mockReturnValue(0);
     useSessionStore.setState({
       ...emptySession(),
       connection: "ready",
@@ -419,6 +422,36 @@ describe("realtime race handling", () => {
       voicePlaybackResponseId: "r1"
     });
     expect(composerStopEnabled()).toBe(true);
+  });
+
+  it("cancels the live response after flushing a different voice playback target", async () => {
+    vi.spyOn(capture, "playbackResponseId").mockReturnValue("r1");
+    vi.spyOn(capture, "playbackClosed").mockReturnValue(false);
+    vi.spyOn(capture, "playbackQueued").mockReturnValue(1);
+    vi.spyOn(capture, "playbackEpoch").mockReturnValue(1);
+    vi.spyOn(capture, "flushPlayback").mockResolvedValue(100);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      mode: "voice",
+      liveResponseId: "r2",
+      voicePlaybackResponseId: "r1",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await cancelRenderedResponse();
+    expect(capture.flushPlayback).toHaveBeenCalledWith("r1");
+    expect(invoke).toHaveBeenCalledWith(
+      "CancelResponse",
+      expect.objectContaining({
+        type: "agent.response.cancel",
+        responseId: "r2"
+      })
+    );
   });
 
   it("queues locally instead of SendText while a response is live", async () => {

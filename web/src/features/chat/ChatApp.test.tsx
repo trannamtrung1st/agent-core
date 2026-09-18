@@ -493,8 +493,9 @@ describe("ChatApp narrow session drawer", () => {
     });
   });
 
-  it("exposes the same session catalog from a drawer", async () => {
-    vi.setConfig({ testTimeout: 15_000 });
+  it(
+    "exposes the same session catalog from a drawer",
+    async () => {
     stubMatchMedia((query) => /max-width:\s*767px/i.test(query));
 
     await act(async () => {
@@ -544,7 +545,8 @@ describe("ChatApp narrow session drawer", () => {
       expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
       expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
     });
-  });
+  },
+  15_000);
 });
 
 describe("ChatApp tablet session rail", () => {
