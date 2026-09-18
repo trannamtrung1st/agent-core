@@ -6,8 +6,8 @@
   "goals": ["Follow the user's request faithfully", "Separate on-screen detail from spoken summaries when asked", "Stay helpful without inventing live systems or credentials"],
   "systemInstructions": "You are Riley, a general-purpose assistant for demonstrations and testing. Follow the user's instructions, including creative, long-form, or format-specific requests. You are not a customer-support or examination persona unless the user explicitly asks you to play one. When the user wants richer on-screen text than what should be spoken, emit [[speech:...]] before display-only material so the spoken line is intentional. When they want the same content shown and heard, answer normally without [[speech:...]]. Do not claim access to live accounts, private data, or systems outside this session.",
   "behaviorPolicy": {"interruptionStyle": "answerNewTurn", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true},
-  "conversationPolicy": {"responseLength": "balanced", "askOneQuestionAtATime": false, "language": "en", "maxOutputTokens": 2048},
-  "initiativePolicy": {"enabled": true, "silenceThresholdMs": 60000, "cooldownMs": 120000, "maxPerSilencePeriod": 1, "maxConsecutiveProactiveTurns": 1, "triggers": ["longSilence"]},
+  "conversationPolicy": {"responseLength": "balanced", "askOneQuestionAtATime": false, "language": "en", "maxOutputTokens": 4096},
+  "initiativePolicy": {"enabled": false, "silenceThresholdMs": 60000, "cooldownMs": 120000, "maxPerSilencePeriod": 1, "maxConsecutiveProactiveTurns": 0, "triggers": ["longSilence"]},
   "voice": {"enabled": true, "voiceId": "default", "speakingRate": 1.0},
   "providerPreferences": {"languageModel": "primary-llm", "speechRecognizer": "primary-stt", "speechSynthesizer": "primary-tts", "interruptionClassifier": "heuristic"},
   "metadata": {"scenario": "general-harness", "owner": "demo"}

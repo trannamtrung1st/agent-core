@@ -21,6 +21,8 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(compliance);
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
+        Assert.False(general.InitiativePolicy.Enabled);
+        Assert.Equal(4096, general.ConversationPolicy.MaxOutputTokens);
         Assert.Equal(1, examiner.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support.InitiativePolicy.MaxPerSilencePeriod);
