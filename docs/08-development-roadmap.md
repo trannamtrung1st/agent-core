@@ -35,7 +35,7 @@ History paging, additive semantic lifecycle (`TransitionLifecycle`, RequestCompl
 
 ## P2D session model selection
 
-Trusted catalog, system default, persisted per-session resolved choice, session-aware resolver, reasoning effort, and Codex-like UI are **planned** until verified. Do not treat this row as observed. Gate: [Implementation Plan](18-implementation-plan.md#p2d--session-model-selection-and-inference-controls-planned-until-verified). Decision: [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
+Trusted catalog, system default, persisted per-session resolved choice, session-aware resolver, reasoning effort, and Codex-like UI are **observed**. Existing sessions stay pinned when the operator default changes. Gate: [Implementation Plan](18-implementation-plan.md#p2d--session-model-selection-and-inference-controls-observed). Decision: [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
 ## Post-MVP planned until verified
 

@@ -201,16 +201,18 @@ This table does not reopen historical Milestones 0–12, post-MVP A–H, P0 conv
 | P1C speech locale | Effective locale session override > agent default > fallback; Application BCP-47 validation; Browser STT tag / TTS exact-then-base-then-compatible; hosted hints in adapters; Voice fails clearly, text remains; realtime OpenAI STT unselectable | **Observed** for Application, adapters, Speech locale Select, Playwright override/fallback, and unedited Chrome 153 `fr-FR` STT/TTS smoke (`p1-final-fr-smoke-r2`) on HEAD `5764010` |
 | P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2A/P2B not started; P2D follows this freeze |
 
-## P2D — Session model selection and inference controls (planned until verified)
+## P2D — Session model selection and inference controls (observed)
 
 This table does not reopen P1. P2A/P2B structured-response work is out of scope for this slice.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
-| P2D catalog | Trusted `IModelCatalog` / `ILanguageModelResolver`; Synthetic fake models; Real default `deepseek-v41-flash` / `deepseek/deepseek-v4.1-flash` / medium | **Planned** |
-| P2D persistence | Concrete `SessionModelSelection`; legacy pin before first post-upgrade generation; per-turn provenance | **Planned** |
-| P2D runtime | Session-aware resolve for Conversation/Initiative/CompletionEvaluation; persist-before-use live switch; `SessionBusy` while generating | **Planned** |
-| P2D API/UI | Safe catalog API; create/mutate catalog-level choices; Codex-like Default + effort controls; session isolation | **Planned** |
+| P2D catalog | Trusted `IModelCatalog` / `ILanguageModelResolver`; Synthetic fake models; Real default `deepseek-v41-flash` / `deepseek/deepseek-v4.1-flash` / medium | **Observed** |
+| P2D persistence | Concrete `SessionModelSelection`; legacy pin before first post-upgrade generation; per-turn provenance | **Observed** |
+| P2D runtime | Session-aware resolve for Conversation/Initiative/CompletionEvaluation; persist-before-use live switch; `SessionBusy` while generating | **Observed** |
+| P2D API/UI | Safe catalog API; create/mutate catalog-level choices; Codex-like Default + effort controls; session isolation | **Observed** |
+
+P2D key-free gate (2026-09-19): Domain 42; Infrastructure 120 passed / 10 skipped; Application 380 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 135; web 340 unit tests and production build; `CI=1` Playwright 35 including two-session Synthetic catalog isolation; `scripts/compose-sqlite-volume.sh` passed on :5080. Opt-in `OpenRouter_deepseek_v41_default_accepts_tools_request` was skipped (no process `OPENROUTER_API_KEY`). P1 lifecycle/history/speech tests were not weakened.
 
 ## Handoff rule
 

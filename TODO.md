@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-P1A/P1B/P1C are **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19): Document V4.1 Flash as the intentional Real development/demo default. CI/Synthetic + Compose verification is green on that exact HEAD. Do not reopen or redesign P1. Historical repair `15930985f54e2e6bf4019dd0d8040796883021c7` remains earlier evidence only. The later `1d405c0` maintainer-notes-only TODO tweak does not reopen P1. P2A/P2B structured-response work has not started; P2D is the next authorized slice.
+P1A/P1B/P1C are **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19): Document V4.1 Flash as the intentional Real development/demo default. CI/Synthetic + Compose verification is green on that exact HEAD. Do not reopen or redesign P1. Historical repair `15930985f54e2e6bf4019dd0d8040796883021c7` remains earlier evidence only. The later `1d405c0` maintainer-notes-only TODO tweak does not reopen P1. P2A/P2B structured-response work has not started. P2D session model selection is observed on this worktree after the key-free gate.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
@@ -18,7 +18,7 @@ Always keep this section even when there is no active work.
 
 - [ ] Add proprietary license to the project.
 - [ ] Add tools that more assistant like, add more user info context (e.g, timezone, language, etc ...). [TBD]
-- [ ] Session model selection and inference controls — see P2D.
+- [x] Session model selection and inference controls — see P2D.
 - [ ] I think we can show the speech text in UI along with the display text. (just maybe highlight or separate it a bit, you decide best suit, UI/UX). [TBD]
 
 ## P0 — Close the current stabilization tail, then freeze it again
@@ -268,27 +268,27 @@ If user personalization grows beyond the current `"friend"` bug, define it delib
 
 ### P2D — Session model selection and inference controls
 
-Codex-like operator default plus a durable per-session resolved choice. Do not document this slice as observed until implementation and the key-free gate are complete. Do not start P2A/P2B structured-output work here.
+Codex-like operator default plus a durable per-session resolved choice. Observed after the key-free gate (Domain 42; Infrastructure 120 passed / 10 skipped; Application 380 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 135; web 340 unit tests and production build; `CI=1` Playwright 35; `scripts/compose-sqlite-volume.sh` on :5080). Opt-in V4.1 OpenRouter smoke was not run (no `OPENROUTER_API_KEY` in the process environment). Do not start P2A/P2B structured-output work here.
 
-- [ ] Trusted backend model catalog (`IModelCatalog`) with safe descriptors: catalog key, display name, trusted provider alias, concrete model ID, capabilities (tools/vision/structured output/reasoning), supported reasoning-effort values, default effort. No API keys, credentials, arbitrary base URLs, or provider headers.
+- [x] Trusted backend model catalog (`IModelCatalog`) with safe descriptors: catalog key, display name, trusted provider alias, concrete model ID, capabilities (tools/vision/structured output/reasoning), supported reasoning-effort values, default effort. No API keys, credentials, arbitrary base URLs, or provider headers.
 
-- [ ] Configuration-driven catalog with a compatibility path from the existing `primary-llm` alias. Shipped Real default: `deepseek-v41-flash` → `deepseek/deepseek-v4.1-flash`, reasoning effort `medium`, tools true, vision false (development/demo default, not a production recommendation). Synthetic exposes deterministic fake models.
+- [x] Configuration-driven catalog with a compatibility path from the existing `primary-llm` alias. Shipped Real default: `deepseek-v41-flash` → `deepseek/deepseek-v4.1-flash`, reasoning effort `medium`, tools true, vision false (development/demo default, not a production recommendation). Synthetic exposes deterministic fake models.
 
-- [ ] Persist concrete `SessionModelSelection` (catalog key, provider alias, model ID, selection source, reasoning effort). “Default” is not a dynamic pointer. Changing the global default later must not rewrite existing sessions.
+- [x] Persist concrete `SessionModelSelection` (catalog key, provider alias, model ID, selection source, reasoning effort). “Default” is not a dynamic pointer. Changing the global default later must not rewrite existing sessions.
 
-- [ ] Selection precedence for create: explicit host/user → optional agent default/constraint → system/operator default. Keep this generic; do not hard-code exam/application model IDs.
+- [x] Selection precedence for create: explicit host/user → optional agent default/constraint → system/operator default. Keep this generic; do not hard-code exam/application model IDs.
 
-- [ ] Session-aware `ILanguageModelResolver` with `ModelPurpose` (`Conversation`, `Initiative`, `CompletionEvaluation`). This first slice uses the session-selected model for all three. Do not mutate singleton `LanguageModelProviderOptions`. Capture the model once when a generation/evaluation begins.
+- [x] Session-aware `ILanguageModelResolver` with `ModelPurpose` (`Conversation`, `Initiative`, `CompletionEvaluation`). This first slice uses the session-selected model for all three. Do not mutate singleton `LanguageModelProviderOptions`. Capture the model once when a generation/evaluation begins.
 
-- [ ] Request/session-scoped reasoning effort on the provider-neutral generation request. Catalog descriptors validate allowed values. Models without reasoning control hide the selector and reject incompatible requests.
+- [x] Request/session-scoped reasoning effort on the provider-neutral generation request. Catalog descriptors validate allowed values. Models without reasoning control hide the selector and reject incompatible requests.
 
-- [ ] APIs: `GET /api/v2/models`; optional model choice on session create (omit = system default); `POST /api/v2/sessions/{id}/model`; trusted-host create may specify the same catalog-level choice. Browser input cannot supply provider alias, BaseUrl, ApiKey, or arbitrary provider JSON. Terminal sessions are read-only.
+- [x] APIs: `GET /api/v2/models`; optional model choice on session create (omit = system default); `POST /api/v2/sessions/{id}/model`; trusted-host create may specify the same catalog-level choice. Browser input cannot supply provider alias, BaseUrl, ApiKey, or arbitrary provider JSON. Terminal sessions are read-only.
 
-- [ ] Live model changes persist-before-use. Reject `SessionBusy` while a response/model/tool/completion generation is active. Failed persistence keeps the old selection.
+- [x] Live model changes persist-before-use. Reject `SessionBusy` while a response/model/tool/completion generation is active. Failed persistence keeps the old selection.
 
-- [ ] Per-turn assistant provenance (catalog key, provider alias, model ID, reasoning effort) survives persistence/history restore. Old entries may be null. No secrets.
+- [x] Per-turn assistant provenance (catalog key, provider alias, model ID, reasoning effort) survives persistence/history restore. Old entries may be null. No secrets.
 
-- [ ] Codex-like first-party UI: new chat starts at Default; effort controls follow the selected model; existing sessions restore their persisted choice; session isolation; busy/terminal cannot switch; failed mutation rolls the UI back. Speech locale stays independent. No per-message one-shot override.
+- [x] Codex-like first-party UI: new chat starts at Default; effort controls follow the selected model; existing sessions restore their persisted choice; session isolation; busy/terminal cannot switch; failed mutation rolls the UI back. Speech locale stays independent. No per-message one-shot override.
 
 ---
 

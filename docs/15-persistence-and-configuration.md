@@ -41,6 +41,8 @@ For bounded personal MVP sessions, `LoadMetadataAsync` does not load conversatio
 
 **Follow-on P1 observed and frozen:** Additive `lifecycleStatus` and purpose/deadline/policy persist on the snapshot; Application `LifecycleTransition` is the persist path for pause/resume/terminal outcomes and deadline expiry. Trusted-host `/api/v2/host/sessions` is the create/configuration surface for purpose/policy; ordinary public SessionView, catalog, `session.ready`, and history stay private of those fields. RequestComplete evaluation is observed. Session `SpeechLocaleOverride` persists independently of agent conversation language. See [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
+**P2D session model selection (observed):** Persist concrete `SessionModelSelection` (catalog key, trusted provider alias, model ID, selection source, reasoning effort) on the snapshot. Default is not a stored pointer. Legacy sessions pin the configured default before the first post-upgrade generation. Assistant entries may store `ModelGenerationProvenance` for the turn that produced them; older rows may be null. Do not persist secrets. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
+
 Stored Text retains full generated text. DeliveryMode records the interaction mode in which the entry was produced and never changes if the session later switches mode. ReceivedTextEndExclusive is the last validated browser-rendered prefix; public history projects only that prefix for assistant entries, so reconnect never newly reveals an unreceived generated tail. User entries set both offsets to Text.Length. On supersession, freeze HeardTextEndExclusive and ReceivedTextEndExclusive at their last validated values; late playback events/receipts do not revise that response. HeardTextEndExclusive remains separately conservative for voice-delivered context using [Spoken Until](06-realtime-voice.md#spoken-until); rendering text is not evidence of hearing it. Prompt construction uses received prefix when DeliveryMode is Text and heard prefix when DeliveryMode is Voice.
 
 ## Write ordering and recovery
@@ -104,6 +106,23 @@ Complete conceptual appsettings.json example, **Markdown only**:
         "AdditionalHeaders": {},
         "Timeouts": {"SetupSeconds": 10, "StreamIdleSeconds": 20, "TotalSeconds": 120}
       }
+    },
+    "ModelCatalog": {
+      "DefaultKey": "scripted-alpha",
+      "Models": [
+        {
+          "Key": "scripted-alpha",
+          "DisplayName": "Scripted Alpha",
+          "ProviderAlias": "primary-llm",
+          "ModelId": "scripted-alpha",
+          "Tools": true,
+          "Vision": false,
+          "StructuredOutput": false,
+          "Reasoning": true,
+          "SupportedReasoningEfforts": ["low", "medium", "high"],
+          "DefaultReasoningEffort": "medium"
+        }
+      ]
     },
     "Speech": {
       "Recognition": {

@@ -49,7 +49,8 @@ public sealed record ModelCapabilities(
 public sealed record ModelRequest(
     Guid ResponseId, IReadOnlyList<ModelMessage> Messages,
     int MaxOutputTokens = 512, double? Temperature = null,
-    IReadOnlyList<ModelToolDefinition>? Tools = null);
+    IReadOnlyList<ModelToolDefinition>? Tools = null,
+    string? ReasoningEffort = null);
 public abstract record ModelGenerationEvent;
 public sealed record ModelTextDelta(string Text) : ModelGenerationEvent;
 public sealed record ModelToolCallEvent(ModelToolCall Call) : ModelGenerationEvent;
@@ -66,7 +67,7 @@ public interface ILanguageModel
 
 Exactly one terminal Completed/Failed event per successful enumeration, followed by EOF. Caller cancellation may throw `OperationCanceledException` instead. Unexpected exceptions are normalized at the supervised application boundary; provider exception details never go to Contracts. Empty EOF is `Unavailable`, never implicit success. Model events have request-scoped identity; the pump adds ResponseId from its captured request, never from current mutable state. Tool calls and structured-output generation are outside MVP; unsupported requested capabilities fail before making a request.
 
-The Language Model reasons over normalized text messages only. ModelRequest has no vendor model ID; the configured adapter instance owns DefaultModel. Selecting another model means selecting/configuring a logical provider alias, never inspecting OpenRouter model IDs in Agent Runtime. Hidden provider reasoning fields are not spoken content and never become ModelTextDelta.
+The Language Model reasons over normalized text messages only. ModelRequest has no vendor model ID. A trusted `IModelCatalog` exposes operator-configured descriptors (catalog key, display name, trusted provider alias, concrete model ID, capabilities, supported reasoning-effort values). `ILanguageModelResolver.Resolve(SessionModelSelection, ModelPurpose)` captures an immutable client for Conversation, Initiative, or CompletionEvaluation from the persisted session selection. This P2D slice uses the session-selected model for all three purposes. Do not mutate singleton `LanguageModelProviderOptions` when a session changes model. Browser input never supplies provider alias, BaseUrl, ApiKey, or arbitrary provider JSON. Hidden provider reasoning fields are not spoken content and never become ModelTextDelta. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
 ## Independent speech ports
 
