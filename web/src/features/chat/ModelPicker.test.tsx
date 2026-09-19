@@ -98,7 +98,6 @@ describe("ModelPicker", () => {
         modelValue="scripted-alpha"
         effortValue="medium"
         layout="row"
-        variant="borderless"
         onModelChange={vi.fn()}
         onEffortChange={onEffortChange}
       />

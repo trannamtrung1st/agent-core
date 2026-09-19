@@ -98,7 +98,6 @@ export function ModelPicker({
   effortValue,
   disabled,
   layout = "stack",
-  variant = "outlined",
   onModelChange,
   onEffortChange
 }: {
@@ -108,7 +107,6 @@ export function ModelPicker({
   effortValue: string | null;
   disabled?: boolean;
   layout?: "stack" | "row";
-  variant?: "outlined" | "borderless";
   onModelChange: (key: string) => void;
   onEffortChange: (effort: string | null) => void;
 }) {
@@ -164,7 +162,6 @@ export function ModelPicker({
 
   const showEffort = Boolean(selected?.reasoning && efforts.length > 0);
   const compact = layout === "row";
-  const composer = variant === "borderless";
 
   function closePicker(): void {
     setOpen(false);
@@ -253,7 +250,7 @@ export function ModelPicker({
     <Flex
       align="center"
       gap={token.paddingXS}
-      className={`model-picker-chip${composer ? "" : " model-picker-chip-outlined"}`}
+      className="model-picker-chip"
     >
       <Button
         type="text"
@@ -295,12 +292,12 @@ export function ModelPicker({
   return (
     <Flex
       align="center"
-      className={`model-picker${compact ? " model-picker-row" : ""}${composer ? " model-picker-composer" : ""}`}
+      className={`model-picker model-picker-composer${compact ? " model-picker-row" : ""}`}
     >
       <Dropdown
         trigger={["click"]}
         arrow={false}
-        placement={composer ? "topLeft" : "bottomLeft"}
+        placement="topLeft"
         autoAdjustOverflow={false}
         open={open}
         onOpenChange={setOpen}

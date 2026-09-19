@@ -136,11 +136,9 @@ export function ChatApp() {
       effort
     );
   };
-  const composerVisible = !readonly && state.status !== "paused";
   const modelPicker = (
     <ModelPicker
       layout="row"
-      variant={composerVisible ? "borderless" : "outlined"}
       models={state.modelCatalog}
       defaultKey={state.modelCatalogDefaultKey}
       modelValue={modelValue}
@@ -170,6 +168,7 @@ export function ChatApp() {
     connectionError: state.error
   };
   const connectionText = conversationStatusLabel(statusSource);
+  const profileText = `Profile: ${profile || "…"}`;
   const activity = mapAgentActivity(statusSource);
   const connectionTone = conversationStatusTone(connectionText);
   const failedAlertTitle = readonly && state.error ? state.error : connectionText;
@@ -241,7 +240,6 @@ export function ChatApp() {
               title={inSession ? state.agentName || "Agent" : "New chat"}
               subtitle={inSession ? state.agentRole : null}
               timestamp={headerTimestamp}
-              modelControls={inSession && !composerVisible ? modelPicker : null}
               speechLocale={
                 inSession && !readonly ? (
                   <SpeechLocalePicker
@@ -271,13 +269,19 @@ export function ChatApp() {
               onEnd={() => void hangUp()}
             />
             <Flex align="center" gap={8} className="chat-header-meta">
-              <Typography.Text data-testid="profile" type="secondary" className="chat-header-profile">
-                Profile: {profile || "…"}
+              <Typography.Text
+                data-testid="profile"
+                type="secondary"
+                className="chat-header-profile"
+                ellipsis={{ tooltip: profileText }}
+              >
+                {profileText}
               </Typography.Text>
               <Typography.Text
                 data-testid="connection"
                 type={connectionTone === "alarm" ? "danger" : "secondary"}
                 className="chat-header-status"
+                ellipsis={{ tooltip: connectionText }}
               >
                 {connectionText}
               </Typography.Text>

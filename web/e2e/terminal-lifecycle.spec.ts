@@ -77,6 +77,7 @@ async function expectReadOnly(page: Page, note: string): Promise<void> {
   await expect(page.getByRole("button", { name: "Send" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Voice" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Resume" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Model" })).toHaveCount(0);
   await expect(page.locator(".conversation-composer [aria-label='Message']")).toHaveCount(0);
 }
 

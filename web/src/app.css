@@ -151,7 +151,15 @@ body,
 .chat-header-profile,
 .chat-header-status {
   font-size: 12px;
-  white-space: nowrap;
+}
+
+/* Cap the header meta text so a long value (for example a connection error)
+   ellipsizes instead of overflowing. Scoped under the meta row because Ant
+   Design's `.ant-typography-ellipsis` sets `max-width: 100%` at higher
+   specificity than these classes. */
+.chat-header-meta .chat-header-profile,
+.chat-header-meta .chat-header-status {
+  max-width: min(24rem, 40vw);
 }
 
 .app-content {
@@ -575,13 +583,6 @@ body,
   align-items: center;
   min-width: 0;
   max-width: 100%;
-}
-
-.model-picker-chip-outlined {
-  padding: var(--ac-space-compact);
-  border: 1px solid var(--ac-color-border);
-  border-radius: 6px;
-  background: var(--ac-color-container);
 }
 
 .model-picker-model.ant-btn {
@@ -1108,11 +1109,6 @@ body,
 @media (max-width: 767px) {
   .app-header {
     padding-inline: var(--ac-space-default) !important;
-  }
-
-  .chat-header-profile,
-  .chat-header-status {
-    white-space: normal;
   }
 
   .conversation-column {

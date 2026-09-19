@@ -10,7 +10,6 @@ export function ChatHeader({
   timestamp,
   sessionsToggle,
   speechLocale,
-  modelControls,
   onEnd,
   inSession
 }: {
@@ -19,7 +18,6 @@ export function ChatHeader({
   timestamp?: string | null;
   sessionsToggle?: ReactNode;
   speechLocale?: ReactNode;
-  modelControls?: ReactNode;
   onEnd: () => void;
   inSession: boolean;
 }) {
@@ -57,9 +55,8 @@ export function ChatHeader({
           ) : null}
         </div>
       </Flex>
-      {speechLocale || modelControls || inSession ? (
+      {speechLocale || inSession ? (
         <Flex align="center" gap={8} className="chat-header-actions">
-          {modelControls}
           {speechLocale}
           {inSession ? (
             <Dropdown menu={{ items }} trigger={["click"]} placement="bottomRight">

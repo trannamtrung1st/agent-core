@@ -199,10 +199,12 @@ test("manual pause via deactivate shows Resume and keeps history", async ({ page
   });
   expect(deactivated.ok).toBe(true);
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Model" })).toHaveCount(0);
   await expect(page.getByTestId("connection")).toHaveText("Paused");
   await expect(page.getByText("Hello from synthetic.")).toBeVisible();
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByLabel("Message")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
 });
 

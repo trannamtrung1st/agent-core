@@ -814,7 +814,31 @@ describe("ChatApp model selection", () => {
     expect(screen.getByLabelText("Reasoning")).toBeInTheDocument();
   });
 
-  it("does not allow model editing on an ended session", async () => {
+  it("hides model controls on a paused session", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s-paused",
+        connection: "idle",
+        status: "paused",
+        pauseReason: "inactivity",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        modelCatalog: models,
+        modelCatalogDefaultKey: "scripted-alpha",
+        sessionModelKey: "scripted-alpha",
+        sessionModelEffort: "medium",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Reasoning")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+  });
+
+  it("hides model controls on an ended session", async () => {
     await act(async () => {
       useSessionStore.setState({
         ...emptySession(),
@@ -832,8 +856,8 @@ describe("ChatApp model selection", () => {
       });
     });
     await act(async () => renderChat());
-    expect(screen.getByRole("button", { name: "Model" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Reasoning")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
   });
 });

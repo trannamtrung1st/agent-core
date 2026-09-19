@@ -80,8 +80,7 @@ public sealed class ToolWorkflowRuntimeTests
     [Fact]
     public async Task Deactivation_rejects_stale_workspace_write()
     {
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var workspace = new GatedWorkspace(gate);
+        var workspace = new GatedWorkspace();
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
@@ -92,12 +91,9 @@ public sealed class ToolWorkflowRuntimeTests
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
         using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(
-            item => item.Payload is StateChangedOutput state
-                && state.OutputState == nameof(OutputActivity.RunningTools),
-            wait.Token);
+        await workspace.Entered.WaitAsync(wait.Token);
         Assert.True(await runtime.RequestDeactivateAsync());
-        gate.TrySetResult();
+        workspace.Release();
         await runtime.WaitUntilIdleAsync();
         Assert.Empty(workspace.Writes);
     }
@@ -185,9 +181,15 @@ public sealed class ToolWorkflowRuntimeTests
         public ValueTask DisposeAsync() => Runtime.DisposeAsync();
     }
 
-    private sealed class GatedWorkspace(TaskCompletionSource gate) : ISessionWorkspace
+    private sealed class GatedWorkspace : ISessionWorkspace
     {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Entered => _entered.Task;
         public List<string> Writes { get; } = [];
+
+        public void Release() => _release.TrySetResult();
 
         public ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
@@ -206,31 +208,20 @@ public sealed class ToolWorkflowRuntimeTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask WriteAsync(
+        public async ValueTask WriteAsync(
             Guid sessionId,
             string logicalPath,
             ReadOnlyMemory<byte> bytes,
             CancellationToken cancellationToken = default)
         {
-            return Wait(cancellationToken);
+            _entered.TrySetResult();
+            await _release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            Writes.Add(logicalPath);
         }
 
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
-
-        private async ValueTask Wait(CancellationToken cancellationToken)
-        {
-            try
-            {
-                await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
-            Writes.Add("/workspace/working/stale.txt");
-        }
     }
 
     private sealed class WorkspaceWriteLanguageModel : ILanguageModel
