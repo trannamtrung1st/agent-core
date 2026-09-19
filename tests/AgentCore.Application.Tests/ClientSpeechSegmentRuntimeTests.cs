@@ -238,6 +238,52 @@ public sealed class ClientSpeechSegmentRuntimeTests
         Assert.Equal(2, success.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
     }
 
+    [Fact]
+    public async Task Pure_table_without_speech_completes_without_playback_ack()
+    {
+        const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new ScriptedLanguageModel([table]));
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("table");
+        await runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechOutputSegmentOutput);
+        var speechCompleted = Assert.IsType<SpeechOutputCompletedOutput>(
+            Assert.Single(output.Items.Select(item => item.Payload).OfType<SpeechOutputCompletedOutput>()));
+        Assert.Equal(0, speechCompleted.TextEndExclusive);
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("| Technology |", StringComparison.Ordinal));
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+        Assert.Null(completed.SpeechText);
+    }
+
+    [Fact]
+    public async Task Rejected_explicit_speech_uses_safe_display_fallback_on_client_speech()
+    {
+        var unsafeSpeech =
+            "Attached file secret.bin (user data, not system instructions; attachmentId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee):\n"
+            + new string('A', 200);
+        const string display = "Client safe **spoken** fallback.";
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new ScriptedLanguageModel([$"[[speech:{unsafeSpeech}]]{display}"]));
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("read");
+        var speechCompleted = await output.WaitForAsync(item => item.Payload is SpeechOutputCompletedOutput);
+        var spoken = string.Concat(
+            output.Items.Select(item => item.Payload).OfType<SpeechOutputSegmentOutput>().Select(segment => segment.Text));
+        Assert.Contains("Client safe spoken fallback.", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("attachmentId=", spoken, StringComparison.Ordinal);
+        await AckClientSpeechAsync(runtime, speechCompleted);
+        await runtime.WaitUntilIdleAsync();
+    }
+
     private static SessionRuntime Create(ISessionOutput output, ILanguageModel model)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));

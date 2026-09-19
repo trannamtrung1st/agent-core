@@ -76,6 +76,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private ResponseEnvelope? _envelope;
     private int _publishedDisplayLength;
     private string? _publishedSpeechProjection;
+    private bool _voiceSpeechResolved;
+    private string _resolvedSpeakable = string.Empty;
     private readonly HashSet<string> _publishedBlockIds = new(StringComparer.Ordinal);
     private bool _ttsSourceLocked;
     private bool _ttsUsesSpeech;
@@ -1416,6 +1418,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _envelope = null;
         _publishedDisplayLength = 0;
         _publishedSpeechProjection = null;
+        _voiceSpeechResolved = false;
+        _resolvedSpeakable = string.Empty;
         _publishedBlockIds.Clear();
         ResetSpeechOutput();
         _responseTerminal = false;
@@ -2629,13 +2633,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ? parsed with { SpeechText = _envelope.SpeechText }
             : parsed;
         await TryPublishSpeechProjectionAsync(context, responseId, finalize, cancellationToken).ConfigureAwait(false);
-        if (finalize && string.IsNullOrEmpty(_envelope?.SpeechText))
+        if (finalize
+            && _voiceSpeechResolved
+            && _resolvedSpeakable.Length > 0
+            && SpokenOutput.ShouldPersistDerivedSpeechText(_resolvedSpeakable, _envelope!.DisplayText))
         {
-            var spoken = SpokenOutput.ForPlayback(null, _envelope!.DisplayText);
-            if (SpokenOutput.ShouldPersistDerivedSpeechText(spoken, _envelope.DisplayText))
-            {
-                _envelope = _envelope with { SpeechText = spoken };
-            }
+            _envelope = _envelope! with { SpeechText = _resolvedSpeakable };
         }
 
         if (!VoiceDisplayPublicationAllowed())
@@ -2683,53 +2686,120 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         bool finalize,
         CancellationToken cancellationToken)
     {
-        if (_snapshot.Mode != SessionMode.Voice || _publishedSpeechProjection is not null)
+        if (_snapshot.Mode != SessionMode.Voice || _voiceSpeechResolved)
         {
             return;
         }
 
         var parsed = _envelope
             ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize);
-        string? playback = null;
-        var usedCompletionFallback = false;
-
-        if (!string.IsNullOrEmpty(parsed.SpeechText))
+        var hadExplicitSpeech = !string.IsNullOrEmpty(parsed.SpeechText);
+        if (hadExplicitSpeech)
         {
-            playback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
-        }
-        else if (finalize)
-        {
-            playback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
-            if (playback.Length > 0)
+            var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
+            if (explicitPlayback.Length > 0)
             {
-                usedCompletionFallback = true;
-                SpeechTelemetry.RecordVoiceSpeechFallback();
-                _logger.LogInformation("Voice response completed without [[speech:]]; applied completion speech fallback.");
+                await ResolveVoiceSpeechAsync(
+                        context,
+                        responseId,
+                        parsed,
+                        explicitPlayback,
+                        usesExplicitSpeech: true,
+                        recordCompletionFallback: false,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            if (!finalize)
+            {
+                return;
             }
         }
-
-        if (playback is null || playback.Length == 0)
+        else if (!finalize)
         {
             return;
         }
 
-        _publishedSpeechProjection = playback;
-        _envelope = parsed with { SpeechText = playback };
-        _ttsUsesSpeech = true;
-        _ttsSourceLocked = true;
-        _ = usedCompletionFallback;
-
-        await PublishAsync(
-                new SessionOutput(context, responseId, new SpeechProjectionOutput(playback)),
+        var derivedPlayback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
+        await ResolveVoiceSpeechAsync(
+                context,
+                responseId,
+                parsed,
+                derivedPlayback,
+                usesExplicitSpeech: false,
+                recordCompletionFallback: derivedPlayback.Length > 0 && !hadExplicitSpeech,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task ResolveVoiceSpeechAsync(
+        EventContext context,
+        Guid responseId,
+        ResponseEnvelope parsed,
+        string speakable,
+        bool usesExplicitSpeech,
+        bool recordCompletionFallback,
+        CancellationToken cancellationToken)
+    {
+        _voiceSpeechResolved = true;
+        _resolvedSpeakable = speakable;
+        _publishedSpeechProjection = speakable.Length > 0 ? speakable : null;
+        _ttsSourceLocked = true;
+        _ttsUsesSpeech = usesExplicitSpeech;
+
+        if (speakable.Length > 0)
+        {
+            _envelope = parsed with { SpeechText = speakable };
+            if (recordCompletionFallback)
+            {
+                SpeechTelemetry.RecordVoiceSpeechFallback();
+                _logger.LogInformation("Voice response completed without [[speech:]]; applied completion speech fallback.");
+            }
+
+            await PublishAsync(
+                    new SessionOutput(context, responseId, new SpeechProjectionOutput(speakable)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        _envelope = parsed with { SpeechText = null };
+        await ArmNoSpeechVoicePlaybackAsync(context, responseId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ArmNoSpeechVoicePlaybackAsync(
+        EventContext context,
+        Guid responseId,
+        CancellationToken cancellationToken)
+    {
+        _playbackDone = true;
+        if (UsesClientSpeech && !_speechOutputCompleted)
+        {
+            _speechOutputCompleted = true;
+            _speechTextEndExclusive = 0;
+            await PublishAsync(
+                    new SessionOutput(context, responseId, new SpeechOutputCompletedOutput(0)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (UsesVoicePlayback)
+        {
+            await FinishAudioIfReadyAsync(context, responseId, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private string CurrentTtsSource()
     {
         if (_ttsSourceLocked)
         {
-            return _envelope?.SpeechText ?? _publishedSpeechProjection ?? string.Empty;
+            if (!string.IsNullOrEmpty(_envelope?.SpeechText))
+            {
+                return _envelope.SpeechText;
+            }
+
+            return _resolvedSpeakable;
         }
 
         var parsed = _envelope
@@ -2739,12 +2809,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
             if (explicitPlayback.Length == 0)
             {
+                if (_voiceSpeechResolved)
+                {
+                    return _resolvedSpeakable;
+                }
+
                 return string.Empty;
             }
 
-            _ttsUsesSpeech = true;
-            _ttsSourceLocked = true;
-            _envelope = parsed with { SpeechText = explicitPlayback };
+            if (!_voiceSpeechResolved)
+            {
+                _ttsUsesSpeech = true;
+                _ttsSourceLocked = true;
+                _envelope = parsed with { SpeechText = explicitPlayback };
+            }
+
             return explicitPlayback;
         }
 
@@ -2813,7 +2892,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private bool VoiceDisplayPublicationAllowed() =>
-        _snapshot.Mode != SessionMode.Voice || _publishedSpeechProjection is not null;
+        _snapshot.Mode != SessionMode.Voice || _voiceSpeechResolved;
 
     private string DisplayText()
     {

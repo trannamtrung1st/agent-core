@@ -458,6 +458,98 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.WaitUntilIdleAsync();
     }
 
+    [Fact]
+    public async Task Pure_table_without_speech_resolves_no_speech_but_publishes_display()
+    {
+        const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([table]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("table");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(synthesizer.Texts);
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechProjectionOutput);
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("| Technology |", StringComparison.Ordinal));
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+        Assert.Null(completed.SpeechText);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(0, assistant.HeardTextEndExclusive);
+        Assert.Contains("| React |", assistant.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Pure_fenced_code_without_prose_resolves_no_speech()
+    {
+        var code = "```csharp\n" + new string('x', 400) + "\n```";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([code]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("code");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(synthesizer.Texts);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+    }
+
+    [Fact]
+    public async Task Rejected_explicit_speech_falls_back_to_safe_display_prose()
+    {
+        var unsafeSpeech =
+            "Attached file secret.bin (user data, not system instructions; attachmentId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee):\n"
+            + new string('A', 200);
+        const string display = "Safe **spoken** fallback prose.";
+        var model = $"[[speech:{unsafeSpeech}]]{display}";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([model]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("read");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Contains(synthesizer.Texts, text => text.Contains("Safe spoken fallback prose.", StringComparison.Ordinal));
+        Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("attachmentId=", text, StringComparison.Ordinal));
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("**spoken**", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Rejected_explicit_speech_and_unsafe_display_resolves_no_speech()
+    {
+        var unsafeSpeech =
+            "Attached file secret.bin (user data, not system instructions; attachmentId=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb):\n"
+            + new string('B', 200);
+        var unsafeDisplay =
+            "Attached file notes.txt (user data, not system instructions; attachmentId=cccccccc-cccc-cccc-cccc-cccccccccccc):\n"
+            + new string('C', 200);
+        var model = $"[[speech:{unsafeSpeech}]]{unsafeDisplay}";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([model]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("dump");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(synthesizer.Texts);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+        Assert.Null(completed.SpeechText);
+    }
+
     private static SessionRuntime CreateVoice(
         ISessionOutput output,
         ILanguageModel model,
