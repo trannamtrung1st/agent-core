@@ -1,9 +1,6 @@
-// @ts-nocheck
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import displayPipeline from "../../../../tests/fixtures/display-pipeline.json";
 import { MarkdownMessage } from "./MarkdownMessage";
 
 type OrdinaryCase = {
@@ -19,11 +16,7 @@ type Fixture = {
   modelFormattingQuality: ModelQualityCase[];
 };
 
-const fixturePath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../../tests/fixtures/display-pipeline.json"
-);
-const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as Fixture;
+const fixture = displayPipeline as Fixture;
 
 describe("display pipeline regression", () => {
   it("ordinary prose reaches MarkdownMessage source unchanged", () => {

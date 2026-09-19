@@ -177,9 +177,11 @@ public sealed class InteractionControllerTests
         Assert.True(harness.Model.Calls >= 2);
         harness.Model.Gate.TrySetResult();
         await harness.Runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain(harness.Output.TextDeltas, delta => delta.Text == "R1b");
         Assert.DoesNotContain(
             harness.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant && entry.Text.Contains("R1b", StringComparison.Ordinal));
+        Assert.Contains(harness.Output.TextDeltas, delta => delta.Text == "R2");
         Assert.Contains(
             harness.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant && entry.Text == "R2");

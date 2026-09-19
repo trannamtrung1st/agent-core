@@ -8,6 +8,9 @@ export default defineConfig({
   appType: "spa",
   plugins: [react()],
   server: {
+    fs: {
+      allow: [".."]
+    },
     port: Number(process.env.VITE_DEV_PORT ?? 5173),
     proxy: {
       "/api": { target: apiProxyTarget, changeOrigin: true },
