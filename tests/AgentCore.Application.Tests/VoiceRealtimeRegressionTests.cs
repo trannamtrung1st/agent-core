@@ -73,7 +73,7 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public async Task Streaming_intro_then_table_speaks_intro_not_table_cells_or_runtime_lead_in()
+    public async Task Streaming_intro_then_table_resolves_no_speech_but_publishes_display()
     {
         const string intro = "Here's a markdown table for you:\n";
         const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
@@ -87,17 +87,19 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("table");
-        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
-        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
-        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
-        var narrated = string.Concat(synthesizer.Texts);
-        Assert.Contains("Here's a markdown table for you:", narrated, StringComparison.Ordinal);
-        Assert.DoesNotContain("I've put the detailed answer on screen.", narrated, StringComparison.Ordinal);
-        Assert.DoesNotContain("| Technology |", narrated, StringComparison.Ordinal);
-        Assert.DoesNotContain("React", narrated, StringComparison.Ordinal);
+        Assert.Empty(synthesizer.Texts);
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechProjectionOutput);
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("| Technology |", StringComparison.Ordinal));
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+        Assert.Null(completed.SpeechText);
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal("Here's a markdown table for you:", assistant.Envelope?.SpeechText);
+        Assert.Contains("Here's a markdown table for you:", assistant.Text, StringComparison.Ordinal);
+        Assert.Null(assistant.Envelope?.SpeechText);
     }
 
     [Fact]
@@ -125,18 +127,18 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public void Structured_display_without_explicit_speech_derives_display_prose_only()
+    public void Structured_display_without_explicit_speech_does_not_stitch_prose_islands()
     {
         var display = "```csharp\npublic class Example {}\n```\nDetails on screen.";
-        Assert.Equal("Details on screen.", SpokenOutput.ForPlayback(null, display));
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(null, display));
     }
 
     [Fact]
-    public void Long_structured_display_without_speech_derives_prose_or_empty_not_runtime_lead_in()
+    public void Long_structured_display_without_speech_resolves_no_speech_not_runtime_lead_in()
     {
         var code = "```csharp\n" + new string('x', 900) + "\n```\nSchedule follows.";
         Assert.True(code.Length > 800);
-        Assert.Equal("Schedule follows.", SpokenOutput.ForPlayback(null, code));
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(null, code));
 
         var table = "| Day | Item |\n| --- | --- |\n"
             + string.Join('\n', Enumerable.Range(0, 40).Select(index => $"| {index} | {new string('a', 20)} |"));
@@ -145,12 +147,12 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public void Vietnamese_structured_markdown_without_speech_never_uses_runtime_english_lead_in()
+    public void Vietnamese_structured_markdown_without_speech_resolves_no_speech()
     {
         const string display =
             "Đây là bảng chi tiết:\n\n| Cột | Giá trị |\n| --- | --- |\n| A | một |\n";
         var spoken = SpokenOutput.ForPlayback(null, display);
-        Assert.Contains("Đây là bảng chi tiết", spoken, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, spoken);
         Assert.DoesNotContain("I've put the detailed answer on screen.", spoken, StringComparison.Ordinal);
     }
 

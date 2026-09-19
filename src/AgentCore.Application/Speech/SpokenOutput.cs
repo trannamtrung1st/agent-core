@@ -116,9 +116,56 @@ public static class SpokenOutput
         return text.IndexOfAny(['+', '/', '=']) >= 0 && Base64Like.IsMatch(text);
     }
 
+    /// <summary>
+    /// True when display text includes materially rich structure (fences, tables, indented code).
+    /// Compatibility fallback must not stitch prose fragments around such regions.
+    /// </summary>
+    public static bool HasMaterialStructuredContent(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        if (text.Contains("```", StringComparison.Ordinal)
+            || text.Contains("~~~", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (MarkdownTable.IsMatch(text))
+        {
+            return true;
+        }
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length > 0
+                && trimmed.StartsWith('|')
+                && trimmed.EndsWith('|'))
+            {
+                return true;
+            }
+
+            if (line.Length > 0 && (line[0] == '\t' || line.StartsWith("    ", StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string DeriveSpeakableProseFromDisplay(string text)
     {
         if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        if (HasMaterialStructuredContent(text))
         {
             return string.Empty;
         }

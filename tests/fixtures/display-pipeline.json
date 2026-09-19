@@ -1,0 +1,40 @@
+{
+  "ordinaryProse": [
+    {
+      "id": "plain-paragraphs",
+      "rawFinalModelText": "This is ordinary display prose.\n\nA second paragraph with **bold** and *emphasis*.",
+      "expectedDisplayText": "This is ordinary display prose.\n\nA second paragraph with **bold** and *emphasis*."
+    },
+    {
+      "id": "heading-and-list",
+      "rawFinalModelText": "## Summary\n\n- first point\n- second point\n\nClosing sentence.",
+      "expectedDisplayText": "## Summary\n\n- first point\n- second point\n\nClosing sentence."
+    },
+    {
+      "id": "speech-marker-stripped",
+      "rawFinalModelText": "Visible display [[speech:Spoken only]] after marker.",
+      "expectedDisplayText": "Visible display  after marker.",
+      "expectedSpeechText": "Spoken only"
+    }
+  ],
+  "modelFormattingQuality": [
+    {
+      "id": "trailing-fenced-block",
+      "rawFinalModelText": "Summary paragraph the model intended as prose.\n\n```json\n{ \"id\": 1 }\n```",
+      "expectedDisplayText": "Summary paragraph the model intended as prose.\n\n```json\n{ \"id\": 1 }\n```",
+      "expectCodeBlock": true
+    },
+    {
+      "id": "unclosed-fence",
+      "rawFinalModelText": "Intro line.\n\n```http\nPOST /tasks HTTP/1.1",
+      "expectedDisplayText": "Intro line.\n\n```http\nPOST /tasks HTTP/1.1",
+      "expectCodeBlock": true
+    },
+    {
+      "id": "four-space-indented-tail",
+      "rawFinalModelText": "Summary paragraph here.\n\n    accidental-indented-line",
+      "expectedDisplayText": "Summary paragraph here.\n\n    accidental-indented-line",
+      "expectCodeBlock": true
+    }
+  ]
+}

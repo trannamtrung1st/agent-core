@@ -35,11 +35,11 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
-    public void Fenced_code_without_speech_keeps_trailing_display_prose()
+    public void Fenced_code_without_speech_does_not_stitch_trailing_prose()
     {
         var code = "```csharp\n" + new string('x', 600) + "\n```\nDetails on screen.";
-        Assert.Equal("Details on screen.", SpokenOutput.ForPlayback(null, code));
-        Assert.DoesNotContain(RuntimeEnglishLeadIn, SpokenOutput.ForPlayback(null, code), StringComparison.Ordinal);
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(null, code));
+        Assert.True(SpokenOutput.HasMaterialStructuredContent(code));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class SpokenOutputTests
         const string display =
             "Đây là bảng chi tiết:\n\n| Cột | Giá trị |\n| --- | --- |\n| A | một |\n";
         var spoken = SpokenOutput.ForPlayback(null, display);
-        Assert.Contains("Đây là bảng chi tiết", spoken, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, spoken);
         Assert.DoesNotContain(RuntimeEnglishLeadIn, spoken, StringComparison.Ordinal);
         Assert.DoesNotContain("| Cột |", spoken, StringComparison.Ordinal);
     }
@@ -178,7 +178,7 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
-    public void Prose_before_technical_blocks_derives_only_the_prose()
+    public void Prose_before_technical_blocks_does_not_stitch_intro_prose()
     {
         const string display = """
             Here is how the task API works.
@@ -198,9 +198,24 @@ public sealed class SpokenOutputTests
             """;
 
         var spoken = SpokenOutput.ForPlayback(null, display);
-        Assert.Equal("Here is how the task API works.", spoken);
+        Assert.Equal(string.Empty, spoken);
+        Assert.DoesNotContain("Here is how", spoken, StringComparison.Ordinal);
         Assert.DoesNotContain("POST /tasks", spoken, StringComparison.Ordinal);
         Assert.DoesNotContain("curl", spoken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prose_intro_with_diagram_resolves_no_speech()
+    {
+        const string display = """
+            Here is the architecture.
+
+            ```text
+            Client --> API Gateway --> PostgreSQL
+            ```
+            """;
+
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(null, display));
     }
 
     [Fact]
@@ -234,8 +249,9 @@ public sealed class SpokenOutputTests
             """;
 
         var spoken = SpokenOutput.ForPlayback(null, display);
-        Assert.Equal("Summary sentence only.", spoken);
+        Assert.Equal(string.Empty, spoken);
         Assert.DoesNotContain("task-1", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("Summary sentence", spoken, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -258,8 +274,9 @@ public sealed class SpokenOutputTests
         const string display = "Visible intro.\n\tcurl -X POST /tasks\n\t{ \"id\": 1 }";
 
         var spoken = SpokenOutput.ForPlayback(null, display);
-        Assert.Equal("Visible intro.", spoken);
+        Assert.Equal(string.Empty, spoken);
         Assert.DoesNotContain("curl", spoken, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Visible intro", spoken, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -336,6 +353,7 @@ public sealed class SpokenOutputTests
             """;
 
         var spoken = SpokenOutput.ForPlayback(null, display);
-        Assert.Equal("Intro sentence stays.", spoken);
+        Assert.Equal(string.Empty, spoken);
+        Assert.DoesNotContain("Intro sentence", spoken, StringComparison.Ordinal);
     }
 }
