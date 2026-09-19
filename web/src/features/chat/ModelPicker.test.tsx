@@ -67,7 +67,7 @@ describe("effortSelectValue", () => {
 });
 
 describe("ModelPicker", () => {
-  it("lists each catalog model once and marks Default on the system default", () => {
+  it("lists each catalog model once and marks Default on the system default", async () => {
     const onModelChange = vi.fn();
     render(
       <ModelPicker
@@ -80,12 +80,35 @@ describe("ModelPicker", () => {
       />
     );
 
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Model" }));
-    const listbox = screen.getByRole("listbox");
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    const listbox = await screen.findByRole("listbox");
     expect(within(listbox).getAllByTitle("Scripted Alpha")).toHaveLength(1);
     expect(within(listbox).getByTitle("Scripted Beta")).toBeInTheDocument();
     expect(within(listbox).getByText("Default")).toBeInTheDocument();
     fireEvent.click(within(listbox).getByTitle("Scripted Beta"));
     expect(onModelChange).toHaveBeenCalledWith("scripted-beta");
+  });
+
+  it("shows reasoning in the chip and slider inside the model menu", async () => {
+    const onEffortChange = vi.fn();
+    render(
+      <ModelPicker
+        models={models}
+        defaultKey="scripted-alpha"
+        modelValue="scripted-alpha"
+        effortValue="medium"
+        layout="row"
+        variant="borderless"
+        onModelChange={vi.fn()}
+        onEffortChange={onEffortChange}
+      />
+    );
+
+    expect(screen.getByLabelText("Reasoning")).toHaveTextContent("Medium");
+    expect(screen.getByRole("button", { name: "Model" })).toContainElement(screen.getByLabelText("Reasoning"));
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    expect(await screen.findByRole("slider")).toBeInTheDocument();
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByTitle("Scripted Alpha")).toBeInTheDocument();
   });
 });

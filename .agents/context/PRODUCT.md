@@ -72,7 +72,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 ## Evidence on Hand
 
 - Official docs under `/docs` (source of truth).
-- Implemented SPA in `web/` uses Ant Design v6 plus the presentation policy in DESIGN.md (composer Model/Reasoning, Spoken inset, compact 8/12/16px rhythm). `/docs` still owns behavior.
+- Implemented SPA in `web/` uses Ant Design v6 plus the presentation policy in DESIGN.md (composer Model chip with in-button reasoning level, Spoken inset, compact 8px composer/overlay shells, 8/12/16px rhythm, 8px control inner padding matching session rows). `/docs` still owns behavior.
 - Demo narratives in `docs/09-demo-scenarios.md`.
 - No brand illustration pack, logo lockup, or photography set. Do not invent them.
 

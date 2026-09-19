@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-19T05:32:00.000Z",
+  "generatedAt": "2026-09-19T06:26:00.000Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -128,9 +128,9 @@
       "name": "Composer shell",
       "kind": "input",
       "refersTo": "antd-control",
-      "description": "Elevated message well: Model/Reasoning, attach, field, voice, send. Stays visible in voice.",
-      "html": "<div class=\"ds-composer\"><textarea class=\"ds-composer-field\" aria-label=\"Message\" placeholder=\"Message Alex...\"></textarea><div class=\"ds-composer-bar\"><span class=\"ds-ghost\">Model</span><span class=\"ds-ghost\">Attach</span><button class=\"ds-send\" type=\"button\" aria-label=\"Send\"></button></div></div>",
-      "css": ".ds-composer { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; border-radius: 16px; background: var(--ac-color-elevated, #1f1f1f); border: 1px solid var(--ac-color-border, #303030); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-composer-field { border: 0; resize: none; min-height: 1.5em; padding: 0; background: transparent; color: inherit; caret-color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: inherit; } .ds-composer-field::placeholder { color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); } .ds-composer-field:focus { outline: none; } .ds-composer-bar { display: flex; justify-content: space-between; align-items: center; min-height: 32px; gap: 8px; flex-wrap: wrap; } .ds-ghost { color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); font-size: 14px; } .ds-send { width: 32px; height: 32px; border: 0; border-radius: 6px; background: var(--ac-color-primary, #1677ff); }"
+      "description": "Elevated message well: Model chip (Dropdown catalog + reasoning footer), attach, field, voice, send. Stays visible in voice. Reasoning level is secondary text inside the Model button. Compact 8px shell plus 8px control inner padding (same as session rows) so Message and Model text share one edge.",
+      "html": "<div class=\"ds-composer\"><textarea class=\"ds-composer-field\" aria-label=\"Message\" placeholder=\"Message Alex...\"></textarea><div class=\"ds-composer-bar\"><button class=\"ds-model\" type=\"button\" aria-label=\"Model\">Scripted Alpha <span class=\"ds-ghost\" aria-label=\"Reasoning\">Medium</span></button><span class=\"ds-ghost\">Attach</span><button class=\"ds-send\" type=\"button\" aria-label=\"Send\"></button></div></div>",
+      "css": ".ds-composer { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 16px; background: var(--ac-color-elevated, #1f1f1f); border: 1px solid var(--ac-color-border, #303030); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-composer-field { border: 0; resize: none; min-height: 1.5em; padding: 8px; background: transparent; color: inherit; caret-color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: inherit; } .ds-composer-field::placeholder { color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); } .ds-composer-field:focus { outline: none; } .ds-composer-bar { display: flex; justify-content: space-between; align-items: center; min-height: 32px; gap: 8px; flex-wrap: wrap; } .ds-model { height: auto; min-height: 32px; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; } .ds-model:hover { background: var(--ac-color-fill, rgba(255, 255, 255, 0.08)); } .ds-ghost { color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); font-size: 14px; } .ds-send { width: 32px; height: 32px; border: 0; border-radius: 6px; background: var(--ac-color-primary, #1677ff); }"
     },
     {
       "name": "User bubble",
@@ -179,8 +179,8 @@
     "keyCharacteristics": [
       "Ant Design v6 darkAlgorithm with Sider theme light so chat surfaces stay black, not navy admin",
       "ChatGPT/Codex are layout/hierarchy references only; no second kit or pixel clone",
-      "Compact/default/section spacing (8/12/16px) is the only product rhythm",
-      "Composer owns Model/Reasoning plus Attach/Voice/Send; header owns Speech locale",
+      "Compact/default/section spacing (8/12/16px) owns shells and sibling gap; Ant Design paddingXS (8px, same as session rows) owns text-control inner padding",
+      "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice/Send; header owns Speech locale",
       "Spoken is a secondary inset on the same assistant turn, not a second chat entry"
     ],
     "rules": [
@@ -188,7 +188,8 @@
       { "name": "Docs Win Rule", "body": "DESIGN.md is lightweight presentation only. /docs owns screens and behavior.", "section": "layout" },
       { "name": "Role Surfaces Rule", "body": "Map dark roles in product CSS. Do not invert the former light palette.", "section": "colors" },
       { "name": "Half-Pane Reply Rule", "body": "After a user send, leave about half the conversation pane for the incoming reply so prior turns can stay in view.", "section": "layout" },
-      { "name": "Compact Rhythm Rule", "body": "Prefer parent gap of compact/default/section. Do not add one-off 2px/4px offsets beside those tokens.", "section": "layout" }
+      { "name": "Compact Rhythm Rule", "body": "Shells, docks, and sibling gap use compact/default/section (8/12/16px). Do not invent extra --ac-space-* steps or 2px CSS gaps.", "section": "layout" },
+      { "name": "Additive Inset Rule", "body": "A padded shell owns the outer inset. Composer and Model overlay shells use compact 8px. Nested text controls keep Ant Design paddingXS (8px, same as session-row body) via theme.useToken(). Align labels by giving equivalent children the same inner padding. Never zero a text button's padding or use negative margin to grow hover fill.", "section": "layout" }
     ],
     "dos": [
       "Do import antd components in feature files; keep ConfigProvider at the app root with darkAlgorithm.",
@@ -196,7 +197,9 @@
       "Do keep the session rail 280px at 1200px and above, 240px from 768–1199px, and an Ant Design Drawer below 768px.",
       "Do fill session-row hover with the fill token only, including the overflow control.",
       "Do leave about half the conversation pane below a user send for the incoming reply.",
-      "Do put Model/Reasoning in the composer when the composer is shown; keep Speech locale in the header and new-chat Identity stack.",
+      "Do put Model in the composer when the composer is shown (reasoning level inside the Model button when supported); keep Speech locale in the header and new-chat Identity stack.",
+      "Do use compact/default/section for shells and sibling gap, and Ant Design paddingXS via theme.useToken() for text-control inner padding so Message and Model labels share one edge and match session-row inset.",
+      "Do compose Model and catalog rows with Ant Design Button type=text and Flex; keep app.css for shell chrome and ring suppression only.",
       "Do render Spoken only when public speechText differs from display text; keep it secondary on the same turn.",
       "Do preserve testids connection and profile.",
       "Do keep the labeled composer available while voice is live until /docs and tests change together."
@@ -206,7 +209,9 @@
       "Don't add generic wrapper libraries, Ant Design Pro/ProComponents/X, or another CSS framework.",
       "Don't use Layout.Sider theme dark (navy admin sider).",
       "Don't treat DESIGN.md as behavioral authority over /docs.",
+      "Don't use a blocking Modal or a second Select/button for model or effort; keep one Dropdown on the Model chip with effort in the overlay footer.",
       "Don't put Model in both the empty Identity stack and the composer.",
+      "Don't zero a text control's padding, use negative margin, or stack extra child padding to fake alignment with a sibling.",
       "Don't show Spoken as another conversational turn or from internal generated tails."
     ]
   }

@@ -769,9 +769,9 @@ describe("ChatApp model selection", () => {
       });
     });
     const view = await act(async () => renderChat());
-    const newChatModel = screen.getByRole("combobox", { name: "Model" });
+    const newChatModel = screen.getByRole("button", { name: "Model" });
     expect(newChatModel.closest("form.composer")).not.toBeNull();
-    expect(screen.getByRole("combobox", { name: "Reasoning" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Reasoning")).toBeInTheDocument();
 
     await act(async () => {
       useSessionStore.setState({
@@ -786,8 +786,8 @@ describe("ChatApp model selection", () => {
       });
       rerenderChat(view);
     });
-    expect(screen.getByRole("combobox", { name: "Model" }).closest("form.composer")).not.toBeNull();
-    expect(screen.queryByRole("combobox", { name: "Reasoning" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).not.toBeNull();
+    expect(screen.queryByLabelText("Reasoning")).not.toBeInTheDocument();
   });
 
   it("disables model editing while a response is running", async () => {
@@ -809,9 +809,9 @@ describe("ChatApp model selection", () => {
       });
     });
     await act(async () => renderChat());
-    expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Model" }).closest("form.composer")).not.toBeNull();
-    expect(screen.getByRole("combobox", { name: "Reasoning" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Model" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).not.toBeNull();
+    expect(screen.getByLabelText("Reasoning")).toBeInTheDocument();
   });
 
   it("does not allow model editing on an ended session", async () => {
@@ -832,8 +832,8 @@ describe("ChatApp model selection", () => {
       });
     });
     await act(async () => renderChat());
-    expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Model" }).closest("form.composer")).toBeNull();
+    expect(screen.getByRole("button", { name: "Model" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).toBeNull();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
   });
 });

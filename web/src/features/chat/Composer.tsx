@@ -1,5 +1,5 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
-import { Button, Flex, Input, Tooltip } from "antd";
+import { Button, Flex, Input, Tooltip, theme } from "antd";
 import {
   AudioOutlined,
   AudioFilled,
@@ -214,6 +214,7 @@ export function Composer({
   onRetry: () => void;
   modelControls?: ReactNode;
 }) {
+  const { token } = theme.useToken();
   const fileInput = useRef<HTMLInputElement>(null);
   const messageRef = useRef<InputRef>(null);
   const [queueExpanded, setQueueExpanded] = useState(false);
@@ -374,6 +375,12 @@ export function Composer({
           autoSize={{ minRows: 1, maxRows: 8 }}
           placeholder={placeholder}
           aria-label="Message"
+          styles={{
+            textarea: {
+              paddingInline: token.paddingXS,
+              paddingBlock: token.paddingXS
+            }
+          }}
         />
         <input
           ref={fileInput}

@@ -1,5 +1,6 @@
-import { Flex, Select, Tag, Typography } from "antd";
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { Button, Dropdown, Flex, Slider, Tag, Typography, theme } from "antd";
+import { CheckOutlined, DownOutlined } from "@ant-design/icons";
 
 export const DEFAULT_MODEL_KEY = "default";
 
@@ -82,19 +83,12 @@ export function effortSelectValue(
   return model.defaultReasoningEffort ?? null;
 }
 
-function modelLabel(displayName: string, isDefault: boolean): ReactNode {
-  if (!isDefault) {
-    return displayName;
+export function formatEffortLabel(effort: string | null | undefined): string {
+  if (!effort) {
+    return "";
   }
 
-  return (
-    <Flex align="center" gap={8} justify="space-between">
-      <span>{displayName}</span>
-      <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
-        Default
-      </Tag>
-    </Flex>
-  );
+  return effort.charAt(0).toUpperCase() + effort.slice(1);
 }
 
 export function ModelPicker({
@@ -118,78 +112,192 @@ export function ModelPicker({
   onModelChange: (key: string) => void;
   onEffortChange: (effort: string | null) => void;
 }) {
+  const { token } = theme.useToken();
+  const [open, setOpen] = useState(false);
+  const controlPadding = token.paddingXS;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function onPointerDown(event: PointerEvent): void {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".model-picker-popover") || target?.closest(".model-picker-chip")) {
+        return;
+      }
+      setOpen(false);
+    }
+
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   if (models.length === 0) {
     return null;
   }
 
   const selectValue = modelValue === DEFAULT_MODEL_KEY ? defaultKey ?? DEFAULT_MODEL_KEY : modelValue;
   const selected = selectedCatalogModel(models, selectValue, defaultKey);
-  const modelOptions = models.map((model) => ({
-    value: model.key,
-    title: model.displayName,
-    label: modelLabel(model.displayName, model.key === defaultKey)
-  }));
-  const effortOptions = (selected?.supportedReasoningEfforts ?? []).map((effort) => ({
-    value: effort,
-    label: effort.charAt(0).toUpperCase() + effort.slice(1)
-  }));
-
+  const efforts = selected?.supportedReasoningEfforts ?? [];
+  const showEffort = Boolean(selected?.reasoning && efforts.length > 0);
+  const effortIndex = effortValue ? Math.max(0, efforts.indexOf(effortValue)) : 0;
   const compact = layout === "row";
-  const modelSelect = (
-    <Select
-      aria-label="Model"
-      size={compact ? "small" : "middle"}
-      variant={variant}
-      value={selectValue}
-      disabled={disabled}
-      getPopupContainer={() => document.body}
-      options={modelOptions}
-      onChange={(next) => onModelChange(typeof next === "string" ? next : defaultKey ?? DEFAULT_MODEL_KEY)}
-      popupMatchSelectWidth={false}
-      style={{ width: "100%", minWidth: 0 }}
-    />
-  );
+  const composer = variant === "borderless";
 
-  const effortSelect =
-    selected?.reasoning && effortOptions.length > 0 ? (
-      <Select
-        aria-label="Reasoning"
-        size={compact ? "small" : "middle"}
-        variant={variant}
-        value={effortValue ?? undefined}
-        disabled={disabled}
-        getPopupContainer={() => document.body}
-        options={effortOptions}
-        onChange={(next) => onEffortChange(typeof next === "string" ? next : null)}
-        popupMatchSelectWidth={false}
-        style={{ width: "100%", minWidth: 0 }}
-      />
-    ) : null;
-
-  if (compact) {
-    return (
-      <Flex
-        align="center"
-        gap={8}
-        wrap="wrap"
-        className={`model-picker model-picker-row${variant === "borderless" ? " model-picker-composer" : ""}`}
-      >
-        <div className="model-picker-control">{modelSelect}</div>
-        {effortSelect ? <div className="model-picker-effort">{effortSelect}</div> : null}
-      </Flex>
-    );
+  function closePicker(): void {
+    setOpen(false);
   }
 
-  return (
-    <Flex vertical gap={8} className="model-picker">
-      <Typography.Text>Model</Typography.Text>
-      {modelSelect}
-      {effortSelect ? (
-        <>
-          <Typography.Text>Reasoning</Typography.Text>
-          {effortSelect}
-        </>
+  function openModels(): void {
+    if (disabled) {
+      return;
+    }
+    if (open) {
+      closePicker();
+      return;
+    }
+    setOpen(true);
+  }
+
+  const overlay = (
+    <Flex vertical gap={token.paddingXS} className="model-picker-overlay">
+      <Typography.Text type="secondary" className="model-picker-overlay-title" style={{ paddingInline: controlPadding }}>
+        Select model
+      </Typography.Text>
+      <Flex vertical role="listbox" aria-label="Model catalog">
+        {models.map((model) => {
+          const isSelected = model.key === selectValue;
+          return (
+            <Button
+              key={model.key}
+              type="text"
+              role="option"
+              title={model.displayName}
+              aria-selected={isSelected}
+              className="model-picker-option"
+              disabled={disabled}
+              style={{
+                width: "100%",
+                height: "auto",
+                paddingInline: controlPadding,
+                paddingBlock: controlPadding
+              }}
+              onClick={() => {
+                onModelChange(model.key);
+                closePicker();
+              }}
+            >
+              <Flex align="center" justify="space-between" gap={token.paddingXS} style={{ width: "100%", minWidth: 0 }}>
+                <span className="model-picker-option-name">{model.displayName}</span>
+                <Flex align="center" gap={token.paddingXS} className="model-picker-option-end">
+                  {model.key === defaultKey ? (
+                    <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
+                      Default
+                    </Tag>
+                  ) : null}
+                  <span className="model-picker-option-mark" aria-hidden>
+                    {isSelected ? <CheckOutlined /> : null}
+                  </span>
+                </Flex>
+              </Flex>
+            </Button>
+          );
+        })}
+      </Flex>
+      {showEffort ? (
+        <Flex vertical gap={token.paddingXS} className="model-picker-reasoning" style={{ paddingInline: controlPadding }}>
+          <Flex align="center" justify="space-between" gap={token.paddingXS}>
+            <Typography.Text type="secondary">Reasoning</Typography.Text>
+            <Typography.Text>{formatEffortLabel(effortValue)}</Typography.Text>
+          </Flex>
+          <Slider
+            min={0}
+            max={Math.max(0, efforts.length - 1)}
+            step={1}
+            dots
+            tooltip={{ open: false }}
+            value={effortIndex}
+            disabled={disabled}
+            onChange={(value) => onEffortChange(efforts[value] ?? null)}
+            aria-label="Reasoning effort"
+          />
+        </Flex>
       ) : null}
+    </Flex>
+  );
+
+  const trigger = (
+    <Flex
+      align="center"
+      gap={token.paddingXS}
+      className={`model-picker-chip${composer ? "" : " model-picker-chip-outlined"}`}
+    >
+      <Button
+        type="text"
+        size="small"
+        aria-label="Model"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        className="model-picker-model"
+        style={{
+          height: "auto",
+          minHeight: token.controlHeight,
+          paddingInline: controlPadding,
+          paddingBlock: controlPadding
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          openModels();
+        }}
+      >
+        <Flex align="center" gap={token.paddingXS}>
+          <span className="model-picker-name">{selected?.displayName ?? "Model"}</span>
+          {selectValue === defaultKey ? (
+            <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
+              Default
+            </Tag>
+          ) : null}
+          {showEffort ? (
+            <Typography.Text type="secondary" className="model-picker-effort" aria-label="Reasoning">
+              {formatEffortLabel(effortValue)}
+            </Typography.Text>
+          ) : null}
+          <DownOutlined aria-hidden />
+        </Flex>
+      </Button>
+    </Flex>
+  );
+
+  return (
+    <Flex
+      align="center"
+      className={`model-picker${compact ? " model-picker-row" : ""}${composer ? " model-picker-composer" : ""}`}
+    >
+      <Dropdown
+        trigger={["click"]}
+        arrow={false}
+        placement={composer ? "topLeft" : "bottomLeft"}
+        autoAdjustOverflow={false}
+        open={open}
+        onOpenChange={setOpen}
+        getPopupContainer={() => document.body}
+        classNames={{ root: "model-picker-popover" }}
+        popupRender={() => overlay}
+      >
+        {trigger}
+      </Dropdown>
     </Flex>
   );
 }

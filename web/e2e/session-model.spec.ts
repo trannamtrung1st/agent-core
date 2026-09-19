@@ -7,7 +7,7 @@ async function startTextSession(page: Page, text: string): Promise<void> {
 }
 
 async function chooseModel(page: Page, title: string): Promise<void> {
-  await page.getByRole("combobox", { name: "Model" }).click();
+  await page.getByRole("button", { name: "Model" }).click();
   await page.getByTitle(title).click();
 }
 
@@ -17,9 +17,9 @@ test("session model selection is isolated between chats", async ({ page }) => {
   const textB = `Isolation B ${stamp}`;
 
   await page.goto("/");
-  await expect(page.getByRole("combobox", { name: "Model" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(page.getByLabel("Reasoning")).toBeVisible();
-  await page.getByRole("combobox", { name: "Model" }).click();
+  await page.getByRole("button", { name: "Model" }).click();
   const catalog = page.getByRole("listbox");
   await expect(catalog.getByTitle("Scripted Alpha")).toHaveCount(1);
   await expect(catalog.getByTitle("Scripted Beta")).toHaveCount(1);
@@ -30,14 +30,14 @@ test("session model selection is isolated between chats", async ({ page }) => {
   await chooseModel(page, "Scripted Beta");
   await expect(page.getByLabel("Reasoning")).toHaveCount(0);
   await startTextSession(page, textA);
-  await expect(page.getByRole("combobox", { name: "Model" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(page.locator(".model-picker")).toContainText("Scripted Beta");
   await expect(page.getByLabel("Reasoning")).toHaveCount(0);
   const sessionA = page.url();
 
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("combobox", { name: "Model" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(page.locator(".model-picker")).toContainText("Default");
   await startTextSession(page, textB);
   await expect(page.locator(".model-picker")).toContainText("Scripted Alpha");

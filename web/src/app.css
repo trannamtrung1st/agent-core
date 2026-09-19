@@ -539,20 +539,8 @@ body,
 }
 
 .model-picker-row {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-}
-
-.model-picker-control {
-  flex: 1 1 12rem;
-  min-width: 0;
-  width: min(14rem, 100%);
-}
-
-.model-picker-effort {
-  flex: 0 1 8rem;
-  min-width: 0;
-  width: min(8rem, 100%);
 }
 
 .model-picker-composer {
@@ -560,14 +548,140 @@ body,
   min-width: 0;
 }
 
-.model-picker-composer .model-picker-control,
-.model-picker-composer .model-picker-effort {
-  width: auto;
-  max-width: min(14rem, 100%);
+.model-picker-chip {
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
 }
 
-.composer-toolbar-start .model-picker-composer .ant-select-selector {
-  padding-inline: 0 !important;
+.model-picker-chip-outlined {
+  padding: var(--ac-space-compact);
+  border: 1px solid var(--ac-color-border);
+  border-radius: 6px;
+  background: var(--ac-color-container);
+}
+
+.model-picker-model.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border: 0 !important;
+  outline: none;
+  box-shadow: none !important;
+  background: transparent !important;
+  transition: none;
+}
+
+.model-picker-composer .model-picker-model.ant-btn {
+  border-radius: 6px;
+}
+
+.model-picker-model.ant-btn::before,
+.model-picker-model.ant-btn::after {
+  display: none !important;
+}
+
+.model-picker-model.ant-btn:hover:not(:disabled),
+.model-picker-model.ant-btn:focus:not(:disabled),
+.model-picker-model.ant-btn:focus-visible:not(:disabled),
+.model-picker-model.ant-btn:active:not(:disabled) {
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: var(--ac-color-fill) !important;
+}
+
+.model-picker-name,
+.model-picker-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-effort.ant-typography {
+  margin: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.model-picker-popover.ant-dropdown {
+  padding: 0;
+}
+
+.model-picker-overlay {
+  width: min(20rem, calc(100vw - 32px));
+  padding: var(--ac-space-compact);
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--ac-color-elevated);
+  border: 1px solid var(--ac-color-border);
+  box-shadow: var(--ac-shadow-composer);
+  color: var(--ac-color-text);
+}
+
+.model-picker-reasoning {
+  padding-block-start: var(--ac-space-compact);
+  border-block-start: 1px solid var(--ac-color-border);
+}
+
+.model-picker-overlay .ant-typography {
+  margin: 0;
+}
+
+.model-picker-reasoning .ant-slider {
+  margin: 0;
+}
+
+.model-picker-overlay-title {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ac-color-text-secondary);
+}
+
+.model-picker-option.ant-btn {
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+  border: 0 !important;
+  box-shadow: none !important;
+  text-align: start;
+}
+
+.model-picker-option.ant-btn::before,
+.model-picker-option.ant-btn::after {
+  display: none !important;
+}
+
+.model-picker-option-end {
+  flex: 0 0 auto;
+}
+
+.model-picker-option-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--ac-color-text);
+  font-size: 12px;
+}
+
+.model-picker-option.ant-btn:not(:disabled):hover,
+.model-picker-option.ant-btn:not(:disabled):focus,
+.model-picker-option.ant-btn:not(:disabled):focus-visible,
+.model-picker-option.ant-btn:not(:disabled):active {
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.model-picker-option[aria-selected="true"] {
+  background: transparent;
+}
+
+.model-picker-option:disabled {
+  cursor: not-allowed;
 }
 
 .session-rail {
@@ -899,7 +1013,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-compact);
-  padding: var(--ac-space-compact) var(--ac-space-default);
+  padding: var(--ac-space-compact);
   border-radius: 16px;
   background: var(--ac-color-elevated);
   border: 1px solid var(--ac-color-border);
@@ -911,7 +1025,6 @@ body,
   border: 0 !important;
   box-shadow: none !important;
   resize: none;
-  padding-inline: 0;
   background: transparent;
 }
 
