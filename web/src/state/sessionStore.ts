@@ -77,6 +77,7 @@ export type SessionView = {
   pendingModelKey: string | null;
   pendingReasoningEffort: string | null;
   modelMutationPending: boolean;
+  modelMutationOwner: { sessionId: string; operationId: number } | null;
   sessionModelKey: string | null;
   sessionModelDisplayName: string | null;
   sessionModelSource: string | null;
@@ -129,6 +130,7 @@ export const emptySession = (): SessionView => ({
   pendingModelKey: "default",
   pendingReasoningEffort: null,
   modelMutationPending: false,
+  modelMutationOwner: null,
   sessionModelKey: null,
   sessionModelDisplayName: null,
   sessionModelSource: null,
@@ -432,7 +434,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         voicePlaybackResponseId: null,
         liveUserTranscript: null,
         historyHasOlder: false,
-        historyOlderLoading: false
+        historyOlderLoading: false,
+        modelMutationPending: false,
+        modelMutationOwner: null
       };
     }
     case "agent.response.started": {
@@ -454,6 +458,25 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         liveResponseId: event.responseId,
         entries: upsert(state.entries, entry),
         lastServerSequence: event.sequence
+      };
+    }
+    case "agent.speech.projection": {
+      if (!event.responseId || event.responseId !== state.liveResponseId) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      const speechText = asSpeechText(event.payload.text);
+      if (!speechText) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      return {
+        ...state,
+        lastServerSequence: event.sequence,
+        entries: state.entries.map((entry) =>
+          entry.responseId === event.responseId
+            ? { ...entry, speechText }
+            : entry)
       };
     }
     case "agent.text.delta": {

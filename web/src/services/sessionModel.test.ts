@@ -93,4 +93,83 @@ describe("applySessionModel", () => {
     expect(state.sessionModelEffort).toBe("low");
     expect(state.modelMutationPending).toBe(false);
   });
+
+  it("does not clear a newer session mutation when an older one completes", async () => {
+    window.localStorage.setItem("agent-core.owner-capability", "token");
+    useSessionStore.setState({
+      ...emptySession(),
+      sessionId: "session-a",
+      sessionModelKey: "scripted-alpha",
+      sessionModelDisplayName: "Scripted Alpha",
+      sessionModelSource: "user",
+      sessionModelEffort: "medium"
+    });
+
+    let resolveA: (value: unknown) => void = () => undefined;
+    const fetchA = new Promise((resolve) => {
+      resolveA = resolve;
+    });
+    let resolveB: (value: unknown) => void = () => undefined;
+    const fetchB = new Promise((resolve) => {
+      resolveB = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        fetchA.then(() => ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sessionId: "session-a",
+            model: {
+              catalogKey: "scripted-beta",
+              displayName: "Scripted Beta",
+              selectionSource: "user",
+              reasoningEffort: "high",
+              modelId: "scripted-beta"
+            }
+          })
+        }))
+      )
+      .mockImplementationOnce(() =>
+        fetchB.then(() => ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sessionId: "session-b",
+            model: {
+              catalogKey: "scripted-gamma",
+              displayName: "Scripted Gamma",
+              selectionSource: "user",
+              reasoningEffort: "low",
+              modelId: "scripted-gamma"
+            }
+          })
+        }))
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pendingA = applySessionModel("scripted-beta", "high");
+    useSessionStore.setState({
+      sessionId: "session-b",
+      sessionModelKey: "scripted-alpha",
+      sessionModelEffort: "low",
+      modelMutationPending: false,
+      modelMutationOwner: null
+    });
+    const pendingB = applySessionModel("scripted-gamma", "low");
+    expect(useSessionStore.getState().modelMutationPending).toBe(true);
+
+    resolveA(undefined);
+    await pendingA;
+    expect(useSessionStore.getState().modelMutationPending).toBe(true);
+    expect(useSessionStore.getState().sessionModelKey).toBe("scripted-alpha");
+
+    resolveB(undefined);
+    await pendingB;
+    const state = useSessionStore.getState();
+    expect(state.sessionModelKey).toBe("scripted-gamma");
+    expect(state.sessionModelEffort).toBe("low");
+    expect(state.modelMutationPending).toBe(false);
+  });
 });

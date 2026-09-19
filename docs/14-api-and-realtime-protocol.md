@@ -145,6 +145,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | transcript.final | utteranceId, text, entryId: UUID, entrySequence: integer |
 | transcript.discarded | utteranceId |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
+| agent.speech.projection | text: accepted speech projection for the live response (Voice); published when `[[speech:...]]` is complete or when completion fallback is applied; not a separate history entry |
 | agent.text.delta | text, textStart: UTF-16 offset of **display** text |
 | agent.text.completed | textLength: integer (display) |
 | agent.block.upsert | blockId, kind: markdown\|attachment\|artifact\|unknown, text, fallbackText, attachmentId?, artifactId? |

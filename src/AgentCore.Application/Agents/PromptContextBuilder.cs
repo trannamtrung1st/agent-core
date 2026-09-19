@@ -205,7 +205,7 @@ public sealed class PromptContextBuilder
         if (context.Mode == SessionMode.Voice)
         {
             lines.Add(
-                "Voice output contract: conversational content is normally intended to be spoken in full and shown the same way. Emit [[speech:...]] only when the spoken response should intentionally differ from the richer visual response, such as code, tables, schedules, long reference lists, artifacts, attachment details, or detailed visual material. Do not shorten stories, explanations, dialogue, coaching, or content the user explicitly asks to hear merely because it is long. When using a separate speech projection, emit [[speech:...]] before display-only material. Absent [[speech:...]], display prose is the spoken answer unless the runtime classifies it as visual-heavy or unsafe to narrate; markdown formatting alone does not create a separate speech projection.");
+                "Voice output contract: every voice response MUST begin with an explicit speech projection using [[speech:<complete spoken content>]] followed by any display-only material. Emit the full [[speech:...]] marker (opening and closing) before Markdown, tables, code, artifacts, attachment details, or other visual-only content. Text inside [[speech:...]] is the only content intended for TTS; content outside the marker is visual-only and will not be narrated while streaming. For ordinary conversational answers you may put the full conversational response inside [[speech:...]] and repeat or expand it in display prose below. For visually rich answers keep [[speech:...]] concise while the display carries detail. Never rely on display prose being spoken automatically.");
         }
         if (!string.IsNullOrEmpty(context.InterruptedHeardText))
         {

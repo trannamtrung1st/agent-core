@@ -67,7 +67,9 @@ export function ChatMessage({
             </>
           ) : (
             <>
-              {showSpeech && entry.speechText ? <SpokenText speechText={entry.speechText} /> : null}
+              {showSpeech && entry.speechText ? (
+                <SpokenText speechText={entry.speechText} deliveryMode={entry.deliveryMode} />
+              ) : null}
               {entry.text ? <MarkdownMessage source={entry.text} /> : null}
               {blocks}
               {files}

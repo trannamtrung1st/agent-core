@@ -21,12 +21,16 @@ public sealed class ClientSpeechSegmentRuntimeTests
     {
         var output = new CapturingSessionOutput();
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using var runtime = Create(output, new ScriptedLanguageModel(ScriptedLanguageModel.LongerChunks, hold));
+        var spoken = string.Concat(ScriptedLanguageModel.LongerChunks);
+        await using var runtime = Create(output, new ScriptedLanguageModel([$"[[speech:{spoken}]]"], hold));
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput);
         var first = await output.WaitForAsync(item => item.Payload is SpeechOutputSegmentOutput);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ResponseCompletedOutput);
+        hold.TrySetResult();
         var firstSegment = (SpeechOutputSegmentOutput)first.Payload;
         Assert.Equal(0, firstSegment.SegmentIndex);
         Assert.Equal(0, firstSegment.TextStart);

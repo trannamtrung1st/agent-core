@@ -1888,6 +1888,12 @@ export async function applySpeechLocale(locale: string | null): Promise<void> {
   }
 }
 
+let modelMutationOperationSeq = 0;
+
+function isActiveModelMutation(owner: { sessionId: string; operationId: number } | null, sessionId: string, operationId: number): boolean {
+  return owner?.sessionId === sessionId && owner.operationId === operationId;
+}
+
 export async function applySessionModel(key: string, reasoningEffort: string | null): Promise<void> {
   const snapshot = useSessionStore.getState();
   if (isReadonlySession(snapshot) || isSessionModelBusy(snapshot)) {
@@ -1900,15 +1906,24 @@ export async function applySessionModel(key: string, reasoningEffort: string | n
   }
 
   const targetSessionId = snapshot.sessionId;
-  useSessionStore.setState({ modelMutationPending: true });
+  const operationId = ++modelMutationOperationSeq;
+  useSessionStore.setState({
+    modelMutationPending: true,
+    modelMutationOwner: { sessionId: targetSessionId, operationId }
+  });
   try {
     const view = await setSessionModel(targetSessionId, { key, reasoningEffort });
-    if (useSessionStore.getState().sessionId !== targetSessionId) {
-      useSessionStore.setState({ modelMutationPending: false });
+    const current = useSessionStore.getState();
+    if (!isActiveModelMutation(current.modelMutationOwner, targetSessionId, operationId)) {
+      return;
+    }
+    if (current.sessionId !== targetSessionId) {
+      useSessionStore.setState({ modelMutationPending: false, modelMutationOwner: null });
       return;
     }
     useSessionStore.setState({
       modelMutationPending: false,
+      modelMutationOwner: null,
       pendingModelKey: key,
       pendingReasoningEffort: reasoningEffort,
       ...modelFieldsFromSelection(view.model),
@@ -1917,13 +1932,18 @@ export async function applySessionModel(key: string, reasoningEffort: string | n
       errorFatal: false
     });
   } catch (error) {
-    if (useSessionStore.getState().sessionId !== targetSessionId) {
-      useSessionStore.setState({ modelMutationPending: false });
+    const current = useSessionStore.getState();
+    if (!isActiveModelMutation(current.modelMutationOwner, targetSessionId, operationId)) {
+      return;
+    }
+    if (current.sessionId !== targetSessionId) {
+      useSessionStore.setState({ modelMutationPending: false, modelMutationOwner: null });
       return;
     }
     const message = error instanceof Error ? error.message : "Unable to update the model.";
     useSessionStore.setState({
       modelMutationPending: false,
+      modelMutationOwner: null,
       error: message,
       sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
       errorFatal: false

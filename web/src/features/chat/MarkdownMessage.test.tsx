@@ -46,6 +46,26 @@ line
     expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
   });
 
+  it("renders consecutive fenced code blocks as separate siblings", () => {
+    render(
+      <MarkdownMessage
+        source={`\`\`\`
+first
+\`\`\`
+
+\`\`\`
+second
+\`\`\``}
+      />
+    );
+
+    const message = document.querySelector(".markdown-message");
+    expect(message).not.toBeNull();
+    const topLevelBlocks = message!.querySelectorAll(":scope > .md-code-block");
+    expect(topLevelBlocks).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Copy code" })).toHaveLength(2);
+  });
+
   it("does not load remote markdown images", () => {
     render(<MarkdownMessage source={`![tracker](https://tracker.example/pixel?id=1)`} />);
 

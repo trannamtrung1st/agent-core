@@ -86,6 +86,7 @@ public sealed partial class SessionRuntime
         _firstFrameSentAt = 0;
         _speechOutputCompleted = false;
         _speechTextEndExclusive = 0;
+        _publishedSpeechProjection = null;
         _segmenter = _activeResponseId is { } id
             && _snapshot.Mode == SessionMode.Voice
             && (_synthesizer is not null || _voice.EffectivePlan.OutputTransport == SpeechTransport.ClientSpeech)

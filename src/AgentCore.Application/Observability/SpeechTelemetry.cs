@@ -86,6 +86,13 @@ public static class SpeechTelemetry
         RuntimeTelemetry.RecordDiagnostic(CancelReasonInstrument, 0, safe);
     }
 
+    public const string VoiceSpeechFallbackCode = "VoiceSpeechFallback";
+
+    public static void RecordVoiceSpeechFallback()
+    {
+        RecordError(VoiceSpeechFallbackCode);
+    }
+
     public static void RecordError(string code)
     {
         var safe = string.IsNullOrWhiteSpace(code) ? "Unknown" : code.Trim();

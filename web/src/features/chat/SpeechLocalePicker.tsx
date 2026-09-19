@@ -1,4 +1,7 @@
+import { useId } from "react";
 import { Flex, Select, Typography } from "antd";
+
+export const SPEECH_LOCALE_FIELD_LABEL = "Speech locale";
 
 export const SPEECH_LOCALE_OPTIONS = [
   { value: "", label: "Agent default" },
@@ -27,13 +30,14 @@ export function SpeechLocalePicker({
   layout?: "stack" | "row";
   onChange: (locale: string | null) => void;
 }) {
+  const labelId = useId();
   const options = SPEECH_LOCALE_OPTIONS.some((option) => option.value === value)
     ? [...SPEECH_LOCALE_OPTIONS]
     : [{ value, label: value }, ...SPEECH_LOCALE_OPTIONS];
 
   const select = (
     <Select
-      aria-label="Speech locale"
+      aria-labelledby={labelId}
       size={layout === "row" ? "small" : "middle"}
       value={value}
       disabled={disabled}
@@ -44,17 +48,25 @@ export function SpeechLocalePicker({
         onChange(tag.length === 0 ? null : tag);
       }}
       popupMatchSelectWidth={false}
+      className={layout === "row" ? "speech-locale-picker-select" : undefined}
       style={{ width: "100%", minWidth: 0 }}
     />
   );
 
   if (layout === "row") {
-    return <div className="speech-locale-picker speech-locale-picker-row">{select}</div>;
+    return (
+      <Flex align="center" gap={8} className="speech-locale-picker speech-locale-picker-row">
+        <Typography.Text type="secondary" id={labelId} className="speech-locale-picker-label">
+          {SPEECH_LOCALE_FIELD_LABEL}
+        </Typography.Text>
+        {select}
+      </Flex>
+    );
   }
 
   return (
     <Flex vertical gap={8} className="speech-locale-picker">
-      <Typography.Text>Speech locale</Typography.Text>
+      <Typography.Text id={labelId}>{SPEECH_LOCALE_FIELD_LABEL}</Typography.Text>
       {select}
     </Flex>
   );

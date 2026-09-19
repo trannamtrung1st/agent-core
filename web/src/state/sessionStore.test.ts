@@ -52,6 +52,36 @@ describe("applyServerEvent", () => {
     expect(state.entries[0]?.blocks?.[0]?.kind).toBe("markdown");
   });
 
+  it("applies agent.speech.projection to the live assistant entry without completing it", () => {
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1", mode: "voice" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r1",
+        payload: { entryId: "e1", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.speech.projection",
+        sequence: 2,
+        responseId: "r1",
+        payload: { text: "Spoken lead." }
+      })
+    );
+    expect(state.entries[0]?.speechText).toBe("Spoken lead.");
+    expect(state.entries[0]?.status).toBe("streaming");
+    expect(state.liveResponseId).toBe("r1");
+    state = applyServerEvent(
+      state,
+      event({ type: "agent.text.delta", sequence: 3, responseId: "r1", payload: { text: "# Title", textStart: 0 } })
+    );
+    expect(state.entries[0]?.text).toBe("# Title");
+    expect(state.entries[0]?.speechText).toBe("Spoken lead.");
+  });
+
   it("replaces live blocks with session.ready history so reconnect hides unseen tails", () => {
     let state = applyServerEvent(
       { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },

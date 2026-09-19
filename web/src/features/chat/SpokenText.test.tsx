@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { SPOKEN_SECTION_LABEL, shouldShowSpeechText, SpokenText } from "./SpokenText";
+import {
+  SPEECH_TEXT_SECTION_LABEL,
+  SPOKEN_SECTION_LABEL,
+  shouldShowSpeechText,
+  SpokenText
+} from "./SpokenText";
 
 describe("shouldShowSpeechText", () => {
   it("hides missing or blank speech text", () => {
@@ -21,10 +26,11 @@ describe("shouldShowSpeechText", () => {
 });
 
 describe("SpokenText", () => {
-  it("exposes the Spoken label as text", () => {
-    render(<SpokenText speechText="The spoken line." />);
+  it("uses Spoken for voice delivery and Speech text for text delivery", () => {
+    const { rerender } = render(<SpokenText speechText="The spoken line." deliveryMode="voice" />);
     expect(screen.getByLabelText(SPOKEN_SECTION_LABEL)).toBeInTheDocument();
-    expect(screen.getByText(SPOKEN_SECTION_LABEL)).toBeInTheDocument();
+    rerender(<SpokenText speechText="The spoken line." deliveryMode="text" />);
+    expect(screen.getByLabelText(SPEECH_TEXT_SECTION_LABEL)).toBeInTheDocument();
     expect(screen.getByText("The spoken line.")).toBeInTheDocument();
   });
 });

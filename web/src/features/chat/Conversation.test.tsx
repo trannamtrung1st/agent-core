@@ -335,7 +335,8 @@ describe("Conversation", () => {
             entryId: "a1",
             role: "assistant",
             text: "Shown display.",
-            speechText: "Hidden speech"
+            speechText: "Hidden speech",
+            deliveryMode: "voice"
           })
         ]}
         activity={{ kind: "idle" }}
@@ -380,7 +381,8 @@ describe("Conversation", () => {
             role: "assistant",
             text: "Final display.",
             status: "completed",
-            speechText: "Final spoken wording."
+            speechText: "Final spoken wording.",
+            deliveryMode: "voice"
           })
         ]}
         activity={{ kind: "idle" }}

@@ -2100,6 +2100,10 @@ public static class SessionEventMapper
                 ["text"] = delta.Text,
                 ["textStart"] = delta.TextStart
             }),
+            SpeechProjectionOutput projection => ("agent.speech.projection", new Dictionary<string, object?>
+            {
+                ["text"] = projection.Text
+            }),
             TextCompletedOutput completed => ("agent.text.completed", new Dictionary<string, object?>
             {
                 ["textLength"] = completed.TextLength

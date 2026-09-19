@@ -239,6 +239,8 @@ public sealed record ResponseStartedOutput(Guid EntryId, long EntrySequence, str
 
 public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload;
 
+public sealed record SpeechProjectionOutput(string Text) : OutputPayload;
+
 public sealed record TextCompletedOutput(int TextLength) : OutputPayload;
 
 public sealed record BlockUpsertOutput(

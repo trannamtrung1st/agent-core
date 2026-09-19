@@ -329,6 +329,115 @@ public sealed class VoiceRealtimeRegressionTests
         Assert.Equal(sessionId, restored.SessionId);
     }
 
+    [Fact]
+    public async Task Speech_marker_split_across_chunks_waits_for_tts_until_projection_complete()
+    {
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel(
+            [
+                "[[speech:Here is",
+                " the summary.]]",
+                "# Details\n",
+                "| A | B |\n",
+                "| 1 | 2 |"
+            ]),
+            synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("structured");
+        await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput projection
+            && projection.Text == "Here is the summary.");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        var narrated = string.Concat(synthesizer.Texts);
+        Assert.Equal("Here is the summary.", narrated);
+        Assert.DoesNotContain("| A |", narrated, StringComparison.Ordinal);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("Here is the summary.", assistant.Envelope!.SpeechText);
+        Assert.Contains("# Details", assistant.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Display_text_before_speech_marker_is_never_synthesized()
+    {
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel(["Display text first.", "[[speech:Actual speech.]]", " More display."]),
+            synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("order");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        var narrated = string.Concat(synthesizer.Texts);
+        Assert.Contains("Actual speech.", narrated, StringComparison.Ordinal);
+        Assert.DoesNotContain("Display text first.", narrated, StringComparison.Ordinal);
+        Assert.DoesNotContain("More display.", narrated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Missing_speech_marker_applies_completion_fallback_without_streaming_tts()
+    {
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel(["Streaming ", "display only."], hold),
+            synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("plain");
+        await Task.Delay(50);
+        Assert.Empty(synthesizer.Texts);
+        hold.TrySetResult();
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Contains(synthesizer.Texts, text => text.Contains("display only", StringComparison.Ordinal));
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("Streaming display only.", assistant.Envelope!.SpeechText);
+    }
+
+    [Fact]
+    public async Task Speech_projection_event_is_published_before_later_display_deltas()
+    {
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel(["[[speech:Spoken lead.]]", "# Architecture\n", "More detail."]),
+            synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("explain");
+        await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput);
+        var items = output.Items.ToList();
+        var projectionIndex = items.FindIndex(item => item.Payload is SpeechProjectionOutput);
+        var laterDisplayIndex = items.FindIndex(
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("Architecture", StringComparison.Ordinal));
+        Assert.True(projectionIndex >= 0);
+        Assert.True(laterDisplayIndex > projectionIndex);
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+    }
+
     private static SessionRuntime CreateVoice(
         ISessionOutput output,
         ILanguageModel model,

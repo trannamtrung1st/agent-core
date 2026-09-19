@@ -75,6 +75,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly ResponseTextAccumulator _accumulator = new();
     private ResponseEnvelope? _envelope;
     private int _publishedDisplayLength;
+    private string? _publishedSpeechProjection;
     private readonly HashSet<string> _publishedBlockIds = new(StringComparer.Ordinal);
     private bool _ttsSourceLocked;
     private bool _ttsUsesSpeech;
@@ -1414,6 +1415,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _accumulator.Reset();
         _envelope = null;
         _publishedDisplayLength = 0;
+        _publishedSpeechProjection = null;
         _publishedBlockIds.Clear();
         ResetSpeechOutput();
         _responseTerminal = false;
@@ -2626,15 +2628,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _envelope = _ttsSourceLocked && _ttsUsesSpeech && !string.IsNullOrEmpty(_envelope?.SpeechText)
             ? parsed with { SpeechText = _envelope.SpeechText }
             : parsed;
-        if (finalize && string.IsNullOrEmpty(_envelope.SpeechText))
+        await TryPublishSpeechProjectionAsync(context, responseId, finalize, cancellationToken).ConfigureAwait(false);
+        if (finalize && string.IsNullOrEmpty(_envelope?.SpeechText))
         {
-            var spoken = SpokenOutput.ForPlayback(null, _envelope.DisplayText);
+            var spoken = SpokenOutput.ForPlayback(null, _envelope!.DisplayText);
             if (SpokenOutput.ShouldPersistDerivedSpeechText(spoken, _envelope.DisplayText))
             {
                 _envelope = _envelope with { SpeechText = spoken };
             }
         }
-        var display = _envelope.DisplayText;
+        var display = _envelope!.DisplayText;
         if (display.Length > _publishedDisplayLength)
         {
             var chunk = display[_publishedDisplayLength..];
@@ -2668,27 +2671,80 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
+    private async Task TryPublishSpeechProjectionAsync(
+        EventContext context,
+        Guid responseId,
+        bool finalize,
+        CancellationToken cancellationToken)
+    {
+        if (_snapshot.Mode != SessionMode.Voice || _publishedSpeechProjection is not null)
+        {
+            return;
+        }
+
+        var parsed = _envelope
+            ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize);
+        string? playback = null;
+        var usedCompletionFallback = false;
+
+        if (!string.IsNullOrEmpty(parsed.SpeechText))
+        {
+            playback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
+        }
+        else if (finalize)
+        {
+            playback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
+            if (playback.Length > 0)
+            {
+                usedCompletionFallback = true;
+                SpeechTelemetry.RecordVoiceSpeechFallback();
+                _logger.LogInformation("Voice response completed without [[speech:]]; applied completion speech fallback.");
+            }
+        }
+
+        if (playback is null || playback.Length == 0)
+        {
+            return;
+        }
+
+        _publishedSpeechProjection = playback;
+        _envelope = parsed with { SpeechText = playback };
+        _ttsUsesSpeech = true;
+        _ttsSourceLocked = true;
+        _ = usedCompletionFallback;
+
+        await PublishAsync(
+                new SessionOutput(context, responseId, new SpeechProjectionOutput(playback)),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private string CurrentTtsSource()
     {
+        if (_ttsSourceLocked)
+        {
+            return _envelope?.SpeechText ?? _publishedSpeechProjection ?? string.Empty;
+        }
+
         var parsed = _envelope
             ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize: false);
-        if (!_ttsSourceLocked)
+        if (!string.IsNullOrEmpty(parsed.SpeechText))
         {
-            if (!string.IsNullOrEmpty(parsed.SpeechText))
+            var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
+            if (explicitPlayback.Length == 0)
             {
-                var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
-                if (explicitPlayback.Length == 0)
-                {
-                    return string.Empty;
-                }
-
-                _ttsUsesSpeech = true;
-                _ttsSourceLocked = true;
-                _envelope = parsed with { SpeechText = explicitPlayback };
-                return explicitPlayback;
+                return string.Empty;
             }
 
-            if (ShouldWaitForExplicitSpeech(parsed))
+            _ttsUsesSpeech = true;
+            _ttsSourceLocked = true;
+            _envelope = parsed with { SpeechText = explicitPlayback };
+            return explicitPlayback;
+        }
+
+        if (_snapshot.Mode == SessionMode.Voice)
+        {
+            if (!_modelDone)
             {
                 return string.Empty;
             }
@@ -2699,43 +2755,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return string.Empty;
             }
 
-            if (!_modelDone)
-            {
-                return fallback;
-            }
-
             _ttsUsesSpeech = false;
             _ttsSourceLocked = true;
+            _envelope = parsed with { SpeechText = fallback };
             return fallback;
         }
 
-        if (_ttsUsesSpeech)
-        {
-            return _envelope?.SpeechText
-                ?? SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
-        }
-
-        return SpokenOutput.ForPlayback(null, parsed.DisplayText);
-    }
-
-    private bool ShouldWaitForExplicitSpeech(ResponseEnvelope parsed)
-    {
-        if (!string.IsNullOrEmpty(parsed.SpeechText))
-        {
-            return false;
-        }
-
-        if (!_modelDone)
-        {
-            if (_accumulator.Text.Contains("[[speech:", StringComparison.Ordinal)
-                || _accumulator.Text.Contains("[[", StringComparison.Ordinal)
-                || SpokenOutput.LooksLikeStructuredDisplay(parsed.DisplayText))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return string.Empty;
     }
 
     private void FeedTtsFromLockedSource()
