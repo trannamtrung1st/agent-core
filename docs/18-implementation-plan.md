@@ -199,7 +199,18 @@ This table does not reopen historical Milestones 0–12, post-MVP A–H, P0 conv
 | P1A history | Evolve `IMemoryStore`; durable `LastEntrySequence` independent of the `Entries` window; retain older rows; messages newest/`before`/`after` with `hasOlder`; one public history projection; UI Load earlier messages with scroll-anchor preservation | **Observed** (P1A-1/P1A-2/P1A-3) |
 | P1B lifecycle | Additive `lifecycleStatus` Active/Paused/Completed/Expired/Cancelled/Ended; protocol-v1 `status` compatible; `SessionPurpose` Ongoing\|Goal; one `TransitionLifecycle`; TimeProvider attached deadlines and detached atomic expiry; RequestComplete evaluator distinct from RequestDeactivate | **Observed** (P1B-1/P1B-2/P1B-3/P1B-4) |
 | P1C speech locale | Effective locale session override > agent default > fallback; Application BCP-47 validation; Browser STT tag / TTS exact-then-base-then-compatible; hosted hints in adapters; Voice fails clearly, text remains; realtime OpenAI STT unselectable | **Observed** for Application, adapters, Speech locale Select, Playwright override/fallback, and unedited Chrome 153 `fr-FR` STT/TTS smoke (`p1-final-fr-smoke-r2`) on HEAD `5764010` |
-| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Pending re-gate** — record freeze SHA only after full gate on stabilization HEAD ([TODO.md](../TODO.md)). Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. Tail reopened for live pause/resume reactivation, resume/durable adoption, explicit host `deadlineAt` timezone, catalog bulk-delete UX. P2 not started |
+| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2A/P2B not started; P2D follows this freeze |
+
+## P2D — Session model selection and inference controls (planned until verified)
+
+This table does not reopen P1. P2A/P2B structured-response work is out of scope for this slice.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P2D catalog | Trusted `IModelCatalog` / `ILanguageModelResolver`; Synthetic fake models; Real default `deepseek-v41-flash` / `deepseek/deepseek-v4.1-flash` / medium | **Planned** |
+| P2D persistence | Concrete `SessionModelSelection`; legacy pin before first post-upgrade generation; per-turn provenance | **Planned** |
+| P2D runtime | Session-aware resolve for Conversation/Initiative/CompletionEvaluation; persist-before-use live switch; `SessionBusy` while generating | **Planned** |
+| P2D API/UI | Safe catalog API; create/mutate catalog-level choices; Codex-like Default + effort controls; session isolation | **Planned** |
 
 ## Handoff rule
 
