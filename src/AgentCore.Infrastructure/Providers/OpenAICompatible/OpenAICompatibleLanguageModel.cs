@@ -187,11 +187,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     break;
                 }
 
-                ModelGenerationEvent? mapped = null;
+                List<ModelGenerationEvent>? mappedEvents = null;
                 ModelFailed? parseFailed = null;
                 try
                 {
-                    mapped = MapPayload(
+                    mappedEvents = MapPayloadEvents(
                         payload,
                         toolsOffered,
                         drafts,
@@ -212,20 +212,31 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     yield break;
                 }
 
-                switch (mapped)
+                if (mappedEvents is null)
                 {
-                    case ModelFailed failed:
-                        if (failed.Failure.Code is ProviderErrorCode.Unavailable or ProviderErrorCode.Timeout)
-                        {
-                            _breaker.RecordFailure();
-                        }
+                    continue;
+                }
 
-                        yield return failed;
-                        yield break;
-                    case ModelTextDelta delta:
-                        emittedText = true;
-                        yield return delta;
-                        break;
+                foreach (var mapped in mappedEvents)
+                {
+                    switch (mapped)
+                    {
+                        case ModelFailed failed:
+                            if (failed.Failure.Code is ProviderErrorCode.Unavailable or ProviderErrorCode.Timeout)
+                            {
+                                _breaker.RecordFailure();
+                            }
+
+                            yield return failed;
+                            yield break;
+                        case ModelTextDelta:
+                            emittedText = true;
+                            yield return mapped;
+                            break;
+                        case ModelReasoningDelta:
+                            yield return mapped;
+                            break;
+                    }
                 }
             }
 
@@ -287,13 +298,26 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             body["temperature"] = temperature;
         }
 
-        if (request.ReasoningEffort is { Length: > 0 } requestEffort)
+        var effort = request.ReasoningEffort;
+        if (string.IsNullOrWhiteSpace(effort))
         {
-            body["reasoning_effort"] = requestEffort;
+            effort = _options.ReasoningEffort;
         }
-        else if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+
+        if (!string.IsNullOrWhiteSpace(effort))
         {
-            body["reasoning_effort"] = _options.ReasoningEffort;
+            if (_options.ReasoningObjectWire)
+            {
+                body["reasoning"] = new Dictionary<string, object?>
+                {
+                    ["effort"] = effort.Trim(),
+                    ["exclude"] = _options.ExcludeVisibleReasoning
+                };
+            }
+            else
+            {
+                body["reasoning_effort"] = effort.Trim();
+            }
         }
 
         if (request.Tools is { Count: > 0 })
@@ -424,7 +448,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             _ => new Dictionary<string, string> { ["type"] = "text", ["text"] = "" }
         };
 
-    private static ModelGenerationEvent? MapPayload(
+    private List<ModelGenerationEvent>? MapPayloadEvents(
         string payload,
         bool toolsOffered,
         Dictionary<int, ToolCallDraft> drafts,
@@ -437,7 +461,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         var root = document.RootElement;
         if (root.TryGetProperty("error", out _))
         {
-            return Fail(ProviderErrorCode.Unavailable, "Language model reported a stream error.");
+            return [Fail(ProviderErrorCode.Unavailable, "Language model reported a stream error.")];
         }
 
         if (root.TryGetProperty("usage", out var usage))
@@ -460,7 +484,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
         if (choices.GetArrayLength() > 1)
         {
-            return Fail(ProviderErrorCode.UnsupportedCapability, "Multiple choices are not supported.");
+            return [Fail(ProviderErrorCode.UnsupportedCapability, "Multiple choices are not supported.")];
         }
 
         if (choices.GetArrayLength() == 0)
@@ -470,21 +494,22 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 
         sawChoice = true;
         var choice = choices[0];
+        string? finishReason = null;
         if (choice.TryGetProperty("finish_reason", out var finish) && finish.ValueKind == JsonValueKind.String)
         {
-            var reason = finish.GetString();
-            if (reason is "tool_calls" or "function_call")
+            finishReason = finish.GetString();
+            if (finishReason is "tool_calls" or "function_call")
             {
                 if (!toolsOffered)
                 {
-                    return Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.");
+                    return [Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.")];
                 }
 
                 stop = ModelStopReason.ToolCalls;
             }
             else
             {
-                stop = reason switch
+                stop = finishReason switch
                 {
                     "stop" => ModelStopReason.Completed,
                     "length" => ModelStopReason.LengthLimit,
@@ -494,30 +519,97 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             }
         }
 
-        if (choice.TryGetProperty("delta", out var delta))
+        if (!choice.TryGetProperty("delta", out var delta))
         {
-            if (delta.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.ValueKind == JsonValueKind.Array)
-            {
-                if (!toolsOffered)
-                {
-                    return Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.");
-                }
+            return null;
+        }
 
-                MergeToolCalls(toolCalls, drafts);
+        var hasContent = delta.TryGetProperty("content", out var content)
+            && content.ValueKind == JsonValueKind.String
+            && !string.IsNullOrEmpty(content.GetString());
+        var hasReasoning = delta.TryGetProperty("reasoning", out var reasoning)
+            && reasoning.ValueKind == JsonValueKind.String
+            && !string.IsNullOrEmpty(reasoning.GetString());
+        var hasReasoningDetails = delta.TryGetProperty("reasoning_details", out var reasoningDetails)
+            && reasoningDetails.ValueKind == JsonValueKind.Array
+            && reasoningDetails.GetArrayLength() > 0;
+        var hasToolCalls = delta.TryGetProperty("tool_calls", out var toolCalls)
+            && toolCalls.ValueKind == JsonValueKind.Array
+            && toolCalls.GetArrayLength() > 0;
+        _options.StreamChoiceDiagnostic?.Invoke(new StreamChoiceDiagnostic(
+            hasContent,
+            hasReasoning,
+            hasReasoningDetails,
+            hasToolCalls,
+            finishReason));
+
+        var events = new List<ModelGenerationEvent>();
+        if (hasToolCalls)
+        {
+            if (!toolsOffered)
+            {
+                return [Fail(ProviderErrorCode.UnsupportedCapability, "Tool calls are not supported.")];
             }
 
-            if (delta.TryGetProperty("content", out var content)
-                && content.ValueKind == JsonValueKind.String)
+            MergeToolCalls(toolCalls, drafts);
+        }
+
+        if (_options.MapSeparateReasoningDeltas)
+        {
+            if (hasReasoning)
             {
-                var text = content.GetString() ?? string.Empty;
-                if (text.Length > 0)
+                events.Add(new ModelReasoningDelta(reasoning.GetString() ?? string.Empty));
+            }
+
+            if (hasReasoningDetails)
+            {
+                var detailsText = TryExtractReasoningDetailsText(reasoningDetails);
+                if (detailsText.Length > 0)
                 {
-                    return new ModelTextDelta(text);
+                    events.Add(new ModelReasoningDelta(detailsText));
                 }
             }
         }
 
-        return null;
+        if (hasContent)
+        {
+            events.Add(new ModelTextDelta(content.GetString() ?? string.Empty));
+        }
+
+        return events.Count == 0 ? null : events;
+    }
+
+    private static string TryExtractReasoningDetailsText(JsonElement reasoningDetails)
+    {
+        if (reasoningDetails.ValueKind != JsonValueKind.Array)
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        foreach (var item in reasoningDetails.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (item.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+            {
+                var piece = text.GetString();
+                if (!string.IsNullOrEmpty(piece))
+                {
+                    if (builder.Length > 0)
+                    {
+                        builder.Append('\n');
+                    }
+
+                    builder.Append(piece);
+                }
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static void MergeToolCalls(JsonElement toolCalls, Dictionary<int, ToolCallDraft> drafts)

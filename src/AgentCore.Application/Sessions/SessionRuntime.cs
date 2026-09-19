@@ -2182,6 +2182,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         switch (input.Event)
         {
+            case ModelReasoningDelta:
+                RuntimeTelemetry.RecordDiagnostic("llm.reasoning.delta", 0, "present");
+                break;
             case ModelTextDelta delta:
                 _accumulator.Append(delta.Text);
                 await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: false, cancellationToken)
@@ -2718,6 +2721,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else if (!finalize)
         {
+            return;
+        }
+
+        if (string.Equals(_modelFinishReason, "lengthLimit", StringComparison.Ordinal) && !hadExplicitSpeech)
+        {
+            await ResolveVoiceSpeechAsync(
+                    context,
+                    responseId,
+                    parsed,
+                    string.Empty,
+                    usesExplicitSpeech: false,
+                    fallbackReason: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 

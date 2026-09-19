@@ -10,7 +10,11 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
+using System.Net;
+using System.Net.Http;
+using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -568,6 +572,39 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public async Task Length_limit_without_explicit_speech_skips_voice_tts()
+    {
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Truncated planning visible in content channel.\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new SseScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key"
+            });
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, model, synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("Explain");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(synthesizer.Texts);
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechProjectionOutput);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal("lengthLimit", completed.FinishReason);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+    }
+
+    [Fact]
     public async Task Rejected_explicit_speech_and_unsafe_display_resolves_no_speech()
     {
         var unsafeSpeech =
@@ -665,6 +702,27 @@ public sealed class VoiceRealtimeRegressionTests
         }
 
         throw new DirectoryNotFoundException("agents/");
+    }
+
+    private sealed class SseScriptedHandler(IReadOnlyList<byte[]> chunks) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var stream = new MemoryStream();
+            foreach (var chunk in chunks)
+            {
+                stream.Write(chunk);
+            }
+
+            stream.Position = 0;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(stream)
+                {
+                    Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/event-stream") }
+                }
+            });
+        }
     }
 
     private sealed class RecordingSynthesizer : ISpeechSynthesizer

@@ -51,6 +51,11 @@ public abstract record ModelGenerationEvent;
 
 public sealed record ModelTextDelta(string Text) : ModelGenerationEvent;
 
+/// <summary>
+/// Provider reasoning channel; must never become display, speech, history, or TTS input.
+/// </summary>
+public sealed record ModelReasoningDelta(string Text) : ModelGenerationEvent;
+
 public sealed record ModelToolCallEvent(ModelToolCall Call) : ModelGenerationEvent;
 
 public sealed record ModelCompleted(

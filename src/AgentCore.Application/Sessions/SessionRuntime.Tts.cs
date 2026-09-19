@@ -536,6 +536,7 @@ public sealed partial class SessionRuntime
                             new ResponseCompletedOutput(
                                 failed,
                                 HeardTextEndExclusive: heard,
+                                FinishReason: failed ? null : _modelFinishReason,
                                 SpeechText: PublicSpeechText())),
                         ct)
                     .ConfigureAwait(false);

@@ -10,6 +10,22 @@ public sealed class LanguageModelProviderOptions
     public string? ApiKey { get; set; }
     public string? DefaultModel { get; set; }
     public string? ReasoningEffort { get; set; }
+    /// <summary>
+    /// When true, send OpenRouter-style <c>reasoning</c> object (effort + exclude) instead of legacy <c>reasoning_effort</c> only.
+    /// </summary>
+    public bool ReasoningObjectWire { get; set; }
+    /// <summary>
+    /// When <see cref="ReasoningObjectWire"/> is enabled, request hidden reasoning output while preserving effort.
+    /// </summary>
+    public bool ExcludeVisibleReasoning { get; set; } = true;
+    /// <summary>
+    /// Map provider <c>delta.reasoning</c> / <c>reasoning_details</c> to <see cref="ModelReasoningDelta"/> instead of text.
+    /// </summary>
+    public bool MapSeparateReasoningDeltas { get; set; } = true;
+    /// <summary>
+    /// Opt-in dev/probe hook: records which SSE choice fields were present without logging secrets or user content.
+    /// </summary>
+    public Action<StreamChoiceDiagnostic>? StreamChoiceDiagnostic { get; set; }
     public bool Vision { get; set; }
     public bool Tools { get; set; }
     public Dictionary<string, string> AdditionalHeaders { get; set; } = [];

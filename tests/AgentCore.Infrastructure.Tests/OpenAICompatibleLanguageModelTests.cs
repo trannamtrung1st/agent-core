@@ -48,10 +48,131 @@ public sealed class OpenAICompatibleLanguageModelTests
         var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
         var events = await CollectAsync(handler);
         Assert.Equal(["Hi"], events.OfType<ModelTextDelta>().Select(delta => delta.Text).ToArray());
+        Assert.Contains(events, item => item is ModelReasoningDelta delta && delta.Text == "secret");
         var completed = Assert.IsType<ModelCompleted>(events[^1]);
         Assert.Equal(3, completed.InputTokens);
         Assert.Equal(1, completed.OutputTokens);
         Assert.DoesNotContain(events, item => item is ModelTextDelta delta && delta.Text.Contains("secret"));
+    }
+
+    [Fact]
+    public async Task Reasoning_only_delta_emits_reasoning_event_not_text()
+    {
+        var body = "data: {\"choices\":[{\"delta\":{\"reasoning\":\"private planning\"}}]}\n\n" +
+                   "data: {\"choices\":[{\"delta\":{\"content\":\"Final answer.\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                   "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var events = await CollectAsync(handler);
+        Assert.DoesNotContain(events, item => item is ModelTextDelta delta && delta.Text.Contains("private", StringComparison.Ordinal));
+        Assert.Contains(events, item => item is ModelReasoningDelta delta && delta.Text == "private planning");
+        Assert.Equal("Final answer.", Assert.Single(events.OfType<ModelTextDelta>()).Text);
+    }
+
+    [Fact]
+    public async Task Reasoning_details_only_delta_emits_reasoning_not_text()
+    {
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"hidden step\"}]}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Visible.\"},\"finish_reason\":\"stop\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var events = await CollectAsync(handler);
+        Assert.Contains(events, item => item is ModelReasoningDelta delta && delta.Text == "hidden step");
+        Assert.Equal("Visible.", Assert.Single(events.OfType<ModelTextDelta>()).Text);
+    }
+
+    [Fact]
+    public async Task Mixed_reasoning_and_content_delta_splits_channels()
+    {
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"reasoning\":\"plan\",\"content\":\"Could you tell me about your hometown?\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var events = await CollectAsync(handler);
+        Assert.Equal("Could you tell me about your hometown?", Assert.Single(events.OfType<ModelTextDelta>()).Text);
+        Assert.Equal("plan", Assert.Single(events.OfType<ModelReasoningDelta>()).Text);
+    }
+
+    [Fact]
+    public async Task Tool_call_with_reasoning_keeps_tool_semantics_and_isolates_reasoning()
+    {
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"reasoning\":\"pick tool\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge_retrieve\",\"arguments\":\"\"}}]}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"identity\\\":\\\"x\\\"}\"}}]}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                Tools = true
+            });
+        var tools = new[]
+        {
+            new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
+        };
+        var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], Tools: tools));
+        Assert.Contains(events, item => item is ModelReasoningDelta);
+        Assert.DoesNotContain(events, item => item is ModelTextDelta);
+        Assert.NotNull(events.OfType<ModelToolCallEvent>().SingleOrDefault());
+        Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task OpenRouter_reasoning_object_wire_sends_effort_and_exclude()
+    {
+        var body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                   "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "deepseek/deepseek-v4.1-flash",
+                ReasoningObjectWire = true,
+                ExcludeVisibleReasoning = true,
+                ApiKey = "test-key"
+            });
+        _ = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], ReasoningEffort: "medium"));
+        Assert.Contains("\"reasoning\":", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"effort\":\"medium\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"exclude\":true", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("reasoning_effort", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Stream_choice_diagnostic_records_field_presence_without_content()
+    {
+        var diagnostics = new List<StreamChoiceDiagnostic>();
+        var body =
+            "data: {\"choices\":[{\"delta\":{\"reasoning\":\"secret\",\"content\":\"Hi\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ApiKey = "test-key",
+                StreamChoiceDiagnostic = diagnostics.Add
+            });
+        _ = await CollectAsync(model);
+        Assert.Equal(2, diagnostics.Count);
+        Assert.True(diagnostics[0].Reasoning);
+        Assert.True(diagnostics[0].Content);
+        Assert.False(diagnostics[0].ToolCalls);
+        Assert.Equal("stop", diagnostics[1].FinishReason);
     }
 
     [Fact]
@@ -422,6 +543,54 @@ public sealed class OpenAICompatibleLanguageModelTests
 
         Assert.DoesNotContain(events, item => item is ModelFailed failed && failed.Failure.Code == ProviderErrorCode.Authentication);
         Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted or ModelFailed);
+    }
+
+    [LiveProviderFact]
+    public async Task DeepSeek_v41_reasoning_probe_records_wire_field_presence()
+    {
+        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+        var diagnostics = new List<StreamChoiceDiagnostic>();
+        using var http = new HttpClient();
+        var model = new OpenAICompatibleLanguageModel(
+            http,
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "https://openrouter.ai/api/v1/",
+                ApiKey = key,
+                DefaultModel = "deepseek/deepseek-v4.1-flash",
+                ReasoningObjectWire = true,
+                ExcludeVisibleReasoning = true,
+                StreamChoiceDiagnostic = diagnostics.Add,
+                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 60 }
+            });
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(
+                           new ModelRequest(
+                               Guid.NewGuid(),
+                               [new ModelMessage(ModelRole.User, "Reply with one short sentence asking what city I grew up in.")],
+                               MaxOutputTokens: 256,
+                               ReasoningEffort: "medium")))
+        {
+            events.Add(item);
+        }
+
+        Assert.DoesNotContain(events, item => item is ModelFailed failed && failed.Failure.Code == ProviderErrorCode.Authentication);
+        Assert.Contains(events, item => item is ModelCompleted);
+        var reasoningDeltas = events.OfType<ModelReasoningDelta>().Count();
+        var textDeltas = events.OfType<ModelTextDelta>().Select(delta => delta.Text).ToArray();
+        var sawReasoningField = diagnostics.Any(item => item.Reasoning || item.ReasoningDetails);
+        var sawContentField = diagnostics.Any(item => item.Content);
+        Assert.True(
+            sawReasoningField || reasoningDeltas > 0 || sawContentField,
+            $"Probe saw no SSE choice fields. diagnostics={diagnostics.Count} reasoningDeltas={reasoningDeltas} textDeltas={textDeltas.Length}");
+        if (sawReasoningField || reasoningDeltas > 0)
+        {
+            Assert.True(
+                reasoningDeltas > 0,
+                "Provider sent separate reasoning fields on the wire; adapter must emit ModelReasoningDelta.");
+            Assert.DoesNotContain(textDeltas, text => text.Contains("reasoning_details", StringComparison.Ordinal));
+        }
     }
 
     [LiveProviderFact]
