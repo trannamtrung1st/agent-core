@@ -153,6 +153,103 @@ public static class HttpMapping
         _ => status.ToString().ToLowerInvariant()
     };
 
+    public static HostSessionViewResponse ToHostView(SessionSnapshot snapshot, Guid? activeResponseId)
+    {
+        var view = ToView(snapshot, activeResponseId);
+        var purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault;
+        var policy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
+        return new HostSessionViewResponse(
+            view.SessionId,
+            view.AgentId,
+            view.AgentVersion,
+            view.Mode,
+            view.PendingMode,
+            view.Status,
+            view.CreatedAt,
+            view.UpdatedAt,
+            view.LastEntrySequence,
+            view.ActiveResponseId,
+            view.ProtocolVersion,
+            view.PauseReason,
+            view.LifecycleStatus,
+            view.SpeechLocale,
+            new HostSessionPurposeResponse(
+                ToPurposeKind(purpose.Kind),
+                purpose.Description,
+                purpose.DeadlineAt is { } deadline ? Format(deadline) : null),
+            new HostSessionCompletionPolicyResponse(
+                ToAgentCompletion(policy.AgentCompletion),
+                policy.UserCompletionAllowed,
+                policy.UserCancellationAllowed),
+            snapshot.LifecycleSource is { } source ? LifecycleTransition.ToSourceWire(source) : null,
+            snapshot.LifecycleReason,
+            snapshot.LifecycleChangedAt is { } changed ? Format(changed) : null);
+    }
+
+    public static SessionPurpose? ParseHostPurpose(
+        HostSessionPurposeRequest? purpose,
+        long? maxDurationSeconds,
+        out TimeSpan? maxDuration)
+    {
+        maxDuration = null;
+        if (maxDurationSeconds is { } seconds)
+        {
+            if (seconds <= 0)
+            {
+                throw AgentCoreErrors.Validation("maxDurationSeconds must be a positive integer.");
+            }
+
+            if (seconds > SessionLifecycle.MaxMaxDuration.TotalSeconds)
+            {
+                throw AgentCoreErrors.Validation(
+                    $"maxDurationSeconds must be at most {(long)SessionLifecycle.MaxMaxDuration.TotalSeconds}.");
+            }
+
+            maxDuration = TimeSpan.FromSeconds(seconds);
+        }
+
+        if (purpose is null && maxDuration is null)
+        {
+            return null;
+        }
+
+        if (purpose?.DeadlineAt is not null && maxDuration is not null)
+        {
+            throw AgentCoreErrors.Validation("Provide deadlineAt or maxDurationSeconds, not both.");
+        }
+
+        DateTimeOffset? deadline = null;
+        if (!string.IsNullOrWhiteSpace(purpose?.DeadlineAt))
+        {
+            if (!DateTimeOffset.TryParse(
+                    purpose.DeadlineAt,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var parsed))
+            {
+                throw AgentCoreErrors.Validation("deadlineAt must be an ISO-8601 timestamp.");
+            }
+
+            deadline = parsed.ToUniversalTime();
+        }
+
+        return new SessionPurpose(ParsePurposeKind(purpose?.Kind), purpose?.Description, deadline);
+    }
+
+    public static SessionCompletionPolicy? ParseHostPolicy(HostSessionCompletionPolicyRequest? policy)
+    {
+        if (policy is null)
+        {
+            return null;
+        }
+
+        var defaults = SessionCompletionPolicy.Default;
+        return new SessionCompletionPolicy(
+            ParseAgentCompletion(policy.AgentCompletion),
+            policy.UserCompletionAllowed ?? defaults.UserCompletionAllowed,
+            policy.UserCancellationAllowed ?? defaults.UserCancellationAllowed);
+    }
+
     public static SpeechLocaleResponse ToSpeechLocale(SessionSnapshot snapshot)
     {
         var resolved = SpeechLocale.Resolve(snapshot);
@@ -164,4 +261,32 @@ public static class HttpMapping
 
     public static string Format(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+
+    private static SessionPurposeKind ParsePurposeKind(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "ongoing" => SessionPurposeKind.Ongoing,
+            "goal" => SessionPurposeKind.Goal,
+            _ => throw AgentCoreErrors.Validation("purpose.kind must be ongoing or goal.")
+        };
+
+    private static string ToPurposeKind(SessionPurposeKind kind) =>
+        kind == SessionPurposeKind.Goal ? "goal" : "ongoing";
+
+    private static AgentCompletionAuthority ParseAgentCompletion(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "disabled" => AgentCompletionAuthority.Disabled,
+            "advisory" => AgentCompletionAuthority.Advisory,
+            "allowed" => AgentCompletionAuthority.Allowed,
+            _ => throw AgentCoreErrors.Validation("agentCompletion must be disabled, advisory, or allowed.")
+        };
+
+    private static string ToAgentCompletion(AgentCompletionAuthority authority) =>
+        authority switch
+        {
+            AgentCompletionAuthority.Advisory => "advisory",
+            AgentCompletionAuthority.Allowed => "allowed",
+            _ => "disabled"
+        };
 }

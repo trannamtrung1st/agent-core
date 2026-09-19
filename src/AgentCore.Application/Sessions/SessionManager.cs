@@ -72,7 +72,15 @@ public sealed class SessionManager
 
         var now = _time.GetUtcNow();
         var profile = await EnsureLocalProfileAsync(now, cancellationToken).ConfigureAwait(false);
-        var resolvedPurpose = SessionLifecycle.ResolvePurpose(purpose, now, maxDuration);
+        SessionPurpose resolvedPurpose;
+        try
+        {
+            resolvedPurpose = SessionLifecycle.ResolvePurpose(purpose, now, maxDuration);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw AgentCoreErrors.Validation(ex.Message);
+        }
         var resolvedPolicy = policy ?? SessionCompletionPolicy.Default;
         var snapshot = new SessionSnapshot(
             SchemaVersion: 1,
@@ -183,77 +191,64 @@ public sealed class SessionManager
 
     public async Task<SessionSnapshot> ReopenAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        return await MutateAsync(
+        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (LifecycleTransition.IsTerminal(snapshot))
+        {
+            throw AgentCoreErrors.Validation("Ended sessions cannot be reopened.");
+        }
+
+        if (snapshot.ArchivedAt is not null)
+        {
+            throw AgentCoreErrors.Validation("Archived sessions must be unarchived before reopen.");
+        }
+
+        if (snapshot.Status is SessionStatus.Attached)
+        {
+            throw AgentCoreErrors.SessionInUse();
+        }
+
+        var resuming = snapshot.Status == SessionStatus.Paused
+            && SessionPauseSemantics.RequiresExplicitResume(snapshot.PauseReason);
+        if (!resuming)
+        {
+            return snapshot;
+        }
+
+        return await TransitionLifecycleAsync(
                 sessionId,
-                snapshot =>
-                {
-                    if (LifecycleTransition.IsTerminal(snapshot))
-                    {
-                        throw AgentCoreErrors.Validation("Ended sessions cannot be reopened.");
-                    }
-
-                    if (snapshot.ArchivedAt is not null)
-                    {
-                        throw AgentCoreErrors.Validation("Archived sessions must be unarchived before reopen.");
-                    }
-
-                    if (snapshot.Status is SessionStatus.Attached)
-                    {
-                        throw AgentCoreErrors.SessionInUse();
-                    }
-
-                    var resuming = snapshot.Status == SessionStatus.Paused
-                        && SessionPauseSemantics.RequiresExplicitResume(snapshot.PauseReason);
-                    if (!resuming)
-                    {
-                        return snapshot;
-                    }
-
-                    return LifecycleTransition.Apply(
-                        snapshot,
-                        SessionLifecycleStatus.Active,
-                        LifecycleTransitionSource.Host,
-                        _time.GetUtcNow(),
-                        "reopen");
-                },
+                SessionLifecycleStatus.Active,
+                LifecycleTransitionSource.User,
                 cancellationToken,
-                touchCatalogOrder: false)
+                "reopen")
             .ConfigureAwait(false);
     }
 
     public async Task<SessionSnapshot> DeactivateAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var started = Stopwatch.GetTimestamp();
-        var result = await MutateAsync(
+        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (LifecycleTransition.IsTerminal(snapshot))
+        {
+            throw AgentCoreErrors.Validation("Ended sessions cannot be deactivated.");
+        }
+
+        if (snapshot.ArchivedAt is not null)
+        {
+            throw AgentCoreErrors.SessionArchived();
+        }
+
+        if (snapshot.Status == SessionStatus.Paused)
+        {
+            RuntimeTelemetry.Record("initiative", RuntimeTelemetry.ElapsedMs(started));
+            return snapshot;
+        }
+
+        var result = await TransitionLifecycleAsync(
                 sessionId,
-                snapshot =>
-                {
-                    if (LifecycleTransition.IsTerminal(snapshot))
-                    {
-                        throw AgentCoreErrors.Validation("Ended sessions cannot be deactivated.");
-                    }
-
-                    if (snapshot.ArchivedAt is not null)
-                    {
-                        throw AgentCoreErrors.SessionArchived();
-                    }
-
-                    if (snapshot.Status == SessionStatus.Paused)
-                    {
-                        return snapshot;
-                    }
-
-                    var paused = LifecycleTransition.Apply(
-                        snapshot,
-                        SessionLifecycleStatus.Paused,
-                        LifecycleTransitionSource.User,
-                        _time.GetUtcNow(),
-                        "manual");
-                    SessionPauseTelemetry.Record("manual");
-                    return paused;
-                },
+                SessionLifecycleStatus.Paused,
+                LifecycleTransitionSource.User,
                 cancellationToken,
-                touchCatalogOrder: false)
+                "manual")
             .ConfigureAwait(false);
         RuntimeTelemetry.Record("initiative", RuntimeTelemetry.ElapsedMs(started));
         return result;
@@ -409,6 +404,13 @@ public sealed class SessionManager
         }
 
         var next = LifecycleTransition.Apply(snapshot, target, source, _time.GetUtcNow(), reason);
+        if (target == SessionLifecycleStatus.Paused
+            && snapshot.LifecycleStatus != SessionLifecycleStatus.Paused
+            && next.LifecycleStatus == SessionLifecycleStatus.Paused)
+        {
+            SessionPauseTelemetry.Record(reason ?? "manual");
+        }
+
         if (ReferenceEquals(next, snapshot) || MemoryStoreEqual(snapshot, next))
         {
             if (next.Revision == snapshot.Revision && next.UpdatedAt == snapshot.UpdatedAt)

@@ -88,7 +88,7 @@ A created session is inactive until attached. One connection owns a session at a
 
 ## Follow-on P1 observed and frozen
 
-Observed mailbox ownership and protocol-v1 attach/pause/end stay as above. Follow-on P1 does not add a second Session Runtime or put raw audio on the domain mailbox. Observed: bounded `IMemoryStore` restore plus durable `LastEntrySequence`; additive `lifecycleStatus` beside protocol-v1 `status` with `LifecycleTransition`; Application effective speech locale outside SessionRuntime vendor branches; Browser/hosted adapter locale/voice selection; Speech locale Select. Real Chrome 153 `fr-FR` Browser STT/TTS smoke is observed (unedited `p1-final-fr-smoke-r2`); **P1 is frozen**. Owners: [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
+Observed mailbox ownership and protocol-v1 attach/pause/end stay as above. Follow-on P1 does not add a second Session Runtime or put raw audio on the domain mailbox. Observed: bounded `IMemoryStore` restore plus durable `LastEntrySequence`; additive `lifecycleStatus` beside protocol-v1 `status` with `LifecycleTransition`; Application effective speech locale outside SessionRuntime vendor branches; Browser/hosted adapter locale/voice selection; Speech locale Select. Real Chrome `fr-FR` Browser STT/TTS smoke is observed (unedited `p1-repair-fr-smoke-r2` on this freeze; earlier `p1-final-fr-smoke-r2` on `5764010` stays as written); **P1 is frozen**. Owners: [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
 ## Post-MVP planned until verified
 

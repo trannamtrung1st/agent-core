@@ -58,6 +58,23 @@ public static class SessionCatalogEndpoints
             }
         });
 
+        group.MapDelete("", async (
+            SessionHost host,
+            bool? includeArchived,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var deletedCount = await host.DeleteAllSessionsAsync(includeArchived == true, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(new BulkDeleteSessionsResponse(deletedCount));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("", async (
             CreateSessionRequest? body,
             SessionManager sessions,
@@ -230,7 +247,7 @@ public static class SessionCatalogEndpoints
                 var snapshot = await host.TransitionLifecycleAsync(
                         sessionId,
                         LifecycleTransition.Parse(body.Target),
-                        LifecycleTransition.ParseSource(body.Source),
+                        LifecycleTransition.UserFacingSource(body.Source),
                         body.Reason,
                         cancellationToken)
                     .ConfigureAwait(false);

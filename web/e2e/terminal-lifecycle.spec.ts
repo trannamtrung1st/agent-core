@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
@@ -37,6 +38,7 @@ con.execute("UPDATE SessionSnapshots SET LastEntrySequence=? WHERE SessionId=?",
 con.commit()
 con.close()
 `;
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   execFileSync("python3", ["-c", script, sessionId, String(lastSequence), dbPath], {
     stdio: "pipe"
   });
@@ -51,19 +53,22 @@ async function createSession(page: Page): Promise<string> {
   return new URL(page.url()).pathname.split("/").pop()!;
 }
 
-async function postLifecycle(page: Page, sessionId: string, target: string): Promise<void> {
-  const result = await page.evaluate(async ({ id, target: next }) => {
+async function postLifecycle(page: Page, sessionId: string, target: string, host = false): Promise<void> {
+  const result = await page.evaluate(async ({ id, target: next, host: useHost }) => {
     const token = window.localStorage.getItem("agent-core.owner-capability");
-    const response = await fetch(`/api/v2/sessions/${id}/lifecycle`, {
+    const path = useHost
+      ? `/api/v2/host/sessions/${id}/lifecycle`
+      : `/api/v2/sessions/${id}/lifecycle`;
+    const response = await fetch(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-AgentCore-Owner-Capability": token ?? ""
       },
-      body: JSON.stringify({ target: next, source: "host" })
+      body: JSON.stringify({ target: next })
     });
     return { ok: response.ok, status: response.status, body: await response.text() };
-  }, { id: sessionId, target });
+  }, { id: sessionId, target, host });
   expect(result.ok, `${target} ${result.status} ${result.body}`).toBe(true);
 }
 
@@ -111,7 +116,7 @@ test("completed sessions stay read-only after reload and do not reopen", async (
 
 test("expired and cancelled sessions stay inspectable without Resume", async ({ page }) => {
   const expiredId = await createSession(page);
-  await postLifecycle(page, expiredId, "expired");
+  await postLifecycle(page, expiredId, "expired", true);
   await expect(page.getByTestId("connection")).toHaveText("Expired", { timeout: 15_000 });
   await expectReadOnly(page, "This conversation has expired.");
   await page.reload();

@@ -1,9 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const webDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(webDir, "..");
+const playwrightData = path.join(root, "data", "playwright");
+const sqlitePath = process.env.PLAYWRIGHT_SQLITE_PATH
+  ?? path.join(playwrightData, "synthetic.db");
+process.env.PLAYWRIGHT_SQLITE_PATH = sqlitePath;
+fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
 const apiPort = process.env.PLAYWRIGHT_API_PORT ?? "5080";
 const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? "5173";
 const apiUrl = `http://127.0.0.1:${apiPort}`;
@@ -56,21 +62,15 @@ export default defineConfig({
         AGENTCORE_LIVE_PROVIDER_TESTS: process.env.AGENTCORE_LIVE_PROVIDER_TESTS ?? "0",
         AGENTCORE_LIVE_OPENAI_STT: process.env.AGENTCORE_LIVE_OPENAI_STT ?? "0",
         AGENTCORE_LIVE_OPENAI_TTS: process.env.AGENTCORE_LIVE_OPENAI_TTS ?? "0",
-        ...(process.env.Persistence__Provider
-          ? { Persistence__Provider: process.env.Persistence__Provider }
-          : {}),
-        ...(process.env.Persistence__ConnectionString
-          ? { Persistence__ConnectionString: process.env.Persistence__ConnectionString }
-          : {}),
-        ...(process.env.Persistence__AttachmentRoot
-          ? { Persistence__AttachmentRoot: process.env.Persistence__AttachmentRoot }
-          : {}),
-        ...(process.env.Persistence__WorkspaceRoot
-          ? { Persistence__WorkspaceRoot: process.env.Persistence__WorkspaceRoot }
-          : {}),
-        ...(process.env.Persistence__ArtifactRoot
-          ? { Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot }
-          : {})
+        Persistence__Provider: process.env.Persistence__Provider ?? "Sqlite",
+        Persistence__ConnectionString: process.env.Persistence__ConnectionString
+          ?? `Data Source=${sqlitePath}`,
+        Persistence__AttachmentRoot: process.env.Persistence__AttachmentRoot
+          ?? path.join(playwrightData, "attachments"),
+        Persistence__WorkspaceRoot: process.env.Persistence__WorkspaceRoot
+          ?? path.join(playwrightData, "workspaces"),
+        Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot
+          ?? path.join(playwrightData, "artifacts")
       },
       url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,

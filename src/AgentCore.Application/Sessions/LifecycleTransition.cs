@@ -84,6 +84,26 @@ public static class LifecycleTransition
             _ => throw AgentCoreErrors.Validation("source must be host, system, user, agent, or legacy.")
         };
 
+    /// <summary>
+    /// First-party/user lifecycle callers are always User. Request JSON cannot self-promote.
+    /// </summary>
+    public static LifecycleTransitionSource UserFacingSource(string? requested)
+    {
+        _ = requested;
+        return LifecycleTransitionSource.User;
+    }
+
+    public static string ToSourceWire(LifecycleTransitionSource source) =>
+        source switch
+        {
+            LifecycleTransitionSource.Host => "host",
+            LifecycleTransitionSource.System => "system",
+            LifecycleTransitionSource.User => "user",
+            LifecycleTransitionSource.Agent => "agent",
+            LifecycleTransitionSource.Legacy => "legacy",
+            _ => source.ToString().ToLowerInvariant()
+        };
+
     private static void Authorize(
         LifecycleTransitionSource source,
         SessionLifecycleStatus target,

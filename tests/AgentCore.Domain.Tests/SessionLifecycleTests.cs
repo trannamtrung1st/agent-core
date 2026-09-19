@@ -76,6 +76,11 @@ public sealed class SessionLifecycleTests
                 Metadata: new Dictionary<string, string> { ["k"] = new string('x', 4001) })));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             SessionLifecycle.ResolvePurpose(null, DateTimeOffset.UtcNow, TimeSpan.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            SessionLifecycle.ResolvePurpose(
+                null,
+                DateTimeOffset.UtcNow,
+                SessionLifecycle.MaxMaxDuration + TimeSpan.FromSeconds(1)));
     }
 
     [Fact]

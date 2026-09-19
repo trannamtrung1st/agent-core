@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
@@ -37,6 +38,7 @@ con.execute("UPDATE SessionSnapshots SET LastEntrySequence=? WHERE SessionId=?",
 con.commit()
 con.close()
 `;
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   execFileSync("python3", ["-c", script, sessionId, String(lastSequence), dbPath], {
     stdio: "pipe"
   });

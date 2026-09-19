@@ -533,13 +533,38 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
     }
 
-    public async Task DeactivateAsync(Guid sessionId, CancellationToken cancellationToken)
+    public async Task<int> DeleteAllSessionsAsync(bool includeArchived, CancellationToken cancellationToken)
     {
-        if (_live.TryGetValue(sessionId, out var live))
+        var deleted = 0;
+
+        while (true)
         {
-            await live.Runtime.RequestDeactivateAsync(cancellationToken).ConfigureAwait(false);
+            var page = await _sessions.ListCatalogAsync(null, 50, includeArchived, cancellationToken)
+                .ConfigureAwait(false);
+            if (page.Items.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var snapshot in page.Items)
+            {
+                await DeleteSessionAsync(snapshot.SessionId, cancellationToken).ConfigureAwait(false);
+                deleted++;
+            }
         }
 
+        return deleted;
+    }
+
+    public async Task DeactivateAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        await TransitionLifecycleAsync(
+                sessionId,
+                SessionLifecycleStatus.Paused,
+                LifecycleTransitionSource.User,
+                "manual",
+                cancellationToken)
+            .ConfigureAwait(false);
         await CancelLiveRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 

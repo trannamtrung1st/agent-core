@@ -104,7 +104,13 @@ public sealed partial class SessionRuntime
 
     private async Task HandleDeactivateAsync(DeactivateReceived input, CancellationToken cancellationToken)
     {
-        await ApplyDeactivateAsync(input.Context, cancellationToken, input.Persisted).ConfigureAwait(false);
+        await ApplyDeactivateAsync(
+                input.Context,
+                cancellationToken,
+                input.Persisted,
+                "manual",
+                LifecycleTransitionSource.User)
+            .ConfigureAwait(false);
     }
 
     private Task HandleRenameAsync(RenameReceived input, CancellationToken cancellationToken)
@@ -276,7 +282,8 @@ public sealed partial class SessionRuntime
         EventContext context,
         CancellationToken cancellationToken,
         TaskCompletionSource<bool>? persisted = null,
-        string pauseReason = "manual")
+        string pauseReason = "manual",
+        LifecycleTransitionSource source = LifecycleTransitionSource.System)
     {
         if (_deactivated)
         {
@@ -309,7 +316,7 @@ public sealed partial class SessionRuntime
         _snapshot = LifecycleTransition.Apply(
             _snapshot,
             SessionLifecycleStatus.Paused,
-            LifecycleTransitionSource.System,
+            source,
             _time.GetUtcNow(),
             pauseReason);
         SessionPauseTelemetry.Record(pauseReason);

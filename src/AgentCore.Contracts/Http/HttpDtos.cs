@@ -6,6 +6,53 @@ public sealed record CreateSessionRequest(string AgentId, int? AgentVersion, str
 
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
 
+public sealed record HostSessionPurposeRequest(
+    string? Kind = null,
+    string? Description = null,
+    string? DeadlineAt = null);
+
+public sealed record HostSessionCompletionPolicyRequest(
+    string? AgentCompletion = null,
+    bool? UserCompletionAllowed = null,
+    bool? UserCancellationAllowed = null);
+
+public sealed record HostCreateSessionRequest(
+    string AgentId,
+    int? AgentVersion,
+    string? Mode,
+    string? SpeechLocale = null,
+    HostSessionPurposeRequest? Purpose = null,
+    HostSessionCompletionPolicyRequest? CompletionPolicy = null,
+    long? MaxDurationSeconds = null);
+
+public sealed record HostSessionPurposeResponse(string Kind, string? Description, string? DeadlineAt);
+
+public sealed record HostSessionCompletionPolicyResponse(
+    string AgentCompletion,
+    bool UserCompletionAllowed,
+    bool UserCancellationAllowed);
+
+public sealed record HostSessionViewResponse(
+    string SessionId,
+    string AgentId,
+    int AgentVersion,
+    string Mode,
+    string? PendingMode,
+    string Status,
+    string CreatedAt,
+    string UpdatedAt,
+    long LastEntrySequence,
+    string? ActiveResponseId,
+    int ProtocolVersion,
+    string? PauseReason,
+    string? LifecycleStatus,
+    SpeechLocaleResponse? SpeechLocale,
+    HostSessionPurposeResponse Purpose,
+    HostSessionCompletionPolicyResponse CompletionPolicy,
+    string? LifecycleSource = null,
+    string? LifecycleReason = null,
+    string? LifecycleChangedAt = null);
+
 public sealed record SetSpeechLocaleRequest(string? Locale);
 
 public sealed record SpeechLocaleResponse(string Effective, string Source, string? Override);
@@ -101,6 +148,8 @@ public sealed record SessionCatalogPageResponse(
     IReadOnlyList<SessionCatalogItemResponse> Items,
     string? NextCursor,
     bool HasMore);
+
+public sealed record BulkDeleteSessionsResponse(int DeletedCount);
 
 public sealed record AttachmentResponse(
     string AttachmentId,

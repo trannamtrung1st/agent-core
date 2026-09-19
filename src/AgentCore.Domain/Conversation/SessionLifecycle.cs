@@ -57,6 +57,7 @@ public static class SessionLifecycle
     public const int MaxPurposeDescriptionLength = 2000;
     public const int MaxMetadataEntries = 16;
     public const int MaxMetadataCharacters = 4000;
+    public static readonly TimeSpan MaxMaxDuration = TimeSpan.FromDays(30);
 
     public static SessionLifecycleStatus FromProtocolStatus(SessionStatus status) =>
         status switch
@@ -84,6 +85,13 @@ public static class SessionLifecycle
             if (duration <= TimeSpan.Zero)
             {
                 throw new ArgumentOutOfRangeException(nameof(maxDuration), "maxDuration must be positive.");
+            }
+
+            if (duration > MaxMaxDuration)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxDuration),
+                    $"maxDuration must be at most {MaxMaxDuration.TotalDays:0} days.");
             }
 
             if (resolved.DeadlineAt is null)

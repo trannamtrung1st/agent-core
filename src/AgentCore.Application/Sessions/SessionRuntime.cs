@@ -2783,21 +2783,99 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         LifecycleTransitionReceived input,
         CancellationToken cancellationToken)
     {
-        if (input.Target == SessionLifecycleStatus.Paused)
+        switch (input.Target)
         {
-            await ApplyDeactivateAsync(input.Context, cancellationToken, input.Persisted, input.Reason ?? "manual")
-                .ConfigureAwait(false);
+            case SessionLifecycleStatus.Paused:
+                await ApplyDeactivateAsync(
+                        input.Context,
+                        cancellationToken,
+                        input.Persisted,
+                        input.Reason ?? "manual",
+                        input.Source)
+                    .ConfigureAwait(false);
+                return;
+            case SessionLifecycleStatus.Active:
+                await ApplyResumeAsync(
+                        input.Context,
+                        input.Source,
+                        input.Reason,
+                        input.Persisted,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            case SessionLifecycleStatus.Completed:
+            case SessionLifecycleStatus.Expired:
+            case SessionLifecycleStatus.Cancelled:
+            case SessionLifecycleStatus.Ended:
+                await TerminalizeAsync(
+                        input.Context,
+                        input.Target,
+                        input.Source,
+                        input.Reason,
+                        input.Persisted,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            default:
+                input.Persisted?.TrySetException(
+                    AgentCoreErrors.Validation("Lifecycle transition is not allowed."));
+                return;
+        }
+    }
+
+    private async Task ApplyResumeAsync(
+        EventContext context,
+        LifecycleTransitionSource source,
+        string? reason,
+        TaskCompletionSource<bool>? persisted,
+        CancellationToken cancellationToken)
+    {
+        if (SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
+        {
+            persisted?.TrySetException(
+                AgentCoreErrors.Validation($"Session is already {LifecycleTransition.ToWire(_snapshot.LifecycleStatus)}."));
             return;
         }
 
-        await TerminalizeAsync(
-                input.Context,
-                input.Target,
-                input.Source,
-                input.Reason,
-                input.Persisted,
-                cancellationToken)
-            .ConfigureAwait(false);
+        if (_snapshot.LifecycleStatus == SessionLifecycleStatus.Active
+            && !_deactivated
+            && _snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
+        {
+            persisted?.TrySetResult(true);
+            return;
+        }
+
+        SessionSnapshot applied;
+        try
+        {
+            applied = LifecycleTransition.Apply(
+                _snapshot,
+                SessionLifecycleStatus.Active,
+                source,
+                _time.GetUtcNow(),
+                reason);
+        }
+        catch (AgentCoreException ex)
+        {
+            persisted?.TrySetException(ex);
+            return;
+        }
+
+        applied = applied with
+        {
+            Status = SessionStatus.Attached,
+            PendingMode = null,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        ResetForExplicitResume(applied);
+        RequestPersist(
+            _snapshot,
+            then: async ct =>
+            {
+                await PublishStateAsync(context, ct).ConfigureAwait(false);
+                persisted?.TrySetResult(true);
+            },
+            ended: persisted);
     }
 
     private async Task TerminalizeAsync(

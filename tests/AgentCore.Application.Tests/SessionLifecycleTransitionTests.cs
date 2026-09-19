@@ -45,6 +45,56 @@ public sealed class SessionLifecycleTransitionTests
                 SessionLifecycleStatus.Cancelled,
                 LifecycleTransitionSource.Host));
         Assert.Equal("ValidationError", mismatch.Code);
+
+        var reactivate = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            manager.TransitionLifecycleAsync(
+                created.SessionId,
+                SessionLifecycleStatus.Active,
+                LifecycleTransitionSource.Host));
+        Assert.Equal("ValidationError", reactivate.Code);
+    }
+
+    [Fact]
+    public async Task Pause_preserves_user_host_and_system_provenance()
+    {
+        var manager = CreateManager(new InMemoryMemoryStore());
+        var userSession = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var userPaused = await manager.DeactivateAsync(userSession.SessionId);
+        Assert.Equal(LifecycleTransitionSource.User, userPaused.LifecycleSource);
+        Assert.Equal("manual", userPaused.LifecycleReason);
+        Assert.NotNull(userPaused.LifecycleChangedAt);
+
+        var hostSession = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var hostPaused = await manager.TransitionLifecycleAsync(
+            hostSession.SessionId,
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.Host,
+            reason: "proctor-hold");
+        Assert.Equal(LifecycleTransitionSource.Host, hostPaused.LifecycleSource);
+        Assert.Equal("proctor-hold", hostPaused.LifecycleReason);
+
+        var systemSession = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var systemPaused = await manager.TransitionLifecycleAsync(
+            systemSession.SessionId,
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.System,
+            reason: "inactivity");
+        Assert.Equal(LifecycleTransitionSource.System, systemPaused.LifecycleSource);
+        Assert.Equal("inactivity", systemPaused.LifecycleReason);
+    }
+
+    [Fact]
+    public async Task Active_to_active_is_idempotent_on_the_store()
+    {
+        var manager = CreateManager(new InMemoryMemoryStore());
+        var created = await manager.CreateAsync("examiner", null, SessionMode.Text);
+        var again = await manager.TransitionLifecycleAsync(
+            created.SessionId,
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User);
+        Assert.Equal(created.Revision, again.Revision);
+        Assert.Equal(SessionLifecycleStatus.Active, again.LifecycleStatus);
+        Assert.Equal(SessionStatus.Created, again.Status);
     }
 
     [Fact]
