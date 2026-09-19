@@ -320,10 +320,30 @@ describe("Composer voice toolbar", () => {
       />
     );
     expect(screen.getByRole("button", { name: /^Voice$/ })).toBeEnabled();
-    const paused = screen.getByRole("button", { name: "Voice input paused while agent speaks" });
-    expect(paused).toBeDisabled();
-    fireEvent.click(paused);
+    const mute = screen.getByRole("button", { name: "Mute" });
+    expect(mute).toBeDisabled();
+    expect(mute).toHaveClass("composer-voice-live");
+    fireEvent.click(mute);
     expect(onVoice).not.toHaveBeenCalled();
+    expect(onMute).not.toHaveBeenCalled();
+  });
+
+  it("keeps Unmute appearance while held for agent output", () => {
+    const onMute = vi.fn();
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputHeldForAgentOutput
+        muted
+        onMute={onMute}
+      />
+    );
+    const unmute = screen.getByRole("button", { name: "Unmute" });
+    expect(unmute).toBeDisabled();
+    expect(unmute).not.toHaveClass("composer-voice-live");
+    fireEvent.click(unmute);
     expect(onMute).not.toHaveBeenCalled();
   });
 });

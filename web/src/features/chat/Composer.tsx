@@ -107,13 +107,27 @@ function MicrophoneControl({
   }
 
   if (voiceInputHeldForAgentOutput) {
+    const heldTooltip = "Microphone resumes after the agent finishes speaking";
+    if (muted) {
+      return (
+        <Tooltip title={heldTooltip}>
+          <Button
+            type="text"
+            className="composer-icon"
+            aria-label="Unmute"
+            icon={<AudioMutedOutlined />}
+            disabled
+          />
+        </Tooltip>
+      );
+    }
     return (
-      <Tooltip title="Microphone resumes after the agent finishes speaking">
+      <Tooltip title={heldTooltip}>
         <Button
           type="text"
-          className="composer-icon"
-          aria-label="Voice input paused while agent speaks"
-          icon={<AudioOutlined />}
+          className="composer-icon composer-voice-live"
+          aria-label="Mute"
+          icon={<AudioFilled />}
           disabled
         />
       </Tooltip>
