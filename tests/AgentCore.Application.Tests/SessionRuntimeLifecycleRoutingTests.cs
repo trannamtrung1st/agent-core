@@ -170,6 +170,39 @@ public sealed class SessionRuntimeLifecycleRoutingTests
     }
 
     [Fact]
+    public async Task Live_resume_persist_pending_rejects_user_text()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new ResumeGatedStore(gate);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, time, new ScriptedLanguageModel(), store);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+
+        var resume = runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User,
+            "resume");
+        await store.ResumeSaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal(SessionLifecycleStatus.Paused, runtime.Snapshot.LifecycleStatus);
+        Assert.False(await runtime.SubmitPersistedUserTextAsync(
+            "while resume persists",
+            Guid.Parse("019944af-0000-7000-8000-000000000092")));
+
+        gate.TrySetResult();
+        Assert.True(await resume.WaitAsync(TimeSpan.FromSeconds(5)));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+        Assert.Equal(SessionLifecycleStatus.Active, runtime.Snapshot.LifecycleStatus);
+    }
+
+    [Fact]
     public async Task Live_resume_active_persist_failure_keeps_paused_durable_state()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));
@@ -308,6 +341,57 @@ public sealed class SessionRuntimeLifecycleRoutingTests
             NullLogger<SessionRuntime>.Instance,
             policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000),
             voice: new VoiceAvailability { SpeechAdaptersResolved = true });
+    }
+
+    private sealed class ResumeGatedStore(TaskCompletionSource gate) : IMemoryStore
+    {
+        public InMemoryMemoryStore Inner { get; } = new();
+        public TaskCompletionSource ResumeSaveStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _pausedPersisted;
+
+        public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            Inner.LoadAsync(sessionId, cancellationToken);
+
+        public async ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
+        {
+            if (snapshot.LifecycleStatus == SessionLifecycleStatus.Paused)
+            {
+                _pausedPersisted = true;
+            }
+            else if (_pausedPersisted
+                     && snapshot.LifecycleStatus == SessionLifecycleStatus.Active
+                     && snapshot.Status == SessionStatus.Attached)
+            {
+                ResumeSaveStarted.TrySetResult();
+                await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await Inner.SaveAsync(snapshot, expectedRevision, cancellationToken).ConfigureAwait(false);
+        }
+
+        public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+            Guid sessionId,
+            long afterEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
+        public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+            Inner.LoadProfileAsync(profileId, cancellationToken);
+
+        public ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default) =>
+            Inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+        public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+            Inner.RecoverCrashedSessionsAsync(cancellationToken);
     }
 
     private sealed class FailingActiveResumeStore : IMemoryStore

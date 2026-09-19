@@ -463,6 +463,42 @@ public sealed class UserTextQueueTests
     }
 
     [Fact]
+    public async Task Lifecycle_resume_dispatches_pending_queued_suffix_once()
+    {
+        var time = Clock();
+        var output = new CapturingSessionOutput();
+        var model = new HoldingLanguageModel();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T1");
+        await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(1, model.Calls);
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User,
+            "resume"));
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
+        Assert.Equal(2, model.Calls);
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, model.Calls);
+        Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant && entry.Text.Contains("T1", StringComparison.Ordinal));
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Pause_does_not_start_the_pending_suffix()
     {
         var time = Clock();

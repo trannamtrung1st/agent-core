@@ -2854,11 +2854,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             PendingMode = null,
             UpdatedAt = _time.GetUtcNow()
         };
-        ApplyProposedResumeState(applied);
         RequestPersist(
-            _snapshot,
+            applied,
+            PersistKind.Resume,
             then: async ct =>
             {
+                ApplyProposedResumeState(_durableSnapshot);
                 await ReactivateLiveSessionAsync(context, ct).ConfigureAwait(false);
                 await PublishStateAsync(context, ct).ConfigureAwait(false);
                 persisted?.TrySetResult(true);
@@ -2887,7 +2888,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
         }
 
-        if (CanEvaluateIdle())
+        if (!await TryStartPendingUserBatchAsync(context, cancellationToken).ConfigureAwait(false)
+            && CanEvaluateIdle())
         {
             ScheduleIdleTimer(SilenceThreshold());
         }
@@ -3087,6 +3089,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Normal,
         Checkpoint,
         Pause,
+        Resume,
         TerminalEnd
     }
 
@@ -3241,6 +3244,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             PersistKind.TerminalEnd => true,
             PersistKind.Pause => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
+            PersistKind.Resume => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
             PersistKind.Checkpoint => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created,
             _ => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created
         };
