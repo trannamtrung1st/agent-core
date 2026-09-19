@@ -34,7 +34,7 @@ export function ChatHeader({
   const timeLabel = timestamp ? formatChatTime(timestamp) : null;
 
   return (
-    <Flex align="center" justify="space-between" gap={12} className="chat-header-inner">
+    <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="chat-header-inner">
       <Flex align="center" gap={12} className="chat-header-identity">
         {sessionsToggle}
         <div className="chat-header-copy">
@@ -53,13 +53,17 @@ export function ChatHeader({
               {subtitle}
             </Typography.Text>
           ) : null}
-          {speechLocale}
         </div>
       </Flex>
-      {inSession ? (
-        <Dropdown menu={{ items }} trigger={["click"]} placement="bottomRight">
-          <Button type="text" size="small" className="session-overflow" aria-label="Conversation actions" icon={<MoreOutlined />} />
-        </Dropdown>
+      {speechLocale || inSession ? (
+        <Flex align="center" gap={8} className="chat-header-actions">
+          {speechLocale}
+          {inSession ? (
+            <Dropdown menu={{ items }} trigger={["click"]} placement="bottomRight">
+              <Button type="text" size="small" className="session-overflow" aria-label="Conversation actions" icon={<MoreOutlined />} />
+            </Dropdown>
+          ) : null}
+        </Flex>
       ) : null}
     </Flex>
   );

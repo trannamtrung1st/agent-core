@@ -1,6 +1,7 @@
 import {
   OwnerCapabilityError,
   archiveSession,
+  deleteAllSessions,
   durableDeleteSession,
   listCatalog,
   renameSession,
@@ -150,6 +151,17 @@ export async function deleteCatalogItem(item: CatalogItem): Promise<boolean> {
     await durableDeleteSession(item.sessionId);
     await refreshCatalog(true);
   });
+}
+
+export async function deleteAllCatalogItems(): Promise<number | false> {
+  let deletedCount = 0;
+  const ok = await runCatalogMutation("*", "deleteAll", async () => {
+    const includeArchived = useSessionStore.getState().catalogIncludeArchived;
+    deletedCount = await deleteAllSessions({ includeArchived });
+    await refreshCatalog(true);
+  });
+
+  return ok ? deletedCount : false;
 }
 
 function patchCatalog(item: CatalogItem): void {

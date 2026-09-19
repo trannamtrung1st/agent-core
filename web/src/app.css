@@ -82,8 +82,10 @@ body,
   align-items: center;
   justify-content: space-between;
   gap: var(--ac-space-default);
-  height: var(--ac-header-height) !important;
+  min-height: var(--ac-header-height);
+  height: auto !important;
   line-height: 1.3 !important;
+  padding-block: var(--ac-space-compact) !important;
   padding-inline: var(--ac-space-section) !important;
   background: var(--ac-color-container) !important;
   border-block-end: 1px solid var(--ac-color-border);
@@ -132,6 +134,11 @@ body,
 .chat-header-subtitle {
   display: block;
   font-size: 12px;
+}
+
+.chat-header-actions {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .chat-header-meta {
@@ -495,6 +502,11 @@ body,
   min-width: 0;
 }
 
+.speech-locale-picker-row {
+  flex: 0 1 12rem;
+  width: min(12rem, 100%);
+}
+
 .session-rail {
   display: flex;
   flex-direction: column;
@@ -531,6 +543,18 @@ body,
 .session-rail-heading {
   min-height: 24px;
   padding-inline: var(--ac-space-compact);
+}
+
+.session-rail-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.session-overflow-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .session-overflow.ant-btn {

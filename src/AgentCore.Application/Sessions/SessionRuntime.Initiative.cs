@@ -102,17 +102,6 @@ public sealed partial class SessionRuntime
         LaunchBrain(context, trigger, responseId, turn);
     }
 
-    private async Task HandleDeactivateAsync(DeactivateReceived input, CancellationToken cancellationToken)
-    {
-        await ApplyDeactivateAsync(
-                input.Context,
-                cancellationToken,
-                input.Persisted,
-                "manual",
-                LifecycleTransitionSource.User)
-            .ConfigureAwait(false);
-    }
-
     private Task HandleRenameAsync(RenameReceived input, CancellationToken cancellationToken)
     {
         if (string.Equals(_snapshot.Title, input.Title, StringComparison.Ordinal))

@@ -399,6 +399,9 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByText("Interrupted")).toBeInTheDocument();
     expect(screen.getByLabelText("Message")).toBeEnabled();
     expect(document.querySelector(".chat-header-time time")).toHaveAttribute("dateTime", "2026-09-15T00:00:00.000Z");
+    expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
+    expect(document.querySelector(".chat-header-copy .speech-locale-picker")).toBeNull();
+    expect(document.querySelector(".chat-header-actions .speech-locale-picker")).not.toBeNull();
 
     fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
     expect(sendDraft).toHaveBeenCalled();
@@ -559,6 +562,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Conversation actions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
   });
 
   it("names completed sessions without Resume or composer", async () => {
@@ -596,6 +600,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Speech locale" })).not.toBeInTheDocument();
   });
 
   it("shows reason-specific pause copy and a keyboard-operable Resume", async () => {
@@ -632,6 +637,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.getByText(/paused after repeated quiet checks/i)).toBeInTheDocument();
     expect(screen.queryByText("This conversation has ended.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Speech locale" })).toBeInTheDocument();
     const resume = screen.getByRole("button", { name: "Resume" });
     expect(resume).toBeEnabled();
     resume.focus();

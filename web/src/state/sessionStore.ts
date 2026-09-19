@@ -560,7 +560,7 @@ export type SessionStore = SessionView & {
   routeNotice: string | null;
 };
 
-export type CatalogMutationKind = "rename" | "archive" | "unarchive" | "delete";
+export type CatalogMutationKind = "rename" | "archive" | "unarchive" | "delete" | "deleteAll";
 
 export type CatalogMutation = {
   sessionId: string;

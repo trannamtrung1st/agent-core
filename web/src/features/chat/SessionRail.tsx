@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Alert, App, Button, Dropdown, Empty, Flex, Input, Typography } from "antd";
-import { MoreOutlined, PlusOutlined } from "@ant-design/icons";
+import { useState, type ReactNode } from "react";
+import { Alert, App, Button, Dropdown, Empty, Flex, Input, Tooltip, Typography } from "antd";
+import { MoreOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import type { AgentDescriptor, CatalogItem } from "../../services/api";
 import {
   archiveCatalogItem,
+  deleteAllCatalogItems,
   deleteCatalogItem,
   refreshCatalog,
   renameCatalogItem,
@@ -44,7 +45,46 @@ function mutationBusy(mutation: CatalogMutation | null, sessionId: string, kind:
 }
 
 function rowBusy(mutation: CatalogMutation | null, sessionId: string): boolean {
+  if (mutation?.kind === "deleteAll") {
+    return true;
+  }
+
   return mutation?.sessionId === sessionId;
+}
+
+function OverflowIconButton({
+  title,
+  ariaLabel,
+  icon,
+  loading,
+  disabled,
+  onClick
+}: {
+  title: string;
+  ariaLabel: string;
+  icon: ReactNode;
+  loading?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  const control = (
+    <Button
+      type="text"
+      size="small"
+      className="session-overflow"
+      aria-label={ariaLabel}
+      icon={icon}
+      loading={loading}
+      disabled={disabled}
+      onClick={onClick}
+    />
+  );
+
+  return (
+    <Tooltip title={title}>
+      {disabled ? <span className="session-overflow-wrap">{control}</span> : control}
+    </Tooltip>
+  );
 }
 
 function latestCatalogError(): string {
@@ -81,7 +121,9 @@ export function SessionRail({
   const { message, modal } = App.useApp();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const catalogBusy = mutation != null;
+  const listActionsDisabled = catalogBusy || refreshing || capabilityLost;
 
   function latestItem(sessionId: string, fallback: CatalogItem): CatalogItem {
     return useSessionStore.getState().catalogItems.find((row) => row.sessionId === sessionId) ?? fallback;
@@ -102,6 +144,38 @@ export function SessionRail({
     if (options?.rejectOnFailure) {
       return Promise.reject(new Error(errorMessage));
     }
+  }
+
+  function confirmDeleteAll(): void {
+    modal.confirm({
+      title: "Delete all chats?",
+      content: includeArchived
+        ? "This removes every session in your catalog, including archived chats. This cannot be undone."
+        : "This removes every visible chat in your catalog. Archived chats are kept unless you show archived first. This cannot be undone.",
+      okText: "Delete all",
+      cancelText: "Cancel",
+      okType: "danger",
+      centered: true,
+      mask: { closable: true },
+      onOk: async () => {
+        const hadActive = activeSessionId != null;
+        const deletedCount = await deleteAllCatalogItems();
+        if (deletedCount === false) {
+          await notifyMutation(false, "Chats deleted.", { rejectOnFailure: true });
+          return;
+        }
+
+        if (hadActive) {
+          onNewChat({ urlMode: "replace" });
+        }
+
+        void message.success(
+          deletedCount === 0
+            ? "No chats to delete."
+            : `Deleted ${deletedCount} chat${deletedCount === 1 ? "" : "s"}.`
+        );
+      }
+    });
   }
 
   function confirmDelete(item: CatalogItem): void {
@@ -179,12 +253,27 @@ export function SessionRail({
     {
       key: "archived",
       label: includeArchived ? "Hide archived" : "Show archived",
-      disabled: catalogBusy,
+      disabled: listActionsDisabled,
       onClick: () => {
         void setIncludeArchived(!includeArchived);
       }
+    },
+    { type: "divider" },
+    {
+      key: "delete-all",
+      danger: true,
+      label: "Delete all chats",
+      disabled: listActionsDisabled,
+      onClick: () => confirmDeleteAll()
     }
   ];
+
+  function refreshList(): void {
+    setRefreshing(true);
+    void refreshCatalog(true).finally(() => {
+      setRefreshing(false);
+    });
+  }
 
   return (
     <nav className="session-rail" aria-label="Chats" data-testid="session-rail">
@@ -207,9 +296,26 @@ export function SessionRail({
       <div className="session-rail-catalog">
         <Flex justify={showHeading ? "space-between" : "flex-end"} align="center" gap={8} className="session-rail-heading">
           {showHeading ? <Typography.Text type="secondary">Chats</Typography.Text> : null}
-          <Dropdown menu={{ items: listMenu }} trigger={["click"]} placement="bottomRight">
-            <Button type="text" size="small" className="session-overflow" aria-label="Chat list options" icon={<MoreOutlined />} />
-          </Dropdown>
+          <div className="session-rail-heading-actions">
+            <OverflowIconButton
+              title="Refresh chats"
+              ariaLabel="Refresh chats"
+              icon={<ReloadOutlined />}
+              loading={refreshing}
+              disabled={listActionsDisabled}
+              onClick={refreshList}
+            />
+            <Dropdown menu={{ items: listMenu }} trigger={["click"]} placement="bottomRight" disabled={listActionsDisabled}>
+              <Button
+                type="text"
+                size="small"
+                className="session-overflow"
+                aria-label="Chat list options"
+                icon={<MoreOutlined />}
+                disabled={listActionsDisabled}
+              />
+            </Dropdown>
+          </div>
         </Flex>
         {capabilityLost ? (
           <Alert type="error" showIcon title={error ?? "Local owner access is unavailable."} />

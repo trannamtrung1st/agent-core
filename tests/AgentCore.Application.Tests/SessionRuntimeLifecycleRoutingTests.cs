@@ -140,6 +140,24 @@ public sealed class SessionRuntimeLifecycleRoutingTests
         Assert.NotNull(runtime.Snapshot.LifecycleChangedAt);
     }
 
+    [Fact]
+    public async Task Request_deactivate_uses_user_manual_lifecycle_pause()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, time, new ScriptedLanguageModel(), store);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.RequestDeactivateAsync());
+        Assert.Equal(SessionLifecycleStatus.Paused, runtime.Snapshot.LifecycleStatus);
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal(LifecycleTransitionSource.User, runtime.Snapshot.LifecycleSource);
+        Assert.Equal("manual", runtime.Snapshot.LifecycleReason);
+        var durable = await store.LoadAsync(runtime.SessionId);
+        Assert.Equal(LifecycleTransitionSource.User, durable!.LifecycleSource);
+        Assert.Equal("manual", durable.LifecycleReason);
+    }
+
     private static SessionRuntime Create(
         ISessionOutput output,
         FakeTimeProvider time,

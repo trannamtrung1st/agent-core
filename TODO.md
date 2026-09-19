@@ -12,6 +12,11 @@ The current free-form rich-response parser plus runtime speech projection is acc
 
 ---
 
+## Maintainer notes
+
+- [ ] Add proprietary license to the project.
+- [ ] Add tools that more assistant like, add more user info context (e.g, timezone, language, etc ...). [TBD]
+
 ## P0 — Close the current stabilization tail, then freeze it again
 
 This is a bounded verification/fix pass, not another voice redesign.

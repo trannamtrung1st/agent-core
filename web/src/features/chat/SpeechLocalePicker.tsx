@@ -34,6 +34,7 @@ export function SpeechLocalePicker({
   const select = (
     <Select
       aria-label="Speech locale"
+      size={layout === "row" ? "small" : "middle"}
       value={value}
       disabled={disabled}
       getPopupContainer={() => document.body}
@@ -42,17 +43,13 @@ export function SpeechLocalePicker({
         const tag = typeof next === "string" ? next : "";
         onChange(tag.length === 0 ? null : tag);
       }}
-      style={{ width: layout === "stack" ? "100%" : 220, minWidth: 0 }}
+      popupMatchSelectWidth={false}
+      style={{ width: "100%", minWidth: 0 }}
     />
   );
 
   if (layout === "row") {
-    return (
-      <Flex align="center" gap={8} wrap="wrap" className="speech-locale-picker">
-        <Typography.Text type="secondary">Speech locale</Typography.Text>
-        {select}
-      </Flex>
-    );
+    return <div className="speech-locale-picker speech-locale-picker-row">{select}</div>;
   }
 
   return (

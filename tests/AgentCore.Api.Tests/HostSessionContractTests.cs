@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AgentCore.Contracts.Http;
+using Microsoft.Data.Sqlite;
 
 namespace AgentCore.Api.Tests;
 
@@ -128,5 +129,59 @@ public sealed class HostSessionContractTests : IClassFixture<AgentCoreApiFactory
                 Purpose: new HostSessionPurposeRequest("goal"),
                 MaxDurationSeconds: (long)TimeSpan.FromDays(31).TotalSeconds));
         Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+    }
+
+    [Fact]
+    public async Task Host_purpose_survives_sqlite_restart_and_stays_off_public_projections()
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"agent-core-host-purpose-{Guid.NewGuid():N}.db");
+        string sessionId;
+        string deadline;
+        try
+        {
+            await using (var first = new DurableSqliteHostFactory(db))
+            {
+                var client = TestOwnerCapability.CreateOwnerClient(first);
+                var created = await client.PostAsJsonAsync(
+                    "/api/v2/host/sessions",
+                    new HostCreateSessionRequest(
+                        "examiner",
+                        1,
+                        "text",
+                        Purpose: new HostSessionPurposeRequest("goal", "Onboarding task"),
+                        CompletionPolicy: new HostSessionCompletionPolicyRequest("advisory", false, true),
+                        MaxDurationSeconds: 120));
+                created.EnsureSuccessStatusCode();
+                using var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+                sessionId = createdDoc.RootElement.GetProperty("sessionId").GetString()!;
+                deadline = createdDoc.RootElement.GetProperty("purpose").GetProperty("deadlineAt").GetString()!;
+            }
+
+            await using var restarted = new DurableSqliteHostFactory(db);
+            var after = TestOwnerCapability.CreateOwnerClient(restarted);
+            using var hostDoc = JsonDocument.Parse(
+                await (await after.GetAsync($"/api/v2/host/sessions/{sessionId}")).Content.ReadAsStringAsync());
+            Assert.Equal("goal", hostDoc.RootElement.GetProperty("purpose").GetProperty("kind").GetString());
+            Assert.Equal("Onboarding task", hostDoc.RootElement.GetProperty("purpose").GetProperty("description").GetString());
+            Assert.Equal(deadline, hostDoc.RootElement.GetProperty("purpose").GetProperty("deadlineAt").GetString());
+            Assert.Equal("advisory", hostDoc.RootElement.GetProperty("completionPolicy").GetProperty("agentCompletion").GetString());
+            Assert.False(hostDoc.RootElement.GetProperty("completionPolicy").GetProperty("userCompletionAllowed").GetBoolean());
+
+            using var publicDoc = JsonDocument.Parse(
+                await (await after.GetAsync($"/api/v2/sessions/{sessionId}")).Content.ReadAsStringAsync());
+            Assert.Equal("active", publicDoc.RootElement.GetProperty("lifecycleStatus").GetString());
+            Assert.False(publicDoc.RootElement.TryGetProperty("purpose", out _));
+            Assert.False(publicDoc.RootElement.TryGetProperty("completionPolicy", out _));
+            Assert.False(publicDoc.RootElement.TryGetProperty("deadlineAt", out _));
+        }
+        finally
+        {
+            using var connection = new SqliteConnection($"Data Source={db}");
+            SqliteConnection.ClearPool(connection);
+            if (File.Exists(db))
+            {
+                File.Delete(db);
+            }
+        }
     }
 }

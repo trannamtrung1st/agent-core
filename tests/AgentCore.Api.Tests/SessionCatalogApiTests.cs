@@ -164,6 +164,87 @@ public sealed class SessionCatalogApiTests : IClassFixture<AgentCoreApiFactory>
     }
 
     [Fact]
+    public async Task V2_bulk_delete_removes_catalog_rows_and_live_runtimes()
+    {
+        var client = OwnerClient();
+        var before = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        var first = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var second = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var firstView = await first.Content.ReadFromJsonAsync<SessionViewResponse>();
+        await using var hub = CreateHubConnection();
+        await hub.StartAsync();
+        var attached = await AttachAsync(hub, firstView!.SessionId);
+        Assert.True(attached.Accepted, attached.Error?.Message);
+        var host = _factory.Services.GetRequiredService<SessionHost>();
+        Assert.NotNull(host.LiveSnapshot(Guid.Parse(firstView.SessionId)));
+
+        using var bulk = await client.DeleteAsync("/api/v2/sessions");
+        bulk.EnsureSuccessStatusCode();
+        var body = await bulk.Content.ReadFromJsonAsync<BulkDeleteSessionsResponse>();
+        Assert.Equal(before!.Items.Count + 2, body!.DeletedCount);
+        Assert.Null(host.LiveSnapshot(Guid.Parse(firstView.SessionId)));
+        var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        Assert.Empty(listed!.Items);
+
+        var emptyBulk = await client.DeleteAsync("/api/v2/sessions");
+        emptyBulk.EnsureSuccessStatusCode();
+        var emptyBody = await emptyBulk.Content.ReadFromJsonAsync<BulkDeleteSessionsResponse>();
+        Assert.Equal(0, emptyBody!.DeletedCount);
+    }
+
+    [Fact]
+    public async Task V2_bulk_delete_pages_through_catalogs_larger_than_one_batch()
+    {
+        var client = OwnerClient();
+        using (await client.DeleteAsync("/api/v2/sessions?includeArchived=true"))
+        {
+        }
+
+        for (var i = 0; i < 52; i++)
+        {
+            var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+            created.EnsureSuccessStatusCode();
+        }
+
+        using var bulk = await client.DeleteAsync("/api/v2/sessions");
+        bulk.EnsureSuccessStatusCode();
+        var body = await bulk.Content.ReadFromJsonAsync<BulkDeleteSessionsResponse>();
+        Assert.Equal(52, body!.DeletedCount);
+        var listed = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions");
+        Assert.Empty(listed!.Items);
+    }
+
+    [Fact]
+    public async Task V2_bulk_delete_respects_include_archived_filter()
+    {
+        var client = OwnerClient();
+        using (await client.DeleteAsync("/api/v2/sessions?includeArchived=true"))
+        {
+        }
+
+        var visible = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var archived = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        var visibleView = await visible.Content.ReadFromJsonAsync<SessionViewResponse>();
+        var archivedView = await archived.Content.ReadFromJsonAsync<SessionViewResponse>();
+        await client.PostAsync($"/api/v2/sessions/{archivedView!.SessionId}/archive", null);
+
+        using var partial = await client.DeleteAsync("/api/v2/sessions");
+        partial.EnsureSuccessStatusCode();
+        var partialBody = await partial.Content.ReadFromJsonAsync<BulkDeleteSessionsResponse>();
+        Assert.Equal(1, partialBody!.DeletedCount);
+        var hidden = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions?includeArchived=true");
+        Assert.Contains(hidden!.Items, row => row.SessionId == archivedView.SessionId);
+        Assert.DoesNotContain(hidden.Items, row => row.SessionId == visibleView!.SessionId);
+
+        using var full = await client.DeleteAsync("/api/v2/sessions?includeArchived=true");
+        full.EnsureSuccessStatusCode();
+        var fullBody = await full.Content.ReadFromJsonAsync<BulkDeleteSessionsResponse>();
+        Assert.Equal(1, fullBody!.DeletedCount);
+        var after = await client.GetFromJsonAsync<SessionCatalogPageResponse>("/api/v2/sessions?includeArchived=true");
+        Assert.Empty(after!.Items);
+    }
+
+    [Fact]
     public async Task V2_delete_removes_attached_session_without_stale_revision()
     {
         var client = OwnerClient();

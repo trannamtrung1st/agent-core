@@ -397,19 +397,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<bool> RequestDeactivateAsync(CancellationToken cancellationToken = default)
-    {
-        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var context = NewContext();
-        BeginWork();
-        if (!Enqueue(new DeactivateReceived(context, persisted), urgent: true))
-        {
-            persisted.TrySetResult(false);
-            return false;
-        }
-
-        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
-    }
+    public Task<bool> RequestDeactivateAsync(CancellationToken cancellationToken = default) =>
+        RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual",
+            cancellationToken);
 
     public async Task<bool> RequestLifecycleTransitionAsync(
         SessionLifecycleStatus target,
@@ -817,9 +810,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case LifecycleTransitionReceived lifecycle:
                     await HandleLifecycleTransitionAsync(lifecycle, cancellationToken).ConfigureAwait(false);
                     break;
-                case DeactivateReceived deactivate:
-                    await HandleDeactivateAsync(deactivate, cancellationToken).ConfigureAwait(false);
-                    break;
                 case RenameReceived rename:
                     await HandleRenameAsync(rename, cancellationToken).ConfigureAwait(false);
                     break;
@@ -849,7 +839,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or DeactivateReceived or RenameReceived or SpeechLocaleReceived or DetachReceived)
+            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or RenameReceived or SpeechLocaleReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
             }
@@ -943,9 +933,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case LifecycleTransitionReceived lifecycle:
                 lifecycle.Persisted.TrySetResult(value);
-                break;
-            case DeactivateReceived deactivate:
-                deactivate.Persisted.TrySetResult(value);
                 break;
             case RenameReceived rename:
                 rename.Persisted.TrySetResult(value);

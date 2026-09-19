@@ -300,12 +300,12 @@ export async function listSessionMessages(
 export async function transitionLifecycle(
   sessionId: string,
   target: string,
-  source = "host"
+  reason?: string
 ): Promise<CatalogItem> {
   const response = await ownerFetch(`/api/v2/sessions/${sessionId}/lifecycle`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target, source })
+    body: JSON.stringify({ target, reason })
   });
   if (!response.ok) {
     throw new Error("Unable to update the session lifecycle.");
@@ -331,4 +331,20 @@ export async function durableDeleteSession(sessionId: string): Promise<void> {
   if (!response.ok) {
     throw new Error("Unable to delete the session.");
   }
+}
+
+export async function deleteAllSessions(options?: { includeArchived?: boolean }): Promise<number> {
+  const params = new URLSearchParams();
+  if (options?.includeArchived) {
+    params.set("includeArchived", "true");
+  }
+
+  const query = params.toString();
+  const response = await ownerFetch(`/api/v2/sessions${query ? `?${query}` : ""}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error("Unable to delete all sessions.");
+  }
+
+  const body = (await response.json()) as { deletedCount: number };
+  return body.deletedCount;
 }

@@ -133,7 +133,7 @@ export function Conversation({
 
         const below = rootBox.bottom - padding - anchorBox.bottom;
         const following = Math.max(0, (Number.isFinite(below) ? below : 0) - safeSpacerHeight);
-        const budget = scrollHeight * REPLY_SPACE_RATIO;
+        const budget = Number.isFinite(scrollHeight) ? scrollHeight * REPLY_SPACE_RATIO : 0;
         const raw = budget - following;
         const next = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
         setReplySpace((current) => (current === next ? current : next));

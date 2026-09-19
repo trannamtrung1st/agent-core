@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSession, durableDeleteSession, listCatalog } from "./api";
+import { createSession, deleteAllSessions, durableDeleteSession, listCatalog } from "./api";
 
 describe("catalog owner fetch", () => {
   afterEach(() => {
@@ -35,6 +35,19 @@ describe("catalog owner fetch", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(createSession("examiner", 1)).rejects.toThrow("Local owner access is unavailable.");
     expect(window.localStorage.getItem("agent-core.owner-capability")).toBeNull();
+  });
+
+  it("uses bulk durable delete on the catalog collection", async () => {
+    window.localStorage.setItem("agent-core.owner-capability", "tok");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ deletedCount: 3 })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(deleteAllSessions({ includeArchived: true })).resolves.toBe(3);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v2/sessions?includeArchived=true");
+    expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
   });
 
   it("uses server-owned durable delete", async () => {

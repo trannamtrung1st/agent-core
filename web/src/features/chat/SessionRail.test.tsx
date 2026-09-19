@@ -7,7 +7,9 @@ import { antdTheme } from "../../app/antdTheme";
 import type { CatalogItem } from "../../services/api";
 import {
   archiveCatalogItem,
+  deleteAllCatalogItems,
   deleteCatalogItem,
+  refreshCatalog,
   renameCatalogItem,
   unarchiveCatalogItem
 } from "../../services/catalog";
@@ -16,6 +18,7 @@ import { SessionRail } from "./SessionRail";
 
 vi.mock("../../services/catalog", () => ({
   archiveCatalogItem: vi.fn(),
+  deleteAllCatalogItems: vi.fn(),
   deleteCatalogItem: vi.fn(),
   refreshCatalog: vi.fn(),
   renameCatalogItem: vi.fn(),
@@ -401,6 +404,51 @@ describe("SessionRail", () => {
     expect(deleteCatalogItem).toHaveBeenCalledTimes(1);
     expect(deleteCatalogItem).toHaveBeenCalledWith(live);
     expect(useSessionStore.getState().catalogItems[0]?.revision).toBe(5);
+  });
+
+  it("refreshes the catalog from the heading control", async () => {
+    vi.mocked(refreshCatalog).mockResolvedValue();
+    renderRail({
+      items: [live],
+      agents,
+      activeSessionId: null,
+      includeArchived: false,
+      hasMore: false,
+      capabilityLost: false,
+      error: null,
+      mutation: null,
+      onNewChat: vi.fn(),
+      onOpen: vi.fn()
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh chats" }));
+    await waitFor(() => expect(refreshCatalog).toHaveBeenCalledWith(true));
+  });
+
+  it("confirms delete all and returns to new chat when the active session is removed", async () => {
+    vi.mocked(deleteAllCatalogItems).mockResolvedValue(1);
+    const onNewChat = vi.fn();
+    renderRail({
+      items: [live],
+      agents,
+      activeSessionId: "s1",
+      includeArchived: false,
+      hasMore: false,
+      capabilityLost: false,
+      error: null,
+      mutation: null,
+      onNewChat,
+      onOpen: vi.fn()
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat list options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete all chats" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Delete all chats?");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete all" }));
+    await waitFor(() => expect(deleteAllCatalogItems).toHaveBeenCalled());
+    expect(onNewChat).toHaveBeenCalledWith({ urlMode: "replace" });
+    expect(await screen.findByText("Deleted 1 chat.")).toBeInTheDocument();
   });
 
   it("toasts catalog mutation failures", async () => {

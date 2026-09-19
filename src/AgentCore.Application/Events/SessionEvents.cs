@@ -134,8 +134,6 @@ public sealed record LifecycleTransitionReceived(
     string? Reason,
     TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
-public sealed record DeactivateReceived(EventContext Context, TaskCompletionSource<bool> Persisted) : SessionInput(Context);
-
 public sealed record RenameReceived(
     EventContext Context,
     string Title,
