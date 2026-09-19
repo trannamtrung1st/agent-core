@@ -1,3 +1,4 @@
+using System.Linq;
 using AgentCore.Application.Events;
 using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
@@ -246,7 +247,8 @@ public sealed partial class SessionRuntime
     }
 
     private bool IsModelMutationBusy() =>
-        _activeResponseId is not null
+        HasPendingModelSelectionPersist()
+        || _activeResponseId is not null
         || _proactiveBrainInFlight
         || _completionCts is not null
         || _outputActivity is OutputActivity.AgentGenerating
@@ -254,6 +256,9 @@ public sealed partial class SessionRuntime
             or OutputActivity.ProcessingAttachments
             or OutputActivity.WaitingForAgent
             or OutputActivity.AgentSpeaking;
+
+    private bool HasPendingModelSelectionPersist() =>
+        _pendingPersist.Values.Any(job => job.Kind == PersistKind.ModelSelection);
 
     private void HandleReopenedSnapshot(ReopenedSnapshotReceived input)
     {

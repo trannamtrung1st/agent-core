@@ -76,6 +76,7 @@ export type SessionView = {
   pendingSpeechLocale: string | null;
   pendingModelKey: string | null;
   pendingReasoningEffort: string | null;
+  modelMutationPending: boolean;
   sessionModelKey: string | null;
   sessionModelDisplayName: string | null;
   sessionModelSource: string | null;
@@ -127,6 +128,7 @@ export const emptySession = (): SessionView => ({
   pendingSpeechLocale: null,
   pendingModelKey: "default",
   pendingReasoningEffort: null,
+  modelMutationPending: false,
   sessionModelKey: null,
   sessionModelDisplayName: null,
   sessionModelSource: null,
@@ -279,8 +281,10 @@ function nextOutputState(eventType: string, liveResponseId: string | null, curre
   return isInFlightOutput(current) ? "idle" : current;
 }
 
-export function isSessionModelBusy(state: Pick<SessionView, "liveResponseId" | "outputState">): boolean {
-  return state.liveResponseId != null || isInFlightOutput(state.outputState);
+export function isSessionModelBusy(
+  state: Pick<SessionView, "liveResponseId" | "outputState" | "modelMutationPending">
+): boolean {
+  return state.modelMutationPending || state.liveResponseId != null || isInFlightOutput(state.outputState);
 }
 
 export function isReadonlySession(state: Pick<SessionView, "sessionId" | "status">): boolean {

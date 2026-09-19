@@ -179,6 +179,25 @@ public sealed class ModelCatalogFactoryTests
     }
 
     [Fact]
+    public void Unsupported_provider_alias_fails_at_catalog_build_time()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Providers:ModelCatalog:DefaultKey"] = "other",
+                ["Providers:ModelCatalog:Models:0:Key"] = "other",
+                ["Providers:ModelCatalog:Models:0:ProviderAlias"] = "secondary-llm",
+                ["Providers:ModelCatalog:Models:0:ModelId"] = "other-model"
+            })
+            .Build();
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ModelCatalogFactory.Create("Synthetic", new LanguageModelProviderOptions { Adapter = "Scripted" }, configuration));
+        Assert.Contains("secondary-llm", error.Message, StringComparison.Ordinal);
+        Assert.Contains("primary-llm", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Resolver_does_not_mutate_singleton_provider_options()
     {
         var primary = new LanguageModelProviderOptions

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSpeechSynthesizer } from "./fakeSpeechAdapters";
-import { resolveSpeechVoice } from "./resolveSpeechVoice";
+import { resolveSpeechVoice, voiceHintFromSegment } from "./resolveSpeechVoice";
 import { speechError } from "./errors";
 import { createSpeechTransportService } from "./speechTransport";
 import { BrowserSpeechSynthesizer } from "./browserSpeechSynthesizer";
@@ -10,6 +10,19 @@ const voices = [
   { voiceURI: "uri-fr", name: "French", lang: "fr-FR" },
   { voiceURI: "uri-en-gb", name: "British", lang: "en-GB" }
 ];
+
+describe("voiceHintFromSegment", () => {
+  it("treats application default alias as locale-only selection", () => {
+    expect(voiceHintFromSegment("default", "en")).toEqual({ lang: "en" });
+    expect(voiceHintFromSegment("DEFAULT", "fr-FR")).toEqual({ lang: "fr-FR" });
+    expect(resolveSpeechVoice(voices, voiceHintFromSegment("default", "en-GB"))?.name).toBe("British");
+  });
+
+  it("passes concrete voice names through to resolution", () => {
+    expect(voiceHintFromSegment("British", "en")).toEqual({ name: "British", lang: "en" });
+    expect(resolveSpeechVoice(voices, voiceHintFromSegment("British", "en"))?.voiceURI).toBe("uri-en-gb");
+  });
+});
 
 describe("resolveSpeechVoice", () => {
   it("resolves voiceURI, then name, then exact or base language, and does not fall through to English", () => {

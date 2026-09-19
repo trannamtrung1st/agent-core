@@ -1,5 +1,17 @@
 import type { SpeechVoice, SpeechVoiceHint } from "./clientSpeechSynthesizer";
 
+const APPLICATION_VOICE_ALIASES = new Set(["default"]);
+
+export function voiceHintFromSegment(voiceHint?: string, language?: string): SpeechVoiceHint | undefined {
+  const alias = voiceHint?.trim();
+  if (alias && !APPLICATION_VOICE_ALIASES.has(alias.toLowerCase())) {
+    return { name: alias, lang: language };
+  }
+
+  const lang = language?.trim();
+  return lang ? { lang } : undefined;
+}
+
 export function speechLanguageCompatible(voiceLang: string, requested: string): boolean {
   const voice = voiceLang.trim().toLowerCase();
   const want = requested.trim().toLowerCase();

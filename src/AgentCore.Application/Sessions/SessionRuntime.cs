@@ -79,6 +79,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _ttsSourceLocked;
     private bool _ttsUsesSpeech;
     private int _ttsFedLength;
+    private string _ttsFedPrefix = string.Empty;
     private bool _responseTerminal;
     private string? _modelFinishReason;
     private CancellationTokenSource? _responseCts;
@@ -2698,6 +2699,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return string.Empty;
             }
 
+            if (!_modelDone)
+            {
+                return fallback;
+            }
+
             _ttsUsesSpeech = false;
             _ttsSourceLocked = true;
             return fallback;
@@ -2740,11 +2746,38 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var source = CurrentTtsSource();
+        if (source.Length == 0)
+        {
+            return;
+        }
+
+        if (TtsSourceIdentityChanged(source))
+        {
+            ResetTtsFeedPipeline();
+        }
+
         if (source.Length > _ttsFedLength)
         {
             EnqueueSegments(_segmenter.Append(source[_ttsFedLength..], _time.GetUtcNow()));
             _ttsFedLength = source.Length;
+            _ttsFedPrefix = source;
         }
+    }
+
+    private bool TtsSourceIdentityChanged(string source)
+    {
+        if (_ttsFedLength == 0)
+        {
+            return false;
+        }
+
+        if (source.Length < _ttsFedLength)
+        {
+            return true;
+        }
+
+        return !source.AsSpan(0, _ttsFedLength)
+            .SequenceEqual(_ttsFedPrefix.AsSpan(0, Math.Min(_ttsFedLength, _ttsFedPrefix.Length)));
     }
 
     private string DisplayText() => _envelope?.DisplayText ?? _accumulator.Text;

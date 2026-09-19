@@ -73,6 +73,7 @@ public sealed partial class SessionRuntime
         _ttsSourceLocked = false;
         _ttsUsesSpeech = false;
         _ttsFedLength = 0;
+        _ttsFedPrefix = string.Empty;
         _currentSegment = null;
         _spokenUntil.Reset();
         _recordedLlm = false;
@@ -90,6 +91,27 @@ public sealed partial class SessionRuntime
             && (_synthesizer is not null || _voice.EffectivePlan.OutputTransport == SpeechTransport.ClientSpeech)
                 ? new SpeechSegmenter(id)
                 : null;
+    }
+
+    private void ResetTtsFeedPipeline()
+    {
+        _ttsFedLength = 0;
+        _ttsFedPrefix = string.Empty;
+        if (_activeResponseId is not { } responseId)
+        {
+            return;
+        }
+
+        _segmenter?.Invalidate();
+        _segmenter = new SpeechSegmenter(responseId);
+        _pendingSegments.Clear();
+        _currentSegment = null;
+        _heldSynthesis?.Processed.TrySetResult();
+        _heldSynthesis = null;
+        _ttsCts?.Cancel();
+        _ttsCts?.Dispose();
+        _ttsCts = null;
+        _ttsBusy = false;
     }
 
     private void InvalidateSpeechJobs()

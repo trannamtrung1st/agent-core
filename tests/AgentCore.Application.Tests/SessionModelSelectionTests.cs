@@ -99,6 +99,28 @@ public sealed class SessionModelSelectionTests
     }
 
     [Fact]
+    public async Task Overlapping_model_change_while_persist_pending_is_rejected()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.Zero));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new GatedModelSelectionStore(gate);
+        var output = new CapturingSessionOutput();
+        var snapshot = await CreateManager(store.Inner).CreateAsync("examiner", null, SessionMode.Text);
+        await using var runtime = CreateRuntime(output, time, store, snapshot, new ScriptedLanguageModel());
+        await runtime.AttachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+
+        var first = runtime.RequestModelSettingsAsync("scripted-beta", null, ModelSelectionSource.User);
+        await store.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            runtime.RequestModelSettingsAsync("scripted-beta", "high", ModelSelectionSource.User));
+        Assert.Equal("SessionBusy", error.Code);
+        gate.TrySetResult();
+        Assert.True(await first);
+        Assert.Equal("scripted-beta", runtime.Snapshot.ModelSelection!.CatalogKey);
+    }
+
+    [Fact]
     public async Task Live_model_change_is_not_effective_before_persistence_succeeds()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.Zero));

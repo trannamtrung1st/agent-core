@@ -145,7 +145,7 @@
       "kind": "custom",
       "refersTo": "spoken-text",
       "description": "Secondary public speech text under the same assistant turn when it differs from display Markdown. Compact 8px rhythm; not a second bubble.",
-      "html": "<section class=\"ds-spoken\" aria-label=\"Spoken\"><div class=\"ds-spoken-caption\"><span aria-hidden=\"true\">♪</span> Spoken</div><p class=\"ds-spoken-body\">Hello. How can I help you today?</p></section>",
+      "html": "<section class=\"ds-spoken\" aria-label=\"Speech text\"><div class=\"ds-spoken-caption\"><span aria-hidden=\"true\">♪</span> Speech text</div><p class=\"ds-spoken-body\">Hello. How can I help you today?</p></section>",
       "css": ".ds-spoken { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 8px; border-top: 1px solid var(--ac-color-border, #303030); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-spoken-caption { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; font-weight: 400; color: var(--ac-color-text-tertiary, rgba(255, 255, 255, 0.45)); } .ds-spoken-body { margin: 0; color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); white-space: pre-wrap; }"
     },
     {

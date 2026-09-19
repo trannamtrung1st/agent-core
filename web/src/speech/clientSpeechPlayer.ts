@@ -1,6 +1,7 @@
 import type { ClientSpeechSynthesizer } from "./clientSpeechSynthesizer";
 import type { SessionErrorView } from "../features/chat/sessionError";
 import { recordSpeechObservation } from "./speechObservability";
+import { voiceHintFromSegment } from "./resolveSpeechVoice";
 
 export type ClientSpeechPlaybackAck = {
   kind: "started" | "progress" | "completed" | "stopped";
@@ -70,7 +71,7 @@ export function createClientSpeechPlayer(
         await synthesizer.speak(
           {
             text: next.text,
-            hint: next.voiceHint ? { name: next.voiceHint, lang: next.language } : next.language ? { lang: next.language } : undefined,
+            hint: voiceHintFromSegment(next.voiceHint, next.language),
             language: next.language,
             speakingRate: next.speakingRate
           },

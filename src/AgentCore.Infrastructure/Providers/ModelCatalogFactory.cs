@@ -159,6 +159,12 @@ internal static class ModelCatalogFactory
     private static ModelDescriptor ToDescriptor(ModelCatalogEntryOptions entry, LanguageModelProviderOptions? languageModel)
     {
         var provider = string.IsNullOrWhiteSpace(entry.ProviderAlias) ? "primary-llm" : entry.ProviderAlias.Trim();
+        if (!string.Equals(provider, "primary-llm", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Model catalog entry '{entry.Key}' uses unsupported ProviderAlias '{provider}'. "
+                + "Only 'primary-llm' is supported until multi-provider model routing is implemented.");
+        }
         var modelId = string.IsNullOrWhiteSpace(entry.ModelId)
             ? languageModel?.DefaultModel ?? entry.Key
             : entry.ModelId.Trim();

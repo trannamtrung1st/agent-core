@@ -1899,9 +1899,16 @@ export async function applySessionModel(key: string, reasoningEffort: string | n
     return;
   }
 
+  const targetSessionId = snapshot.sessionId;
+  useSessionStore.setState({ modelMutationPending: true });
   try {
-    const view = await setSessionModel(snapshot.sessionId, { key, reasoningEffort });
+    const view = await setSessionModel(targetSessionId, { key, reasoningEffort });
+    if (useSessionStore.getState().sessionId !== targetSessionId) {
+      useSessionStore.setState({ modelMutationPending: false });
+      return;
+    }
     useSessionStore.setState({
+      modelMutationPending: false,
       pendingModelKey: key,
       pendingReasoningEffort: reasoningEffort,
       ...modelFieldsFromSelection(view.model),
@@ -1910,8 +1917,13 @@ export async function applySessionModel(key: string, reasoningEffort: string | n
       errorFatal: false
     });
   } catch (error) {
+    if (useSessionStore.getState().sessionId !== targetSessionId) {
+      useSessionStore.setState({ modelMutationPending: false });
+      return;
+    }
     const message = error instanceof Error ? error.message : "Unable to update the model.";
     useSessionStore.setState({
+      modelMutationPending: false,
       error: message,
       sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
       errorFatal: false

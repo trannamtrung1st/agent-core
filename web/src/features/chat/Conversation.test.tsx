@@ -302,7 +302,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
 
     rerender(
       <Conversation
@@ -312,7 +312,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
 
     rerender(
       <Conversation
@@ -322,7 +322,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
   });
 
   it("renders Spoken under the same assistant message when public speech text differs", () => {
@@ -342,7 +342,7 @@ describe("Conversation", () => {
       />
     );
     expect(screen.getByText("Shown display.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Spoken")).toHaveTextContent("Hidden speech");
+    expect(screen.getByLabelText("Speech text")).toHaveTextContent("Hidden speech");
     expect(screen.getAllByRole("listitem").filter((item) => item.className.includes("chat-message-assistant"))).toHaveLength(1);
   });
 
@@ -362,7 +362,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
     expect(screen.queryByText("Should not appear")).not.toBeInTheDocument();
   });
 
@@ -384,7 +384,7 @@ describe("Conversation", () => {
       />
     );
     expect(screen.getByText("Final display.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Spoken")).toHaveTextContent("Final spoken wording.");
+    expect(screen.getByLabelText("Speech text")).toHaveTextContent("Final spoken wording.");
   });
 
   it("shows transient activity instead of persisting it as a message", () => {

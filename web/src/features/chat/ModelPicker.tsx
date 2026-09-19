@@ -152,6 +152,11 @@ export function ModelPicker({
   const efforts = selected?.supportedReasoningEfforts ?? [];
   const showEffort = Boolean(selected?.reasoning && efforts.length > 0);
   const effortIndex = effortValue ? Math.max(0, efforts.indexOf(effortValue)) : 0;
+  const [effortPreviewIndex, setEffortPreviewIndex] = useState(effortIndex);
+
+  useEffect(() => {
+    setEffortPreviewIndex(effortIndex);
+  }, [effortIndex, open, efforts.length]);
   const compact = layout === "row";
   const composer = variant === "borderless";
 
@@ -219,7 +224,7 @@ export function ModelPicker({
         <Flex vertical gap={token.paddingXS} className="model-picker-reasoning" style={{ paddingInline: controlPadding }}>
           <Flex align="center" justify="space-between" gap={token.paddingXS}>
             <Typography.Text type="secondary">Reasoning</Typography.Text>
-            <Typography.Text>{formatEffortLabel(effortValue)}</Typography.Text>
+            <Typography.Text>{formatEffortLabel(efforts[effortPreviewIndex] ?? effortValue)}</Typography.Text>
           </Flex>
           <Slider
             min={0}
@@ -227,9 +232,10 @@ export function ModelPicker({
             step={1}
             dots
             tooltip={{ open: false }}
-            value={effortIndex}
+            value={effortPreviewIndex}
             disabled={disabled}
-            onChange={(value) => onEffortChange(efforts[value] ?? null)}
+            onChange={(value) => setEffortPreviewIndex(value)}
+            onChangeComplete={(value) => onEffortChange(efforts[value] ?? null)}
             aria-label="Reasoning effort"
           />
         </Flex>

@@ -73,6 +73,33 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public async Task Streaming_intro_then_table_speaks_lead_in_not_table_cells()
+    {
+        const string intro = "Here's a markdown table for you:\n";
+        const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel([intro, table]),
+            synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("table");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+        await runtime.WaitUntilIdleAsync();
+        var narrated = string.Concat(synthesizer.Texts);
+        Assert.Contains(SpokenOutput.StructuredLeadIn, narrated, StringComparison.Ordinal);
+        Assert.DoesNotContain("| Technology |", narrated, StringComparison.Ordinal);
+        Assert.DoesNotContain("React", narrated, StringComparison.Ordinal);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(SpokenOutput.StructuredLeadIn, assistant.Envelope?.SpeechText);
+    }
+
+    [Fact]
     public async Task Structured_schedule_display_uses_short_speech_projection()
     {
         var table = "| Day | Item |\n| --- | --- |\n"

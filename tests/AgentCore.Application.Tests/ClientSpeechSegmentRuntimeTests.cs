@@ -78,6 +78,26 @@ public sealed class ClientSpeechSegmentRuntimeTests
     }
 
     [Fact]
+    public async Task Streaming_table_display_emits_lead_in_segments_only()
+    {
+        const string intro = "Here's a markdown table for you:\n";
+        const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new ScriptedLanguageModel([intro, table]));
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("table");
+        var speechCompleted = await output.WaitForAsync(item => item.Payload is SpeechOutputCompletedOutput);
+        await AckClientSpeechAsync(runtime, speechCompleted);
+        await runtime.WaitUntilIdleAsync();
+        var spoken = string.Concat(
+            output.Items.Select(item => item.Payload).OfType<SpeechOutputSegmentOutput>().Select(segment => segment.Text));
+        Assert.Contains(SpokenOutput.StructuredLeadIn, spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("| Technology |", spoken, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Display_markdown_is_not_spoken_as_raw_syntax()
     {
         var output = new CapturingSessionOutput();

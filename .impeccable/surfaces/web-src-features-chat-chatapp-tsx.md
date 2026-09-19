@@ -36,6 +36,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 ## Scope
 
 - Surface: `web/src/features/chat/*` and `web/src/app.css`.
-- Preserve testids `connection` and `profile`, accessible names Identity, Speech locale, Model, Reasoning, Send, Voice, Cancel voice, Mute, Unmute, End, Attach, Spoken.
+- Preserve testids `connection` and `profile`, accessible names Identity, Speech locale, Model, Reasoning, Send, Voice, Cancel voice, Mute, Unmute, End, Attach, Speech text.
 - Composer stays in voice. End remains the existing session-end control until `/docs` and tests change together.
 - Session catalog, attachments, realtime, and voice contracts stay compatible.

@@ -80,6 +80,21 @@ describe("clientSpeechPlayer", () => {
     expect(acks.at(-1)?.report.kind).toBe("stopped");
   });
 
+  it("maps default voiceHint to speech locale instead of a bogus voice name", async () => {
+    const { player, synth } = collect();
+    player.enqueue({
+      responseId: "r1",
+      segmentIndex: 0,
+      textStart: 0,
+      text: "Hello",
+      voiceHint: "default",
+      language: "en-GB"
+    });
+    await Promise.resolve();
+    expect(synth.spoken[0]?.voice?.name).toBe("Fake English");
+    expect(synth.spoken[0]?.voice?.lang).toBe("en-US");
+  });
+
   it("passes language and speakingRate through to the synthesizer", async () => {
     const { player, synth } = collect();
     player.enqueue({
