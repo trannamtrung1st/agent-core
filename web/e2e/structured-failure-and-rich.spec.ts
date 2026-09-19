@@ -25,7 +25,8 @@ test("rich envelope shows differing spoken text without another message and does
   await expect(page.getByRole("button", { name: /Artifact fixture-artifact-1/ })).toBeVisible();
   await expect(page.getByText("[Unsupported content]")).toBeVisible();
   await expect(page.locator(".spoken-text")).toContainText("Hidden speech");
-  await expect(page.getByLabel("Spoken")).toHaveCount(1);
+  // Text-delivered speech projects as "Speech text"; "Spoken" is reserved for voice delivery.
+  await expect(page.getByLabel("Speech text")).toHaveCount(1);
   await expect(page.locator(".chat-message-assistant")).toHaveCount(1);
   await expect(page.getByText("Thinking…")).toHaveCount(0);
 
@@ -33,6 +34,6 @@ test("rich envelope shows differing spoken text without another message and does
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.getByText("Shown display.")).toBeVisible();
   await expect(page.locator(".spoken-text")).toContainText("Hidden speech");
-  await expect(page.getByLabel("Spoken")).toHaveCount(1);
+  await expect(page.getByLabel("Speech text")).toHaveCount(1);
   await expect(page.getByText("Thinking…")).toHaveCount(0);
 });
