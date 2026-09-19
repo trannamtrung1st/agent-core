@@ -223,6 +223,108 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
+    public void Tilde_fenced_json_is_removed_from_fallback_speech()
+    {
+        const string display = """
+            Summary sentence only.
+
+            ~~~json
+            { "id": "task-1", "title": "Example" }
+            ~~~
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal("Summary sentence only.", spoken);
+        Assert.DoesNotContain("task-1", spoken, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Http_status_lines_do_not_leak_into_fallback_speech()
+    {
+        const string display = """
+            The request completed successfully.
+
+            HTTP/1.1 201 Created
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal("The request completed successfully.", spoken);
+        Assert.DoesNotContain("HTTP/1.1", spoken, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Short_tab_indented_code_lines_do_not_leak_into_fallback_speech()
+    {
+        const string display = "Visible intro.\n\tcurl -X POST /tasks\n\t{ \"id\": 1 }";
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal("Visible intro.", spoken);
+        Assert.DoesNotContain("curl", spoken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Observed_architecture_http_json_bash_fixture_resolves_no_speech()
+    {
+        const string display = """
+            ```text
+            Client
+              |
+              v
+            HTTPS
+              |
+              v
+            API Gateway
+              |
+              +--> Auth Service
+              |
+              v
+            Task Service
+              |
+              v
+            PostgreSQL
+            ```
+
+            ```http
+            POST /tasks HTTP/1.1
+            Host: api.example.com
+            Authorization: Bearer sk-live-example
+            Content-Type: application/json
+
+            { "title": "Deploy service" }
+            ```
+
+            ```http
+            HTTP/1.1 201 Created
+            Content-Type: application/json
+
+            { "id": "task-9f2a", "status": "queued" }
+            ```
+
+            ```json
+            {
+              "id": "task-9f2a",
+              "status": "queued"
+            }
+            ```
+
+            ```bash
+            curl -X POST https://api.example.com/tasks \
+              -H "Authorization: Bearer sk-live-example" \
+              -H "Content-Type: application/json" \
+              -d '{ "title": "Deploy service" }'
+            ```
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal(string.Empty, spoken);
+        Assert.DoesNotContain("Client", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("Authorization", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("HTTP/1.1", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("task-9f2a", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("curl", spoken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Unclosed_fence_suppresses_trailing_technical_content()
     {
         const string display = """

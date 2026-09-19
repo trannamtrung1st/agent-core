@@ -138,21 +138,35 @@ public static class SpokenOutput
         var index = 0;
         while (index < text.Length)
         {
-            var open = text.IndexOf("```", index, StringComparison.Ordinal);
-            if (open < 0)
+            var backtickOpen = text.IndexOf("```", index, StringComparison.Ordinal);
+            var tildeOpen = text.IndexOf("~~~", index, StringComparison.Ordinal);
+            if (backtickOpen < 0 && tildeOpen < 0)
             {
                 builder.Append(text.AsSpan(index));
                 break;
             }
 
+            string marker;
+            int open;
+            if (backtickOpen < 0 || (tildeOpen >= 0 && tildeOpen < backtickOpen))
+            {
+                marker = "~~~";
+                open = tildeOpen;
+            }
+            else
+            {
+                marker = "```";
+                open = backtickOpen;
+            }
+
             builder.Append(text.AsSpan(index, open - index));
-            var close = text.IndexOf("```", open + 3, StringComparison.Ordinal);
+            var close = text.IndexOf(marker, open + marker.Length, StringComparison.Ordinal);
             if (close < 0)
             {
                 break;
             }
 
-            index = close + 3;
+            index = close + marker.Length;
         }
 
         return builder.ToString();
@@ -164,7 +178,12 @@ public static class SpokenOutput
         var kept = new List<string>(lines.Length);
         foreach (var line in lines)
         {
-            if (line.Length >= 4 && (line.StartsWith("    ", StringComparison.Ordinal) || line[0] == '\t'))
+            if (line.Length > 0 && line[0] == '\t')
+            {
+                continue;
+            }
+
+            if (line.StartsWith("    ", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -224,6 +243,7 @@ public static class SpokenOutput
         }
 
         if (HttpRequestLine.IsMatch(trimmed)
+            || HttpStatusLine.IsMatch(trimmed)
             || trimmed.StartsWith("Authorization:", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("Content-Type:", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("Accept:", StringComparison.OrdinalIgnoreCase)
@@ -323,6 +343,9 @@ public static class SpokenOutput
     private static readonly Regex CollapseWhitespace = new(@"\s{2,}", RegexOptions.Compiled);
     private static readonly Regex HttpRequestLine = new(
         @"^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+(\s+HTTP/\d(?:\.\d)?)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex HttpStatusLine = new(
+        @"^HTTP/\d(?:\.\d)?\s+\d{3}\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex JsonHeavyLine = new(
         @"^\s*[\{\[].*[\}\]]\s*$|""[^""]+""\s*:\s*",

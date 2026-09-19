@@ -91,7 +91,42 @@ public sealed class SpeechTelemetrySurfaceTests
         Assert.Contains("userStop", reasons);
         Assert.Contains("other", reasons);
         Assert.Contains("VoiceUnavailable", codes);
+        Assert.Equal(1, codes.Count(code => code == SpeechTelemetry.VoiceSpeechFallbackCode));
         Assert.Equal("stream=0,partial=0,bound=0,cancel=1", SpeechTelemetry.FormatCapabilities(new RecognitionCapabilities(false, false, false, true)));
         Assert.Equal("none", SpeechTelemetry.FormatCapabilities((SynthesisCapabilities?)null));
+    }
+
+    [Fact]
+    public void Missing_explicit_fallback_is_not_an_error_code()
+    {
+        RuntimeTelemetry.Reset();
+        RuntimeTelemetry.Configure(64, contentLogging: false);
+        var codes = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == RuntimeTelemetry.Name
+                && instrument.Name == SpeechTelemetry.ErrorCodeInstrument)
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "code")
+                {
+                    codes.Add(tag.Value?.ToString() ?? "");
+                }
+            }
+        });
+        listener.Start();
+
+        SpeechTelemetry.RecordVoiceSpeechFallback(SpeechTelemetry.VoiceSpeechFallbackReason.MissingExplicit);
+        Assert.Empty(codes);
+        SpeechTelemetry.RecordVoiceSpeechFallback(SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit);
+        listener.Dispose();
+        Assert.Single(codes, code => code == SpeechTelemetry.VoiceSpeechFallbackCode);
     }
 }

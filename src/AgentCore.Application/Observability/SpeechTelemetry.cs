@@ -109,7 +109,10 @@ public static class SpeechTelemetry
 
         VoiceSpeechFallback.Add(1, new TagList { { "reason", wire } });
         RuntimeTelemetry.RecordDiagnostic(VoiceSpeechFallbackInstrument, 0, wire);
-        RecordError(VoiceSpeechFallbackCode);
+        if (reason == VoiceSpeechFallbackReason.RejectedExplicit)
+        {
+            RecordError(VoiceSpeechFallbackCode);
+        }
     }
 
     public static void RecordError(string code)
