@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Definitions;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -21,6 +22,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(compliance);
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
+        Assert.True(ConversationLanguagePolicy.IsAuto(general.ConversationPolicy.Language));
         Assert.False(general.InitiativePolicy.Enabled);
         Assert.Equal(4096, general.ConversationPolicy.MaxOutputTokens);
         Assert.DoesNotContain("[[speech:", general.SystemInstructions, StringComparison.Ordinal);
@@ -34,6 +36,26 @@ public sealed class AgentDefinitionStoreTests
         Assert.DoesNotContain("[[speech:", support!.SystemInstructions, StringComparison.Ordinal);
         Assert.DoesNotContain("[[speech:", compliance.SystemInstructions, StringComparison.Ordinal);
         Assert.Null(missing);
+        Assert.Equal("en", examiner!.ConversationPolicy.Language);
+        Assert.Equal("en", support!.ConversationPolicy.Language);
+        Assert.Equal("en", compliance.ConversationPolicy.Language);
+    }
+
+    [Fact]
+    public async Task Demo_definitions_do_not_duplicate_language_policy_in_system_instructions()
+    {
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        foreach (var id in new[] { "examiner", "customer-support", "compliance", "general-assistant" })
+        {
+            var definition = await store.GetAsync(id, 1);
+            Assert.NotNull(definition);
+            Assert.DoesNotContain("Respond in", definition!.SystemInstructions, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("current language", definition.SystemInstructions, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                ConversationLanguagePolicy.PromptInstruction(definition.ConversationPolicy.Language),
+                definition.SystemInstructions,
+                StringComparison.Ordinal);
+        }
     }
 
     [Fact]

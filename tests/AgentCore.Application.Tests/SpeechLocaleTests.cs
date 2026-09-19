@@ -31,6 +31,14 @@ public sealed class SpeechLocaleTests
         Assert.Equal(SpeechLocaleSource.ProviderFallback, resolved.Source);
     }
 
+    [Fact]
+    public void Auto_agent_language_does_not_fix_speech_locale()
+    {
+        var resolved = SpeechLocale.Resolve((string?)null, "auto");
+        Assert.Equal("en", resolved.Effective);
+        Assert.Equal(SpeechLocaleSource.ProviderFallback, resolved.Source);
+    }
+
     [Theory]
     [InlineData("!!!")]
     [InlineData("en_US")]

@@ -1,5 +1,6 @@
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Speech;
 
@@ -33,7 +34,8 @@ public static class SpeechLocale
             return new SpeechLocaleResolution(overrideTag, SpeechLocaleSource.SessionOverride, overrideTag);
         }
 
-        if (TryCanonical(agentDefault, out var agentTag))
+        if (!ConversationLanguagePolicy.IsAuto(agentDefault)
+            && TryCanonical(agentDefault, out var agentTag))
         {
             return new SpeechLocaleResolution(agentTag, SpeechLocaleSource.AgentDefault, null);
         }

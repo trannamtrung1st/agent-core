@@ -1,6 +1,8 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Definitions;
 
 namespace AgentCore.Application.Tests;
 
@@ -27,10 +29,11 @@ public sealed class PromptContextBuilderTests
             .First(text => text.Contains("Voice compatibility", StringComparison.Ordinal));
         Assert.Contains(PromptContextBuilder.VoiceModeOutputGuidance, modeSystem, StringComparison.Ordinal);
         Assert.Contains("[[speech:", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("optional", modeSystem, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("only content intended for TTS", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("only streaming TTS source", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("spoken fallback", modeSystem, StringComparison.Ordinal);
         Assert.Contains("visual-only", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("MUST begin", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Never rely on display prose", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Absent [[speech:...]], display prose is the spoken answer", modeSystem, StringComparison.Ordinal);
     }
 
@@ -80,5 +83,43 @@ public sealed class PromptContextBuilderTests
         var combined = string.Join('\n', request.Messages.Where(message => message.Role == ModelRole.System).Select(message => message.Text));
         Assert.DoesNotContain("Voice compatibility", combined, StringComparison.Ordinal);
         Assert.DoesNotContain(PromptContextBuilder.VoiceModeOutputGuidance, combined, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Identity_system_includes_conversation_language_policy_not_persona_duplication()
+    {
+        var fixedIdentity = PromptContextBuilder.BuildIdentitySystem(SampleDefinitions.Examiner);
+        Assert.Contains("language=en", fixedIdentity, StringComparison.Ordinal);
+        Assert.Contains(ConversationLanguagePolicy.PromptInstruction("en"), fixedIdentity, StringComparison.Ordinal);
+        Assert.DoesNotContain("Respond in", SampleDefinitions.Examiner.SystemInstructions, StringComparison.Ordinal);
+
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var general = await store.GetAsync("general-assistant", 1);
+        Assert.NotNull(general);
+        Assert.True(ConversationLanguagePolicy.IsAuto(general!.ConversationPolicy.Language));
+        var autoIdentity = PromptContextBuilder.BuildIdentitySystem(general);
+        Assert.Contains("language=auto", autoIdentity, StringComparison.Ordinal);
+        Assert.Contains(
+            ConversationLanguagePolicy.PromptInstruction(ConversationLanguagePolicy.Auto),
+            autoIdentity,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Respond in", general.SystemInstructions, StringComparison.Ordinal);
+    }
+
+    private static string FindAgents()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var agents = Path.Combine(dir.FullName, "agents");
+            if (Directory.Exists(agents) && File.Exists(Path.Combine(agents, "examiner.json")))
+            {
+                return agents;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("agents/");
     }
 }

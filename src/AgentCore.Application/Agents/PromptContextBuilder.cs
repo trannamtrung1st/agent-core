@@ -18,7 +18,7 @@ public sealed record PromptSections(
 public sealed class PromptContextBuilder
 {
     public const string VoiceModeOutputGuidance = """
-        Voice compatibility (temporary until a validated response envelope): speechText is an optional natural-language projection intended for spoken delivery when it should differ from displayText. The current encoding is [[speech:<complete spoken content>]] before any display-only material. If used, emit the full marker (opening and closing) first. Text inside the marker is the only content intended for TTS while streaming; content outside is visual-only and will not be narrated while streaming. Omit the marker when spoken wording should match the visual answer. Never rely on display prose being spoken automatically.
+        Voice compatibility (temporary until P2B): use [[speech:<complete spoken content>]] only when the spoken projection must differ from display text. When present, emit the full marker before display-only material; marker text is the only streaming TTS source and outside content is visual-only. When no distinct spoken projection is needed, omit the marker; after completion, display text may be used as the spoken fallback.
         """;
 
     public const int MaxHistoryEntries = 20;
@@ -152,7 +152,8 @@ public sealed class PromptContextBuilder
             "System instructions:",
             definition.SystemInstructions,
             $"Behavior: interruptionStyle={definition.BehaviorPolicy.InterruptionStyle}; acknowledgeInterruption={definition.BehaviorPolicy.AcknowledgeInterruption}; avoidUnsupportedClaims={definition.BehaviorPolicy.AvoidUnsupportedClaims}.",
-            $"Conversation: responseLength={definition.ConversationPolicy.ResponseLength}; askOneQuestionAtATime={definition.ConversationPolicy.AskOneQuestionAtATime}; language={definition.ConversationPolicy.Language}; maxOutputTokens={definition.ConversationPolicy.MaxOutputTokens}."
+            $"Conversation: responseLength={definition.ConversationPolicy.ResponseLength}; askOneQuestionAtATime={definition.ConversationPolicy.AskOneQuestionAtATime}; language={definition.ConversationPolicy.Language}; maxOutputTokens={definition.ConversationPolicy.MaxOutputTokens}.",
+            ConversationLanguagePolicy.PromptInstruction(definition.ConversationPolicy.Language)
         ]);
 
     public static string BuildInitiativeAgentContext(AgentDefinition definition)
@@ -172,6 +173,7 @@ public sealed class PromptContextBuilder
                 "System instructions:",
                 Clip(definition.SystemInstructions, 900),
                 $"Conversation policy: responseLength={definition.ConversationPolicy.ResponseLength}; askOneQuestionAtATime={definition.ConversationPolicy.AskOneQuestionAtATime}; language={definition.ConversationPolicy.Language}.",
+                ConversationLanguagePolicy.PromptInstruction(definition.ConversationPolicy.Language),
                 $"Initiative policy: silenceThresholdMs={policy.SilenceThresholdMs}; cooldownMs={policy.CooldownMs}; maxPerSilencePeriod={policy.MaxPerSilencePeriod}; consecutiveCap={policy.ConsecutiveCap}; triggers=[{triggers}]."
             ]);
     }
