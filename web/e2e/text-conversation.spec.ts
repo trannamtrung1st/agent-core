@@ -73,10 +73,14 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("link", { name: "notes.txt" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(2);
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Hello from synthetic.");
 
   await page.getByLabel("Message").fill("Please hold the line");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.locator(".chat-message").filter({ hasText: "Hello" }).last()).toBeVisible();
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(3);
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Hello");
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await page.getByRole("button", { name: /^Voice$/ }).click();
   await expect(page.getByTestId("connection")).toHaveText("Starting voice…", { timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
