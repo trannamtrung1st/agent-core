@@ -14,9 +14,12 @@ The current free-form rich-response parser plus runtime speech projection is acc
 
 ## Maintainer notes
 
+Always keep this section even when there is no active work.
+
 - [ ] Add proprietary license to the project.
 - [ ] Add tools that more assistant like, add more user info context (e.g, timezone, language, etc ...). [TBD]
 - [ ] Configure model default, or allow to switch model in UI/per request (stored decision per session). [TBD]
+- [ ] I think we can show the speech text in UI along with the display text. (just maybe highlight or separate it a bit, you decide best suit, UI/UX). [TBD]
 
 ## P0 — Close the current stabilization tail, then freeze it again
 
