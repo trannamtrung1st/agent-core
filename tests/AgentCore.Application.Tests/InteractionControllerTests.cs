@@ -132,7 +132,7 @@ public sealed class InteractionControllerTests
         await using var runtime = CreateRuntime(output, model, time, brain, classifier, SessionMode.Voice);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "R1a");
+        await VoiceTestHelpers.WaitForActiveResponseAsync(runtime);
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000ae");
         await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -165,11 +165,24 @@ public sealed class InteractionControllerTests
         var harness = await LiveGeneratingAsync();
         var r1 = harness.Runtime.ActiveResponseId;
         await harness.Runtime.SubmitUserTextAsync("Second turn");
-        await harness.Output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "R2");
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline
+               && (harness.Runtime.ActiveResponseId == r1 || harness.Model.Calls < 2))
+        {
+            await harness.Runtime.WaitUntilMailboxDrainedAsync();
+            await Task.Delay(10);
+        }
+
+        Assert.NotEqual(r1, harness.Runtime.ActiveResponseId);
+        Assert.True(harness.Model.Calls >= 2);
         harness.Model.Gate.TrySetResult();
         await harness.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(harness.Output.TextDeltas, delta => delta.Text == "R1b");
-        Assert.Contains(harness.Output.TextDeltas, delta => delta.Text == "R2");
+        Assert.DoesNotContain(
+            harness.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Text.Contains("R1b", StringComparison.Ordinal));
+        Assert.Contains(
+            harness.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Text == "R2");
         Assert.Contains(harness.Snapshot.Entries, entry => entry.ResponseId == r1 && entry.Status == EntryStatus.Interrupted);
         await harness.Runtime.DisposeAsync();
     }
@@ -192,7 +205,7 @@ public sealed class InteractionControllerTests
             SessionMode.Voice);
         await runtimeVoice.AttachAsync();
         await runtimeVoice.SubmitUserTextAsync("Hello");
-        await outputVoice.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "R1a");
+        await VoiceTestHelpers.WaitForActiveResponseAsync(runtimeVoice);
         var brainBefore = brainVoice.Calls;
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000af");
         await runtimeVoice.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
@@ -266,7 +279,7 @@ public sealed class InteractionControllerTests
             new InteractionPolicy(BargeInPolicy: "semantic"));
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        await VoiceTestHelpers.WaitForActiveResponseAsync(runtime);
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000b0");
         await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.95);
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -291,7 +304,7 @@ public sealed class InteractionControllerTests
         var runtime = CreateRuntime(output, model, time, brain, classifier, SessionMode.Voice);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "R1a");
+        await VoiceTestHelpers.WaitForActiveResponseAsync(runtime);
         return new Harness(runtime, time, output, model, brain, classifier);
     }
 

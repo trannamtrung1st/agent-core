@@ -62,23 +62,22 @@ public sealed class BargeInTests
         var output = new CapturingSessionOutput();
         var time = Clock();
         var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var model = new ScriptedLanguageModel(
-            ["There are three points. ", "Later text continues."],
-            releaseAfterFirstChunk: release);
-        release.TrySetResult();
+        const string first = "There are three points. ";
+        const string second = "Later text continues.";
+        var full = first + second;
+        var model = new ScriptedLanguageModel([VoiceTestHelpers.WithExplicitSpeech(full, full)]);
         await using var runtime = Create(output, model, time, brain, new UntimedSynthesizer());
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
-        var first = "There are three points. ".Length * UntimedSynthesizer.SamplesPerCharacter;
-        var second = "Later text continues.".Length * UntimedSynthesizer.SamplesPerCharacter;
-        var consumed = first + (second / 2);
+        var firstSamples = first.Length * UntimedSynthesizer.SamplesPerCharacter;
+        var secondSamples = second.Length * UntimedSynthesizer.SamplesPerCharacter;
+        var consumed = firstSamples + (secondSamples / 2);
         await output.WaitForAsync(_ => runtime.SentSamples >= consumed);
         await runtime.WaitUntilMailboxDrainedAsync();
         var r1 = runtime.ActiveResponseId!.Value;
-        Assert.True(consumed < first + second);
+        Assert.True(consumed < firstSamples + secondSamples);
         await runtime.SubmitPlaybackAsync(r1, "progress", consumed, 0);
         await runtime.WaitUntilMailboxDrainedAsync();
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000c3");
@@ -112,7 +111,7 @@ public sealed class BargeInTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        await VoiceTestHelpers.WaitForActiveResponseAsync(runtime);
         var utterance = Guid.Parse("019944af-0000-7000-8000-0000000000c4");
         await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.95);
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -180,13 +179,13 @@ public sealed class BargeInTests
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
-        var model = new ScriptedLanguageModel(["There are three points. "]);
+        var model = new ScriptedLanguageModel([VoiceTestHelpers.WithExplicitSpeech("There are three points. ")]);
         var runtime = Create(output, model, time, new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())));
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
         return new VoiceHarness(runtime, time, output);
     }
 

@@ -20,7 +20,10 @@ public sealed class SpeechPlaybackTests
         var output = new CapturingSessionOutput();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var model = new ScriptedLanguageModel(
-            ["There are three points. ", "Later text continues."],
+            [
+                VoiceTestHelpers.WithExplicitSpeech("There are three points. "),
+                " Later text continues."
+            ],
             releaseAfterFirstChunk: release);
         var synthesizer = new CountingSynthesizer();
         await using var runtime = Create(output, model, synthesizer);
@@ -114,7 +117,11 @@ public sealed class SpeechPlaybackTests
     {
         var output = new CapturingSessionOutput();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using var runtime = Create(output, new ScriptedLanguageModel(["There are three points."], releaseAfterFirstChunk: release));
+        await using var runtime = Create(
+            output,
+            new ScriptedLanguageModel(
+                [VoiceTestHelpers.WithExplicitSpeech("There are three points.")],
+                releaseAfterFirstChunk: release));
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
@@ -128,13 +135,10 @@ public sealed class SpeechPlaybackTests
         Assert.True(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, 0));
         Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", 0, 0));
         Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", runtime.SentSamples + 48_000, 0));
-        var generated = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text.Length;
+        var generated = "There are three points.".Length;
         Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated + 1));
         Assert.True(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated));
-        if (generated > 0)
-        {
-            Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated - 1));
-        }
+        Assert.False(await runtime.SubmitPlaybackAsync(responseId, "progress", consumed, generated - 1));
 
         release.TrySetResult();
     }
@@ -145,7 +149,10 @@ public sealed class SpeechPlaybackTests
         var output = new CapturingSessionOutput();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var model = new ScriptedLanguageModel(
-            ["There are three points. ", "This second sentence should not speak."],
+            [
+                VoiceTestHelpers.WithExplicitSpeech("There are three points. "),
+                " This second sentence should not speak."
+            ],
             releaseAfterFirstChunk: release);
         var synthesizer = new CountingSynthesizer();
         await using var runtime = Create(output, model, synthesizer);

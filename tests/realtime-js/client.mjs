@@ -1358,7 +1358,7 @@ async function run() {
         throw new Error(JSON.stringify(send));
       }
       const startedEvt = await waitForEvent((evt) => evt.type === "agent.response.started");
-      await waitForEvent((evt) => evt.type === "agent.text.delta");
+      // Voice display is gated until speech resolves; hold-the-line never finalizes, so do not wait on text deltas.
       let sequence = 2;
       const earlyCompleted = await connection.invoke(
         "PlaybackCompleted",
