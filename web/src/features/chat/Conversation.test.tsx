@@ -302,7 +302,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
 
     rerender(
       <Conversation
@@ -312,7 +312,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
 
     rerender(
       <Conversation
@@ -322,10 +322,10 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
   });
 
-  it("renders Spoken under the same assistant message when public speech text differs", () => {
+  it("renders Spoken before display in the same assistant message when they differ", () => {
     render(
       <Conversation
         agentName="Alex"
@@ -342,7 +342,10 @@ describe("Conversation", () => {
       />
     );
     expect(screen.getByText("Shown display.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Speech text")).toHaveTextContent("Hidden speech");
+    const speech = screen.getByLabelText("Spoken");
+    expect(speech).toHaveTextContent("Hidden speech");
+    const display = screen.getByText("Shown display.");
+    expect(speech.compareDocumentPosition(display) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByRole("listitem").filter((item) => item.className.includes("chat-message-assistant"))).toHaveLength(1);
   });
 
@@ -362,7 +365,7 @@ describe("Conversation", () => {
         activity={{ kind: "idle" }}
       />
     );
-    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
     expect(screen.queryByText("Should not appear")).not.toBeInTheDocument();
   });
 
@@ -384,7 +387,7 @@ describe("Conversation", () => {
       />
     );
     expect(screen.getByText("Final display.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Speech text")).toHaveTextContent("Final spoken wording.");
+    expect(screen.getByLabelText("Spoken")).toHaveTextContent("Final spoken wording.");
   });
 
   it("shows transient activity instead of persisting it as a message", () => {

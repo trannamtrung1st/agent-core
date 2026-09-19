@@ -111,4 +111,18 @@ describe("ModelPicker", () => {
     const listbox = await screen.findByRole("listbox");
     expect(within(listbox).getByTitle("Scripted Alpha")).toBeInTheDocument();
   });
+
+  it("renders after catalog hydration without changing hook order", () => {
+    const props = {
+      defaultKey: "scripted-alpha" as const,
+      modelValue: "scripted-alpha",
+      effortValue: "medium" as const,
+      onModelChange: vi.fn(),
+      onEffortChange: vi.fn()
+    };
+    const { rerender } = render(<ModelPicker models={[]} {...props} />);
+    expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
+    rerender(<ModelPicker models={models} {...props} />);
+    expect(screen.getByRole("button", { name: "Model" })).toBeInTheDocument();
+  });
 });

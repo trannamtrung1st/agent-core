@@ -143,20 +143,26 @@ export function ModelPicker({
     };
   }, [open]);
 
-  if (models.length === 0) {
-    return null;
-  }
-
-  const selectValue = modelValue === DEFAULT_MODEL_KEY ? defaultKey ?? DEFAULT_MODEL_KEY : modelValue;
-  const selected = selectedCatalogModel(models, selectValue, defaultKey);
+  const selectValue =
+    models.length === 0
+      ? modelValue
+      : modelValue === DEFAULT_MODEL_KEY
+        ? defaultKey ?? DEFAULT_MODEL_KEY
+        : modelValue;
+  const selected = models.length === 0 ? null : selectedCatalogModel(models, selectValue, defaultKey);
   const efforts = selected?.supportedReasoningEfforts ?? [];
-  const showEffort = Boolean(selected?.reasoning && efforts.length > 0);
-  const effortIndex = effortValue ? Math.max(0, efforts.indexOf(effortValue)) : 0;
+  const effortIndex = effortValue && efforts.length > 0 ? Math.max(0, efforts.indexOf(effortValue)) : 0;
   const [effortPreviewIndex, setEffortPreviewIndex] = useState(effortIndex);
 
   useEffect(() => {
     setEffortPreviewIndex(effortIndex);
   }, [effortIndex, open, efforts.length]);
+
+  if (models.length === 0) {
+    return null;
+  }
+
+  const showEffort = Boolean(selected?.reasoning && efforts.length > 0);
   const compact = layout === "row";
   const composer = variant === "borderless";
 

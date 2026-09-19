@@ -88,7 +88,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 - Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.
 - Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).
 - Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice/Send; header owns identity, Speech locale, and overflow.
-- Assistant display Markdown stays primary; persisted public speech text is a quieter **Speech text** inset on the same turn.
+- Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
 
 ## Colors
 
@@ -127,7 +127,7 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 
 ## Layout
 
-One session: black rail + conversation column + sticky composer. Column is `min(100%, 52rem)` centered with 16px inline padding. Conversation list gap is section (16px); inside a turn, compact (8px) owns sibling stacks (meta → body → Spoken).
+One session: black rail + conversation column + sticky composer. Column is `min(100%, 52rem)` centered with 16px inline padding. Conversation list gap is section (16px); inside a turn, compact (8px) owns sibling stacks (meta → body: speech projection when present, then display).
 
 - Rail: 280px at 1200px+, 240px from 768–1199px, Drawer below 768px. Shared 16px left edge for New chat, Chats, session titles. Sections use title + gap, not dividing rules.
 - Header: 56px min height, container background, compact block padding, 16px inline.
@@ -187,7 +187,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ### Conversation turns
 - User: right-aligned bubble (`8px 12px`, 18px radius).
-- Assistant: open sanitized Markdown; optional blocks/files; then **Speech text** when public `speechText` meaningfully differs. Speech text is the same list item: speaker icon (decorative) + visible “Speech text” label (tertiary via CSS), body secondary with `pre-wrap`; 8px stack gap; 8px padding above a 1px border. Not a second bubble, avatar, or timestamp.
+- Assistant: when public `speechText` meaningfully differs from display, show **Spoken** first (the TTS projection), then open sanitized Markdown, blocks, and files. Spoken is the same list item: speaker icon (decorative) + visible “Spoken” label (tertiary via CSS), body secondary with `pre-wrap`; 8px stack gap; 8px padding below a 1px border before on-screen detail. Not a second bubble, avatar, or timestamp.
 
 ### Composer toolbar
 - Left: Model (reasoning level inside the Model button when supported), Attach, Voice, microphone.
@@ -201,7 +201,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** use compact/default/section (8/12/16px) for shells and sibling `gap`; use Ant Design `paddingXS` (8px, `{spacing.controlInner}`) via `theme.useToken()` for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.
 - **Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.
 - **Do** compose Model/catalog rows with Ant Design `Button type="text"` and `Flex`; keep `app.css` for shell chrome, overflow, and ring suppression only.
-- **Do** render Speech text only for assistant public `speechText` that differs after whitespace normalization; keep it secondary to display Markdown.
+- **Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.
 - **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
 - **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
@@ -213,4 +213,4 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Don't** treat this file as behavioral authority over `/docs`.
 - **Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.
 - **Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.
-- **Don't** show Speech text as another conversational turn or from internal generated tails.
+- **Don't** show Spoken as another conversational turn or from internal generated tails.

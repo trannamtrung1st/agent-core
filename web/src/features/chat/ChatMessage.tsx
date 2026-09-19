@@ -24,6 +24,20 @@ export function ChatMessage({
   const hasBlocks = Boolean(entry.blocks?.length);
   const showSpeech = !isUser && shouldShowSpeechText(entry.text, entry.speechText);
   const hasBody = Boolean(entry.text) || hasBlocks || hasFiles || showSpeech;
+  const blocks = hasBlocks && entry.blocks ? (
+    <div className="entry-blocks">
+      {entry.blocks.map((block) => (
+        <RichBlock key={block.blockId} sessionId={sessionId} block={block} />
+      ))}
+    </div>
+  ) : null;
+  const files = hasFiles && entry.attachments && sessionId ? (
+    <div className="entry-files">
+      {entry.attachments.map((file) => (
+        <HistoryAttachmentView key={file.attachmentId} sessionId={sessionId} file={file} />
+      ))}
+    </div>
+  ) : null;
 
   return (
     <li
@@ -46,25 +60,19 @@ export function ChatMessage({
       {hasBody ? (
         <div className={isUser ? "user-bubble" : "assistant-body"}>
           {isUser ? (
-            entry.text ? <Typography.Paragraph className="user-bubble-text">{entry.text}</Typography.Paragraph> : null
-          ) : entry.text ? (
-            <MarkdownMessage source={entry.text} />
-          ) : null}
-          {hasBlocks && entry.blocks ? (
-            <div className="entry-blocks">
-              {entry.blocks.map((block) => (
-                <RichBlock key={block.blockId} sessionId={sessionId} block={block} />
-              ))}
-            </div>
-          ) : null}
-          {hasFiles && entry.attachments && sessionId ? (
-            <div className="entry-files">
-              {entry.attachments.map((file) => (
-                <HistoryAttachmentView key={file.attachmentId} sessionId={sessionId} file={file} />
-              ))}
-            </div>
-          ) : null}
-          {showSpeech && entry.speechText ? <SpokenText speechText={entry.speechText} /> : null}
+            <>
+              {entry.text ? <Typography.Paragraph className="user-bubble-text">{entry.text}</Typography.Paragraph> : null}
+              {blocks}
+              {files}
+            </>
+          ) : (
+            <>
+              {showSpeech && entry.speechText ? <SpokenText speechText={entry.speechText} /> : null}
+              {entry.text ? <MarkdownMessage source={entry.text} /> : null}
+              {blocks}
+              {files}
+            </>
+          )}
         </div>
       ) : null}
       {status ? (

@@ -383,8 +383,9 @@ body,
   align-items: flex-start;
   gap: var(--ac-space-compact);
   min-width: 0;
-  padding-block-start: var(--ac-space-compact);
-  border-block-start: 1px solid var(--ac-color-border);
+  padding-block-end: var(--ac-space-compact);
+  margin-block-end: var(--ac-space-compact);
+  border-block-end: 1px solid var(--ac-color-border);
 }
 
 .spoken-text-label,
