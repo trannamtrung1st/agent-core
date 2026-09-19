@@ -50,10 +50,7 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("responseLength is invalid.");
         }
 
-        if (string.IsNullOrWhiteSpace(definition.ConversationPolicy.Language))
-        {
-            throw new ArgumentException("language is required.");
-        }
+        ConversationLanguagePolicy.Validate(definition.ConversationPolicy.Language);
 
         if (definition.ConversationPolicy.MaxOutputTokens is < 1 or > 4096)
         {

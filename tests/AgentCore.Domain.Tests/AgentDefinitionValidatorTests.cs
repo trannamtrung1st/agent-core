@@ -48,6 +48,26 @@ public sealed class AgentDefinitionValidatorTests
     }
 
     [Fact]
+    public void Rejects_invalid_conversation_language()
+    {
+        var definition = new AgentDefinition(
+            1,
+            "broken",
+            1,
+            new AgentIdentity("X", "role", "desc", "tone"),
+            ["goal"],
+            "instructions",
+            new BehaviorPolicy("acknowledgeThenContinue", true, true),
+            new ConversationPolicy("concise", true, "potato!", 256),
+            new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
+            new VoiceConfiguration(true, "default", 1.0),
+            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new Dictionary<string, string>());
+        var error = Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(definition));
+        Assert.Contains("language", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Rejects_invalid_model_default_catalog_key()
     {
         var definition = new AgentDefinition(

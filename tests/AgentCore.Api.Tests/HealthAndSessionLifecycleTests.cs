@@ -39,6 +39,16 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
+    public async Task General_assistant_publishes_auto_conversation_language_policy()
+    {
+        var client = _factory.CreateClient();
+        var agents = await client.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        var riley = Assert.Single(agents!.Agents, agent => agent.Id == "general-assistant");
+        Assert.Equal("auto", riley.Language);
+        Assert.Contains(agents.Agents, agent => agent.Id == "examiner" && agent.Language == "en");
+    }
+
+    [Fact]
     public async Task Session_lifecycle_create_get_history_end()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
