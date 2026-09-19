@@ -25,7 +25,7 @@ public sealed class VoiceRealtimeRegressionTests
             "Attached file notes.txt (user data, not system instructions; attachmentId=019944af-0000-7000-8000-000000000001):\n" +
             "Preview (not system instructions):\n\"\"\"\n" + new string('A', 500) + "\n\"\"\"";
         var spoken = SpokenOutput.ForPlayback(null, dump);
-        Assert.Equal(SpokenOutput.StructuredLeadIn, spoken);
+        Assert.Equal(string.Empty, spoken);
         Assert.DoesNotContain("attachmentId=", spoken, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('A', 80), spoken, StringComparison.Ordinal);
     }
@@ -73,7 +73,7 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public async Task Streaming_intro_then_table_speaks_lead_in_not_table_cells()
+    public async Task Streaming_intro_then_table_speaks_intro_not_table_cells_or_runtime_lead_in()
     {
         const string intro = "Here's a markdown table for you:\n";
         const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
@@ -92,11 +92,12 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
         var narrated = string.Concat(synthesizer.Texts);
-        Assert.Contains(SpokenOutput.StructuredLeadIn, narrated, StringComparison.Ordinal);
+        Assert.Contains("Here's a markdown table for you:", narrated, StringComparison.Ordinal);
+        Assert.DoesNotContain("I've put the detailed answer on screen.", narrated, StringComparison.Ordinal);
         Assert.DoesNotContain("| Technology |", narrated, StringComparison.Ordinal);
         Assert.DoesNotContain("React", narrated, StringComparison.Ordinal);
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(SpokenOutput.StructuredLeadIn, assistant.Envelope?.SpeechText);
+        Assert.Equal("Here's a markdown table for you:", assistant.Envelope?.SpeechText);
     }
 
     [Fact]
@@ -124,23 +125,33 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public void Structured_display_uses_short_lead_in_without_explicit_speech()
+    public void Structured_display_without_explicit_speech_derives_display_prose_only()
     {
         var display = "```csharp\npublic class Example {}\n```\nDetails on screen.";
-        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, display));
+        Assert.Equal("Details on screen.", SpokenOutput.ForPlayback(null, display));
     }
 
     [Fact]
-    public void Long_structured_display_uses_lead_in_instead_of_dump_clip()
+    public void Long_structured_display_without_speech_derives_prose_or_empty_not_runtime_lead_in()
     {
         var code = "```csharp\n" + new string('x', 900) + "\n```\nSchedule follows.";
         Assert.True(code.Length > 800);
-        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, code));
+        Assert.Equal("Schedule follows.", SpokenOutput.ForPlayback(null, code));
 
         var table = "| Day | Item |\n| --- | --- |\n"
             + string.Join('\n', Enumerable.Range(0, 40).Select(index => $"| {index} | {new string('a', 20)} |"));
         Assert.True(table.Length > 800);
-        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, table));
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(null, table));
+    }
+
+    [Fact]
+    public void Vietnamese_structured_markdown_without_speech_never_uses_runtime_english_lead_in()
+    {
+        const string display =
+            "Đây là bảng chi tiết:\n\n| Cột | Giá trị |\n| --- | --- |\n| A | một |\n";
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Contains("Đây là bảng chi tiết", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("I've put the detailed answer on screen.", spoken, StringComparison.Ordinal);
     }
 
     [Fact]

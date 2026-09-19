@@ -9,8 +9,6 @@ public static class SpokenOutput
     /// </summary>
     public const int SafetyMaxChars = 32_000;
 
-    public const string StructuredLeadIn = "I've put the detailed answer on screen.";
-
     public static string ForPlayback(string? speechText, string displayText)
     {
         if (!string.IsNullOrWhiteSpace(speechText))
@@ -18,20 +16,20 @@ public static class SpokenOutput
             var explicitSpeech = speechText.Trim();
             if (LooksLikeFileDump(explicitSpeech))
             {
-                return StructuredLeadIn;
+                return string.Empty;
             }
 
             return ApplySafetyCap(explicitSpeech);
         }
 
         var display = displayText ?? string.Empty;
-        if (LooksLikeStructuredDisplay(display) || LooksLikeFileDump(display))
+        if (LooksLikeFileDump(display))
         {
-            return StructuredLeadIn;
+            return string.Empty;
         }
 
-        var prose = StripMarkdown(display);
-        if (string.IsNullOrWhiteSpace(prose))
+        var prose = StripMarkdownForSpeech(display);
+        if (string.IsNullOrWhiteSpace(prose) || LooksLikeFileDump(prose))
         {
             return string.Empty;
         }
@@ -49,6 +47,9 @@ public static class SpokenOutput
             && !string.Equals(spoken, displayText, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Heuristic for tests and diagnostics only; playback selection does not branch on this.
+    /// </summary>
     public static bool LooksLikeStructuredDisplay(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -117,7 +118,7 @@ public static class SpokenOutput
         return text[..SafetyMaxChars];
     }
 
-    private static string StripMarkdown(string text)
+    private static string StripMarkdownForSpeech(string text)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -125,21 +126,33 @@ public static class SpokenOutput
         }
 
         var stripped = FencedCodeBlock.Replace(text, " ");
+        stripped = MarkdownTableRow.Replace(stripped, " ");
+        stripped = MarkdownTableSeparator.Replace(stripped, " ");
         stripped = MarkdownImage.Replace(stripped, " ");
         stripped = MarkdownLink.Replace(stripped, "$1");
         stripped = MarkdownHeading.Replace(stripped, "");
         stripped = MarkdownFence.Replace(stripped, " ");
         stripped = MarkdownEmphasis.Replace(stripped, "");
+        stripped = ListMarker.Replace(stripped, "");
+        stripped = NumberedListMarker.Replace(stripped, "");
+        stripped = HorizontalRule.Replace(stripped, " ");
+        stripped = CollapseWhitespace.Replace(stripped, " ");
         return stripped.Trim();
     }
 
     private static readonly Regex FencedCodeBlock = new("```[\\s\\S]*?```", RegexOptions.Compiled);
     private static readonly Regex MarkdownTable = new(@"^\|.+\|\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex MarkdownTableRow = new(@"^\|[^\n]*\|\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex MarkdownTableSeparator = new(@"^\|[\s\-:|]+\|\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex MarkdownImage = new(@"!\[[^\]]*\]\([^)]*\)", RegexOptions.Compiled);
     private static readonly Regex MarkdownLink = new(@"\[([^\]]+)\]\([^)]*\)", RegexOptions.Compiled);
     private static readonly Regex MarkdownHeading = new(@"^#{1,6}\s+", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex MarkdownFence = new("```+", RegexOptions.Compiled);
     private static readonly Regex MarkdownEmphasis = new(@"[*_`]{1,3}", RegexOptions.Compiled);
+    private static readonly Regex ListMarker = new(@"^\s*[-*+]\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex NumberedListMarker = new(@"^\s*\d+\.\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex HorizontalRule = new(@"^[-*_]{3,}\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex CollapseWhitespace = new(@"\s{2,}", RegexOptions.Compiled);
 
     private static readonly Regex Base64Like = new(
         "[A-Za-z0-9+/]{80,}={0,2}",

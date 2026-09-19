@@ -82,6 +82,11 @@ public static class SpeechLocale
         }
 
         var trimmed = value.Trim();
+        if (ConversationLanguagePolicy.IsAuto(trimmed))
+        {
+            return false;
+        }
+
         if (trimmed.Length is 0 or > MaxLength || trimmed.Contains('_', StringComparison.Ordinal))
         {
             return false;

@@ -1,5 +1,6 @@
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Speech;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tests;
 
@@ -37,6 +38,19 @@ public sealed class SpeechLocaleTests
         var resolved = SpeechLocale.Resolve((string?)null, "auto");
         Assert.Equal("en", resolved.Effective);
         Assert.Equal(SpeechLocaleSource.ProviderFallback, resolved.Source);
+    }
+
+    [Fact]
+    public void Auto_is_a_conversation_policy_sentinel_not_a_speech_locale()
+    {
+        var error = Assert.Throws<AgentCoreException>(() => SpeechLocale.Validate("auto"));
+        Assert.Equal("ValidationError", error.Code);
+
+        var resolved = SpeechLocale.Resolve("auto", "en");
+        Assert.Equal("en", resolved.Effective);
+        Assert.Equal(SpeechLocaleSource.AgentDefault, resolved.Source);
+
+        Assert.Equal(ConversationLanguagePolicy.Auto, ConversationLanguagePolicy.Validate("auto"));
     }
 
     [Theory]

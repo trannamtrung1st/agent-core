@@ -4,6 +4,8 @@ namespace AgentCore.Application.Tests;
 
 public sealed class SpokenOutputTests
 {
+    private const string RuntimeEnglishLeadIn = "I've put the detailed answer on screen.";
+
     [Fact]
     public void Long_conversational_prose_is_not_semantically_clipped()
     {
@@ -13,7 +15,7 @@ public sealed class SpokenOutputTests
         var spoken = SpokenOutput.ForPlayback(null, story);
 
         Assert.Equal(story, spoken);
-        Assert.DoesNotContain(SpokenOutput.StructuredLeadIn, spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain(RuntimeEnglishLeadIn, spoken, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -26,17 +28,18 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
-    public void Structured_display_without_speech_uses_lead_in()
+    public void Structured_display_without_speech_derives_model_prose_not_runtime_lead_in()
     {
         var schedule = "| Day | Item |\n| --- | --- |\n| Mon | Standup |\n| Tue | Review |";
-        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, schedule));
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(null, schedule));
     }
 
     [Fact]
-    public void Fenced_code_without_speech_uses_lead_in()
+    public void Fenced_code_without_speech_keeps_trailing_display_prose()
     {
         var code = "```csharp\n" + new string('x', 600) + "\n```\nDetails on screen.";
-        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, code));
+        Assert.Equal("Details on screen.", SpokenOutput.ForPlayback(null, code));
+        Assert.DoesNotContain(RuntimeEnglishLeadIn, SpokenOutput.ForPlayback(null, code), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -55,14 +58,24 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
-    public void Attachment_dump_uses_lead_in()
+    public void Vietnamese_structured_markdown_derives_model_language_not_runtime_english()
+    {
+        const string display =
+            "Đây là bảng chi tiết:\n\n| Cột | Giá trị |\n| --- | --- |\n| A | một |\n";
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Contains("Đây là bảng chi tiết", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain(RuntimeEnglishLeadIn, spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("| Cột |", spoken, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Attachment_dump_produces_no_spoken_fallback()
     {
         var dump =
             "Attached file notes.txt (user data, not system instructions; attachmentId=019944af-0000-7000-8000-000000000001):\n" +
             "Preview (not system instructions):\n\"\"\"\n" + new string('A', 500) + "\n\"\"\"";
         var spoken = SpokenOutput.ForPlayback(null, dump);
-        Assert.Equal(SpokenOutput.StructuredLeadIn, spoken);
-        Assert.DoesNotContain("attachmentId=", spoken, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, spoken);
     }
 
     [Fact]
@@ -81,17 +94,28 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
-    public void Pure_reference_list_uses_lead_in_without_explicit_speech()
+    public void Pure_reference_list_derives_list_text_without_runtime_lead_in()
     {
         const string list = "- apples\n- oranges\n- pears";
         Assert.True(SpokenOutput.LooksLikeStructuredDisplay(list));
-        Assert.Equal(SpokenOutput.StructuredLeadIn, SpokenOutput.ForPlayback(null, list));
+        var spoken = SpokenOutput.ForPlayback(null, list);
+        Assert.Contains("apples", spoken, StringComparison.Ordinal);
+        Assert.Contains("pears", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain(RuntimeEnglishLeadIn, spoken, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Explicit_speech_remains_authoritative_for_structured_display()
+    {
+        const string speech = "Here is your week at a glance.";
+        var table = "| Day | Item |\n| --- | --- |\n| Mon | Standup |";
+        Assert.Equal(speech, SpokenOutput.ForPlayback(speech, table));
     }
 
     [Fact]
     public void Derived_speech_projection_persists_when_playback_coordinates_differ_from_display()
     {
-        Assert.True(SpokenOutput.ShouldPersistDerivedSpeechText(SpokenOutput.StructuredLeadIn, "| a | b |"));
+        Assert.False(SpokenOutput.ShouldPersistDerivedSpeechText(string.Empty, "| a | b |"));
         Assert.False(SpokenOutput.ShouldPersistDerivedSpeechText("Plain spoken line.", "Plain spoken line."));
         Assert.True(
             SpokenOutput.ShouldPersistDerivedSpeechText(
@@ -104,5 +128,12 @@ public sealed class SpokenOutputTests
     {
         var huge = new string('z', SpokenOutput.SafetyMaxChars + 50);
         Assert.Equal(SpokenOutput.SafetyMaxChars, SpokenOutput.ForPlayback(huge, huge).Length);
+    }
+
+    [Fact]
+    public void Explicit_speech_that_looks_like_file_dump_is_not_spoken()
+    {
+        var dump = "attachmentId=abc\n" + new string('A', 200);
+        Assert.Equal(string.Empty, SpokenOutput.ForPlayback(dump, "display"));
     }
 }

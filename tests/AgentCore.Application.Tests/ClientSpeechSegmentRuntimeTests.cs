@@ -82,7 +82,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
     }
 
     [Fact]
-    public async Task Streaming_table_display_emits_lead_in_segments_only()
+    public async Task Streaming_table_display_emits_derived_intro_not_runtime_lead_in()
     {
         const string intro = "Here's a markdown table for you:\n";
         const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
@@ -97,7 +97,8 @@ public sealed class ClientSpeechSegmentRuntimeTests
         await runtime.WaitUntilIdleAsync();
         var spoken = string.Concat(
             output.Items.Select(item => item.Payload).OfType<SpeechOutputSegmentOutput>().Select(segment => segment.Text));
-        Assert.Contains(SpokenOutput.StructuredLeadIn, spoken, StringComparison.Ordinal);
+        Assert.Contains("Here's a markdown table for you:", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("I've put the detailed answer on screen.", spoken, StringComparison.Ordinal);
         Assert.DoesNotContain("| Technology |", spoken, StringComparison.Ordinal);
     }
 
