@@ -2,19 +2,18 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` at `a9b724d45913c344d45caa415d114e1f98b7c716` (`a9b724d`, 2026-09-19).
+Reviewed against `main` at `0d118034bf12b2500912f653a79c8fdff6893b0c` (`0d11803`, 2026-09-19).
 
 Current roadmap:
 
-1. restore `main` to a fully green Synthetic + Compose baseline;
-2. implement **P2A — first-class progress semantics**;
-3. implement **P2B — validated model response envelope**;
-4. evolve tools and external integrations;
-5. add context compaction and memory;
-6. add configurable triggers;
-7. add durable background work;
-8. productize the agent harness/admin lifecycle;
-9. evolve sandbox and multi-user infrastructure only when requirements justify it.
+1. implement **P2A — first-class progress semantics**;
+2. implement **P2B — validated model response envelope**;
+3. evolve tools and external integrations;
+4. add context compaction and memory;
+5. add configurable triggers;
+6. add durable background work;
+7. productize the agent harness/admin lifecycle;
+8. evolve sandbox and multi-user infrastructure only when requirements justify it.
 
 P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`). Do not reopen P1 without a reproducible regression or a concrete new product requirement.
 
@@ -43,7 +42,7 @@ Do not continue adding marker-specific speech heuristics merely to improve archi
 
 Always keep this section even when there is no active work.
 
-- [ ] Add proprietary license to the project.
+- [x] Add proprietary license to the project.
 
 - [ ] Add more general-assistant tools and trusted user/session context where useful.
 
@@ -69,98 +68,37 @@ Always keep this section even when there is no active work.
 
 ---
 
-# P0 — Restore a clean current baseline
+# P0 — Green baseline (closed)
 
-This is a bounded stabilization tail, not another voice redesign.
+**P0A closed and frozen** on `0d118034bf12b2500912f653a79c8fdff6893b0c` (`0d11803`, 2026-09-19). [Synthetic run 35447234418](https://github.com/trannamtrung1st/agent-core/actions/runs/35447234418) completed successfully on that exact `main` commit. Both the Synthetic offline gates and the Synthetic Compose smoke succeeded.
 
-Current HEAD `a9b724d` is almost green.
+The preceding run on `a9b724d` had one pending-Voice Playwright failure (34 passed / 1 failed). The test clicked Voice before it had established that the held text response was active, so direct activation could correctly show `Listening…` instead of the pending `Starting voice…` state. The production voice lifecycle was not changed to satisfy the test.
 
-Latest Synthetic run on this HEAD:
-
-- Domain: **64 passed**;
-- Infrastructure: **133 passed / 12 skipped**;
-- Application: **420 passed** with hang detection;
-- API: **136 passed**;
-- frontend unit tests: **369 passed** across 48 files;
-- frontend production build: **passed**;
-- Compose owner-capability / SQLite-volume smoke: **passed**;
-- Playwright: **34 passed / 1 failed**.
-
-The remaining failure is:
-
-```text
-web/e2e/text-conversation.spec.ts
-
-Expected connection status:
-Starting voice…
-
-Observed:
-Listening…
-```
-
-The test currently attempts to exercise pending Voice after sending `Please hold the line`, but the response can finish before the Voice click/assertion, allowing Voice to transition directly to active listening.
-
-## P0A — Close the remaining deterministic-test gap
+## P0A — Closed deterministic-test gap
 
 - [x] Fix the Docker/web regression-fixture build boundary.
 
-  Completed through `62ecf1e` / `6d51117`.
-
-  The frontend regression fixture is now loaded through the test helper without widening normal Vite filesystem access or globally enabling Node typings.
+  Completed through `62ecf1e` / `6d51117`. The frontend regression fixture loads through the test helper without widening normal Vite filesystem access or globally enabling Node typings.
 
 - [x] Align rich-envelope Playwright assertions with mode-dependent speech labels.
 
-  Completed in `86a4df0`.
-
-  Text-delivered secondary speech uses `Speech text`; `Spoken` is reserved for Voice delivery.
+  Completed in `86a4df0`. Text-delivered secondary speech uses `Speech text`; `Spoken` is reserved for Voice delivery.
 
 - [x] Stabilize the stale workspace-write cancellation regression.
 
-  Completed in `a9b724d`.
+  Completed in `a9b724d`. The test waits on the actual gated workspace operation before deactivation instead of relying on a runtime-state observation.
 
-  The test now waits on the actual gated workspace operation before deactivation instead of relying on a less-direct runtime-state observation.
+- [x] Make the pending-Voice Playwright scenario deterministic.
 
-- [ ] Make the pending-Voice Playwright scenario deterministic.
+  Completed in `0d11803`. The test waits for the prior attachment response to finish, then observes the held response's first assistant chunk and Stop control before clicking Voice. It verifies `Starting voice…`, Cancel, zero audio frames before Voice applies, and disconnect cleanup. The focused scenario passed 10 consecutive local runs; the complete 35-test local Playwright suite also passed before the CI run.
 
-  Current failing scenario:
+- [x] Re-run the complete key-free `.github/workflows/synthetic.yml` gate.
 
-  ```text
-  synthetic text conversation, pending voice, and disconnect cleanup
-  ```
+  [Run 35447234418](https://github.com/trannamtrung1st/agent-core/actions/runs/35447234418) reports success for Domain, Infrastructure, Application, API, frontend unit tests and production build, Playwright Chromium, and the Compose owner-capability / SQLite-volume smoke.
 
-  The test should not require observing a transient `Starting voice…` state unless it has deterministically established the condition that keeps Voice pending.
+- [x] Record the green HEAD and freeze this stabilization tail.
 
-  Preferred fix:
-
-  - explicitly keep the current assistant response active before clicking Voice;
-  - then assert the pending Voice behavior;
-  - release/finish the response only after the required pending assertions.
-
-  Alternatively, if the scenario is intended only to verify successful Voice activation rather than pending-mode semantics, assert the stable resulting state instead.
-
-  Do **not** slow down production behavior or artificially preserve `Starting voice…` merely to make Playwright catch it.
-
-- [ ] Re-run the complete key-free `.github/workflows/synthetic.yml` gate after the above fix.
-
-  Required:
-
-  - Domain;
-  - Infrastructure;
-  - Application;
-  - API;
-  - frontend unit tests;
-  - frontend production build;
-  - Playwright Chromium;
-  - Compose persistence/capability smoke.
-
-- [ ] Record the green HEAD here and freeze this stabilization tail.
-
-  After that point, further Browser-STT/Voice changes require either:
-
-  - a reproducible product regression; or
-  - a concrete product requirement.
-
-Do not start another speculative Voice-hardening pass.
+  The verified commit is `0d118034bf12b2500912f653a79c8fdff6893b0c`. Further Browser-STT/Voice changes require a reproducible product regression or a concrete product requirement. Do not start another speculative Voice-hardening pass.
 
 ---
 

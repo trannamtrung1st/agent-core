@@ -1,6 +1,7 @@
 {
   "name": "agent-core-web",
   "private": true,
+  "license": "UNLICENSED",
   "packageManager": "pnpm@9.6.0",
   "type": "module",
   "scripts": {

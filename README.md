@@ -29,6 +29,10 @@ The most important qualities are:
 
 Complex tool orchestration, multi-agent systems, workflow builders, marketplaces, and advanced long-term memory are intentionally outside the first MVP.
 
+## License
+
+Agent Core is proprietary software. Source availability does not grant permission to use, copy, modify, or redistribute it. See [LICENSE](LICENSE) for details.
+
 ## Project documents
 
 - [Product Vision](docs/01-product-vision.md)
