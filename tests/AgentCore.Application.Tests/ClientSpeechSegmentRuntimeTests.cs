@@ -239,6 +239,35 @@ public sealed class ClientSpeechSegmentRuntimeTests
     }
 
     [Fact]
+    public async Task Technical_fenced_display_without_speech_completes_without_playback_ack()
+    {
+        const string display = """
+            ```http
+            POST /tasks HTTP/1.1
+            Authorization: Bearer sk-test
+            ```
+
+            ```json
+            { "id": "task-1" }
+            ```
+            """;
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new ScriptedLanguageModel([display]));
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("api");
+        await runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechOutputSegmentOutput);
+        var speechCompleted = Assert.IsType<SpeechOutputCompletedOutput>(
+            Assert.Single(output.Items.Select(item => item.Payload).OfType<SpeechOutputCompletedOutput>()));
+        Assert.Equal(0, speechCompleted.TextEndExclusive);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+    }
+
+    [Fact]
     public async Task Pure_table_without_speech_completes_without_playback_ack()
     {
         const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";

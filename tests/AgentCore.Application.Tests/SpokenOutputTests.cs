@@ -136,4 +136,104 @@ public sealed class SpokenOutputTests
         var dump = "attachmentId=abc\n" + new string('A', 200);
         Assert.Equal(string.Empty, SpokenOutput.ForPlayback(dump, "display"));
     }
+
+    [Fact]
+    public void Heading_and_prose_fallback_keeps_readable_prose_only()
+    {
+        Assert.Equal(
+            "Result. The request completed successfully.",
+            SpokenOutput.ForPlayback(null, "# Result\nThe request completed successfully."));
+    }
+
+    [Fact]
+    public void Multiple_fenced_technical_blocks_without_prose_resolve_no_speech()
+    {
+        const string display = """
+            ```text
+            Client --> HTTPS --> API Gateway --> Auth --> Task Service --> PostgreSQL
+            ```
+
+            ```http
+            POST /tasks HTTP/1.1
+            Authorization: Bearer sk-test
+            Content-Type: application/json
+            ```
+
+            ```json
+            { "id": "task-1", "title": "Example" }
+            ```
+
+            ```bash
+            curl -X POST https://api.example.com/tasks -H "Authorization: Bearer sk-test"
+            ```
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal(string.Empty, spoken);
+        Assert.DoesNotContain("Client", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("Authorization", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("POST /tasks", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("curl", spoken, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("json", spoken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prose_before_technical_blocks_derives_only_the_prose()
+    {
+        const string display = """
+            Here is how the task API works.
+
+            ```http
+            POST /tasks HTTP/1.1
+            Authorization: Bearer sk-test
+            ```
+
+            ```json
+            { "id": "task-1" }
+            ```
+
+            ```bash
+            curl -X POST https://api.example.com/tasks
+            ```
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal("Here is how the task API works.", spoken);
+        Assert.DoesNotContain("POST /tasks", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("curl", spoken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Explicit_speech_with_rich_technical_display_speaks_only_explicit_text()
+    {
+        const string speech = "Đây là kiến trúc API gồm client, gateway, xác thực, task service và PostgreSQL.";
+        const string display = """
+            ```text
+            Client --> API Gateway --> PostgreSQL
+            ```
+            ```http
+            POST /tasks HTTP/1.1
+            ```
+            ```json
+            { "id": "task-1" }
+            ```
+            """;
+
+        Assert.Equal(speech, SpokenOutput.ForPlayback(speech, display));
+    }
+
+    [Fact]
+    public void Unclosed_fence_suppresses_trailing_technical_content()
+    {
+        const string display = """
+            Intro sentence stays.
+
+            ```http
+            POST /tasks HTTP/1.1
+            Authorization: Bearer token
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal("Intro sentence stays.", spoken);
+    }
 }

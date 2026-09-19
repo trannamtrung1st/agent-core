@@ -459,6 +459,46 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public async Task Technical_fenced_display_without_speech_resolves_no_speech_but_publishes_display()
+    {
+        const string display = """
+            ```text
+            Client --> HTTPS --> API Gateway --> Auth --> Task Service
+            ```
+
+            ```http
+            POST /tasks HTTP/1.1
+            Authorization: Bearer sk-test
+            ```
+
+            ```json
+            { "id": "task-1", "title": "Example" }
+            ```
+
+            ```bash
+            curl -X POST https://api.example.com/tasks
+            ```
+            """;
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        await using var runtime = CreateVoice(output, new ScriptedLanguageModel([display]), synthesizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        await runtime.SubmitUserTextAsync("architecture");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(synthesizer.Texts);
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechProjectionOutput);
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("POST /tasks", StringComparison.Ordinal));
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Equal(0, completed.HeardTextEndExclusive);
+        Assert.Null(completed.SpeechText);
+    }
+
+    [Fact]
     public async Task Pure_table_without_speech_resolves_no_speech_but_publishes_display()
     {
         const string table = "| Technology | Category |\n| --- | --- |\n| React | Frontend |\n";
