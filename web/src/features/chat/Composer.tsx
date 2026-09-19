@@ -125,9 +125,9 @@ function MicrophoneControl({
       <Tooltip title={heldTooltip}>
         <Button
           type="text"
-          className="composer-icon composer-voice-live"
+          className="composer-icon"
           aria-label="Mute"
-          icon={<AudioFilled />}
+          icon={<AudioMutedOutlined />}
           disabled
         />
       </Tooltip>

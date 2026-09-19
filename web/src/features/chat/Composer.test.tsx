@@ -307,7 +307,7 @@ describe("Composer voice toolbar", () => {
   it("disables the microphone while browser STT is held for agent output", () => {
     const onVoice = vi.fn();
     const onMute = vi.fn();
-    render(
+    const { rerender } = render(
       <Composer
         {...emptyComposerProps()}
         voiceAvailable
@@ -322,10 +322,26 @@ describe("Composer voice toolbar", () => {
     expect(screen.getByRole("button", { name: /^Voice$/ })).toBeEnabled();
     const mute = screen.getByRole("button", { name: "Mute" });
     expect(mute).toBeDisabled();
-    expect(mute).toHaveClass("composer-voice-live");
+    expect(mute).not.toHaveClass("composer-voice-live");
+    expect(mute.querySelector(".anticon-audio-muted")).not.toBeNull();
     fireEvent.click(mute);
     expect(onVoice).not.toHaveBeenCalled();
     expect(onMute).not.toHaveBeenCalled();
+    rerender(
+      <Composer
+        {...emptyComposerProps()}
+        voiceAvailable
+        voiceModeActive
+        voiceInputLive
+        muted={false}
+        onVoice={onVoice}
+        onMute={onMute}
+      />
+    );
+    const resumedMute = screen.getByRole("button", { name: "Mute" });
+    expect(resumedMute).toBeEnabled();
+    expect(resumedMute).toHaveClass("composer-voice-live");
+    expect(resumedMute.querySelector(".anticon-audio")).not.toBeNull();
   });
 
   it("keeps Unmute appearance while held for agent output", () => {
@@ -343,6 +359,7 @@ describe("Composer voice toolbar", () => {
     const unmute = screen.getByRole("button", { name: "Unmute" });
     expect(unmute).toBeDisabled();
     expect(unmute).not.toHaveClass("composer-voice-live");
+    expect(unmute.querySelector(".anticon-audio-muted")).not.toBeNull();
     fireEvent.click(unmute);
     expect(onMute).not.toHaveBeenCalled();
   });
