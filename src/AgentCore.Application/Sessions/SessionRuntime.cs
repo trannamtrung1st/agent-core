@@ -2637,6 +2637,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 _envelope = _envelope with { SpeechText = spoken };
             }
         }
+
+        if (!VoiceDisplayPublicationAllowed())
+        {
+            return;
+        }
+
         var display = _envelope!.DisplayText;
         if (display.Length > _publishedDisplayLength)
         {
@@ -2806,7 +2812,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .SequenceEqual(_ttsFedPrefix.AsSpan(0, Math.Min(_ttsFedLength, _ttsFedPrefix.Length)));
     }
 
-    private string DisplayText() => _envelope?.DisplayText ?? _accumulator.Text;
+    private bool VoiceDisplayPublicationAllowed() =>
+        _snapshot.Mode != SessionMode.Voice || _publishedSpeechProjection is not null;
+
+    private string DisplayText()
+    {
+        if (!VoiceDisplayPublicationAllowed())
+        {
+            return string.Empty;
+        }
+
+        return _envelope?.DisplayText ?? _accumulator.Text;
+    }
 
     private int DisplayLength() => DisplayText().Length;
 

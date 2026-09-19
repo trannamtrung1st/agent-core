@@ -453,6 +453,15 @@ body,
   margin-block: 0;
 }
 
+.markdown-message hr {
+  align-self: stretch;
+  width: 100%;
+  height: 0;
+  border: 0;
+  border-block-start: 1px solid var(--ac-color-border);
+  background: transparent;
+}
+
 .markdown-message pre,
 .md-code-block pre {
   margin: 0;

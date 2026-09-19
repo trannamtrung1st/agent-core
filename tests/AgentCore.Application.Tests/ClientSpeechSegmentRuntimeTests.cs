@@ -208,7 +208,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
-        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        await output.WaitForAsync(item => item.Payload is ResponseStartedOutput);
         Assert.True(await runtime.SubmitUserTextAsync("queued later", behavior: UserTextBehavior.Queue));
         hold.TrySetResult();
         var firstCompleted = await output.WaitForAsync(item => item.Payload is SpeechOutputCompletedOutput);
@@ -225,7 +225,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
         await success.SetModeAsync(SessionMode.Voice);
         await output2.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await success.SubmitUserTextAsync("Hello");
-        await output2.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        await output2.WaitForAsync(item => item.Payload is ResponseStartedOutput);
         Assert.True(await success.SubmitUserTextAsync("queued later", behavior: UserTextBehavior.Queue));
         hold2.TrySetResult();
         var done = await output2.WaitForAsync(item => item.Payload is SpeechOutputCompletedOutput);

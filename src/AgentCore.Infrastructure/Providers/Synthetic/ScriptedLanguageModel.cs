@@ -40,7 +40,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     public static IReadOnlyList<string> ShortChunks { get; } = ["OK."];
 
     public static IReadOnlyList<string> MarkdownChunks { get; } =
-        ["The architecture has **three** pieces:\n\n", "1. Session runtime\n2. Agent execution\n\n", "Use `IAgentProvider`.\n"];
+        [
+            "The architecture has **three** pieces:\n\n",
+            "1. Session runtime\n2. Agent execution\n\n---\n\n",
+            "Use `IAgentProvider`.\n"
+        ];
 
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,

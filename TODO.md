@@ -246,9 +246,15 @@ The exact schema may evolve with P2A; do not freeze it prematurely.
   - optional intentionally different speech text;
   - requested rich blocks within allowed types.
 
+  Intended Voice semantics (observed interim `[[speech:]]` protocol until P2B ships):
+  - ordinary turns may use equivalent or near-equivalent `displayText` and `speechText`;
+  - visually rich turns may use concise `speechText` plus richer `displayText` / blocks;
+  - explicit `speechText` is authoritative for Voice TTS;
+  - compatibility fallback exists only when the model omits speech projection; do not reintroduce speculative display-to-TTS streaming.
+
 - [ ] Preserve a fallback path for models/providers that do not reliably support structured output.
 
-- [ ] Keep ordinary display prose as the default speech source when explicit `speechText` is absent.
+- [ ] In Voice mode, explicit `speechText` is the authoritative TTS source. Providers/models that omit it may use a bounded completion-time compatibility fallback; never speculatively narrate display prose while the response is streaming. Text mode continues to treat display text as the normal conversational projection. Prompt-level composition guidance (same/near-equivalent speech and display for ordinary prose; split channels mainly for visual structure) lives in `PromptContextBuilder.VoiceModeOutputGuidance`; manual probes: [voice-composition-probes.md](docs/reports/voice-composition-probes.md).
 
 - [ ] Remove `[[speech:]]` / related inline markers only after compatibility and persistence migration are covered.
 

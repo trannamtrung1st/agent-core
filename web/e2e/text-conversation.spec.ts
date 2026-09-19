@@ -208,11 +208,22 @@ test("manual pause via deactivate shows Resume and keeps history", async ({ page
 
 test("markdown response renders and survives reopen", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Show markdown");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".agent-activity")).toHaveText("Thinking…", { timeout: 15_000 });
   await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
-  await expect(page.getByText("Session runtime")).toBeVisible();
+  await expect(page.locator(".markdown-message").getByText("Session runtime")).toBeVisible();
+  await expect(page.locator(".markdown-message hr")).toHaveCount(1);
+  await expect
+    .poll(async () =>
+      page.locator(".markdown-message hr").evaluate((hr) => {
+        const rule = hr.getBoundingClientRect().width;
+        const host = hr.closest(".markdown-message")?.getBoundingClientRect().width ?? 0;
+        return host > 0 && rule >= host * 0.9;
+      })
+    )
+    .toBe(true);
   await expect(page.locator(".markdown-message code")).toHaveText("IAgentProvider");
   await expect(page.locator(".agent-activity")).toHaveCount(0);
 

@@ -376,10 +376,17 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("order");
+        await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput projection
+            && projection.Text == "Actual speech.");
         var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
+        var items = output.Items.ToList();
+        var projectionIndex = items.FindIndex(item => item.Payload is SpeechProjectionOutput);
+        var firstDisplayIndex = items.FindIndex(item => item.Payload is TextDeltaOutput);
+        Assert.True(projectionIndex >= 0);
+        Assert.True(firstDisplayIndex > projectionIndex);
         var narrated = string.Concat(synthesizer.Texts);
         Assert.Contains("Actual speech.", narrated, StringComparison.Ordinal);
         Assert.DoesNotContain("Display text first.", narrated, StringComparison.Ordinal);

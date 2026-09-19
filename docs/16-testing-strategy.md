@@ -10,7 +10,7 @@ Default verification is fully offline and deterministic: Synthetic/scripted adap
 
 OpenRouter live smoke, when opted in, may use `openrouter/free`. Do not use that router as the Real/demo DefaultModel. The shipped Real catalog may still offer it as an explicit session choice. Do not assert catalog quality, exact phrasing or structured-output correctness. OpenAI STT/TTS live integration and manual headset/speaker verification may wait until `OPENAI_API_KEY` is supplied; missing that key must not fail normal build/test. Prioritize verifying the text-conversation path with Synthetic and, optionally, OpenRouter.
 
-For manual Real-profile checks of **display versus speech** (for example long on-screen prose with a short spoken summary), prefer the `general-assistant` definition so role-specific goals do not fight the harness contract. Role agents (examiner, customer support, compliance) remain the right fixtures for identity and workflow demos, not for isolating `[[speech:]]` adherence.
+For manual Real-profile checks of **display versus speech** (for example long on-screen prose with a short spoken summary), prefer the `general-assistant` definition so role-specific goals do not fight the harness contract. Use the checklist in [voice-composition-probes.md](reports/voice-composition-probes.md) for neutral composition probes; deterministic prompt coverage lives in `PromptContextBuilderTests`. Role agents (examiner, customer support, compliance) remain the right fixtures for identity and workflow demos, not for isolating `[[speech:]]` adherence.
 
 ## Runtime evidence for development and review
 
