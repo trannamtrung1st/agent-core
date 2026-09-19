@@ -26,6 +26,8 @@ export function catalogShell() {
   return {
     agents: state.agents,
     selectedAgentId: state.selectedAgentId,
+    modelCatalog: state.modelCatalog,
+    modelCatalogDefaultKey: state.modelCatalogDefaultKey,
     catalogItems: state.catalogItems,
     catalogNextCursor: state.catalogNextCursor,
     catalogHasMore: state.catalogHasMore,

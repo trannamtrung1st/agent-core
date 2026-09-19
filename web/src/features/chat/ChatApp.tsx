@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Typography } from "antd";
 import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
-import { isReadonlySession, useSessionStore } from "../../state/sessionStore";
+import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
 import {
   beginNewChat,
   bootstrap,
@@ -21,12 +21,20 @@ import {
   selectAgent,
   sendDraft,
   applySpeechLocale,
+  applySessionModel,
   cancelRenderedResponse,
   setDraft,
   setMuted
 } from "../../services/realtime";
 import { AgentPicker } from "./AgentPicker";
 import { SpeechLocalePicker, speechLocaleSelectValue } from "./SpeechLocalePicker";
+import {
+  ModelPicker,
+  effortSelectValue,
+  modelSelectValue,
+  nextEffortForModel,
+  selectedCatalogModel
+} from "./ModelPicker";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
@@ -100,6 +108,34 @@ export function ChatApp() {
   const sendLabel = composerSendLabel();
   const inSession = state.sessionId != null;
   const readonly = isReadonlySession(state);
+  const modelBusy = isSessionModelBusy(state);
+  const modelValue = modelSelectValue(state.sessionModelKey, state.pendingModelKey, inSession);
+  const selectedModel = selectedCatalogModel(state.modelCatalog, modelValue, state.modelCatalogDefaultKey);
+  const effortValue = effortSelectValue(
+    selectedModel,
+    state.sessionModelEffort,
+    state.pendingReasoningEffort,
+    inSession
+  );
+  const modelDisabled = readonly || modelBusy;
+  const changeModel = (key: string) => {
+    void applySessionModel(
+      key,
+      nextEffortForModel(state.modelCatalog, key, state.modelCatalogDefaultKey, effortValue)
+    );
+  };
+  const modelPicker = (
+    <ModelPicker
+      layout={inSession ? "row" : "stack"}
+      models={state.modelCatalog}
+      defaultKey={state.modelCatalogDefaultKey}
+      modelValue={modelValue}
+      effortValue={effortValue}
+      disabled={inSession ? modelDisabled : false}
+      onModelChange={changeModel}
+      onEffortChange={(effort) => void applySessionModel(modelValue, effort)}
+    />
+  );
   const selectedAgent = state.agents.find((agent) => agent.id === state.selectedAgentId) ?? state.agents[0];
   const liveAssistant = state.entries.find(
     (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
@@ -191,6 +227,7 @@ export function ChatApp() {
               title={inSession ? state.agentName || "Agent" : "New chat"}
               subtitle={inSession ? state.agentRole : null}
               timestamp={headerTimestamp}
+              modelControls={inSession ? modelPicker : null}
               speechLocale={
                 inSession && !readonly ? (
                   <SpeechLocalePicker
@@ -201,6 +238,7 @@ export function ChatApp() {
                       state.pendingSpeechLocale,
                       true
                     )}
+                    disabled={readonly}
                     onChange={(locale) => void applySpeechLocale(locale)}
                   />
                 ) : null
@@ -288,8 +326,14 @@ export function ChatApp() {
                               state.pendingSpeechLocale,
                               false
                             )}
+                            models={state.modelCatalog}
+                            defaultModelKey={state.modelCatalogDefaultKey}
+                            modelValue={modelValue}
+                            effortValue={effortValue}
                             onSelect={selectAgent}
                             onSpeechLocaleChange={(locale) => void applySpeechLocale(locale)}
+                            onModelChange={changeModel}
+                            onEffortChange={(effort) => void applySessionModel(modelValue, effort)}
                           />
                         </div>
                       )

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AgentDescriptor, CatalogItem } from "../services/api";
+import type { AgentDescriptor, CatalogItem, ModelDescriptor, SessionModelSelection } from "../services/api";
 import type { PendingAttachment } from "../services/attachments";
 import { sessionErrorFromMessage, sessionErrorFromWire, type SessionErrorView } from "../features/chat/sessionError";
 
@@ -73,6 +73,13 @@ export type SessionView = {
   speechLocaleSource: string | null;
   speechLocaleOverride: string | null;
   pendingSpeechLocale: string | null;
+  pendingModelKey: string | null;
+  pendingReasoningEffort: string | null;
+  sessionModelKey: string | null;
+  sessionModelDisplayName: string | null;
+  sessionModelSource: string | null;
+  sessionModelEffort: string | null;
+  sessionModelId: string | null;
   sttTransport: "serverAudio" | "clientTranscript" | null;
   ttsTransport: "serverAudio" | "clientSpeech" | null;
   mode: "text" | "voice";
@@ -117,6 +124,13 @@ export const emptySession = (): SessionView => ({
   speechLocaleSource: null,
   speechLocaleOverride: null,
   pendingSpeechLocale: null,
+  pendingModelKey: "default",
+  pendingReasoningEffort: null,
+  sessionModelKey: null,
+  sessionModelDisplayName: null,
+  sessionModelSource: null,
+  sessionModelEffort: null,
+  sessionModelId: null,
   sttTransport: null,
   ttsTransport: null,
   mode: "text",
@@ -170,6 +184,56 @@ function speechLocaleFieldsFromPayload(
   };
 }
 
+function modelFieldsFromPayload(
+  payload: Record<string, unknown>
+): Pick<
+  SessionView,
+  "sessionModelKey" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionModelId"
+> {
+  const capabilities = (payload.capabilities ?? {}) as Record<string, unknown>;
+  return modelFieldsFromRecord((capabilities.model ?? payload.model ?? {}) as Record<string, unknown>);
+}
+
+export function modelFieldsFromSelection(
+  model: SessionModelSelection | null | undefined
+): Pick<
+  SessionView,
+  "sessionModelKey" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionModelId"
+> {
+  if (!model) {
+    return {
+      sessionModelKey: null,
+      sessionModelDisplayName: null,
+      sessionModelSource: null,
+      sessionModelEffort: null,
+      sessionModelId: null
+    };
+  }
+
+  return {
+    sessionModelKey: model.catalogKey,
+    sessionModelDisplayName: model.displayName,
+    sessionModelSource: model.selectionSource,
+    sessionModelEffort: model.reasoningEffort ?? null,
+    sessionModelId: model.modelId ?? null
+  };
+}
+
+function modelFieldsFromRecord(
+  model: Record<string, unknown>
+): Pick<
+  SessionView,
+  "sessionModelKey" | "sessionModelDisplayName" | "sessionModelSource" | "sessionModelEffort" | "sessionModelId"
+> {
+  return {
+    sessionModelKey: asString(model.catalogKey) || null,
+    sessionModelDisplayName: asString(model.displayName) || null,
+    sessionModelSource: asString(model.selectionSource) || null,
+    sessionModelEffort: asString(model.reasoningEffort) || null,
+    sessionModelId: asString(model.modelId) || null
+  };
+}
+
 function transportsFromPayload(payload: Record<string, unknown>): {
   sttTransport: SessionView["sttTransport"];
   ttsTransport: SessionView["ttsTransport"];
@@ -203,6 +267,10 @@ function nextOutputState(eventType: string, liveResponseId: string | null, curre
   }
 
   return isInFlightOutput(current) ? "idle" : current;
+}
+
+export function isSessionModelBusy(state: Pick<SessionView, "liveResponseId" | "outputState">): boolean {
+  return state.liveResponseId != null || isInFlightOutput(state.outputState);
 }
 
 export function isReadonlySession(state: Pick<SessionView, "sessionId" | "status">): boolean {
@@ -327,6 +395,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         voiceAvailable: Boolean(agent.voiceAvailable),
         conversationLanguage: asString(agent.language) || null,
         ...speechLocaleFieldsFromPayload(payload, asString(agent.language) || null),
+        ...modelFieldsFromPayload(payload),
         ...transportsFromPayload(payload),
         mode: asString(payload.mode) === "voice" ? "voice" : "text",
         pendingMode: payload.pendingMode == null ? null : asString(payload.pendingMode) === "voice" ? "voice" : "text",
@@ -550,6 +619,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
 export type SessionStore = SessionView & {
   agents: AgentDescriptor[];
   selectedAgentId: string;
+  modelCatalog: ModelDescriptor[];
+  modelCatalogDefaultKey: string | null;
   catalogItems: CatalogItem[];
   catalogNextCursor: string | null;
   catalogHasMore: boolean;
@@ -582,5 +653,7 @@ export const useSessionStore = create<SessionStore>(() => ({
   ...emptySession(),
   agents: [],
   selectedAgentId: "examiner",
+  modelCatalog: [],
+  modelCatalogDefaultKey: null,
   ...emptyCatalog()
 }));

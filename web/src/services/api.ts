@@ -14,6 +14,37 @@ export type HealthResponse = {
   protocolVersion: number;
 };
 
+export type SessionModelChoice = {
+  key?: string | null;
+  reasoningEffort?: string | null;
+};
+
+export type SessionModelSelection = {
+  catalogKey: string;
+  displayName: string;
+  selectionSource: string;
+  reasoningEffort?: string | null;
+  modelId?: string | null;
+};
+
+export type ModelDescriptor = {
+  key: string;
+  displayName: string;
+  tools: boolean;
+  vision: boolean;
+  structuredOutput: boolean;
+  reasoning: boolean;
+  supportedReasoningEfforts: string[];
+  defaultReasoningEffort?: string | null;
+  contextCategory?: string | null;
+  costCategory?: string | null;
+};
+
+export type ModelCatalog = {
+  defaultKey: string;
+  models: ModelDescriptor[];
+};
+
 export type SessionResponse = {
   sessionId: string;
   agentId: string;
@@ -25,6 +56,7 @@ export type SessionResponse = {
   pauseReason?: string | null;
   lifecycleStatus?: string | null;
   speechLocale?: { effective?: string; source?: string; override?: string | null } | null;
+  model?: SessionModelSelection | null;
 };
 
 export type HistoryPage = {
@@ -159,15 +191,28 @@ export async function getHealth(): Promise<HealthResponse> {
   return (await response.json()) as HealthResponse;
 }
 
+export async function listModels(): Promise<ModelCatalog> {
+  const response = await ownerFetch("/api/v2/models");
+  if (!response.ok) {
+    throw new Error("Unable to load models.");
+  }
+
+  return (await response.json()) as ModelCatalog;
+}
+
 export async function createSession(
   agentId: string,
   agentVersion?: number,
   mode = "text",
-  speechLocale?: string | null
+  speechLocale?: string | null,
+  model?: SessionModelChoice | null
 ): Promise<SessionResponse> {
   const body: Record<string, unknown> = { agentId, agentVersion, mode };
   if (speechLocale) {
     body.speechLocale = speechLocale;
+  }
+  if (model) {
+    body.model = model;
   }
 
   const response = await ownerFetch("/api/v2/sessions", {
@@ -177,6 +222,30 @@ export async function createSession(
   });
   if (!response.ok) {
     throw new Error("Unable to create a session.");
+  }
+
+  return (await response.json()) as SessionResponse;
+}
+
+export async function setSessionModel(
+  sessionId: string,
+  model: SessionModelChoice
+): Promise<SessionResponse> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/model`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(model)
+  });
+  if (!response.ok) {
+    let message = "Unable to update the model.";
+    try {
+      const problem = (await response.json()) as { title?: string; detail?: string };
+      message = problem.detail?.trim() || problem.title?.trim() || message;
+    } catch {
+      // keep fallback
+    }
+
+    throw new Error(message);
   }
 
   return (await response.json()) as SessionResponse;

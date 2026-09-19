@@ -507,6 +507,27 @@ body,
   width: min(12rem, 100%);
 }
 
+.model-picker {
+  min-width: 0;
+}
+
+.model-picker-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.model-picker-control {
+  flex: 1 1 12rem;
+  min-width: 0;
+  width: min(14rem, 100%);
+}
+
+.model-picker-effort {
+  flex: 0 1 8rem;
+  min-width: 0;
+  width: min(8rem, 100%);
+}
+
 .session-rail {
   display: flex;
   flex-direction: column;

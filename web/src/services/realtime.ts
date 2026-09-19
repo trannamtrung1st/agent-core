@@ -2,10 +2,10 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microso
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, isReadonlySession, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
+import { applyServerEvent, emptySession, hasControlSequenceGap, isReadonlySession, isSessionModelBusy, modelFieldsFromSelection, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, reopenSession, setSpeechLocale } from "./api";
+import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listModels, reopenSession, setSessionModel, setSpeechLocale } from "./api";
 import { loadNewestHistoryPage, loadOlderHistoryPage, beginSessionHistory } from "./sessionHistory";
 import {
   abortPendingAttachment,
@@ -1726,10 +1726,12 @@ export async function bootstrap(): Promise<string> {
 }
 
 async function bootstrapInner(): Promise<string> {
-  const [agents, health] = await Promise.all([listAgents(), getHealth()]);
+  const [agents, health, models] = await Promise.all([listAgents(), getHealth(), listModels()]);
   useSessionStore.setState({
     agents,
-    selectedAgentId: agents[0]?.id ?? "examiner"
+    selectedAgentId: agents[0]?.id ?? "examiner",
+    modelCatalog: models.models,
+    modelCatalogDefaultKey: models.defaultKey
   });
   await refreshCatalog(true);
   await applyRouteFromLocation();
@@ -1805,7 +1807,10 @@ export async function startConversation(): Promise<boolean> {
         throw new Error("Unable to create a session.");
       }
 
-      const created = await createSession(agent.id, agent.version, "text", snapshot.pendingSpeechLocale);
+      const created = await createSession(agent.id, agent.version, "text", snapshot.pendingSpeechLocale, {
+        key: snapshot.pendingModelKey,
+        reasoningEffort: snapshot.pendingReasoningEffort
+      });
       await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
@@ -1875,6 +1880,37 @@ export async function applySpeechLocale(locale: string | null): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update the speech locale.";
+    useSessionStore.setState({
+      error: message,
+      sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
+      errorFatal: false
+    });
+  }
+}
+
+export async function applySessionModel(key: string, reasoningEffort: string | null): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (isReadonlySession(snapshot) || isSessionModelBusy(snapshot)) {
+    return;
+  }
+
+  if (!snapshot.sessionId) {
+    useSessionStore.setState({ pendingModelKey: key, pendingReasoningEffort: reasoningEffort });
+    return;
+  }
+
+  try {
+    const view = await setSessionModel(snapshot.sessionId, { key, reasoningEffort });
+    useSessionStore.setState({
+      pendingModelKey: key,
+      pendingReasoningEffort: reasoningEffort,
+      ...modelFieldsFromSelection(view.model),
+      error: null,
+      sessionError: null,
+      errorFatal: false
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update the model.";
     useSessionStore.setState({
       error: message,
       sessionError: sessionErrorFromMessage(message, { category: "Validation", code: "ValidationError", fatal: false }),
@@ -2099,6 +2135,7 @@ async function showPausedSession(
       lifecycleStatus: view.lifecycleStatus ?? "paused",
       pauseReason: view.pauseReason ?? null,
       lastServerSequence: view.lastEntrySequence ?? 0,
+      ...modelFieldsFromSelection(view.model),
       error: null,
       errorFatal: false
     });
@@ -2187,6 +2224,7 @@ async function showEndedSession(
       status: "ended",
       lifecycleStatus: view.lifecycleStatus ?? "ended",
       lastServerSequence: view.lastEntrySequence ?? 0,
+      ...modelFieldsFromSelection(view.model),
       error: null,
       errorFatal: false
     });

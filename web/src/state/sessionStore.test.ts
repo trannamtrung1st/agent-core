@@ -264,6 +264,36 @@ describe("applyServerEvent", () => {
     expect(state.speechLocaleOverride).toBe("vi-VN");
   });
 
+  it("reads session.ready model selection from capabilities", () => {
+    const state = applyServerEvent(
+      emptySession(),
+      event({
+        type: "session.ready",
+        sequence: 1,
+        payload: {
+          mode: "text",
+          pendingMode: null,
+          status: "attached",
+          agent: { name: "Alex", voiceAvailable: true, language: "en" },
+          history: [],
+          capabilities: {
+            model: {
+              catalogKey: "scripted-beta",
+              displayName: "Scripted Beta",
+              selectionSource: "user",
+              reasoningEffort: null,
+              modelId: "scripted-beta"
+            }
+          }
+        }
+      })
+    );
+    expect(state.sessionModelKey).toBe("scripted-beta");
+    expect(state.sessionModelDisplayName).toBe("Scripted Beta");
+    expect(state.sessionModelSource).toBe("user");
+    expect(state.sessionModelId).toBe("scripted-beta");
+  });
+
   it("applies mute from session.state.changed without dropping voice mode", () => {
     const ready = applyServerEvent(
       emptySession(),

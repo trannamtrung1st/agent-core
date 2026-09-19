@@ -722,6 +722,118 @@ describe("ChatApp accessibility", () => {
   });
 });
 
+describe("ChatApp model selection", () => {
+  afterEach(() => {
+    act(() => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [],
+        selectedAgentId: "examiner",
+        modelCatalog: [],
+        modelCatalogDefaultKey: null
+      });
+    });
+  });
+
+  const models = [
+    {
+      key: "scripted-alpha",
+      displayName: "Scripted Alpha",
+      tools: true,
+      vision: false,
+      structuredOutput: false,
+      reasoning: true,
+      supportedReasoningEfforts: ["low", "medium", "high"],
+      defaultReasoningEffort: "medium"
+    },
+    {
+      key: "scripted-beta",
+      displayName: "Scripted Beta",
+      tools: true,
+      vision: false,
+      structuredOutput: false,
+      reasoning: false,
+      supportedReasoningEfforts: [],
+      defaultReasoningEffort: null
+    }
+  ];
+
+  it("starts a new chat on Default and restores a persisted session model", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner",
+        modelCatalog: models,
+        modelCatalogDefaultKey: "scripted-alpha"
+      });
+    });
+    const view = await act(async () => renderChat());
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Reasoning" })).toBeInTheDocument();
+
+    await act(async () => {
+      useSessionStore.setState({
+        sessionId: "s-model",
+        connection: "ready",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        sessionModelKey: "scripted-beta",
+        sessionModelDisplayName: "Scripted Beta",
+        sessionModelSource: "user",
+        sessionModelEffort: null
+      });
+      rerenderChat(view);
+    });
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Reasoning" })).not.toBeInTheDocument();
+  });
+
+  it("disables model editing while a response is running", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s-busy",
+        connection: "ready",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        liveResponseId: "r1",
+        outputState: "agentGenerating",
+        modelCatalog: models,
+        modelCatalogDefaultKey: "scripted-alpha",
+        sessionModelKey: "scripted-alpha",
+        sessionModelEffort: "medium",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Reasoning" })).toBeDisabled();
+  });
+
+  it("does not allow model editing on an ended session", async () => {
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        sessionId: "s-ended",
+        connection: "idle",
+        status: "ended",
+        agentName: "Alex",
+        agentRole: "Examiner",
+        modelCatalog: models,
+        modelCatalogDefaultKey: "scripted-alpha",
+        sessionModelKey: "scripted-alpha",
+        sessionModelEffort: "medium",
+        agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+  });
+});
+
 describe("ChatApp narrow session drawer", () => {
   const matchMedia = window.matchMedia;
 
