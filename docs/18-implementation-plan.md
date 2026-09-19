@@ -33,7 +33,7 @@ The verified MVP generic UI is Ant Design v6 ([Technology Decisions](10-technolo
 - **Tests:** Complete example definitions deserialize/validate; missing aliases/version failures; exact prompt sections; current turn once; independent simultaneous sessions; deterministic snapshot revisions.
 - **Acceptance criteria:** Examiner/support differ by definition only; no vendor DTO crosses Application; mutable state has a single owner and synthetic scripts work with both.
 - **Explicit non-goals:** Agent editor, YAML, tools, native realtime implementation or model-assisted summarization.
-- **Status:** Complete. Definitions load from `agents/examiner.json` and `agents/customer-support.json` (M2 gate). Shipped fixtures also include `agents/compliance.json` from post-MVP role environments and `agents/general-assistant.json` for open-ended harness checks (including hosted display/speech probes). `PromptContextBuilder` + `DefaultAgentBrain` drive the same `SessionRuntime` mailbox for both identities. See [Milestone 2 verification](reports/m02-verification.md).
+- **Status:** Complete. Definitions load from `agents/examiner.json` and `agents/customer-support.json` (M2 gate). Shipped fixtures also include `agents/compliance.json` from post-MVP role environments and `agents/general-assistant.json` for open-ended harness checks. Speech/display remain runtime response capabilities, not definition instructions. `PromptContextBuilder` + `DefaultAgentBrain` drive the same `SessionRuntime` mailbox for both identities. See [Milestone 2 verification](reports/m02-verification.md).
 
 ## Milestone 3 — OpenAI-compatible streaming LLM and OpenRouter configuration
 

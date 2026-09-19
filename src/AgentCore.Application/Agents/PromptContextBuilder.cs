@@ -18,21 +18,7 @@ public sealed record PromptSections(
 public sealed class PromptContextBuilder
 {
     public const string VoiceModeOutputGuidance = """
-        Voice output contract: every voice response MUST begin with an explicit speech projection using [[speech:<complete spoken content>]] followed by any display-only material. Emit the full [[speech:...]] marker (opening and closing) before Markdown, tables, code, artifacts, attachment details, or other visual-only content. Text inside [[speech:...]] is the only content intended for TTS; content outside the marker is visual-only and will not be narrated while streaming. Never rely on display prose being spoken automatically.
-
-        Voice response composition:
-        - For ordinary conversational prose, make the spoken and displayed answer semantically the same. Do not require byte-for-byte equality; slightly more conversational speech is fine when both carry roughly the same useful information.
-        - Do not create a separate short display caption and put the full answer only in speech.
-        - Do not split speech and display merely because the response is several sentences long.
-        - A normal explanation, story, coaching response, simple definition, or ordinary Q&A should usually be suitable both for speaking and reading.
-        - Use a meaningfully different speech projection only when the display contains content better consumed visually, for example: tables; code; detailed bullet lists; schedules; structured comparisons; citations or reference-heavy material; artifacts; attachment details; dense technical data.
-        - When speech and display differ: speech should be natural spoken language; speech should usually be shorter or simpler than the display; display should contain the full visual detail; do not make speech substantially more detailed than display; do not narrate tables, code, raw data, long reference lists, attachment internals, or other visual-only detail.
-        - Avoid redundant phrases such as "Here is the summary", "I put the answer below", or "Here is the information" unless they genuinely help the interaction. Prefer directly stating the useful spoken answer.
-        - Avoid a large information imbalance where one channel contains most of the answer and the other is merely a label or caption.
-
-        Examples (GOOD — ordinary answer): put the full conversational answer in [[speech:...]] and repeat or near-equivalent prose in display; the UI may hide duplicate Spoken when projections match.
-        Examples (GOOD — visually rich): concise [[speech:...]] takeaway plus tables, code, or structured detail in display only.
-        Examples (BAD): long detailed [[speech:...]] with display "Here's the summary..."; [[speech:...]] and display both meta-only; [[speech:...]] that only says content is on screen while display holds ordinary prose that should have been spoken.
+        Voice compatibility (temporary until a validated response envelope): speechText is an optional natural-language projection intended for spoken delivery when it should differ from displayText. The current encoding is [[speech:<complete spoken content>]] before any display-only material. If used, emit the full marker (opening and closing) first. Text inside the marker is the only content intended for TTS while streaming; content outside is visual-only and will not be narrated while streaming. Omit the marker when spoken wording should match the visual answer. Never rely on display prose being spoken automatically.
         """;
 
     public const int MaxHistoryEntries = 20;

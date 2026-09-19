@@ -23,10 +23,16 @@ public sealed class AgentDefinitionStoreTests
         Assert.Equal("Riley", general!.Identity.Name);
         Assert.False(general.InitiativePolicy.Enabled);
         Assert.Equal(4096, general.ConversationPolicy.MaxOutputTokens);
+        Assert.DoesNotContain("[[speech:", general.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("TTS", general.SystemInstructions, StringComparison.Ordinal);
+        Assert.All(general.Goals, goal => Assert.DoesNotContain("[[speech:", goal, StringComparison.Ordinal));
         Assert.Equal(1, examiner.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support.InitiativePolicy.MaxPerSilencePeriod);
         Assert.Equal(0, compliance!.InitiativePolicy.ConsecutiveCap);
+        Assert.DoesNotContain("[[speech:", examiner.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", support!.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", compliance.SystemInstructions, StringComparison.Ordinal);
         Assert.Null(missing);
     }
 

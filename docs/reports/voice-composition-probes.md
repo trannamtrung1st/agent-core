@@ -1,15 +1,14 @@
-# Voice composition manual probes (`general-assistant`)
+# Voice probes (`general-assistant`)
 
-Deterministic prompt tests in `PromptContextBuilderTests` assert the Voice system guidance text. These manual probes exercise **model composition** on a Real or hosted profile with agent **`general-assistant`**. They do not replace runtime speech-contract tests.
+`general-assistant` is a **neutral identity** (goals and system instructions only). It must not contain `[[speech:]]`, TTS, or UI-format instructions. Speech/display are runtime response capabilities; P2B will expose them as a validated envelope. Deterministic coverage is `PromptContextBuilderTests` (short Voice compatibility text only) plus `VoiceRealtimeRegressionTests` (projection ordering, no display-to-TTS leakage, completion fallback).
 
-Record: session in **Voice** mode; whether **Spoken** appears; whether speech and display are equivalent or meaningfully split; any meta-only display lines.
+Manual Real-profile checks, if needed, confirm runtime behavior rather than composition style:
 
-| # | User prompt | Expected composition |
-| --- | --- | --- |
-| 1 | What is a samurai? | Ordinary conversational answer; speech and display same or near-equivalent; no useless “Here’s the summary” display-only line. |
-| 2 | Compare SQLite, PostgreSQL, and MySQL in a table. | Concise spoken takeaway; detailed comparison table on screen; table body not narrated in speech. |
-| 3 | Tell me a short story. | Story spoken in full; do not put the story only on screen with a short spoken summary. |
-| 4 | Explain this code. (with a small snippet attached or pasted) | Conversational spoken explanation; code and fine detail remain visual. |
-| 5 | Give me a detailed weekly schedule. | Brief spoken overview; schedule detail stays in structured/visual display. |
+| Check | Expected |
+| --- | --- |
+| Voice turn with no speech marker | Display streams after completion fallback; TTS uses display-derived speech, not speculative streaming narration. |
+| Voice turn with complete `[[speech:...]]` first | Live `agent.speech.projection`; TTS uses that text; later display does not enter TTS. |
+| Equivalent speech and display | No duplicate Spoken section. |
+| Meaningfully different `speechText` | Spoken section appears above display. |
 
-Pass criteria per probe: TTS uses explicit `[[speech:...]]` (or completion fallback only if the model omits the marker); no speculative display narration while streaming; composition matches the table above. Failures are prompt/model issues, not transport bugs.
+Do not add agent-definition heuristics or expand `VoiceModeOutputGuidance` with GOOD/BAD composition examples.

@@ -6,7 +6,7 @@ P1A/P1B/P1C are **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceac
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
-Browser STT/TTS is now a usable low-cost development path. Hosted OpenAI TTS and OpenAI-compatible batch STT are selectable. Realtime OpenAI STT remains deferred and unselectable. The `general-assistant` harness identity now exists specifically for neutral display/speech probes and has initiative disabled.
+Browser STT/TTS is now a usable low-cost development path. Hosted OpenAI TTS and OpenAI-compatible batch STT are selectable. Realtime OpenAI STT remains deferred and unselectable. The `general-assistant` harness identity exists for open-ended checks with initiative disabled. Speech/display are runtime response capabilities, not persona instructions.
 
 The current free-form rich-response parser plus runtime speech projection is acceptable for now. Do **not** start a structured-output migration only for architectural cleanliness. Move to a validated model response contract when the response/progress model is intentionally changed, so the migration happens once rather than being rewritten twice.
 
@@ -219,9 +219,11 @@ The system needs a first-class distinction between transient progress and durabl
 
 ### P2B — Validated model response envelope
 
-Replace free-form inline control markers when the response contract is next intentionally changed.
+Replace free-form inline control markers when the response contract is next intentionally changed. **P2B has not started.** Current `[[speech:]]` / related markers are compatibility debt.
 
-Target conceptual contract:
+Speech/display are **Agent Core response capabilities**, not agent persona. Agent definitions must not mention TTS, UI rendering, or marker syntax. Runtime and the provider generation contract own how those fields are represented.
+
+Target conceptual contract (schema may evolve with P2A):
 
 ```text
 displayText: string
@@ -229,7 +231,28 @@ speechText?: string
 blocks?: [...]
 ```
 
-The exact schema may evolve with P2A; do not freeze it prematurely.
+Field semantics:
+
+- `displayText`: primary visual/conversational response (required).
+- `speechText`: optional natural-language projection when spoken wording should differ from `displayText`. Not mandatory because the session is Voice.
+- `blocks`: optional richer visual output.
+
+Runtime semantics after the validated envelope exists:
+
+- **Text:** `displayText` required; `speechText` may be absent; no TTS.
+- **Voice:** `displayText` remains the visual response; if `speechText` exists it is the authoritative TTS input; if absent, `displayText` is the completion-time spoken fallback from the validated contract (not guessed from partial marker text). Rich blocks, tables, code, and attachment payloads must not leak into TTS.
+- Generation is configured from provider-neutral capabilities (structured output support, speech delivery, rich blocks), not agent-specific prompt text.
+- Conversation language is independent of speech/display capability. Both projections of one response use the same conversation language unless the task is bilingual/translation.
+
+UI semantics (already observed; keep):
+
+- `displayText` always renders normally.
+- Absent `speechText` → no Spoken section.
+- Normalized `speechText` equal to `displayText` → no duplicate Spoken section.
+- Meaningfully different `speechText` → Spoken as secondary content.
+- No fuzzy semantic dedupe.
+
+Until P2B ships, preserve current Voice safety: explicit marker projection is the sole streaming TTS source when present; live `agent.speech.projection`; display gated until projection or completion fallback; malformed-order regressions. Do not add more marker-specific architecture or expand `PromptContextBuilder.VoiceModeOutputGuidance` with composition heuristics.
 
 - [ ] Introduce a provider-neutral validated generation contract.
 
@@ -241,26 +264,17 @@ The exact schema may evolve with P2A; do not freeze it prematurely.
   - speech segmentation/delivery;
   - persistence coordinates.
 
-  The model owns:
-  - what should be displayed;
-  - optional intentionally different speech text;
-  - requested rich blocks within allowed types.
+  The model owns filling available output fields. Do not teach each agent when to use speech versus display.
 
-  Intended Voice semantics (observed interim `[[speech:]]` protocol until P2B ships):
-  - ordinary turns may use equivalent or near-equivalent `displayText` and `speechText`;
-  - visually rich turns may use concise `speechText` plus richer `displayText` / blocks;
-  - explicit `speechText` is authoritative for Voice TTS;
-  - compatibility fallback exists only when the model omits speech projection; do not reintroduce speculative display-to-TTS streaming.
+- [ ] Preserve a fallback path for models/providers that do not reliably support structured output (temporary compatibility parser only).
 
-- [ ] Preserve a fallback path for models/providers that do not reliably support structured output.
-
-- [ ] In Voice mode, explicit `speechText` is the authoritative TTS source. Providers/models that omit it may use a bounded completion-time compatibility fallback; never speculatively narrate display prose while the response is streaming. Text mode continues to treat display text as the normal conversational projection. Prompt-level composition guidance (same/near-equivalent speech and display for ordinary prose; split channels mainly for visual structure) lives in `PromptContextBuilder.VoiceModeOutputGuidance`; manual probes: [voice-composition-probes.md](docs/reports/voice-composition-probes.md).
+- [ ] In Voice mode, explicit `speechText` is the authoritative TTS source. When it is omitted, use validated `displayText` as the spoken fallback after the response is complete; never speculatively narrate display prose while streaming. Text mode continues to treat display text as the normal conversational projection. Marker encoding lives only in `PromptContextBuilder.VoiceModeOutputGuidance` as compatibility text.
 
 - [ ] Remove `[[speech:]]` / related inline markers only after compatibility and persistence migration are covered.
 
-- [ ] Do not add more `SpokenOutput` heuristics to solve model-intent problems that belong in the structured contract.
+- [ ] Do not add more `SpokenOutput` heuristics or Voice prompt composition examples to solve model-intent problems that belong in the structured contract.
 
-- [ ] Use `general-assistant` for neutral hosted display/speech probes.
+- [ ] Use `general-assistant` as a neutral identity for hosted probes; do not put transport syntax in that definition.
 
 ### P2C — Preferred-name / personalization boundary
 
@@ -744,7 +758,7 @@ Keep this as a compact orientation section, not a second roadmap.
 - [x] Browser-STT half-duplex hold during agent output, restart stitching, endpointing, durable finals, and reconnect recovery.
 - [x] Full conversational speech projection with persisted derived `SpeechText` when spoken coordinates differ from display.
 - [x] Separate Voice mode and Mute controls.
-- [x] `general-assistant` harness identity for neutral display/speech probes with initiative disabled.
+- [x] `general-assistant` harness identity for open-ended checks with initiative disabled (no speech/display transport syntax in the definition).
 - [x] Silent Browser STT listening no longer falsely exhausts the recognition restart limit (`7fe5b166`).
 - [x] Interruption/barge-in and conservative spoken/heard handling.
 - [x] Ant Design v6 conversation-first UI.
