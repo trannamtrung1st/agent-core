@@ -403,6 +403,47 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted or ModelFailed);
     }
 
+    [LiveProviderFact]
+    public async Task OpenRouter_deepseek_v41_default_accepts_tool_choice()
+    {
+        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+        using var http = new HttpClient();
+        var model = new OpenAICompatibleLanguageModel(
+            http,
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "https://openrouter.ai/api/v1/",
+                ApiKey = key,
+                DefaultModel = "deepseek/deepseek-v4.1-flash",
+                Tools = true,
+                Vision = false,
+                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 60 }
+            });
+        var tools = new[]
+        {
+            new ModelToolDefinition(
+                ToolCatalog.KnowledgeRetrieve,
+                "Retrieve approved knowledge by identity.",
+                """{"type":"object","properties":{"identity":{"type":"string"}},"required":["identity"]}""")
+        };
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(
+                           new ModelRequest(
+                               Guid.NewGuid(),
+                               [new ModelMessage(ModelRole.User, "Call knowledge_retrieve with identity support-order-policy only.")],
+                               Tools: tools)))
+        {
+            events.Add(item);
+        }
+
+        Assert.DoesNotContain(events, item => item is ModelFailed failed && failed.Failure.Code == ProviderErrorCode.Authentication);
+        Assert.True(
+            events.Any(item => item is ModelToolCallEvent)
+            || events.Any(item => item is ModelCompleted),
+            "Expected a tool call or a normal completion from the pinned DeepSeek V4.1 model.");
+    }
+
     [Fact]
     public async Task Vision_false_returns_typed_unsupported_without_http()
     {

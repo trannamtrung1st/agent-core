@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-P1 stabilization tail reopened after post-freeze work through `271baf5` (catalog bulk delete, host contract). Prior verified repair on `15930985f54e2e6bf4019dd0d8040796883021c7` is not the current freeze HEAD. This pass fixes live pause/resume reactivation (recognition, idle, session deadline timer), resume persist-before-durable adoption, deferred live activation until resume persist succeeds, pending queued suffix dispatch on resume, explicit `deadlineAt` timezone validation, and bulk-delete navigation when the active chat is archived. **Re-run the full Synthetic/Compose gate on the resulting HEAD and only then record the new freeze SHA.** Live `synthetic.yml` run [35413785980](https://github.com/trannamtrung1st/agent-core/actions/runs/35413785980) on `4285c6c` failed at **Synthetic Playwright** (missing `data/agent-core.db` with InMemory host); `1593098` addressed that with a dedicated Playwright SQLite file. P2 has not started.
+P1A/P1B/P1C implementation is **freeze-ready** on `88cadd4` (lifecycle pause/resume/deadline, host `deadlineAt`, catalog bulk delete) plus follow-on Real-profile defaults and vision-test fixtures. **Do not record a new P1 freeze SHA until the full `synthetic.yml` + Compose gate is green on the exact HEAD being frozen.** Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` remains historical only. P2 has not started.
 
 The current baseline already includes the MVP, post-MVP phases A–H, persistent multi-session chat, attachments, rich responses, repeated initiative/deactivation, versioned role environments, session workspaces/artifacts, bounded typed tools, Docker `sandbox.run`, Synthetic full-duplex voice, the P0 conversation-lifecycle/UI stabilization work, and most of P1 replaceable speech.
 
@@ -16,6 +16,7 @@ The current free-form rich-response parser plus runtime speech projection is acc
 
 - [ ] Add proprietary license to the project.
 - [ ] Add tools that more assistant like, add more user info context (e.g, timezone, language, etc ...). [TBD]
+- [ ] Configure model default, or allow to switch model in UI/per request (stored decision per session). [TBD]
 
 ## P0 — Close the current stabilization tail, then freeze it again
 
@@ -51,7 +52,7 @@ This is a bounded verification/fix pass, not another voice redesign.
 
 ## P1 — Conversation and session ergonomics
 
-Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). P1A/P1B/P1C implementation is observed. **P1 freeze is pending** a full gate on the stabilization HEAD after the pause/resume and host-deadline fixes above (do not inherit verification from `1593098` or `271baf5`). Observed P1 replaceable speech (Browser/hosted STT/TTS independence) stays closed. Do not start P2.
+Authoritative contracts are in [Technology Decisions](docs/10-technology-decisions.md#decision-bounded-history-and-durable-lastentrysequence) and [Implementation Plan](docs/18-implementation-plan.md#follow-on-p1-history-lifecycle-and-multilingual-speech). **P1A/P1B/P1C: done** (code); **P1 freeze: pending** full Synthetic/Compose verification on the freeze candidate HEAD only. Observed P1 replaceable speech stays closed. Do not start P2.
 
 ### P1A — Lazy-load old chat history
 
