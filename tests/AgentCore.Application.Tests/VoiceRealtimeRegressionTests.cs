@@ -426,6 +426,8 @@ public sealed class VoiceRealtimeRegressionTests
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("explain");
         await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput);
+        await output.WaitForAsync(
+            item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("Architecture", StringComparison.Ordinal));
         var items = output.Items.ToList();
         var projectionIndex = items.FindIndex(item => item.Payload is SpeechProjectionOutput);
         var laterDisplayIndex = items.FindIndex(
