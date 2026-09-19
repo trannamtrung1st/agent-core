@@ -43,7 +43,7 @@ public sealed class SpeechConfigurationHostTests
             ["AgentCore:Profile"] = "Real",
             ["Providers:LanguageModels:primary-llm:Adapter"] = "OpenAICompatible",
             ["Providers:LanguageModels:primary-llm:BaseUrl"] = "https://openrouter.ai/api/v1/",
-            ["Providers:LanguageModels:primary-llm:DefaultModel"] = "openai/gpt-4o-mini-2024-07-18",
+            ["Providers:LanguageModels:primary-llm:DefaultModel"] = "deepseek/deepseek-v4-flash-0731:free",
             ["Providers:LanguageModels:primary-llm:ApiKey"] = "test-text-only",
             ["Providers:Speech:Recognition:Adapter"] = "OpenAI",
             ["Providers:Speech:Synthesis:Adapter"] = "OpenAI"

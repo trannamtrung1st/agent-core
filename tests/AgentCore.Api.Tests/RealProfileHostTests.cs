@@ -33,8 +33,8 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["Persistence__Provider"] = "InMemory";
         start.Environment["Providers__LanguageModels__primary-llm__Adapter"] = "OpenAICompatible";
         start.Environment["Providers__LanguageModels__primary-llm__BaseUrl"] = "https://openrouter.ai/api/v1/";
-        start.Environment["Providers__LanguageModels__primary-llm__DefaultModel"] = "openai/gpt-4o-mini-2024-07-18";
-        start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "true";
+        start.Environment["Providers__LanguageModels__primary-llm__DefaultModel"] = "deepseek/deepseek-v4-flash-0731:free";
+        start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "false";
         start.Environment["Providers__LanguageModels__primary-llm__Tools"] = "true";
         start.Environment["OPENROUTER_API_KEY"] = "test-key-not-for-live-calls";
         _process = await ProcessHostLauncher.StartApiAsync(start, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
