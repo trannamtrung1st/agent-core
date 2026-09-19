@@ -2,24 +2,43 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` at `0d118034bf12b2500912f653a79c8fdff6893b0c` (`0d11803`, 2026-09-19).
+Reviewed against `main` on 2026-09-19.
 
 Current roadmap:
 
 1. implement **P2A — first-class progress semantics**;
 2. implement **P2B — validated model response envelope**;
-3. evolve tools and external integrations;
-4. add context compaction and memory;
-5. add configurable triggers;
-6. add durable background work;
-7. productize the agent harness/admin lifecycle;
-8. evolve sandbox and multi-user infrastructure only when requirements justify it.
+3. close **P2E — multimodal/image input usability and capability handling**;
+4. evolve tools and external integrations;
+5. add context compaction and memory;
+6. add configurable triggers;
+7. add durable background work;
+8. productize the agent harness/admin lifecycle;
+9. evolve sandbox and multi-user infrastructure only when requirements justify it.
 
 P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`). Do not reopen P1 without a reproducible regression or a concrete new product requirement.
 
 P2D session model selection is implemented and remains closed.
 
 P2A/P2B have **not started**. The current implementation still uses the free-form `ResponseEnvelopeParser` / `[[speech:...]]` compatibility path, and `PromptContextBuilder.VoiceModeOutputGuidance` explicitly marks that mechanism as temporary until P2B.
+
+Current-turn image input already has substantial implementation and must not be redesigned from scratch:
+
+- image attachments are accepted and processed;
+- decoded image size is bounded;
+- metadata is stripped before model use;
+- Application already has provider-neutral `ModelContentPart`, `ModelTextContent`, and `ModelImageContent`;
+- current-turn image attachments can become `ModelImageContent`;
+- the OpenAI-compatible adapter maps image content to multimodal `image_url` content;
+- `ModelCapabilities` and `ModelDescriptor` already expose Vision capability;
+- `/api/v2/models` already exposes model vision capability;
+- the Real catalog currently marks:
+  - `deepseek-v41-flash` as `vision: false`;
+  - `gpt-4o-mini-2024-07-18` as `vision: true`;
+  - `openrouter-free` as `vision: false`;
+- `PngVisionRuntimeTests` already proves that a PNG attachment reaches a vision-enabled OpenAI-compatible model request.
+
+Therefore P2E is primarily a **capability/UX/correctness closure**, not a new multimodal architecture.
 
 The recent response/voice work is now part of the baseline:
 
@@ -53,6 +72,16 @@ Always keep this section even when there is no active work.
   - explicit user preferences.
 
   Do not infer durable personal facts from conversational guesses. Coordinate durable personalization with P2C/P4 rather than growing ad-hoc prompt fields.
+
+- [ ] Close current image-input usability under P2E.
+
+  Do not create a second multimodal abstraction. Reuse the existing:
+
+  - attachment store/processor;
+  - `ModelContentPart`;
+  - `ModelImageContent`;
+  - model `Vision` capability;
+  - OpenAI-compatible multimodal mapping.
 
 - [ ] Background responses / continuing work after leaving a session are tracked under P6.
 
@@ -163,6 +192,11 @@ Current contract includes:
   - `CompletionEvaluation`;
 - request/session-scoped reasoning effort;
 - catalog validation of allowed effort values;
+- model capabilities including:
+  - tools;
+  - vision;
+  - structured output;
+  - reasoning;
 - `GET /api/v2/models`;
 - model selection during session creation;
 - live session model mutation;
@@ -179,9 +213,20 @@ Shipped Real development/demo default:
 deepseek-v41-flash
 → deepseek/deepseek-v4.1-flash
 → reasoning effort: medium
+→ vision: false
 ```
 
-This is a development/demo default, not a production model recommendation.
+The Real catalog also contains:
+
+```text
+gpt-4o-mini-2024-07-18
+→ openai/gpt-4o-mini-2024-07-18
+→ vision: true
+```
+
+This is a development/demo catalog, not a production model recommendation.
+
+The fact that the default model is non-vision does **not** mean Agent Core lacks an image-input abstraction. Current-turn vision plumbing already exists. Product/capability closure belongs to P2E.
 
 Current UI rule:
 
@@ -190,15 +235,27 @@ Current UI rule:
 - terminal sessions are read-only;
 - paused/terminal headers do not duplicate Model controls.
 
-Keep P2D closed.
+Keep P2D closed. Do not reopen model-selection architecture merely to finish image UX.
 
 ---
 
-# P2 — Response, progress, and structured generation contract
+# P2 — Response, progress, structured generation, and multimodal input contract
 
 This is the next architectural phase.
 
+Preferred execution order:
+
+```text
+P2A → P2B → P2E
+```
+
+P2C personalization is largely independent and can follow when durable personalization becomes useful.
+
+P2D is already completed and frozen.
+
 Implement **P2A before P2B** so progress semantics exist before the final generation contract is frozen.
+
+P2E should reuse the existing multimodal foundations rather than create a second request format.
 
 ---
 
@@ -645,6 +702,266 @@ P2B is done when:
 
 ---
 
+## P2E — Multimodal image-input capability closure
+
+The architecture already contains the core image-input path.
+
+Do **not** introduce another image-specific language-model interface.
+
+Existing foundations:
+
+- [x] session-owned image attachments;
+- [x] image signature/content-type classification;
+- [x] bounded decoded-pixel validation;
+- [x] image metadata stripping;
+- [x] provider-neutral `ModelContentPart`;
+- [x] `ModelTextContent`;
+- [x] `ModelImageContent`;
+- [x] current-turn image → model content-part projection;
+- [x] OpenAI-compatible `image_url` mapping;
+- [x] model-level Vision capability;
+- [x] catalog/API Vision capability;
+- [x] a Real catalog entry that supports vision;
+- [x] deterministic application coverage proving PNG image bytes reach a vision-enabled request.
+
+The current product gap is mostly that capability is not presented/enforced early enough.
+
+### Capability-aware admission
+
+- [ ] Detect whether the pending/current user turn contains one or more image attachments before starting model generation.
+
+- [ ] Resolve the selected session model and validate its Vision capability before generation.
+
+For an image turn with a non-vision model:
+
+- do not send the model request;
+- do not silently drop the image;
+- do not pretend the model saw it;
+- do not automatically switch the user's selected model;
+- return a clear non-fatal capability error.
+
+Example product meaning:
+
+```text
+This model cannot read images. Choose a vision-capable model to send this attachment.
+```
+
+Keep provider/model wire details out of the error.
+
+- [ ] Keep attachment upload/storage independent from model capability.
+
+It is valid to upload/stage an image before choosing a model.
+
+Capability validation belongs to the point where the attachment is about to become model input.
+
+### Model picker / composer UX
+
+- [ ] Surface Vision capability in the model picker.
+
+At minimum, users must be able to distinguish:
+
+- vision-capable;
+- non-vision.
+
+Do not turn the picker into a dense provider-debug surface.
+
+- [ ] When the composer contains image attachments and the current model lacks Vision:
+
+  - show an understandable incompatibility state;
+  - prevent sending until resolved;
+  - keep the draft and attachments intact;
+  - allow the user to select a vision-capable model.
+
+- [ ] Re-evaluate compatibility immediately when:
+
+  - model selection changes;
+  - an image is added;
+  - an image is removed;
+  - a pending new-chat model choice changes.
+
+- [ ] Do not automatically choose GPT-4o mini or any other model solely because an image was attached.
+
+Model choice remains explicit unless a future agent/session policy defines capability-based routing.
+
+### Image encoding correctness
+
+- [ ] Make sanitized image bytes and declared model-input content type agree.
+
+Current processing may transcode formats such as GIF/WebP through a PNG encoder while retaining the original attachment content type.
+
+The model input must never claim:
+
+```text
+image/webp
+```
+
+while carrying PNG bytes, or equivalent mismatches.
+
+Choose one clear rule:
+
+1. preserve the original encoding when it remains safe and supported; or
+2. normalize sanitized model-input images to a canonical format such as PNG/JPEG and update the `ModelImageContent.ContentType` accordingly.
+
+Prefer deterministic normalization over format-specific complexity.
+
+- [ ] Add explicit tests for:
+
+  - PNG;
+  - JPEG;
+  - WebP;
+  - GIF, if accepted as an input type.
+
+If GIF animation is not intentionally supported, document that only the sanitized/static projection is used.
+
+### Provider boundary
+
+- [ ] Keep `ModelImageContent` provider-neutral.
+
+Provider adapters may map it to:
+
+- OpenAI/OpenRouter `image_url`;
+- another provider's native image block;
+- a future upload/file reference mechanism.
+
+Application must not depend on those formats.
+
+- [ ] Keep image bytes out of prompts/logging/telemetry.
+
+Telemetry may record bounded metadata such as:
+
+- image present;
+- content type;
+- byte-size bucket;
+- capability accepted/rejected.
+
+Do not log base64 payloads or raw image bytes.
+
+### Model capability integrity
+
+- [ ] Treat catalog capabilities as trusted backend configuration.
+
+The browser may display capability metadata, but it does not declare whether a model supports Vision.
+
+- [ ] Keep runtime/provider capability validation as a second defensive boundary.
+
+Even after application preflight, the adapter should continue rejecting image parts if its resolved model does not support Vision.
+
+- [ ] Add startup/configuration validation where useful so contradictory catalog/provider capability declarations fail clearly.
+
+Avoid configuration where:
+
+```text
+catalog.vision = true
+provider.vision = false
+```
+
+silently behaves unpredictably.
+
+### Current-turn versus historical image access
+
+Current-turn image inspection is the first P2E requirement.
+
+Today `attachments.read` deliberately returns metadata for image files rather than putting binary image bytes into a tool result. Do not base64 images into ordinary textual tool results.
+
+- [ ] Define historical image re-inspection deliberately.
+
+Possible future-safe approaches include:
+
+- a typed tool result that can contribute `ModelContentPart`;
+- bounded rehydration of explicitly referenced session images;
+- another provider-neutral multimodal context mechanism.
+
+Do **not**:
+
+- put raw/base64 image data in model-visible text;
+- automatically replay every historical image on every turn;
+- repeatedly pay image-token cost merely because an old image exists in the session.
+
+Historical image re-inspection may be implemented with P3 tool evolution if that produces the cleaner typed-tool-result boundary.
+
+It does **not** block the first P2E closure where newly attached images work reliably in the current user turn.
+
+### Supported scope
+
+First closure target:
+
+```text
+user uploads image
+→ attachment is validated/sanitized
+→ compatible vision model is selected
+→ current user turn contains ModelImageContent
+→ provider adapter sends multimodal request
+→ assistant can answer about the image
+```
+
+Do not add OCR as the primary image architecture.
+
+A multimodal model should receive the image natively when Vision is available.
+
+OCR/document-image extraction may be added later as a separate degraded/tool path if a concrete workflow requires it.
+
+### Verification
+
+- [ ] Keep/expand the existing PNG vision runtime test.
+
+- [ ] Infrastructure tests for correct multimodal provider mapping.
+
+- [ ] Tests that sanitized bytes and MIME type match for every accepted image format.
+
+- [ ] Application tests for:
+
+  - vision model + image → accepted;
+  - non-vision model + image → rejected before provider request;
+  - text-only turn + non-vision model → unaffected;
+  - mixed text + image;
+  - multiple images;
+  - image attachment with no textual user message;
+  - cancellation/interruption during image processing;
+  - stale runtime protection.
+
+- [ ] API/model-catalog tests preserving Vision capability.
+
+- [ ] frontend tests for:
+
+  - Vision indicator;
+  - incompatible image/model state;
+  - model switch resolving the state;
+  - removing the image resolving the state;
+  - draft/attachment preservation after capability rejection.
+
+- [ ] one deterministic Playwright flow for:
+
+```text
+attach image
+→ non-vision model is visibly incompatible
+→ choose vision-capable model
+→ send succeeds
+```
+
+Synthetic CI may use a deterministic vision-capable fixture/catalog entry rather than external inference.
+
+- [ ] bounded opt-in Real OpenRouter image probe using a known vision-capable catalog model.
+
+Do not make real vision inference part of default CI.
+
+### P2E stop condition
+
+P2E is done when:
+
+- users can attach images through the normal composer;
+- the UI clearly indicates whether the selected model supports image input;
+- a non-vision model cannot silently receive or ignore an image turn;
+- a vision-capable model receives the sanitized image as provider-neutral multimodal input;
+- encoded bytes and MIME type are correct;
+- PNG/JPEG and any other accepted formats have deterministic coverage;
+- image payloads do not leak into logs, TTS, reasoning, or ordinary text context;
+- default CI remains key-free/offline;
+- one opt-in Real vision probe is documented.
+
+Historical re-inspection of old images may continue under P3 if typed multimodal tool results are required.
+
+---
+
 ## P2C — Personalization boundary
 
 Do not let personalization grow through accidental prompt inference.
@@ -701,6 +1018,12 @@ Build on this instead of replacing it.
   - **Result/Artifact layer** — bounded structured result.
 
 Do not introduce a large plugin framework before a second real external tool provider/integration requires it.
+
+- [ ] Add typed non-text tool results only when required by a concrete workflow.
+
+Historical image re-inspection from P2E is one legitimate trigger if it requires a tool result to contribute `ModelContentPart`.
+
+Do not encode binary media into ordinary JSON/text tool results.
 
 ## Workspace ergonomics
 
@@ -1201,7 +1524,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 
 - [ ] Keep `main` green before beginning the next architectural phase.
 
-- [ ] Add regressions alongside every lifecycle, response, speech, tool, memory, trigger, and background-work change.
+- [ ] Add regressions alongside every lifecycle, response, speech, multimodal-input, tool, memory, trigger, and background-work change.
 
 - [ ] Maintain Playwright coverage for user-visible workflows.
 
@@ -1219,6 +1542,8 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 
   - model calls;
   - model/provider selection;
+  - model capability selection/rejection;
+  - image-input presence without image-content logging;
   - reasoning-field presence without reasoning-content logging;
   - response lifecycle;
   - progress lifecycle;
@@ -1236,7 +1561,9 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2A/P2B as implemented before they ship;
+- do not document P2A/P2B/P2E as implemented before they ship;
+- document the existing current-turn vision foundation accurately;
+- distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;
 - keep transport/speech-marker syntax out of Agent Definitions;
 - update freeze/handoff reports when a baseline materially changes.
@@ -1261,6 +1588,7 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Fixed Real development/demo model default.
 - [x] Trusted model catalog.
 - [x] Durable per-session model/reasoning selection.
+- [x] Model capability metadata for tools/vision/structured-output/reasoning.
 - [x] Per-turn assistant model provenance.
 - [x] Separate provider reasoning channel.
 - [x] Reasoning excluded from display/speech/history.
@@ -1270,7 +1598,14 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Session reopen and terminal read-only history.
 - [x] Generic session purpose and lifecycle policy.
 - [x] Host/user/agent completion-authority model.
-- [x] Session-owned attachments and later-turn recall.
+- [x] Session-owned attachments and later-turn attachment references.
+- [x] Image attachment validation and sanitization.
+- [x] Provider-neutral text/image model content parts.
+- [x] Current-turn image projection into multimodal model requests.
+- [x] OpenAI-compatible image-content mapping.
+- [x] Deterministic PNG→vision-request coverage.
+- [ ] User-facing capability-aware image/model admission — P2E.
+- [ ] Historical image re-inspection beyond the original multimodal turn — evaluate under P2E/P3.
 - [x] Existing rich-response envelope with display/speech/blocks.
 - [x] Persisted/public meaningful `SpeechText`.
 - [x] Artifact references and session-owned artifacts.
