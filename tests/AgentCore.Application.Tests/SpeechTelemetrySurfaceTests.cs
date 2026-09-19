@@ -28,7 +28,8 @@ public sealed class SpeechTelemetrySurfaceTests
                 or SpeechTelemetry.ErrorCodeInstrument
                 or SpeechTelemetry.FinalLatencyInstrument
                 or SpeechTelemetry.SegmentLatencyInstrument
-                or SpeechTelemetry.PlaybackStartLatencyInstrument)
+                or SpeechTelemetry.PlaybackStartLatencyInstrument
+                or SpeechTelemetry.VoiceSpeechFallbackInstrument)
             {
                 meterListener.EnableMeasurementEvents(instrument);
             }
@@ -67,6 +68,8 @@ public sealed class SpeechTelemetrySurfaceTests
         SpeechTelemetry.RecordCancel("userStop");
         SpeechTelemetry.RecordCancel("not-a-reason");
         SpeechTelemetry.RecordError("VoiceUnavailable");
+        SpeechTelemetry.RecordVoiceSpeechFallback(SpeechTelemetry.VoiceSpeechFallbackReason.MissingExplicit);
+        SpeechTelemetry.RecordVoiceSpeechFallback(SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit);
         listener.Dispose();
 
         var events = RuntimeTelemetry.SnapshotTimeline();
@@ -78,6 +81,8 @@ public sealed class SpeechTelemetrySurfaceTests
         Assert.Contains(events, item => item.Stage == SpeechTelemetry.CancelReasonInstrument && item.Detail == "userStop");
         Assert.Contains(events, item => item.Stage == SpeechTelemetry.CancelReasonInstrument && item.Detail == "other");
         Assert.Contains(events, item => item.Stage == SpeechTelemetry.ErrorCodeInstrument && item.Detail == "VoiceUnavailable");
+        Assert.Contains(events, item => item.Stage == SpeechTelemetry.VoiceSpeechFallbackInstrument && item.Detail == "missingExplicit");
+        Assert.Contains(events, item => item.Stage == SpeechTelemetry.VoiceSpeechFallbackInstrument && item.Detail == "rejectedExplicit");
         Assert.All(events, item =>
         {
             Assert.DoesNotContain("hello", item.Detail ?? "", StringComparison.OrdinalIgnoreCase);

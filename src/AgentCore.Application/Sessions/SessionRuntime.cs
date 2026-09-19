@@ -2705,7 +2705,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         parsed,
                         explicitPlayback,
                         usesExplicitSpeech: true,
-                        recordCompletionFallback: false,
+                        fallbackReason: null,
                         cancellationToken)
                     .ConfigureAwait(false);
                 return;
@@ -2722,13 +2722,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var derivedPlayback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
+        SpeechTelemetry.VoiceSpeechFallbackReason? fallbackReason = derivedPlayback.Length > 0
+            ? hadExplicitSpeech
+                ? SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit
+                : SpeechTelemetry.VoiceSpeechFallbackReason.MissingExplicit
+            : null;
         await ResolveVoiceSpeechAsync(
                 context,
                 responseId,
                 parsed,
                 derivedPlayback,
                 usesExplicitSpeech: false,
-                recordCompletionFallback: derivedPlayback.Length > 0 && !hadExplicitSpeech,
+                fallbackReason,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -2739,7 +2744,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ResponseEnvelope parsed,
         string speakable,
         bool usesExplicitSpeech,
-        bool recordCompletionFallback,
+        SpeechTelemetry.VoiceSpeechFallbackReason? fallbackReason,
         CancellationToken cancellationToken)
     {
         _voiceSpeechResolved = true;
@@ -2751,10 +2756,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (speakable.Length > 0)
         {
             _envelope = parsed with { SpeechText = speakable };
-            if (recordCompletionFallback)
+            if (fallbackReason is { } reason)
             {
-                SpeechTelemetry.RecordVoiceSpeechFallback();
-                _logger.LogInformation("Voice response completed without [[speech:]]; applied completion speech fallback.");
+                SpeechTelemetry.RecordVoiceSpeechFallback(reason);
+                _logger.LogInformation(
+                    reason == SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit
+                        ? "Voice explicit speech was rejected; applied display-derived speech fallback."
+                        : "Voice response completed without [[speech:]]; applied completion speech fallback.");
             }
 
             await PublishAsync(
@@ -2792,6 +2800,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private string CurrentTtsSource()
     {
+        // Authoritative speech selection is TryPublishSpeechProjectionAsync (_voiceSpeechResolved + _resolvedSpeakable).
+        // This method streams early explicit markers before resolution and reads the resolved speakable afterward.
+        if (_voiceSpeechResolved)
+        {
+            return _resolvedSpeakable;
+        }
+
         if (_ttsSourceLocked)
         {
             if (!string.IsNullOrEmpty(_envelope?.SpeechText))

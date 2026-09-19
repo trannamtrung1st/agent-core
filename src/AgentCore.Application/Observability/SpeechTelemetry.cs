@@ -13,6 +13,7 @@ public static class SpeechTelemetry
     public const string PlaybackCompleteInstrument = "speech.playback.complete";
     public const string CancelReasonInstrument = "speech.cancel.reason";
     public const string ErrorCodeInstrument = "speech.error.code";
+    public const string VoiceSpeechFallbackInstrument = "speech.voice.fallback";
 
     private static readonly Counter<long> PartialCount =
         RuntimeTelemetry.Meter.CreateCounter<long>(PartialCountInstrument);
@@ -34,6 +35,9 @@ public static class SpeechTelemetry
 
     private static readonly Counter<long> ErrorCode =
         RuntimeTelemetry.Meter.CreateCounter<long>(ErrorCodeInstrument);
+
+    private static readonly Counter<long> VoiceSpeechFallback =
+        RuntimeTelemetry.Meter.CreateCounter<long>(VoiceSpeechFallbackInstrument);
 
     private static readonly HashSet<string> CancelReasons =
     [
@@ -88,8 +92,23 @@ public static class SpeechTelemetry
 
     public const string VoiceSpeechFallbackCode = "VoiceSpeechFallback";
 
-    public static void RecordVoiceSpeechFallback()
+    public enum VoiceSpeechFallbackReason
     {
+        MissingExplicit,
+        RejectedExplicit
+    }
+
+    public static void RecordVoiceSpeechFallback(VoiceSpeechFallbackReason reason)
+    {
+        var wire = reason switch
+        {
+            VoiceSpeechFallbackReason.MissingExplicit => "missingExplicit",
+            VoiceSpeechFallbackReason.RejectedExplicit => "rejectedExplicit",
+            _ => "other"
+        };
+
+        VoiceSpeechFallback.Add(1, new TagList { { "reason", wire } });
+        RuntimeTelemetry.RecordDiagnostic(VoiceSpeechFallbackInstrument, 0, wire);
         RecordError(VoiceSpeechFallbackCode);
     }
 
