@@ -29,16 +29,22 @@ public sealed class PromptContextBuilderTests
             .First(text => text.Contains("Voice compatibility", StringComparison.Ordinal));
         Assert.Contains(PromptContextBuilder.VoiceModeOutputGuidance, modeSystem, StringComparison.Ordinal);
         Assert.Contains("[[speech:", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("only streaming TTS source", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("spoken fallback", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("visual-only", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("place [[speech:<complete spoken content>]] before display content", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("marker alone supplies streaming speech", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("Without a marker, the runtime may speak the completed display as a fallback", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("following content is shown on screen", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("Speak naturally", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("name the relevant on-screen detail", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("without hearing the whole document", modeSystem, StringComparison.Ordinal);
+        Assert.Contains("full answer on screen", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Speak naturally", request.Messages[0].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("MUST begin", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Never rely on display prose", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Absent [[speech:...]], display prose is the spoken answer", modeSystem, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Voice_mode_system_prompt_does_not_teach_composition_heuristics()
+    public void Voice_mode_system_prompt_avoids_fixed_length_and_stock_phrases()
     {
         var builder = new PromptContextBuilder();
         var context = new AgentContext(

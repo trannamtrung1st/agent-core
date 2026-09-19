@@ -96,10 +96,14 @@ public sealed class RichEnvelopeRuntimeTests
     }
 
     [Fact]
-    public async Task Speech_first_marker_is_spoken_while_display_stays_rich()
+    public async Task Speech_first_marker_allows_short_spoken_summary_of_long_display()
     {
         var output = new CapturingSessionOutput();
-        var model = new ScriptedLanguageModel(["[[speech:Different spoken line]]There are three points. "]);
+        const string spoken = "Câu chuyện kể về một quán phở nổi tiếng vì chuyện hài.";
+        const string display = "Một hôm, chủ quán phở thử món phở xào mới. Khách ăn rất thích và hỏi vì sao quán không bán thường xuyên. " +
+            "Chủ quán đùa rằng mỗi lần cắt hành để nấu món này, anh lại khóc đến mức không bán hàng được. " +
+            "Từ đó khách gọi quán là Phở Khóc, và câu đùa ấy khiến cả khu phố biết đến quán.";
+        var model = new ScriptedLanguageModel([$"[[speech:{spoken}]]{display}"]);
         var synthesizer = new RecordingSynthesizer();
         await using var runtime = Create(
             output,
@@ -110,15 +114,18 @@ public sealed class RichEnvelopeRuntimeTests
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
-        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.SubmitUserTextAsync("Cho tôi một truyện hài dài nhưng nói tóm tắt thôi.");
         var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
-        Assert.Contains(synthesizer.Texts, text => text.Contains("Different spoken line", StringComparison.Ordinal));
+        Assert.Contains(synthesizer.Texts, text => text.Contains(spoken, StringComparison.Ordinal));
+        Assert.DoesNotContain(synthesizer.Texts, text => text.Contains("Chủ quán đùa", StringComparison.Ordinal));
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal("There are three points. ", assistant.Text);
-        Assert.Equal("Different spoken line", assistant.Envelope!.SpeechText);
+        var envelope = Assert.IsType<ResponseEnvelope>(assistant.Envelope);
+        Assert.Equal(display, assistant.Text);
+        Assert.Equal(spoken, envelope.SpeechText);
+        Assert.True(assistant.Text.Length > envelope.SpeechText!.Length);
     }
 
     [Fact]

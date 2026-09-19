@@ -1,6 +1,6 @@
 # Voice probes (`general-assistant`)
 
-`general-assistant` is a **neutral identity** (goals and system instructions only). It must not contain `[[speech:]]`, TTS, or UI-format instructions. Speech/display are runtime response capabilities; P2B will expose them as a validated envelope. Deterministic coverage is `PromptContextBuilderTests` (short Voice compatibility text only) plus `VoiceRealtimeRegressionTests` (projection ordering, no display-to-TTS leakage, completion fallback).
+`general-assistant` is a **neutral identity** (goals and system instructions only). It must not contain `[[speech:]]`, TTS, or UI-format instructions. Speech/display are runtime response capabilities; P2B will expose them as a validated envelope. Deterministic coverage includes `PromptContextBuilderTests` (framework Voice guidance only), `RichEnvelopeRuntimeTests` (long display with short spoken text), and `VoiceRealtimeRegressionTests` (projection ordering, no display-to-TTS leakage, completion fallback).
 
 Manual Real-profile checks, if needed, confirm runtime behavior rather than composition style:
 
@@ -11,4 +11,4 @@ Manual Real-profile checks, if needed, confirm runtime behavior rather than comp
 | Equivalent speech and display | No duplicate Spoken section. |
 | Meaningfully different `speechText` | Spoken section appears above display. |
 
-Do not add agent-definition heuristics or expand `VoiceModeOutputGuidance` with GOOD/BAD composition examples.
+Keep agent definitions free of speech/display composition rules. `VoiceModeOutputGuidance` may explain that speech should sound conversational, briefly convey the point, and direct the listener to useful on-screen detail rather than narrating a long display answer. Avoid GOOD/BAD examples, stock lead-ins, or a fixed spoken length.
