@@ -18,6 +18,7 @@ Always keep this section even when there is no active work.
 
 - [ ] Add proprietary license to the project.
 - [ ] Add tools that more assistant like, add more user info context (e.g, timezone, language, etc ...). [TBD]
+- [ ] Allow background response, maybe no need pause or interrupt when leave session [TBD]
 - [x] Session model selection and inference controls — see P2D.
 - [x] Show persisted public `speechText` first in the assistant turn when it meaningfully differs; omit it when absent or equivalent. TTS uses that projection only. [observed]
 
