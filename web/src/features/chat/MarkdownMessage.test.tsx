@@ -46,6 +46,27 @@ line
     expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
   });
 
+  it("does not render fenced code blocks with no content", () => {
+    render(
+      <MarkdownMessage
+        source={`## Summary
+
+Some prose.
+
+\`\`\`python
+\`\`\`
+
+\`\`\`
+\`\`\``}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Summary" })).toBeInTheDocument();
+    expect(screen.getByText(/Some prose/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy code" })).not.toBeInTheDocument();
+    expect(document.querySelector(".md-code-block")).toBeNull();
+  });
+
   it("renders consecutive fenced code blocks as separate siblings", () => {
     render(
       <MarkdownMessage

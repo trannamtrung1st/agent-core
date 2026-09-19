@@ -43,6 +43,10 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const text = codeText(children);
 
+  if (!text.trim()) {
+    return null;
+  }
+
   async function copy() {
     if (!text) {
       return;

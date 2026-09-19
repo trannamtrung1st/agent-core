@@ -342,6 +342,44 @@ public sealed class SpokenOutputTests
     }
 
     [Fact]
+    public void Unfenced_technical_region_between_prose_resolves_no_speech()
+    {
+        const string display = """
+            Here is the request you can use.
+
+            POST /tasks HTTP/1.1
+            Authorization: Bearer sk-test
+            Content-Type: application/json
+            { "title": "Deploy service" }
+
+            Let me know if you want the response shape too.
+            """;
+
+        var spoken = SpokenOutput.ForPlayback(null, display);
+        Assert.Equal(string.Empty, spoken);
+        Assert.True(SpokenOutput.HasMaterialStructuredContent(display));
+        Assert.DoesNotContain("Here is the request", spoken, StringComparison.Ordinal);
+        Assert.DoesNotContain("Let me know", spoken, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Explicit_speech_overrides_unfenced_technical_region()
+    {
+        const string speech = "I put the request details on screen.";
+        const string display = """
+            Here is the request.
+
+            POST /tasks HTTP/1.1
+            Authorization: Bearer sk-test
+            Content-Type: application/json
+
+            Ask if you need more.
+            """;
+
+        Assert.Equal(speech, SpokenOutput.ForPlayback(speech, display));
+    }
+
+    [Fact]
     public void Unclosed_fence_suppresses_trailing_technical_content()
     {
         const string display = """

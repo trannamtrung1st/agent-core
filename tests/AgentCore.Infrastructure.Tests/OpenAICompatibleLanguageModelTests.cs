@@ -9,6 +9,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
@@ -590,6 +591,110 @@ public sealed class OpenAICompatibleLanguageModelTests
                 reasoningDeltas > 0,
                 "Provider sent separate reasoning fields on the wire; adapter must emit ModelReasoningDelta.");
             Assert.DoesNotContain(textDeltas, text => text.Contains("reasoning_details", StringComparison.Ordinal));
+        }
+    }
+
+    [LiveProviderFact]
+    public async Task DeepSeek_v41_conversational_probe_keeps_reasoning_out_of_display_and_history()
+    {
+        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var general = (await store.GetAsync("general-assistant"))!;
+        var examiner = (await store.GetAsync("examiner"))!;
+
+        await ProbeAgent(general, "Hello");
+        await ProbeAgent(examiner, "Hi");
+
+        async Task ProbeAgent(AgentDefinition definition, string userText)
+        {
+            var diagnostics = new List<StreamChoiceDiagnostic>();
+            using var http = new HttpClient();
+            var model = new OpenAICompatibleLanguageModel(
+                http,
+                new LanguageModelProviderOptions
+                {
+                    Adapter = "OpenAICompatible",
+                    BaseUrl = "https://openrouter.ai/api/v1/",
+                    ApiKey = key,
+                    DefaultModel = "deepseek/deepseek-v4.1-flash",
+                    ReasoningEffort = "medium",
+                    ReasoningObjectWire = true,
+                    ExcludeVisibleReasoning = true,
+                    StreamChoiceDiagnostic = diagnostics.Add,
+                    Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 90 }
+                });
+            var recording = new RecordingLanguageModel(model);
+            var output = new CapturingSessionOutput();
+            var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero));
+            var ids = new DeterministicIdGenerator(
+                Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+                [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+            var memory = new InMemoryMemoryStore();
+            var now = time.GetUtcNow();
+            var snapshot = new SessionSnapshot(
+                1, ids.NewSessionId(), 1, definition, SessionMode.Text, null,
+                SessionStatus.Created, [], string.Empty, 0, null, null, now, now,
+                ModelSelection: new SessionModelSelection(
+                    "deepseek-v41-flash",
+                    "primary-llm",
+                    "deepseek/deepseek-v4.1-flash",
+                    ModelSelectionSource.SystemDefault,
+                    "medium"));
+            await memory.SaveAsync(snapshot, 0);
+            await using var runtime = new SessionRuntime(
+                snapshot,
+                recording,
+                new DefaultAgentBrain(new PromptContextBuilder()),
+                memory,
+                output,
+                ids,
+                time,
+                NullLogger<SessionRuntime>.Instance);
+
+            await runtime.SubmitUserTextAsync(userText);
+            await runtime.WaitUntilIdleAsync();
+
+            var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+            var displayText = string.Concat(output.TextDeltas.Select(delta => delta.Text));
+            var completed = output.Terminals.LastOrDefault();
+
+            Assert.NotNull(completed);
+            Assert.False(string.IsNullOrWhiteSpace(assistant.Text));
+            Assert.Equal(assistant.Text, displayText);
+            Assert.Null(assistant.Envelope?.SpeechText);
+
+            var sawReasoningField = diagnostics.Any(d => d.Reasoning || d.ReasoningDetails);
+            var sawContent = diagnostics.Any(d => d.Content);
+            Assert.True(sawReasoningField || sawContent, $"Probe for '{definition.Id}' saw no SSE choice fields.");
+            Assert.Contains(recording.Events, item => item is ModelCompleted);
+
+            // Reasoning channel text must never appear in public text, history, or speech projection.
+            foreach (var reasoning in recording.Events.OfType<ModelReasoningDelta>().Select(delta => delta.Text))
+            {
+                Assert.DoesNotContain(reasoning, assistant.Text, StringComparison.Ordinal);
+                Assert.DoesNotContain(reasoning, displayText, StringComparison.Ordinal);
+            }
+
+            // If the provider emitted planning inside delta.content, that is provider/model behavior;
+            // we do not classify it with heuristics. The wire diagnostic still records field presence.
+        }
+    }
+
+    private sealed class RecordingLanguageModel(ILanguageModel inner) : ILanguageModel
+    {
+        public List<ModelGenerationEvent> Events { get; } = [];
+
+        public ModelCapabilities Capabilities => inner.Capabilities;
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await foreach (var item in inner.GenerateAsync(request, cancellationToken))
+            {
+                Events.Add(item);
+                yield return item;
+            }
         }
     }
 

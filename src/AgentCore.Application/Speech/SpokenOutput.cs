@@ -117,8 +117,9 @@ public static class SpokenOutput
     }
 
     /// <summary>
-    /// True when display text includes materially rich structure (fences, tables, indented code).
-    /// Compatibility fallback must not stitch prose fragments around such regions.
+    /// True when display text includes materially rich structure (fences, tables, indented code,
+    /// or a substantial un-fenced technical region). Compatibility fallback must not stitch
+    /// prose fragments around such regions.
     /// </summary>
     public static bool HasMaterialStructuredContent(string text)
     {
@@ -152,6 +153,33 @@ public static class SpokenOutput
             if (line.Length > 0 && (line[0] == '\t' || line.StartsWith("    ", StringComparison.Ordinal)))
             {
                 return true;
+            }
+        }
+
+        return HasSubstantialUnfencedTechnicalRegion(lines);
+    }
+
+    /// <summary>
+    /// Detects a run of un-fenced technical/structured lines long enough that removing them
+    /// would leave disconnected prose islands. Conservative: requires at least three
+    /// consecutive technical lines.
+    /// </summary>
+    private static bool HasSubstantialUnfencedTechnicalRegion(string[] lines)
+    {
+        var run = 0;
+        foreach (var line in lines)
+        {
+            if (IsTechnicalNoiseLine(line))
+            {
+                run++;
+                if (run >= 3)
+                {
+                    return true;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(line))
+            {
+                run = 0;
             }
         }
 
