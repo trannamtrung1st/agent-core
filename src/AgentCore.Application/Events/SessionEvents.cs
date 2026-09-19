@@ -211,7 +211,8 @@ public sealed record PublicHistoryEntry(
     DateTimeOffset CreatedAt,
     IReadOnlyList<PublicResponseBlock> Blocks,
     IReadOnlyList<PublicHistoryAttachment>? Attachments = null,
-    string? FinishReason = null);
+    string? FinishReason = null,
+    string? SpeechText = null);
 
 public sealed record SessionReadyProjection(
     SessionMode Mode,
@@ -268,7 +269,8 @@ public sealed record ResponseCompletedOutput(
     bool Failed,
     int HeardTextEndExclusive,
     string? InterruptReason = null,
-    string? FinishReason = null) : OutputPayload;
+    string? FinishReason = null,
+    string? SpeechText = null) : OutputPayload;
 
 public sealed record ResponseInterruptedOutput(string Reason, int HeardTextEndExclusive) : OutputPayload;
 
@@ -341,6 +343,10 @@ public static class PublicHistory
                 .Select(item => new PublicHistoryAttachment(item.AttachmentId, item.DisplayName, item.ContentType))
                 .ToArray()
             : null;
+        var speechText = entry.Role == ConversationRole.Assistant
+            && !string.IsNullOrEmpty(entry.Envelope?.SpeechText)
+                ? entry.Envelope.SpeechText
+                : null;
         return new PublicHistoryEntry(
             entry.EntryId,
             entry.Sequence,
@@ -355,7 +361,8 @@ public static class PublicHistory
             entry.CreatedAt,
             blocks,
             attachments,
-            entry.FinishReason);
+            entry.FinishReason,
+            speechText);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

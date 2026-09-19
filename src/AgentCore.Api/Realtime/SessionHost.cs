@@ -2117,13 +2117,15 @@ public static class SessionEventMapper
                 ("agent.response.interrupted", new Dictionary<string, object?>
                 {
                     ["reason"] = reason,
-                    ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive
+                    ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive,
+                    ["speechText"] = terminal.SpeechText
                 }),
             ResponseCompletedOutput terminal => ("agent.response.completed", new Dictionary<string, object?>
             {
                 ["status"] = terminal.Failed ? "failed" : "completed",
                 ["heardTextEndExclusive"] = terminal.HeardTextEndExclusive,
-                ["finishReason"] = terminal.FinishReason
+                ["finishReason"] = terminal.FinishReason,
+                ["speechText"] = terminal.SpeechText
             }),
             PlaybackStopOutput stop => ("playback.stop", new Dictionary<string, object?>
             {
@@ -2246,7 +2248,8 @@ public static class SessionEventMapper
                 ["attachmentId"] = block.AttachmentId,
                 ["artifactId"] = block.ArtifactId
             }).ToArray(),
-            ["finishReason"] = entry.FinishReason
+            ["finishReason"] = entry.FinishReason,
+            ["speechText"] = entry.SpeechText
         }).ToArray();
 
         return new Dictionary<string, object?>

@@ -37,6 +37,36 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["Providers__LanguageModels__primary-llm__ReasoningEffort"] = "medium";
         start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "false";
         start.Environment["Providers__LanguageModels__primary-llm__Tools"] = "true";
+        start.Environment["Providers__ModelCatalog__DefaultKey"] = "deepseek-v41-flash";
+        start.Environment["Providers__ModelCatalog__Models__0__Key"] = "deepseek-v41-flash";
+        start.Environment["Providers__ModelCatalog__Models__0__DisplayName"] = "DeepSeek V4.1 Flash";
+        start.Environment["Providers__ModelCatalog__Models__0__ProviderAlias"] = "primary-llm";
+        start.Environment["Providers__ModelCatalog__Models__0__ModelId"] = "deepseek/deepseek-v4.1-flash";
+        start.Environment["Providers__ModelCatalog__Models__0__Tools"] = "true";
+        start.Environment["Providers__ModelCatalog__Models__0__Vision"] = "false";
+        start.Environment["Providers__ModelCatalog__Models__0__StructuredOutput"] = "false";
+        start.Environment["Providers__ModelCatalog__Models__0__Reasoning"] = "true";
+        start.Environment["Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__0"] = "low";
+        start.Environment["Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__1"] = "medium";
+        start.Environment["Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__2"] = "high";
+        start.Environment["Providers__ModelCatalog__Models__0__DefaultReasoningEffort"] = "medium";
+        start.Environment["Providers__ModelCatalog__Models__1__Key"] = "gpt-4o-mini-2024-07-18";
+        start.Environment["Providers__ModelCatalog__Models__1__DisplayName"] = "GPT-4o mini 2024-07-18";
+        start.Environment["Providers__ModelCatalog__Models__1__ProviderAlias"] = "primary-llm";
+        start.Environment["Providers__ModelCatalog__Models__1__ModelId"] = "openai/gpt-4o-mini-2024-07-18";
+        start.Environment["Providers__ModelCatalog__Models__1__Tools"] = "true";
+        start.Environment["Providers__ModelCatalog__Models__1__Vision"] = "true";
+        start.Environment["Providers__ModelCatalog__Models__1__StructuredOutput"] = "true";
+        start.Environment["Providers__ModelCatalog__Models__1__Reasoning"] = "false";
+        start.Environment["Providers__ModelCatalog__Models__2__Key"] = "openrouter-free";
+        start.Environment["Providers__ModelCatalog__Models__2__DisplayName"] = "OpenRouter Free";
+        start.Environment["Providers__ModelCatalog__Models__2__ProviderAlias"] = "primary-llm";
+        start.Environment["Providers__ModelCatalog__Models__2__ModelId"] = "openrouter/free";
+        start.Environment["Providers__ModelCatalog__Models__2__Tools"] = "true";
+        start.Environment["Providers__ModelCatalog__Models__2__Vision"] = "false";
+        start.Environment["Providers__ModelCatalog__Models__2__StructuredOutput"] = "false";
+        start.Environment["Providers__ModelCatalog__Models__2__Reasoning"] = "false";
+        start.Environment["Providers__ModelCatalog__Models__2__CostCategory"] = "free";
         start.Environment["OPENROUTER_API_KEY"] = "test-key-not-for-live-calls";
         _process = await ProcessHostLauncher.StartApiAsync(start, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -120,6 +150,34 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
 
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var createdView = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.Equal("deepseek-v41-flash", createdView!.Model!.CatalogKey);
+        Assert.Equal("deepseek/deepseek-v4.1-flash", createdView.Model.ModelId);
+        Assert.Equal("medium", createdView.Model.ReasoningEffort);
+
+        var models = await client.GetFromJsonAsync<ModelCatalogResponse>("/api/v2/models");
+        Assert.Equal("deepseek-v41-flash", models!.DefaultKey);
+        Assert.Contains(models.Models, model => model.Key == "deepseek-v41-flash" && model.Reasoning);
+        Assert.Contains(models.Models, model => model.Key == "gpt-4o-mini-2024-07-18" && !model.Reasoning);
+        Assert.Contains(models.Models, model => model.Key == "openrouter-free" && !model.Reasoning);
+        Assert.DoesNotContain(models.Models, model => model.Key == "scripted-alpha");
+
+        var mini = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest("examiner", 1, "text", Model: new SessionModelChoiceRequest("gpt-4o-mini-2024-07-18")));
+        Assert.Equal(HttpStatusCode.Created, mini.StatusCode);
+        var miniView = await mini.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.Equal("gpt-4o-mini-2024-07-18", miniView!.Model!.CatalogKey);
+        Assert.Equal("openai/gpt-4o-mini-2024-07-18", miniView.Model.ModelId);
+        Assert.Null(miniView.Model.ReasoningEffort);
+
+        var free = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest("examiner", 1, "text", Model: new SessionModelChoiceRequest("openrouter-free")));
+        Assert.Equal(HttpStatusCode.Created, free.StatusCode);
+        var freeView = await free.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.Equal("openrouter-free", freeView!.Model!.CatalogKey);
+        Assert.Equal("openrouter/free", freeView.Model.ModelId);
 
         var voice = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "voice"));
         Assert.Equal(HttpStatusCode.Created, voice.StatusCode);

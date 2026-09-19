@@ -769,7 +769,8 @@ describe("ChatApp model selection", () => {
       });
     });
     const view = await act(async () => renderChat());
-    expect(screen.getByRole("combobox", { name: "Model" })).toBeInTheDocument();
+    const newChatModel = screen.getByRole("combobox", { name: "Model" });
+    expect(newChatModel.closest("form.composer")).not.toBeNull();
     expect(screen.getByRole("combobox", { name: "Reasoning" })).toBeInTheDocument();
 
     await act(async () => {
@@ -785,7 +786,7 @@ describe("ChatApp model selection", () => {
       });
       rerenderChat(view);
     });
-    expect(screen.getByRole("combobox", { name: "Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Model" }).closest("form.composer")).not.toBeNull();
     expect(screen.queryByRole("combobox", { name: "Reasoning" })).not.toBeInTheDocument();
   });
 
@@ -809,6 +810,7 @@ describe("ChatApp model selection", () => {
     });
     await act(async () => renderChat());
     expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Model" }).closest("form.composer")).not.toBeNull();
     expect(screen.getByRole("combobox", { name: "Reasoning" })).toBeDisabled();
   });
 
@@ -831,6 +833,8 @@ describe("ChatApp model selection", () => {
     });
     await act(async () => renderChat());
     expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Model" }).closest("form.composer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
   });
 });
 

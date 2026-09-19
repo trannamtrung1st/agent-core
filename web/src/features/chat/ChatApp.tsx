@@ -33,7 +33,8 @@ import {
   effortSelectValue,
   modelSelectValue,
   nextEffortForModel,
-  selectedCatalogModel
+  selectedCatalogModel,
+  wireModelSelectionKey
 } from "./ModelPicker";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
@@ -109,7 +110,12 @@ export function ChatApp() {
   const inSession = state.sessionId != null;
   const readonly = isReadonlySession(state);
   const modelBusy = isSessionModelBusy(state);
-  const modelValue = modelSelectValue(state.sessionModelKey, state.pendingModelKey, inSession);
+  const modelValue = modelSelectValue(
+    state.sessionModelKey,
+    state.pendingModelKey,
+    inSession,
+    state.modelCatalogDefaultKey
+  );
   const selectedModel = selectedCatalogModel(state.modelCatalog, modelValue, state.modelCatalogDefaultKey);
   const effortValue = effortSelectValue(
     selectedModel,
@@ -120,20 +126,28 @@ export function ChatApp() {
   const modelDisabled = readonly || modelBusy;
   const changeModel = (key: string) => {
     void applySessionModel(
-      key,
+      wireModelSelectionKey(key, state.modelCatalogDefaultKey, inSession),
       nextEffortForModel(state.modelCatalog, key, state.modelCatalogDefaultKey, effortValue)
     );
   };
+  const changeEffort = (effort: string | null) => {
+    void applySessionModel(
+      wireModelSelectionKey(modelValue, state.modelCatalogDefaultKey, inSession),
+      effort
+    );
+  };
+  const composerVisible = !readonly && state.status !== "paused";
   const modelPicker = (
     <ModelPicker
-      layout={inSession ? "row" : "stack"}
+      layout="row"
+      variant={composerVisible ? "borderless" : "outlined"}
       models={state.modelCatalog}
       defaultKey={state.modelCatalogDefaultKey}
       modelValue={modelValue}
       effortValue={effortValue}
       disabled={inSession ? modelDisabled : false}
       onModelChange={changeModel}
-      onEffortChange={(effort) => void applySessionModel(modelValue, effort)}
+      onEffortChange={changeEffort}
     />
   );
   const selectedAgent = state.agents.find((agent) => agent.id === state.selectedAgentId) ?? state.agents[0];
@@ -227,7 +241,7 @@ export function ChatApp() {
               title={inSession ? state.agentName || "Agent" : "New chat"}
               subtitle={inSession ? state.agentRole : null}
               timestamp={headerTimestamp}
-              modelControls={inSession ? modelPicker : null}
+              modelControls={inSession && !composerVisible ? modelPicker : null}
               speechLocale={
                 inSession && !readonly ? (
                   <SpeechLocalePicker
@@ -326,14 +340,8 @@ export function ChatApp() {
                               state.pendingSpeechLocale,
                               false
                             )}
-                            models={state.modelCatalog}
-                            defaultModelKey={state.modelCatalogDefaultKey}
-                            modelValue={modelValue}
-                            effortValue={effortValue}
                             onSelect={selectAgent}
                             onSpeechLocaleChange={(locale) => void applySpeechLocale(locale)}
-                            onModelChange={changeModel}
-                            onEffortChange={(effort) => void applySessionModel(modelValue, effort)}
                           />
                         </div>
                       )
@@ -406,6 +414,7 @@ export function ChatApp() {
                       onMute={(muted) => void setMuted(muted)}
                       canRetry={false}
                       onRetry={() => void retryConnection()}
+                      modelControls={modelPicker}
                     />
                   )}
                 </div>

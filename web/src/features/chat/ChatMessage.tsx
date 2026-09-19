@@ -3,6 +3,7 @@ import type { HistoryBlock, HistoryEntry } from "../../state/sessionStore";
 import { HistoryAttachmentView } from "./AttachmentPreview";
 import { formatChatTime, statusLabel } from "./chatTime";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { shouldShowSpeechText, SpokenText } from "./SpokenText";
 
 export function ChatMessage({
   entry,
@@ -21,7 +22,8 @@ export function ChatMessage({
   const timeLabel = formatChatTime(entry.createdAt);
   const hasFiles = Boolean(entry.attachments?.length && sessionId);
   const hasBlocks = Boolean(entry.blocks?.length);
-  const hasBody = Boolean(entry.text) || hasBlocks || hasFiles;
+  const showSpeech = !isUser && shouldShowSpeechText(entry.text, entry.speechText);
+  const hasBody = Boolean(entry.text) || hasBlocks || hasFiles || showSpeech;
 
   return (
     <li
@@ -62,6 +64,7 @@ export function ChatMessage({
               ))}
             </div>
           ) : null}
+          {showSpeech && entry.speechText ? <SpokenText speechText={entry.speechText} /> : null}
         </div>
       ) : null}
       {status ? (

@@ -394,12 +394,13 @@ describe("applyServerEvent", () => {
         type: "agent.response.completed",
         sequence: 1,
         responseId: "r1",
-        payload: { status: "completed" }
+        payload: { status: "completed", speechText: "Spoken hello" }
       })
     );
     expect(completed.liveResponseId).toBeNull();
     expect(completed.outputState).toBe("idle");
     expect(completed.entries[0]?.status).toBe("completed");
+    expect(completed.entries[0]?.speechText).toBe("Spoken hello");
   });
 
   it("marks interrupted output when the live response is barged in", () => {
@@ -706,6 +707,25 @@ describe("historyFromPayload", () => {
     expect(entries[0]?.receivedTextEndExclusive).toBe(14);
     expect(entries[0]?.heardTextEndExclusive).toBe(13);
     expect(entries.some((entry) => entry.text.includes("Thinking"))).toBe(false);
+  });
+
+  it("maps public speechText from history payloads", () => {
+    const entries = historyFromPayload([
+      {
+        entryId: "e1",
+        sequence: 1,
+        role: "assistant",
+        text: "Shown display.",
+        speechText: "Hidden speech",
+        responseId: "r1",
+        status: "completed",
+        deliveryMode: "voice",
+        heardTextEndExclusive: 13,
+        receivedTextEndExclusive: 14,
+        createdAt: "2026-09-18T00:00:00.000Z"
+      }
+    ]);
+    expect(entries[0]?.speechText).toBe("Hidden speech");
   });
 });
 

@@ -35,6 +35,7 @@ export type HistoryEntry = {
   attachments?: HistoryAttachment[];
   blocks?: HistoryBlock[];
   finishReason?: string | null;
+  speechText?: string | null;
 };
 
 export type ServerEvent = {
@@ -165,6 +166,15 @@ export const emptySession = (): SessionView => ({
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
+}
+
+function asSpeechText(value: unknown): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  const text = asString(value);
+  return text.length === 0 ? undefined : text;
 }
 
 function asNumber(value: unknown): number {
@@ -298,7 +308,8 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       createdAt: asString(row.createdAt),
       attachments: asAttachments(row.attachments),
       blocks: asBlocks(row.blocks),
-      finishReason: row.finishReason == null ? null : asString(row.finishReason)
+      finishReason: row.finishReason == null ? null : asString(row.finishReason),
+      speechText: asSpeechText(row.speechText)
     };
   });
 }
@@ -520,7 +531,12 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         lastServerSequence: event.sequence,
         entries: state.entries.map((entry) =>
           entry.responseId === event.responseId
-            ? { ...entry, status, finishReason: finishReason ?? entry.finishReason ?? null }
+            ? {
+                ...entry,
+                status,
+                finishReason: finishReason ?? entry.finishReason ?? null,
+                speechText: asSpeechText(event.payload.speechText) ?? entry.speechText
+              }
             : entry)
       };
     }

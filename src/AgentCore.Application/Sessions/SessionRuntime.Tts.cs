@@ -508,7 +508,10 @@ public sealed partial class SessionRuntime
                         new SessionOutput(
                             context,
                             capturedResponseId,
-                            new ResponseCompletedOutput(failed, HeardTextEndExclusive: heard)),
+                            new ResponseCompletedOutput(
+                                failed,
+                                HeardTextEndExclusive: heard,
+                                SpeechText: PublicSpeechText())),
                         ct)
                     .ConfigureAwait(false);
                 ClearActive();

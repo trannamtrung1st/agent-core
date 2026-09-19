@@ -5,10 +5,12 @@
 #
 # Matches the native http-openrouter launch profile: hosted OpenRouter text + tools.
 # Copy `.env.example` to a gitignored `.env` and set OPENROUTER_API_KEY.
-# Compose loads `.env` from the repo root for interpolation. Override the text
-# model with AGENTCORE_LLM_MODEL (do not use openrouter/free). Hosted STT/TTS
-# are not selected here; Real voice stays unavailable until those adapters are
-# resolved at startup. Never commit secrets.
+# Compose loads `.env` from the repo root for interpolation. AGENTCORE_LLM_MODEL
+# sets primary-llm DefaultModel; when it matches a catalog ModelId the factory
+# retargets DefaultKey. Do not use openrouter/free as DefaultModel (it remains a
+# catalog option). Do not rewrite the DeepSeek catalog identity with that env
+# var. Hosted STT/TTS are not selected here; Real voice stays unavailable until
+# those adapters are resolved at startup. Never commit secrets.
 
 services:
   agent-core:
@@ -24,7 +26,7 @@ services:
       Providers__ModelCatalog__Models__0__Key: deepseek-v41-flash
       Providers__ModelCatalog__Models__0__DisplayName: DeepSeek V4.1 Flash
       Providers__ModelCatalog__Models__0__ProviderAlias: primary-llm
-      Providers__ModelCatalog__Models__0__ModelId: ${AGENTCORE_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+      Providers__ModelCatalog__Models__0__ModelId: deepseek/deepseek-v4.1-flash
       Providers__ModelCatalog__Models__0__Tools: ${AGENTCORE_LLM_TOOLS:-true}
       Providers__ModelCatalog__Models__0__Vision: ${AGENTCORE_LLM_VISION:-false}
       Providers__ModelCatalog__Models__0__StructuredOutput: "false"
@@ -33,4 +35,21 @@ services:
       Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__1: medium
       Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__2: high
       Providers__ModelCatalog__Models__0__DefaultReasoningEffort: ${AGENTCORE_LLM_REASONING_EFFORT:-medium}
+      Providers__ModelCatalog__Models__1__Key: gpt-4o-mini-2024-07-18
+      Providers__ModelCatalog__Models__1__DisplayName: GPT-4o mini 2024-07-18
+      Providers__ModelCatalog__Models__1__ProviderAlias: primary-llm
+      Providers__ModelCatalog__Models__1__ModelId: openai/gpt-4o-mini-2024-07-18
+      Providers__ModelCatalog__Models__1__Tools: "true"
+      Providers__ModelCatalog__Models__1__Vision: "true"
+      Providers__ModelCatalog__Models__1__StructuredOutput: "true"
+      Providers__ModelCatalog__Models__1__Reasoning: "false"
+      Providers__ModelCatalog__Models__2__Key: openrouter-free
+      Providers__ModelCatalog__Models__2__DisplayName: OpenRouter Free
+      Providers__ModelCatalog__Models__2__ProviderAlias: primary-llm
+      Providers__ModelCatalog__Models__2__ModelId: openrouter/free
+      Providers__ModelCatalog__Models__2__Tools: "true"
+      Providers__ModelCatalog__Models__2__Vision: "false"
+      Providers__ModelCatalog__Models__2__StructuredOutput: "false"
+      Providers__ModelCatalog__Models__2__Reasoning: "false"
+      Providers__ModelCatalog__Models__2__CostCategory: free
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

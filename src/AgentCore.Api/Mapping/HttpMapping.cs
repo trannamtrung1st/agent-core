@@ -136,7 +136,8 @@ public static partial class HttpMapping
             projected.Attachments?.Select(item => new HistoryAttachmentResponse(
                 item.AttachmentId.ToString(),
                 item.DisplayName,
-                item.ContentType)).ToArray());
+                item.ContentType)).ToArray(),
+            projected.SpeechText);
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

@@ -7,7 +7,7 @@ Build the canonical composed pipeline from deterministic conversation mechanics 
 | 0 | Documentation/contracts finalized | Complete; see [Implementation Plan](18-implementation-plan.md) |
 | 1 | Solution skeleton + synthetic text vertical slice | Complete: offline application-service text exchange and health (see [Implementation Plan](18-implementation-plan.md)) |
 | 2 | Agent Definition + Agent Runtime + synthetic provider | Complete: two identities through one runtime and pinned JSON definitions (compliance added post-MVP; see [Implementation Plan](18-implementation-plan.md#post-mvp-phases-planned-until-verified)) |
-| 3 | OpenAICompatibleLanguageModel + OpenRouter configuration | Complete: offline SSE contracts; optional `openrouter/free` smoke (not demo DefaultModel); skips without opt-in + `OPENROUTER_API_KEY` |
+| 3 | OpenAICompatibleLanguageModel + OpenRouter configuration | Complete: offline SSE contracts; optional `openrouter/free` smoke (not demo DefaultModel; catalog option only); skips without opt-in + `OPENROUTER_API_KEY` |
 | 4 | Interaction Controller with synthetic speech/events | Complete: deterministic backchannel, interruption, stale-result and classifier/brain isolation tests |
 | 5 | SignalR realtime protocol + browser connection + minimal Synthetic Compose | Complete: MessagePack browser text slice, leases, identity guards, key-free Compose smoke, GitHub Actions (see [Implementation Plan](18-implementation-plan.md)) |
 | 6 | Microphone + AudioWorklet + streaming STT | Complete: synthetic STT + AudioWorklet preflight/PCM gating (see [Implementation Plan](18-implementation-plan.md)) |
@@ -35,7 +35,7 @@ History paging, additive semantic lifecycle (`TransitionLifecycle`, RequestCompl
 
 ## P2D session model selection
 
-Trusted catalog, system default, persisted per-session resolved choice, session-aware resolver, reasoning effort, and Codex-like UI are **observed**. Existing sessions stay pinned when the operator default changes. Gate: [Implementation Plan](18-implementation-plan.md#p2d--session-model-selection-and-inference-controls-observed). Decision: [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
+Trusted catalog, system default, persisted per-session resolved choice, session-aware resolver, reasoning effort, and Codex-like UI are **observed**. Existing sessions stay pinned when the operator default changes. The shipped Real catalog default is DeepSeek V4.1 Flash; GPT-4o mini 2024-07-18 and OpenRouter Free are additional allowed choices. Gate: [Implementation Plan](18-implementation-plan.md#p2d--session-model-selection-and-inference-controls-observed). Decision: [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
 ## Post-MVP planned until verified
 

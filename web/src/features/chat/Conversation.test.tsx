@@ -293,6 +293,100 @@ describe("Conversation", () => {
     expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
   });
 
+  it("does not add a Spoken section when speech text is absent or equivalent", () => {
+    const { rerender } = render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "a1", role: "assistant", text: "Hello there." })]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+
+    rerender(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "a1", role: "assistant", text: "Hello there.", speechText: "Hello there." })]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+
+    rerender(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "a1", role: "assistant", text: "Hello  there.\n", speechText: " Hello there. " })]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+  });
+
+  it("renders Spoken under the same assistant message when public speech text differs", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Shown display.",
+            speechText: "Hidden speech"
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Shown display.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Spoken")).toHaveTextContent("Hidden speech");
+    expect(screen.getAllByRole("listitem").filter((item) => item.className.includes("chat-message-assistant"))).toHaveLength(1);
+  });
+
+  it("never renders Spoken on a user message", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "u1",
+            role: "user",
+            text: "Hello",
+            speechText: "Should not appear"
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByText("Should not appear")).not.toBeInTheDocument();
+  });
+
+  it("keeps Spoken on a read-only terminal assistant row", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s-ended"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Final display.",
+            status: "completed",
+            speechText: "Final spoken wording."
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Final display.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Spoken")).toHaveTextContent("Final spoken wording.");
+  });
+
   it("shows transient activity instead of persisting it as a message", () => {
     render(
       <Conversation

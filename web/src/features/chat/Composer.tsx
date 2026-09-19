@@ -1,4 +1,4 @@
-import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { Button, Flex, Input, Tooltip } from "antd";
 import {
   AudioOutlined,
@@ -185,7 +185,8 @@ export function Composer({
   onVoice,
   onCancelVoice,
   onMute,
-  onRetry
+  onRetry,
+  modelControls
 }: {
   draft: string;
   canSend: boolean;
@@ -211,6 +212,7 @@ export function Composer({
   onCancelVoice: () => void;
   onMute: (muted: boolean) => void;
   onRetry: () => void;
+  modelControls?: ReactNode;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const messageRef = useRef<InputRef>(null);
@@ -385,8 +387,9 @@ export function Composer({
             event.target.value = "";
           }}
         />
-        <Flex justify="space-between" align="center" gap={8} className="composer-toolbar">
-          <Flex gap={8} align="center" className="composer-toolbar-start">
+        <Flex justify="space-between" align="center" gap={8} wrap="wrap" className="composer-toolbar">
+          <Flex gap={8} align="center" wrap="wrap" className="composer-toolbar-start">
+            {modelControls}
             <Tooltip title="Attach">
               <Button
                 type="text"

@@ -15,7 +15,7 @@ test("validation failures keep structured recoverable details", async ({ page })
   await expect(page.getByText("sk-")).toHaveCount(0);
 });
 
-test("rich envelope keeps speech text hidden and does not replay thinking after reload", async ({ page }) => {
+test("rich envelope shows differing spoken text without another message and does not replay thinking after reload", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Message").fill("[test:rich-envelope]");
   await page.getByRole("button", { name: "Send" }).click();
@@ -24,12 +24,15 @@ test("rich envelope keeps speech text hidden and does not replay thinking after 
   await expect(page.getByText("notes.txt")).toBeVisible();
   await expect(page.getByRole("button", { name: /Artifact fixture-artifact-1/ })).toBeVisible();
   await expect(page.getByText("[Unsupported content]")).toBeVisible();
-  await expect(page.getByText("Hidden speech")).toHaveCount(0);
+  await expect(page.locator(".spoken-text")).toContainText("Hidden speech");
+  await expect(page.getByLabel("Spoken")).toHaveCount(1);
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(1);
   await expect(page.getByText("Thinking…")).toHaveCount(0);
 
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.getByText("Shown display.")).toBeVisible();
+  await expect(page.locator(".spoken-text")).toContainText("Hidden speech");
+  await expect(page.getByLabel("Spoken")).toHaveCount(1);
   await expect(page.getByText("Thinking…")).toHaveCount(0);
-  await expect(page.getByText("Hidden speech")).toHaveCount(0);
 });

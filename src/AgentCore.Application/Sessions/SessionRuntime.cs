@@ -2343,7 +2343,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         new ResponseCompletedOutput(
                             true,
                             HeardTextEndExclusive: heard,
-                            InterruptReason: reason)),
+                            InterruptReason: reason,
+                            SpeechText: PublicSpeechText())),
                     cancellationToken)
                 .ConfigureAwait(false);
             if (requestPersist && _snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
@@ -2393,7 +2394,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             new ResponseCompletedOutput(
                                 failed,
                                 HeardTextEndExclusive: heard,
-                                FinishReason: failed ? null : _modelFinishReason)),
+                                FinishReason: failed ? null : _modelFinishReason,
+                                SpeechText: PublicSpeechText())),
                         ct)
                     .ConfigureAwait(false);
                 ClearActive();
@@ -2543,6 +2545,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var entry = _snapshot.Entries.FirstOrDefault(item => item.EntryId == entryId);
         return entry?.HeardTextEndExclusive ?? 0;
+    }
+
+    private string? PublicSpeechText()
+    {
+        if (_activeEntryId is not { } entryId)
+        {
+            return null;
+        }
+
+        var speech = _snapshot.Entries.FirstOrDefault(item => item.EntryId == entryId)?.Envelope?.SpeechText;
+        return string.IsNullOrEmpty(speech) ? null : speech;
     }
 
     private async Task HandleReceiptAsync(ResponseReceiptReceived input, CancellationToken cancellationToken)

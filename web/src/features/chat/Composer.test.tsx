@@ -77,6 +77,17 @@ describe("Composer attachment staging", () => {
     expect(staged[0].name).toBe("notes.txt");
   });
 
+  it("renders model controls in the composer toolbar", () => {
+    render(
+      <Composer
+        {...emptyComposerProps()}
+        modelControls={<span>Model control</span>}
+      />
+    );
+    expect(screen.getByText("Model control").closest("form.composer")).not.toBeNull();
+    expect(screen.getByText("Model control").closest(".composer-toolbar-start")).not.toBeNull();
+  });
+
   it("stages pasted images through the same pending-attachment queue as the picker", () => {
     const image = new File([new Uint8Array([137, 80, 78, 71])], "clip.png", { type: "image/png" });
     render(<Composer {...emptyComposerProps()} />);

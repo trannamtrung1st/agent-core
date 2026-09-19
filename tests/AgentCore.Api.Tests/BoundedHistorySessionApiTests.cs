@@ -152,6 +152,7 @@ public sealed class BoundedHistorySessionApiTests
         Assert.Equal("**Hi**", Assert.Single(item.Blocks!).Text);
         Assert.Equal("note.txt", Assert.Single(item.Attachments!).DisplayName);
         Assert.DoesNotContain("Spoken hidden", item.Text, StringComparison.Ordinal);
+        Assert.Equal("Spoken hidden", item.SpeechText);
     }
 
     private sealed class Seeded : IAsyncDisposable

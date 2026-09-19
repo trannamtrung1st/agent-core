@@ -8,6 +8,10 @@ internal static class ModelCatalogFactory
 {
     public const string DeepSeekV41FlashKey = "deepseek-v41-flash";
     public const string DeepSeekV41FlashModelId = "deepseek/deepseek-v4.1-flash";
+    public const string Gpt4oMini20240718Key = "gpt-4o-mini-2024-07-18";
+    public const string Gpt4oMini20240718ModelId = "openai/gpt-4o-mini-2024-07-18";
+    public const string OpenRouterFreeKey = "openrouter-free";
+    public const string OpenRouterFreeModelId = "openrouter/free";
     public const string ScriptedAlphaKey = "scripted-alpha";
     public const string ScriptedBetaKey = "scripted-beta";
 
@@ -17,6 +21,16 @@ internal static class ModelCatalogFactory
         IConfiguration? configuration)
     {
         var configured = Bind(configuration);
+        if (IsRealProfile(profile))
+        {
+            if (configured.Models.Count > 0 && !IsSyntheticCatalog(configured))
+            {
+                return WithPrimaryDefault(FromOptions(configured, languageModel), languageModel);
+            }
+
+            return WithPrimaryDefault(Real(), languageModel);
+        }
+
         if (configured.Models.Count > 0)
         {
             return FromOptions(configured, languageModel);
@@ -59,6 +73,46 @@ internal static class ModelCatalogFactory
                     reasoning: false,
                     [],
                     null)
+            ]);
+
+    public static IModelCatalog Real() =>
+        new ConfigurationModelCatalog(
+            DeepSeekV41FlashKey,
+            [
+                Descriptor(
+                    DeepSeekV41FlashKey,
+                    "DeepSeek V4.1 Flash",
+                    "primary-llm",
+                    DeepSeekV41FlashModelId,
+                    tools: true,
+                    vision: false,
+                    structuredOutput: false,
+                    reasoning: true,
+                    ["low", "medium", "high"],
+                    "medium"),
+                Descriptor(
+                    Gpt4oMini20240718Key,
+                    "GPT-4o mini 2024-07-18",
+                    "primary-llm",
+                    Gpt4oMini20240718ModelId,
+                    tools: true,
+                    vision: true,
+                    structuredOutput: true,
+                    reasoning: false,
+                    [],
+                    null),
+                Descriptor(
+                    OpenRouterFreeKey,
+                    "OpenRouter Free",
+                    "primary-llm",
+                    OpenRouterFreeModelId,
+                    tools: true,
+                    vision: false,
+                    structuredOutput: false,
+                    reasoning: false,
+                    [],
+                    null,
+                    costCategory: "free")
             ]);
 
     public static IModelCatalog FromPrimary(LanguageModelProviderOptions languageModel)
@@ -157,6 +211,44 @@ internal static class ModelCatalogFactory
             defaultEffort,
             contextCategory,
             costCategory);
+
+    private static IModelCatalog WithPrimaryDefault(IModelCatalog catalog, LanguageModelProviderOptions? languageModel)
+    {
+        var modelId = languageModel?.DefaultModel?.Trim();
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return catalog;
+        }
+
+        var matches = catalog.Models
+            .Where(model => string.Equals(model.ModelId, modelId, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length == 0)
+        {
+            return catalog;
+        }
+
+        var match = matches.Length == 1
+            ? matches[0]
+            : matches.FirstOrDefault(model =>
+                  !string.Equals(model.Key, catalog.DefaultKey, StringComparison.Ordinal))
+              ?? matches[0];
+        if (string.Equals(match.Key, catalog.DefaultKey, StringComparison.Ordinal))
+        {
+            return catalog;
+        }
+
+        return new ConfigurationModelCatalog(match.Key, catalog.Models);
+    }
+
+    private static bool IsRealProfile(string profile) =>
+        string.Equals(profile, "Real", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSyntheticCatalog(ModelCatalogOptions options) =>
+        options.Models.Count > 0
+        && options.Models.All(entry =>
+            string.Equals(entry.Key, ScriptedAlphaKey, StringComparison.Ordinal)
+            || string.Equals(entry.Key, ScriptedBetaKey, StringComparison.Ordinal));
 
     private static ModelCatalogOptions Bind(IConfiguration? configuration)
     {

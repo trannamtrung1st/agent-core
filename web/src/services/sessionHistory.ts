@@ -14,8 +14,21 @@ let olderCursor: number | null = null;
 
 export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryEntry[]): HistoryEntry[] {
   const byId = new Map<string, HistoryEntry>();
-  for (const entry of [...incoming, ...existing]) {
+  for (const entry of existing) {
     byId.set(entry.entryId, entry);
+  }
+
+  for (const entry of incoming) {
+    const current = byId.get(entry.entryId);
+    if (!current) {
+      byId.set(entry.entryId, entry);
+      continue;
+    }
+
+    byId.set(entry.entryId, {
+      ...current,
+      speechText: current.speechText || entry.speechText
+    });
   }
 
   return [...byId.values()].sort((left, right) => left.sequence - right.sequence);

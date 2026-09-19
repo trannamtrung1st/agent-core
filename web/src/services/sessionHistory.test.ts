@@ -58,6 +58,20 @@ describe("session history controller", () => {
     ]);
   });
 
+  it("keeps speechText on the same entry across prepend and live overlap", () => {
+    const merged = mergeHistoryEntries(
+      [row(3, { text: "Shown display." }), row(4)],
+      [
+        row(1, { text: "Earlier", speechText: "Spoken earlier" }),
+        row(3, { text: "stale overlap", speechText: "Hidden speech" })
+      ]
+    );
+    expect(merged.map((entry) => entry.entryId)).toEqual(["e1", "e3", "e4"]);
+    expect(merged.find((entry) => entry.sequence === 3)?.text).toBe("Shown display.");
+    expect(merged.find((entry) => entry.sequence === 3)?.speechText).toBe("Hidden speech");
+    expect(merged.find((entry) => entry.sequence === 1)?.speechText).toBe("Spoken earlier");
+  });
+
   it("opens a 500-entry transcript with one newest-page request", async () => {
     const newest = Array.from({ length: 50 }, (_, index) => payload(row(index + 451)));
     vi.mocked(listSessionMessages).mockResolvedValue({

@@ -19,7 +19,7 @@ Always keep this section even when there is no active work.
 - [ ] Add proprietary license to the project.
 - [ ] Add tools that more assistant like, add more user info context (e.g, timezone, language, etc ...). [TBD]
 - [x] Session model selection and inference controls — see P2D.
-- [ ] I think we can show the speech text in UI along with the display text. (just maybe highlight or separate it a bit, you decide best suit, UI/UX). [TBD]
+- [x] Show persisted public `speechText` under assistant display text when it meaningfully differs; omit it when absent or equivalent. [observed]
 
 ## P0 — Close the current stabilization tail, then freeze it again
 
@@ -272,7 +272,7 @@ Codex-like operator default plus a durable per-session resolved choice. Observed
 
 - [x] Trusted backend model catalog (`IModelCatalog`) with safe descriptors: catalog key, display name, trusted provider alias, concrete model ID, capabilities (tools/vision/structured output/reasoning), supported reasoning-effort values, default effort. No API keys, credentials, arbitrary base URLs, or provider headers.
 
-- [x] Configuration-driven catalog with a compatibility path from the existing `primary-llm` alias. Shipped Real default: `deepseek-v41-flash` → `deepseek/deepseek-v4.1-flash`, reasoning effort `medium`, tools true, vision false (development/demo default, not a production recommendation). Synthetic exposes deterministic fake models.
+- [x] Configuration-driven catalog with a compatibility path from the existing `primary-llm` alias. Shipped Real default: `deepseek-v41-flash` → `deepseek/deepseek-v4.1-flash`, reasoning effort `medium`, tools true, vision false (development/demo default, not a production recommendation). Real catalog also allows `gpt-4o-mini-2024-07-18` → `openai/gpt-4o-mini-2024-07-18` and `openrouter-free` → `openrouter/free` (not the system default). Synthetic exposes deterministic fake models.
 
 - [x] Persist concrete `SessionModelSelection` (catalog key, provider alias, model ID, selection source, reasoning effort). “Default” is not a dynamic pointer. Changing the global default later must not rewrite existing sessions.
 
@@ -288,7 +288,7 @@ Codex-like operator default plus a durable per-session resolved choice. Observed
 
 - [x] Per-turn assistant provenance (catalog key, provider alias, model ID, reasoning effort) survives persistence/history restore. Old entries may be null. No secrets.
 
-- [x] Codex-like first-party UI: new chat starts at Default; effort controls follow the selected model; existing sessions restore their persisted choice; session isolation; busy/terminal cannot switch; failed mutation rolls the UI back. Speech locale stays independent. No per-message one-shot override.
+- [x] Codex-like first-party UI: new chat starts on the catalog default (Default mark, not a second row); effort controls follow the selected model; existing sessions restore their persisted choice; session isolation; busy/terminal cannot switch; failed mutation rolls the UI back. Speech locale stays independent. No per-message one-shot override.
 
 ---
 

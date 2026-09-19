@@ -144,7 +144,8 @@ public sealed record HistoryItemResponse(
     string CreatedAt,
     IReadOnlyList<HistoryBlockResponse>? Blocks = null,
     string? FinishReason = null,
-    IReadOnlyList<HistoryAttachmentResponse>? Attachments = null);
+    IReadOnlyList<HistoryAttachmentResponse>? Attachments = null,
+    string? SpeechText = null);
 
 public sealed record HistoryPageResponse(
     IReadOnlyList<HistoryItemResponse> Items,

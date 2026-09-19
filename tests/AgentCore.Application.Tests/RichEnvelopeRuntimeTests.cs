@@ -39,6 +39,7 @@ public sealed class RichEnvelopeRuntimeTests
         await runtime.WaitUntilMailboxDrainedAsync();
         assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("Hello", PublicHistory.FromEntry(assistant).Text);
+        Assert.Equal("Spoken hello", PublicHistory.FromEntry(assistant).SpeechText);
         Assert.Equal(0, assistant.HeardTextEndExclusive);
         Assert.Empty(PublicHistory.FromEntry(assistant).Blocks);
 
@@ -48,6 +49,7 @@ public sealed class RichEnvelopeRuntimeTests
         var publicEntry = PublicHistory.FromEntry(
             runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant));
         Assert.Equal(3, publicEntry.Blocks.Count);
+        Assert.Equal("Spoken hello", publicEntry.SpeechText);
         Assert.Contains(publicEntry.Blocks, block => block.Kind == "artifact" && block.ArtifactId == "fixture-artifact-1");
         Assert.Contains(publicEntry.Blocks, block => block.Kind == "unknown");
     }

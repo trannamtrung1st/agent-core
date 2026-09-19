@@ -3,6 +3,8 @@ name: Agent Core
 description: Ant Design v6 dark operate UI for one persistent text/voice session.
 colors:
   primary: "#1677ff"
+  success: "#52c41a"
+  successHover: "#73d13d"
   text: "rgba(255, 255, 255, 0.88)"
   textSecondary: "rgba(255, 255, 255, 0.65)"
   textTertiary: "rgba(255, 255, 255, 0.45)"
@@ -13,11 +15,26 @@ colors:
   fill: "rgba(255, 255, 255, 0.08)"
   bubble: "rgba(255, 255, 255, 0.12)"
 typography:
+  headline:
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontSize: "28px"
+    fontWeight: 600
+    lineHeight: 1.3
+  title:
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontSize: "16px"
+    fontWeight: 600
+    lineHeight: 1.3
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.5714285714
+  label:
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.4
 rounded:
   control: "6px"
   bubble: "18px"
@@ -31,6 +48,7 @@ components:
     backgroundColor: "{colors.container}"
     textColor: "{colors.text}"
     rounded: "{rounded.control}"
+    size: "32px"
   user-bubble:
     backgroundColor: "{colors.bubble}"
     textColor: "{colors.text}"
@@ -41,55 +59,146 @@ components:
     textColor: "{colors.text}"
     rounded: "{rounded.composer}"
     padding: "8px 12px"
+  spoken-text:
+    backgroundColor: "transparent"
+    textColor: "{colors.textSecondary}"
+    padding: "8px 0 0"
 ---
 
-# Design Context
+# Design System: Agent Core
 
 This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in `/docs`. If this file conflicts with `/docs`, `/docs` wins.
 
-**Creative North Star: Ant Design operate UI**
+## Overview
 
-Agent Core is a personal-chat operate surface. Ant Design is the MVP component system. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT is a UX/layout reference for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer, in-flow activity)—not a component dependency or pixel clone.
+**Creative North Star: "Ant Design operate UI"**
 
-The default appearance is Ant Design `darkAlgorithm`: black layout, `#141414` conversation, `#1f1f1f` elevated composer/code, and `#1677ff` for primary actions. Product CSS maps those roles; it does not invert the former light palette.
+Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system; Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone.
 
-Ant Design v6 owns generic controls (Layout, Select, Button, Input, Empty, Spin, Tag, Alert, Progress, Typography, Dropdown, Drawer). Product components import those primitives directly. `web/src/app.css` may only size the shell, manage overflow, constrain product layout/content, size attachment previews, and fix accessibility.
+The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from `:root` custom properties; it does not invert a former light palette or invent a second token catalog.
 
-## Product Context
+**Key Characteristics:**
 
-- **What it is:** Operator UI for one active conversation at a time (durable catalog rail for resume); text and voice are modes of the same session.
-- **Who it is for:** Operators and demo participants; Synthetic stays labeled.
-- **What it is not:** Pixel Dialogue Field, a custom token catalog, an admin dashboard, or a second component framework.
+- Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.
+- Compact / default / section spacing (8 / 12 / 16px) is the only product rhythm.
+- Composer owns Model/Reasoning plus Attach/Voice/Send; header owns identity, Speech locale, and overflow.
+- Assistant display Markdown stays primary; persisted public speech text is a quieter **Spoken** inset on the same turn.
 
-## Personality
+## Colors
 
-Quiet, labeled, and conventional. Status is written in type. Controls keep their accessible names (Identity, Speech locale, Send, Stop, Queue, Voice, Cancel voice, Mute, Unmute, End, Attach, Resume). Voice is a session-mode control and stays visible while voice is on; Mute/Unmute is a separate microphone control. Accent (primary blue) means Voice mode is on; green means the microphone is actively listening.
+Dark operate neutrals with one primary accent and one success accent for live microphone state.
 
-## Tone
+### Primary
+- **Ant Design primary** (`{colors.primary}`): Send, Voice-on (`aria-pressed`), focus rings, and selection tint. Use sparingly so the transcript stays readable.
 
-Direct operator language. No invented marketing. Prefer Ant Design defaults over custom chrome.
+### Secondary
+- **Listening green** (`{colors.success}` / `{colors.successHover}`): microphone is actively capturing. Distinct from Voice mode (primary). Do not use green for Voice-on.
 
-## Voice
+### Neutral
+- **Layout** (`{colors.layout}`): rail and page chrome.
+- **Container** (`{colors.container}`): conversation pane and header.
+- **Elevated** (`{colors.elevated}`): composer shell, code, chips-on-dark.
+- **Border** (`{colors.border}`): 1px hairlines (rail edge, header, composer, Spoken separator).
+- **Fill** (`{colors.fill}`): session-row hover across the whole row including overflow.
+- **Bubble** (`{colors.bubble}`): user message fill only.
+- **Text / secondary / tertiary** (`{colors.text}`, `{colors.textSecondary}`, `{colors.textTertiary}`): body, meta/timestamps/Spoken body, Spoken caption and icons.
 
-Use Ant Design type and spacing. Do not self-host a display face or recreate phosphor, bevels, markers, or decorative plates.
+**The Role Surfaces Rule.** Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.
 
-## Do
+## Typography
 
-- Import `antd` components in feature files; keep ConfigProvider at the app root with `darkAlgorithm`.
-- Honor `prefers-reduced-motion`; keep labeled errors and visible focus.
-- Session rail is 280px at 1200px and above, 240px from 768–1199px, and an Ant Design Drawer below 768px.
-- Session list hover fills the whole row, including the overflow control, using the fill token only—no outline on the open control. Overflow icons share one 24px size, sit inside the row padding, and share a common right edge.
-- Rail sections use a title and gap, not dividing rules. New chat, the Chats heading, and session titles share the Agent Core left edge.
-- Conversation meta shows a compact timestamp next to the agent name and above user bubbles. Interrupted/failed entries use an Ant Design Tag chip, not a full-width banner.
-- After a user send, leave about half the conversation pane below that bubble for the incoming reply so prior turns can stay in view. Shrink that space as the reply grows. Historical turns stay compact.
-- Preserve testids `connection` and `profile`.
-- Show the Voice control only when `voiceAvailable` is true (catalog list before attach; `session.ready` agent after attach). Keep Voice visible in voice mode; do not replace it with Mute.
-- Keep the labeled composer available while voice is live until `/docs` and tests change together.
-- Ended conversations keep the same reading column; the composer slot is a quiet “This conversation has ended.” note, not a disabled input.
+**Display/Body Font:** system UI stack (San Francisco / Segoe UI / Roboto fallbacks). No self-hosted display face.
 
-## Don't
+**Character:** Ant Design defaults. Status is written in type, not color alone.
 
-- Reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or custom Select.
-- Add generic wrapper libraries, Ant Design Pro/ProComponents/X, or another CSS framework.
-- Use Layout.Sider `theme="dark"` (navy admin sider). Keep `theme="light"` so `darkAlgorithm` supplies chat surfaces.
-- Treat this file as behavioral authority over `/docs`.
+### Hierarchy
+- **Headline** (600, 28px desktop / 22px below 768px): empty-chat “What do you want to work on?”
+- **Title** (600, 16px): Agent Core rail wordmark (line-height 1.4) and session header agent name (line-height 1.3).
+- **Body** (400, 14px, line-height 1.57): conversation, composer field, rail titles. Reading column max width 52rem.
+- **Label** (400, 12px): timestamps, header subtitle, connection/profile, Spoken caption. Spoken icon matches this size.
+
+**The One Face Rule.** Do not self-host a display face or costume monospace except for code in Markdown.
+
+## Layout
+
+One session: black rail + conversation column + sticky composer. Column is `min(100%, 52rem)` centered with 16px inline padding. Conversation list gap is section (16px); inside a turn, compact (8px) owns sibling stacks (meta → body → Spoken).
+
+- Rail: 280px at 1200px+, 240px from 768–1199px, Drawer below 768px. Shared 16px left edge for New chat, Chats, session titles. Sections use title + gap, not dividing rules.
+- Header: 56px min height, container background, compact block padding, 16px inline.
+- Composer dock: 12px above, 16px below the shell. Toolbar min-height 32px (44px below 768px); wrap with 8px gap.
+- After a user send, leave about half the pane for the incoming reply; shrink as the reply grows. Historical turns stay compact.
+- New chat empty: Identity + Speech locale in the intro stack (max 22rem). Model/Reasoning are not duplicated there.
+- Paused: Resume replaces the composer; Model returns to the header. Ended: quiet ended note; disabled Model in the header.
+
+**The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
+
+**The Compact Rhythm Rule.** Prefer parent `gap` of compact/default/section. Do not add one-off 2px/4px offsets beside those tokens.
+
+## Elevation & Depth
+
+Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow on the composer.
+
+### Shadow Vocabulary
+- **Composer lift** (`box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45)`): sticky message well only.
+
+**The Flat-By-Default Rule.** Surfaces are flat at rest. Do not add card shadows inside transcript turns.
+
+## Shapes
+
+- **Control** (6px): AntD buttons, Selects, 32px composer icon/send hits, status tags.
+- **Composer** (16px): message well.
+- **Bubble** (18px): user turns only. Assistant content is unbubbled Markdown.
+
+Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
+
+## Components
+
+### Buttons
+- **Shape:** 6px radius; icon Send/Attach/Voice are 32×32px (44px tall toolbar on small screens).
+- **Primary:** Send and Voice-on use `{colors.primary}`.
+- **Ghost/text:** Attach, overflow, New chat; hover uses `{colors.fill}` only, no outline on session overflow.
+- **Success:** live microphone control uses `{colors.success}`.
+
+### Chips
+- Interrupted/failed: solid Ant Design Tag, not a full-width banner. Default tag marks the catalog default model in the Model menu.
+
+### Cards / Containers
+- Composer shell: elevated fill, 16px radius, 8px 12px padding, 8px inner gap, 1px border, composer shadow.
+- Do not nest a card inside each assistant message.
+
+### Inputs / Fields
+- Message: borderless textarea inside the composer; placeholder secondary text.
+- Model/Reasoning in the live composer: small borderless Selects, left of Attach. Header/paused/ended Model uses outlined small Selects.
+- Identity and Speech locale: labeled AntD Selects.
+
+### Navigation
+- Session row hover fills the whole row including overflow (24px icon, inside row padding, common right edge).
+- Header: agent name + 12px timestamp; Speech locale; conversation overflow (End). No Model in the live header.
+
+### Conversation turns
+- User: right-aligned bubble (`8px 12px`, 18px radius).
+- Assistant: open sanitized Markdown; optional blocks/files; then **Spoken** when public `speechText` meaningfully differs. Spoken is the same list item: speaker icon (decorative) + visible “Spoken” label (tertiary via CSS), body secondary with `pre-wrap`; 8px stack gap; 8px padding above a 1px border. Not a second bubble, avatar, or timestamp.
+
+### Composer toolbar
+- Left: Model, Reasoning (if the model supports it), Attach, Voice, microphone.
+- Right: Stop / Queue / Send.
+- Accessible names stay Model, Reasoning, Attach, Voice, Send, Stop.
+
+## Do's and Don'ts
+
+### Do:
+- **Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme="light"` so chat surfaces stay black.
+- **Do** use compact/default/section (8/12/16px) for gaps and padding; align Spoken and composer toolbar to that rhythm.
+- **Do** put Model/Reasoning in the composer when the composer is shown; keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.
+- **Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it secondary to display Markdown.
+- **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
+- **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
+- **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
+
+### Don't:
+- **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.
+- **Don't** add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.
+- **Don't** use Layout.Sider `theme="dark"` (navy admin sider).
+- **Don't** treat this file as behavioral authority over `/docs`.
+- **Don't** put Model in both the empty Identity stack and the composer.
+- **Don't** show Spoken as another conversational turn or from internal generated tails.
