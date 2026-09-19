@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Models;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Speech;
 using AgentCore.Contracts.Http;
@@ -22,7 +24,10 @@ public static partial class HttpMapping
         };
 
     // Purpose metadata and completion-authority policy stay private; protocol-v1 status remains the public field.
-    public static SessionViewResponse ToView(SessionSnapshot snapshot, Guid? activeResponseId) =>
+    public static SessionViewResponse ToView(
+        SessionSnapshot snapshot,
+        Guid? activeResponseId,
+        IModelCatalog? catalog = null) =>
         new(
             snapshot.SessionId.ToString(),
             snapshot.Definition.Id,
@@ -37,7 +42,8 @@ public static partial class HttpMapping
             ProtocolVersion,
             snapshot.PauseReason,
             LifecycleTransition.ToWire(snapshot.LifecycleStatus),
-            ToSpeechLocale(snapshot));
+            ToSpeechLocale(snapshot),
+            ToModel(snapshot, catalog));
 
     public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
         new(
@@ -154,9 +160,12 @@ public static partial class HttpMapping
         _ => status.ToString().ToLowerInvariant()
     };
 
-    public static HostSessionViewResponse ToHostView(SessionSnapshot snapshot, Guid? activeResponseId)
+    public static HostSessionViewResponse ToHostView(
+        SessionSnapshot snapshot,
+        Guid? activeResponseId,
+        IModelCatalog? catalog = null)
     {
-        var view = ToView(snapshot, activeResponseId);
+        var view = ToView(snapshot, activeResponseId, catalog);
         var purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault;
         var policy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
         return new HostSessionViewResponse(
@@ -174,6 +183,7 @@ public static partial class HttpMapping
             view.PauseReason,
             view.LifecycleStatus,
             view.SpeechLocale,
+            view.Model,
             new HostSessionPurposeResponse(
                 ToPurposeKind(purpose.Kind),
                 purpose.Description,
@@ -266,6 +276,40 @@ public static partial class HttpMapping
             SpeechLocale.ToWire(resolved.Source),
             resolved.Override);
     }
+
+    public static SessionModelSelectionResponse? ToModel(SessionSnapshot snapshot, IModelCatalog? catalog)
+    {
+        if (snapshot.ModelSelection is not { } selection)
+        {
+            return null;
+        }
+
+        var display = catalog?.Get(selection.CatalogKey)?.DisplayName ?? selection.CatalogKey;
+        return new SessionModelSelectionResponse(
+            selection.CatalogKey,
+            display,
+            SessionModelBinder.ToWire(selection.SelectionSource),
+            selection.ReasoningEffort,
+            selection.ModelId);
+    }
+
+    public static ModelCatalogResponse ToCatalog(IModelCatalog catalog) =>
+        new(
+            catalog.DefaultKey,
+            catalog.Models.Select(ToDescriptor).ToArray());
+
+    public static ModelDescriptorResponse ToDescriptor(ModelDescriptor model) =>
+        new(
+            model.Key,
+            model.DisplayName,
+            model.Tools,
+            model.Vision,
+            model.StructuredOutput,
+            model.Reasoning,
+            model.SupportedReasoningEfforts,
+            model.DefaultReasoningEffort,
+            model.ContextCategory,
+            model.CostCategory);
 
     public static string Format(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);

@@ -6,6 +6,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
@@ -27,7 +28,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly SemaphoreSlim _wake = new(0);
 
-    private readonly ILanguageModel _languageModel;
+    private readonly ILanguageModelResolver _models;
+    private readonly IModelCatalog? _catalog;
     private readonly IAgentBrain _brain;
     private readonly IInterruptionClassifier _classifier;
     private readonly IMemoryStore _store;
@@ -153,10 +155,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IAttachmentProcessor? processor = null,
         IArtifactReferenceAuthorizer? artifacts = null,
         SessionToolExecutor? tools = null,
-        VoiceAvailability? voice = null)
+        VoiceAvailability? voice = null,
+        ILanguageModelResolver? modelResolver = null,
+        IModelCatalog? catalog = null)
     {
         _snapshot = snapshot;
-        _languageModel = languageModel;
+        _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
+        _catalog = catalog;
         _brain = brain;
         _classifier = classifier ?? new HeuristicInterruptionClassifier();
         _store = store;
@@ -449,6 +454,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var context = NewContext();
         BeginWork();
         if (!Enqueue(new SpeechLocaleReceived(context, normalized, persisted), urgent: true))
+        {
+            persisted.TrySetResult(false);
+            return false;
+        }
+
+        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> RequestModelSettingsAsync(
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource source,
+        CancellationToken cancellationToken = default)
+    {
+        var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new ModelSelectionReceived(context, modelKey, reasoningEffort, source, persisted), urgent: true))
         {
             persisted.TrySetResult(false);
             return false;
@@ -816,6 +839,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case SpeechLocaleReceived speechLocale:
                     await HandleSpeechLocaleAsync(speechLocale, cancellationToken).ConfigureAwait(false);
                     break;
+                case ModelSelectionReceived modelSelection:
+                    await HandleModelSelectionAsync(modelSelection, cancellationToken).ConfigureAwait(false);
+                    break;
                 case InitiativeHoldReceived hold:
                     HandleInitiativeHold(hold);
                     break;
@@ -839,7 +865,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Mailbox processing failed for session {SessionId}", SessionId);
-            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or RenameReceived or SpeechLocaleReceived or DetachReceived)
+            if (input is AttachReceived or EndSessionReceived or LifecycleTransitionReceived or RenameReceived or SpeechLocaleReceived or ModelSelectionReceived or DetachReceived)
             {
                 CompleteInputWaiters(input, false);
             }
@@ -939,6 +965,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case SpeechLocaleReceived speechLocale:
                 speechLocale.Persisted.TrySetResult(value);
+                break;
+            case ModelSelectionReceived modelSelection:
+                modelSelection.Persisted.TrySetResult(value);
                 break;
             case AttachReceived attach:
                 attach.Attached.TrySetResult(value);
@@ -1361,6 +1390,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             RememberPostResponseIdleDelay(speakable.NextWaitMs);
         }
 
+        PinModelSelectionIfMissing();
         var now = _time.GetUtcNow();
         var entryId = _ids.NewId();
         var sequence = NextSequence();
@@ -1375,7 +1405,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _snapshot.Mode,
             0,
             0,
-            now);
+            now,
+            ModelProvenance: ToProvenance(_snapshot.ModelSelection));
 
         _activeResponseId = input.ResponseId;
         _activeEntryId = entryId;
@@ -1399,14 +1430,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
 
-        var request = speakable.Request with { ResponseId = input.ResponseId };
+        var request = speakable.Request with
+        {
+            ResponseId = input.ResponseId,
+            ReasoningEffort = _snapshot.ModelSelection?.ReasoningEffort
+        };
+        var model = ResolveSessionModel(
+            input.Trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
         BeginWork();
         var responseToken = _responseCts.Token;
         _ = Task.Run(async () =>
         {
             try
             {
-                await PumpModelAsync(request, input.Context, responseToken).ConfigureAwait(false);
+                await PumpModelAsync(model, request, input.Context, responseToken).ConfigureAwait(false);
             }
             finally
             {
@@ -1459,7 +1496,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var generation = ++_completionGeneration;
         _completionCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var token = _completionCts.Token;
+        PinModelSelectionIfMissing();
         var snapshot = _snapshot;
+        var model = ResolveSessionModel(ModelPurpose.CompletionEvaluation);
         BeginWork();
         _ = Task.Run(async () =>
         {
@@ -1469,7 +1508,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 try
                 {
                     decision = await CompletionEvaluator.EvaluateAsync(
-                            _languageModel,
+                            model,
                             snapshot,
                             _time.GetUtcNow(),
                             token)
@@ -1736,6 +1775,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _brainEvaluationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var evaluationToken = _brainEvaluationCts.Token;
+        PinModelSelectionIfMissing();
+        var model = ResolveSessionModel(
+            trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
 
         _ = Task.Run(async () =>
         {
@@ -1759,9 +1801,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     SpeaksThisSilencePeriod: _proactiveSpeaksThisSilence,
                     InitiativeHeld: _initiativeHeld || _pendingUploadHold,
                     InactivityExceeded: InactivityExceeded(),
-                    ModelSupportsTools: _languageModel.Capabilities.Tools,
+                    ModelSupportsTools: model.Capabilities.Tools,
                     UtcNow: _time.GetUtcNow(),
-                    LastUserActivityAt: _snapshot.LastUserActivityAt);
+                    LastUserActivityAt: _snapshot.LastUserActivityAt,
+                    LanguageModel: model,
+                    ReasoningEffort: _snapshot.ModelSelection?.ReasoningEffort);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
@@ -1859,7 +1903,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }, CancellationToken.None);
     }
 
-    private async Task PumpModelAsync(ModelRequest request, EventContext cause, CancellationToken cancellationToken)
+    private async Task PumpModelAsync(
+        ILanguageModel model,
+        ModelRequest request,
+        EventContext cause,
+        CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
@@ -1877,7 +1925,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var pending = new List<ModelToolCall>();
                 var finished = false;
                 var working = request with { Messages = messages };
-                await foreach (var evt in _languageModel.GenerateAsync(working, generateToken).ConfigureAwait(false))
+                await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
                     switch (evt)
                     {
@@ -3090,7 +3138,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Checkpoint,
         Pause,
         Resume,
-        TerminalEnd
+        TerminalEnd,
+        ModelSelection
     }
 
     private sealed class PersistJob(
@@ -3118,6 +3167,27 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         SessionSnapshot? Saved,
         Exception? Error,
         bool Superseded) : SessionInput(Context);
+
+    private ILanguageModel ResolveSessionModel(ModelPurpose purpose)
+    {
+        var selection = _snapshot.ModelSelection
+            ?? new SessionModelSelection(
+                "unspecified",
+                "primary-llm",
+                "unspecified",
+                ModelSelectionSource.SystemDefault,
+                null);
+        return _models.Resolve(selection, purpose);
+    }
+
+    private static ModelGenerationProvenance? ToProvenance(SessionModelSelection? selection) =>
+        selection is null
+            ? null
+            : new ModelGenerationProvenance(
+                selection.CatalogKey,
+                selection.ProviderAlias,
+                selection.ModelId,
+                selection.ReasoningEffort);
 
     private static void Signal(ref TaskCompletionSource source)
     {
@@ -3198,7 +3268,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 if (_snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending
-                    && job.Kind is not PersistKind.Pause)
+                    && job.Kind is not PersistKind.Pause and not PersistKind.ModelSelection)
                 {
                     await FailPersistenceAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -3245,6 +3315,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             PersistKind.TerminalEnd => true,
             PersistKind.Pause => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
             PersistKind.Resume => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
+            PersistKind.ModelSelection => _snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending,
             PersistKind.Checkpoint => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created,
             _ => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created
         };
@@ -3490,6 +3561,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (kind is PersistKind.Pause)
         {
             _snapshot = MergePersisted(saved, _snapshot);
+            return;
+        }
+
+        if (kind is PersistKind.ModelSelection)
+        {
+            _snapshot = _snapshot with
+            {
+                ModelSelection = saved.ModelSelection,
+                Revision = saved.Revision,
+                UpdatedAt = saved.UpdatedAt
+            };
             return;
         }
 

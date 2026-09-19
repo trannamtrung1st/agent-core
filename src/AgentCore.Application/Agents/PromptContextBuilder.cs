@@ -86,7 +86,11 @@ public sealed class PromptContextBuilder
                     "Do not repeat prior wording, stack empty check-ins, or ask a question mark solely to keep the conversation alive.")));
         }
 
-        return new ModelRequest(responseId, messages, context.Definition.ConversationPolicy.MaxOutputTokens);
+        return new ModelRequest(
+            responseId,
+            messages,
+            context.Definition.ConversationPolicy.MaxOutputTokens,
+            ReasoningEffort: context.ReasoningEffort);
     }
 
     public static string BuildInitiativePlanFramework(InitiativeIntent intent)

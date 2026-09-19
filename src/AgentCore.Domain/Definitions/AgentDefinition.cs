@@ -13,7 +13,8 @@ public sealed record AgentDefinition(
     VoiceConfiguration Voice,
     ProviderPreferences ProviderPreferences,
     IReadOnlyDictionary<string, string> Metadata,
-    RoleEnvironment? Environment = null);
+    RoleEnvironment? Environment = null,
+    AgentModelDefaults? ModelDefaults = null);
 
 public sealed record AgentIdentity(string Name, string Role, string Description, string Tone);
 
@@ -58,3 +59,5 @@ public sealed record ProviderPreferences(
     string? SpeechRecognizer,
     string? SpeechSynthesizer,
     string InterruptionClassifier = "heuristic");
+
+public sealed record AgentModelDefaults(string? CatalogKey, string? ReasoningEffort);

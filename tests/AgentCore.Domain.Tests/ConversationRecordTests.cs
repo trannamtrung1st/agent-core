@@ -1,5 +1,4 @@
 using AgentCore.Domain.Conversation;
-using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Tests;
 
@@ -27,23 +26,42 @@ public sealed class ConversationRecordTests
     }
 
     [Fact]
-    public void Agent_definition_identity_is_immutable_data()
+    public void Conversation_entry_model_provenance_is_optional_and_value_equal()
     {
-        var definition = new AgentDefinition(
+        var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
+        var left = new ConversationEntry(
+            Guid.Parse("019944af-0000-7000-8000-000000000010"),
             1,
-            "examiner",
-            1,
-            new AgentIdentity("Alex", "Speaking examiner", "desc", "tone"),
-            ["goal"],
-            "instructions",
-            new BehaviorPolicy("acknowledgeThenContinue", true, true),
-            new ConversationPolicy("concise", true, "en", 256),
-            new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]),
-            new VoiceConfiguration(true, "default", 1.0),
-            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
-            new Dictionary<string, string>());
-        Assert.Equal("examiner", definition.Id);
-        Assert.Equal("Alex", definition.Identity.Name);
+            null,
+            ConversationRole.Assistant,
+            "Hello",
+            Guid.Parse("019944af-0000-7000-8000-000000000011"),
+            EntryStatus.Completed,
+            SessionMode.Text,
+            0,
+            5,
+            now,
+            ModelProvenance: new ModelGenerationProvenance(
+                "scripted-alpha",
+                "primary-llm",
+                "scripted-alpha",
+                "medium"));
+        Assert.Equal(left, left with { });
+        Assert.NotEqual(left, left with { ModelProvenance = null });
+    }
+
+    [Fact]
+    public void Session_model_selection_is_a_concrete_value()
+    {
+        var left = new SessionModelSelection(
+            "scripted-alpha",
+            "primary-llm",
+            "scripted-alpha",
+            ModelSelectionSource.SystemDefault,
+            "medium");
+        Assert.Equal(left, left with { });
+        Assert.NotEqual(left, left with { SelectionSource = ModelSelectionSource.User });
+        Assert.NotEqual(left, left with { ReasoningEffort = "high" });
     }
 
     [Fact]

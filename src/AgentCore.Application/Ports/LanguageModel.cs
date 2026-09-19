@@ -44,7 +44,8 @@ public sealed record ModelRequest(
     IReadOnlyList<ModelMessage> Messages,
     int MaxOutputTokens = 512,
     double? Temperature = null,
-    IReadOnlyList<ModelToolDefinition>? Tools = null);
+    IReadOnlyList<ModelToolDefinition>? Tools = null,
+    string? ReasoningEffort = null);
 
 public abstract record ModelGenerationEvent;
 

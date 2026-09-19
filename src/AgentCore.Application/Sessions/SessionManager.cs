@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
@@ -21,6 +22,7 @@ public sealed class SessionManager
     private readonly RoleKnowledgeService? _knowledge;
     private readonly ISessionWorkspace? _workspace;
     private readonly IArtifactStore? _artifacts;
+    private readonly IModelCatalog? _models;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -31,7 +33,8 @@ public sealed class SessionManager
         IAttachmentStore? attachments = null,
         RoleKnowledgeService? knowledge = null,
         ISessionWorkspace? workspace = null,
-        IArtifactStore? artifacts = null)
+        IArtifactStore? artifacts = null,
+        IModelCatalog? models = null)
     {
         _definitions = definitions;
         _store = store;
@@ -42,6 +45,7 @@ public sealed class SessionManager
         _knowledge = knowledge;
         _workspace = workspace;
         _artifacts = artifacts;
+        _models = models;
     }
 
     public async Task<SessionSnapshot> CreateAsync(
@@ -52,7 +56,10 @@ public sealed class SessionManager
         SessionPurpose? purpose = null,
         SessionCompletionPolicy? policy = null,
         TimeSpan? maxDuration = null,
-        string? speechLocaleOverride = null)
+        string? speechLocaleOverride = null,
+        string? modelKey = null,
+        string? reasoningEffort = null,
+        ModelSelectionSource modelSource = ModelSelectionSource.SystemDefault)
     {
         if (string.IsNullOrWhiteSpace(agentId))
         {
@@ -106,7 +113,8 @@ public sealed class SessionManager
             CompletionPolicy: resolvedPolicy,
             LifecycleSource: LifecycleTransitionSource.System,
             LifecycleChangedAt: now,
-            SpeechLocaleOverride: localeOverride);
+            SpeechLocaleOverride: localeOverride,
+            ModelSelection: BindCreatedModel(definition, modelKey, reasoningEffort, modelSource));
         if (SessionLifecycle.DeadlineElapsed(resolvedPurpose, now))
         {
             snapshot = LifecycleTransition.Apply(
@@ -463,6 +471,72 @@ public sealed class SessionManager
         return next;
     }
 
+    public async Task<SessionSnapshot> SetModelAsync(
+        Guid sessionId,
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource source,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (LifecycleTransition.IsTerminal(snapshot))
+        {
+            throw AgentCoreErrors.Validation("Ended sessions cannot change model.");
+        }
+
+        if (_models is null)
+        {
+            throw AgentCoreErrors.Validation("Model catalog is not configured.");
+        }
+
+        var selection = SessionModelBinder.Bind(
+            _models,
+            modelKey,
+            reasoningEffort,
+            source,
+            snapshot.Definition.ModelDefaults);
+        if (snapshot.ModelSelection == selection)
+        {
+            return snapshot;
+        }
+
+        var next = snapshot with
+        {
+            ModelSelection = selection,
+            Revision = snapshot.Revision + 1,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        await _store.SaveAsync(next, snapshot.Revision, cancellationToken).ConfigureAwait(false);
+        return next;
+    }
+
+    public SessionSnapshot PinModelSelection(SessionSnapshot snapshot)
+    {
+        if (snapshot.ModelSelection is not null || _models is null)
+        {
+            return snapshot;
+        }
+
+        return snapshot with
+        {
+            ModelSelection = SessionModelBinder.PinDefault(_models, snapshot.Definition)
+        };
+    }
+
+    private SessionModelSelection? BindCreatedModel(
+        AgentDefinition definition,
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource source)
+    {
+        if (_models is null)
+        {
+            return null;
+        }
+
+        return SessionModelBinder.Bind(_models, modelKey, reasoningEffort, source, definition.ModelDefaults);
+    }
+
     private async Task<SessionSnapshot> PersistDeadlineExpiryAsync(
         SessionSnapshot snapshot,
         CancellationToken cancellationToken)
@@ -797,7 +871,9 @@ public sealed class SessionRuntimeFactory(
     IAttachmentStore attachments,
     IAttachmentProcessor processor,
     IArtifactReferenceAuthorizer artifacts,
-    SessionToolExecutor tools)
+    SessionToolExecutor tools,
+    ILanguageModelResolver? models = null,
+    IModelCatalog? catalog = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -820,5 +896,7 @@ public sealed class SessionRuntimeFactory(
             attachments: attachments,
             processor: processor,
             artifacts: artifacts,
-            tools: tools);
+            tools: tools,
+            modelResolver: models,
+            catalog: catalog);
 }

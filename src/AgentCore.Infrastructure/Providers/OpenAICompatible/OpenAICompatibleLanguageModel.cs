@@ -287,7 +287,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             body["temperature"] = temperature;
         }
 
-        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+        if (request.ReasoningEffort is { Length: > 0 } requestEffort)
+        {
+            body["reasoning_effort"] = requestEffort;
+        }
+        else if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
         {
             body["reasoning_effort"] = _options.ReasoningEffort;
         }

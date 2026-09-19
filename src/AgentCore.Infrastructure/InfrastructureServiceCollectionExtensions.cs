@@ -52,6 +52,14 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(persistence);
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(SyntheticProviderAliases.Default);
+        services.TryAddSingleton<IModelCatalog>(provider =>
+            ModelCatalogFactory.Create(profile, languageModel, provider.GetService<IConfiguration>()));
+        services.TryAddSingleton<ILanguageModelResolver>(provider =>
+            new LanguageModelResolver(
+                provider,
+                profile,
+                languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" },
+                provider.GetRequiredService<IModelCatalog>()));
         services.TryAddSingleton<PromptContextBuilder>();
         services.TryAddSingleton<IInitiativeEvaluator>(provider =>
             new DefaultInitiativeEvaluator(
@@ -175,7 +183,9 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IAttachmentStore>(),
                 provider.GetRequiredService<IAttachmentProcessor>(),
                 provider.GetRequiredService<IArtifactReferenceAuthorizer>(),
-                provider.GetRequiredService<SessionToolExecutor>());
+                provider.GetRequiredService<SessionToolExecutor>(),
+                provider.GetRequiredService<ILanguageModelResolver>(),
+                provider.GetRequiredService<IModelCatalog>());
         });
         return services;
     }

@@ -30,6 +30,9 @@ public static class AgentCoreErrors
     public static AgentCoreException SessionInUse() =>
         new("SessionInUse", "Session is attached to another connection.", 409);
 
+    public static AgentCoreException SessionBusy() =>
+        new("SessionBusy", "Session is busy generating a response.", 409);
+
     public static AgentCoreException SessionCapacityExceeded() =>
         new("SessionCapacityExceeded", "Maximum active sessions reached.", 429) { RetryAfterMs = 5000 };
 

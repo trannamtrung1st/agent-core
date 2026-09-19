@@ -1,8 +1,10 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api;
 
@@ -17,6 +19,7 @@ public static class LegacySessionEndpoints
             SessionManager sessions,
             SessionHost host,
             HttpContext http,
+            IModelCatalog catalog,
             CancellationToken cancellationToken) =>
         {
             try
@@ -36,9 +39,12 @@ public static class LegacySessionEndpoints
                         body.AgentVersion,
                         HttpMapping.ParseMode(body.Mode),
                         cancellationToken,
-                        speechLocaleOverride: body.SpeechLocale)
+                        speechLocaleOverride: body.SpeechLocale,
+                        modelKey: body.Model?.Key,
+                        reasoningEffort: body.Model?.ReasoningEffort,
+                        modelSource: ModelSelectionSource.User)
                     .ConfigureAwait(false);
-                var view = HttpMapping.ToView(snapshot, activeResponseId: null);
+                var view = HttpMapping.ToView(snapshot, activeResponseId: null, catalog);
                 var location = $"/api/v1/sessions/{view.SessionId}";
                 http.Response.Headers.Location = location;
                 return Results.Json(view, statusCode: StatusCodes.Status201Created);
@@ -53,13 +59,14 @@ public static class LegacySessionEndpoints
             Guid sessionId,
             SessionManager sessions,
             SessionHost host,
+            IModelCatalog catalog,
             CancellationToken cancellationToken) =>
         {
             try
             {
                 var snapshot = host.LiveSnapshot(sessionId)
                     ?? await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-                return Results.Json(HttpMapping.ToView(snapshot, host.ActiveResponseId(sessionId)));
+                return Results.Json(HttpMapping.ToView(snapshot, host.ActiveResponseId(sessionId), catalog));
             }
             catch (AgentCoreException ex)
             {

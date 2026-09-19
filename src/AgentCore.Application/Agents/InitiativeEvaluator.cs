@@ -161,7 +161,8 @@ public static class InitiativeEvaluator
                 new ModelMessage(ModelRole.User, JsonSerializer.Serialize(payload, Json))
             ],
             MaxOutputTokens: 160,
-            Temperature: 0.2);
+            Temperature: 0.2,
+            ReasoningEffort: context.ReasoningEffort);
     }
 
     private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(

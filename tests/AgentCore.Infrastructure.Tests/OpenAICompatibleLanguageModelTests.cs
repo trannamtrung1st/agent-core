@@ -134,6 +134,27 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
+    public async Task Request_reasoning_effort_overrides_configured_fallback()
+    {
+        var body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                   "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ReasoningEffort = "medium",
+                ApiKey = "test-key"
+            });
+        _ = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")], ReasoningEffort: "high"));
+        Assert.Contains("\"reasoning_effort\":\"high\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"reasoning_effort\":\"medium\"", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Duplicate_generate_is_a_new_post_not_a_retry_of_the_same_call()
     {
         var body = "data: {\"choices\":[{\"delta\":{\"content\":\"A\"},\"finish_reason\":\"stop\"}]}\n\n" +
@@ -404,7 +425,7 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [LiveProviderFact]
-    public async Task OpenRouter_deepseek_v41_default_accepts_tool_choice()
+    public async Task OpenRouter_deepseek_v41_default_accepts_tools_request()
     {
         var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
         using var http = new HttpClient();
@@ -416,6 +437,7 @@ public sealed class OpenAICompatibleLanguageModelTests
                 BaseUrl = "https://openrouter.ai/api/v1/",
                 ApiKey = key,
                 DefaultModel = "deepseek/deepseek-v4.1-flash",
+                ReasoningEffort = "medium",
                 Tools = true,
                 Vision = false,
                 Timeouts = new ProviderTimeoutOptions { SetupSeconds = 15, StreamIdleSeconds = 30, TotalSeconds = 60 }
@@ -432,7 +454,8 @@ public sealed class OpenAICompatibleLanguageModelTests
                            new ModelRequest(
                                Guid.NewGuid(),
                                [new ModelMessage(ModelRole.User, "Call knowledge_retrieve with identity support-order-policy only.")],
-                               Tools: tools)))
+                               Tools: tools,
+                               ReasoningEffort: "medium")))
         {
             events.Add(item);
         }
@@ -441,7 +464,7 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.True(
             events.Any(item => item is ModelToolCallEvent)
             || events.Any(item => item is ModelCompleted),
-            "Expected a tool call or a normal completion from the pinned DeepSeek V4.1 model.");
+            "Expected the pinned DeepSeek V4.1 model to accept the tools request and complete or tool-call.");
     }
 
     [Fact]

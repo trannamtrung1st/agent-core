@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
@@ -18,6 +19,7 @@ public static class HostSessionEndpoints
             SessionManager sessions,
             SessionHost host,
             HttpContext http,
+            IModelCatalog catalog,
             CancellationToken cancellationToken) =>
         {
             try
@@ -42,9 +44,12 @@ public static class HostSessionEndpoints
                         purpose,
                         policy,
                         maxDuration,
-                        body.SpeechLocale)
+                        body.SpeechLocale,
+                        body.Model?.Key,
+                        body.Model?.ReasoningEffort,
+                        ModelSelectionSource.Host)
                     .ConfigureAwait(false);
-                var view = HttpMapping.ToHostView(snapshot, activeResponseId: null);
+                var view = HttpMapping.ToHostView(snapshot, activeResponseId: null, catalog);
                 http.Response.Headers.Location = $"/api/v2/host/sessions/{view.SessionId}";
                 return Results.Json(view, statusCode: StatusCodes.Status201Created);
             }
@@ -58,6 +63,7 @@ public static class HostSessionEndpoints
             Guid sessionId,
             SessionManager sessions,
             SessionHost host,
+            IModelCatalog catalog,
             CancellationToken cancellationToken) =>
         {
             try
@@ -69,7 +75,7 @@ public static class HostSessionEndpoints
                     throw AgentCoreErrors.NotFound("Session was not found.");
                 }
 
-                return Results.Json(HttpMapping.ToHostView(snapshot, host.ActiveResponseId(sessionId)));
+                return Results.Json(HttpMapping.ToHostView(snapshot, host.ActiveResponseId(sessionId), catalog));
             }
             catch (AgentCoreException ex)
             {
@@ -81,6 +87,7 @@ public static class HostSessionEndpoints
             Guid sessionId,
             TransitionLifecycleRequest? body,
             SessionHost host,
+            IModelCatalog catalog,
             CancellationToken cancellationToken) =>
         {
             try
@@ -97,7 +104,7 @@ public static class HostSessionEndpoints
                         body.Reason,
                         cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(HttpMapping.ToHostView(snapshot, host.ActiveResponseId(sessionId)));
+                return Results.Json(HttpMapping.ToHostView(snapshot, host.ActiveResponseId(sessionId), catalog));
             }
             catch (AgentCoreException ex)
             {

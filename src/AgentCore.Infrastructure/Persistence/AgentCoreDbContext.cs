@@ -48,6 +48,11 @@ public sealed class SnapshotRecord
     public string? LifecycleSource { get; set; }
     public long? LifecycleChangedAtUtc { get; set; }
     public string? SpeechLocaleOverride { get; set; }
+    public string? ModelCatalogKey { get; set; }
+    public string? ModelProviderAlias { get; set; }
+    public string? ModelId { get; set; }
+    public string? ModelSelectionSource { get; set; }
+    public string? ModelReasoningEffort { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 
@@ -68,6 +73,10 @@ public sealed class EntryRecord
     public string? AttachmentRefsJson { get; set; }
     public string? SourceAdmissionFingerprint { get; set; }
     public string? FinishReason { get; set; }
+    public string? ModelCatalogKey { get; set; }
+    public string? ModelProviderAlias { get; set; }
+    public string? ModelId { get; set; }
+    public string? ModelReasoningEffort { get; set; }
     public long CreatedAtUtc { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }

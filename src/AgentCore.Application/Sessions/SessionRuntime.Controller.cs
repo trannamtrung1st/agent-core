@@ -1,6 +1,7 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
@@ -78,6 +79,7 @@ public sealed partial class SessionRuntime
         }
 
         _deactivated = false;
+        PinModelSelectionIfMissing();
         if (_snapshot.ProfileId is { } profileId)
         {
             _profile = await _store.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
@@ -362,7 +364,8 @@ public sealed partial class SessionRuntime
             _voice.EffectivePlan.InputTransport,
             _voice.EffectivePlan.OutputTransport,
             _snapshot.LifecycleStatus,
-            SpeechLocale.Resolve(_snapshot));
+            SpeechLocale.Resolve(_snapshot),
+            _snapshot.ModelSelection);
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>

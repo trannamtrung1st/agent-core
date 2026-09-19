@@ -181,6 +181,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "SessionSnapshots", "ModelCatalogKey", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260919080000_SessionModelSelection', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await TableExistsAsync(connection, "Artifacts", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -708,6 +718,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Snapshot.LifecycleSource = snapshot.LifecycleSource?.ToString();
         row.Snapshot.LifecycleChangedAtUtc = snapshot.LifecycleChangedAt?.ToUnixTimeMilliseconds();
         row.Snapshot.SpeechLocaleOverride = snapshot.SpeechLocaleOverride;
+        ApplyModelSelection(row.Snapshot, snapshot.ModelSelection);
     }
 
     private static SessionRecord ToRecord(SessionSnapshot snapshot)
@@ -745,6 +756,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.AttachmentRefsJson = SerializeAttachmentRefs(entry.Attachments);
         row.SourceAdmissionFingerprint = entry.SourceAdmissionFingerprint;
         row.FinishReason = entry.FinishReason;
+        ApplyModelProvenance(row, entry.ModelProvenance);
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
 
@@ -783,7 +795,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             snapshot.LifecycleReason,
             ParseEnumOrNull<LifecycleTransitionSource>(snapshot.LifecycleSource),
             snapshot.LifecycleChangedAtUtc is { } changed ? FromUnix(changed) : null,
-            snapshot.SpeechLocaleOverride);
+            snapshot.SpeechLocaleOverride,
+            ReadModelSelection(snapshot));
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>
@@ -802,7 +815,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             DeserializeEnvelope(row.EnvelopeJson),
             DeserializeAttachmentRefs(row.AttachmentRefsJson),
             row.SourceAdmissionFingerprint,
-            row.FinishReason);
+            row.FinishReason,
+            ReadModelProvenance(row));
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }
@@ -847,6 +861,57 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 ?? SessionCompletionPolicy.Default.AgentCompletion,
             snapshot.UserCompletionAllowed ?? true,
             snapshot.UserCancellationAllowed ?? true);
+
+    private static void ApplyModelSelection(SnapshotRecord row, SessionModelSelection? selection)
+    {
+        row.ModelCatalogKey = selection?.CatalogKey;
+        row.ModelProviderAlias = selection?.ProviderAlias;
+        row.ModelId = selection?.ModelId;
+        row.ModelSelectionSource = selection?.SelectionSource.ToString();
+        row.ModelReasoningEffort = selection?.ReasoningEffort;
+    }
+
+    private static SessionModelSelection? ReadModelSelection(SnapshotRecord row)
+    {
+        if (string.IsNullOrEmpty(row.ModelCatalogKey)
+            || string.IsNullOrEmpty(row.ModelProviderAlias)
+            || string.IsNullOrEmpty(row.ModelId)
+            || string.IsNullOrEmpty(row.ModelSelectionSource))
+        {
+            return null;
+        }
+
+        return new SessionModelSelection(
+            row.ModelCatalogKey,
+            row.ModelProviderAlias,
+            row.ModelId,
+            Enum.Parse<ModelSelectionSource>(row.ModelSelectionSource),
+            row.ModelReasoningEffort);
+    }
+
+    private static void ApplyModelProvenance(EntryRecord row, ModelGenerationProvenance? provenance)
+    {
+        row.ModelCatalogKey = provenance?.CatalogKey;
+        row.ModelProviderAlias = provenance?.ProviderAlias;
+        row.ModelId = provenance?.ModelId;
+        row.ModelReasoningEffort = provenance?.ReasoningEffort;
+    }
+
+    private static ModelGenerationProvenance? ReadModelProvenance(EntryRecord row)
+    {
+        if (string.IsNullOrEmpty(row.ModelCatalogKey)
+            || string.IsNullOrEmpty(row.ModelProviderAlias)
+            || string.IsNullOrEmpty(row.ModelId))
+        {
+            return null;
+        }
+
+        return new ModelGenerationProvenance(
+            row.ModelCatalogKey,
+            row.ModelProviderAlias,
+            row.ModelId,
+            row.ModelReasoningEffort);
+    }
 
     private static TEnum? ParseEnumOrNull<TEnum>(string? value) where TEnum : struct, Enum =>
         string.IsNullOrEmpty(value) ? null : Enum.Parse<TEnum>(value);

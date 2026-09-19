@@ -30,7 +30,8 @@ public sealed record ConversationEntry(
     ResponseEnvelope? Envelope = null,
     IReadOnlyList<ConversationAttachmentRef>? Attachments = null,
     string? SourceAdmissionFingerprint = null,
-    string? FinishReason = null);
+    string? FinishReason = null,
+    ModelGenerationProvenance? ModelProvenance = null);
 
 public sealed record UserProfile(
     Guid ProfileId,
@@ -200,7 +201,8 @@ public sealed record SessionSnapshot(
     string? LifecycleReason = null,
     LifecycleTransitionSource? LifecycleSource = null,
     DateTimeOffset? LifecycleChangedAt = null,
-    string? SpeechLocaleOverride = null)
+    string? SpeechLocaleOverride = null,
+    SessionModelSelection? ModelSelection = null)
 {
     public long DurableLastEntrySequence
     {

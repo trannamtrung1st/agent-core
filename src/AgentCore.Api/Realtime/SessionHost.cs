@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Threading.Channels;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Events;
+using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Speech;
@@ -33,6 +34,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     private readonly AgentCoreOptions _options;
     private readonly IOwnerCapabilityService _capabilities;
     private readonly ILogger<SessionHost> _logger;
+    private readonly IModelCatalog? _catalog;
     private readonly ConcurrentDictionary<Guid, Live> _live = new();
     private readonly ConcurrentDictionary<string, Guid> _connections = new();
     private readonly HashSet<Guid> _terminating = [];
@@ -62,7 +64,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         TimeProvider time,
         IOptions<AgentCoreOptions> options,
         IOwnerCapabilityService capabilities,
-        ILogger<SessionHost> logger)
+        ILogger<SessionHost> logger,
+        IModelCatalog? catalog = null)
     {
         _sessions = sessions;
         _factory = factory;
@@ -71,6 +74,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         _options = options.Value;
         _capabilities = capabilities;
         _logger = logger;
+        _catalog = catalog;
     }
 
     public Guid? ActiveResponseId(Guid sessionId) =>
@@ -661,6 +665,28 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
 
         return await _sessions.SetSpeechLocaleAsync(sessionId, locale, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SessionSnapshot> SetModelAsync(
+        Guid sessionId,
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource source,
+        CancellationToken cancellationToken = default)
+    {
+        if (_live.TryGetValue(sessionId, out var live))
+        {
+            if (!await live.Runtime.RequestModelSettingsAsync(modelKey, reasoningEffort, source, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                throw AgentCoreErrors.Persistence("Model update failed.");
+            }
+
+            return live.Runtime.Snapshot;
+        }
+
+        return await _sessions.SetModelAsync(sessionId, modelKey, reasoningEffort, source, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task DetachAsync(string connectionId)
@@ -1481,7 +1507,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 cancellationToken);
         }
 
-        var evt = SessionEventMapper.Map(output, live.AttachmentId, live.NextSequence());
+        var evt = SessionEventMapper.Map(output, live.AttachmentId, live.NextSequence(), _catalog);
         return new ValueTask(PublishEventAsync(live, output, evt, cancellationToken));
     }
 
@@ -2054,11 +2080,15 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
 public static class SessionEventMapper
 {
-    public static ServerEvent Map(SessionOutput output, Guid attachmentId, long sequence)
+    public static ServerEvent Map(
+        SessionOutput output,
+        Guid attachmentId,
+        long sequence,
+        IModelCatalog? catalog = null)
     {
         var (type, payload) = output.Payload switch
         {
-            ReadyOutput ready => ("session.ready", Ready(ready.Ready)),
+            ReadyOutput ready => ("session.ready", Ready(ready.Ready, catalog)),
             ResponseStartedOutput started => ("agent.response.started", new Dictionary<string, object?>
             {
                 ["entryId"] = started.EntryId.ToString(),
@@ -2186,7 +2216,7 @@ public static class SessionEventMapper
         };
     }
 
-    private static Dictionary<string, object?> Ready(SessionReadyProjection ready)
+    private static Dictionary<string, object?> Ready(SessionReadyProjection ready, IModelCatalog? catalog)
     {
         var history = ready.History.Select(entry => (object)new Dictionary<string, object?>
         {
@@ -2272,6 +2302,16 @@ public static class SessionEventMapper
                             ["effective"] = locale.Effective,
                             ["source"] = SpeechLocale.ToWire(locale.Source),
                             ["override"] = locale.Override
+                        }
+                        : null,
+                    ["model"] = ready.ModelSelection is { } model
+                        ? new Dictionary<string, object?>
+                        {
+                            ["catalogKey"] = model.CatalogKey,
+                            ["displayName"] = catalog?.Get(model.CatalogKey)?.DisplayName ?? model.CatalogKey,
+                            ["selectionSource"] = SessionModelBinder.ToWire(model.SelectionSource),
+                            ["reasoningEffort"] = model.ReasoningEffort,
+                            ["modelId"] = model.ModelId
                         }
                         : null
                 },

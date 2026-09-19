@@ -109,7 +109,8 @@ public static class CompletionEvaluator
                 new ModelMessage(ModelRole.User, JsonSerializer.Serialize(payload, Json))
             ],
             MaxOutputTokens: 80,
-            Temperature: 0);
+            Temperature: 0,
+            ReasoningEffort: snapshot.ModelSelection?.ReasoningEffort);
     }
 
     private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(

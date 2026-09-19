@@ -144,6 +144,13 @@ public sealed record SpeechLocaleReceived(
     string? Locale,
     TaskCompletionSource<bool> Persisted) : SessionInput(Context);
 
+public sealed record ModelSelectionReceived(
+    EventContext Context,
+    string? ModelKey,
+    string? ReasoningEffort,
+    ModelSelectionSource Source,
+    TaskCompletionSource<bool> Persisted) : SessionInput(Context);
+
 public sealed record InitiativeHoldReceived(EventContext Context, bool Held) : SessionInput(Context);
 
 public sealed record ReopenedSnapshotReceived(
@@ -222,7 +229,8 @@ public sealed record SessionReadyProjection(
     string InputTransport,
     string OutputTransport,
     SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
-    SpeechLocaleResolution? SpeechLocale = null);
+    SpeechLocaleResolution? SpeechLocale = null,
+    SessionModelSelection? ModelSelection = null);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

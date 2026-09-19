@@ -20,4 +20,17 @@ services:
       Providers__LanguageModels__primary-llm__ReasoningEffort: ${AGENTCORE_LLM_REASONING_EFFORT:-medium}
       Providers__LanguageModels__primary-llm__Vision: ${AGENTCORE_LLM_VISION:-false}
       Providers__LanguageModels__primary-llm__Tools: ${AGENTCORE_LLM_TOOLS:-true}
+      Providers__ModelCatalog__DefaultKey: deepseek-v41-flash
+      Providers__ModelCatalog__Models__0__Key: deepseek-v41-flash
+      Providers__ModelCatalog__Models__0__DisplayName: DeepSeek V4.1 Flash
+      Providers__ModelCatalog__Models__0__ProviderAlias: primary-llm
+      Providers__ModelCatalog__Models__0__ModelId: ${AGENTCORE_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+      Providers__ModelCatalog__Models__0__Tools: ${AGENTCORE_LLM_TOOLS:-true}
+      Providers__ModelCatalog__Models__0__Vision: ${AGENTCORE_LLM_VISION:-false}
+      Providers__ModelCatalog__Models__0__StructuredOutput: "false"
+      Providers__ModelCatalog__Models__0__Reasoning: "true"
+      Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__0: low
+      Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__1: medium
+      Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__2: high
+      Providers__ModelCatalog__Models__0__DefaultReasoningEffort: ${AGENTCORE_LLM_REASONING_EFFORT:-medium}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

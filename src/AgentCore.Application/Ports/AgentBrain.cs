@@ -31,7 +31,9 @@ public sealed record AgentContext(
     bool InactivityExceeded = false,
     bool ModelSupportsTools = true,
     DateTimeOffset UtcNow = default,
-    DateTimeOffset? LastUserActivityAt = null);
+    DateTimeOffset? LastUserActivityAt = null,
+    ILanguageModel? LanguageModel = null,
+    string? ReasoningEffort = null);
 
 public abstract record AgentDecision;
 

@@ -125,6 +125,20 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("metadata exceeds allowed size.");
         }
 
+        if (definition.ModelDefaults is { } modelDefaults)
+        {
+            if (modelDefaults.CatalogKey is { Length: > 0 } key && !IdPattern.IsMatch(key))
+            {
+                throw new ArgumentException("modelDefaults.catalogKey must be lowercase [a-z0-9-] length 1..64.");
+            }
+
+            if (modelDefaults.ReasoningEffort is { Length: > 0 } effort
+                && effort.Length > 32)
+            {
+                throw new ArgumentException("modelDefaults.reasoningEffort is invalid.");
+            }
+        }
+
         ValidateEnvironment(RoleEnvironments.Of(definition));
     }
 

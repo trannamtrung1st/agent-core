@@ -2,7 +2,12 @@ namespace AgentCore.Contracts.Http;
 
 public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion);
 
-public sealed record CreateSessionRequest(string AgentId, int? AgentVersion, string? Mode, string? SpeechLocale = null);
+public sealed record CreateSessionRequest(
+    string AgentId,
+    int? AgentVersion,
+    string? Mode,
+    string? SpeechLocale = null,
+    SessionModelChoiceRequest? Model = null);
 
 /// <param name="Source">Ignored on all lifecycle routes; authority is fixed per route (user vs host).</param>
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
@@ -24,7 +29,8 @@ public sealed record HostCreateSessionRequest(
     string? SpeechLocale = null,
     HostSessionPurposeRequest? Purpose = null,
     HostSessionCompletionPolicyRequest? CompletionPolicy = null,
-    long? MaxDurationSeconds = null);
+    long? MaxDurationSeconds = null,
+    SessionModelChoiceRequest? Model = null);
 
 public sealed record HostSessionPurposeResponse(string Kind, string? Description, string? DeadlineAt);
 
@@ -48,6 +54,7 @@ public sealed record HostSessionViewResponse(
     string? PauseReason,
     string? LifecycleStatus,
     SpeechLocaleResponse? SpeechLocale,
+    SessionModelSelectionResponse? Model,
     HostSessionPurposeResponse Purpose,
     HostSessionCompletionPolicyResponse CompletionPolicy,
     string? LifecycleSource = null,
@@ -57,6 +64,33 @@ public sealed record HostSessionViewResponse(
 public sealed record SetSpeechLocaleRequest(string? Locale);
 
 public sealed record SpeechLocaleResponse(string Effective, string Source, string? Override);
+
+public sealed record SessionModelChoiceRequest(string? Key = null, string? ReasoningEffort = null);
+
+public sealed record SetSessionModelRequest(string? Key = null, string? ReasoningEffort = null);
+
+public sealed record SessionModelSelectionResponse(
+    string CatalogKey,
+    string DisplayName,
+    string SelectionSource,
+    string? ReasoningEffort,
+    string? ModelId = null);
+
+public sealed record ModelCapabilityResponse(bool Tools, bool Vision, bool StructuredOutput, bool Reasoning);
+
+public sealed record ModelDescriptorResponse(
+    string Key,
+    string DisplayName,
+    bool Tools,
+    bool Vision,
+    bool StructuredOutput,
+    bool Reasoning,
+    IReadOnlyList<string> SupportedReasoningEfforts,
+    string? DefaultReasoningEffort,
+    string? ContextCategory = null,
+    string? CostCategory = null);
+
+public sealed record ModelCatalogResponse(string DefaultKey, IReadOnlyList<ModelDescriptorResponse> Models);
 
 public sealed record SessionViewResponse(
     string SessionId,
@@ -72,7 +106,8 @@ public sealed record SessionViewResponse(
     int ProtocolVersion,
     string? PauseReason = null,
     string? LifecycleStatus = null,
-    SpeechLocaleResponse? SpeechLocale = null);
+    SpeechLocaleResponse? SpeechLocale = null,
+    SessionModelSelectionResponse? Model = null);
 
 public sealed record AgentDescriptorResponse(
     string Id,

@@ -369,6 +369,21 @@ public sealed class GatedThenLiveModel : ILanguageModel
     {
         var call = Interlocked.Increment(ref _calls);
         Calls = call;
+        if (request.Messages.Any(message => message.Text.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal)))
+        {
+            yield return new ModelTextDelta(
+                """{"decision":"speak","intent":"followUp","objective":"Synthetic environment update is actionable."}""");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
+        if (request.Messages.Any(message => message.Text.Contains(CompletionEvaluator.Marker, StringComparison.Ordinal)))
+        {
+            yield return new ModelTextDelta("""{"decision":"continue","reason":"Synthetic completion continue."}""");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
         if (call == 1)
         {
             yield return new ModelTextDelta("R1a");

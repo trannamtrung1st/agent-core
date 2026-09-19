@@ -9,5 +9,10 @@ public sealed class DefaultInitiativeEvaluator(PromptContextBuilder builder, ILa
         AgentContext context,
         Guid responseId,
         CancellationToken cancellationToken = default) =>
-        InitiativeEvaluator.EvaluateAsync(initiativeModel, builder, context, responseId, cancellationToken);
+        InitiativeEvaluator.EvaluateAsync(
+            context.LanguageModel ?? initiativeModel,
+            builder,
+            context,
+            responseId,
+            cancellationToken);
 }

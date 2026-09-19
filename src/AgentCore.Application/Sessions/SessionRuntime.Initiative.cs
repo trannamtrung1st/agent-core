@@ -1,4 +1,5 @@
 using AgentCore.Application.Events;
+using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
@@ -170,6 +171,89 @@ public sealed partial class SessionRuntime
             },
             ended: input.Persisted);
     }
+
+    private void PinModelSelectionIfMissing()
+    {
+        if (_snapshot.ModelSelection is not null || _catalog is null)
+        {
+            return;
+        }
+
+        _snapshot = _snapshot with
+        {
+            ModelSelection = SessionModelBinder.PinDefault(_catalog, _snapshot.Definition),
+            UpdatedAt = _time.GetUtcNow()
+        };
+    }
+
+    private async Task HandleModelSelectionAsync(ModelSelectionReceived input, CancellationToken cancellationToken)
+    {
+        if (SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
+        {
+            input.Persisted.TrySetException(AgentCoreErrors.Validation("Ended sessions cannot change model."));
+            return;
+        }
+
+        if (IsModelMutationBusy())
+        {
+            input.Persisted.TrySetException(AgentCoreErrors.SessionBusy());
+            return;
+        }
+
+        if (_catalog is null)
+        {
+            input.Persisted.TrySetException(AgentCoreErrors.Validation("Model catalog is not configured."));
+            return;
+        }
+
+        SessionModelSelection selection;
+        try
+        {
+            selection = SessionModelBinder.Bind(
+                _catalog,
+                input.ModelKey,
+                input.ReasoningEffort,
+                input.Source,
+                _snapshot.Definition.ModelDefaults);
+        }
+        catch (AgentCoreException ex)
+        {
+            input.Persisted.TrySetException(ex);
+            return;
+        }
+
+        if (_snapshot.ModelSelection == selection)
+        {
+            input.Persisted.TrySetResult(true);
+            return;
+        }
+
+        var proposed = _snapshot with
+        {
+            ModelSelection = selection,
+            UpdatedAt = _time.GetUtcNow()
+        };
+        RequestPersist(
+            proposed,
+            PersistKind.ModelSelection,
+            then: async ct =>
+            {
+                await PublishAsync(new SessionOutput(input.Context, null, new ReadyOutput(BuildReady())), ct)
+                    .ConfigureAwait(false);
+                input.Persisted.TrySetResult(true);
+            },
+            ended: input.Persisted);
+    }
+
+    private bool IsModelMutationBusy() =>
+        _activeResponseId is not null
+        || _proactiveBrainInFlight
+        || _completionCts is not null
+        || _outputActivity is OutputActivity.AgentGenerating
+            or OutputActivity.RunningTools
+            or OutputActivity.ProcessingAttachments
+            or OutputActivity.WaitingForAgent
+            or OutputActivity.AgentSpeaking;
 
     private void HandleReopenedSnapshot(ReopenedSnapshotReceived input)
     {

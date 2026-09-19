@@ -153,6 +153,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("FinishReason")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ModelCatalogKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelProviderAlias")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelReasoningEffort")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("HeardTextEndExclusive")
                         .HasColumnType("INTEGER");
 
@@ -366,6 +378,21 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("SpeechLocaleOverride")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelCatalogKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelProviderAlias")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelReasoningEffort")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelSelectionSource")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("SummarizedThroughEntrySequence")

@@ -803,6 +803,38 @@ public sealed class MemoryStoreContractTests
         Assert.Equal(5, restored.ReceivedTextEndExclusive);
     }
 
+    [Fact]
+    public async Task Session_model_selection_and_turn_provenance_survive_sqlite_reopen()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
+        var selection = new SessionModelSelection(
+            "scripted-alpha",
+            "primary-llm",
+            "scripted-alpha",
+            ModelSelectionSource.SystemDefault,
+            "medium");
+        var entry = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Hello") with
+        {
+            ModelProvenance = new ModelGenerationProvenance(
+                "scripted-alpha",
+                "primary-llm",
+                "scripted-alpha",
+                "medium")
+        };
+        var snapshot = First() with { Entries = [entry], ModelSelection = selection };
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(snapshot, 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        var restored = await reopened.Store.LoadAsync(snapshot.SessionId);
+        Assert.Equal(selection, restored!.ModelSelection);
+        Assert.Equal(entry.ModelProvenance, Assert.Single(restored.Entries).ModelProvenance);
+    }
+
     private static IReadOnlyList<ConversationEntry> LongTranscript(int count, int trailingUsers)
     {
         var entries = new ConversationEntry[count];
