@@ -63,7 +63,9 @@ public sealed class InteractionControllerTests
         await harness.Runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(1, harness.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.User));
         Assert.NotNull(harness.Runtime.ActiveResponseId);
-        Assert.DoesNotContain(harness.Output.TextDeltas, delta => delta.Text == "R1b");
+        Assert.DoesNotContain(
+            harness.Output.TextDeltas,
+            delta => delta.Text.Contains("R1b", StringComparison.Ordinal));
         harness.Model.Gate.TrySetResult();
         await harness.Runtime.WaitUntilIdleAsync();
         await harness.Runtime.DisposeAsync();
@@ -177,7 +179,9 @@ public sealed class InteractionControllerTests
         Assert.True(harness.Model.Calls >= 2);
         harness.Model.Gate.TrySetResult();
         await harness.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(harness.Output.TextDeltas, delta => delta.Text == "R1b");
+        Assert.DoesNotContain(
+            harness.Output.TextDeltas,
+            delta => delta.Text.Contains("R1b", StringComparison.Ordinal));
         Assert.DoesNotContain(
             harness.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant && entry.Text.Contains("R1b", StringComparison.Ordinal));

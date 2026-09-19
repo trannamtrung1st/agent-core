@@ -1,22 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import displayPipeline from "../../../../tests/fixtures/display-pipeline.json";
+import { loadDisplayPipelineFixture } from "../../test/displayPipelineFixture";
 import { MarkdownMessage } from "./MarkdownMessage";
 
-type OrdinaryCase = {
-  id: string;
-  rawFinalModelText: string;
-  expectedDisplayText: string;
-};
-
-type ModelQualityCase = OrdinaryCase & { expectCodeBlock: boolean };
-
-type Fixture = {
-  ordinaryProse: OrdinaryCase[];
-  modelFormattingQuality: ModelQualityCase[];
-};
-
-const fixture = displayPipeline as Fixture;
+const fixture = loadDisplayPipelineFixture();
 
 describe("display pipeline regression", () => {
   it("ordinary prose reaches MarkdownMessage source unchanged", () => {
