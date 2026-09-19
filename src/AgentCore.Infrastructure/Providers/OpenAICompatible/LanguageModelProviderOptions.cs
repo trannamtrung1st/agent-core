@@ -9,6 +9,7 @@ public sealed class LanguageModelProviderOptions
     public string? BaseUrl { get; set; }
     public string? ApiKey { get; set; }
     public string? DefaultModel { get; set; }
+    public string? ReasoningEffort { get; set; }
     public bool Vision { get; set; }
     public bool Tools { get; set; }
     public Dictionary<string, string> AdditionalHeaders { get; set; } = [];

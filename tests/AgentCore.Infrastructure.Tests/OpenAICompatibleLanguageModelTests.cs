@@ -114,6 +114,26 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
+    public async Task Sends_configured_reasoning_effort_on_chat_completions()
+    {
+        var body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                   "data: [DONE]\n\n";
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes(body)]);
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "local-model",
+                ReasoningEffort = "medium",
+                ApiKey = "test-key"
+            });
+        _ = await CollectAsync(model);
+        Assert.Contains("\"reasoning_effort\":\"medium\"", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Duplicate_generate_is_a_new_post_not_a_retry_of_the_same_call()
     {
         var body = "data: {\"choices\":[{\"delta\":{\"content\":\"A\"},\"finish_reason\":\"stop\"}]}\n\n" +

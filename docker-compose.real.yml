@@ -16,7 +16,8 @@ services:
       AgentCore__Profile: Real
       Providers__LanguageModels__primary-llm__Adapter: OpenAICompatible
       Providers__LanguageModels__primary-llm__BaseUrl: https://openrouter.ai/api/v1/
-      Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-deepseek/deepseek-v4-flash-0731:free}
+      Providers__LanguageModels__primary-llm__DefaultModel: ${AGENTCORE_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+      Providers__LanguageModels__primary-llm__ReasoningEffort: ${AGENTCORE_LLM_REASONING_EFFORT:-medium}
       Providers__LanguageModels__primary-llm__Vision: ${AGENTCORE_LLM_VISION:-false}
       Providers__LanguageModels__primary-llm__Tools: ${AGENTCORE_LLM_TOOLS:-true}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required for Real Compose}

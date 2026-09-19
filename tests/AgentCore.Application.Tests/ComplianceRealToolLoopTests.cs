@@ -33,7 +33,7 @@ public sealed class ComplianceRealToolLoopTests
             {
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/",
-                DefaultModel = "deepseek/deepseek-v4-flash-0731:free",
+                DefaultModel = "deepseek/deepseek-v4.1-flash",
                 ApiKey = "test-key",
                 Vision = true,
                 Tools = true

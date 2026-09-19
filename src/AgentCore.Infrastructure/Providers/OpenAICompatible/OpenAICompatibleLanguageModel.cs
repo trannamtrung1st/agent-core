@@ -287,6 +287,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             body["temperature"] = temperature;
         }
 
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+        {
+            body["reasoning_effort"] = _options.ReasoningEffort;
+        }
+
         if (request.Tools is { Count: > 0 })
         {
             body["tools"] = request.Tools.Select(MapTool).ToArray();
