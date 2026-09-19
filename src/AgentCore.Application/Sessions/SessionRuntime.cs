@@ -2854,15 +2854,43 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             PendingMode = null,
             UpdatedAt = _time.GetUtcNow()
         };
-        ResetForExplicitResume(applied);
+        ApplyProposedResumeState(applied);
         RequestPersist(
             _snapshot,
             then: async ct =>
             {
+                await ReactivateLiveSessionAsync(context, ct).ConfigureAwait(false);
                 await PublishStateAsync(context, ct).ConfigureAwait(false);
                 persisted?.TrySetResult(true);
             },
             ended: persisted);
+    }
+
+    private async Task ReactivateLiveSessionAsync(EventContext context, CancellationToken cancellationToken)
+    {
+        if (_snapshot.Mode == SessionMode.Voice
+            && _snapshot.Status is SessionStatus.Attached or SessionStatus.Created
+            && !_deactivated)
+        {
+            try
+            {
+                await StartRecognitionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                await FailVoiceAsync(context, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        if (CanEvaluateIdle())
+        {
+            ScheduleIdleTimer(SilenceThreshold());
+        }
     }
 
     private async Task TerminalizeAsync(

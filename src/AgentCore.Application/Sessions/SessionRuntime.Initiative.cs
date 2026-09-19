@@ -236,6 +236,13 @@ public sealed partial class SessionRuntime
 
     private void ResetForExplicitResume(SessionSnapshot snapshot)
     {
+        ApplyProposedResumeState(snapshot);
+        _durableRevision = snapshot.Revision;
+        _durableSnapshot = snapshot;
+    }
+
+    private void ApplyProposedResumeState(SessionSnapshot snapshot)
+    {
         CancelBrainEvaluation();
         _deactivated = false;
         _activeResponseId = null;
@@ -251,8 +258,6 @@ public sealed partial class SessionRuntime
         _environmentQueue.Clear();
         var activityAt = snapshot.LastUserActivityAt ?? _time.GetUtcNow();
         _lastMeaningfulActivityAt = activityAt;
-        _durableRevision = snapshot.Revision;
-        _durableSnapshot = snapshot;
         _snapshot = snapshot;
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
         _timerGeneration++;
@@ -299,7 +304,6 @@ public sealed partial class SessionRuntime
             await SupersedeAsync(context, live, cancellationToken, "deactivated").ConfigureAwait(false);
         }
 
-        _deadlineTimerGeneration++;
         _outputActivity = OutputActivity.Idle;
         _initiativeHeld = false;
         _snapshot = LifecycleTransition.Apply(

@@ -129,6 +129,15 @@ public sealed class HostSessionContractTests : IClassFixture<AgentCoreApiFactory
                 Purpose: new HostSessionPurposeRequest("goal"),
                 MaxDurationSeconds: (long)TimeSpan.FromDays(31).TotalSeconds));
         Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+
+        var noTimezone = await client.PostAsJsonAsync(
+            "/api/v2/host/sessions",
+            new HostCreateSessionRequest(
+                "examiner",
+                1,
+                "text",
+                Purpose: new HostSessionPurposeRequest("goal", "Exam", "2026-09-19T12:00:00")));
+        Assert.Equal(HttpStatusCode.BadRequest, noTimezone.StatusCode);
     }
 
     [Fact]

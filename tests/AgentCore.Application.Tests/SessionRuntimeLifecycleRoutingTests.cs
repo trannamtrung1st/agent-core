@@ -141,6 +141,72 @@ public sealed class SessionRuntimeLifecycleRoutingTests
     }
 
     [Fact]
+    public async Task Live_voice_pause_resume_restarts_recognition()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));
+        var output = new CapturingSessionOutput();
+        var recognizer = new SyntheticSpeechRecognizer();
+        await using var runtime = CreateVoice(output, time, recognizer);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        Assert.True(runtime.RecognitionActive);
+
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.False(runtime.RecognitionActive);
+
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User,
+            "resume"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.True(runtime.RecognitionActive);
+        Assert.Equal(SessionMode.Voice, runtime.Snapshot.Mode);
+        Assert.Equal(SessionStatus.Attached, runtime.Snapshot.Status);
+    }
+
+    [Fact]
+    public async Task Live_resume_active_persist_failure_keeps_paused_durable_state()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));
+        var store = new FailingActiveResumeStore();
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, time, new ScriptedLanguageModel(), store);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var durableAfterPause = await store.Inner.LoadAsync(runtime.SessionId);
+        Assert.Equal(SessionLifecycleStatus.Paused, durableAfterPause!.LifecycleStatus);
+        Assert.Equal(SessionStatus.Paused, durableAfterPause.Status);
+
+        var resume = runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User,
+            "resume");
+        for (var attempt = 0; attempt < 12 && !resume.IsCompleted; attempt++)
+        {
+            time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10);
+        }
+
+        Assert.False(await resume);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(SessionLifecycleStatus.Paused, runtime.Snapshot.LifecycleStatus);
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        var durableAfterFailure = await store.Inner.LoadAsync(runtime.SessionId);
+        Assert.Equal(SessionLifecycleStatus.Paused, durableAfterFailure!.LifecycleStatus);
+        Assert.Equal(SessionStatus.Paused, durableAfterFailure.Status);
+        Assert.Contains(output.Items, item => item.Payload is ErrorOutput error && error.Code == "SessionPersistenceUnavailable");
+    }
+
+    [Fact]
     public async Task Request_deactivate_uses_user_manual_lifecycle_pause()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));
@@ -156,6 +222,47 @@ public sealed class SessionRuntimeLifecycleRoutingTests
         var durable = await store.LoadAsync(runtime.SessionId);
         Assert.Equal(LifecycleTransitionSource.User, durable!.LifecycleSource);
         Assert.Equal("manual", durable.LifecycleReason);
+    }
+
+    private static SessionRuntime CreateVoice(
+        ISessionOutput output,
+        FakeTimeProvider time,
+        ISpeechRecognizer recognizer)
+    {
+        var store = new InMemoryMemoryStore();
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var now = time.GetUtcNow();
+        var snapshot = new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now);
+        store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        return new SessionRuntime(
+            snapshot,
+            new ScriptedLanguageModel(),
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            output,
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance,
+            policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000),
+            voice: new VoiceAvailability { SpeechAdaptersResolved = true },
+            recognizer: recognizer,
+            synthesizer: new SyntheticSpeechSynthesizer());
     }
 
     private static SessionRuntime Create(
@@ -201,5 +308,54 @@ public sealed class SessionRuntimeLifecycleRoutingTests
             NullLogger<SessionRuntime>.Instance,
             policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000),
             voice: new VoiceAvailability { SpeechAdaptersResolved = true });
+    }
+
+    private sealed class FailingActiveResumeStore : IMemoryStore
+    {
+        public InMemoryMemoryStore Inner { get; } = new();
+        private bool _pausedPersisted;
+
+        public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            Inner.LoadAsync(sessionId, cancellationToken);
+
+        public ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
+        {
+            if (snapshot.LifecycleStatus == SessionLifecycleStatus.Paused)
+            {
+                _pausedPersisted = true;
+            }
+            else if (_pausedPersisted
+                     && snapshot.LifecycleStatus == SessionLifecycleStatus.Active
+                     && snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
+            {
+                throw AgentCoreErrors.Persistence("forced active resume persist failure");
+            }
+
+            return Inner.SaveAsync(snapshot, expectedRevision, cancellationToken);
+        }
+
+        public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+            Guid sessionId,
+            long afterEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
+        public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+            Inner.LoadProfileAsync(profileId, cancellationToken);
+
+        public ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default) =>
+            Inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+        public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+            Inner.RecoverCrashedSessionsAsync(cancellationToken);
     }
 }

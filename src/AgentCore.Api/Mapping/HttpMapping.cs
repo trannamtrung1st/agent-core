@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Sessions;
@@ -8,7 +9,7 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Mapping;
 
-public static class HttpMapping
+public static partial class HttpMapping
 {
     public const int ProtocolVersion = 1;
 
@@ -221,8 +222,15 @@ public static class HttpMapping
         DateTimeOffset? deadline = null;
         if (!string.IsNullOrWhiteSpace(purpose?.DeadlineAt))
         {
+            var rawDeadline = purpose.DeadlineAt.Trim();
+            if (!HasExplicitTimezone(rawDeadline))
+            {
+                throw AgentCoreErrors.Validation(
+                    "deadlineAt must include an explicit timezone (Z or ±HH:mm).");
+            }
+
             if (!DateTimeOffset.TryParse(
-                    purpose.DeadlineAt,
+                    rawDeadline,
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.RoundtripKind,
                     out var parsed))
@@ -289,4 +297,11 @@ public static class HttpMapping
             AgentCompletionAuthority.Allowed => "allowed",
             _ => "disabled"
         };
+
+    private static bool HasExplicitTimezone(string raw) =>
+        raw.EndsWith("Z", StringComparison.OrdinalIgnoreCase)
+        || DeadlineOffsetRegex().IsMatch(raw);
+
+    [GeneratedRegex(@"[+-]\d{2}:\d{2}$", RegexOptions.CultureInvariant)]
+    private static partial Regex DeadlineOffsetRegex();
 }

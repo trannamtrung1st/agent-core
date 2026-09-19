@@ -425,6 +425,31 @@ describe("SessionRail", () => {
     await waitFor(() => expect(refreshCatalog).toHaveBeenCalledWith(true));
   });
 
+  it("does not leave an archived active chat when delete all keeps archived rows", async () => {
+    vi.mocked(deleteAllCatalogItems).mockResolvedValue(1);
+    const onNewChat = vi.fn();
+    renderRail({
+      items: [archived],
+      agents,
+      activeSessionId: "s3",
+      includeArchived: false,
+      hasMore: false,
+      capabilityLost: false,
+      error: null,
+      mutation: null,
+      onNewChat,
+      onOpen: vi.fn()
+    });
+    useSessionStore.setState({ catalogItems: [archived] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat list options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete all chats" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete all" }));
+    await waitFor(() => expect(deleteAllCatalogItems).toHaveBeenCalled());
+    expect(onNewChat).not.toHaveBeenCalled();
+  });
+
   it("confirms delete all and returns to new chat when the active session is removed", async () => {
     vi.mocked(deleteAllCatalogItems).mockResolvedValue(1);
     const onNewChat = vi.fn();

@@ -4,6 +4,7 @@ public sealed record HealthResponse(string Status, string Profile, int ProtocolV
 
 public sealed record CreateSessionRequest(string AgentId, int? AgentVersion, string? Mode, string? SpeechLocale = null);
 
+/// <param name="Source">Ignored on all lifecycle routes; authority is fixed per route (user vs host).</param>
 public sealed record TransitionLifecycleRequest(string Target, string? Source = null, string? Reason = null);
 
 public sealed record HostSessionPurposeRequest(

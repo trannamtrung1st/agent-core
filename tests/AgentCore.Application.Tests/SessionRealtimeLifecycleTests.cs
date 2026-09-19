@@ -396,6 +396,88 @@ public sealed class SessionRealtimeLifecycleTests
     }
 
     [Fact]
+    public async Task Paused_deadline_still_expires()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 4, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var output = new CapturingSessionOutput();
+        var snapshot = new SessionSnapshot(
+            1,
+            Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842"),
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            time.GetUtcNow(),
+            time.GetUtcNow(),
+            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(3)));
+        await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
+        Assert.True(await runtime.AttachAsync());
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        time.Advance(TimeSpan.FromMinutes(3) + TimeSpan.FromSeconds(1));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await output.WaitForAsync(item =>
+            item.Payload is StateChangedOutput state
+            && state.LifecycleStatus == SessionLifecycleStatus.Expired);
+        Assert.Equal(SessionLifecycleStatus.Expired, runtime.Snapshot.LifecycleStatus);
+        Assert.Equal(SessionStatus.Ended, runtime.Snapshot.Status);
+    }
+
+    [Fact]
+    public async Task Pause_resume_deadline_still_expires()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 4, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var output = new CapturingSessionOutput();
+        var snapshot = new SessionSnapshot(
+            1,
+            Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842"),
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            time.GetUtcNow(),
+            time.GetUtcNow(),
+            Purpose: new SessionPurpose(SessionPurposeKind.Goal, DeadlineAt: time.GetUtcNow().AddMinutes(5)));
+        await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
+        Assert.True(await runtime.AttachAsync());
+        await runtime.WaitUntilMailboxDrainedAsync();
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User,
+            "resume"));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        time.Advance(TimeSpan.FromMinutes(3) + TimeSpan.FromSeconds(1));
+        await runtime.WaitUntilMailboxDrainedAsync();
+        await output.WaitForAsync(item =>
+            item.Payload is StateChangedOutput state
+            && state.LifecycleStatus == SessionLifecycleStatus.Expired);
+        Assert.Equal(SessionLifecycleStatus.Expired, runtime.Snapshot.LifecycleStatus);
+    }
+
+    [Fact]
     public async Task Attached_deadline_expires_before_later_user_input()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 4, 0, 0, TimeSpan.Zero));

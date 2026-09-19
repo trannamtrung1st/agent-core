@@ -146,6 +146,23 @@ export function SessionRail({
     }
   }
 
+  function activeSessionInBulkDeleteScope(): boolean {
+    if (activeSessionId == null) {
+      return false;
+    }
+
+    const row =
+      items.find((item) => sameSessionId(item.sessionId, activeSessionId))
+      ?? useSessionStore
+          .getState()
+          .catalogItems.find((item) => sameSessionId(item.sessionId, activeSessionId));
+    if (row == null) {
+      return false;
+    }
+
+    return includeArchived || !row.archived;
+  }
+
   function confirmDeleteAll(): void {
     modal.confirm({
       title: "Delete all chats?",
@@ -158,14 +175,14 @@ export function SessionRail({
       centered: true,
       mask: { closable: true },
       onOk: async () => {
-        const hadActive = activeSessionId != null;
+        const activeInScope = activeSessionInBulkDeleteScope();
         const deletedCount = await deleteAllCatalogItems();
         if (deletedCount === false) {
           await notifyMutation(false, "Chats deleted.", { rejectOnFailure: true });
           return;
         }
 
-        if (hadActive) {
+        if (activeInScope) {
           onNewChat({ urlMode: "replace" });
         }
 
