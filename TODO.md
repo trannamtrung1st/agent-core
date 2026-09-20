@@ -417,7 +417,7 @@ Do not add durable background-work execution in this phase.
 
 ## P2B — Validated model response envelope
 
-P2B implementation is **code-complete** on `2561949` (not frozen until CI). Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
+P2B implementation is **code-complete** on `2561949` (not frozen until green key-free CI on `5bfa5a9`). Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
 
 After P2A, the shipped generation contract retired this compatibility debt from Domain/Application:
 
