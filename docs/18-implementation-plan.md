@@ -229,7 +229,7 @@ P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f
 
 ## P2B — Validated model response envelope (observed)
 
-This table does not reopen P1, P2D, or P2A. P2E is next; P2C/P6 have not started.
+This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2C** is next; P2E is observed/frozen. Do not reopen P2B or P2E without a reproducible regression.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -240,6 +240,19 @@ This table does not reopen P1, P2D, or P2A. P2E is next; P2C/P6 have not started
 | P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Observed** (P2B gate) |
 
 **P2B freeze:** `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`, 2026-09-20) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Prior descendant gate on `c6e0735` (run `35496153659`) remains corroborating evidence. Key-free gate counts on `e0e8a55`: Domain 75; Infrastructure 178 passed / 12 skipped; Application 457 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web unit tests, production build, and `CI=1` Playwright per `.github/workflows/synthetic.yml`; `scripts/compose-sqlite-volume.sh` passed. Optional Real-provider probes were not run. Do not reopen P2B without a reproducible regression. Closure spans envelope persistence/review (`583f021`–`a8f41f7`), public custom-only `speechText` with live `agent.speech.projection` mode/telemetry (`2fc96e6`), superseded attachment idle/output production (`aedb32b`–`2561949`), and causation-synchronized gated attachment regression (`5bfa5a9`–`c6e0735`). Earlier gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
+
+## P2E — Multimodal image-input capability closure (observed)
+
+This table does not reopen P1, P2D, P2A, or P2B. **P2C** is next.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P2E representation | Sanitized `ModelImageContent.ContentType` matches output bytes; WebP/GIF static projection to PNG; processor cache `attachment-processors/2` | **Observed** (P2E-1) |
+| P2E admission | `UserTurnCapabilityValidator` before durable user text; runtime defense after attachment processing; `ModelCapabilityUnsupported` (409, non-fatal) | **Observed** (P2E-2) |
+| P2E UX | Catalog `vision` metadata; ModelPicker Vision indicator; composer compatibility guard; Synthetic `scripted-vision`; Playwright attach→block→switch→send | **Observed** (P2E-3) |
+| P2E verification | Full proposal §11 regressions plus §23 key-free gate and Compose on one freeze HEAD | **Observed** (P2E-4) |
+
+**P2E freeze:** key-free Synthetic + Compose verification green on the P2E freeze HEAD (2026-09-21; implementation commits `0eeb27c`–`a502266` plus this documentation revision on the same freeze HEAD). Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 75 passed; Infrastructure 181 passed / 12 skipped; Application 462 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 157 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed including `scripted-vision.spec.ts`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Hosted workflow run identity pending push to `origin/main`. Optional Real vision probe **SKIPPED — credentials unavailable**. Do not reopen P2E without a reproducible regression. Historical image re-inspection remains out of scope until P3 tool evolution.
 
 ## Handoff rule
 

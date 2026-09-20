@@ -8,7 +8,7 @@ Current roadmap:
 
 1. **P2A — first-class progress semantics** is **observed** and frozen;
 2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
-3. **P2E — multimodal/image input usability and capability handling** — active phase;
+3. **P2E — multimodal/image input usability and capability handling** — **observed/frozen** (2026-09-21 key-free Synthetic + Compose gate on freeze HEAD);
 4. evolve tools and external integrations;
 5. add context compaction and memory;
 6. add configurable triggers;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** is the active implementation phase. Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** multimodal image-input capability closure is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (implementation commits `0eeb27c`–`a502266` plus documentation on that freeze HEAD). Do not reopen P2E without a reproducible regression. Optional Real vision (`gpt-4o-mini-2024-07-18`) and structured-response probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. **P2C** is next; P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -38,7 +38,7 @@ Current-turn image input already has substantial implementation and must not be 
   - `openrouter-free` as `vision: false`;
 - `PngVisionRuntimeTests` already proves that a PNG attachment reaches a vision-enabled OpenAI-compatible model request.
 
-Therefore P2E is primarily a **capability/UX/correctness closure**, not a new multimodal architecture.
+P2E closed that **capability/UX/correctness** gap without a new multimodal architecture (truthful sanitized MIME/`attachment-processors/2`, layered Vision admission, Synthetic `scripted-vision` UX).
 
 The recent response/voice work is now part of the baseline:
 
@@ -74,7 +74,7 @@ Always keep this section even when there is no active work.
 
   Do not infer durable personal facts from conversational guesses. Coordinate durable personalization with P2C/P4 rather than growing ad-hoc prompt fields.
 
-- [ ] Close current image-input usability under P2E.
+- [x] Close current image-input usability under P2E.
 
   Do not create a second multimodal abstraction. Reuse the existing:
 
@@ -252,9 +252,9 @@ P2A → P2B → P2E
 
 P2C personalization is largely independent and can follow when durable personalization becomes useful.
 
-P2D is already completed and frozen. P2A and P2B are observed/frozen.
+P2D is already completed and frozen. P2A, P2B, and **P2E** are observed/frozen. **P2C** is next.
 
-**P2E** is the active phase. Reuse the existing multimodal foundations rather than create a second request format.
+P2E reused the existing multimodal foundations rather than creating a second request format.
 
 ---
 
@@ -677,7 +677,11 @@ Only after native structured + fallback generation paths are verified:
 
 ### P2B stop condition
 
-P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + Compose green (workflow run `35496178496`). P2E is the active phase; P2C/P6 have not started.
+P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + Compose green (workflow run `35496178496`).
+
+### P2E stop condition
+
+P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection remains a P3 evaluation. P2C is next; P6 has not started.
 
 ---
 
@@ -707,9 +711,9 @@ The current product gap is mostly that capability is not presented/enforced earl
 
 ### Capability-aware admission
 
-- [ ] Detect whether the pending/current user turn contains one or more image attachments before starting model generation.
+- [x] Detect whether the pending/current user turn contains one or more image attachments before starting model generation.
 
-- [ ] Resolve the selected session model and validate its Vision capability before generation.
+- [x] Resolve the selected session model and validate its Vision capability before generation.
 
 For an image turn with a non-vision model:
 
@@ -727,7 +731,7 @@ This model cannot read images. Choose a vision-capable model to send this attach
 
 Keep provider/model wire details out of the error.
 
-- [ ] Keep attachment upload/storage independent from model capability.
+- [x] Keep attachment upload/storage independent from model capability.
 
 It is valid to upload/stage an image before choosing a model.
 
@@ -735,7 +739,7 @@ Capability validation belongs to the point where the attachment is about to beco
 
 ### Model picker / composer UX
 
-- [ ] Surface Vision capability in the model picker.
+- [x] Surface Vision capability in the model picker.
 
 At minimum, users must be able to distinguish:
 
@@ -744,27 +748,27 @@ At minimum, users must be able to distinguish:
 
 Do not turn the picker into a dense provider-debug surface.
 
-- [ ] When the composer contains image attachments and the current model lacks Vision:
+- [x] When the composer contains image attachments and the current model lacks Vision:
 
   - show an understandable incompatibility state;
   - prevent sending until resolved;
   - keep the draft and attachments intact;
   - allow the user to select a vision-capable model.
 
-- [ ] Re-evaluate compatibility immediately when:
+- [x] Re-evaluate compatibility immediately when:
 
   - model selection changes;
   - an image is added;
   - an image is removed;
   - a pending new-chat model choice changes.
 
-- [ ] Do not automatically choose GPT-4o mini or any other model solely because an image was attached.
+- [x] Do not automatically choose GPT-4o mini or any other model solely because an image was attached.
 
 Model choice remains explicit unless a future agent/session policy defines capability-based routing.
 
 ### Image encoding correctness
 
-- [ ] Make sanitized image bytes and declared model-input content type agree.
+- [x] Make sanitized image bytes and declared model-input content type agree.
 
 Current processing may transcode formats such as GIF/WebP through a PNG encoder while retaining the original attachment content type.
 
@@ -783,7 +787,7 @@ Choose one clear rule:
 
 Prefer deterministic normalization over format-specific complexity.
 
-- [ ] Add explicit tests for:
+- [x] Add explicit tests for:
 
   - PNG;
   - JPEG;
@@ -794,7 +798,7 @@ If GIF animation is not intentionally supported, document that only the sanitize
 
 ### Provider boundary
 
-- [ ] Keep `ModelImageContent` provider-neutral.
+- [x] Keep `ModelImageContent` provider-neutral.
 
 Provider adapters may map it to:
 
@@ -804,7 +808,7 @@ Provider adapters may map it to:
 
 Application must not depend on those formats.
 
-- [ ] Keep image bytes out of prompts/logging/telemetry.
+- [x] Keep image bytes out of prompts/logging/telemetry.
 
 Telemetry may record bounded metadata such as:
 
@@ -817,11 +821,11 @@ Do not log base64 payloads or raw image bytes.
 
 ### Model capability integrity
 
-- [ ] Treat catalog capabilities as trusted backend configuration.
+- [x] Treat catalog capabilities as trusted backend configuration.
 
 The browser may display capability metadata, but it does not declare whether a model supports Vision.
 
-- [ ] Keep runtime/provider capability validation as a second defensive boundary.
+- [x] Keep runtime/provider capability validation as a second defensive boundary.
 
 Even after application preflight, the adapter should continue rejecting image parts if its resolved model does not support Vision.
 
@@ -881,13 +885,13 @@ OCR/document-image extraction may be added later as a separate degraded/tool pat
 
 ### Verification
 
-- [ ] Keep/expand the existing PNG vision runtime test.
+- [x] Keep/expand the existing PNG vision runtime test.
 
-- [ ] Infrastructure tests for correct multimodal provider mapping.
+- [x] Infrastructure tests for correct multimodal provider mapping.
 
-- [ ] Tests that sanitized bytes and MIME type match for every accepted image format.
+- [x] Tests that sanitized bytes and MIME type match for every accepted image format.
 
-- [ ] Application tests for:
+- [x] Application tests for:
 
   - vision model + image → accepted;
   - non-vision model + image → rejected before provider request;
@@ -898,9 +902,9 @@ OCR/document-image extraction may be added later as a separate degraded/tool pat
   - cancellation/interruption during image processing;
   - stale runtime protection.
 
-- [ ] API/model-catalog tests preserving Vision capability.
+- [x] API/model-catalog tests preserving Vision capability.
 
-- [ ] frontend tests for:
+- [x] frontend tests for:
 
   - Vision indicator;
   - incompatible image/model state;
@@ -908,7 +912,7 @@ OCR/document-image extraction may be added later as a separate degraded/tool pat
   - removing the image resolving the state;
   - draft/attachment preservation after capability rejection.
 
-- [ ] one deterministic Playwright flow for:
+- [x] one deterministic Playwright flow for:
 
 ```text
 attach image
@@ -919,25 +923,13 @@ attach image
 
 Synthetic CI may use a deterministic vision-capable fixture/catalog entry rather than external inference.
 
-- [ ] bounded opt-in Real OpenRouter image probe using a known vision-capable catalog model.
+- [x] bounded opt-in Real OpenRouter image probe using a known vision-capable catalog model (skipped: no process keys; not claimed verified).
 
 Do not make real vision inference part of default CI.
 
 ### P2E stop condition
 
-P2E is done when:
-
-- users can attach images through the normal composer;
-- the UI clearly indicates whether the selected model supports image input;
-- a non-vision model cannot silently receive or ignore an image turn;
-- a vision-capable model receives the sanitized image as provider-neutral multimodal input;
-- encoded bytes and MIME type are correct;
-- PNG/JPEG and any other accepted formats have deterministic coverage;
-- image payloads do not leak into logs, TTS, reasoning, or ordinary text context;
-- default CI remains key-free/offline;
-- one opt-in Real vision probe is documented.
-
-Historical re-inspection of old images may continue under P3 if typed multimodal tool results are required.
+P2E is **done** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (see [Implementation Plan](docs/18-implementation-plan.md#p2e--multimodal-image-input-capability-closure-observed)).
 
 ---
 
@@ -1540,7 +1532,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2E as implemented before it ships; P2A and P2B are observed/frozen (`e0e8a55` for P2B); active work is P2E;
+- do not document P2E as active; P2A, P2B, and P2E are observed/frozen (`e0e8a55` for P2B; P2E freeze HEAD in implementation plan); active roadmap work is **P2C** and later phases;
 - document the existing current-turn vision foundation accurately;
 - distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;
@@ -1583,8 +1575,8 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Current-turn image projection into multimodal model requests.
 - [x] OpenAI-compatible image-content mapping.
 - [x] Deterministic PNG→vision-request coverage.
-- [ ] User-facing capability-aware image/model admission — P2E.
-- [ ] Historical image re-inspection beyond the original multimodal turn — evaluate under P2E/P3.
+- [x] User-facing capability-aware image/model admission (P2E).
+- [ ] Historical image re-inspection beyond the original multimodal turn — evaluate under P3.
 - [x] Existing rich-response envelope with display/speech/blocks.
 - [x] Internal same-mode `speech.text` when playback differs from display.
 - [x] Public/history `speechText` custom-only (P2B).
