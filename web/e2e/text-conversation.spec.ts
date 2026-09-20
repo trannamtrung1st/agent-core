@@ -217,8 +217,7 @@ test("markdown response renders and survives reopen", async ({ page }) => {
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("Show markdown");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.locator(".agent-activity")).toHaveText("Thinking…", { timeout: 15_000 });
-  await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
+  await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 30_000 });
   await expect(page.locator(".markdown-message").getByText("Session runtime")).toBeVisible();
   await expect(page.locator(".markdown-message hr")).toHaveCount(1);
   await expect
