@@ -618,10 +618,7 @@ public sealed class SessionManager
         var created = new UserProfile(
             LocalUserProfile.Id,
             1,
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["language"] = "en"
-            },
+            LocalUserProfile.CreateDefaultSeed(now),
             now);
         LocalUserProfile.Validate(created.Preferences);
         try

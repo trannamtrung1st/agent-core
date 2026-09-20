@@ -82,7 +82,11 @@ public sealed class IdentityRuntimeTests
             new UserProfile(
                 LocalUserProfile.Id,
                 1,
-                new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+                new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+                {
+                    ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                    ["preferredName"] = new UserProfileValue("Pat", UserProfileValueSource.UserSet, now)
+                },
                 now),
             0);
         var firstModel = new RecordingLanguageModel(new ScriptedLanguageModel());

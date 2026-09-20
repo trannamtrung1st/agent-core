@@ -407,8 +407,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             return null;
         }
 
-        var preferences = JsonSerializer.Deserialize<Dictionary<string, string>>(row.PreferencesJson, Json)
-            ?? [];
+        var preferences = UserProfilePreferencesCodec.Read(row.PreferencesJson, FromUnix(row.UpdatedAtUtc));
         return new UserProfile(profileId, row.Revision, preferences, FromUnix(row.UpdatedAtUtc));
     }
 
@@ -432,7 +431,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             db.Profiles.Add(new ProfileRecord
             {
                 ProfileId = key,
-                PreferencesJson = JsonSerializer.Serialize(profile.Preferences, Json),
+                PreferencesJson = UserProfilePreferencesCodec.Write(profile.Preferences),
                 Revision = profile.Revision,
                 UpdatedAtUtc = profile.UpdatedAt.ToUnixTimeMilliseconds()
             });
@@ -457,7 +456,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             throw AgentCoreErrors.Conflict("Stale profile revision.");
         }
 
-        existing.PreferencesJson = JsonSerializer.Serialize(profile.Preferences, Json);
+        existing.PreferencesJson = UserProfilePreferencesCodec.Write(profile.Preferences);
         existing.Revision = profile.Revision;
         existing.UpdatedAtUtc = profile.UpdatedAt.ToUnixTimeMilliseconds();
         try

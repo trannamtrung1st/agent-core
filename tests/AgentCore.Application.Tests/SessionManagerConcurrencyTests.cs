@@ -24,7 +24,8 @@ public sealed class SessionManagerConcurrencyTests
         var profile = await inner.LoadProfileAsync(LocalUserProfile.Id);
         Assert.NotNull(profile);
         Assert.False(profile!.Preferences.ContainsKey("preferredName"));
-        Assert.Equal("en", profile.Preferences["language"]);
+        Assert.Equal("en", profile.Preferences["language"].Value);
+        Assert.Equal(UserProfileValueSource.ApplicationProfile, profile.Preferences["language"].Source);
     }
 
     [Fact]

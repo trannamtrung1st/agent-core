@@ -276,14 +276,21 @@ public sealed class MemoryStoreContractTests
             var profile = new UserProfile(
                 LocalUserProfile.Id,
                 1,
-                new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+                new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+                {
+                    ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                    ["preferredName"] = new UserProfileValue("Pat", UserProfileValueSource.UserSet, now)
+                },
                 now);
             await store.SaveProfileAsync(profile, 0);
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
                 store.SaveProfileAsync(profile with
                 {
                     Revision = 2,
-                    Preferences = new Dictionary<string, string> { ["theme"] = "dark" }
+                    Preferences = new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+                    {
+                        ["theme"] = LocalUserProfile.ApplicationProfileValue("dark", now)
+                    }
                 }, 1).AsTask());
         }
 
@@ -297,7 +304,11 @@ public sealed class MemoryStoreContractTests
                     new UserProfile(
                         LocalUserProfile.Id,
                         1,
-                        new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+                        new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+                        {
+                            ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                            ["preferredName"] = new UserProfileValue("Pat", UserProfileValueSource.UserSet, now)
+                        },
                         now),
                     0);
             }
@@ -305,12 +316,48 @@ public sealed class MemoryStoreContractTests
             await using var reopened = OpenSqlite(path, deleteOnDispose: true);
             await reopened.Store.EnsureCreatedAsync();
             var loaded = await reopened.Store.LoadProfileAsync(LocalUserProfile.Id);
-            Assert.Equal("Pat", loaded!.Preferences["preferredName"]);
+            Assert.Equal("Pat", loaded!.Preferences["preferredName"].Value);
+            Assert.Equal(UserProfileValueSource.UserSet, loaded.Preferences["preferredName"].Source);
         }
         finally
         {
             ReleaseSqlite(path);
         }
+    }
+
+    [Fact]
+    public async Task Profile_legacy_json_loads_and_next_save_rewrites_typed_json()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero);
+        await using var harness = await SqliteAsync();
+        await harness.Store.SaveProfileAsync(
+            new UserProfile(
+                LocalUserProfile.Id,
+                1,
+                LocalUserProfile.CreateDefaultSeed(now),
+                now),
+            0);
+
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            var row = await db.Profiles.SingleAsync(item => item.ProfileId == LocalUserProfile.Id.ToString("D"));
+            row.PreferencesJson = """{"language":"en","preferredName":"friend"}""";
+            await db.SaveChangesAsync();
+        }
+
+        var loaded = await harness.Store.LoadProfileAsync(LocalUserProfile.Id);
+        Assert.NotNull(loaded);
+        Assert.False(loaded!.Preferences.ContainsKey("preferredName"));
+        Assert.Equal(UserProfileValueSource.ApplicationProfile, loaded.Preferences["language"].Source);
+
+        var rewritten = loaded with { Revision = 2, UpdatedAt = now.AddHours(1) };
+        await harness.Store.SaveProfileAsync(rewritten, 1);
+
+        await using var verify = await harness.Factory.CreateDbContextAsync();
+        var persisted = await verify.Profiles.AsNoTracking()
+            .SingleAsync(item => item.ProfileId == LocalUserProfile.Id.ToString("D"));
+        Assert.Contains("applicationProfile", persisted.PreferencesJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"language\":\"en\"", persisted.PreferencesJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -460,7 +507,11 @@ public sealed class MemoryStoreContractTests
         var profile = new UserProfile(
             LocalUserProfile.Id,
             1,
-            new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+            new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+            {
+                ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                ["preferredName"] = new UserProfileValue("Pat", UserProfileValueSource.UserSet, now)
+            },
             now);
         var first = harness.Store.SaveProfileAsync(profile, 0).AsTask();
         var second = harness.Store.SaveProfileAsync(profile, 0).AsTask();
@@ -480,7 +531,15 @@ public sealed class MemoryStoreContractTests
             """);
         var unavailable = await Assert.ThrowsAsync<AgentCoreException>(() =>
             harness.Store.SaveProfileAsync(
-                profile with { Revision = 2, Preferences = new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Sam" } },
+                profile with
+                {
+                    Revision = 2,
+                    Preferences = new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+                    {
+                        ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                        ["preferredName"] = new UserProfileValue("Sam", UserProfileValueSource.UserSet, now)
+                    }
+                },
                 1).AsTask());
         Assert.Equal("SessionPersistenceUnavailable", unavailable.Code);
     }

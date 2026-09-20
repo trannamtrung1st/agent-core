@@ -5,6 +5,7 @@ using AgentCore.Application.Testing;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -20,7 +21,11 @@ public sealed class PreferredNameProvenanceTests
         var seeded = new UserProfile(
             LocalUserProfile.Id,
             1,
-            new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "friend" },
+            new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+            {
+                ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                ["preferredName"] = LocalUserProfile.ApplicationProfileValue("friend", now)
+            },
             now);
         var sections = builder.BuildSections(Context(seeded));
         Assert.DoesNotContain("friend", sections.MemorySystem, StringComparison.OrdinalIgnoreCase);
@@ -38,7 +43,11 @@ public sealed class PreferredNameProvenanceTests
         var profile = new UserProfile(
             LocalUserProfile.Id,
             1,
-            new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "Pat" },
+            new Dictionary<string, UserProfileValue>(StringComparer.Ordinal)
+            {
+                ["language"] = LocalUserProfile.ApplicationProfileValue("en", now),
+                ["preferredName"] = new UserProfileValue("Pat", UserProfileValueSource.UserSet, now)
+            },
             now);
         var sections = builder.BuildSections(Context(profile));
         Assert.Contains("preferredName=Pat", sections.MemorySystem, StringComparison.Ordinal);
@@ -84,21 +93,27 @@ public sealed class PreferredNameProvenanceTests
     public async Task Ensure_strips_durable_seeded_friend_before_prompt()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
-        var store = new InMemoryMemoryStore();
-        await store.SaveProfileAsync(
+        await using var harness = await SqliteTestHarness.CreateMigratedAsync();
+        await harness.Store.SaveProfileAsync(
             new UserProfile(
                 LocalUserProfile.Id,
                 1,
-                new Dictionary<string, string> { ["language"] = "en", ["preferredName"] = "friend" },
+                LocalUserProfile.CreateDefaultSeed(time.GetUtcNow()),
                 time.GetUtcNow()),
             0);
-        var manager = CreateManager(store, time);
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            var row = await db.Profiles.SingleAsync(item => item.ProfileId == LocalUserProfile.Id.ToString("D"));
+            row.PreferencesJson = """{"language":"en","preferredName":"friend"}""";
+            await db.SaveChangesAsync();
+        }
+
+        var manager = CreateManager(harness.Store, time);
         await manager.CreateAsync("examiner", null, SessionMode.Text);
-        var profile = await store.LoadProfileAsync(LocalUserProfile.Id);
+        var profile = await harness.Store.LoadProfileAsync(LocalUserProfile.Id);
         Assert.NotNull(profile);
         Assert.False(profile!.Preferences.ContainsKey("preferredName"));
-        Assert.Equal("en", profile.Preferences["language"]);
-        Assert.Equal(2, profile.Revision);
+        Assert.Equal("en", profile.Preferences["language"].Value);
     }
 
     private static AgentContext Context(UserProfile profile)
