@@ -14,7 +14,7 @@ public sealed class ModelCatalogFactoryTests
     {
         var catalog = ModelCatalogFactory.Create("Synthetic", new LanguageModelProviderOptions { Adapter = "Scripted" }, configuration: null);
         Assert.Equal("scripted-alpha", catalog.DefaultKey);
-        Assert.Equal(["scripted-alpha", "scripted-beta"], catalog.Models.Select(model => model.Key).ToArray());
+        Assert.Equal(["scripted-alpha", "scripted-beta", "scripted-vision"], catalog.Models.Select(model => model.Key).ToArray());
         Assert.True(catalog.Get("scripted-alpha")!.Reasoning);
         Assert.Equal(["low", "medium", "high"], catalog.Get("scripted-alpha")!.SupportedReasoningEfforts);
         Assert.Equal("medium", catalog.Get("scripted-alpha")!.DefaultReasoningEffort);

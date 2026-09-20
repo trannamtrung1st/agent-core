@@ -1,5 +1,5 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
-import { Button, Flex, Input, Tooltip, theme } from "antd";
+import { Button, Flex, Input, Tooltip, Alert, theme } from "antd";
 import {
   AudioOutlined,
   AudioFilled,
@@ -200,7 +200,8 @@ export function Composer({
   onCancelVoice,
   onMute,
   onRetry,
-  modelControls
+  modelControls,
+  imageIncompatibilityMessage
 }: {
   draft: string;
   canSend: boolean;
@@ -227,6 +228,7 @@ export function Composer({
   onMute: (muted: boolean) => void;
   onRetry: () => void;
   modelControls?: ReactNode;
+  imageIncompatibilityMessage?: string | null;
 }) {
   const { token } = theme.useToken();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -272,6 +274,9 @@ export function Composer({
   return (
     <Flex vertical gap={8} className="dock">
       {error ? <SessionFailureAlert error={error} /> : null}
+      {imageIncompatibilityMessage ? (
+        <Alert type="warning" showIcon message={imageIncompatibilityMessage} />
+      ) : null}
 
       {pendingSendQueue.length > 0 ? (
         <section className="pending-send-queue" aria-label="Queued messages">

@@ -30,6 +30,14 @@ import { ClientTranscriptLifecycle } from "../speech/clientTranscriptLifecycle";
 import { createFakeSpeechRecognizer, createFakeSpeechSynthesizer, type FakeSpeechRecognizer, type FakeSpeechSynthesizer } from "../speech/fakeSpeechAdapters";
 import { speechTransport } from "../speech/speechTransport";
 import { voiceControlEnabled } from "../speech/voiceEnablement";
+import { modelSelectValue } from "../features/chat/ModelPicker";
+import {
+  IMAGE_MODEL_INCOMPATIBLE_MESSAGE,
+  imageModelCompatibility,
+  pendingAttachmentsIncludeImage,
+  queuedSendIncludesImage,
+  resolveModelVision
+} from "../features/chat/imageModelCompatibility";
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
@@ -2333,12 +2341,51 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
   }
 }
 
-function restoreDraft(text: string, error: string, wire?: WireError | null): void {
+function restoreDraft(text: string, error: string, wire?: WireError | null, attachments?: PendingAttachment[]): void {
   const latest = useSessionStore.getState();
+  const code = wire?.code ?? "ValidationError";
+  const category = wire?.category ?? "Validation";
   useSessionStore.setState({
     draft: latest.draft === "" ? text : latest.draft,
-    ...sessionFailurePatch(error, { wire, category: "Validation", code: "ValidationError" })
+    ...(attachments ? { pendingAttachments: attachments } : {}),
+    ...sessionFailurePatch(error, { wire, category, code })
   });
+}
+
+function composerModelValue(snapshot = useSessionStore.getState()): string {
+  return modelSelectValue(
+    snapshot.sessionModelKey,
+    snapshot.pendingModelKey,
+    snapshot.sessionId != null,
+    snapshot.modelCatalogDefaultKey);
+}
+
+function composerImageCompatibility(snapshot = useSessionStore.getState()) {
+  return imageModelCompatibility({
+    models: snapshot.modelCatalog,
+    modelValue: composerModelValue(snapshot),
+    defaultKey: snapshot.modelCatalogDefaultKey,
+    pendingAttachments: snapshot.pendingAttachments,
+    pendingSendQueue: snapshot.pendingSendQueue
+  });
+}
+
+export function composerImageIncompatibilityMessage(): string | null {
+  const result = composerImageCompatibility();
+  return result.incompatible ? result.message : null;
+}
+
+function outgoingImageTurnIncompatible(attachments: readonly PendingAttachment[]): boolean {
+  if (!pendingAttachmentsIncludeImage(attachments)) {
+    return false;
+  }
+
+  const snapshot = useSessionStore.getState();
+  const vision = resolveModelVision(
+    snapshot.modelCatalog,
+    composerModelValue(snapshot),
+    snapshot.modelCatalogDefaultKey);
+  return vision === false;
 }
 
 function composerCanSend(draft: string, pending: PendingAttachment[], connection: string, liveResponseId: string | null, pendingSendQueue: PendingSendItem[]): boolean {
@@ -2358,10 +2405,22 @@ function composerCanSend(draft: string, pending: PendingAttachment[], connection
   }
 
   if (hasText || complete.length > 0) {
+    if (composerImageCompatibility().incompatible) {
+      return false;
+    }
+
     return true;
   }
 
-  return liveResponseId == null && !voicePlaybackHoldActive() && pendingSendQueue.length > 0;
+  if (liveResponseId == null && !voicePlaybackHoldActive() && pendingSendQueue.length > 0) {
+    if (composerImageCompatibility().incompatible) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 async function hydrateBoundAttachments(sessionId: string | null): Promise<void> {
@@ -2707,6 +2766,16 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
     return false;
   }
 
+  if (outgoingImageTurnIncompatible(readyFiles)) {
+    useSessionStore.setState({
+      ...sessionFailurePatch(IMAGE_MODEL_INCOMPATIBLE_MESSAGE, {
+        category: "Session",
+        code: "ModelCapabilityUnsupported"
+      })
+    });
+    return false;
+  }
+
   const item: PendingSendItem = {
     localId: uuid(),
     eventId: uuid(),
@@ -2759,6 +2828,27 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     return false;
   }
 
+  if (outgoingImageTurnIncompatible(message.attachments)) {
+    const errorMessage = IMAGE_MODEL_INCOMPATIBLE_MESSAGE;
+    const queueLocalIdEarly = message.source?.kind === "queue" ? message.source.localId : null;
+    if (queueLocalIdEarly) {
+      useSessionStore.setState((state) => ({
+        pendingSendQueue: state.pendingSendQueue.map((item) =>
+          item.localId === queueLocalIdEarly ? { ...item, error: errorMessage } : item)
+      }));
+    } else {
+      restoreDraft(text, errorMessage, {
+        category: "Session",
+        code: "ModelCapabilityUnsupported",
+        message: errorMessage,
+        fatal: false,
+        retryAfterMs: null
+      }, message.attachments.slice());
+    }
+
+    return false;
+  }
+
   const reusePending =
     pendingUserText !== null
     && pendingUserText.text === text
@@ -2804,7 +2894,11 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         pendingUserText = null;
         removeOptimisticUserEntry(eventId);
         const errorMessage = ack?.error?.message ?? "Message was not accepted.";
-        const failure = sessionFailurePatch(errorMessage, { wire: ack?.error, category: "Validation", code: "ValidationError" });
+        const failure = sessionFailurePatch(errorMessage, {
+          wire: ack?.error,
+          category: ack?.error?.category,
+          code: ack?.error?.code
+        });
         if (queueLocalId) {
           clearQueueItemDispatchState(queueLocalId);
           useSessionStore.setState((state) => ({
@@ -2813,7 +2907,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
             ...(state.errorFatal ? {} : failure)
           }));
         } else {
-          restoreDraft(text, errorMessage, ack?.error);
+          restoreDraft(text, errorMessage, ack?.error, pendingAttachmentSnapshot);
         }
 
         return;
@@ -2903,6 +2997,7 @@ export function composerSteerEnabled(localId: string): boolean {
     && item != null
     && !item.dispatching
     && !anyDispatching
+    && !(queuedSendIncludesImage(item) && outgoingImageTurnIncompatible(item.attachments))
   );
 }
 

@@ -13,6 +13,7 @@ const models = [
   {
     key: "scripted-alpha",
     displayName: "Scripted Alpha",
+    vision: false,
     reasoning: true,
     supportedReasoningEfforts: ["low", "medium", "high"],
     defaultReasoningEffort: "medium"
@@ -20,6 +21,15 @@ const models = [
   {
     key: "scripted-beta",
     displayName: "Scripted Beta",
+    vision: false,
+    reasoning: false,
+    supportedReasoningEfforts: [],
+    defaultReasoningEffort: null
+  },
+  {
+    key: "scripted-vision",
+    displayName: "Scripted Vision",
+    vision: true,
     reasoning: false,
     supportedReasoningEfforts: [],
     defaultReasoningEffort: null
@@ -67,6 +77,23 @@ describe("effortSelectValue", () => {
 });
 
 describe("ModelPicker", () => {
+  it("shows a Vision indicator on vision-capable models", async () => {
+    render(
+      <ModelPicker
+        models={models}
+        defaultKey="scripted-alpha"
+        modelValue="scripted-alpha"
+        effortValue="medium"
+        onModelChange={vi.fn()}
+        onEffortChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByText("Vision")).toBeInTheDocument();
+  });
+
   it("lists each catalog model once and marks Default on the system default", async () => {
     const onModelChange = vi.fn();
     render(

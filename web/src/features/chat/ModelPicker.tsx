@@ -7,6 +7,7 @@ export const DEFAULT_MODEL_KEY = "default";
 export type ModelCatalogItem = {
   key: string;
   displayName: string;
+  vision: boolean;
   reasoning: boolean;
   supportedReasoningEfforts: readonly string[];
   defaultReasoningEffort?: string | null;
@@ -209,6 +210,11 @@ export function ModelPicker({
               <Flex align="center" justify="space-between" gap={token.paddingXS} style={{ width: "100%", minWidth: 0 }}>
                 <span className="model-picker-option-name">{model.displayName}</span>
                 <Flex align="center" gap={token.paddingXS} className="model-picker-option-end">
+                  {model.vision ? (
+                    <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
+                      Vision
+                    </Tag>
+                  ) : null}
                   {model.key === defaultKey ? (
                     <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
                       Default

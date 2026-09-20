@@ -14,6 +14,7 @@ internal static class ModelCatalogFactory
     public const string OpenRouterFreeModelId = "openrouter/free";
     public const string ScriptedAlphaKey = "scripted-alpha";
     public const string ScriptedBetaKey = "scripted-beta";
+    public const string ScriptedVisionKey = "scripted-vision";
 
     public static IModelCatalog Create(
         string profile,
@@ -70,6 +71,17 @@ internal static class ModelCatalogFactory
                     tools: true,
                     vision: false,
                     structuredOutput: true,
+                    reasoning: false,
+                    [],
+                    null),
+                Descriptor(
+                    "scripted-vision",
+                    "Scripted Vision",
+                    "primary-llm",
+                    "scripted-vision",
+                    tools: true,
+                    vision: true,
+                    structuredOutput: false,
                     reasoning: false,
                     [],
                     null)

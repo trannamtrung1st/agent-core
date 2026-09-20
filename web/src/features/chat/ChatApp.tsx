@@ -36,6 +36,7 @@ import {
   selectedCatalogModel,
   wireModelSelectionKey
 } from "./ModelPicker";
+import { imageModelCompatibility } from "./imageModelCompatibility";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
@@ -116,6 +117,13 @@ export function ChatApp() {
     inSession,
     state.modelCatalogDefaultKey
   );
+  const imageIncompatibility = imageModelCompatibility({
+    models: state.modelCatalog,
+    modelValue,
+    defaultKey: state.modelCatalogDefaultKey,
+    pendingAttachments: state.pendingAttachments,
+    pendingSendQueue: state.pendingSendQueue
+  });
   const selectedModel = selectedCatalogModel(state.modelCatalog, modelValue, state.modelCatalogDefaultKey);
   const effortValue = effortSelectValue(
     selectedModel,
@@ -420,6 +428,9 @@ export function ChatApp() {
                       canRetry={false}
                       onRetry={() => void retryConnection()}
                       modelControls={modelPicker}
+                      imageIncompatibilityMessage={
+                        imageIncompatibility.incompatible ? imageIncompatibility.message : null
+                      }
                     />
                   )}
                 </div>
