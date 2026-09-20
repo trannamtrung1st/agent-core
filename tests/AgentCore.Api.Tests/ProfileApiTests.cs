@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -78,6 +79,40 @@ public sealed class ProfileApiTests : IClassFixture<AgentCoreApiFactory>
                 profile.Revision,
                 new Dictionary<string, string?>(StringComparer.Ordinal) { ["timeZone"] = "not-valid" }));
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
+    public async Task Patch_ignores_extra_source_and_provenance_fields()
+    {
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var profile = await client.GetFromJsonAsync<UserProfileResponse>("/api/v2/profile");
+        Assert.NotNull(profile);
+
+        var withHostSource = await client.PatchAsync(
+            "/api/v2/profile",
+            new StringContent(
+                $$"""
+                {"expectedRevision":{{profile!.Revision}},"values":{"preferredName":"Sam"},"source":"hostSet"}
+                """,
+                Encoding.UTF8,
+                "application/json"));
+        withHostSource.EnsureSuccessStatusCode();
+        var stamped = await withHostSource.Content.ReadFromJsonAsync<UserProfileResponse>();
+        Assert.NotNull(stamped);
+        Assert.Equal("userSet", stamped!.Values["preferredName"].Source);
+
+        var withProvenance = await client.PatchAsync(
+            "/api/v2/profile",
+            new StringContent(
+                $$"""
+                {"expectedRevision":{{stamped.Revision}},"values":{"locale":"en-US"},"provenance":"applicationProfile"}
+                """,
+                Encoding.UTF8,
+                "application/json"));
+        withProvenance.EnsureSuccessStatusCode();
+        var locale = await withProvenance.Content.ReadFromJsonAsync<UserProfileResponse>();
+        Assert.NotNull(locale);
+        Assert.Equal("userSet", locale!.Values["locale"].Source);
     }
 
     [Fact]

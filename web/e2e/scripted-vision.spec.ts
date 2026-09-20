@@ -13,6 +13,22 @@ async function chooseModel(page: import("@playwright/test").Page, title: string)
 }
 
 test("vision incompatibility blocks send until Scripted Vision is selected", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  const failedRequests: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    const text = message.text();
+    if (text.includes("[antd: Alert]") && text.includes("deprecated")) {
+      return;
+    }
+    consoleErrors.push(text);
+  });
+  page.on("requestfailed", (request) => {
+    failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`);
+  });
+
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
@@ -38,4 +54,7 @@ test("vision incompatibility blocks send until Scripted Vision is selected", asy
   await expect(page.locator(".conversation-list").getByText("Hello from synthetic.").last()).toBeVisible({
     timeout: 15_000
   });
+
+  expect(consoleErrors, consoleErrors.join("\n")).toEqual([]);
+  expect(failedRequests, failedRequests.join("\n")).toEqual([]);
 });
