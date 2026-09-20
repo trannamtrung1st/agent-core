@@ -247,6 +247,18 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         return builder.ToString();
     }
 
+    private static string SavePng(Image image, MemoryStream output)
+    {
+        image.Save(output, new PngEncoder());
+        return "image/png";
+    }
+
+    private static string SaveJpeg(Image image, MemoryStream output)
+    {
+        image.Save(output, new JpegEncoder { Quality = 90 });
+        return "image/jpeg";
+    }
+
     private static AttachmentProcessResult ProcessImage(AttachmentRecord record, byte[] bytes)
     {
         try
@@ -263,23 +275,21 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
             image.Metadata.XmpProfile = null;
             image.Metadata.IptcProfile = null;
             using var output = new MemoryStream();
-            if (string.Equals(record.ContentType, "image/png", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(record.ContentType, "image/gif", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(record.ContentType, "image/webp", StringComparison.OrdinalIgnoreCase))
+            var normalizedType = AttachmentMedia.NormalizeContentType(record.ContentType);
+            var outputContentType = normalizedType switch
             {
-                image.Save(output, new PngEncoder());
-            }
-            else
-            {
-                image.Save(output, new JpegEncoder { Quality = 90 });
-            }
+                "image/png" => SavePng(image, output),
+                "image/jpeg" => SaveJpeg(image, output),
+                "image/webp" or "image/gif" => SavePng(image, output),
+                _ => SaveJpeg(image, output),
+            };
 
             return new AttachmentProcessResult(
                 record.AttachmentId,
                 AttachmentLimits.ProcessorVersion,
                 AttachmentProcessKind.Image,
                 record.DisplayName,
-                record.ContentType,
+                outputContentType,
                 Text: string.Empty,
                 Provenance: null,
                 StrippedImage: output.ToArray(),

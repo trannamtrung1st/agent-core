@@ -4,6 +4,10 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Persistence;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -55,6 +59,59 @@ public sealed class AttachmentProcessorTests
         Assert.Equal(AttachmentProcessKind.Image, result.Kind);
         Assert.NotNull(result.StrippedImage);
         Assert.DoesNotContain("AgentCoreSecret"u8.ToArray(), result.StrippedImage);
+        Assert.Equal("image/png", result.ContentType);
+        Assert.True(HasPngSignature(result.StrippedImage!));
+    }
+
+    [Fact]
+    public async Task Sanitized_image_content_type_matches_output_bytes_for_each_supported_format()
+    {
+        var store = new InMemoryAttachmentStore(TimeProvider.System);
+        var session = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        var processor = new AttachmentProcessor(store);
+
+        var pngBytes = MinimalPngBytes();
+        var jpegBytes = MinimalJpegBytes();
+        var webpBytes = MinimalWebpBytes();
+        var gifBytes = MinimalGifBytes();
+
+        var png = await Upload(store, session, "mislabeled.jpg", "image/png", pngBytes);
+        var jpeg = await Upload(store, session, "mislabeled.png", "image/jpeg", jpegBytes);
+        var webp = await Upload(store, session, "clip.webp", "image/webp", webpBytes);
+        var gif = await Upload(store, session, "clip.gif", "image/gif", gifBytes);
+
+        var results = await processor.ProcessTurnAsync(session, [png.AttachmentId, jpeg.AttachmentId, webp.AttachmentId, gif.AttachmentId]);
+
+        Assert.Equal("image/png", results[0].ContentType);
+        Assert.True(HasPngSignature(results[0].StrippedImage!));
+        Assert.Equal("image/jpeg", results[1].ContentType);
+        Assert.True(HasJpegSignature(results[1].StrippedImage!));
+        Assert.Equal("image/png", results[2].ContentType);
+        Assert.True(HasPngSignature(results[2].StrippedImage!));
+        Assert.Equal("image/png", results[3].ContentType);
+        Assert.True(HasPngSignature(results[3].StrippedImage!));
+    }
+
+    [Fact]
+    public void Processor_cache_keys_differ_between_attachment_processor_versions()
+    {
+        var id = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        var legacy = AttachmentProcessor.CacheKey(id, "attachment-processors/1");
+        var current = AttachmentProcessor.CacheKey(id, AttachmentLimits.ProcessorVersion);
+        Assert.NotEqual(legacy, current);
+        Assert.Equal("attachment-processors/2", AttachmentLimits.ProcessorVersion);
+    }
+
+    [Fact]
+    public async Task Content_type_parameters_do_not_change_sanitized_png_output()
+    {
+        var store = new InMemoryAttachmentStore(TimeProvider.System);
+        var session = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        var processor = new AttachmentProcessor(store);
+        var uploaded = await Upload(store, session, "a.png", "image/png; charset=binary", MinimalPngBytes());
+        var result = (await processor.ProcessTurnAsync(session, [uploaded.AttachmentId]))[0];
+        Assert.Equal("image/png", result.ContentType);
+        Assert.True(HasPngSignature(result.StrippedImage!));
 
         var bomb = AttachmentProcessor.ProcessBytes(
             uploaded with { DisplayName = "bomb.png" },
@@ -179,5 +236,47 @@ trailer<< /Root 1 0 R >>
         Buffer.BlockCopy(width, 0, png, 16, 4);
         Buffer.BlockCopy(height, 0, png, 20, 4);
         return png;
+    }
+
+    private static bool HasPngSignature(ReadOnlySpan<byte> bytes) =>
+        bytes.Length >= 8
+        && bytes[0] == 0x89
+        && bytes[1] == (byte)'P'
+        && bytes[2] == (byte)'N'
+        && bytes[3] == (byte)'G';
+
+    private static bool HasJpegSignature(ReadOnlySpan<byte> bytes) =>
+        bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF;
+
+    private static byte[] MinimalPngBytes()
+    {
+        using var image = new Image<Rgba32>(2, 2, new Rgba32(1, 2, 3));
+        using var buffer = new MemoryStream();
+        image.Save(buffer, new PngEncoder());
+        return buffer.ToArray();
+    }
+
+    private static byte[] MinimalJpegBytes()
+    {
+        using var image = new Image<Rgba32>(2, 2, new Rgba32(4, 5, 6));
+        using var buffer = new MemoryStream();
+        image.Save(buffer, new JpegEncoder { Quality = 90 });
+        return buffer.ToArray();
+    }
+
+    private static byte[] MinimalWebpBytes()
+    {
+        using var image = new Image<Rgba32>(2, 2, new Rgba32(7, 8, 9));
+        using var buffer = new MemoryStream();
+        image.Save(buffer, new WebpEncoder());
+        return buffer.ToArray();
+    }
+
+    private static byte[] MinimalGifBytes()
+    {
+        using var image = new Image<Rgba32>(2, 2, new Rgba32(10, 11, 12));
+        using var buffer = new MemoryStream();
+        image.Save(buffer, new GifEncoder());
+        return buffer.ToArray();
     }
 }

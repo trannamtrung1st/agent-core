@@ -9,7 +9,7 @@ public static class AttachmentLimits
     public const int MaxExtractionOutputBytes = 256 * 1024;
     public const int ParserTimeoutSeconds = 10;
     public const long ParserMemoryBytes = 256L * 1024 * 1024;
-    public const string ProcessorVersion = "attachment-processors/1";
+    public const string ProcessorVersion = "attachment-processors/2";
     public static readonly TimeSpan PendingTtl = TimeSpan.FromHours(1);
 }
 
