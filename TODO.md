@@ -252,7 +252,7 @@ P2A → P2B → P2E
 
 P2C personalization is largely independent and can follow when durable personalization becomes useful.
 
-P2D is already completed and frozen. P2A, P2B, **P2E**, and **P2C** are observed/frozen. **P2-Final** gate evidence is on HEAD `fe245c8`; whole-output review pending before P2 closed/frozen.
+P2D is already completed and frozen. P2A, P2B, **P2E**, and **P2C** are observed/frozen. **P2-Final** §23 gate evidence re-recorded during whole-output review; whole-output review pending before P2 closed/frozen.
 
 P2E reused the existing multimodal foundations rather than creating a second request format.
 
@@ -681,7 +681,7 @@ P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + 
 
 ### P2E stop condition
 
-P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection remains a P3 evaluation. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2-Final** proposal §23 gate **passed** on HEAD `fe245c8` (Domain 76; Infrastructure 192/6 skip; Application 470; API 161; web 384 + build; Playwright 40; Compose passed). Optional Real probes **skipped** (credentials unavailable). **P2 closed/frozen** awaits mandatory whole-output review; P6 has not started.
+P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection remains a P3 evaluation. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2-Final** proposal §23 gate **re-run** during whole-output review (exact HEAD and counts in TDP production evidence). Optional Real probes **skipped** (credentials unavailable). **P2 closed/frozen** awaits mandatory whole-output review; P6 has not started.
 
 ---
 
@@ -959,7 +959,7 @@ Do not let personalization grow through accidental prompt inference.
 
 - [x] README, TODO, and canonical docs agree P2A/P2B/P2D frozen and P2E/P2C observed/frozen; owner `GET|PATCH /api/v2/profile` and typed profile persistence are documented.
 
-- [x] Proposal §23 key-free gate (backend, web unit/build, Synthetic Playwright, Compose SQLite volume) passed on final HEAD `fe245c8` (2026-09-21). Optional Real structured-response and vision probes **skipped** (credentials unavailable).
+- [x] Proposal §23 key-free gate (backend, web unit/build, Synthetic Playwright, Compose SQLite volume) re-verified during whole-output review (2026-09-21; exact HEAD in TDP). Optional Real structured-response and vision probes **skipped** (credentials unavailable).
 
 - [ ] Mandatory whole-output review complete; then mark **P2 closed/frozen** and hand roadmap focus to P3/P4 per proposal §26 (not claimed during this production batch).
 
