@@ -1701,6 +1701,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _progressOwnerResponseId = responseId;
         if (_processor is null || attachmentIds.Count == 0)
         {
+            if (_outputActivity == OutputActivity.ProcessingAttachments)
+            {
+                _outputActivity = OutputActivity.WaitingForAgent;
+            }
+
             LaunchBrain(cause, trigger, responseId, turn);
             return;
         }
@@ -1767,14 +1772,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             || input.TurnGeneration != _turnGeneration
             || (_progressOwnerResponseId is { } owner && owner != input.ResponseId))
         {
-            if (!_deactivated
-                && _activeResponseId is null
-                && _outputActivity == OutputActivity.ProcessingAttachments)
+            if (!_deactivated && _outputActivity == OutputActivity.ProcessingAttachments)
             {
                 await PublishOutputIdleAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
 
-            EndWork();
             return;
         }
 
