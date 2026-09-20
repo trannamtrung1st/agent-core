@@ -873,7 +873,8 @@ public sealed class SessionRuntimeFactory(
     IArtifactReferenceAuthorizer artifacts,
     SessionToolExecutor tools,
     ILanguageModelResolver? models = null,
-    IModelCatalog? catalog = null)
+    IModelCatalog? catalog = null,
+    IUserTurnCapabilityValidator? turnCapabilities = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -898,5 +899,6 @@ public sealed class SessionRuntimeFactory(
             artifacts: artifacts,
             tools: tools,
             modelResolver: models,
-            catalog: catalog);
+            catalog: catalog,
+            turnCapabilities: turnCapabilities);
 }

@@ -45,6 +45,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly ISessionAudioOutput? _audioOutput;
     private readonly IAttachmentStore? _attachments;
     private readonly IAttachmentProcessor? _processor;
+    private readonly IUserTurnCapabilityValidator? _turnCapabilities;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private readonly InteractionPolicy _policy;
@@ -169,7 +170,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         SessionToolExecutor? tools = null,
         VoiceAvailability? voice = null,
         ILanguageModelResolver? modelResolver = null,
-        IModelCatalog? catalog = null)
+        IModelCatalog? catalog = null,
+        IUserTurnCapabilityValidator? turnCapabilities = null)
     {
         _snapshot = snapshot;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
@@ -186,6 +188,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _audioOutput = audioOutput ?? output as ISessionAudioOutput;
         _attachments = attachments;
         _processor = processor;
+        _turnCapabilities = turnCapabilities;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
@@ -1782,6 +1785,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        if (TryRejectProcessedImageCapability(input))
+        {
+            await PublishProgressAsync(
+                    input.Context,
+                    input.ResponseId,
+                    ResponseProgressKind.ReadingAttachments,
+                    ResponseProgressState.Failed,
+                    operationId: null,
+                    ResponseProgressMessages.ReadingAttachments,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await PublishModelCapabilityFailureAsync(input.Context, input.ResponseId, cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await PublishProgressAsync(
                 input.Context,
                 input.ResponseId,
@@ -1798,6 +1817,45 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private bool TryRejectProcessedImageCapability(AttachmentsProcessedReceived input)
+    {
+        if (_turnCapabilities is null || input.Failed)
+        {
+            return false;
+        }
+
+        try
+        {
+            _turnCapabilities.ValidateProcessedImages(_snapshot.ModelSelection, input.Results);
+            return false;
+        }
+        catch (AgentCoreException ex) when (ex.Code == "ModelCapabilityUnsupported")
+        {
+            return true;
+        }
+    }
+
+    private async Task PublishModelCapabilityFailureAsync(
+        EventContext cause,
+        Guid responseId,
+        CancellationToken cancellationToken)
+    {
+        await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, cancellationToken).ConfigureAwait(false);
+        await PublishOutputIdleAsync(cause, cancellationToken).ConfigureAwait(false);
+        await PublishAsync(
+                new SessionOutput(
+                    cause,
+                    responseId,
+                    new ErrorOutput(
+                        "Session",
+                        "ModelCapabilityUnsupported",
+                        AgentCoreErrors.ModelCapabilityUnsupported().Message,
+                        false,
+                        null)),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private void LaunchBrain(

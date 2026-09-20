@@ -35,6 +35,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     private readonly IOwnerCapabilityService _capabilities;
     private readonly ILogger<SessionHost> _logger;
     private readonly IModelCatalog? _catalog;
+    private readonly IUserTurnCapabilityValidator? _turnCapabilities;
     private readonly ConcurrentDictionary<Guid, Live> _live = new();
     private readonly ConcurrentDictionary<string, Guid> _connections = new();
     private readonly HashSet<Guid> _terminating = [];
@@ -65,7 +66,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         IOptions<AgentCoreOptions> options,
         IOwnerCapabilityService capabilities,
         ILogger<SessionHost> logger,
-        IModelCatalog? catalog = null)
+        IModelCatalog? catalog = null,
+        IUserTurnCapabilityValidator? turnCapabilities = null)
     {
         _sessions = sessions;
         _factory = factory;
@@ -75,6 +77,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         _capabilities = capabilities;
         _logger = logger;
         _catalog = catalog;
+        _turnCapabilities = turnCapabilities;
     }
 
     public Guid? ActiveResponseId(Guid sessionId) =>
@@ -1026,6 +1029,16 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
             try
             {
+                if (_turnCapabilities is not null && ids.Count > 0)
+                {
+                    await _turnCapabilities.ValidateAsync(
+                            live.Runtime.SessionId,
+                            live.Runtime.Snapshot.ModelSelection,
+                            ids,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
                 var persisted = await live.Runtime.SubmitPersistedUserTextAsync(
                         text,
                         sourceEventId,
@@ -1076,7 +1089,12 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             }
             catch (AgentCoreException ex)
             {
-                var category = string.Equals(ex.Code, "ProtocolError", StringComparison.Ordinal) ? "Protocol" : "Validation";
+                var category = ex.Code switch
+                {
+                    "ProtocolError" => "Protocol",
+                    "ModelCapabilityUnsupported" => "Session",
+                    _ => "Validation"
+                };
                 return Reject(command.EventId, category, ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
             }
         }, cancellationToken).ConfigureAwait(false);

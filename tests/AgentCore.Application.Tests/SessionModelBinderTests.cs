@@ -126,4 +126,32 @@ internal static class TestModelCatalogs
 
     public static IModelCatalog WithDefault(string defaultKey) =>
         new ConfigurationModelCatalog(defaultKey, Synthetic().Models);
+
+    public static IModelCatalog Real() =>
+        new ConfigurationModelCatalog(
+            "deepseek-v41-flash",
+            [
+                new ModelDescriptor(
+                    "deepseek-v41-flash",
+                    "DeepSeek V4.1 Flash",
+                    "primary-llm",
+                    "deepseek/deepseek-v4.1-flash",
+                    Tools: true,
+                    Vision: false,
+                    StructuredOutput: false,
+                    Reasoning: true,
+                    ["low", "medium", "high"],
+                    "medium"),
+                new ModelDescriptor(
+                    "gpt-4o-mini-2024-07-18",
+                    "GPT-4o mini 2024-07-18",
+                    "primary-llm",
+                    "openai/gpt-4o-mini-2024-07-18",
+                    Tools: true,
+                    Vision: true,
+                    StructuredOutput: true,
+                    Reasoning: false,
+                    [],
+                    null)
+            ]);
 }

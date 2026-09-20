@@ -63,6 +63,13 @@ public static class AgentCoreErrors
     public static AgentCoreException SessionArchived() =>
         new("SessionArchived", "Archived sessions cannot use attachments until unarchive.", 409);
 
+    public static AgentCoreException ModelCapabilityUnsupported() =>
+        new(
+            "ModelCapabilityUnsupported",
+            "This model cannot read images. Choose a vision-capable model to send this attachment.",
+            409,
+            fatal: false);
+
     public static AgentCoreException WorkspaceQuotaExceeded() =>
         new("WorkspaceQuotaExceeded", "Workspace writes cannot exceed 250 MiB.", 413);
 

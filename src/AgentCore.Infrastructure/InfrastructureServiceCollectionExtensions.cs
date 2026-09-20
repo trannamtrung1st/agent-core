@@ -1,6 +1,7 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
+using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -153,6 +154,7 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<SessionManager>();
+        services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
@@ -185,7 +187,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IArtifactReferenceAuthorizer>(),
                 provider.GetRequiredService<SessionToolExecutor>(),
                 provider.GetRequiredService<ILanguageModelResolver>(),
-                provider.GetRequiredService<IModelCatalog>());
+                provider.GetRequiredService<IModelCatalog>(),
+                provider.GetRequiredService<IUserTurnCapabilityValidator>());
         });
         return services;
     }
