@@ -148,7 +148,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | transcript.discarded | utteranceId |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
 | agent.progress | kind: preparing\|readingAttachments\|runningTool\|waitingExternal\|finalizing, state: started\|updated\|completed\|failed, operationId?: UUID, message?: trusted bounded status string. The owning `responseId` is on the envelope, not nested in the payload. Transient live status only: never `session.ready` history, GET `/messages`, TTS/`clientSpeech` input, provider reasoning, or durable assistant text. Runtime-generated `operationId` is not a provider tool-call id. `session.state.changed.outputState` is unchanged and remains additive. |
-| agent.speech.projection | text: accepted speech projection for the live response (Voice); published when validated `speech.mode=custom` is ready or when `same` completion fallback is applied; never raw markers or native JSON; not a separate history entry |
+| agent.speech.projection | mode: same\|custom\|none, text: accepted playback projection for the live response (Voice); published when validated speech is ready (`custom`) or when `same` completion fallback is applied; never raw markers or native JSON; not a separate history entry. Clients must not treat `same`/`none` projections as public semantic `speechText` (only `custom` maps to history `speechText`) |
 | agent.text.delta | text, textStart: UTF-16 offset of **display** text |
 | agent.text.completed | textLength: integer (display) |
 | agent.block.upsert | blockId, kind: markdown\|attachment\|artifact\|unknown, text, fallbackText, attachmentId?, artifactId? |

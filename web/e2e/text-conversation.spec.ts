@@ -301,6 +301,9 @@ test("progress is visible, replaced, cleared on final, reload, disconnect, and s
       timeout: 15_000
     })
     .toBe(true);
+  await expect(page.locator(".chat-message-assistant").first()).toContainText(/Order 91 is delayed/i, {
+    timeout: 60_000
+  });
   await expect(page.locator(".markdown-message strong")).toHaveText("Delayed", { timeout: 30_000 });
   await expect(page.locator(".agent-activity")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "notes.txt" })).toBeVisible();

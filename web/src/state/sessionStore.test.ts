@@ -68,12 +68,22 @@ describe("applyServerEvent", () => {
         type: "agent.speech.projection",
         sequence: 2,
         responseId: "r1",
-        payload: { text: "Spoken lead." }
+        payload: { mode: "custom", text: "Spoken lead." }
       })
     );
     expect(state.entries[0]?.speechText).toBe("Spoken lead.");
     expect(state.entries[0]?.status).toBe("streaming");
     expect(state.liveResponseId).toBe("r1");
+    state = applyServerEvent(
+      state,
+      event({
+        type: "agent.speech.projection",
+        sequence: 4,
+        responseId: "r1",
+        payload: { mode: "same", text: "Derived playback only." }
+      })
+    );
+    expect(state.entries[0]?.speechText).toBe("Spoken lead.");
     state = applyServerEvent(
       state,
       event({ type: "agent.text.delta", sequence: 3, responseId: "r1", payload: { text: "# Title", textStart: 0 } })

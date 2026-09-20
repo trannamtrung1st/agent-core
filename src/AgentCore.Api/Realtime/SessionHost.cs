@@ -2102,6 +2102,7 @@ public static class SessionEventMapper
             }),
             SpeechProjectionOutput projection => ("agent.speech.projection", new Dictionary<string, object?>
             {
+                ["mode"] = ToWireSpeechMode(projection.Mode),
                 ["text"] = projection.Text
             }),
             TextCompletedOutput completed => ("agent.text.completed", new Dictionary<string, object?>
@@ -2342,6 +2343,13 @@ public static class SessionEventMapper
         "EnvironmentUpdate" => "environmentUpdate",
         "UnfinishedInteraction" => "unfinishedInteraction",
         _ => "userTurn"
+    };
+
+    private static string ToWireSpeechMode(ResponseSpeechMode mode) => mode switch
+    {
+        ResponseSpeechMode.Custom => "custom",
+        ResponseSpeechMode.None => "none",
+        _ => "same"
     };
 
     private static string ToInput(string value) => value switch

@@ -7,7 +7,7 @@ Reviewed against `main` on 2026-09-19.
 Current roadmap:
 
 1. **P2A — first-class progress semantics** is **observed** and frozen for follow-on P2B;
-2. **P2B — validated model response envelope** — post-`6b58c01` closure pass (first-wins compatibility speech markers, snapshot attachment auth); not frozen until key-free gate is green on the closing commit;
+2. **P2B — validated model response envelope** — post-`583f021` closure (public `speechText` = custom only, projection `mode` on wire); freeze after key-free gate green on the closing commit;
 3. close **P2E — multimodal/image input usability and capability handling**;
 4. evolve tools and external integrations;
 5. add context compaction and memory;

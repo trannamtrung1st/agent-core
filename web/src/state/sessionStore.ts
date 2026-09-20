@@ -554,6 +554,11 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         return { ...state, lastServerSequence: event.sequence };
       }
 
+      const projectionMode = asString(event.payload.mode);
+      if (projectionMode && projectionMode !== "custom") {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
       const speechText = asSpeechText(event.payload.text);
       if (!speechText) {
         return { ...state, lastServerSequence: event.sequence };

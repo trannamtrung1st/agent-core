@@ -2683,8 +2683,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return null;
         }
 
-        var speech = _snapshot.Entries.FirstOrDefault(item => item.EntryId == entryId)?.Envelope?.SpeechText;
-        return string.IsNullOrEmpty(speech) ? null : speech;
+        return _snapshot.Entries.FirstOrDefault(item => item.EntryId == entryId)?.Envelope?.PublicCustomSpeech();
     }
 
     private async Task HandleReceiptAsync(ResponseReceiptReceived input, CancellationToken cancellationToken)
@@ -3066,7 +3065,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
 
             await PublishAsync(
-                    new SessionOutput(context, responseId, new SpeechProjectionOutput(speakable)),
+                    new SessionOutput(context, responseId, new SpeechProjectionOutput(parsed.SpeechMode, speakable)),
                     cancellationToken)
                 .ConfigureAwait(false);
             return;

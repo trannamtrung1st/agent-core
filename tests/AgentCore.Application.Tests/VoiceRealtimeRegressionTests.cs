@@ -217,6 +217,10 @@ public sealed class VoiceRealtimeRegressionTests
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("The architecture has three pieces.", assistant.Envelope!.SpeechText);
         Assert.Contains(synthesizer.Texts, text => text.Contains("three", StringComparison.Ordinal));
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Null(completed.SpeechText);
+        Assert.Null(PublicHistory.FromEntry(assistant).SpeechText);
     }
 
     [Fact]
@@ -465,6 +469,7 @@ public sealed class VoiceRealtimeRegressionTests
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("structured");
         await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput projection
+            && projection.Mode == ResponseSpeechMode.Custom
             && projection.Text == "Here is the summary.");
         var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
@@ -492,6 +497,7 @@ public sealed class VoiceRealtimeRegressionTests
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("order");
         await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput projection
+            && projection.Mode == ResponseSpeechMode.Custom
             && projection.Text == "Actual speech.");
         var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
@@ -526,12 +532,18 @@ public sealed class VoiceRealtimeRegressionTests
         Assert.Empty(synthesizer.Texts);
         hold.TrySetResult();
         var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await output.WaitForAsync(item => item.Payload is SpeechProjectionOutput projection
+            && projection.Mode == ResponseSpeechMode.Same
+            && projection.Text == "Streaming display only.");
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
         await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(synthesizer.Texts, text => text.Contains("display only", StringComparison.Ordinal));
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("Streaming display only.", assistant.Envelope!.SpeechText);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Null(completed.SpeechText);
     }
 
     [Fact]
