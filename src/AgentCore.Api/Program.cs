@@ -53,6 +53,7 @@ builder.Services.AddOptions<HostingOptions>()
 var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
 builder.Services.AddSingleton<SessionHost>();
+builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());

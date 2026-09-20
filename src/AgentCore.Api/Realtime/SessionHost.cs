@@ -25,7 +25,7 @@ public sealed class AgentCoreOptions
     public int PendingVoiceTimeoutMs { get; set; } = 30_000;
 }
 
-public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress
+public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress, IProfileLiveUpdateNotifier
 {
     private readonly SessionManager _sessions;
     private readonly SessionRuntimeFactory _factory;
@@ -460,6 +460,19 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         if (_live.TryGetValue(sessionId, out var live))
         {
             await live.Runtime.ApplyReopenedSnapshotAsync(reopened, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async ValueTask NotifyProfileUpdatedAsync(UserProfile profile, CancellationToken cancellationToken = default)
+    {
+        foreach (var live in _live.Values)
+        {
+            if (live.Runtime.Snapshot.ProfileId != profile.ProfileId)
+            {
+                continue;
+            }
+
+            await live.Runtime.ApplyProfileAsync(profile, cancellationToken).ConfigureAwait(false);
         }
     }
 

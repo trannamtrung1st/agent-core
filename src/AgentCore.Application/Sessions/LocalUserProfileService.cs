@@ -3,7 +3,10 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Sessions;
 
-public sealed class LocalUserProfileService(IMemoryStore store, TimeProvider time) : ILocalUserProfileService
+public sealed class LocalUserProfileService(
+    IMemoryStore store,
+    TimeProvider time,
+    IProfileLiveUpdateNotifier? liveUpdates = null) : ILocalUserProfileService
 {
     public async ValueTask<UserProfile> GetLocalProfileAsync(CancellationToken cancellationToken = default)
     {
@@ -137,6 +140,11 @@ public sealed class LocalUserProfileService(IMemoryStore store, TimeProvider tim
             merged,
             now);
         await store.SaveProfileAsync(updated, expectedRevision, cancellationToken).ConfigureAwait(false);
+        if (liveUpdates is not null)
+        {
+            await liveUpdates.NotifyProfileUpdatedAsync(updated, cancellationToken).ConfigureAwait(false);
+        }
+
         return updated;
     }
 }

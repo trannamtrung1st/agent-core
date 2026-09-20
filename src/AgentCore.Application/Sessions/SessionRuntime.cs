@@ -240,6 +240,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await applied.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task ApplyProfileAsync(UserProfile profile, CancellationToken cancellationToken = default)
+    {
+        var applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new ProfileUpdatedReceived(context, profile, applied), urgent: true))
+        {
+            applied.TrySetResult();
+            EndWork();
+            return;
+        }
+
+        await applied.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<bool> SubmitUserTextAsync(
         string text,
         Guid? sourceEventId = null,
@@ -865,6 +880,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case TransportResumedSnapshotReceived transportResumed:
                     HandleTransportResumedSnapshot(transportResumed);
+                    break;
+                case ProfileUpdatedReceived profileUpdated:
+                    HandleProfileUpdated(profileUpdated);
                     break;
                 case EnvironmentReceived environment:
                     await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);

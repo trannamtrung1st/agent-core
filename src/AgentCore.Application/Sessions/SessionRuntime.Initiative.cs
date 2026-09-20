@@ -272,6 +272,25 @@ public sealed partial class SessionRuntime
         input.Applied.TrySetResult();
     }
 
+    private void HandleProfileUpdated(ProfileUpdatedReceived input)
+    {
+        if (_snapshot.ProfileId != input.Profile.ProfileId)
+        {
+            input.Applied.TrySetResult();
+            return;
+        }
+
+        if (_profile is not null && input.Profile.Revision <= _profile.Revision)
+        {
+            input.Applied.TrySetResult();
+            return;
+        }
+
+        LocalUserProfile.Validate(input.Profile.Preferences);
+        _profile = input.Profile;
+        input.Applied.TrySetResult();
+    }
+
     private void ResetForTransportResume(SessionSnapshot snapshot)
     {
         CancelBrainEvaluation();
