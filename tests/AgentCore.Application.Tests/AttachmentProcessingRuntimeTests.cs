@@ -188,9 +188,10 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("first", attachmentIds: [uploaded.AttachmentId]));
         Assert.True(await runtime.SubmitUserTextAsync("second"));
         gate.TrySetResult([]);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, cts.Token);
-        await runtime.WaitUntilIdleAsync();
+        using var completedCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, completedCts.Token);
+        using var idleCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await runtime.WaitUntilIdleAsync(idleCts.Token);
         Assert.Contains(brain.Contexts, context => context.Trigger.Text == "second");
         Assert.DoesNotContain(brain.Contexts, context => context.Trigger.Text == "first");
         Assert.NotEqual(OutputActivity.ProcessingAttachments, runtime.Output);
