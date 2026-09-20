@@ -7,7 +7,7 @@ Reviewed against `main` on 2026-09-19.
 Current roadmap:
 
 1. **P2A — first-class progress semantics** is **observed** and frozen for follow-on P2B;
-2. **P2B — validated model response envelope** — code-complete on `2561949` (speech/envelope + attachment supersession); **freeze after green key-free CI** on that SHA;
+2. **P2B — validated model response envelope** — code-complete on `2561949` (speech/envelope + attachment supersession production); **freeze after green key-free CI** on `5bfa5a9`;
 3. close **P2E — multimodal/image input usability and capability handling**;
 4. evolve tools and external integrations;
 5. add context compaction and memory;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on that commit. Historical gates: `2fc96e6` (39/39 Playwright), `aedb32b` (full offline gate). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9`. Historical gates: `2fc96e6` (39/39 Playwright), `aedb32b` (full offline gate). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -678,7 +678,7 @@ Only after native structured + fallback generation paths are verified:
 
 ### P2B stop condition
 
-P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `2561949` (freeze SHA). Implementation targets are met in tree (semantic contract, public custom-only `speechText`, superseded attachment idle/output). P2E is next after freeze; P2C/P6 have not started.
+P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `5bfa5a9` (freeze SHA). Implementation targets are met in tree (semantic contract, public custom-only `speechText`, superseded attachment idle/output production on `2561949`; gated regression synchronized on `5bfa5a9`). P2E is next after freeze; P2C/P6 have not started.
 
 ---
 
@@ -1541,7 +1541,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2E as implemented before it ships; P2A is observed; P2B is code-complete on `2561949` until the freeze gate is green;
+- do not document P2E as implemented before it ships; P2A is observed; P2B is code-complete on `2561949` until the freeze gate is green on `5bfa5a9`;
 - document the existing current-turn vision foundation accurately;
 - distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;
