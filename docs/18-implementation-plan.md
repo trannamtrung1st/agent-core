@@ -229,7 +229,7 @@ P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f
 
 ## P2B — Validated model response envelope (observed)
 
-This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2E** and **P2C** are observed/frozen. **P2-Final** is next. Do not reopen P2B, P2E, or P2C without a reproducible regression.
+This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2E** and **P2C** are observed/frozen. **P2-Final** production gate evidence is recorded on HEAD `fe245c8`; **P2 closed/frozen** awaits mandatory whole-output review. Do not reopen P2B, P2E, or P2C without a reproducible regression.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -243,7 +243,7 @@ This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2
 
 ## P2E — Multimodal image-input capability closure (observed)
 
-This table does not reopen P1, P2D, P2A, or P2B. **P2-Final** is next.
+This table does not reopen P1, P2D, P2A, or P2B. P2-Final gate evidence is on HEAD `fe245c8` (see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -256,7 +256,7 @@ This table does not reopen P1, P2D, P2A, or P2B. **P2-Final** is next.
 
 ## P2C — Personalization boundary (observed)
 
-This table does not reopen P1, P2D, P2A, P2B, or P2E. **P2-Final** is next.
+This table does not reopen P1, P2D, P2A, P2B, or P2E. P2-Final gate evidence is on HEAD `fe245c8` (see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -266,6 +266,12 @@ This table does not reopen P1, P2D, P2A, P2B, or P2E. **P2-Final** is next.
 | P2C verification | Proposal §20 profile regressions plus §23 key-free gate and Compose on one freeze HEAD | **Observed** (P2C-4) |
 
 **P2C freeze:** key-free Synthetic + Compose verification green on the P2C freeze HEAD (2026-09-21; implementation commits `4ae1095`–`c636b28` plus this documentation revision on the same freeze HEAD). Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 76 passed; Infrastructure 186 passed / 12 skipped; Application 470 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 161 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed (verification re-run after one flaky progress/session-switch failure in the initial full gate); `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Hosted workflow run identity pending push to `origin/main`. Optional Real probes **SKIPPED — credentials unavailable**. Do not reopen P2C without a reproducible regression. Memory-derived personalization and inferred facts remain P4-owned.
+
+## P2-Final — Reconcile and close P2 (production evidence)
+
+P2A, P2B, P2D, P2E, and P2C remain observed/frozen on their recorded HEADs. Proposal §26 stop conditions trace to shipped artifacts and the gate below on one unchanged final HEAD. **P2 closed/frozen** is not claimed in this production batch; mandatory whole-output review must complete first (see `TODO.md` P2-Final and proposal §26).
+
+**Final gate HEAD:** `fe245c84efdfeabda8d1d2b2c46d5642212f7d52` (`fe245c8`, 2026-09-21) after P2C freeze documentation. Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 76 passed; Infrastructure 192 passed / 6 skipped; Application 470 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 161 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Hosted workflow run identity pending push to `origin/main`. Optional Real structured-response and vision probes **SKIPPED — credentials unavailable** (`OPENROUTER_API_KEY` / `OPENAI_API_KEY` absent). Roadmap handoff to P3/P4 follows only after whole-output review closes P2.
 
 ## Handoff rule
 

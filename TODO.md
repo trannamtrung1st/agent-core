@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** multimodal image-input capability closure is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (implementation commits `0eeb27c`–`a502266` plus documentation on that freeze HEAD). Do not reopen P2E without a reproducible regression. Optional Real vision (`gpt-4o-mini-2024-07-18`) and structured-response probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. **P2C** personalization boundary is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2C freeze HEAD (implementation commits `4ae1095`–`c636b28` plus documentation on that freeze HEAD). Do not reopen P2C without a reproducible regression. **P2-Final** is next; P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** multimodal image-input capability closure is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (implementation commits `0eeb27c`–`a502266` plus documentation on that freeze HEAD). Do not reopen P2E without a reproducible regression. Optional Real vision (`gpt-4o-mini-2024-07-18`) and structured-response probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. **P2C** personalization boundary is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2C freeze HEAD (implementation commits `4ae1095`–`c636b28` plus documentation on that freeze HEAD). Do not reopen P2C without a reproducible regression. **P2-Final** proposal §23 gate **passed** on HEAD `fe245c84efdfeabda8d1d2b2c46d5642212f7d52` (2026-09-21); production closure evidence is recorded — **P2 closed/frozen** awaits mandatory whole-output review. P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -252,7 +252,7 @@ P2A → P2B → P2E
 
 P2C personalization is largely independent and can follow when durable personalization becomes useful.
 
-P2D is already completed and frozen. P2A, P2B, **P2E**, and **P2C** are observed/frozen. **P2-Final** is next.
+P2D is already completed and frozen. P2A, P2B, **P2E**, and **P2C** are observed/frozen. **P2-Final** gate evidence is on HEAD `fe245c8`; whole-output review pending before P2 closed/frozen.
 
 P2E reused the existing multimodal foundations rather than creating a second request format.
 
@@ -681,7 +681,7 @@ P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + 
 
 ### P2E stop condition
 
-P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection remains a P3 evaluation. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2-Final** is next; P6 has not started.
+P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection remains a P3 evaluation. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2-Final** proposal §23 gate **passed** on HEAD `fe245c8` (Domain 76; Infrastructure 192/6 skip; Application 470; API 161; web 384 + build; Playwright 40; Compose passed). Optional Real probes **skipped** (credentials unavailable). **P2 closed/frozen** awaits mandatory whole-output review; P6 has not started.
 
 ---
 
@@ -952,6 +952,16 @@ Do not let personalization grow through accidental prompt inference.
 - [x] Live runtime mailbox refresh on subsequent turns without mutating in-flight responses or session revision.
 
 - [x] Coordinate durable personalization with P4 structured memory rather than creating a second unrelated memory system (no inferred durable writes in P2C).
+
+---
+
+## P2-Final — Reconcile and close P2
+
+- [x] README, TODO, and canonical docs agree P2A/P2B/P2D frozen and P2E/P2C observed/frozen; owner `GET|PATCH /api/v2/profile` and typed profile persistence are documented.
+
+- [x] Proposal §23 key-free gate (backend, web unit/build, Synthetic Playwright, Compose SQLite volume) passed on final HEAD `fe245c8` (2026-09-21). Optional Real structured-response and vision probes **skipped** (credentials unavailable).
+
+- [ ] Mandatory whole-output review complete; then mark **P2 closed/frozen** and hand roadmap focus to P3/P4 per proposal §26 (not claimed during this production batch).
 
 ---
 
@@ -1528,7 +1538,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2E or P2C as active; P2A, P2B, P2E, and P2C are observed/frozen (`e0e8a55` for P2B; P2E/P2C freeze HEADs in implementation plan); active roadmap work is **P2-Final** and later phases;
+- do not document P2E or P2C as active; P2A, P2B, P2E, and P2C are observed/frozen (`e0e8a55` for P2B; P2E/P2C freeze HEADs in implementation plan); do not mark **P2 closed/frozen** until mandatory whole-output review completes; active roadmap work is **P3/P4** planning only (no new P2 implementation);
 - document the existing current-turn vision foundation accurately;
 - distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;
