@@ -311,6 +311,11 @@ public sealed class ClientSpeechSegmentRuntimeTests
         Assert.DoesNotContain("attachmentId=", spoken, StringComparison.Ordinal);
         await AckClientSpeechAsync(runtime, speechCompleted);
         await runtime.WaitUntilIdleAsync();
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(ResponseSpeechMode.Same, assistant.Envelope!.SpeechMode);
+        Assert.Null(assistant.Envelope.PublicCustomSpeech());
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechProjectionOutput projection
+            && projection.Mode == ResponseSpeechMode.Custom);
     }
 
     private static SessionRuntime Create(ISessionOutput output, ILanguageModel model)

@@ -2942,6 +2942,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 return;
             }
+
+            var rejectedFallback = SpokenOutput.ForPlayback(null, _envelope.DisplayText);
+            var effectiveEnvelope = rejectedFallback.Length > 0
+                ? _envelope with { SpeechMode = ResponseSpeechMode.Same, SpeechText = null }
+                : _envelope with { SpeechMode = ResponseSpeechMode.None, SpeechText = null };
+            await ResolveVoiceSpeechAsync(
+                    context,
+                    responseId,
+                    effectiveEnvelope,
+                    rejectedFallback,
+                    rejectedFallback.Length > 0
+                        ? SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit
+                        : null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
         }
         else if (!finalize)
         {

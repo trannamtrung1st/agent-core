@@ -673,12 +673,30 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("read");
+        var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+        await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(synthesizer.Texts, text => text.Contains("Safe spoken fallback prose.", StringComparison.Ordinal));
         Assert.All(synthesizer.Texts, text => Assert.DoesNotContain("attachmentId=", text, StringComparison.Ordinal));
         Assert.Contains(
             output.Items,
             item => item.Payload is TextDeltaOutput delta && delta.Text.Contains("**spoken**", StringComparison.Ordinal));
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(ResponseSpeechMode.Same, assistant.Envelope!.SpeechMode);
+        Assert.Null(assistant.Envelope.PublicCustomSpeech());
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is SpeechProjectionOutput projection
+                && projection.Mode == ResponseSpeechMode.Same
+                && projection.Text == "Safe spoken fallback prose.");
+        Assert.DoesNotContain(
+            output.Items,
+            item => item.Payload is SpeechProjectionOutput projection
+                && projection.Mode == ResponseSpeechMode.Custom);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.Null(completed.SpeechText);
     }
 
     [Fact]
@@ -731,8 +749,14 @@ public sealed class VoiceRealtimeRegressionTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("dump");
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput);
         await runtime.WaitUntilIdleAsync();
         Assert.Empty(synthesizer.Texts);
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechProjectionOutput);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(ResponseSpeechMode.None, assistant.Envelope!.SpeechMode);
+        Assert.Null(assistant.Envelope.SpeechText);
+        Assert.Null(assistant.Envelope.PublicCustomSpeech());
         var completed = Assert.IsType<ResponseCompletedOutput>(
             output.Items.Last(item => item.Payload is ResponseCompletedOutput).Payload);
         Assert.Equal(0, completed.HeardTextEndExclusive);
