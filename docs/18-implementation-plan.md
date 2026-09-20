@@ -199,7 +199,7 @@ This table does not reopen historical Milestones 0–12, post-MVP A–H, P0 conv
 | P1A history | Evolve `IMemoryStore`; durable `LastEntrySequence` independent of the `Entries` window; retain older rows; messages newest/`before`/`after` with `hasOlder`; one public history projection; UI Load earlier messages with scroll-anchor preservation | **Observed** (P1A-1/P1A-2/P1A-3) |
 | P1B lifecycle | Additive `lifecycleStatus` Active/Paused/Completed/Expired/Cancelled/Ended; protocol-v1 `status` compatible; `SessionPurpose` Ongoing\|Goal; one `TransitionLifecycle`; TimeProvider attached deadlines and detached atomic expiry; RequestComplete evaluator distinct from RequestDeactivate | **Observed** (P1B-1/P1B-2/P1B-3/P1B-4) |
 | P1C speech locale | Effective locale session override > agent default > fallback; Application BCP-47 validation; Browser STT tag / TTS exact-then-base-then-compatible; hosted hints in adapters; Voice fails clearly, text remains; realtime OpenAI STT unselectable | **Observed** for Application, adapters, Speech locale Select, Playwright override/fallback, and unedited Chrome 153 `fr-FR` STT/TTS smoke (`p1-final-fr-smoke-r2`) on HEAD `5764010` |
-| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2D followed this freeze; P2A is observed; P2B is code-complete pending freeze on `5bfa5a9` |
+| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2D followed this freeze; P2A is observed; P2B is code-complete pending freeze on `5bfa5a9` (or merge HEAD) |
 
 ## P2D — Session model selection and inference controls (observed)
 
@@ -216,7 +216,7 @@ P2D key-free gate (2026-09-19): Domain 42; Infrastructure 120 passed / 10 skippe
 
 ## P2A — First-class progress vs final assistant output (observed)
 
-This table does not reopen P1 or P2D. P2B is code-complete on `2561949` pending a green freeze gate on `5bfa5a9`.
+This table does not reopen P1 or P2D. P2B is code-complete on `2561949` pending a green freeze gate on `5bfa5a9` (or merge HEAD).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -237,7 +237,7 @@ This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
 | P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover; public `speechText` custom-only; `agent.speech.projection` `mode` | **Implemented** (`2561949`) |
 | P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility first-wins `[[speech:]]` including `[[speech:none]]`; `SemanticMatches` speech guard | **Implemented** (`2561949`) |
 | P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (`2fc96e6` gate: 379 Vitest, 39 Playwright) |
-| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending freeze** on green CI for `5bfa5a9` (local: Domain 75, Infrastructure 178/12 skip, Application 457 blame-hang, API 155) |
+| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending freeze** on green CI for `5bfa5a9` (or merge HEAD; local: Domain 75, Infrastructure 178/12 skip, Application 457 blame-hang, API 155) |
 
 P2B implementation is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9` (or its merge HEAD). Closure includes envelope persistence/review fixes (`583f021`–`a8f41f7`), public custom-only `speechText` and projection `mode` (`2fc96e6`), superseded attachment idle/output production fixes (`aedb32b`–`2561949`), and causation-synchronized gated attachment regression coverage (`5bfa5a9`). Prior gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
 

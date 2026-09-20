@@ -7,7 +7,7 @@ Reviewed against `main` on 2026-09-19.
 Current roadmap:
 
 1. **P2A — first-class progress semantics** is **observed** and frozen for follow-on P2B;
-2. **P2B — validated model response envelope** — code-complete on `2561949` (speech/envelope + attachment supersession production); **freeze after green key-free CI** on `5bfa5a9`;
+2. **P2B — validated model response envelope** — code-complete on `2561949` (speech/envelope + attachment supersession production); **freeze after green key-free CI** on `5bfa5a9` (or merge HEAD);
 3. close **P2E — multimodal/image input usability and capability handling**;
 4. evolve tools and external integrations;
 5. add context compaction and memory;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9`. Historical gates: `2fc96e6` (39/39 Playwright), `aedb32b` (full offline gate). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9` (or merge HEAD). Historical gates: `2fc96e6` (39/39 Playwright), `aedb32b` (full offline gate). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -49,7 +49,8 @@ The recent response/voice work is now part of the baseline:
 - Voice display publication waits for speech resolution;
 - runtime-authored generic spoken lead-ins have been removed;
 - compatibility display→speech derivation is intentionally conservative around code, tables, dumps, and substantial technical content;
-- persisted/public `SpeechText` is available when spoken output meaningfully differs from display;
+- envelope may persist same-mode `speech.text` for playback/heard coordinates when spoken output meaningfully differs from display;
+- public/history `speechText` exposes custom semantic speech only;
 - `general-assistant` remains a neutral harness identity;
 - the Real DeepSeek V4.1 Flash reasoning-channel probe is documented in `docs/reports/reasoning-channel-probe.md`.
 
@@ -417,7 +418,7 @@ Do not add durable background-work execution in this phase.
 
 ## P2B — Validated model response envelope
 
-P2B implementation is **code-complete** on `2561949` (not frozen until green key-free CI on `5bfa5a9`). Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
+P2B implementation is **code-complete** on `2561949` (not frozen until green key-free CI on `5bfa5a9` or merge HEAD). Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
 
 After P2A, the shipped generation contract retired this compatibility debt from Domain/Application:
 
@@ -678,7 +679,7 @@ Only after native structured + fallback generation paths are verified:
 
 ### P2B stop condition
 
-P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `5bfa5a9` (freeze SHA). Implementation targets are met in tree (semantic contract, public custom-only `speechText`, superseded attachment idle/output production on `2561949`; gated regression synchronized on `5bfa5a9`). P2E is next after freeze; P2C/P6 have not started.
+P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `5bfa5a9` (or merge HEAD; freeze baseline). Implementation targets are met in tree (semantic contract, public custom-only `speechText`, superseded attachment idle/output production on `2561949`; gated regression synchronized on `5bfa5a9`). P2E is next after freeze; P2C/P6 have not started.
 
 ---
 
@@ -1541,7 +1542,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2E as implemented before it ships; P2A is observed; P2B is code-complete on `2561949` until the freeze gate is green on `5bfa5a9`;
+- do not document P2E as implemented before it ships; P2A is observed; P2B is code-complete on `2561949` until the freeze gate is green on `5bfa5a9` (or merge HEAD);
 - document the existing current-turn vision foundation accurately;
 - distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;
@@ -1587,7 +1588,8 @@ Keep this compact. It is orientation, not another roadmap.
 - [ ] User-facing capability-aware image/model admission — P2E.
 - [ ] Historical image re-inspection beyond the original multimodal turn — evaluate under P2E/P3.
 - [x] Existing rich-response envelope with display/speech/blocks.
-- [x] Persisted/public meaningful `SpeechText`.
+- [x] Internal same-mode `speech.text` when playback differs from display.
+- [x] Public/history `speechText` custom-only (P2B).
 - [x] Artifact references and session-owned artifacts.
 - [x] Repeated proactive initiative.
 - [x] Deactivation/pause lifecycle.

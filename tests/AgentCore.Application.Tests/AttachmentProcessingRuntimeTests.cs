@@ -215,16 +215,16 @@ public sealed class AttachmentProcessingRuntimeTests
         gateA.TrySetResult([]);
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(OutputActivity.ProcessingAttachments, runtime.Output);
-        Assert.DoesNotContain(
-            output.Items.Skip(outputsAfterTurnBProcessing),
-            item => item.Context.CausationId == eventA
-                && item.Payload is StateChangedOutput state
-                && state.OutputState == nameof(OutputActivity.Idle));
         gateB.TrySetResult([]);
         using var completedCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, completedCts.Token);
         using var idleCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await runtime.WaitUntilIdleAsync(idleCts.Token);
+        Assert.DoesNotContain(
+            output.Items.Skip(outputsAfterTurnBProcessing),
+            item => item.Context.CausationId == eventA
+                && item.Payload is StateChangedOutput state
+                && state.OutputState == nameof(OutputActivity.Idle));
         Assert.DoesNotContain(brain.Contexts, context => context.Trigger.Text == "turnA");
         Assert.Contains(brain.Contexts, context => context.Trigger.Text == "turnB");
         Assert.Equal(OutputActivity.Idle, runtime.Output);
