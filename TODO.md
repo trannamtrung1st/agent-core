@@ -2,13 +2,13 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on 2026-09-19.
+Reviewed against `main` on 2026-09-20.
 
 Current roadmap:
 
-1. **P2A — first-class progress semantics** is **observed** and frozen for follow-on P2B;
-2. **P2B — validated model response envelope** — code-complete on `2561949` (speech/envelope + attachment supersession production); **freeze after green key-free CI** on `5bfa5a9` (or merge HEAD);
-3. close **P2E — multimodal/image input usability and capability handling**;
+1. **P2A — first-class progress semantics** is **observed** and frozen;
+2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
+3. **P2E — multimodal/image input usability and capability handling** — active phase;
 4. evolve tools and external integrations;
 5. add context compaction and memory;
 6. add configurable triggers;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9` (or merge HEAD). Historical gates: `2fc96e6` (39/39 Playwright), `aedb32b` (full offline gate). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** is the active implementation phase. Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -252,11 +252,9 @@ P2A → P2B → P2E
 
 P2C personalization is largely independent and can follow when durable personalization becomes useful.
 
-P2D is already completed and frozen.
+P2D is already completed and frozen. P2A and P2B are observed/frozen.
 
-Implement **P2A before P2B** so progress semantics exist before the final generation contract is frozen.
-
-P2E should reuse the existing multimodal foundations rather than create a second request format.
+**P2E** is the active phase. Reuse the existing multimodal foundations rather than create a second request format.
 
 ---
 
@@ -418,7 +416,7 @@ Do not add durable background-work execution in this phase.
 
 ## P2B — Validated model response envelope
 
-P2B implementation is **code-complete** on `2561949` (not frozen until green key-free CI on `5bfa5a9` or merge HEAD). Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
+**Observed/frozen** on `e0e8a55` (2026-09-20). Do not reopen without a reproducible regression. Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
 
 After P2A, the shipped generation contract retired this compatibility debt from Domain/Application:
 
@@ -679,7 +677,7 @@ Only after native structured + fallback generation paths are verified:
 
 ### P2B stop condition
 
-P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `5bfa5a9` (or merge HEAD; freeze baseline). Implementation targets are met in tree (semantic contract, public custom-only `speechText` with projection mode/telemetry, superseded attachment idle/output production on `2561949`; gated regression synchronized on `5bfa5a9`–`c6e0735`). P2E is next after freeze; P2C/P6 have not started.
+P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + Compose green (workflow run `35496178496`). P2E is the active phase; P2C/P6 have not started.
 
 ---
 
@@ -1542,7 +1540,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2E as implemented before it ships; P2A is observed; P2B is code-complete on `2561949` until the freeze gate is green on `5bfa5a9` (or merge HEAD);
+- do not document P2E as implemented before it ships; P2A and P2B are observed/frozen (`e0e8a55` for P2B); active work is P2E;
 - document the existing current-turn vision foundation accurately;
 - distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;

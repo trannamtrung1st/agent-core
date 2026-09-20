@@ -199,11 +199,11 @@ This table does not reopen historical Milestones 0–12, post-MVP A–H, P0 conv
 | P1A history | Evolve `IMemoryStore`; durable `LastEntrySequence` independent of the `Entries` window; retain older rows; messages newest/`before`/`after` with `hasOlder`; one public history projection; UI Load earlier messages with scroll-anchor preservation | **Observed** (P1A-1/P1A-2/P1A-3) |
 | P1B lifecycle | Additive `lifecycleStatus` Active/Paused/Completed/Expired/Cancelled/Ended; protocol-v1 `status` compatible; `SessionPurpose` Ongoing\|Goal; one `TransitionLifecycle`; TimeProvider attached deadlines and detached atomic expiry; RequestComplete evaluator distinct from RequestDeactivate | **Observed** (P1B-1/P1B-2/P1B-3/P1B-4) |
 | P1C speech locale | Effective locale session override > agent default > fallback; Application BCP-47 validation; Browser STT tag / TTS exact-then-base-then-compatible; hosted hints in adapters; Voice fails clearly, text remains; realtime OpenAI STT unselectable | **Observed** for Application, adapters, Speech locale Select, Playwright override/fallback, and unedited Chrome 153 `fr-FR` STT/TTS smoke (`p1-final-fr-smoke-r2`) on HEAD `5764010` |
-| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2D followed this freeze; P2A is observed; P2B is code-complete pending freeze on `5bfa5a9` (or merge HEAD) |
+| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2D followed this freeze; P2A and P2B are observed separately |
 
 ## P2D — Session model selection and inference controls (observed)
 
-This table does not reopen P1. P2B structured-response work is code-complete separately and does not reopen P2D.
+This table does not reopen P1. P2B structured-response work is observed separately and does not reopen P2D.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -216,7 +216,7 @@ P2D key-free gate (2026-09-19): Domain 42; Infrastructure 120 passed / 10 skippe
 
 ## P2A — First-class progress vs final assistant output (observed)
 
-This table does not reopen P1 or P2D. P2B is code-complete on `2561949` pending a green freeze gate on `5bfa5a9` (or merge HEAD).
+This table does not reopen P1 or P2D. P2B is **frozen** on `e0e8a55`. Do not reopen P2B without a reproducible regression.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -227,19 +227,19 @@ This table does not reopen P1 or P2D. P2B is code-complete on `2561949` pending 
 
 P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree (new-run evidence; no retired-run artifact). `npm ci` in `tests/realtime-js`; Domain 64; Infrastructure 133 passed / 12 skipped; Application 436 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web `pnpm install --frozen-lockfile`, 376 unit tests, production build; `CI=1 pnpm exec playwright test` 36 passed including `progress is visible, replaced, cleared on final, reload, disconnect, and session switch`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Optional Real-provider probes were not run.
 
-## P2B — Validated model response envelope (pending freeze gate)
+## P2B — Validated model response envelope (observed)
 
-This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
+This table does not reopen P1, P2D, or P2A. P2E is next; P2C/P6 have not started.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
-| P2B speech semantics | Domain `same`/`custom`/`none`; legacy `speechText`; `speech.text` on `same` when playback coordinate differs from display; rejected custom normalizes to effective `same`/`none` | **Implemented** (`2561949`) |
-| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover; public `speechText` custom-only; `agent.speech.projection` `mode` | **Implemented** (`2561949`) |
-| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility first-wins `[[speech:]]` including `[[speech:none]]`; `SemanticMatches` speech guard | **Implemented** (`2561949`) |
-| P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (`2fc96e6` gate: 379 Vitest, 39 Playwright) |
-| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending freeze** on green CI for `5bfa5a9` (or merge HEAD; local: Domain 75, Infrastructure 178/12 skip, Application 457 blame-hang, API 155) |
+| P2B speech semantics | Domain `same`/`custom`/`none`; legacy `speechText`; `speech.text` on `same` when playback coordinate differs from display; rejected custom normalizes to effective `same`/`none` | **Observed** |
+| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover; public `speechText` custom-only; `agent.speech.projection` `mode` | **Observed** |
+| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility first-wins `[[speech:]]` including `[[speech:none]]`; `SemanticMatches` speech guard | **Observed** |
+| P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Observed** |
+| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Observed** (P2B gate) |
 
-P2B implementation is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9` (or merge HEAD). Closure includes envelope persistence/review fixes (`583f021`–`a8f41f7`), public custom-only `speechText` with live `agent.speech.projection` mode/telemetry (`2fc96e6`), superseded attachment idle/output production fixes (`aedb32b`–`2561949`), and causation-synchronized gated attachment regression coverage (`5bfa5a9`–`c6e0735`). Prior gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
+**P2B freeze:** `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`, 2026-09-20) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Prior descendant gate on `c6e0735` (run `35496153659`) remains corroborating evidence. Key-free gate counts on `e0e8a55`: Domain 75; Infrastructure 178 passed / 12 skipped; Application 457 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web unit tests, production build, and `CI=1` Playwright per `.github/workflows/synthetic.yml`; `scripts/compose-sqlite-volume.sh` passed. Optional Real-provider probes were not run. Do not reopen P2B without a reproducible regression. Closure spans envelope persistence/review (`583f021`–`a8f41f7`), public custom-only `speechText` with live `agent.speech.projection` mode/telemetry (`2fc96e6`), superseded attachment idle/output production (`aedb32b`–`2561949`), and causation-synchronized gated attachment regression (`5bfa5a9`–`c6e0735`). Earlier gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
 
 ## Handoff rule
 
