@@ -519,6 +519,7 @@ function dropLiveTransport(connection: "reconnecting" | "failed"): void {
     preflightReady: false,
     captureLive: false,
     attachmentId: null,
+    activeProgress: null,
     ...(connection === "reconnecting"
       ? { error: null, sessionError: null, errorFatal: false, errorHoldSequence: 0 }
       : {})
@@ -551,6 +552,7 @@ function markConnectionFailed(message: string, options?: { force?: boolean }): v
     preflightReady: false,
     captureLive: false,
     attachmentId: null,
+    activeProgress: null,
     pendingSendQueue: []
   });
 }
@@ -3422,7 +3424,8 @@ if (typeof window !== "undefined") {
         pendingMode: null,
         preflightReady: false,
         captureLive: false,
-        attachmentId: null
+        attachmentId: null,
+        activeProgress: null
       });
     },
     reconnect: async () => {

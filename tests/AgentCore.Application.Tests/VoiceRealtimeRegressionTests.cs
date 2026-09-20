@@ -347,6 +347,52 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public async Task Tool_progress_is_never_tts_or_speech_segment_input()
+    {
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var tools = new SessionToolExecutor(
+            new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
+            artifacts: artifacts);
+        var definition = await Load("customer-support");
+        await using var runtime = CreateVoice(
+            output,
+            new ScriptedLanguageModel(),
+            synthesizer,
+            snapshotDefinition: definition,
+            tools: tools,
+            artifacts: artifacts);
+        await runtime.AttachAsync();
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+        Assert.True(await runtime.SubmitUserTextAsync("Run the support case for order 91."));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Contains(
+            output.Items,
+            item => item.Payload is ResponseProgressOutput progress && progress.Kind == ResponseProgressKind.RunningTool);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ResponseProgressOutput progress
+            && progress.Kind is ResponseProgressKind.Preparing or ResponseProgressKind.Finalizing);
+        Assert.All(synthesizer.Texts, text =>
+        {
+            Assert.DoesNotContain("Running tools", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Reading attachments", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Preparing response", text, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.All(
+            output.Items.Select(item => item.Payload).OfType<SpeechOutputSegmentOutput>(),
+            segment =>
+            {
+                Assert.DoesNotContain("Running tools", segment.Text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("Reading attachments", segment.Text, StringComparison.OrdinalIgnoreCase);
+            });
+        Assert.DoesNotContain(
+            runtime.Snapshot.Entries,
+            entry => entry.Text.Contains("Running tools", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Speech_marker_split_across_chunks_waits_for_tts_until_projection_complete()
     {
         var output = new CapturingSessionOutput();

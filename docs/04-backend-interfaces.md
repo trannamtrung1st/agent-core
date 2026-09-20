@@ -31,7 +31,7 @@ SyntheticSpeechRecognizer, SyntheticSpeechSynthesizer and ScriptedLanguageModel 
 public enum ProviderErrorCode
 {
     Authentication, RateLimited, Timeout, Cancelled, InvalidRequest,
-    Unavailable, UnsupportedCapability, Unknown
+    InvalidResponse, Unavailable, UnsupportedCapability, Unknown
 }
 public sealed record ProviderFailure(
     ProviderErrorCode Code, string SafeMessage, TimeSpan? RetryAfter = null);
@@ -45,14 +45,22 @@ public sealed record ModelMessage(
     string? ToolCallId = null, string? Name = null,
     IReadOnlyList<ModelToolCall>? ToolCalls = null);
 public sealed record ModelCapabilities(
-    bool StreamingText, bool Cancellation, bool Vision = false, bool Tools = false);
+    bool StreamingText, bool Cancellation, bool Vision = false, bool Tools = false,
+    bool StructuredOutput = false);
+public sealed record ModelResponseContract(bool SpeechWillBeUsed);
+public sealed record ModelSemanticResponse(
+    string DisplayText, ModelSpeechProjection Speech, IReadOnlyList<ModelResponseBlock> Blocks);
 public sealed record ModelRequest(
     Guid ResponseId, IReadOnlyList<ModelMessage> Messages,
     int MaxOutputTokens = 512, double? Temperature = null,
     IReadOnlyList<ModelToolDefinition>? Tools = null,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    ModelResponseContract? ResponseContract = null);
 public abstract record ModelGenerationEvent;
 public sealed record ModelTextDelta(string Text) : ModelGenerationEvent;
+public sealed record ModelDisplayDelta(string Text) : ModelGenerationEvent;
+public sealed record ModelSemanticResponseReady(ModelSemanticResponse Response) : ModelGenerationEvent;
+public sealed record ModelReasoningDelta(string Text) : ModelGenerationEvent;
 public sealed record ModelToolCallEvent(ModelToolCall Call) : ModelGenerationEvent;
 public sealed record ModelCompleted(ModelStopReason Reason,
     int? InputTokens = null, int? OutputTokens = null) : ModelGenerationEvent;
@@ -65,9 +73,9 @@ public interface ILanguageModel
 }
 ```
 
-Exactly one terminal Completed/Failed event per successful enumeration, followed by EOF. Caller cancellation may throw `OperationCanceledException` instead. Unexpected exceptions are normalized at the supervised application boundary; provider exception details never go to Contracts. Empty EOF is `Unavailable`, never implicit success. Model events have request-scoped identity; the pump adds ResponseId from its captured request, never from current mutable state. Tool calls and structured-output generation are outside MVP; unsupported requested capabilities fail before making a request.
+Exactly one terminal Completed/Failed event per successful enumeration, followed by EOF. Caller cancellation may throw `OperationCanceledException` instead. Unexpected exceptions are normalized at the supervised application boundary; provider exception details never go to Contracts. Empty EOF is `Unavailable`, never implicit success. Model events have request-scoped identity; the pump adds ResponseId from its captured request, never from current mutable state. `InvalidResponse` is a distinct provider failure for malformed or unusable assistant output after the request was accepted; it is not `InvalidRequest` (the provider rejected the request). Optional `ModelRequest.ResponseContract` asks for provider-neutral semantic events (`ModelDisplayDelta`, `ModelSemanticResponseReady`); a null contract keeps `ModelTextDelta`. Resolved language models are wrapped by an Infrastructure semantic-response decorator: native completed JSON is validated when `StructuredOutput` is true, otherwise one bounded compatibility instruction and marker parser produce the same events. Raw JSON and marker fragments are never display or speech. Application types do not carry `response_format` or `json_schema`. Unsupported requested capabilities fail before making a request.
 
-The Language Model reasons over normalized text messages only. ModelRequest has no vendor model ID. A trusted `IModelCatalog` exposes operator-configured descriptors (catalog key, display name, trusted provider alias, concrete model ID, capabilities, supported reasoning-effort values). `ILanguageModelResolver.Resolve(SessionModelSelection, ModelPurpose)` captures an immutable client for Conversation, Initiative, or CompletionEvaluation from the persisted session selection. This P2D slice uses the session-selected model for all three purposes. Do not mutate singleton `LanguageModelProviderOptions` when a session changes model. Browser input never supplies provider alias, BaseUrl, ApiKey, or arbitrary provider JSON. Hidden provider reasoning fields are not spoken content and never become ModelTextDelta. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
+The Language Model reasons over normalized text messages only. ModelRequest has no vendor model ID. A trusted `IModelCatalog` exposes operator-configured descriptors (catalog key, display name, trusted provider alias, concrete model ID, capabilities including `StructuredOutput`, supported reasoning-effort values). `ILanguageModelResolver.Resolve(SessionModelSelection, ModelPurpose)` captures an immutable client for Conversation, Initiative, or CompletionEvaluation from the persisted session selection and copies trusted catalog `Tools`, `Vision`, and `StructuredOutput` onto cloned provider options and resolved `ModelCapabilities`. This P2D slice uses the session-selected model for all three purposes. Do not mutate singleton `LanguageModelProviderOptions` when a session changes model. Browser input never supplies provider alias, BaseUrl, ApiKey, or arbitrary provider JSON. Hidden provider reasoning fields are not spoken content and never become ModelTextDelta. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
 ## Independent speech ports
 
@@ -322,6 +330,6 @@ Observed typed tools: Application-normalized `ModelToolCall` / `ModelStopReason.
 
 Observed `ISandboxExecutor`: Infrastructure `DockerSandboxExecutor` runs `busybox:1.36` with `--network none`, `--read-only`, `--user 65534:65534`, `--cap-drop ALL`, `--security-opt no-new-privileges`, 64 MiB / 0.5 CPU / 32 PIDs / 8 s, bind-mount of that session's `/workspace/working` only, normalized `echo`/`true`/`cat`/`sleep`, cancellation kill/reap, bounded output, and export only through `IArtifactStore` for `/workspace/working` paths. Unit fakes may supplement Application allowlist tests; they do not replace isolation/resource checks. Missing Docker skips those facts; it is not Phase H success. Shipped Support/Compliance allowlists do not include `sandbox.run` or process/shell.
 
-Observed rich envelope: parent `ResponseId` owns `reply.text` (stored as entry `Text` after marker strip), optional `reply.speech`, Markdown/attachment/artifact/unknown blocks, independent display vs speech-coordinate receipts, and fixture-only artifact authorization (`fixture-artifact-1`). Unknown and unauthorized artifact refs persist a safe fallback without leaking the id.
+Observed rich envelope: parent `ResponseId` owns validated `displayText` (stored as entry `Text`), optional public `speechText` when `speech.mode` is `custom` and it differs from display, Markdown/attachment/artifact/unknown blocks, independent display vs speech-coordinate receipts, and fixture-only artifact authorization (`fixture-artifact-1`). Unknown and unauthorized artifact refs persist a safe fallback without leaking the id. Legacy rows that stored marker-era speech still project through the same public `speechText` field.
 
 Quota numbers: [resource table](10-technology-decisions.md#planned-resource-limits).

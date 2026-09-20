@@ -199,11 +199,11 @@ This table does not reopen historical Milestones 0–12, post-MVP A–H, P0 conv
 | P1A history | Evolve `IMemoryStore`; durable `LastEntrySequence` independent of the `Entries` window; retain older rows; messages newest/`before`/`after` with `hasOlder`; one public history projection; UI Load earlier messages with scroll-anchor preservation | **Observed** (P1A-1/P1A-2/P1A-3) |
 | P1B lifecycle | Additive `lifecycleStatus` Active/Paused/Completed/Expired/Cancelled/Ended; protocol-v1 `status` compatible; `SessionPurpose` Ongoing\|Goal; one `TransitionLifecycle`; TimeProvider attached deadlines and detached atomic expiry; RequestComplete evaluator distinct from RequestDeactivate | **Observed** (P1B-1/P1B-2/P1B-3/P1B-4) |
 | P1C speech locale | Effective locale session override > agent default > fallback; Application BCP-47 validation; Browser STT tag / TTS exact-then-base-then-compatible; hosted hints in adapters; Voice fails clearly, text remains; realtime OpenAI STT unselectable | **Observed** for Application, adapters, Speech locale Select, Playwright override/fallback, and unedited Chrome 153 `fr-FR` STT/TTS smoke (`p1-final-fr-smoke-r2`) on HEAD `5764010` |
-| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2A/P2B not started; P2D follows this freeze |
+| P1-Final | Exact live `synthetic.yml` plus Compose; catalog/archive/pause regressions remain; P0 Chrome Voice checklist re-run | **Frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`, 2026-09-19). CI/Synthetic + Compose verification is green on that HEAD (Real V4.1 Flash development/demo default documented). Do not reopen P1. Prior verified repair `15930985f54e2e6bf4019dd0d8040796883021c7` (2026-09-19): Domain 40; Infra 112/9 skip; App 356 blame-hang; API 123; Vitest 328; Playwright 34 (`data/playwright/synthetic.db`); Compose-equivalent :5088. P2D followed this freeze; P2A and P2B are observed separately |
 
 ## P2D — Session model selection and inference controls (observed)
 
-This table does not reopen P1. P2A/P2B structured-response work is out of scope for this slice.
+This table does not reopen P1. P2B structured-response work is observed separately and does not reopen P2D.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -213,6 +213,33 @@ This table does not reopen P1. P2A/P2B structured-response work is out of scope 
 | P2D API/UI | Safe catalog API; create/mutate catalog-level choices; Codex-like Default + effort controls; session isolation | **Observed** |
 
 P2D key-free gate (2026-09-19): Domain 42; Infrastructure 120 passed / 10 skipped; Application 380 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 135; web 340 unit tests and production build; `CI=1` Playwright 35 including two-session Synthetic catalog isolation; `scripts/compose-sqlite-volume.sh` passed on :5080. Opt-in `OpenRouter_deepseek_v41_default_accepts_tools_request` was skipped (no process `OPENROUTER_API_KEY`). P1 lifecycle/history/speech tests were not weakened.
+
+## P2A — First-class progress vs final assistant output (observed)
+
+This table does not reopen P1 or P2D. P2B is observed separately.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P2A progress contract | Additive `ResponseProgressOutput` / `agent.progress` with envelope `responseId`, optional runtime `operationId`, specified camelCase kinds/states, trusted bounded message | **Observed** (P2A-1) |
+| P2A runtime | Attachment and tool progress start/complete/fail; no Preparing/Finalizing/WaitingExternal synthesis; finish on complete/interrupt/cancel/fail/detach; reasoning never becomes progress | **Observed** (P2A-2) |
+| P2A UI | One replaceable `activeProgress`; clears on terminal/text/blocks/ready/disconnect/session switch; connection and pending Voice still win | **Observed** (P2A-3) |
+| P2A verification | Playwright progress-to-final + reload/history + disconnect/reconnect + session-switch; Voice TTS exclusion; kind/state telemetry; key-free `synthetic.yml` plus Compose | **Observed** (P2A-4) |
+
+P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree (new-run evidence; no retired-run artifact). `npm ci` in `tests/realtime-js`; Domain 64; Infrastructure 133 passed / 12 skipped; Application 436 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web `pnpm install --frozen-lockfile`, 376 unit tests, production build; `CI=1 pnpm exec playwright test` 36 passed including `progress is visible, replaced, cleared on final, reload, disconnect, and session switch`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Optional Real-provider probes were not run.
+
+## P2B — Validated model response envelope (observed)
+
+This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P2B speech semantics | Domain `same`/`custom`/`none`; backward-compatible persisted `speechText` | **Observed** |
+| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover | **Observed** |
+| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility markers only in Infrastructure | **Observed** |
+| P2B UI/e2e | Speech text vs Spoken; structured Finalizing then display; Alpha without visible markers | **Observed** |
+| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Observed** (P2B-7) |
+
+P2B key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus this working tree (new-run evidence). `npm ci` in `tests/realtime-js`; Domain 76; Infrastructure 165 passed / 12 skipped; Application 454 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web `pnpm install --frozen-lockfile`, 379 unit tests, production build; `CI=1 pnpm exec playwright test` 39 passed including `structured Scripted Beta finalizes then shows same speech without a duplicate section`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were skipped (no process `OPENROUTER_API_KEY` / `OPENAI_API_KEY`) and are not claimed verified. Freeze at proposal section 36.
 
 ## Handoff rule
 

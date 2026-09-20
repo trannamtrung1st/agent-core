@@ -9,7 +9,7 @@ namespace AgentCore.Application.Tests;
 public sealed class PromptContextBuilderTests
 {
     [Fact]
-    public void Voice_mode_system_prompt_keeps_marker_compatibility()
+    public void Voice_mode_system_prompt_has_no_marker_syntax()
     {
         var builder = new PromptContextBuilder();
         var context = new AgentContext(
@@ -26,53 +26,27 @@ public sealed class PromptContextBuilderTests
         var modeSystem = request.Messages
             .Where(message => message.Role == ModelRole.System)
             .Select(message => message.Text)
-            .First(text => text.Contains("Voice compatibility", StringComparison.Ordinal));
+            .First(text => text.Contains("Current session mode: Voice", StringComparison.Ordinal));
         Assert.Contains(PromptContextBuilder.VoiceModeOutputGuidance, modeSystem, StringComparison.Ordinal);
-        Assert.Contains("[[speech:", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("place [[speech:<complete spoken content>]] before display content", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("marker alone supplies streaming speech", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("Without a marker, the runtime may speak the completed display as a fallback", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("following content is shown on screen", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("]]", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("speech:", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Voice compatibility", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("marker", modeSystem, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Speak naturally", modeSystem, StringComparison.Ordinal);
         Assert.Contains("name the relevant on-screen detail", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("without hearing the whole document", modeSystem, StringComparison.Ordinal);
-        Assert.Contains("full answer on screen", modeSystem, StringComparison.Ordinal);
+        Assert.Null(request.ResponseContract);
         Assert.DoesNotContain("Speak naturally", request.Messages[0].Text, StringComparison.Ordinal);
         Assert.DoesNotContain("MUST begin", modeSystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("Never rely on display prose", modeSystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("Absent [[speech:...]], display prose is the spoken answer", modeSystem, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Voice_mode_system_prompt_avoids_fixed_length_and_stock_phrases()
-    {
-        var builder = new PromptContextBuilder();
-        var context = new AgentContext(
-            SampleDefinitions.Examiner,
-            [],
-            string.Empty,
-            null,
-            SessionMode.Voice,
-            null,
-            false,
-            null,
-            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "Hello"));
-        var request = builder.Build(context, Guid.NewGuid());
-        var modeSystem = request.Messages
-            .Where(message => message.Role == ModelRole.System)
-            .Select(message => message.Text)
-            .First(text => text.Contains("Voice compatibility", StringComparison.Ordinal));
-
-        Assert.DoesNotContain("semantically the same", modeSystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("several sentences long", modeSystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("shorter or simpler than the display", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Here is the summary", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Examples (GOOD", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Examples (BAD", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("semantically the same", modeSystem, StringComparison.Ordinal);
+        Assert.DoesNotContain("several sentences long", modeSystem, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Text_mode_system_prompt_omits_voice_marker_compatibility()
+    public void Text_mode_system_prompt_omits_voice_output_guidance()
     {
         var builder = new PromptContextBuilder();
         var context = new AgentContext(
@@ -89,6 +63,16 @@ public sealed class PromptContextBuilderTests
         var combined = string.Join('\n', request.Messages.Where(message => message.Role == ModelRole.System).Select(message => message.Text));
         Assert.DoesNotContain("Voice compatibility", combined, StringComparison.Ordinal);
         Assert.DoesNotContain(PromptContextBuilder.VoiceModeOutputGuidance, combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[md:", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[artifact:", combined, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Application_prompt_guidance_does_not_reintroduce_markers()
+    {
+        Assert.DoesNotContain("[[", PromptContextBuilder.VoiceModeOutputGuidance, StringComparison.Ordinal);
+        Assert.DoesNotContain("speech:", PromptContextBuilder.VoiceModeOutputGuidance, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,6 +94,9 @@ public sealed class PromptContextBuilderTests
             autoIdentity,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Respond in", general.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", general.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[md:", general.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[artifact:", general.SystemInstructions, StringComparison.Ordinal);
     }
 
     private static string FindAgents()

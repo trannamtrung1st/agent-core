@@ -2175,6 +2175,13 @@ public static class SessionEventMapper
                 ["reason"] = intent.Reason,
                 ["advisory"] = intent.Advisory
             }),
+            ResponseProgressOutput progress => ("agent.progress", new Dictionary<string, object?>
+            {
+                ["operationId"] = progress.OperationId?.ToString(),
+                ["kind"] = ToProgressKind(progress.Kind),
+                ["state"] = ToProgressState(progress.State),
+                ["message"] = progress.Message
+            }),
             ErrorOutput error => ("error", new Dictionary<string, object?>
             {
                 ["category"] = error.Category,
@@ -2354,5 +2361,24 @@ public static class SessionEventMapper
         nameof(OutputActivity.AgentSpeaking) => "agentSpeaking",
         nameof(OutputActivity.Interrupted) => "interrupted",
         _ => "idle"
+    };
+
+    private static string ToProgressKind(ResponseProgressKind kind) => kind switch
+    {
+        ResponseProgressKind.Preparing => "preparing",
+        ResponseProgressKind.ReadingAttachments => "readingAttachments",
+        ResponseProgressKind.RunningTool => "runningTool",
+        ResponseProgressKind.WaitingExternal => "waitingExternal",
+        ResponseProgressKind.Finalizing => "finalizing",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported progress kind.")
+    };
+
+    private static string ToProgressState(ResponseProgressState state) => state switch
+    {
+        ResponseProgressState.Started => "started",
+        ResponseProgressState.Updated => "updated",
+        ResponseProgressState.Completed => "completed",
+        ResponseProgressState.Failed => "failed",
+        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unsupported progress state.")
     };
 }

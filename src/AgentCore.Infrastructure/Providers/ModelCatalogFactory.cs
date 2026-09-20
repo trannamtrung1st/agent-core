@@ -69,7 +69,7 @@ internal static class ModelCatalogFactory
                     ScriptedBetaKey,
                     tools: true,
                     vision: false,
-                    structuredOutput: false,
+                    structuredOutput: true,
                     reasoning: false,
                     [],
                     null)

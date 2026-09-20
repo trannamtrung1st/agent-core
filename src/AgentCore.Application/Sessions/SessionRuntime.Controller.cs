@@ -162,6 +162,11 @@ public sealed partial class SessionRuntime
         {
             await SupersedeAsync(input.Context, live, cancellationToken, "disconnected").ConfigureAwait(false);
         }
+        else
+        {
+            await FinishOwnedProgressAsync(input.Context, ResponseProgressState.Failed, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if (_snapshot.Status == SessionStatus.Paused)
         {
@@ -836,7 +841,7 @@ public sealed partial class SessionRuntime
                 var responseId = _ids.NewId();
                 var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
                 _outputActivity = OutputActivity.WaitingForAgent;
-                LaunchPreparedTurn(cause, trigger, responseId, turn, staged);
+                await LaunchPreparedTurnAsync(cause, trigger, responseId, turn, staged).ConfigureAwait(false);
                 await PublishWaitingOutputAsync(cause).ConfigureAwait(false);
             });
     }

@@ -70,8 +70,6 @@ public sealed partial class SessionRuntime
         _ackedSamples = 0;
         _ackedPlaybackText = 0;
         _ttsJobsStarted = 0;
-        _ttsSourceLocked = false;
-        _ttsUsesSpeech = false;
         _ttsFedLength = 0;
         _ttsFedPrefix = string.Empty;
         _currentSegment = null;
@@ -512,6 +510,12 @@ public sealed partial class SessionRuntime
         UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed);
         var heard = failed ? 0 : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
+        await FinishOwnedProgressAsync(
+                context,
+                failed ? ResponseProgressState.Failed : ResponseProgressState.Completed,
+                cancellationToken,
+                responseId)
+            .ConfigureAwait(false);
         await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;

@@ -669,7 +669,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.Status == entry.Status.ToString()
         && row.HeardTextEndExclusive == entry.HeardTextEndExclusive
         && row.ReceivedTextEndExclusive == entry.ReceivedTextEndExclusive
-        && row.EnvelopeJson == SerializeEnvelope(entry.Envelope)
+        && EnvelopeUnchanged(row.EnvelopeJson, entry.Envelope)
         && row.AttachmentRefsJson == SerializeAttachmentRefs(entry.Attachments)
         && row.SourceAdmissionFingerprint == entry.SourceAdmissionFingerprint
         && row.FinishReason == entry.FinishReason
@@ -916,11 +916,43 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     private static TEnum? ParseEnumOrNull<TEnum>(string? value) where TEnum : struct, Enum =>
         string.IsNullOrEmpty(value) ? null : Enum.Parse<TEnum>(value);
 
+    private static bool EnvelopeUnchanged(string? json, ResponseEnvelope? envelope)
+    {
+        var stored = ResponseEnvelopeJson.Deserialize(json);
+        if (stored is null)
+        {
+            return envelope is null;
+        }
+
+        if (envelope is null)
+        {
+            return false;
+        }
+
+        if (stored.DisplayText != envelope.DisplayText
+            || stored.SpeechMode != envelope.SpeechMode
+            || stored.SpeechText != envelope.SpeechText
+            || stored.Blocks.Count != envelope.Blocks.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < stored.Blocks.Count; index++)
+        {
+            if (stored.Blocks[index] != envelope.Blocks[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static string? SerializeEnvelope(ResponseEnvelope? envelope) =>
-        envelope is null ? null : JsonSerializer.Serialize(envelope, Json);
+        envelope is null ? null : ResponseEnvelopeJson.Serialize(envelope);
 
     private static ResponseEnvelope? DeserializeEnvelope(string? json) =>
-        string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<ResponseEnvelope>(json, Json);
+        ResponseEnvelopeJson.Deserialize(json);
 
     private static DateTimeOffset FromUnix(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);

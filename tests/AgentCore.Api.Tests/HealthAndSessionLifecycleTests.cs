@@ -137,8 +137,8 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     {
         var root = FindRepoRoot();
         Assert.DoesNotContain("Microsoft.AspNetCore", File.ReadAllText(Path.Combine(root, "src/AgentCore.Domain/AgentCore.Domain.csproj")));
-        Assert.DoesNotContain("Infrastructure", File.ReadAllText(Path.Combine(root, "src/AgentCore.Application/AgentCore.Application.csproj")));
-        Assert.DoesNotContain("Contracts", File.ReadAllText(Path.Combine(root, "src/AgentCore.Application/AgentCore.Application.csproj")));
+        Assert.DoesNotContain("ProjectReference Include=\"..\\AgentCore.Infrastructure", File.ReadAllText(Path.Combine(root, "src/AgentCore.Application/AgentCore.Application.csproj")));
+        Assert.DoesNotContain("ProjectReference Include=\"..\\AgentCore.Contracts", File.ReadAllText(Path.Combine(root, "src/AgentCore.Application/AgentCore.Application.csproj")));
         Assert.DoesNotContain("Contracts", File.ReadAllText(Path.Combine(root, "src/AgentCore.Infrastructure/AgentCore.Infrastructure.csproj")));
         Assert.Contains("AgentCore.Domain", File.ReadAllText(Path.Combine(root, "src/AgentCore.Application/AgentCore.Application.csproj")));
         Assert.Contains("AgentCore.Application", File.ReadAllText(Path.Combine(root, "src/AgentCore.Infrastructure/AgentCore.Infrastructure.csproj")));

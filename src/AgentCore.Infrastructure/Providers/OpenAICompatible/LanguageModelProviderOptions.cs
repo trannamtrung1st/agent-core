@@ -28,6 +28,7 @@ public sealed class LanguageModelProviderOptions
     public Action<StreamChoiceDiagnostic>? StreamChoiceDiagnostic { get; set; }
     public bool Vision { get; set; }
     public bool Tools { get; set; }
+    public bool StructuredOutput { get; set; }
     public Dictionary<string, string> AdditionalHeaders { get; set; } = [];
     public ProviderTimeoutOptions Timeouts { get; set; } = new();
 }

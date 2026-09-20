@@ -150,13 +150,31 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 Session-scoped LLM work resolves through `ILanguageModelResolver` from the persisted selection and a `ModelPurpose` (`Conversation`, `Initiative`, `CompletionEvaluation`). This first slice uses the session-selected model for all three purposes. Do not mutate singleton `LanguageModelProviderOptions` when a session changes model. Capture the model once when a generation or evaluation begins. Reasoning effort is request/session-scoped and validated by the selected catalog descriptor; it is not a global unchecked enum. Live changes persist first and activate second; an in-flight response, tool loop, or completion evaluation rejects the change with `SessionBusy`. Record per-turn model provenance on assistant generations. Public APIs accept only catalog-level choices. No per-message one-shot override, arbitrary provider JSON, credentials, or OpenRouter marketplace discovery in this slice.
 
-**Status:** **Observed** as P2D after the key-free gate. P1 remains frozen on `dceaccb`. P2A/P2B have not started.
+**Status:** **Observed** as P2D after the key-free gate. P1 remains frozen on `dceaccb`. P2A and P2B are observed.
 
 **Rationale:** Operators need a Codex-like default plus durable per-session control without letting browser input choose provider routing or silently retarget historical chats.
 
 **Consequence:** [Interfaces](04-backend-interfaces.md) owns catalog/resolver ports; [Persistence](15-persistence-and-configuration.md) owns durable selection and provenance; [Protocol](14-api-and-realtime-protocol.md) owns catalog and session model HTTP; [Frontend](13-frontend-implementation-spec.md) owns Default/effort UX; [Implementation Plan](18-implementation-plan.md) owns the P2D gate.
 
-## Explicit non-goals
+## Decision: first-class transient response progress
+
+**Decision:** Live response progress is a first-class transient Application event (`ResponseProgressOutput`, wire `agent.progress`) owned by the outer envelope `responseId`. Nested tool or attachment work may carry a runtime-generated `operationId`. Kinds are `preparing`, `readingAttachments`, `runningTool`, `waitingExternal`, and `finalizing`; states are `started`, `updated`, `completed`, and `failed`. Progress is never durable history, `session.ready` replay, provider reasoning, conversational assistant text, response blocks, or TTS/`clientSpeech` input. Trusted bounded `message` values are status copy only. Coarse `session.state.changed.outputState` remains. The browser keeps one replaceable `activeProgress` status. Telemetry records `agent.progress.event` with `kind` and `state` tags only, plus optional kind-tagged `agent.progress.active_ms`.
+
+**Status:** **Observed** as P2A after the key-free Synthetic plus Compose gate recorded on git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` (`5effbb5`) with the P2A working tree (P2A-1..4 not a separate published commit). Domain 64; Infrastructure 133 passed / 12 skipped; Application 436 with `--blame-hang --blame-hang-timeout 5m`; API 155; web 376 unit tests and production build; `CI=1` Playwright 36 including progress-to-final, reload/history, disconnect/reconnect, and session-switch; `scripts/compose-sqlite-volume.sh` passed. Optional Real-provider probes were not run. P1 remains frozen on `dceaccb`. P2B is observed separately.
+
+**Rationale:** Operators and participants need a single understandable live status while attachments or tools run, without turning operational noise into history or speech.
+
+**Consequence:** [Protocol](14-api-and-realtime-protocol.md) owns `agent.progress`; [Voice](06-realtime-voice.md) owns the TTS exclusion; [Operations](17-observability-and-operations.md) owns progress instruments; [Implementation Plan](18-implementation-plan.md) owns the P2A gate.
+
+## Decision: validated provider-neutral assistant response
+
+**Decision:** Conversational generation uses one validated semantic envelope (`displayText`, `speech.mode` `same`|`custom`|`none`, optional `blocks`). SessionRuntime always attaches `ModelResponseContract`. Native JSON is requested only when trusted catalog `StructuredOutput` is true; otherwise Infrastructure injects a bounded compatibility instruction and marker parser. Domain persists the envelope; provider JSON never crosses into Application. Progress `finalizing` may cover structured completion and is never durable, reasoning, history, or TTS.
+
+**Status:** **Observed** as P2B after the 2026-09-20 key-free Synthetic plus Compose gate on git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus this working tree. `npm ci` in `tests/realtime-js`; Domain 76; Infrastructure 165 passed / 12 skipped; Application 454 with `--blame-hang --blame-hang-timeout 5m`; API 155; web 379 unit tests and production build; `CI=1` Playwright 39 including structured Scripted Beta finalizing-then-display, same/custom/none, reload, and Scripted Alpha without visible markers; `scripts/compose-sqlite-volume.sh` passed. Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were skipped (no process keys) and are not claimed verified. P2E is next; P2C/P6 have not started.
+
+**Rationale:** Display, speech, and blocks must share one validated contract so Voice, history, and UI do not depend on inline markers or provider JSON.
+
+**Consequence:** [Interfaces](04-backend-interfaces.md) owns semantic model events; [Voice](06-realtime-voice.md) owns TTS selection from `speech.mode`; [Protocol](14-api-and-realtime-protocol.md) owns public `speechText` and speech labels; [Implementation Plan](18-implementation-plan.md) owns the P2B gate.
 
 No native speech-to-speech/realtime model in MVP. No microservices, Kafka, RabbitMQ, Redis requirement, Kubernetes requirement, Orleans/Akka actor framework, MediatR merely for layer forwarding, generic workflow engine, multi-agent system, vector database, RAG platform, plugin marketplace, OAuth/login system for MVP, WebRTC in the first version, mobile app, native desktop app, elaborate avatar system, SSR, or Next.js. Ant Design v6 is the verified MVP generic UI system (see the decision above); do not add another component or CSS framework, Ant Design Pro/ProComponents/X, or a replacement custom design system. No autonomous tools/platform, distributed event bus or generic repository framework. No extra hosted mock or third-party test-only inference service. Reconsider only when actual requirements justify the cost.
 

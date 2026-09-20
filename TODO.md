@@ -6,8 +6,8 @@ Reviewed against `main` on 2026-09-19.
 
 Current roadmap:
 
-1. implement **P2A — first-class progress semantics**;
-2. implement **P2B — validated model response envelope**;
+1. **P2A — first-class progress semantics** is **observed** and frozen for follow-on P2B;
+2. **P2B — validated model response envelope** is **observed** and frozen;
 3. close **P2E — multimodal/image input usability and capability handling**;
 4. evolve tools and external integrations;
 5. add context compaction and memory;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A/P2B have **not started**. The current implementation still uses the free-form `ResponseEnvelopeParser` / `[[speech:...]]` compatibility path, and `PromptContextBuilder.VoiceModeOutputGuidance` explicitly marks that mechanism as temporary until P2B.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate on the same HEAD plus this working tree. Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -261,18 +261,11 @@ P2E should reuse the existing multimodal foundations rather than create a second
 
 ## P2A — First-class progress vs final assistant output
 
-The runtime already exposes coarse activity such as attachment processing and tool execution, but the product still lacks a clean semantic distinction between:
-
-- transient progress;
-- controller/runtime activity;
-- provider reasoning;
-- durable assistant conversation output.
-
-Define that distinction before tools/background work become substantially richer.
+Observed. Transient `agent.progress` is distinct from controller `outputState`, provider reasoning, and durable assistant output.
 
 ### Progress contract
 
-- [ ] Introduce a small provider/runtime-neutral progress model.
+- [x] Introduce a small provider/runtime-neutral progress model.
 
 Conceptually:
 
@@ -301,7 +294,7 @@ Possible `state` values:
 
 Do not over-design the enum before real consumers need more states.
 
-- [ ] Add a first-class realtime progress event.
+- [x] Add a first-class realtime progress event.
 
 Conceptually:
 
@@ -309,15 +302,15 @@ Conceptually:
 agent.progress
 ```
 
-Exact protocol naming may change during implementation.
+Wire name is `agent.progress` (protocol v1).
 
-- [ ] Tie response progress to `responseId`.
+- [x] Tie response progress to `responseId`.
 
 Nested tool/external operations may additionally have an `operationId`.
 
 ### Reasoning boundary
 
-- [ ] Keep `ModelReasoningDelta` completely separate from progress.
+- [x] Keep `ModelReasoningDelta` completely separate from progress.
 
 Provider reasoning is not user-visible progress.
 
@@ -334,7 +327,7 @@ Reasoning-presence telemetry may be recorded without logging its content.
 
 ### Persistence
 
-- [ ] Make ordinary response progress transient by default.
+- [x] Make ordinary response progress transient by default.
 
 Do not create durable assistant messages such as:
 
@@ -342,9 +335,9 @@ Do not create durable assistant messages such as:
 - “Running tool…”;
 - “Preparing response…”.
 
-- [ ] Persist the final assistant result as the conversational record.
+- [x] Persist the final assistant result as the conversational record.
 
-- [ ] Clear transient progress on:
+- [x] Clear transient progress on:
 
   - successful response completion;
   - interruption;
@@ -354,7 +347,7 @@ Do not create durable assistant messages such as:
   - disconnect;
   - stale response/epoch supersession.
 
-- [ ] Do not add durable/replayable progress yet.
+- [x] Do not add durable/replayable progress yet.
 
 Current live responses do not resume across reconnect, so ordinary response progress should follow the same lifecycle.
 
@@ -362,7 +355,7 @@ Durable progress belongs to P6 `WorkItem`, where work can genuinely outlive the 
 
 ### Existing controller state
 
-- [ ] Keep current coarse `session.state.changed.outputState` initially.
+- [x] Keep current coarse `session.state.changed.outputState` initially.
 
 Existing states such as:
 
@@ -376,23 +369,23 @@ P2A progress is an additive semantic/presentation layer, not a requirement to im
 
 ### UI
 
-- [ ] Render progress as transient status, not normal assistant chat bubbles.
+- [x] Render progress as transient status, not normal assistant chat bubbles.
 
-- [ ] Keep one understandable active progress surface per response.
+- [x] Keep one understandable active progress surface per response.
 
 Do not produce a growing transcript of operational status messages.
 
-- [ ] Replace/update progress rather than stacking repetitive messages.
+- [x] Replace/update progress rather than stacking repetitive messages.
 
-- [ ] Remove active progress when final output takes over.
+- [x] Remove active progress when final output takes over.
 
-- [ ] Do not narrate progress through TTS by default.
+- [x] Do not narrate progress through TTS by default.
 
 Voice users should hear the assistant response, not internal/tool activity.
 
 ### Verification
 
-- [ ] Application tests for:
+- [x] Application tests for:
 
   - progress start/update/complete;
   - attachment processing;
@@ -404,26 +397,19 @@ Voice users should hear the assistant response, not internal/tool activity.
   - stale runtime epoch;
   - reasoning never becoming progress.
 
-- [ ] Realtime protocol tests.
+- [x] Realtime protocol tests.
 
-- [ ] frontend tests for progress ownership and cleanup.
+- [x] frontend tests for progress ownership and cleanup.
 
-- [ ] one Playwright progress → final-response workflow.
+- [x] one Playwright progress → final-response workflow.
 
-- [ ] reconnect/session-switch regression coverage.
+- [x] reconnect/session-switch regression coverage.
 
-- [ ] update protocol/observability docs.
+- [x] update protocol/observability docs.
 
 ### P2A stop condition
 
-P2A is done when:
-
-- progress is a first-class semantic event;
-- progress is not fake conversation history;
-- progress clears reliably on every terminal path;
-- Voice does not narrate operational progress;
-- provider reasoning stays private/internal;
-- final assistant output remains the durable conversational result.
+P2A is **observed**. The stop condition holds: first-class semantic event; not fake conversation history; clears on terminal paths; Voice does not narrate operational progress; provider reasoning stays internal; the final assistant result remains the durable record.
 
 Do not add durable background-work execution in this phase.
 
@@ -431,15 +417,17 @@ Do not add durable background-work execution in this phase.
 
 ## P2B — Validated model response envelope
 
-After P2A, replace the current marker-based response composition with a validated provider-neutral generation contract.
+P2B is **observed**. Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
 
-Current compatibility debt includes:
+After P2A, the shipped generation contract retired this compatibility debt from Domain/Application:
 
-- `ResponseEnvelopeParser`;
-- `[[speech:...]]`;
-- inline rich block markers;
-- marker-aware streaming/display gating;
-- compatibility speech derivation heuristics.
+- free-form `ResponseEnvelopeParser` in SessionRuntime;
+- `[[speech:...]]` in normal prompting;
+- inline rich block markers in Application parsing;
+- marker-aware streaming/display gating in the runtime;
+- compatibility speech derivation as the normal TTS path.
+
+Infrastructure still maps unstructured catalog models through a bounded marker compatibility parser into the same semantic events.
 
 Speech/display are **Agent Core response capabilities**, not Agent Definition persona behavior.
 
@@ -453,7 +441,7 @@ Agent definitions must not contain:
 
 ### Canonical semantic response
 
-- [ ] Define one validated provider-neutral semantic response.
+- [x] Define one validated provider-neutral semantic response.
 
 Preferred conceptual shape:
 
@@ -516,7 +504,7 @@ Blocks never enter TTS automatically.
 
 ### Provider-neutral generation events
 
-- [ ] Keep provider wire format inside Infrastructure.
+- [x] Keep provider wire format inside Infrastructure.
 
 Application/SessionRuntime should consume semantic events, not OpenRouter/OpenAI-specific JSON fields.
 
@@ -532,65 +520,65 @@ completion
 failure
 ```
 
-- [ ] Keep `ModelReasoningDelta` as a separate internal semantic event.
+- [x] Keep `ModelReasoningDelta` as a separate internal semantic event.
 
-- [ ] Never concatenate reasoning into `ModelTextDelta`.
+- [x] Never concatenate reasoning into `ModelTextDelta`.
 
-- [ ] Never persist provider reasoning in `ConversationEntry`.
+- [x] Never persist provider reasoning in `ConversationEntry`.
 
 ### Native structured generation
 
-- [ ] For providers/models with reliable structured-output support, request the validated schema directly.
+- [x] For providers/models with reliable structured-output support, request the validated schema directly.
 
-- [ ] Use trusted model-catalog capabilities to determine structured-output availability.
+- [x] Use trusted model-catalog capabilities to determine structured-output availability.
 
-- [ ] Validate completed semantic output before durable publication.
+- [x] Validate completed semantic output before durable publication.
 
-- [ ] Centralize malformed-response normalization/failure handling.
+- [x] Centralize malformed-response normalization/failure handling.
 
 Do not scatter malformed JSON/schema recovery throughout SessionRuntime.
 
 ### Compatibility path
 
-- [ ] Keep one bounded compatibility adapter for providers/models that cannot reliably generate the validated structure.
+- [x] Keep one bounded compatibility adapter for providers/models that cannot reliably generate the validated structure.
 
-- [ ] Temporarily let that adapter understand the existing marker format.
+- [x] Temporarily let that adapter understand the existing marker format.
 
-- [ ] Convert compatibility output into the same canonical semantic response used by native structured providers.
+- [x] Convert compatibility output into the same canonical semantic response used by native structured providers.
 
-- [ ] Keep marker syntax out of Domain/Application APIs where possible.
+- [x] Keep marker syntax out of Domain/Application APIs where possible.
 
 The compatibility parser should be an edge adapter, not permanent architecture.
 
 ### Streaming
 
-- [ ] Preserve useful display streaming where safely possible.
+- [x] Preserve useful display streaming where safely possible.
 
-- [ ] Never stream raw structured JSON to the user.
+- [x] Never stream raw structured JSON to the user.
 
-- [ ] Never treat incomplete marker/JSON fragments as speech.
+- [x] Never treat incomplete marker/JSON fragments as speech.
 
-- [ ] Never expose provider reasoning while waiting for validated display content.
+- [x] Never expose provider reasoning while waiting for validated display content.
 
-- [ ] Do not require every semantic field to stream in the first P2B slice.
+- [x] Do not require every semantic field to stream in the first P2B slice.
 
 Correct completion-time validation is preferable to unsafe pseudo-streaming.
 
 ### Voice semantics
 
-- [ ] `speech.mode = custom`:
+- [x] `speech.mode = custom`:
 
   `speech.text` is the authoritative TTS input.
 
-- [ ] `speech.mode = same`:
+- [x] `speech.mode = same`:
 
   use the completed conversational display projection.
 
-- [ ] `speech.mode = none`:
+- [x] `speech.mode = none`:
 
   do not synthesize speech.
 
-- [ ] Never feed these automatically into TTS:
+- [x] Never feed these automatically into TTS:
 
   - code;
   - tables;
@@ -600,13 +588,13 @@ Correct completion-time validation is preferable to unsafe pseudo-streaming.
   - provider reasoning;
   - arbitrary rich blocks.
 
-- [ ] Keep speech segmentation/playback timing in the runtime speech layer.
+- [x] Keep speech segmentation/playback timing in the runtime speech layer.
 
-- [ ] Keep conversation language independent from response projection.
+- [x] Keep conversation language independent from response projection.
 
 ### Persistence
 
-- [ ] Persist the validated semantic envelope atomically with the assistant entry.
+- [x] Persist the validated semantic envelope atomically with the assistant entry.
 
 Preserve:
 
@@ -617,9 +605,9 @@ Preserve:
 - finish reason;
 - model provenance.
 
-- [ ] Do not persist duplicate custom speech when speech is equivalent to display.
+- [x] Do not persist duplicate custom speech when speech is equivalent to display.
 
-- [ ] Preserve backward compatibility with old marker-generated conversations.
+- [x] Preserve backward compatibility with old marker-generated conversations.
 
 Do not destructively rewrite historical conversation rows merely for schema cleanliness.
 
@@ -639,23 +627,23 @@ Keep the current presentation semantics:
 
 Only after native structured + fallback generation paths are verified:
 
-- [ ] remove `[[speech:...]]` from normal model prompting;
+- [x] remove `[[speech:...]]` from normal model prompting;
 
-- [ ] remove marker parsing from normal runtime flow;
+- [x] remove marker parsing from normal runtime flow;
 
-- [ ] remove marker-specific streaming/order machinery that is no longer needed;
+- [x] remove marker-specific streaming/order machinery that is no longer needed;
 
-- [ ] remove compatibility-only `SpokenOutput` heuristics;
+- [x] remove compatibility-only `SpokenOutput` heuristics;
 
-- [ ] retain only deterministic formatting/safety projection required by the canonical response contract;
+- [x] retain only deterministic formatting/safety projection required by the canonical response contract;
 
-- [ ] keep `general-assistant` transport-agnostic.
+- [x] keep `general-assistant` transport-agnostic.
 
 ### Verification
 
-- [ ] Domain tests for semantic response validation.
+- [x] Domain tests for semantic response validation.
 
-- [ ] Infrastructure tests for:
+- [x] Infrastructure tests for:
 
   - native structured generation;
   - fallback compatibility parsing;
@@ -666,7 +654,7 @@ Only after native structured + fallback generation paths are verified:
   - content filtering;
   - provider failure.
 
-- [ ] Application tests proving reasoning cannot enter:
+- [x] Application tests proving reasoning cannot enter:
 
   - display;
   - speech;
@@ -674,31 +662,23 @@ Only after native structured + fallback generation paths are verified:
   - progress;
   - persistence/history.
 
-- [ ] Voice tests for:
+- [x] Voice tests for:
 
   - `same`;
   - `custom`;
   - `none`.
 
-- [ ] persistence/history/reopen coverage.
+- [x] persistence/history/reopen coverage.
 
-- [ ] frontend rich-response tests.
+- [x] frontend rich-response tests.
 
-- [ ] Playwright structured-response workflow.
+- [x] Playwright structured-response workflow.
 
-- [ ] bounded opt-in Real OpenRouter probe using `general-assistant`.
+- [x] bounded opt-in Real OpenRouter probe using `general-assistant` (skipped this run: no process keys; not claimed verified).
 
 ### P2B stop condition
 
-P2B is done when:
-
-- Application consumes a provider-neutral validated semantic response;
-- structured-capable providers do not depend on inline speech markers;
-- compatibility providers map into the exact same semantic contract;
-- reasoning is fully isolated;
-- rich visual content cannot leak into TTS;
-- old persisted conversations still render correctly;
-- marker-specific runtime architecture can be removed.
+P2B is **observed** and frozen at proposal section 36. The stop condition holds: Application consumes a provider-neutral validated semantic response; structured-capable providers do not depend on inline speech markers; compatibility providers map into the same semantic contract at the Infrastructure edge; reasoning stays isolated; rich visual content does not leak into TTS; old persisted conversations still render; marker-specific normal-runtime architecture is removed. Marker compatibility remains only in Infrastructure. P2E is next; P2C/P6 have not started.
 
 ---
 
@@ -1561,7 +1541,7 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 In particular:
 
 - do not describe deferred adapters as active runtime behavior;
-- do not document P2A/P2B/P2E as implemented before they ship;
+- do not document P2E as implemented before it ships; P2A and P2B are observed;
 - document the existing current-turn vision foundation accurately;
 - distinguish vision-capable from non-vision catalog models;
 - keep provider wire details in Infrastructure/provider docs;

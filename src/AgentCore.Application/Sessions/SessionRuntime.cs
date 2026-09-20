@@ -18,6 +18,8 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime : IAsyncDisposable
 {
+    internal static Func<ILanguageModel, ILanguageModel>? TestDecorateLanguageModel;
+
     private readonly Channel<SessionInput> _mailbox = Channel.CreateBounded<SessionInput>(
         new BoundedChannelOptions(256)
         {
@@ -74,13 +76,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private Guid? _activeEntryId;
     private readonly ResponseTextAccumulator _accumulator = new();
     private ResponseEnvelope? _envelope;
+    private bool _usesResponseContract;
+    private bool _structuredOutput;
+    private bool _semanticReady;
+    private Guid? _finalizingOperationId;
     private int _publishedDisplayLength;
     private string? _publishedSpeechProjection;
     private bool _voiceSpeechResolved;
     private string _resolvedSpeakable = string.Empty;
     private readonly HashSet<string> _publishedBlockIds = new(StringComparer.Ordinal);
-    private bool _ttsSourceLocked;
-    private bool _ttsUsesSpeech;
     private int _ttsFedLength;
     private string _ttsFedPrefix = string.Empty;
     private bool _responseTerminal;
@@ -92,6 +96,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private TaskCompletionSource _mailboxIdle = CompletedIdle();
     private InputActivity _input = InputActivity.Idle;
     private OutputActivity _outputActivity = OutputActivity.Idle;
+    private Guid? _progressOwnerResponseId;
+    private bool _progressLive;
+    private ResponseProgressKind _progressKind;
+    private Guid? _progressOperationId;
+    private long _progressStartedTimestamp;
     private InterruptionCandidate? _candidate;
     private ResponseLifecycle? _responseLifecycle;
     private int _timerGeneration = 1;
@@ -761,7 +770,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     catch (Exception ex) when (brain.Trigger.Kind != TriggerKind.UserTurn && ex is not OperationCanceledException)
                     {
                         _logger.LogError(ex, "Proactive brain handling failed for session {SessionId}", SessionId);
-                        RecoverProactiveHandleFailure(brain);
+                        await RecoverProactiveHandleFailureAsync(brain, cancellationToken).ConfigureAwait(false);
                     }
                     finally
                     {
@@ -1343,6 +1352,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (input.Trigger.Kind == TriggerKind.UserTurn)
         {
+            await FinishOwnedProgressAsync(input.Context, ResponseProgressState.Failed, cancellationToken)
+                .ConfigureAwait(false);
             await PublishOutputIdleAsync(input.Context, cancellationToken).ConfigureAwait(false);
             if (input.Recoverable)
             {
@@ -1413,9 +1424,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ModelProvenance: ToProvenance(_snapshot.ModelSelection));
 
         _activeResponseId = input.ResponseId;
+        _progressOwnerResponseId = input.ResponseId;
         _activeEntryId = entryId;
         _accumulator.Reset();
         _envelope = null;
+        _usesResponseContract = true;
+        _semanticReady = false;
+        _structuredOutput = false;
+        _finalizingOperationId = null;
         _publishedDisplayLength = 0;
         _publishedSpeechProjection = null;
         _voiceSpeechResolved = false;
@@ -1440,10 +1456,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var request = speakable.Request with
         {
             ResponseId = input.ResponseId,
-            ReasoningEffort = _snapshot.ModelSelection?.ReasoningEffort
+            ReasoningEffort = _snapshot.ModelSelection?.ReasoningEffort,
+            ResponseContract = new ModelResponseContract(
+                SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice)
         };
         var model = ResolveSessionModel(
             input.Trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+        _structuredOutput = model.Capabilities.StructuredOutput;
+        if (_structuredOutput)
+        {
+            _finalizingOperationId = _ids.NewId();
+            await PublishProgressAsync(
+                    input.Context,
+                    input.ResponseId,
+                    ResponseProgressKind.Finalizing,
+                    ResponseProgressState.Started,
+                    _finalizingOperationId.Value,
+                    ResponseProgressMessages.Finalizing,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
         BeginWork();
         var responseToken = _responseCts.Token;
         _ = Task.Run(async () =>
@@ -1667,18 +1699,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _environmentQueue.Clear();
         _outputActivity = OutputActivity.WaitingForAgent;
         UserTextQueueTelemetry.RecordPendingBatchStarted(suffix.Count);
-        LaunchPreparedTurn(batchCause, trigger, _ids.NewId(), turn, attachmentIds);
+        await LaunchPreparedTurnAsync(batchCause, trigger, _ids.NewId(), turn, attachmentIds).ConfigureAwait(false);
         await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
         return true;
     }
 
-    private void LaunchPreparedTurn(
+    private async Task LaunchPreparedTurnAsync(
         EventContext cause,
         AgentTrigger trigger,
         Guid responseId,
         int turn,
         IReadOnlyList<Guid> attachmentIds)
     {
+        await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, CancellationToken.None)
+            .ConfigureAwait(false);
+        _progressOwnerResponseId = responseId;
         if (_processor is null || attachmentIds.Count == 0)
         {
             LaunchBrain(cause, trigger, responseId, turn);
@@ -1693,7 +1728,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             try
             {
                 await PublishStateAsync(inbound, CancellationToken.None).ConfigureAwait(false);
+                await PublishProgressAsync(
+                        inbound,
+                        responseId,
+                        ResponseProgressKind.ReadingAttachments,
+                        ResponseProgressState.Started,
+                        operationId: null,
+                        ResponseProgressMessages.ReadingAttachments,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
                 IReadOnlyList<AttachmentProcessResult> results;
+                var failed = false;
                 var extractionStarted = Stopwatch.GetTimestamp();
                 try
                 {
@@ -1704,7 +1749,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 catch (OperationCanceledException)
                 {
                     RuntimeTelemetry.Record("extraction", RuntimeTelemetry.ElapsedMs(extractionStarted));
-                    if (!TryMailbox(new AttachmentsProcessedReceived(inbound, turn, responseId, trigger, [])))
+                    if (!TryMailbox(new AttachmentsProcessedReceived(inbound, turn, responseId, trigger, [], Failed: true)))
                     {
                         EndWork();
                     }
@@ -1715,9 +1760,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     _logger.LogError(ex, "Attachment processing failed for {SessionId}", SessionId);
                     results = [];
+                    failed = true;
                 }
 
-                if (!TryMailbox(new AttachmentsProcessedReceived(inbound, turn, responseId, trigger, results)))
+                if (!TryMailbox(new AttachmentsProcessedReceived(inbound, turn, responseId, trigger, results, failed)))
                 {
                     EndWork();
                 }
@@ -1732,7 +1778,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleAttachmentsProcessedAsync(AttachmentsProcessedReceived input, CancellationToken cancellationToken)
     {
-        if (_deactivated || input.TurnGeneration != _turnGeneration)
+        if (_deactivated
+            || input.TurnGeneration != _turnGeneration
+            || (_progressOwnerResponseId is { } owner && owner != input.ResponseId))
         {
             if (!_deactivated
                 && _activeResponseId is null
@@ -1745,6 +1793,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        await PublishProgressAsync(
+                input.Context,
+                input.ResponseId,
+                ResponseProgressKind.ReadingAttachments,
+                input.Failed ? ResponseProgressState.Failed : ResponseProgressState.Completed,
+                operationId: null,
+                ResponseProgressMessages.ReadingAttachments,
+                cancellationToken)
+            .ConfigureAwait(false);
         _outputActivity = OutputActivity.WaitingForAgent;
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
         LaunchBrain(input.Context, input.Trigger, input.ResponseId, input.TurnGeneration, input.Results, workHeld: true);
@@ -1942,7 +1999,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls:
                             continue;
                         default:
-                            if (!_recordedLlm && evt is ModelTextDelta)
+                            if (!_recordedLlm && evt is ModelTextDelta or ModelDisplayDelta or ModelSemanticResponseReady)
                             {
                                 _recordedLlm = true;
                                 RuntimeTelemetry.Record("llm", RuntimeTelemetry.ElapsedMs(started));
@@ -2008,6 +2065,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    var operationId = _ids.NewId();
+                    await PublishProgressAsync(
+                            cause,
+                            request.ResponseId,
+                            ResponseProgressKind.RunningTool,
+                            ResponseProgressState.Started,
+                            operationId,
+                            ResponseProgressMessages.RunningTools,
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+
                     string result;
                     var toolStarted = Stopwatch.GetTimestamp();
                     try
@@ -2024,6 +2092,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
                         RuntimeTelemetry.RecordDropped("tools");
+                        await PublishProgressAsync(
+                                cause,
+                                request.ResponseId,
+                                ResponseProgressKind.RunningTool,
+                                ResponseProgressState.Failed,
+                                operationId,
+                                ResponseProgressMessages.RunningTools,
+                                CancellationToken.None)
+                            .ConfigureAwait(false);
                         await MailboxModelAsync(
                                 cause,
                                 request.ResponseId,
@@ -2040,6 +2117,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     outputBytes += Encoding.UTF8.GetByteCount(result);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {
+                        await PublishProgressAsync(
+                                cause,
+                                request.ResponseId,
+                                ResponseProgressKind.RunningTool,
+                                ResponseProgressState.Failed,
+                                operationId,
+                                ResponseProgressMessages.RunningTools,
+                                CancellationToken.None)
+                            .ConfigureAwait(false);
                         await MailboxModelAsync(
                                 cause,
                                 request.ResponseId,
@@ -2051,6 +2137,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    await PublishProgressAsync(
+                            cause,
+                            request.ResponseId,
+                            ResponseProgressKind.RunningTool,
+                            ResponseProgressState.Completed,
+                            operationId,
+                            ResponseProgressMessages.RunningTools,
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
                     messages.Add(new ModelMessage(ModelRole.Tool, result, ToolCallId: call.Id, Name: call.Name));
                     steps++;
                 }
@@ -2079,6 +2174,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, CancellationToken.None, request.ResponseId)
+                .ConfigureAwait(false);
             await MailboxModelAsync(
                     cause,
                     request.ResponseId,
@@ -2089,6 +2186,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Language model pump failed for {ResponseId}", request.ResponseId);
+            await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, CancellationToken.None, request.ResponseId)
+                .ConfigureAwait(false);
             await MailboxModelAsync(
                     cause,
                     request.ResponseId,
@@ -2174,7 +2273,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleModelAsync(ModelResultReceived input, CancellationToken cancellationToken)
     {
-        if (_activeResponseId != input.ResponseId || _responseTerminal)
+        if (_activeResponseId != input.ResponseId
+            || _responseTerminal
+            || input.Context.Epoch != _epoch)
         {
             input.Processed.TrySetResult();
             return;
@@ -2184,6 +2285,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             case ModelReasoningDelta:
                 RuntimeTelemetry.RecordDiagnostic("llm.reasoning.delta", 0, "present");
+                break;
+            case ModelDisplayDelta delta when _usesResponseContract:
+                await HandleDisplayDeltaAsync(input.Context, input.ResponseId, delta.Text, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+            case ModelSemanticResponseReady ready when _usesResponseContract:
+                await HandleSemanticReadyAsync(input.Context, input.ResponseId, ready.Response, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+            case ModelTextDelta when _usesResponseContract:
                 break;
             case ModelTextDelta delta:
                 _accumulator.Append(delta.Text);
@@ -2221,6 +2332,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ModelStopReason.ContentFiltered => "contentFiltered",
                     _ => null
                 };
+                if (_usesResponseContract && !_semanticReady)
+                {
+                    await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                }
+
                 await PublishEnvelopeProgressAsync(input.Context, input.ResponseId, finalize: true, cancellationToken)
                     .ConfigureAwait(false);
                 UpdateStreamingAssistant();
@@ -2245,7 +2363,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 break;
-            case ModelFailed:
+            case ModelFailed failed:
+                if (_usesResponseContract)
+                {
+                    _envelope = null;
+                    _accumulator.Reset();
+                }
+
                 await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken).ConfigureAwait(false);
                 break;
         }
@@ -2334,6 +2458,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var heard = UsesClientSpeech ? _ackedPlaybackText : _spokenUntil.Credit(_ackedSamples);
         ApplyHeard(heard);
         InvalidateSpeechJobs();
+        await FinishOwnedProgressAsync(context, ResponseProgressState.Failed, cancellationToken, responseId)
+            .ConfigureAwait(false);
         await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
         if (!_responseTerminal)
         {
@@ -2375,6 +2501,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _initiativeHeld = false;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
         UpdateAssistant(status);
+        await FinishOwnedProgressAsync(
+                context,
+                failed ? ResponseProgressState.Failed : ResponseProgressState.Completed,
+                cancellationToken,
+                responseId)
+            .ConfigureAwait(false);
         await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;
@@ -2538,7 +2670,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         Text = DisplayText(),
                         Status = status,
-                        Envelope = CurrentEnvelope(status != EntryStatus.Streaming),
+                        Envelope = status == EntryStatus.Failed && (!_usesResponseContract || !_semanticReady)
+                            ? null
+                            : CurrentEnvelope(status != EntryStatus.Streaming),
                         FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null
                     }
                     : entry)
@@ -2622,92 +2756,145 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _ = cancellationToken;
     }
 
-    private async Task PublishEnvelopeProgressAsync(
+    private async Task HandleDisplayDeltaAsync(
         EventContext context,
         Guid responseId,
-        bool finalize,
+        string text,
         CancellationToken cancellationToken)
     {
-        var parsed = ResponseEnvelopeParser.Parse(
-            _accumulator.Text,
-            id => _artifacts.IsAuthorized(_snapshot.SessionId, id),
-            finalize);
-        _envelope = _ttsSourceLocked && _ttsUsesSpeech && !string.IsNullOrEmpty(_envelope?.SpeechText)
-            ? parsed with { SpeechText = _envelope.SpeechText }
-            : parsed;
-        await TryPublishSpeechProjectionAsync(context, responseId, finalize, cancellationToken).ConfigureAwait(false);
-        if (finalize
-            && _voiceSpeechResolved
-            && _resolvedSpeakable.Length > 0
-            && SpokenOutput.ShouldPersistDerivedSpeechText(_resolvedSpeakable, _envelope!.DisplayText))
+        _accumulator.Append(text);
+        await PublishEnvelopeProgressAsync(context, responseId, finalize: false, cancellationToken)
+            .ConfigureAwait(false);
+        UpdateStreamingAssistant();
+        await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
+        if (UsesSpeechSegmentation)
         {
-            _envelope = _envelope! with { SpeechText = _resolvedSpeakable };
-        }
-
-        if (!VoiceDisplayPublicationAllowed())
-        {
-            return;
-        }
-
-        var display = _envelope!.DisplayText;
-        if (display.Length > _publishedDisplayLength)
-        {
-            var chunk = display[_publishedDisplayLength..];
-            await PublishAsync(
-                    new SessionOutput(context, responseId, new TextDeltaOutput(_publishedDisplayLength, chunk)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            _publishedDisplayLength = display.Length;
-        }
-
-        foreach (var block in _envelope.Blocks)
-        {
-            if (!_publishedBlockIds.Add(block.BlockId))
+            if (_segmentPipelineStarted == 0)
             {
-                continue;
+                _segmentPipelineStarted = Stopwatch.GetTimestamp();
             }
 
-            await PublishAsync(
-                    new SessionOutput(
-                        context,
-                        responseId,
-                        new BlockUpsertOutput(
-                            block.BlockId,
-                            BlockKindName(block.Kind),
-                            string.IsNullOrEmpty(block.DisplayText) ? block.FallbackText : block.DisplayText,
-                            block.FallbackText,
-                            block.AttachmentId,
-                            block.ArtifactId)),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            FeedTtsFromLockedSource();
+            ScheduleSegmentTimer();
+            KickTts(context);
+            await ReleaseClientSpeechAsync(context, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task TryPublishSpeechProjectionAsync(
+    private async Task HandleSemanticReadyAsync(
+        EventContext context,
+        Guid responseId,
+        ModelSemanticResponse semantic,
+        CancellationToken cancellationToken)
+    {
+        ResponseEnvelope mapped;
+        try
+        {
+            mapped = SemanticResponseMapper.ToEnvelope(
+                semantic,
+                _snapshot.SessionId,
+                _artifacts,
+                AttachmentAllowed);
+        }
+        catch (ArgumentException)
+        {
+            _envelope = null;
+            _accumulator.Reset();
+            await CompleteAsync(context, responseId, failed: true, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        _semanticReady = true;
+        _envelope = mapped;
+        _accumulator.Replace(mapped.DisplayText);
+        if (_finalizingOperationId is { } op)
+        {
+            await PublishProgressAsync(
+                    context,
+                    responseId,
+                    ResponseProgressKind.Finalizing,
+                    ResponseProgressState.Completed,
+                    op,
+                    ResponseProgressMessages.Finalizing,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            _finalizingOperationId = null;
+        }
+
+        await PublishEnvelopeProgressAsync(context, responseId, finalize: false, cancellationToken)
+            .ConfigureAwait(false);
+        UpdateStreamingAssistant();
+        await CheckpointStreamingAsync(cancellationToken).ConfigureAwait(false);
+        if (UsesSpeechSegmentation)
+        {
+            if (_segmentPipelineStarted == 0)
+            {
+                _segmentPipelineStarted = Stopwatch.GetTimestamp();
+            }
+
+            FeedTtsFromLockedSource();
+            ScheduleSegmentTimer();
+            KickTts(context);
+            await ReleaseClientSpeechAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private bool AttachmentAllowed(string attachmentId)
+    {
+        if (LooksLikeUnsafeAttachment(attachmentId))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool LooksLikeUnsafeAttachment(string attachmentId) =>
+        attachmentId.Contains("..", StringComparison.Ordinal)
+        || attachmentId.Contains('/', StringComparison.Ordinal)
+        || attachmentId.Contains('\\', StringComparison.Ordinal);
+
+    private async Task TryPublishContractSpeechAsync(
         EventContext context,
         Guid responseId,
         bool finalize,
         CancellationToken cancellationToken)
     {
-        if (_snapshot.Mode != SessionMode.Voice || _voiceSpeechResolved)
+        if (_snapshot.Mode != SessionMode.Voice || _envelope is null || _voiceSpeechResolved)
         {
             return;
         }
 
-        var parsed = _envelope
-            ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize);
-        var hadExplicitSpeech = !string.IsNullOrEmpty(parsed.SpeechText);
+        if (_envelope.SpeechMode == ResponseSpeechMode.None)
+        {
+            if (!finalize)
+            {
+                return;
+            }
+
+            await ResolveVoiceSpeechAsync(
+                    context,
+                    responseId,
+                    _envelope,
+                    string.Empty,
+                    fallbackReason: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var hadExplicitSpeech = _envelope.SpeechMode == ResponseSpeechMode.Custom
+            && !string.IsNullOrEmpty(_envelope.SpeechText);
         if (hadExplicitSpeech)
         {
-            var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
+            var explicitPlayback = SpokenOutput.ForPlayback(_envelope.SpeechText, _envelope.DisplayText);
             if (explicitPlayback.Length > 0)
             {
                 await ResolveVoiceSpeechAsync(
                         context,
                         responseId,
-                        parsed,
+                        _envelope,
                         explicitPlayback,
-                        usesExplicitSpeech: true,
                         fallbackReason: null,
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -2729,16 +2916,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await ResolveVoiceSpeechAsync(
                     context,
                     responseId,
-                    parsed,
+                    _envelope,
                     string.Empty,
-                    usesExplicitSpeech: false,
                     fallbackReason: null,
                     cancellationToken)
                 .ConfigureAwait(false);
             return;
         }
 
-        var derivedPlayback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
+        var derivedPlayback = SpokenOutput.ForPlayback(null, _envelope.DisplayText);
         SpeechTelemetry.VoiceSpeechFallbackReason? fallbackReason = derivedPlayback.Length > 0
             ? hadExplicitSpeech
                 ? SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit
@@ -2747,12 +2933,74 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await ResolveVoiceSpeechAsync(
                 context,
                 responseId,
-                parsed,
+                _envelope,
                 derivedPlayback,
-                usesExplicitSpeech: false,
                 fallbackReason,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task PublishEnvelopeProgressAsync(
+        EventContext context,
+        Guid responseId,
+        bool finalize,
+        CancellationToken cancellationToken)
+    {
+        if (_usesResponseContract)
+        {
+            await TryPublishContractSpeechAsync(context, responseId, finalize, cancellationToken)
+                .ConfigureAwait(false);
+            if (finalize
+                && _voiceSpeechResolved
+                && _resolvedSpeakable.Length > 0
+                && SpokenOutput.ShouldPersistDerivedSpeechText(_resolvedSpeakable, _envelope?.DisplayText ?? _accumulator.Text))
+            {
+                _envelope = (_envelope ?? new ResponseEnvelope(_accumulator.Text, null, [], ResponseSpeechMode.Same))
+                    with { SpeechText = _resolvedSpeakable };
+            }
+
+            if (!VoiceDisplayPublicationAllowed())
+            {
+                return;
+            }
+
+            var contractDisplay = _semanticReady && _envelope is { DisplayText.Length: > 0 }
+                ? _envelope.DisplayText
+                : _accumulator.Text;
+            if (contractDisplay.Length > _publishedDisplayLength)
+            {
+                var chunk = contractDisplay[_publishedDisplayLength..];
+                await PublishAsync(
+                        new SessionOutput(context, responseId, new TextDeltaOutput(_publishedDisplayLength, chunk)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                _publishedDisplayLength = contractDisplay.Length;
+            }
+
+            foreach (var block in _envelope?.Blocks ?? [])
+            {
+                if (!_publishedBlockIds.Add(block.BlockId))
+                {
+                    continue;
+                }
+
+                await PublishAsync(
+                        new SessionOutput(
+                            context,
+                            responseId,
+                            new BlockUpsertOutput(
+                                block.BlockId,
+                                BlockKindName(block.Kind),
+                                string.IsNullOrEmpty(block.DisplayText) ? block.FallbackText : block.DisplayText,
+                                block.FallbackText,
+                                block.AttachmentId,
+                                block.ArtifactId)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return;
+        }
     }
 
     private async Task ResolveVoiceSpeechAsync(
@@ -2760,15 +3008,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Guid responseId,
         ResponseEnvelope parsed,
         string speakable,
-        bool usesExplicitSpeech,
         SpeechTelemetry.VoiceSpeechFallbackReason? fallbackReason,
         CancellationToken cancellationToken)
     {
         _voiceSpeechResolved = true;
         _resolvedSpeakable = speakable;
         _publishedSpeechProjection = speakable.Length > 0 ? speakable : null;
-        _ttsSourceLocked = true;
-        _ttsUsesSpeech = usesExplicitSpeech;
 
         if (speakable.Length > 0)
         {
@@ -2779,7 +3024,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 _logger.LogInformation(
                     reason == SpeechTelemetry.VoiceSpeechFallbackReason.RejectedExplicit
                         ? "Voice explicit speech was rejected; applied display-derived speech fallback."
-                        : "Voice response completed without [[speech:]]; applied completion speech fallback.");
+                        : "Voice response completed without an explicit spoken form; applied display-derived speech fallback.");
             }
 
             await PublishAsync(
@@ -2817,65 +3062,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private string CurrentTtsSource()
     {
-        // Authoritative speech selection is TryPublishSpeechProjectionAsync (_voiceSpeechResolved + _resolvedSpeakable).
-        // This method streams early explicit markers before resolution and reads the resolved speakable afterward.
         if (_voiceSpeechResolved)
         {
             return _resolvedSpeakable;
-        }
-
-        if (_ttsSourceLocked)
-        {
-            if (!string.IsNullOrEmpty(_envelope?.SpeechText))
-            {
-                return _envelope.SpeechText;
-            }
-
-            return _resolvedSpeakable;
-        }
-
-        var parsed = _envelope
-            ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize: false);
-        if (!string.IsNullOrEmpty(parsed.SpeechText))
-        {
-            var explicitPlayback = SpokenOutput.ForPlayback(parsed.SpeechText, parsed.DisplayText);
-            if (explicitPlayback.Length == 0)
-            {
-                if (_voiceSpeechResolved)
-                {
-                    return _resolvedSpeakable;
-                }
-
-                return string.Empty;
-            }
-
-            if (!_voiceSpeechResolved)
-            {
-                _ttsUsesSpeech = true;
-                _ttsSourceLocked = true;
-                _envelope = parsed with { SpeechText = explicitPlayback };
-            }
-
-            return explicitPlayback;
-        }
-
-        if (_snapshot.Mode == SessionMode.Voice)
-        {
-            if (!_modelDone)
-            {
-                return string.Empty;
-            }
-
-            var fallback = SpokenOutput.ForPlayback(null, parsed.DisplayText);
-            if (fallback.Length == 0)
-            {
-                return string.Empty;
-            }
-
-            _ttsUsesSpeech = false;
-            _ttsSourceLocked = true;
-            _envelope = parsed with { SpeechText = fallback };
-            return fallback;
         }
 
         return string.Empty;
@@ -2949,10 +3138,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private ResponseEnvelope CurrentEnvelope(bool finalize)
     {
-        var parsed = _envelope
-            ?? ResponseEnvelopeParser.Parse(_accumulator.Text, id => _artifacts.IsAuthorized(_snapshot.SessionId, id), finalize);
-        var existing = _snapshot.Entries.FirstOrDefault(item => item.EntryId == _activeEntryId)?.Envelope;
-        return ResponseEnvelopeParser.MergeDelivery(existing, parsed);
+        _ = finalize;
+        var contract = _envelope
+            ?? new ResponseEnvelope(_accumulator.Text, null, [], ResponseSpeechMode.Same);
+        var prior = _snapshot.Entries.FirstOrDefault(item => item.EntryId == _activeEntryId)?.Envelope;
+        return ResponseEnvelopeParser.MergeDelivery(prior, contract);
     }
 
     private static ResponseEnvelope? MarkBlocksDelivered(
@@ -2986,6 +3176,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _activeResponseId = null;
         _activeEntryId = null;
         _modelFinishReason = null;
+        _progressOwnerResponseId = null;
+        _progressLive = false;
+        _progressOperationId = null;
+        _progressStartedTimestamp = 0;
+        _usesResponseContract = false;
+        _semanticReady = false;
+        _structuredOutput = false;
+        _finalizingOperationId = null;
         _responseCts?.Dispose();
         _responseCts = null;
         _ttsCts?.Dispose();
@@ -3189,6 +3387,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             await SupersedeAsync(context, live, cancellationToken, "ended").ConfigureAwait(false);
         }
+        else
+        {
+            await FinishOwnedProgressAsync(context, ResponseProgressState.Failed, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         Signal(ref _abandonPersist);
         RequestPersist(
@@ -3377,7 +3580,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 "unspecified",
                 ModelSelectionSource.SystemDefault,
                 null);
-        return _models.Resolve(selection, purpose);
+        var resolved = _models.Resolve(selection, purpose);
+        return TestDecorateLanguageModel?.Invoke(resolved) ?? resolved;
     }
 
     private static ModelGenerationProvenance? ToProvenance(SessionModelSelection? selection) =>
@@ -3541,6 +3745,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
             InvalidateSpeechJobs();
             _ttsCts?.Cancel();
+            await FinishOwnedProgressAsync(context, ResponseProgressState.Failed, cancellationToken)
+                .ConfigureAwait(false);
             if (_activeResponseId is { } live)
             {
                 await SupersedeAsync(context, live, cancellationToken, "disconnected").ConfigureAwait(false);
@@ -3836,7 +4042,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 Status = current.Status == EntryStatus.Streaming ? current.Status : durable.Status,
                 ReceivedTextEndExclusive = Math.Max(durable.ReceivedTextEndExclusive, current.ReceivedTextEndExclusive),
                 HeardTextEndExclusive = Math.Max(durable.HeardTextEndExclusive, current.HeardTextEndExclusive),
-                Envelope = ResponseEnvelopeParser.MergeDelivery(durable.Envelope, current.Envelope)
+                Envelope = current.Status == EntryStatus.Failed
+                    ? current.Envelope
+                    : ResponseEnvelopeParser.MergeDelivery(durable.Envelope, current.Envelope)
             };
         }
 
@@ -3893,6 +4101,105 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         await _output.PublishAsync(output, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task PublishProgressAsync(
+        EventContext context,
+        Guid responseId,
+        ResponseProgressKind kind,
+        ResponseProgressState state,
+        Guid? operationId,
+        string? message,
+        CancellationToken cancellationToken)
+    {
+        if (state is ResponseProgressState.Started or ResponseProgressState.Updated)
+        {
+            if (_deactivated
+                || context.Epoch != _epoch
+                || responseId != (_activeResponseId ?? _progressOwnerResponseId)
+                || (_responseTerminal && _activeResponseId == responseId))
+            {
+                return;
+            }
+
+            _progressLive = true;
+            _progressOwnerResponseId = responseId;
+            _progressKind = kind;
+            _progressOperationId = operationId;
+            if (_progressStartedTimestamp == 0)
+            {
+                _progressStartedTimestamp = Stopwatch.GetTimestamp();
+            }
+        }
+        else if (!_progressLive || _progressOwnerResponseId != responseId)
+        {
+            return;
+        }
+        else
+        {
+            _progressLive = false;
+        }
+
+        await PublishAsync(
+                new SessionOutput(
+                    context,
+                    responseId,
+                    new ResponseProgressOutput(
+                        kind,
+                        state,
+                        operationId,
+                        ResponseProgressMessages.Bound(message))),
+                cancellationToken)
+            .ConfigureAwait(false);
+        RecordPublishedProgress(kind, state);
+    }
+
+    private async Task FinishOwnedProgressAsync(
+        EventContext context,
+        ResponseProgressState state,
+        CancellationToken cancellationToken,
+        Guid? responseId = null)
+    {
+        if (!_progressLive)
+        {
+            return;
+        }
+
+        var owned = _progressOwnerResponseId;
+        if (owned is null || (responseId is { } expected && expected != owned))
+        {
+            return;
+        }
+
+        _progressLive = false;
+        await PublishAsync(
+                new SessionOutput(
+                    context,
+                    owned.Value,
+                    new ResponseProgressOutput(
+                        _progressKind,
+                        state,
+                        _progressOperationId,
+                        null)),
+                cancellationToken)
+            .ConfigureAwait(false);
+        RecordPublishedProgress(_progressKind, state);
+    }
+
+    private void RecordPublishedProgress(ResponseProgressKind kind, ResponseProgressState state)
+    {
+        double? activeMs = null;
+        if (state is ResponseProgressState.Completed or ResponseProgressState.Failed)
+        {
+            if (_progressStartedTimestamp != 0)
+            {
+                activeMs = RuntimeTelemetry.ElapsedMs(_progressStartedTimestamp);
+            }
+
+            _progressStartedTimestamp = 0;
+        }
+
+        ProgressTelemetry.Record(kind, state, activeMs);
     }
 
     private void NoteAudioTransport()

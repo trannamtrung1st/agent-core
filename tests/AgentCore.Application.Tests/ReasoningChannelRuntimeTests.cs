@@ -1,4 +1,5 @@
 using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -48,6 +49,7 @@ public sealed class ReasoningChannelRuntimeTests
         Assert.Equal("Public answer only.", assistant.Text);
         Assert.DoesNotContain("internal planning", assistant.Text, StringComparison.Ordinal);
         Assert.DoesNotContain(output.TextDeltas, delta => delta.Text.Contains("internal planning", StringComparison.Ordinal));
+        Assert.DoesNotContain(output.Items, item => item.Payload is ResponseProgressOutput);
     }
 
     private sealed class FixedEventLanguageModel(IReadOnlyList<ModelGenerationEvent> events) : ILanguageModel

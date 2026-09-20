@@ -3,7 +3,7 @@ namespace AgentCore.Application.Ports;
 public enum ProviderErrorCode
 {
     Authentication, RateLimited, Timeout, Cancelled, InvalidRequest,
-    Unavailable, UnsupportedCapability, Unknown
+    InvalidResponse, Unavailable, UnsupportedCapability, Unknown
 }
 
 public sealed record ProviderFailure(
@@ -37,7 +37,14 @@ public sealed record ModelCapabilities(
     bool StreamingText,
     bool Cancellation,
     bool Vision = false,
-    bool Tools = false);
+    bool Tools = false,
+    bool StructuredOutput = false);
+
+/// <summary>
+/// Provider-neutral request that the assistant response should follow the semantic envelope.
+/// <see cref="SpeechWillBeUsed"/> is assigned by SessionRuntime at conversational cutover (P2B-5), not here.
+/// </summary>
+public sealed record ModelResponseContract(bool SpeechWillBeUsed);
 
 public sealed record ModelRequest(
     Guid ResponseId,
@@ -45,11 +52,51 @@ public sealed record ModelRequest(
     int MaxOutputTokens = 512,
     double? Temperature = null,
     IReadOnlyList<ModelToolDefinition>? Tools = null,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    ModelResponseContract? ResponseContract = null);
 
 public abstract record ModelGenerationEvent;
 
 public sealed record ModelTextDelta(string Text) : ModelGenerationEvent;
+
+public enum ModelSpeechMode
+{
+    Same,
+    Custom,
+    None
+}
+
+public sealed record ModelSpeechProjection(ModelSpeechMode Mode, string? Text);
+
+public enum ModelResponseBlockKind
+{
+    Markdown,
+    AttachmentReference,
+    ArtifactReference,
+    Unknown
+}
+
+public sealed record ModelResponseBlock(
+    ModelResponseBlockKind Kind,
+    string? Text = null,
+    string? AttachmentId = null,
+    string? ArtifactId = null);
+
+public sealed record ModelSemanticResponse(
+    string DisplayText,
+    ModelSpeechProjection Speech,
+    IReadOnlyList<ModelResponseBlock> Blocks);
+
+/// <summary>
+/// Incremental visible conversational text for a request that carries <see cref="ModelResponseContract"/>.
+/// Non-envelope requests keep <see cref="ModelTextDelta"/>.
+/// </summary>
+public sealed record ModelDisplayDelta(string Text) : ModelGenerationEvent;
+
+/// <summary>
+/// Completed provider-neutral assistant envelope for a contract request.
+/// </summary>
+public sealed record ModelSemanticResponseReady(ModelSemanticResponse Response) : ModelGenerationEvent;
 
 /// <summary>
 /// Provider reasoning channel; must never become display, speech, history, or TTS input.

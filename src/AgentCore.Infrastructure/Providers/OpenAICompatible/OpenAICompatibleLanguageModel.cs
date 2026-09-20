@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 
 namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 
@@ -33,7 +34,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = JoinCompletions(options.BaseUrl);
-        Capabilities = new ModelCapabilities(StreamingText: true, Cancellation: true, Vision: options.Vision, Tools: options.Tools);
+        Capabilities = new ModelCapabilities(
+            StreamingText: true,
+            Cancellation: true,
+            Vision: options.Vision,
+            Tools: options.Tools,
+            StructuredOutput: options.StructuredOutput);
     }
 
     public ModelCapabilities Capabilities { get; }
@@ -324,6 +330,11 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             body["tools"] = request.Tools.Select(MapTool).ToArray();
             body["tool_choice"] = "auto";
+        }
+
+        if (request.ResponseContract is not null && Capabilities.StructuredOutput)
+        {
+            body["response_format"] = AssistantResponseSchema.OpenAiCompatibleResponseFormat;
         }
 
         var json = JsonSerializer.Serialize(body);

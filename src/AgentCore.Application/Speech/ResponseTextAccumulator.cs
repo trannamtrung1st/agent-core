@@ -14,4 +14,6 @@ public sealed class ResponseTextAccumulator
     }
 
     public void Reset() => Text = string.Empty;
+
+    public void Replace(string text) => Text = text ?? string.Empty;
 }

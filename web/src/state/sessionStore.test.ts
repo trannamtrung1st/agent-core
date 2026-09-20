@@ -697,6 +697,170 @@ describe("applyServerEvent", () => {
   });
 });
 
+describe("agent.progress", () => {
+  const progress = (sequence: number, extra: Partial<ServerEvent> & { payload: Record<string, unknown> }) =>
+    event({
+      type: "agent.progress",
+      sequence,
+      responseId: extra.responseId ?? "r1",
+      ...extra
+    });
+
+  it("replaces a single activeProgress and does not append transcript entries", () => {
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      progress(1, {
+        payload: { kind: "readingAttachments", state: "started", message: "Reading attachments…" }
+      })
+    );
+    expect(state.activeProgress).toEqual({
+      responseId: "r1",
+      operationId: null,
+      kind: "readingAttachments",
+      state: "started",
+      message: "Reading attachments…"
+    });
+    expect(state.entries).toEqual([]);
+    state = applyServerEvent(
+      state,
+      progress(2, {
+        payload: {
+          kind: "runningTool",
+          state: "started",
+          operationId: "op-2",
+          message: "Running tools…"
+        }
+      })
+    );
+    expect(state.activeProgress?.kind).toBe("runningTool");
+    expect(state.activeProgress?.operationId).toBe("op-2");
+    expect(state.entries).toEqual([]);
+  });
+
+  it("clears matching completed or failed progress", () => {
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      progress(1, { payload: { kind: "runningTool", state: "started", operationId: "op-1" } })
+    );
+    state = applyServerEvent(
+      state,
+      progress(2, { payload: { kind: "runningTool", state: "completed", operationId: "op-1" } })
+    );
+    expect(state.activeProgress).toBeNull();
+    state = applyServerEvent(
+      state,
+      progress(3, { payload: { kind: "readingAttachments", state: "started" } })
+    );
+    state = applyServerEvent(
+      state,
+      progress(4, { payload: { kind: "readingAttachments", state: "failed" } })
+    );
+    expect(state.activeProgress).toBeNull();
+  });
+
+  it("clears progress on response completed and interrupted", () => {
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
+      progress(1, { payload: { kind: "finalizing", state: "started" } })
+    );
+    state = applyServerEvent(
+      state,
+      event({ type: "agent.response.completed", sequence: 2, responseId: "r1", payload: { status: "completed" } })
+    );
+    expect(state.activeProgress).toBeNull();
+    state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
+      progress(1, { payload: { kind: "runningTool", state: "started" } })
+    );
+    state = applyServerEvent(
+      state,
+      event({ type: "agent.response.interrupted", sequence: 2, responseId: "r1", payload: { reason: "userStop" } })
+    );
+    expect(state.activeProgress).toBeNull();
+  });
+
+  it("clears progress on session.ready, paused state, and control-sequence reset", () => {
+    const withProgress = {
+      ...emptySession(),
+      attachmentId: "a1",
+      lastServerSequence: 1,
+      activeProgress: {
+        responseId: "r1",
+        operationId: null,
+        kind: "runningTool" as const,
+        state: "started" as const,
+        message: "Running tools…"
+      }
+    };
+    const ready = applyServerEvent(
+      withProgress,
+      event({
+        type: "session.ready",
+        sequence: 9,
+        payload: { mode: "text", status: "attached", history: [{ text: "Hello", role: "assistant" }] }
+      })
+    );
+    expect(ready.activeProgress).toBeNull();
+    expect(ready.entries.some((entry) => entry.text.includes("Running tools"))).toBe(false);
+    const paused = applyServerEvent(
+      { ...withProgress, lastServerSequence: 1 },
+      event({
+        type: "session.state.changed",
+        sequence: 2,
+        payload: { status: "paused", mode: "text", inputState: "idle", outputState: "idle" }
+      })
+    );
+    expect(paused.activeProgress).toBeNull();
+    const reset = applyServerEvent(
+      { ...withProgress, lastServerSequence: 4 },
+      event({ type: "agent.progress", sequence: 8, responseId: "r1", payload: { kind: "runningTool", state: "started" } })
+    );
+    expect(reset.connection).toBe("failed");
+    expect(reset.activeProgress).toBeNull();
+  });
+
+  it("ignores stale response progress and does not restore it from history", () => {
+    let state = applyServerEvent(
+      {
+        ...emptySession(),
+        attachmentId: "a1",
+        liveResponseId: "r2",
+        tombstones: { r1: "interrupted" as const }
+      },
+      progress(1, { responseId: "r1", payload: { kind: "runningTool", state: "started" } })
+    );
+    expect(state.activeProgress).toBeNull();
+    state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r2" },
+      progress(1, { responseId: "r1", payload: { kind: "runningTool", state: "started" } })
+    );
+    expect(state.activeProgress).toBeNull();
+  });
+
+  it("clears progress on first user-visible assistant text", () => {
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r1",
+        payload: { entryId: "e1", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      progress(2, { payload: { kind: "finalizing", state: "started", message: "Finalizing response…" } })
+    );
+    expect(state.activeProgress?.kind).toBe("finalizing");
+    state = applyServerEvent(
+      state,
+      event({ type: "agent.text.delta", sequence: 3, responseId: "r1", payload: { text: "Hi", textStart: 0 } })
+    );
+    expect(state.activeProgress).toBeNull();
+    expect(state.entries[0]?.text).toBe("Hi");
+  });
+});
+
 describe("historyFromPayload", () => {
   it("preserves finishReason on hydrated history rows", () => {
     const entries = historyFromPayload([

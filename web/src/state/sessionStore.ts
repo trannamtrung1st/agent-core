@@ -20,6 +20,23 @@ export type HistoryBlock = {
   artifactId: string | null;
 };
 
+export type ResponseProgressKind =
+  | "preparing"
+  | "readingAttachments"
+  | "runningTool"
+  | "waitingExternal"
+  | "finalizing";
+
+export type ResponseProgressState = "started" | "updated" | "completed" | "failed";
+
+export type ResponseProgress = {
+  responseId: string;
+  operationId: string | null;
+  kind: ResponseProgressKind;
+  state: ResponseProgressState;
+  message: string | null;
+};
+
 export type HistoryEntry = {
   entryId: string;
   sequence: number;
@@ -93,6 +110,7 @@ export type SessionView = {
   outputState: string;
   entries: HistoryEntry[];
   liveResponseId: string | null;
+  activeProgress: ResponseProgress | null;
   tombstones: Record<string, "interrupted" | "completed" | "failed">;
   lastServerSequence: number;
   streamId: string | null;
@@ -146,6 +164,7 @@ export const emptySession = (): SessionView => ({
   outputState: "idle",
   entries: [],
   liveResponseId: null,
+  activeProgress: null,
   tombstones: {},
   lastServerSequence: 0,
   streamId: null,
@@ -183,6 +202,45 @@ function asSpeechText(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
+}
+
+const progressKinds = new Set<ResponseProgressKind>([
+  "preparing",
+  "readingAttachments",
+  "runningTool",
+  "waitingExternal",
+  "finalizing"
+]);
+
+const progressStates = new Set<ResponseProgressState>(["started", "updated", "completed", "failed"]);
+
+function parseProgress(event: ServerEvent): ResponseProgress | null {
+  if (!event.responseId) {
+    return null;
+  }
+
+  const kind = asString(event.payload.kind);
+  const state = asString(event.payload.state);
+  if (!progressKinds.has(kind as ResponseProgressKind) || !progressStates.has(state as ResponseProgressState)) {
+    return null;
+  }
+
+  const message = event.payload.message == null ? null : asString(event.payload.message);
+  return {
+    responseId: event.responseId,
+    operationId: event.payload.operationId == null ? null : asString(event.payload.operationId),
+    kind: kind as ResponseProgressKind,
+    state: state as ResponseProgressState,
+    message: message && message.length > 0 ? message : null
+  };
+}
+
+function progressIsStale(state: SessionView, responseId: string): boolean {
+  if (state.tombstones[responseId]) {
+    return true;
+  }
+
+  return state.liveResponseId != null && state.liveResponseId !== responseId;
 }
 
 function speechLocaleFieldsFromPayload(
@@ -390,11 +448,12 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       error: sessionError.message,
       sessionError,
       errorFatal: false,
-      connection: "failed"
+      connection: "failed",
+      activeProgress: null
     };
   }
 
-    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain")) {
+    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain" || event.type === "agent.progress")) {
     return { ...state, lastServerSequence: event.sequence };
   }
 
@@ -422,6 +481,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         outputState: asString(payload.outputState) || "idle",
         entries: historyFromPayload(payload.history),
         liveResponseId: payload.activeResponseId == null ? null : asString(payload.activeResponseId),
+        activeProgress: null,
         tombstones: {},
         lastServerSequence: event.sequence,
         streamId: payload.streamId == null ? null : asString(payload.streamId),
@@ -460,6 +520,35 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         lastServerSequence: event.sequence
       };
     }
+    case "agent.progress": {
+      const progress = parseProgress(event);
+      if (!progress || progressIsStale(state, progress.responseId)) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      if (progress.state === "completed" || progress.state === "failed") {
+        const current = state.activeProgress;
+        if (!current || current.responseId !== progress.responseId) {
+          return { ...state, lastServerSequence: event.sequence };
+        }
+
+        if (
+          progress.operationId
+          && current.operationId
+          && progress.operationId !== current.operationId
+        ) {
+          return { ...state, lastServerSequence: event.sequence };
+        }
+
+        return { ...state, activeProgress: null, lastServerSequence: event.sequence };
+      }
+
+      return {
+        ...state,
+        activeProgress: progress,
+        lastServerSequence: event.sequence
+      };
+    }
     case "agent.speech.projection": {
       if (!event.responseId || event.responseId !== state.liveResponseId) {
         return { ...state, lastServerSequence: event.sequence };
@@ -486,6 +575,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
 
       const text = asString(event.payload.text);
       const start = asNumber(event.payload.textStart);
+      const live = state.entries.find((entry) => entry.responseId === event.responseId);
+      const appended = Boolean(live && start === live.text.length && text.length > 0);
       return {
         ...state,
         lastServerSequence: event.sequence,
@@ -503,7 +594,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
             ...entry,
             text: nextText
           };
-        })
+        }),
+        activeProgress: appended && event.responseId === state.activeProgress?.responseId
+          ? null
+          : state.activeProgress
       };
     }
     case "agent.text.completed":
@@ -535,7 +629,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
           }
 
           return { ...entry, blocks: [...blocks, block] };
-        })
+        }),
+        activeProgress: event.responseId === state.activeProgress?.responseId ? null : state.activeProgress
       };
     }
     case "agent.response.interrupted":
@@ -553,6 +648,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       return {
         ...state,
         liveResponseId,
+        activeProgress: event.responseId && state.activeProgress?.responseId === event.responseId
+          ? null
+          : state.activeProgress,
         outputState: nextOutputState(event.type, liveResponseId, state.outputState),
         tombstones,
         lastServerSequence: event.sequence,
@@ -586,6 +684,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         voiceAvailable: terminal ? false : state.voiceAvailable,
         inputState: asString(event.payload.inputState) || state.inputState,
         outputState: asString(event.payload.outputState) || state.outputState,
+        activeProgress: paused || terminal ? null : state.activeProgress,
         mode,
         pendingMode,
         streamId: event.payload.streamId == null ? null : asString(event.payload.streamId),

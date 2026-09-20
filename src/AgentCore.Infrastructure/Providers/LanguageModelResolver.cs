@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Infrastructure.Providers;
@@ -32,7 +33,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
         var providerAlias = selection.ProviderAlias;
         var modelId = selection.ModelId;
         var descriptor = _catalog.Get(selection.CatalogKey);
-        var route = $"{providerAlias}\u001f{modelId}";
+        var route = $"{selection.CatalogKey}\u001f{providerAlias}\u001f{modelId}";
         lock (_gate)
         {
             if (_clients.TryGetValue(route, out var cached))
@@ -40,7 +41,8 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
                 return cached;
             }
 
-            var created = Create(modelId, descriptor);
+            var created = new SemanticResponseLanguageModel(
+                BindCatalogCapabilities(Create(modelId, descriptor), descriptor));
             _clients[route] = created;
             return created;
         }
@@ -54,6 +56,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
         {
             options.Tools = descriptor.Tools;
             options.Vision = descriptor.Vision;
+            options.StructuredOutput = descriptor.StructuredOutput;
         }
 
         options.ReasoningEffort = null;
@@ -67,6 +70,24 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
         }
 
         return LanguageModelFactory.Create(_services, _profile, options);
+    }
+
+    private static ILanguageModel BindCatalogCapabilities(ILanguageModel model, ModelDescriptor? descriptor)
+    {
+        if (descriptor is null)
+        {
+            return model;
+        }
+
+        var overlay = model.Capabilities with
+        {
+            Tools = descriptor.Tools,
+            Vision = descriptor.Vision,
+            StructuredOutput = descriptor.StructuredOutput
+        };
+        return overlay.Equals(model.Capabilities)
+            ? model
+            : new CatalogBoundLanguageModel(model, overlay);
     }
 
     private bool IsScripted(LanguageModelProviderOptions options) =>
@@ -87,6 +108,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
             MapSeparateReasoningDeltas = source.MapSeparateReasoningDeltas,
             Vision = source.Vision,
             Tools = source.Tools,
+            StructuredOutput = source.StructuredOutput,
             AdditionalHeaders = new Dictionary<string, string>(source.AdditionalHeaders, StringComparer.Ordinal),
             Timeouts = new ProviderTimeoutOptions
             {
@@ -95,4 +117,16 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
                 TotalSeconds = source.Timeouts.TotalSeconds
             }
         };
+}
+
+internal sealed class CatalogBoundLanguageModel(ILanguageModel inner, ModelCapabilities capabilities) : ILanguageModel
+{
+    public ILanguageModel Inner { get; } = inner;
+
+    public ModelCapabilities Capabilities { get; } = capabilities;
+
+    public IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+        ModelRequest request,
+        CancellationToken cancellationToken = default) =>
+        Inner.GenerateAsync(request, cancellationToken);
 }

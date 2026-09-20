@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 
 namespace AgentCore.Infrastructure.Providers.Synthetic;
 
@@ -82,6 +83,15 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         var chunks = Select(lastUser);
+        if (RequestsNativeJson(request))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(400, cancellationToken).ConfigureAwait(false);
+            yield return new ModelTextDelta(ToNativeJson(lastUser, chunks));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
         for (var index = 0; index < chunks.Count; index++)
         {
             if (!_emitAfterCancel)
@@ -286,11 +296,38 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     internal const string SteerProbeMarker = "[test:steer-probe]";
 
+    private static bool RequestsNativeJson(ModelRequest request) =>
+        request.ResponseContract is not null
+        && request.Messages.All(message =>
+            message.Role != ModelRole.System
+            || !message.Text.Contains(AssistantResponseSchema.CompatibilityInstructionPrefix, StringComparison.Ordinal));
+
+    private static string ToNativeJson(string lastUser, IReadOnlyList<string> chunks)
+    {
+        if (lastUser.Contains("[test:speech-none]", StringComparison.OrdinalIgnoreCase))
+        {
+            return """{"displayText":"Shown only.","speech":{"mode":"none","text":null},"blocks":[]}""";
+        }
+
+        if (lastUser.Contains("[test:rich-envelope]", StringComparison.OrdinalIgnoreCase))
+        {
+            return """{"displayText":"Shown display.","speech":{"mode":"custom","text":"Hidden speech"},"blocks":[{"kind":"markdown","text":"**Extra block**"},{"kind":"attachmentReference","attachmentId":"notes.txt"},{"kind":"artifactReference","artifactId":"fixture-artifact-1"}]}""";
+        }
+
+        var display = string.Concat(chunks);
+        return "{\"displayText\":" + JsonSerializer.Serialize(display) + ",\"speech\":{\"mode\":\"same\",\"text\":null},\"blocks\":[]}";
+    }
+
     private IReadOnlyList<string> Select(string lastUser)
     {
         if (_chunks != DefaultChunks)
         {
             return _chunks;
+        }
+
+        if (lastUser.Contains("[test:speech-none]", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["Shown only."];
         }
 
         if (lastUser.Contains("[test:rich-envelope]", StringComparison.OrdinalIgnoreCase))

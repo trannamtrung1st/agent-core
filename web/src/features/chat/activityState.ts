@@ -14,6 +14,10 @@ export type StatusSource = {
   liveAssistantText?: string;
   liveAssistantHasContent?: boolean;
   connectionError?: string | null;
+  activeProgress?: {
+    kind: "preparing" | "readingAttachments" | "runningTool" | "waitingExternal" | "finalizing";
+    message?: string | null;
+  } | null;
 };
 
 function agentOutputLive(source: StatusSource): boolean {
@@ -82,6 +86,39 @@ function idleLabel(source: StatusSource): string {
   return "Ready";
 }
 
+export function progressActivityLabel(kind: NonNullable<StatusSource["activeProgress"]>["kind"], message?: string | null): string {
+  const trusted = message?.trim();
+  if (trusted) {
+    return trusted;
+  }
+
+  switch (kind) {
+    case "readingAttachments":
+      return "Reading attachments…";
+    case "runningTool":
+      return "Running tools…";
+    case "waitingExternal":
+      return "Waiting…";
+    case "finalizing":
+      return "Finalizing response…";
+    default:
+      return "Preparing response…";
+  }
+}
+
+function progressActivity(progress: NonNullable<StatusSource["activeProgress"]>): AgentActivityState {
+  const label = progressActivityLabel(progress.kind, progress.message);
+  if (progress.kind === "readingAttachments") {
+    return { kind: "attachments", label };
+  }
+
+  if (progress.kind === "runningTool" || progress.kind === "waitingExternal") {
+    return { kind: "tools", label };
+  }
+
+  return { kind: "thinking", label };
+}
+
 export function mapAgentActivity(source: StatusSource): AgentActivityState {
   if (source.connection === "failed") {
     const message = source.connectionError?.trim();
@@ -113,6 +150,10 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
 
   if (source.sessionStatus === "ended") {
     return { kind: "idle" };
+  }
+
+  if (source.activeProgress) {
+    return progressActivity(source.activeProgress);
   }
 
   const live = source.liveResponseId != null;
@@ -200,7 +241,10 @@ export function conversationStatusTone(text: string): "live" | "wait" | "alarm" 
     text === "Thinking…" ||
     text === "Generating response…" ||
     text === "Reading attachments…" ||
-    text === "Running tools…"
+    text === "Running tools…" ||
+    text === "Waiting…" ||
+    text === "Finalizing response…" ||
+    text === "Preparing response…"
   ) {
     return "wait";
   }

@@ -798,9 +798,38 @@ public sealed class MemoryStoreContractTests
         var restored = Assert.Single(loaded!.Entries);
         Assert.Equal("Hello", restored.Text);
         Assert.Equal("Spoken", restored.Envelope!.SpeechText);
+        Assert.Equal(ResponseSpeechMode.Custom, restored.Envelope.SpeechMode);
         Assert.True(Assert.Single(restored.Envelope.Blocks).DisplayDelivered);
         Assert.Equal(3, restored.HeardTextEndExclusive);
         Assert.Equal(5, restored.ReceivedTextEndExclusive);
+    }
+
+    [Fact]
+    public async Task Legacy_speech_text_envelope_json_reopens_as_custom_and_is_not_rewritten_when_unchanged()
+    {
+        await using var harness = await SqliteAsync();
+        const string legacy =
+            """{"displayText":"Hello","speechText":"Spoken","blocks":[{"blockId":"b1","kind":0,"displayText":"**Hi**","fallbackText":"**Hi**","attachmentId":null,"artifactId":null,"displayDelivered":true}]}""";
+        var decoded = ResponseEnvelopeJson.Deserialize(legacy)!;
+        var entry = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Hello") with { Envelope = decoded };
+        var snapshot = First() with { Entries = [entry] };
+        await harness.Store.SaveAsync(snapshot, 0);
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            var row = Assert.Single(db.Entries);
+            row.EnvelopeJson = legacy;
+            await db.SaveChangesAsync();
+        }
+
+        var loaded = await harness.Store.LoadAsync(snapshot.SessionId);
+        var restored = Assert.Single(loaded!.Entries);
+        Assert.Equal(ResponseSpeechMode.Custom, restored.Envelope!.SpeechMode);
+        Assert.Equal("Spoken", restored.Envelope.SpeechText);
+        await harness.Store.SaveAsync(loaded with { Revision = loaded.Revision + 1 }, loaded.Revision);
+        await using (var db = await harness.Factory.CreateDbContextAsync())
+        {
+            Assert.Equal(legacy, Assert.Single(db.Entries).EnvelopeJson);
+        }
     }
 
     [Fact]

@@ -293,7 +293,7 @@ describe("Conversation", () => {
     expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
   });
 
-  it("does not add a Spoken section when speech text is absent or equivalent", () => {
+    it("does not add a Spoken or Speech text section when speech is absent or equivalent", () => {
     const { rerender } = render(
       <Conversation
         agentName="Alex"
@@ -303,6 +303,7 @@ describe("Conversation", () => {
       />
     );
     expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
 
     rerender(
       <Conversation
@@ -313,6 +314,7 @@ describe("Conversation", () => {
       />
     );
     expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
 
     rerender(
       <Conversation
@@ -323,6 +325,81 @@ describe("Conversation", () => {
       />
     );
     expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+  });
+
+  it("renders Speech text for custom text delivery and Spoken for Voice", () => {
+    const { rerender } = render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Shown display.",
+            speechText: "Hidden speech",
+            deliveryMode: "text"
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByLabelText("Speech text")).toHaveTextContent("Hidden speech");
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+
+    rerender(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Shown display.",
+            speechText: "Hidden speech",
+            deliveryMode: "voice"
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByLabelText("Spoken")).toHaveTextContent("Hidden speech");
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+  });
+
+  it("does not render secondary speech when speech text is omitted", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[entry({ entryId: "a1", role: "assistant", text: "Shown only.", speechText: null })]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Shown only.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Spoken")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech text")).not.toBeInTheDocument();
+  });
+
+  it("still renders differing speech from older history rows", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s-old"
+        entries={[
+          entry({
+            entryId: "a-legacy",
+            role: "assistant",
+            text: "Shown display.",
+            speechText: "Hidden speech"
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Shown display.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Speech text")).toHaveTextContent("Hidden speech");
   });
 
   it("renders Spoken before display in the same assistant message when they differ", () => {

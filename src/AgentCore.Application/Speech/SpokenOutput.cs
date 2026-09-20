@@ -47,7 +47,7 @@ public static class SpokenOutput
 
     /// <summary>
     /// True when the runtime should persist a derived <c>SpeechText</c> on the envelope
-    /// (model omitted <c>[[speech:]]</c> but the TTS coordinate string differs from display).
+    /// (no explicit spoken form, but the TTS coordinate string differs from display).
     /// </summary>
     public static bool ShouldPersistDerivedSpeechText(string spoken, string displayText)
     {

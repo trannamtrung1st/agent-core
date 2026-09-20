@@ -70,6 +70,66 @@ describe("agent activity mapping", () => {
     expect(conversationStatus(ready)).toBe("Ready");
   });
 
+  it("lets first-class progress outrank speaking and coarse output labels", () => {
+    expect(
+      conversationStatus({
+        ...ready,
+        liveResponseId: "r1",
+        inputState: "userSpeaking",
+        liveUserTranscript: "Hello",
+        outputState: "agentSpeaking",
+        activeProgress: { kind: "runningTool", message: "Running tools…" }
+      })
+    ).toBe("Running tools…");
+    expect(
+      mapAgentActivity({
+        ...ready,
+        liveResponseId: "r1",
+        outputState: "waitingForAgent",
+        activeProgress: { kind: "readingAttachments" }
+      })
+    ).toEqual({ kind: "attachments", label: "Reading attachments…" });
+    expect(
+      conversationStatus({
+        ...ready,
+        liveResponseId: "r1",
+        outputState: "agentGenerating",
+        activeProgress: { kind: "preparing" }
+      })
+    ).toBe("Preparing response…");
+    expect(
+      conversationStatus({
+        ...ready,
+        connection: "reconnecting",
+        activeProgress: { kind: "runningTool", message: "Running tools…" }
+      })
+    ).toBe("Reconnecting to Agent Core…");
+    expect(
+      conversationStatus({
+        ...ready,
+        pendingVoice: true,
+        activeProgress: { kind: "runningTool", message: "Running tools…" }
+      })
+    ).toBe("Starting voice…");
+    expect(
+      conversationStatus({
+        ...ready,
+        connection: "idle",
+        activeProgress: { kind: "runningTool", message: "Running tools…" }
+      })
+    ).toBe("Ready");
+    expect(
+      conversationStatus({
+        ...ready,
+        sessionStatus: "ended",
+        activeProgress: { kind: "runningTool", message: "Running tools…" }
+      })
+    ).toBe("Ended");
+    expect(conversationStatusTone("Waiting…")).toBe("wait");
+    expect(conversationStatusTone("Finalizing response…")).toBe("wait");
+    expect(conversationStatusTone("Preparing response…")).toBe("wait");
+  });
+
   it("does not restore thinking from stale output after a terminal response", () => {
     expect(
       mapAgentActivity({

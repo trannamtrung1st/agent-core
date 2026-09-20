@@ -831,6 +831,139 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains("image_url", handler.LastBody, StringComparison.Ordinal);
         Assert.Contains($"data:image/png;base64,{png}", handler.LastBody, StringComparison.Ordinal);
         Assert.DoesNotContain("OpenAI.Chat", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("response_format", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Structured_contract_sends_strict_json_schema_response_format()
+    {
+        var handler = StopStream();
+        var model = Create(handler, structuredOutput: true, tools: true, reasoningObject: true);
+        var tools = new[]
+        {
+            new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
+        };
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [new ModelMessage(ModelRole.User, "Hi")],
+            Tools: tools,
+            ReasoningEffort: "medium",
+            ResponseContract: new ModelResponseContract(SpeechWillBeUsed: false));
+        var events = await CollectAsync(model, request);
+        Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted);
+        Assert.Contains("\"response_format\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"json_schema\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("agent_core_assistant_response", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"strict\":true", handler.LastBody.Replace(" ", string.Empty), StringComparison.Ordinal);
+        Assert.Contains("displayText", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("attachmentReference", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("blockId", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisplayDelivered", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("You are", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("examiner", handler.LastBody, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"tools\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"reasoning\":", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"effort\":\"medium\"", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fallback_model_or_missing_contract_omits_response_format()
+    {
+        var fallback = StopStream();
+        await CollectAsync(
+            Create(fallback, structuredOutput: false),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [new ModelMessage(ModelRole.User, "Hi")],
+                ResponseContract: new ModelResponseContract(SpeechWillBeUsed: true)));
+        Assert.DoesNotContain("response_format", fallback.LastBody, StringComparison.Ordinal);
+
+        var unstructuredRequest = StopStream();
+        await CollectAsync(Create(unstructuredRequest, structuredOutput: true), Request());
+        Assert.DoesNotContain("response_format", unstructuredRequest.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("json_schema", unstructuredRequest.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Structured_contract_preserves_length_and_content_filter_finish_reasons()
+    {
+        var length = new ScriptedHandler(
+        [
+            Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"length\"}]}\n\n" +
+                "data: [DONE]\n\n")
+        ]);
+        var lengthEvents = await CollectAsync(
+            Create(length, structuredOutput: true),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [new ModelMessage(ModelRole.User, "Hi")],
+                ResponseContract: new ModelResponseContract(false)));
+        Assert.Equal(ModelStopReason.LengthLimit, Assert.IsType<ModelCompleted>(lengthEvents[^1]).Reason);
+        Assert.Contains("response_format", length.LastBody, StringComparison.Ordinal);
+
+        var filtered = new ScriptedHandler(
+        [
+            Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"content_filter\"}]}\n\n" +
+                "data: [DONE]\n\n")
+        ]);
+        var filterEvents = await CollectAsync(
+            Create(filtered, structuredOutput: true),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [new ModelMessage(ModelRole.User, "Hi")],
+                ResponseContract: new ModelResponseContract(false)));
+        Assert.Equal(ModelStopReason.ContentFiltered, Assert.IsType<ModelCompleted>(filterEvents[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task Structured_contract_preserves_tool_call_and_image_mapping()
+    {
+        var toolsBody =
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"knowledge_retrieve\",\"arguments\":\"{\\\"identity\\\":\\\"x\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n" +
+            "data: [DONE]\n\n";
+        var toolHandler = new ScriptedHandler([Encoding.UTF8.GetBytes(toolsBody)]);
+        var tools = new[]
+        {
+            new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Retrieve knowledge.", """{"type":"object"}""")
+        };
+        var toolEvents = await CollectAsync(
+            Create(toolHandler, structuredOutput: true, tools: true),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [new ModelMessage(ModelRole.User, "Hi")],
+                Tools: tools,
+                ResponseContract: new ModelResponseContract(false)));
+        Assert.NotNull(toolEvents.OfType<ModelToolCallEvent>().SingleOrDefault());
+        Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(toolEvents[^1]).Reason);
+        Assert.Contains("response_format", toolHandler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"tools\"", toolHandler.LastBody, StringComparison.Ordinal);
+
+        var png = Convert.ToBase64String("img"u8.ToArray());
+        var vision = new ScriptedHandler(
+        [
+            Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: [DONE]\n\n")
+        ]);
+        await CollectAsync(
+            Create(vision, structuredOutput: true, vision: true),
+            new ModelRequest(
+                Guid.NewGuid(),
+                [
+                    new ModelMessage(
+                        ModelRole.User,
+                        "see",
+                        [
+                            new ModelTextContent("see"),
+                            new ModelImageContent("image/png", "img"u8.ToArray(), "x.png")
+                        ])
+                ],
+                ResponseContract: new ModelResponseContract(false)));
+        Assert.Contains("image_url", vision.LastBody, StringComparison.Ordinal);
+        Assert.Contains($"data:image/png;base64,{png}", vision.LastBody, StringComparison.Ordinal);
+        Assert.Contains("response_format", vision.LastBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -890,7 +1023,20 @@ public sealed class OpenAICompatibleLanguageModelTests
         return events;
     }
 
-    private static OpenAICompatibleLanguageModel Create(HttpMessageHandler handler) =>
+    private static ScriptedHandler StopStream() =>
+        new(
+        [
+            Encoding.UTF8.GetBytes(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: [DONE]\n\n")
+        ]);
+
+    private static OpenAICompatibleLanguageModel Create(
+        HttpMessageHandler handler,
+        bool structuredOutput = false,
+        bool tools = false,
+        bool vision = false,
+        bool reasoningObject = false) =>
         new(
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
@@ -898,7 +1044,12 @@ public sealed class OpenAICompatibleLanguageModelTests
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
-                ApiKey = "test-key"
+                ApiKey = "test-key",
+                StructuredOutput = structuredOutput,
+                Tools = tools,
+                Vision = vision,
+                ReasoningObjectWire = reasoningObject,
+                ExcludeVisibleReasoning = reasoningObject
             });
 
     private static ModelRequest Request() =>

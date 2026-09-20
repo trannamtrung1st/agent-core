@@ -284,13 +284,15 @@ public sealed partial class SessionRuntime
         _input = snapshot.Mode == SessionMode.Voice ? InputActivity.Listening : InputActivity.Idle;
     }
 
-    private void RecoverProactiveHandleFailure(BrainReturned brain)
+    private async Task RecoverProactiveHandleFailureAsync(BrainReturned brain, CancellationToken cancellationToken)
     {
         if (brain.Trigger.Kind == TriggerKind.UserTurn || _activeResponseId != brain.ResponseId)
         {
             return;
         }
 
+        await FinishOwnedProgressAsync(brain.Context, ResponseProgressState.Failed, cancellationToken, brain.ResponseId)
+            .ConfigureAwait(false);
         var entryId = _activeEntryId;
         _responseCts?.Cancel();
         _responseCts?.Dispose();
@@ -310,6 +312,10 @@ public sealed partial class SessionRuntime
         _responseTerminal = true;
         _responseLifecycle = ResponseLifecycle.Failed;
         _outputActivity = OutputActivity.Idle;
+        _progressOwnerResponseId = null;
+        _progressLive = false;
+        _progressOperationId = null;
+        _progressStartedTimestamp = 0;
         if (brain.Trigger.Kind == TriggerKind.LongSilence)
         {
             _helpOfferedDuringSilence = false;
@@ -335,6 +341,10 @@ public sealed partial class SessionRuntime
         CancelBrainEvaluation();
         _deactivated = false;
         _activeResponseId = null;
+        _progressOwnerResponseId = null;
+        _progressLive = false;
+        _progressStartedTimestamp = 0;
+        _progressOperationId = null;
         _outputActivity = OutputActivity.Idle;
         _initiativeHeld = false;
         _proactiveBrainInFlight = false;
@@ -391,6 +401,11 @@ public sealed partial class SessionRuntime
         if (_activeResponseId is { } live)
         {
             await SupersedeAsync(context, live, cancellationToken, "deactivated").ConfigureAwait(false);
+        }
+        else
+        {
+            await FinishOwnedProgressAsync(context, ResponseProgressState.Failed, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         _outputActivity = OutputActivity.Idle;

@@ -8,4 +8,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AgentCore.Application.Tests" />
+    <InternalsVisibleTo Include="AgentCore.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="AgentCore.Api.Tests" />
+  </ItemGroup>
+
 </Project>

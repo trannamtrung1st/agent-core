@@ -165,7 +165,8 @@ export function ChatApp() {
     liveUserTranscript: state.liveUserTranscript,
     liveAssistantText: liveAssistant?.text,
     liveAssistantHasContent: Boolean(liveAssistant?.blocks?.length),
-    connectionError: state.error
+    connectionError: state.error,
+    activeProgress: state.activeProgress
   };
   const connectionText = conversationStatusLabel(statusSource);
   const profileText = `Profile: ${profile || "…"}`;

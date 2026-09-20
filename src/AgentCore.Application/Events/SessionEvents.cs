@@ -51,7 +51,8 @@ public sealed record AttachmentsProcessedReceived(
     int TurnGeneration,
     Guid ResponseId,
     AgentTrigger Trigger,
-    IReadOnlyList<AttachmentProcessResult> Results) : SessionInput(Context);
+    IReadOnlyList<AttachmentProcessResult> Results,
+    bool Failed = false) : SessionInput(Context);
 
 public sealed record ToolActivityReceived(
     EventContext Context,
@@ -304,6 +305,47 @@ public sealed record ErrorOutput(
     bool Fatal,
     TimeSpan? RetryAfter) : OutputPayload;
 
+public enum ResponseProgressKind
+{
+    Preparing,
+    ReadingAttachments,
+    RunningTool,
+    WaitingExternal,
+    Finalizing
+}
+
+public enum ResponseProgressState
+{
+    Started,
+    Updated,
+    Completed,
+    Failed
+}
+
+public sealed record ResponseProgressOutput(
+    ResponseProgressKind Kind,
+    ResponseProgressState State,
+    Guid? OperationId = null,
+    string? Message = null) : OutputPayload;
+
+public static class ResponseProgressMessages
+{
+    public const string ReadingAttachments = "Reading attachments…";
+    public const string RunningTools = "Running tools…";
+    public const string Finalizing = "Finalizing response…";
+    public const int MaxLength = 80;
+
+    public static string? Bound(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return message;
+        }
+
+        return message.Length <= MaxLength ? message : message[..MaxLength];
+    }
+}
+
 public sealed record CompletionIntentOutput(string Reason, bool Advisory) : OutputPayload;
 
 public interface ISessionOutput
@@ -346,9 +388,8 @@ public static class PublicHistory
                 .ToArray()
             : null;
         var speechText = entry.Role == ConversationRole.Assistant
-            && !string.IsNullOrEmpty(entry.Envelope?.SpeechText)
-                ? entry.Envelope.SpeechText
-                : null;
+            ? entry.Envelope?.PublicCustomSpeech()
+            : null;
         return new PublicHistoryEntry(
             entry.EntryId,
             entry.Sequence,

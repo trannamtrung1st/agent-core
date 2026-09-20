@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,6 +19,8 @@ public sealed class ModelCatalogFactoryTests
         Assert.Equal(["low", "medium", "high"], catalog.Get("scripted-alpha")!.SupportedReasoningEfforts);
         Assert.Equal("medium", catalog.Get("scripted-alpha")!.DefaultReasoningEffort);
         Assert.False(catalog.Get("scripted-beta")!.Reasoning);
+        Assert.False(catalog.Get("scripted-alpha")!.StructuredOutput);
+        Assert.True(catalog.Get("scripted-beta")!.StructuredOutput);
     }
 
     [Fact]
@@ -258,17 +261,129 @@ public sealed class ModelCatalogFactoryTests
                 AgentCore.Domain.Conversation.ModelSelectionSource.SystemDefault,
                 "medium"),
             ModelPurpose.Conversation);
-        Assert.Same(registered, resolved);
+        Assert.Same(registered, Unwrap(resolved));
         Assert.Same(
             registered,
-            resolver.Resolve(
+            Unwrap(resolver.Resolve(
                 new AgentCore.Domain.Conversation.SessionModelSelection(
                     "scripted-beta",
                     "primary-llm",
                     "scripted-beta",
                     AgentCore.Domain.Conversation.ModelSelectionSource.User,
                     null),
-                ModelPurpose.Initiative));
+                ModelPurpose.Initiative)));
+        Assert.False(resolved.Capabilities.StructuredOutput);
+    }
+
+    [Fact]
+    public void Resolver_structured_output_matches_the_catalog_descriptor()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
+        services.AddSingleton(TimeProvider.System);
+        var catalog = ModelCatalogFactory.Real();
+        var primary = new LanguageModelProviderOptions
+        {
+            Adapter = "OpenAICompatible",
+            BaseUrl = "http://127.0.0.1/v1/",
+            DefaultModel = ModelCatalogFactory.DeepSeekV41FlashModelId,
+            Tools = true,
+            Vision = false,
+            StructuredOutput = false
+        };
+        var resolver = new LanguageModelResolver(services.BuildServiceProvider(), "Real", primary, catalog);
+
+        var deepseek = resolver.Resolve(
+            new AgentCore.Domain.Conversation.SessionModelSelection(
+                ModelCatalogFactory.DeepSeekV41FlashKey,
+                "primary-llm",
+                ModelCatalogFactory.DeepSeekV41FlashModelId,
+                AgentCore.Domain.Conversation.ModelSelectionSource.SystemDefault,
+                "medium"),
+            ModelPurpose.Conversation);
+        var gpt = resolver.Resolve(
+            new AgentCore.Domain.Conversation.SessionModelSelection(
+                ModelCatalogFactory.Gpt4oMini20240718Key,
+                "primary-llm",
+                ModelCatalogFactory.Gpt4oMini20240718ModelId,
+                AgentCore.Domain.Conversation.ModelSelectionSource.User,
+                null),
+            ModelPurpose.Conversation);
+
+        Assert.False(catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.StructuredOutput);
+        Assert.True(catalog.Get(ModelCatalogFactory.Gpt4oMini20240718Key)!.StructuredOutput);
+        Assert.False(deepseek.Capabilities.StructuredOutput);
+        Assert.True(gpt.Capabilities.StructuredOutput);
+        Assert.True(gpt.Capabilities.Vision);
+        Assert.False(deepseek.Capabilities.Vision);
+        Assert.False(primary.StructuredOutput);
+        Assert.False(primary.Vision);
+    }
+
+    [Fact]
+    public void Synthetic_resolver_overlays_catalog_structured_output_on_the_registered_model()
+    {
+        var registered = new AgentCore.Infrastructure.Providers.Synthetic.ScriptedLanguageModel();
+        var services = new ServiceCollection();
+        services.AddSingleton<ILanguageModel>(registered);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Providers:ModelCatalog:DefaultKey"] = "scripted-alpha",
+                ["Providers:ModelCatalog:Models:0:Key"] = "scripted-alpha",
+                ["Providers:ModelCatalog:Models:0:DisplayName"] = "Scripted Alpha",
+                ["Providers:ModelCatalog:Models:0:ProviderAlias"] = "primary-llm",
+                ["Providers:ModelCatalog:Models:0:ModelId"] = "scripted-alpha",
+                ["Providers:ModelCatalog:Models:0:Tools"] = "true",
+                ["Providers:ModelCatalog:Models:0:Vision"] = "false",
+                ["Providers:ModelCatalog:Models:0:StructuredOutput"] = "true",
+                ["Providers:ModelCatalog:Models:0:Reasoning"] = "true"
+            })
+            .Build();
+        var catalog = ModelCatalogFactory.Create(
+            "Synthetic",
+            new LanguageModelProviderOptions { Adapter = "Scripted" },
+            configuration);
+        var resolver = new LanguageModelResolver(
+            services.BuildServiceProvider(),
+            "Synthetic",
+            new LanguageModelProviderOptions { Adapter = "Scripted" },
+            catalog);
+        var resolved = resolver.Resolve(
+            new AgentCore.Domain.Conversation.SessionModelSelection(
+                "scripted-alpha",
+                "primary-llm",
+                "scripted-alpha",
+                AgentCore.Domain.Conversation.ModelSelectionSource.SystemDefault,
+                "medium"),
+            ModelPurpose.Conversation);
+        Assert.True(catalog.Get("scripted-alpha")!.StructuredOutput);
+        Assert.False(registered.Capabilities.StructuredOutput);
+        Assert.True(resolved.Capabilities.StructuredOutput);
+        Assert.Same(registered, Unwrap(resolved));
+    }
+
+    private sealed class StubHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
+    }
+
+    private static ILanguageModel Unwrap(ILanguageModel model)
+    {
+        while (true)
+        {
+            switch (model)
+            {
+                case SemanticResponseLanguageModel semantic:
+                    model = semantic.Inner;
+                    continue;
+                case CatalogBoundLanguageModel bound:
+                    model = bound.Inner;
+                    continue;
+                default:
+                    return model;
+            }
+        }
     }
 
     private static IConfiguration RealCatalogConfiguration() =>

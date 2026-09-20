@@ -18,7 +18,7 @@ public sealed record PromptSections(
 public sealed class PromptContextBuilder
 {
     public const string VoiceModeOutputGuidance = """
-        Voice compatibility (temporary until P2B): place [[speech:<complete spoken content>]] before display content when the spoken version should differ. The marker alone supplies streaming speech; following content is shown on screen. Speak naturally: convey the point and, when useful, name the relevant on-screen detail so the listener can follow without hearing the whole document. For a long written answer with brief speech, keep the full answer on screen and put the conversational spoken response in the marker. Omit the marker only when the display itself is natural to say aloud. Without a marker, the runtime may speak the completed display as a fallback.
+        Speak naturally: convey the point and, when useful, name the relevant on-screen detail so the listener can follow without hearing the whole document. For a long written answer with brief speech, keep the full answer on screen. Spoken wording may match the display or differ; omit a separate spoken form when the display itself is natural to say aloud.
         """;
 
     public const int MaxHistoryEntries = 20;
