@@ -230,6 +230,8 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | POST /api/v2/host/sessions/{id}/lifecycle | Host-authoritative `LifecycleTransition`. Server sets source `Host` regardless of request `source`. Host completion bypasses user/agent policy bits |
 | GET /api/v2/models | Safe catalog: system `defaultKey` plus descriptors (key, display name, capabilities, supported/default reasoning effort). No secrets, provider alias, BaseUrl, or credentials |
 | POST /api/v2/sessions/{id}/speech-locale | Set or clear session speech override (`locale` BCP-47-like or null). Does not rewrite agent conversation `language`. Effective locale is public on GET and `session.ready` |
+| GET /api/v2/profile | Owner capability; returns local profile revision and allowlisted typed values with provenance (`source`) and per-field `updatedAt` |
+| PATCH /api/v2/profile | Owner capability; optimistic `expectedRevision`; allowlisted keys only; null/whitespace removes a field; server stamps `UserSet` (browser cannot set source) |
 | POST /api/v2/sessions/{id}/model | Catalog-level session model mutation (`key` Default or a catalog key, optional `reasoningEffort`). Server resolves and persists concrete `SessionModelSelection`. Rejects `SessionBusy` while generating. Terminal sessions are read-only |
 | GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
 | GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query, default `/`); owner capability |

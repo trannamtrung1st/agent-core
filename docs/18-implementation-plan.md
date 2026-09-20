@@ -229,7 +229,7 @@ P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f
 
 ## P2B — Validated model response envelope (observed)
 
-This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2C** is next; P2E is observed/frozen. Do not reopen P2B or P2E without a reproducible regression.
+This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2E** and **P2C** are observed/frozen. **P2-Final** is next. Do not reopen P2B, P2E, or P2C without a reproducible regression.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -243,7 +243,7 @@ This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2
 
 ## P2E — Multimodal image-input capability closure (observed)
 
-This table does not reopen P1, P2D, P2A, or P2B. **P2C** is next.
+This table does not reopen P1, P2D, P2A, or P2B. **P2-Final** is next.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -253,6 +253,19 @@ This table does not reopen P1, P2D, P2A, or P2B. **P2C** is next.
 | P2E verification | Full proposal §11 regressions plus §23 key-free gate and Compose on one freeze HEAD | **Observed** (P2E-4) |
 
 **P2E freeze:** key-free Synthetic + Compose verification green on the P2E freeze HEAD (2026-09-21; implementation commits `0eeb27c`–`a502266` plus this documentation revision on the same freeze HEAD). Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 75 passed; Infrastructure 181 passed / 12 skipped; Application 462 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 157 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed including `scripted-vision.spec.ts`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Hosted workflow run identity pending push to `origin/main`. Optional Real vision probe **SKIPPED — credentials unavailable**. Do not reopen P2E without a reproducible regression. Historical image re-inspection remains out of scope until P3 tool evolution.
+
+## P2C — Personalization boundary (observed)
+
+This table does not reopen P1, P2D, P2A, P2B, or P2E. **P2-Final** is next.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P2C persistence | Typed `UserProfileValue`/`UserProfileValueSource`; expanded allowlist; legacy string JSON compatibility; InMemory/SQLite parity | **Observed** (P2C-1) |
+| P2C mutation API | `ILocalUserProfileService`; owner `GET|PATCH /api/v2/profile`; optimistic revision; browser `UserSet` stamping | **Observed** (P2C-2) |
+| P2C live refresh | `ProfileUpdatedReceived` mailbox apply; SessionHost fan-out; stale/mismatch ignored; session revision unchanged | **Observed** (P2C-3) |
+| P2C verification | Proposal §20 profile regressions plus §23 key-free gate and Compose on one freeze HEAD | **Observed** (P2C-4) |
+
+**P2C freeze:** key-free Synthetic + Compose verification green on the P2C freeze HEAD (2026-09-21; implementation commits `4ae1095`–`c636b28` plus this documentation revision on the same freeze HEAD). Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 76 passed; Infrastructure 186 passed / 12 skipped; Application 470 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 161 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed (verification re-run after one flaky progress/session-switch failure in the initial full gate); `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Hosted workflow run identity pending push to `origin/main`. Optional Real probes **SKIPPED — credentials unavailable**. Do not reopen P2C without a reproducible regression. Memory-derived personalization and inferred facts remain P4-owned.
 
 ## Handoff rule
 
