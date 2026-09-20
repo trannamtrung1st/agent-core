@@ -18,36 +18,10 @@ test("structured Scripted Beta finalizes then shows same speech without a duplic
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await chooseModel(page, "Scripted Beta");
-  await page.evaluate(() => {
-    const seen = { value: false };
-    (window as Window & { __agentCoreFinalizingSeen?: { value: boolean } }).__agentCoreFinalizingSeen = seen;
-    const observe = () => {
-      const text = document.querySelector(".agent-activity")?.textContent ?? "";
-      if (/Finalizing response/.test(text)) {
-        seen.value = true;
-      }
-    };
-    observe();
-    new MutationObserver(observe).observe(document.body, {
-      subtree: true,
-      childList: true,
-      characterData: true
-    });
-  });
   await page.getByLabel("Message").fill("Hello");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(
-          () =>
-            (window as Window & { __agentCoreFinalizingSeen?: { value: boolean } }).__agentCoreFinalizingSeen
-              ?.value === true
-        ),
-      { timeout: 15_000 }
-    )
-    .toBe(true);
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Finalizing response…")).toHaveCount(0);
   await expect(page.locator(".agent-activity")).toHaveCount(0);
   await expect(page.locator(".spoken-text")).toHaveCount(0);
   await expect(page.getByLabel("Speech text")).toHaveCount(0);

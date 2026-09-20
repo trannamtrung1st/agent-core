@@ -44,6 +44,22 @@ public sealed class SemanticResponseMapperTests
     }
 
     [Fact]
+    public void Foreign_attachment_id_falls_back_when_not_in_session()
+    {
+        var foreignId = Guid.NewGuid().ToString("D");
+        var envelope = SemanticResponseMapper.ToEnvelope(
+            new ModelSemanticResponse(
+                "See file",
+                new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                [new ModelResponseBlock(ModelResponseBlockKind.AttachmentReference, AttachmentId: foreignId)]),
+            Guid.NewGuid(),
+            new FixtureArtifactReferenceAuthorizer(),
+            attachmentAllowed: _ => false);
+        Assert.Equal(ResponseEnvelopeParser.UnsupportedFallback, envelope.Blocks[0].FallbackText);
+        Assert.Null(envelope.Blocks[0].AttachmentId);
+    }
+
+    [Fact]
     public void Authorizes_fixture_artifact()
     {
         var envelope = SemanticResponseMapper.ToEnvelope(

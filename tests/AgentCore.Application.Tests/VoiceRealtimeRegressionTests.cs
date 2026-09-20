@@ -220,6 +220,58 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
+    public async Task Derived_same_mode_speech_survives_store_reopen_for_heard_context()
+    {
+        const string display = "The architecture has **three** pieces.";
+        const string spoken = "The architecture has three pieces.";
+        var store = new InMemoryMemoryStore();
+        var output = new CapturingSessionOutput();
+        var synthesizer = new RecordingSynthesizer();
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        Guid sessionId;
+        await using (var runtime = CreateVoice(
+                         output,
+                         new ScriptedLanguageModel([display]),
+                         synthesizer,
+                         store: store,
+                         brain: brain))
+        {
+            await runtime.AttachAsync();
+            sessionId = runtime.SessionId;
+            await runtime.SetModeAsync(SessionMode.Voice);
+            await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
+            await runtime.SubmitUserTextAsync("Explain");
+            var final = await output.WaitForAsync(item => item.Payload is AudioFrameOutput frame && frame.IsFinal);
+            await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "started", 0, 0);
+            await runtime.SubmitPlaybackAsync(final.ResponseId!.Value, "completed", runtime.SentSamples, 0);
+            await runtime.WaitUntilIdleAsync();
+            await runtime.DetachAsync();
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var paused = (await store.LoadAsync(sessionId))!;
+        var loaded = await PausedSessionReopen.ReopenAsync(store, paused, TimeProvider.System);
+        await using var restored = CreateVoice(
+            new CapturingSessionOutput(),
+            new ScriptedLanguageModel(),
+            new RecordingSynthesizer(),
+            store: store,
+            snapshot: loaded,
+            brain: brain);
+        await restored.AttachAsync();
+        await restored.SetModeAsync(SessionMode.Voice);
+        await restored.SubmitUserTextAsync("Follow up");
+        await restored.WaitUntilIdleAsync();
+        var firstAssistant = restored.Snapshot.Entries.First(
+            entry => entry.Role == ConversationRole.Assistant && entry.Text == display);
+        Assert.Equal(spoken, firstAssistant.Envelope!.SpeechText);
+        Assert.Equal(spoken, PromptContextBuilder.EligibleAssistantText(firstAssistant));
+        var assistantInPrompt = brain.Contexts[^1].History.First(
+            entry => entry.Role == ConversationRole.Assistant && entry.Text == display);
+        Assert.Equal(spoken, PromptContextBuilder.EligibleAssistantText(assistantInPrompt));
+    }
+
+    [Fact]
     public async Task Fully_heard_markdown_assistant_uses_speech_coordinates_in_next_prompt()
     {
         const string display = "The architecture has **three** pieces.";

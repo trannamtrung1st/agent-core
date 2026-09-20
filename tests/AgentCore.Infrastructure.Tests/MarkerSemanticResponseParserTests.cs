@@ -9,6 +9,17 @@ public sealed class MarkerSemanticResponseParserTests
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
+    public void Speech_none_marker_maps_to_none_mode()
+    {
+        var parsed = MarkerSemanticResponseParser.Parse(
+            "Chart only.[[speech:none]]",
+            finalize: true);
+        Assert.Equal("Chart only.", parsed.DisplayText);
+        Assert.Equal(ModelSpeechMode.None, parsed.Speech.Mode);
+        Assert.Null(parsed.Speech.Text);
+    }
+
+    [Fact]
     public void Strips_markers_and_keeps_display_independent_of_speech()
     {
         var parsed = MarkerSemanticResponseParser.Parse(

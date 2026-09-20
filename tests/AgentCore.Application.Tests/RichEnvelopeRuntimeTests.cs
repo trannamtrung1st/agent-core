@@ -192,19 +192,40 @@ public sealed class RichEnvelopeRuntimeTests
     public async Task Attachment_reference_block_is_distinct_from_display_text()
     {
         var output = new CapturingSessionOutput();
-        var model = new ScriptedLanguageModel(["See file.[[attachment:notes.txt]]"]);
-        await using var runtime = Create(output, new InMemoryMemoryStore(), model);
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var sessionId = Guid.Parse("019944af-0000-7000-8000-000000000001");
+        var uploaded = await attachments.UploadPendingAsync(sessionId, "notes.txt", "text/plain", new MemoryStream("notes"u8.ToArray()), allowStoreUnread: true);
+        var attachmentId = uploaded.AttachmentId;
+        var model = new ScriptedLanguageModel([$"See file.[[attachment:{attachmentId:D}]]"]);
+        var snapshot = new SessionSnapshot(
+            1,
+            sessionId,
+            1,
+            SampleDefinitions.Examiner,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            LocalUserProfile.Id,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+        await using var runtime = Create(output, new InMemoryMemoryStore(), model, snapshot, attachments: attachments);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("See file.", assistant.Text);
-        Assert.Contains(assistant.Envelope!.Blocks, block => block.Kind == ResponseBlockKind.AttachmentReference && block.AttachmentId == "notes.txt");
+        Assert.Contains(
+            assistant.Envelope!.Blocks,
+            block => block.Kind == ResponseBlockKind.AttachmentReference && block.AttachmentId == attachmentId.ToString("D"));
         Assert.True(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length, blockIds: assistant.Envelope.Blocks.Select(block => block.BlockId).ToArray()));
         await runtime.WaitUntilMailboxDrainedAsync();
         var visible = PublicHistory.FromEntry(runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant));
         Assert.Equal("See file.", visible.Text);
-        Assert.Contains(visible.Blocks, block => block.Kind == "attachment" && block.AttachmentId == "notes.txt");
+        Assert.Contains(visible.Blocks, block => block.Kind == "attachment" && block.AttachmentId == attachmentId.ToString("D"));
     }
 
     [Fact]
@@ -240,7 +261,8 @@ public sealed class RichEnvelopeRuntimeTests
         ILanguageModel model,
         SessionSnapshot? snapshot = null,
         ISpeechSynthesizer? synthesizer = null,
-        bool voice = false)
+        bool voice = false,
+        IAttachmentStore? attachments = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -277,7 +299,8 @@ public sealed class RichEnvelopeRuntimeTests
             time,
             NullLogger<SessionRuntime>.Instance,
             recognizer: synthesizer is null ? null : new SyntheticSpeechRecognizer(),
-            synthesizer: synthesizer);
+            synthesizer: synthesizer,
+            attachments: attachments);
     }
 
     private sealed class RecordingSynthesizer : ISpeechSynthesizer

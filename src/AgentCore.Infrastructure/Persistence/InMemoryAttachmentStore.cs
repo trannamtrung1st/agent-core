@@ -356,6 +356,9 @@ public sealed class InMemoryAttachmentStore(TimeProvider time) : IAttachmentStor
         return ValueTask.FromResult(items);
     }
 
+    public bool Exists(Guid sessionId, Guid attachmentId) =>
+        _items.TryGetValue(attachmentId, out var record) && record.SessionId == sessionId;
+
     public ValueTask<AttachmentRecord?> GetAsync(
         Guid sessionId,
         Guid attachmentId,

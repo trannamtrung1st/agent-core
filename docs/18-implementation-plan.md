@@ -216,7 +216,7 @@ P2D key-free gate (2026-09-19): Domain 42; Infrastructure 120 passed / 10 skippe
 
 ## P2A — First-class progress vs final assistant output (observed)
 
-This table does not reopen P1 or P2D. P2B is observed separately.
+This table does not reopen P1 or P2D. P2B is tracked separately and is not frozen on `0906097`.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -227,19 +227,19 @@ This table does not reopen P1 or P2D. P2B is observed separately.
 
 P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree (new-run evidence; no retired-run artifact). `npm ci` in `tests/realtime-js`; Domain 64; Infrastructure 133 passed / 12 skipped; Application 436 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web `pnpm install --frozen-lockfile`, 376 unit tests, production build; `CI=1 pnpm exec playwright test` 36 passed including `progress is visible, replaced, cleared on final, reload, disconnect, and session switch`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Optional Real-provider probes were not run.
 
-## P2B — Validated model response envelope (observed)
+## P2B — Validated model response envelope (pending closure)
 
 This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
-| P2B speech semantics | Domain `same`/`custom`/`none`; backward-compatible persisted `speechText` | **Observed** |
-| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover | **Observed** |
-| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility markers only in Infrastructure | **Observed** |
-| P2B UI/e2e | Speech text vs Spoken; structured Finalizing then display; Alpha without visible markers | **Observed** |
-| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Observed** (P2B-7) |
+| P2B speech semantics | Domain `same`/`custom`/`none`; legacy `speechText`; `speech.text` on `same` when playback coordinate differs from display | **Implemented** (local); reopen gate pending |
+| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover | **Implemented** (local) |
+| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility markers only in Infrastructure; `[[speech:none]]`; reject speech-only fallback | **Implemented** (local) |
+| P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (local); full Playwright gate pending |
+| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending** (post-`0906097` review fixes) |
 
-P2B key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus this working tree (new-run evidence). `npm ci` in `tests/realtime-js`; Domain 76; Infrastructure 165 passed / 12 skipped; Application 454 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web `pnpm install --frozen-lockfile`, 379 unit tests, production build; `CI=1 pnpm exec playwright test` 39 passed including `structured Scripted Beta finalizes then shows same speech without a duplicate section`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were skipped (no process `OPENROUTER_API_KEY` / `OPENAI_API_KEY`) and are not claimed verified. Freeze at proposal section 36.
+P2B on commit `0906097` is **not frozen**. A follow-up working tree closes review blockers (same-mode derived speech persistence, fallback `displayText` validation, session attachment authorization, compatibility `none`, Finalizing progress timing). Re-run the full key-free Synthetic plus Compose gate before marking P2B observed again. Prior evidence on `5effbb5` plus the pre-review tree remains historical only.
 
 ## Handoff rule
 

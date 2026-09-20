@@ -22,7 +22,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
         var output = new CapturingSessionOutput();
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var spoken = string.Concat(ScriptedLanguageModel.LongerChunks);
-        await using var runtime = Create(output, new ScriptedLanguageModel([$"[[speech:{spoken}]]"], hold));
+        await using var runtime = Create(output, new ScriptedLanguageModel([$"[[speech:{spoken}]]\n{spoken}"], hold));
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);

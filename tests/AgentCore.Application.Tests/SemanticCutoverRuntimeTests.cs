@@ -55,11 +55,10 @@ public sealed class SemanticCutoverRuntimeTests
         Assert.Equal(EntryStatus.Failed, assistant.Status);
         Assert.Null(assistant.Envelope);
         Assert.DoesNotContain("{", assistant.Text, StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             output.Items,
             item => item.Payload is ResponseProgressOutput progress
-                && progress.Kind == ResponseProgressKind.Finalizing
-                && progress.State == ResponseProgressState.Started);
+                && progress.Kind == ResponseProgressKind.Finalizing);
     }
 
     [Fact]

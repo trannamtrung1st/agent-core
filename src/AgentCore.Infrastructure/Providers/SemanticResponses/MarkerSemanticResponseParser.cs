@@ -27,6 +27,13 @@ internal sealed class MarkerSemanticResponseParser
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(parsed.DisplayText))
+        {
+            response = null;
+            safeFailure = "Malformed assistant envelope.";
+            return false;
+        }
+
         var remainder = AdvanceDisplay(parsed.DisplayText);
         if (remainder.Length > 0)
         {
@@ -47,7 +54,9 @@ internal sealed class MarkerSemanticResponseParser
     public bool TryPeekSpeechReady(out ModelSemanticResponse? response)
     {
         var parsed = Parse(_raw.ToString(), finalize: false);
-        if (parsed.Speech.Mode != ModelSpeechMode.Custom || string.IsNullOrEmpty(parsed.Speech.Text))
+        if (parsed.Speech.Mode != ModelSpeechMode.Custom
+            || string.IsNullOrEmpty(parsed.Speech.Text)
+            || string.IsNullOrWhiteSpace(parsed.DisplayText))
         {
             response = null;
             return false;
@@ -96,6 +105,7 @@ internal sealed class MarkerSemanticResponseParser
         var display = new StringBuilder();
         var blocks = new List<ModelResponseBlock>();
         string? speech = null;
+        var speechNone = false;
         var index = 0;
         while (index < work.Length)
         {
@@ -119,7 +129,14 @@ internal sealed class MarkerSemanticResponseParser
             var payload = colon < 0 ? string.Empty : inner[(colon + 1)..];
             if (kind.Equals("speech", StringComparison.OrdinalIgnoreCase))
             {
-                speech ??= payload;
+                if (payload.Equals("none", StringComparison.OrdinalIgnoreCase))
+                {
+                    speechNone = true;
+                }
+                else if (payload.Length > 0)
+                {
+                    speech ??= payload;
+                }
             }
             else if (kind.Equals("md", StringComparison.OrdinalIgnoreCase)
                 || kind.Equals("markdown", StringComparison.OrdinalIgnoreCase))
@@ -145,6 +162,11 @@ internal sealed class MarkerSemanticResponseParser
             }
 
             index = end + 2;
+        }
+
+        if (speechNone)
+        {
+            return new ModelSemanticResponse(display.ToString(), new ModelSpeechProjection(ModelSpeechMode.None, null), blocks);
         }
 
         var spoken = string.IsNullOrEmpty(speech) ? null : speech;

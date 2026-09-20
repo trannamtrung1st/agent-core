@@ -51,7 +51,7 @@ public sealed class SpeechPlaybackTests
     public async Task Empty_final_marker_does_not_advance_sample_offset()
     {
         var output = new CapturingSessionOutput();
-        await using var runtime = Create(output, new ScriptedLanguageModel(["   "]));
+        await using var runtime = Create(output, new ScriptedLanguageModel(["[[speech:none]]\nVisual only."]));
         await runtime.AttachAsync();
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);

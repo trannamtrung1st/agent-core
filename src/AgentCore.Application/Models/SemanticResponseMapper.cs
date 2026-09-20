@@ -30,15 +30,6 @@ public static class SemanticResponseMapper
             _ => ResponseSpeechMode.Same
         };
         var display = semantic.DisplayText ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(display))
-        {
-            return new ResponseEnvelope(
-                display,
-                mode == ResponseSpeechMode.Custom ? speech.Text : null,
-                blocks,
-                mode);
-        }
-
         return ResponseEnvelope.Create(
             display,
             new ResponseSpeech(mode, mode == ResponseSpeechMode.Custom ? speech.Text : null),

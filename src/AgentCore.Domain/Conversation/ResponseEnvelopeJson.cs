@@ -15,9 +15,10 @@ public static class ResponseEnvelopeJson
     public static string Serialize(ResponseEnvelope envelope)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        envelope = NormalizeForPersistence(envelope);
         var dto = new EnvelopeDto(
             envelope.DisplayText,
-            new SpeechDto(ToWire(envelope.SpeechMode), envelope.SpeechMode == ResponseSpeechMode.Custom ? envelope.SpeechText : null),
+            new SpeechDto(ToWire(envelope.SpeechMode), WireSpeechText(envelope)),
             envelope.Blocks);
         return JsonSerializer.Serialize(dto, Json);
     }
@@ -77,13 +78,38 @@ public static class ResponseEnvelopeJson
         }
         catch (ArgumentException)
         {
-            return new ResponseEnvelope(
-                display,
-                mode == ResponseSpeechMode.Custom ? text : null,
-                blocks,
-                mode);
+            return new ResponseEnvelope(display, RestoreSpeechText(mode, text), blocks, mode);
         }
     }
+
+    private static ResponseEnvelope NormalizeForPersistence(ResponseEnvelope envelope)
+    {
+        if (envelope.SpeechMode == ResponseSpeechMode.Custom
+            && string.Equals(envelope.SpeechText?.Trim(), envelope.DisplayText.Trim(), StringComparison.Ordinal))
+        {
+            return envelope with { SpeechMode = ResponseSpeechMode.Same, SpeechText = null };
+        }
+
+        return envelope;
+    }
+
+    private static string? WireSpeechText(ResponseEnvelope envelope) => envelope.SpeechMode switch
+    {
+        ResponseSpeechMode.Custom => envelope.SpeechText,
+        ResponseSpeechMode.Same when HasDerivedPlaybackCoordinate(envelope) => envelope.SpeechText,
+        _ => null
+    };
+
+    private static bool HasDerivedPlaybackCoordinate(ResponseEnvelope envelope) =>
+        !string.IsNullOrEmpty(envelope.SpeechText)
+        && !string.Equals(envelope.SpeechText, envelope.DisplayText, StringComparison.Ordinal);
+
+    private static string? RestoreSpeechText(ResponseSpeechMode mode, string? text) => mode switch
+    {
+        ResponseSpeechMode.Custom => text,
+        ResponseSpeechMode.Same when !string.IsNullOrEmpty(text) => text,
+        _ => null
+    };
 
     private static string ToWire(ResponseSpeechMode mode) => mode switch
     {

@@ -79,7 +79,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _usesResponseContract;
     private bool _structuredOutput;
     private bool _semanticReady;
-    private Guid? _finalizingOperationId;
     private int _publishedDisplayLength;
     private string? _publishedSpeechProjection;
     private bool _voiceSpeechResolved;
@@ -1431,7 +1430,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _usesResponseContract = true;
         _semanticReady = false;
         _structuredOutput = false;
-        _finalizingOperationId = null;
         _publishedDisplayLength = 0;
         _publishedSpeechProjection = null;
         _voiceSpeechResolved = false;
@@ -1463,19 +1461,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var model = ResolveSessionModel(
             input.Trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
         _structuredOutput = model.Capabilities.StructuredOutput;
-        if (_structuredOutput)
-        {
-            _finalizingOperationId = _ids.NewId();
-            await PublishProgressAsync(
-                    input.Context,
-                    input.ResponseId,
-                    ResponseProgressKind.Finalizing,
-                    ResponseProgressState.Started,
-                    _finalizingOperationId.Value,
-                    ResponseProgressMessages.Finalizing,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
         BeginWork();
         var responseToken = _responseCts.Token;
         _ = Task.Run(async () =>
@@ -2787,6 +2772,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelSemanticResponse semantic,
         CancellationToken cancellationToken)
     {
+        Guid? finalizingOperationId = null;
+        if (_structuredOutput)
+        {
+            finalizingOperationId = _ids.NewId();
+            await PublishProgressAsync(
+                    context,
+                    responseId,
+                    ResponseProgressKind.Finalizing,
+                    ResponseProgressState.Started,
+                    finalizingOperationId.Value,
+                    ResponseProgressMessages.Finalizing,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         ResponseEnvelope mapped;
         try
         {
@@ -2798,6 +2798,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (ArgumentException)
         {
+            if (finalizingOperationId is { } failedOp)
+            {
+                await PublishProgressAsync(
+                        context,
+                        responseId,
+                        ResponseProgressKind.Finalizing,
+                        ResponseProgressState.Failed,
+                        failedOp,
+                        ResponseProgressMessages.Finalizing,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             _envelope = null;
             _accumulator.Reset();
             await CompleteAsync(context, responseId, failed: true, cancellationToken).ConfigureAwait(false);
@@ -2807,18 +2820,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _semanticReady = true;
         _envelope = mapped;
         _accumulator.Replace(mapped.DisplayText);
-        if (_finalizingOperationId is { } op)
+        if (finalizingOperationId is { } completedOp)
         {
             await PublishProgressAsync(
                     context,
                     responseId,
                     ResponseProgressKind.Finalizing,
                     ResponseProgressState.Completed,
-                    op,
+                    completedOp,
                     ResponseProgressMessages.Finalizing,
                     cancellationToken)
                 .ConfigureAwait(false);
-            _finalizingOperationId = null;
         }
 
         await PublishEnvelopeProgressAsync(context, responseId, finalize: false, cancellationToken)
@@ -2846,7 +2858,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return false;
         }
 
-        return true;
+        if (FixtureAttachmentReferenceAuthorizer.IsAuthorized(attachmentId))
+        {
+            return true;
+        }
+
+        if (_attachments is not null
+            && Guid.TryParse(attachmentId, out var id)
+            && _attachments.Exists(_snapshot.SessionId, id))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static bool LooksLikeUnsafeAttachment(string attachmentId) =>
@@ -3183,7 +3207,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _usesResponseContract = false;
         _semanticReady = false;
         _structuredOutput = false;
-        _finalizingOperationId = null;
         _responseCts?.Dispose();
         _responseCts = null;
         _ttsCts?.Dispose();

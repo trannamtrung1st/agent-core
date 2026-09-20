@@ -311,7 +311,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         if (lastUser.Contains("[test:rich-envelope]", StringComparison.OrdinalIgnoreCase))
         {
-            return """{"displayText":"Shown display.","speech":{"mode":"custom","text":"Hidden speech"},"blocks":[{"kind":"markdown","text":"**Extra block**"},{"kind":"attachmentReference","attachmentId":"notes.txt"},{"kind":"artifactReference","artifactId":"fixture-artifact-1"}]}""";
+            return """{"displayText":"Shown display.","speech":{"mode":"custom","text":"Hidden speech"},"blocks":[{"kind":"markdown","text":"**Extra block**"},{"kind":"attachmentReference","attachmentId":"fixture-attachment-1"},{"kind":"artifactReference","artifactId":"fixture-artifact-1"}]}""";
         }
 
         var display = string.Concat(chunks);
@@ -334,7 +334,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             return
             [
-                "Shown display.[[speech:Hidden speech]][[md:**Extra block**]][[attachment:notes.txt]][[artifact:"
+                "Shown display.[[speech:Hidden speech]][[md:**Extra block**]][[attachment:fixture-attachment-1]][[artifact:"
                     + FixtureArtifactReferenceAuthorizer.AuthorizedId
                     + "]][[xyz:nope]]"
             ];

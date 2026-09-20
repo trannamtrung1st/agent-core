@@ -99,8 +99,18 @@ public sealed record AttachmentRecord(
     DateTimeOffset? ExpiresAt,
     DateTimeOffset? BoundAt);
 
+public static class FixtureAttachmentReferenceAuthorizer
+{
+    public const string AuthorizedId = "fixture-attachment-1";
+
+    public static bool IsAuthorized(string attachmentId) =>
+        string.Equals(attachmentId, AuthorizedId, StringComparison.Ordinal);
+}
+
 public interface IAttachmentStore
 {
+    bool Exists(Guid sessionId, Guid attachmentId);
+
     ValueTask<AttachmentRecord> UploadPendingAsync(
         Guid sessionId,
         string displayName,

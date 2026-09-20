@@ -249,6 +249,11 @@ async function selectCustomerSupport(page: Page): Promise<void> {
   await page.getByTitle(/Sam —/).click();
 }
 
+async function chooseScriptedAlpha(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Model" }).click();
+  await page.getByTitle("Scripted Alpha").click();
+}
+
 async function expectHistoryOmitsProgress(page: Page): Promise<void> {
   const bodies = page.locator(".chat-message-user, .chat-message-assistant");
   const count = await bodies.count();
@@ -266,6 +271,7 @@ test("progress is visible, replaced, cleared on final, reload, disconnect, and s
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await selectCustomerSupport(page);
+  await chooseScriptedAlpha(page);
   await page.locator("input.attach-input").setInputFiles({
     name: "notes.txt",
     mimeType: "text/plain",

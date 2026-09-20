@@ -136,6 +136,33 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     [Fact]
+    public async Task Compatibility_speech_only_without_display_is_invalid_response()
+    {
+        var inner = new ScriptedInner(
+        [
+            new ModelTextDelta("[[speech:Spoken only]]"),
+            new ModelCompleted(ModelStopReason.Completed)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        Assert.Equal(ProviderErrorCode.InvalidResponse, Assert.Single(events.OfType<ModelFailed>()).Failure.Code);
+        Assert.DoesNotContain(events, item => item is ModelSemanticResponseReady);
+    }
+
+    [Fact]
+    public async Task Compatibility_none_marker_becomes_none()
+    {
+        var inner = new ScriptedInner(
+        [
+            new ModelTextDelta("Chart only.[[speech:none]]"),
+            new ModelCompleted(ModelStopReason.Completed)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Chart only.", ready.DisplayText);
+        Assert.Equal(ModelSpeechMode.None, ready.Speech.Mode);
+    }
+
+    [Fact]
     public async Task Compatibility_speech_marker_becomes_custom()
     {
         var inner = new ScriptedInner(

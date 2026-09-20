@@ -22,6 +22,7 @@ internal static class AssistantResponseSchema
         return CompatibilityInstructionPrefix
             + speech
             + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
+            + "Use [[speech:none]] when the answer must stay visual-only. "
             + "Optional rich blocks use [[md:...]], [[attachment:<id>]], or [[artifact:<id>]]. "
             + "Do not include hidden reasoning. Do not emit JSON.";
     }

@@ -805,6 +805,27 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Same_mode_derived_speech_survives_sqlite_reopen()
+    {
+        await using var harness = await SqliteAsync();
+        const string display = "The architecture has **three** pieces.";
+        const string spoken = "The architecture has three pieces.";
+        var envelope = new ResponseEnvelope(display, spoken, [], ResponseSpeechMode.Same);
+        var entry = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, display) with
+        {
+            Envelope = envelope,
+            HeardTextEndExclusive = spoken.Length
+        };
+        var snapshot = First() with { Entries = [entry] };
+        await harness.Store.SaveAsync(snapshot, 0);
+        var loaded = await harness.Store.LoadAsync(snapshot.SessionId);
+        var restored = Assert.Single(loaded!.Entries);
+        Assert.Equal(ResponseSpeechMode.Same, restored.Envelope!.SpeechMode);
+        Assert.Equal(spoken, restored.Envelope.SpeechText);
+        Assert.Equal(spoken.Length, restored.HeardTextEndExclusive);
+    }
+
+    [Fact]
     public async Task Legacy_speech_text_envelope_json_reopens_as_custom_and_is_not_rewritten_when_unchanged()
     {
         await using var harness = await SqliteAsync();
