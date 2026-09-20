@@ -192,14 +192,34 @@ public sealed class AttachmentProcessingRuntimeTests
             "text/plain",
             new MemoryStream("bbb"u8.ToArray()),
             false);
-        Assert.True(await runtime.SubmitUserTextAsync("turnA", attachmentIds: [uploadedA.AttachmentId]));
-        await WaitForProcessingAttachmentsAsync(output);
-        Assert.True(await runtime.SubmitUserTextAsync("turnB", attachmentIds: [uploadedB.AttachmentId]));
-        await WaitForProcessingAttachmentsAsync(output);
+        var eventA = Guid.NewGuid();
+        var eventB = Guid.NewGuid();
+        Assert.True(await runtime.SubmitUserTextAsync(
+            "turnA",
+            sourceEventId: eventA,
+            attachmentIds: [uploadedA.AttachmentId]));
+        await output.WaitForAsync(item =>
+            item.Context.CausationId == eventA
+            && item.Payload is StateChangedOutput state
+            && state.OutputState == nameof(OutputActivity.ProcessingAttachments));
+        Assert.True(await runtime.SubmitUserTextAsync(
+            "turnB",
+            sourceEventId: eventB,
+            attachmentIds: [uploadedB.AttachmentId]));
+        await output.WaitForAsync(item =>
+            item.Context.CausationId == eventB
+            && item.Payload is StateChangedOutput state
+            && state.OutputState == nameof(OutputActivity.ProcessingAttachments));
+        var outputsAfterTurnBProcessing = output.Items.Count;
         Assert.Equal(OutputActivity.ProcessingAttachments, runtime.Output);
         gateA.TrySetResult([]);
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(OutputActivity.ProcessingAttachments, runtime.Output);
+        Assert.DoesNotContain(
+            output.Items.Skip(outputsAfterTurnBProcessing),
+            item => item.Context.CausationId == eventA
+                && item.Payload is StateChangedOutput state
+                && state.OutputState == nameof(OutputActivity.Idle));
         gateB.TrySetResult([]);
         using var completedCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, completedCts.Token);
@@ -237,10 +257,6 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.NotEqual(OutputActivity.ProcessingAttachments, runtime.Output);
         Assert.Equal(OutputActivity.Idle, runtime.Output);
     }
-
-    private static Task WaitForProcessingAttachmentsAsync(CapturingSessionOutput output) =>
-        output.WaitForAsync(item => item.Payload is StateChangedOutput state
-            && state.OutputState == nameof(OutputActivity.ProcessingAttachments));
 
     private static SessionRuntime CreateRuntime(
         ISessionOutput output,
