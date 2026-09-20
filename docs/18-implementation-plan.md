@@ -216,7 +216,7 @@ P2D key-free gate (2026-09-19): Domain 42; Infrastructure 120 passed / 10 skippe
 
 ## P2A — First-class progress vs final assistant output (observed)
 
-This table does not reopen P1 or P2D. P2B is tracked separately and is not frozen on `0906097`.
+This table does not reopen P1 or P2D. P2B is code-complete on `2561949` pending a green freeze gate.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -227,19 +227,19 @@ This table does not reopen P1 or P2D. P2B is tracked separately and is not froze
 
 P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree (new-run evidence; no retired-run artifact). `npm ci` in `tests/realtime-js`; Domain 64; Infrastructure 133 passed / 12 skipped; Application 436 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 155; web `pnpm install --frozen-lockfile`, 376 unit tests, production build; `CI=1 pnpm exec playwright test` 36 passed including `progress is visible, replaced, cleared on final, reload, disconnect, and session switch`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). Optional Real-provider probes were not run.
 
-## P2B — Validated model response envelope (pending closure)
+## P2B — Validated model response envelope (pending freeze gate)
 
 This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
-| P2B speech semantics | Domain `same`/`custom`/`none`; legacy `speechText`; `speech.text` on `same` when playback coordinate differs from display | **Implemented** (local); reopen gate pending |
-| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover | **Implemented** (local) |
-| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility markers only in Infrastructure; `[[speech:none]]`; reject speech-only fallback | **Implemented** (local) |
-| P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (local); full Playwright gate pending |
-| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending** (post-`0906097` review fixes) |
+| P2B speech semantics | Domain `same`/`custom`/`none`; legacy `speechText`; `speech.text` on `same` when playback coordinate differs from display; rejected custom normalizes to effective `same`/`none` | **Implemented** (`2561949`) |
+| P2B semantic contract | `ModelResponseContract`, `ModelDisplayDelta` / `ModelSemanticResponseReady`; SessionRuntime cutover; public `speechText` custom-only; `agent.speech.projection` `mode` | **Implemented** (`2561949`) |
+| P2B Infrastructure | Native JSON when catalog `StructuredOutput`; compatibility first-wins `[[speech:]]` including `[[speech:none]]`; `SemanticMatches` speech guard | **Implemented** (`2561949`) |
+| P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (`2fc96e6` gate: 379 Vitest, 39 Playwright) |
+| P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending freeze** on green CI for `2561949` (local: Domain 75, Infrastructure 178/12 skip, Application 457 blame-hang, API 155) |
 
-P2B on commit `6b58c01` is **not frozen**. The post-`0906097` review blockers are closed in tree; a further pass adds first-wins compatibility `[[speech:]]` parsing (aligned with early peek publication), `SemanticMatches` speech comparison as a safety net, and envelope attachment authorization from bound conversation ids plus `fixture-attachment-1` (no synchronous attachment-store lookup on the Session Runtime mailbox). Re-run the full key-free Synthetic plus Compose gate before marking P2B observed again. Prior evidence on `5effbb5` / `0906097` remains historical only.
+P2B implementation is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on that commit (or its merge HEAD). Closure includes envelope persistence/review fixes (`583f021`–`a8f41f7`), public custom-only `speechText` and projection `mode` (`2fc96e6`), and superseded attachment idle/output regressions (`aedb32b`–`2561949`). Prior gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
 
 ## Handoff rule
 
