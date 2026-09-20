@@ -153,6 +153,7 @@ public static class InfrastructureServiceCollectionExtensions
             };
         });
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
+        services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();

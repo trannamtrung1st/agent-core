@@ -23,6 +23,7 @@ public sealed class SessionManager
     private readonly ISessionWorkspace? _workspace;
     private readonly IArtifactStore? _artifacts;
     private readonly IModelCatalog? _models;
+    private readonly ILocalUserProfileService _localProfiles;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -34,7 +35,8 @@ public sealed class SessionManager
         RoleKnowledgeService? knowledge = null,
         ISessionWorkspace? workspace = null,
         IArtifactStore? artifacts = null,
-        IModelCatalog? models = null)
+        IModelCatalog? models = null,
+        ILocalUserProfileService? localProfiles = null)
     {
         _definitions = definitions;
         _store = store;
@@ -46,6 +48,7 @@ public sealed class SessionManager
         _workspace = workspace;
         _artifacts = artifacts;
         _models = models;
+        _localProfiles = localProfiles ?? new LocalUserProfileService(store, time);
     }
 
     public async Task<SessionSnapshot> CreateAsync(
@@ -577,67 +580,8 @@ public sealed class SessionManager
         }
     }
 
-    private async Task<UserProfile> EnsureLocalProfileAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var existing = await _store.LoadProfileAsync(LocalUserProfile.Id, cancellationToken).ConfigureAwait(false);
-        if (existing is not null)
-        {
-            LocalUserProfile.Validate(existing.Preferences);
-            if (!LocalUserProfile.InventedPreferredNameNeedsRemoval(existing.Preferences))
-            {
-                return existing;
-            }
-
-            var cleaned = new UserProfile(
-                existing.ProfileId,
-                existing.Revision + 1,
-                LocalUserProfile.WithoutInventedPreferredName(existing.Preferences),
-                now);
-            LocalUserProfile.Validate(cleaned.Preferences);
-            try
-            {
-                await _store.SaveProfileAsync(cleaned, existing.Revision, cancellationToken).ConfigureAwait(false);
-                return cleaned;
-            }
-            catch (AgentCoreException ex) when (ex.Code == "Conflict")
-            {
-                var raced = await _store.LoadProfileAsync(LocalUserProfile.Id, cancellationToken).ConfigureAwait(false);
-                if (raced is null)
-                {
-                    throw;
-                }
-
-                LocalUserProfile.Validate(raced.Preferences);
-                return raced with
-                {
-                    Preferences = LocalUserProfile.WithoutInventedPreferredName(raced.Preferences)
-                };
-            }
-        }
-
-        var created = new UserProfile(
-            LocalUserProfile.Id,
-            1,
-            LocalUserProfile.CreateDefaultSeed(now),
-            now);
-        LocalUserProfile.Validate(created.Preferences);
-        try
-        {
-            await _store.SaveProfileAsync(created, 0, cancellationToken).ConfigureAwait(false);
-            return created;
-        }
-        catch (AgentCoreException ex) when (ex.Code == "Conflict")
-        {
-            var raced = await _store.LoadProfileAsync(LocalUserProfile.Id, cancellationToken).ConfigureAwait(false);
-            if (raced is null)
-            {
-                throw;
-            }
-
-            LocalUserProfile.Validate(raced.Preferences);
-            return raced;
-        }
-    }
+    private async Task<UserProfile> EnsureLocalProfileAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+        await _localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
 
     public async Task<IReadOnlyList<PublicAgentDescriptor>> ListAgentsAsync(
         CancellationToken cancellationToken = default)

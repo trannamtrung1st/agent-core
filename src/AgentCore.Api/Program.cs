@@ -89,6 +89,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHub<SessionHub>("/hubs/session");
 SessionCatalogEndpoints.Map(app);
+ProfileEndpoints.Map(app);
 HostSessionEndpoints.Map(app);
 LegacySessionEndpoints.Map(app);
 AttachmentEndpoints.Map(app);

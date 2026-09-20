@@ -188,6 +188,16 @@ public sealed record SessionCatalogPageResponse(
 
 public sealed record BulkDeleteSessionsResponse(int DeletedCount);
 
+public sealed record UserProfileValueResponse(string Value, string Source, string UpdatedAt);
+
+public sealed record UserProfileResponse(
+    long Revision,
+    IReadOnlyDictionary<string, UserProfileValueResponse> Values);
+
+public sealed record PatchUserProfileRequest(
+    long ExpectedRevision,
+    IReadOnlyDictionary<string, string?>? Values);
+
 public sealed record AttachmentResponse(
     string AttachmentId,
     string SessionId,

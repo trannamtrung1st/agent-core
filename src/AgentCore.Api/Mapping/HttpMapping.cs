@@ -315,6 +315,29 @@ public static partial class HttpMapping
     public static string Format(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
+    public static UserProfileResponse ToProfile(UserProfile profile)
+    {
+        var values = new Dictionary<string, UserProfileValueResponse>(StringComparer.Ordinal);
+        foreach (var pair in profile.Preferences)
+        {
+            values[pair.Key] = new UserProfileValueResponse(
+                pair.Value.Value,
+                ToProfileSource(pair.Value.Source),
+                Format(pair.Value.UpdatedAt));
+        }
+
+        return new UserProfileResponse(profile.Revision, values);
+    }
+
+    private static string ToProfileSource(UserProfileValueSource source) =>
+        source switch
+        {
+            UserProfileValueSource.UserSet => "userSet",
+            UserProfileValueSource.HostSet => "hostSet",
+            UserProfileValueSource.ApplicationProfile => "applicationProfile",
+            _ => throw new ArgumentOutOfRangeException(nameof(source), source, null)
+        };
+
     private static SessionPurposeKind ParsePurposeKind(string? value) =>
         value?.Trim().ToLowerInvariant() switch
         {
