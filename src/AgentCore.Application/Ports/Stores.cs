@@ -109,8 +109,6 @@ public static class FixtureAttachmentReferenceAuthorizer
 
 public interface IAttachmentStore
 {
-    bool Exists(Guid sessionId, Guid attachmentId);
-
     ValueTask<AttachmentRecord> UploadPendingAsync(
         Guid sessionId,
         string displayName,

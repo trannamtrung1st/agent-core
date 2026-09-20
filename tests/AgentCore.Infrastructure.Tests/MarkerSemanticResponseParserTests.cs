@@ -9,6 +9,47 @@ public sealed class MarkerSemanticResponseParserTests
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
+    public void First_speech_marker_wins_custom_before_none()
+    {
+        var parsed = MarkerSemanticResponseParser.Parse(
+            "Answer.[[speech:Speak]][[speech:none]]",
+            finalize: true);
+        Assert.Equal("Answer.", parsed.DisplayText);
+        Assert.Equal(ModelSpeechMode.Custom, parsed.Speech.Mode);
+        Assert.Equal("Speak", parsed.Speech.Text);
+    }
+
+    [Fact]
+    public void First_speech_marker_wins_none_before_custom()
+    {
+        var parsed = MarkerSemanticResponseParser.Parse(
+            "Answer.[[speech:none]][[speech:Speak]]",
+            finalize: true);
+        Assert.Equal("Answer.", parsed.DisplayText);
+        Assert.Equal(ModelSpeechMode.None, parsed.Speech.Mode);
+        Assert.Null(parsed.Speech.Text);
+    }
+
+    [Fact]
+    public void Chunked_feed_keeps_first_speech_marker_across_chunks()
+    {
+        var parser = new MarkerSemanticResponseParser();
+        _ = parser.Feed("Visible.[[speech:Speak this]]");
+        Assert.True(parser.TryPeekSpeechReady(out var peek));
+        Assert.Equal(ModelSpeechMode.Custom, peek!.Speech.Mode);
+        Assert.True(parser.TryFinish(out var finished, out _));
+        Assert.Equal(ModelSpeechMode.Custom, finished!.Speech.Mode);
+        Assert.Equal("Speak this", finished.Speech.Text);
+
+        var noneFirst = new MarkerSemanticResponseParser();
+        _ = noneFirst.Feed("Visible.[[speech:none]]");
+        Assert.False(noneFirst.TryPeekSpeechReady(out _));
+        noneFirst.Feed("[[speech:Later custom]]");
+        Assert.True(noneFirst.TryFinish(out var noneFinal, out _));
+        Assert.Equal(ModelSpeechMode.None, noneFinal!.Speech.Mode);
+    }
+
+    [Fact]
     public void Speech_none_marker_maps_to_none_mode()
     {
         var parsed = MarkerSemanticResponseParser.Parse(

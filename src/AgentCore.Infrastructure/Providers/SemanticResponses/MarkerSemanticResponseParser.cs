@@ -105,6 +105,7 @@ internal sealed class MarkerSemanticResponseParser
         var display = new StringBuilder();
         var blocks = new List<ModelResponseBlock>();
         string? speech = null;
+        var speechLocked = false;
         var speechNone = false;
         var index = 0;
         while (index < work.Length)
@@ -129,13 +130,21 @@ internal sealed class MarkerSemanticResponseParser
             var payload = colon < 0 ? string.Empty : inner[(colon + 1)..];
             if (kind.Equals("speech", StringComparison.OrdinalIgnoreCase))
             {
+                if (speechLocked)
+                {
+                    index = end + 2;
+                    continue;
+                }
+
                 if (payload.Equals("none", StringComparison.OrdinalIgnoreCase))
                 {
                     speechNone = true;
+                    speechLocked = true;
                 }
                 else if (payload.Length > 0)
                 {
-                    speech ??= payload;
+                    speech = payload;
+                    speechLocked = true;
                 }
             }
             else if (kind.Equals("md", StringComparison.OrdinalIgnoreCase)

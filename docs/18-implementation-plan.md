@@ -239,7 +239,7 @@ This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
 | P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (local); full Playwright gate pending |
 | P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending** (post-`0906097` review fixes) |
 
-P2B on commit `0906097` is **not frozen**. A follow-up working tree closes review blockers (same-mode derived speech persistence, fallback `displayText` validation, session attachment authorization, compatibility `none`, Finalizing progress timing). Re-run the full key-free Synthetic plus Compose gate before marking P2B observed again. Prior evidence on `5effbb5` plus the pre-review tree remains historical only.
+P2B on commit `6b58c01` is **not frozen**. The post-`0906097` review blockers are closed in tree; a further pass adds first-wins compatibility `[[speech:]]` parsing (aligned with early peek publication), `SemanticMatches` speech comparison as a safety net, and envelope attachment authorization from bound conversation ids plus `fixture-attachment-1` (no synchronous attachment-store lookup on the Session Runtime mailbox). Re-run the full key-free Synthetic plus Compose gate before marking P2B observed again. Prior evidence on `5effbb5` / `0906097` remains historical only.
 
 ## Handoff rule
 

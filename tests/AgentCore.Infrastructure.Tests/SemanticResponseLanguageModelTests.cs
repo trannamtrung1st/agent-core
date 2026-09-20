@@ -163,6 +163,39 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     [Fact]
+    public async Task Compatibility_chunked_custom_then_none_keeps_custom_speech()
+    {
+        var inner = new ScriptedInner(
+        [
+            new ModelTextDelta("Visible answer.[[speech:Speak this]]"),
+            new ModelTextDelta("[[speech:none]]"),
+            new ModelCompleted(ModelStopReason.Completed)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Visible answer.", ready.DisplayText);
+        Assert.Equal(ModelSpeechMode.Custom, ready.Speech.Mode);
+        Assert.Equal("Speak this", ready.Speech.Text);
+    }
+
+    [Fact]
+    public async Task Compatibility_chunked_none_then_custom_keeps_none_speech()
+    {
+        var inner = new ScriptedInner(
+        [
+            new ModelTextDelta("Visible answer.[[speech:none]]"),
+            new ModelTextDelta("[[speech:Speak this]]"),
+            new ModelCompleted(ModelStopReason.Completed)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Visible answer.", ready.DisplayText);
+        Assert.Equal(ModelSpeechMode.None, ready.Speech.Mode);
+        Assert.DoesNotContain(events, item => item is ModelSemanticResponseReady readyEvent
+            && readyEvent.Response.Speech.Mode == ModelSpeechMode.Custom);
+    }
+
+    [Fact]
     public async Task Compatibility_speech_marker_becomes_custom()
     {
         var inner = new ScriptedInner(

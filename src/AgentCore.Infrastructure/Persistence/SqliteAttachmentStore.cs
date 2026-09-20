@@ -324,14 +324,6 @@ public sealed class SqliteAttachmentStore(
         return rows.Select(FromRow).ToArray();
     }
 
-    public bool Exists(Guid sessionId, Guid attachmentId)
-    {
-        using var db = contexts.CreateDbContext();
-        var key = attachmentId.ToString("D");
-        var sid = sessionId.ToString("D");
-        return db.Attachments.AsNoTracking().Any(row => row.AttachmentId == key && row.SessionId == sid);
-    }
-
     public async ValueTask<AttachmentRecord?> GetAsync(
         Guid sessionId,
         Guid attachmentId,

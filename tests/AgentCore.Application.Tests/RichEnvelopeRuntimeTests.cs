@@ -214,7 +214,7 @@ public sealed class RichEnvelopeRuntimeTests
             DateTimeOffset.UtcNow);
         await using var runtime = Create(output, new InMemoryMemoryStore(), model, snapshot, attachments: attachments);
         await runtime.AttachAsync();
-        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.SubmitUserTextAsync("Hello", attachmentIds: [attachmentId]);
         await runtime.WaitUntilIdleAsync();
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal("See file.", assistant.Text);

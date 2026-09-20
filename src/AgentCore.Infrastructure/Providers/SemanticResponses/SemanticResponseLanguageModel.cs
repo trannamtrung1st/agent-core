@@ -172,9 +172,7 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                         yield return new ModelDisplayDelta(remainder);
                     }
 
-                    if (peeked is null
-                        || peeked.DisplayText != response!.DisplayText
-                        || peeked.Blocks.Count != response.Blocks.Count)
+                    if (peeked is null || !SemanticMatches(peeked, response!))
                     {
                         yield return new ModelSemanticResponseReady(response!);
                     }
@@ -195,6 +193,12 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         messages.Add(new ModelMessage(ModelRole.System, instruction));
         return request with { Messages = messages };
     }
+
+    private static bool SemanticMatches(ModelSemanticResponse peeked, ModelSemanticResponse final) =>
+        string.Equals(peeked.DisplayText, final.DisplayText, StringComparison.Ordinal)
+        && peeked.Blocks.Count == final.Blocks.Count
+        && peeked.Speech.Mode == final.Speech.Mode
+        && string.Equals(peeked.Speech.Text, final.Speech.Text, StringComparison.Ordinal);
 
     private static ModelFailed Fail() =>
         new(new ProviderFailure(ProviderErrorCode.InvalidResponse, "Malformed assistant envelope."));

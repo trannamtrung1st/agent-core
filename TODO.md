@@ -7,7 +7,7 @@ Reviewed against `main` on 2026-09-19.
 Current roadmap:
 
 1. **P2A — first-class progress semantics** is **observed** and frozen for follow-on P2B;
-2. **P2B — validated model response envelope** — implementation pending closure (P1 heard-context persistence, fallback validation, attachment auth, compatibility `none`, Finalizing timing);
+2. **P2B — validated model response envelope** — post-`6b58c01` closure pass (first-wins compatibility speech markers, snapshot attachment auth); not frozen until key-free gate is green on the closing commit;
 3. close **P2E — multimodal/image input usability and capability handling**;
 4. evolve tools and external integrations;
 5. add context compaction and memory;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B cutover on `0906097` is **not frozen**: review found P1 heard-context persistence, fallback `displayText` validation, session attachment authorization, compatibility `speech.mode=none`, and Finalizing progress lifecycle gaps. Close those blockers and rerun the key-free Synthetic plus Compose gate before marking P2B observed again. Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B cutover is **not frozen**: `6b58c01` closed the first review blockers; the follow-up pass addresses conflicting compatibility speech markers plus snapshot-scoped attachment authorization. Rerun the key-free Synthetic plus Compose gate on the closing commit before marking P2B observed again. Optional Real native (`gpt-4o-mini-2024-07-18`) and fallback (`deepseek-v41-flash`) probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. P2C/P2E/P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -678,7 +678,7 @@ Only after native structured + fallback generation paths are verified:
 
 ### P2B stop condition
 
-P2B stop condition is **not met** until review blockers on `0906097` are closed and the key-free Synthetic plus Compose gate is green again. Target: Application consumes a provider-neutral validated semantic response; structured-capable providers do not depend on inline speech markers; compatibility providers map into the same semantic contract at the Infrastructure edge; reasoning stays isolated; rich visual content does not leak into TTS; same-mode derived playback coordinates survive SQLite reopen for heard context; old persisted conversations still render; marker-specific normal-runtime architecture is removed. Marker compatibility remains only in Infrastructure. P2E is next; P2C/P6 have not started.
+P2B stop condition is **not met** until the follow-up speech-marker and attachment-auth pass is committed and the key-free Synthetic plus Compose gate is green again. Target: Application consumes a provider-neutral validated semantic response; structured-capable providers do not depend on inline speech markers; compatibility providers map into the same semantic contract at the Infrastructure edge; reasoning stays isolated; rich visual content does not leak into TTS; same-mode derived playback coordinates survive SQLite reopen for heard context; old persisted conversations still render; marker-specific normal-runtime architecture is removed. Marker compatibility remains only in Infrastructure. P2E is next; P2C/P6 have not started.
 
 ---
 

@@ -2863,11 +2863,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return true;
         }
 
-        if (_attachments is not null
-            && Guid.TryParse(attachmentId, out var id)
-            && _attachments.Exists(_snapshot.SessionId, id))
+        if (!Guid.TryParse(attachmentId, out var id))
         {
-            return true;
+            return false;
+        }
+
+        foreach (var entry in _snapshot.Entries)
+        {
+            if (entry.Attachments is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            foreach (var attachment in entry.Attachments)
+            {
+                if (attachment.AttachmentId == id)
+                {
+                    return true;
+                }
+            }
         }
 
         return false;
