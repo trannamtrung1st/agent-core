@@ -171,6 +171,46 @@ public sealed class AttachmentProcessingRuntimeTests
     }
 
     [Fact]
+    public async Task Stale_gated_attachment_completion_preserves_live_turn_processing()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var gateA = new TaskCompletionSource<IReadOnlyList<AttachmentProcessResult>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gateB = new TaskCompletionSource<IReadOnlyList<AttachmentProcessResult>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processor = new SequentialGatedProcessor(gateA, gateB);
+        var brain = new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder()));
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(output, attachments, processor, new ScriptedLanguageModel(), brain);
+        var uploadedA = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "a.txt",
+            "text/plain",
+            new MemoryStream("aaa"u8.ToArray()),
+            false);
+        var uploadedB = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "b.txt",
+            "text/plain",
+            new MemoryStream("bbb"u8.ToArray()),
+            false);
+        Assert.True(await runtime.SubmitUserTextAsync("turnA", attachmentIds: [uploadedA.AttachmentId]));
+        await WaitForProcessingAttachmentsAsync(output);
+        Assert.True(await runtime.SubmitUserTextAsync("turnB", attachmentIds: [uploadedB.AttachmentId]));
+        await WaitForProcessingAttachmentsAsync(output);
+        Assert.Equal(OutputActivity.ProcessingAttachments, runtime.Output);
+        gateA.TrySetResult([]);
+        await runtime.WaitUntilMailboxDrainedAsync();
+        Assert.Equal(OutputActivity.ProcessingAttachments, runtime.Output);
+        gateB.TrySetResult([]);
+        using var completedCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, completedCts.Token);
+        using var idleCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await runtime.WaitUntilIdleAsync(idleCts.Token);
+        Assert.DoesNotContain(brain.Contexts, context => context.Trigger.Text == "turnA");
+        Assert.Contains(brain.Contexts, context => context.Trigger.Text == "turnB");
+        Assert.Equal(OutputActivity.Idle, runtime.Output);
+    }
+
+    [Fact]
     public async Task Late_extraction_after_supersede_does_not_launch()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
@@ -197,6 +237,10 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.NotEqual(OutputActivity.ProcessingAttachments, runtime.Output);
         Assert.Equal(OutputActivity.Idle, runtime.Output);
     }
+
+    private static Task WaitForProcessingAttachmentsAsync(CapturingSessionOutput output) =>
+        output.WaitForAsync(item => item.Payload is StateChangedOutput state
+            && state.OutputState == nameof(OutputActivity.ProcessingAttachments));
 
     private static SessionRuntime CreateRuntime(
         ISessionOutput output,
@@ -248,5 +292,35 @@ public sealed class AttachmentProcessingRuntimeTests
             IReadOnlyList<Guid> attachmentIds,
             CancellationToken cancellationToken = default) =>
             await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed class SequentialGatedProcessor : IAttachmentProcessor
+    {
+        private readonly object _sync = new();
+        private readonly Queue<TaskCompletionSource<IReadOnlyList<AttachmentProcessResult>>> _gates;
+
+        public SequentialGatedProcessor(params TaskCompletionSource<IReadOnlyList<AttachmentProcessResult>>[] gates) =>
+            _gates = new Queue<TaskCompletionSource<IReadOnlyList<AttachmentProcessResult>>>(gates);
+
+        public string Version => "sequential-gate";
+
+        public async ValueTask<IReadOnlyList<AttachmentProcessResult>> ProcessTurnAsync(
+            Guid sessionId,
+            IReadOnlyList<Guid> attachmentIds,
+            CancellationToken cancellationToken = default)
+        {
+            TaskCompletionSource<IReadOnlyList<AttachmentProcessResult>> gate;
+            lock (_sync)
+            {
+                if (_gates.Count == 0)
+                {
+                    throw new InvalidOperationException("No gated attachment extractions remain.");
+                }
+
+                gate = _gates.Dequeue();
+            }
+
+            return await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 }

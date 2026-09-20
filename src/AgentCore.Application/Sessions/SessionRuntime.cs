@@ -1772,7 +1772,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             || input.TurnGeneration != _turnGeneration
             || (_progressOwnerResponseId is { } owner && owner != input.ResponseId))
         {
-            if (!_deactivated && _outputActivity == OutputActivity.ProcessingAttachments)
+            if (!_deactivated
+                && _progressOwnerResponseId == input.ResponseId
+                && _outputActivity == OutputActivity.ProcessingAttachments)
             {
                 await PublishOutputIdleAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
@@ -1791,7 +1793,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ConfigureAwait(false);
         _outputActivity = OutputActivity.WaitingForAgent;
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
-        LaunchBrain(input.Context, input.Trigger, input.ResponseId, input.TurnGeneration, input.Results, workHeld: true);
+        LaunchBrain(input.Context, input.Trigger, input.ResponseId, input.TurnGeneration, input.Results);
         if (_outputActivity == OutputActivity.Idle)
         {
             await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
@@ -1803,8 +1805,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentTrigger trigger,
         Guid responseId,
         int turn,
-        IReadOnlyList<AttachmentProcessResult>? attachments = null,
-        bool workHeld = false)
+        IReadOnlyList<AttachmentProcessResult>? attachments = null)
     {
         var proactive = trigger.Kind != TriggerKind.UserTurn;
         if (_deactivated || (proactive && _activeResponseId is not null))
@@ -1813,10 +1814,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (!workHeld)
-        {
-            BeginWork();
-        }
+        BeginWork();
 
         CancelBrainEvaluation();
         if (proactive)
