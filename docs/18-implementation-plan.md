@@ -239,7 +239,7 @@ This table does not reopen P1, P2D, or P2A. P2E/P2C/P6 have not started.
 | P2B UI/e2e | Speech text vs Spoken; structured Finalizing at semantic validation only; Alpha without visible markers | **Implemented** (`2fc96e6` gate: 379 Vitest, 39 Playwright) |
 | P2B verification | Key-free `synthetic.yml` plus Compose; Real probes skipped without keys | **Pending freeze** on green CI for `5bfa5a9` (or merge HEAD; local: Domain 75, Infrastructure 178/12 skip, Application 457 blame-hang, API 155) |
 
-P2B implementation is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9` (or its merge HEAD). Closure includes envelope persistence/review fixes (`583f021`–`a8f41f7`), public custom-only `speechText` and projection `mode` (`2fc96e6`), superseded attachment idle/output production fixes (`aedb32b`–`2561949`), and causation-synchronized gated attachment regression coverage (`5bfa5a9`). Prior gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
+P2B implementation is **code-complete on `2561949`** and **not frozen** until the key-free Synthetic plus Compose workflow is green on `5bfa5a9` (or merge HEAD). Closure includes envelope persistence/review fixes (`583f021`–`a8f41f7`), public custom-only `speechText` with live `agent.speech.projection` mode/telemetry (`2fc96e6`), superseded attachment idle/output production fixes (`aedb32b`–`2561949`), and causation-synchronized gated attachment regression coverage (`5bfa5a9`–`c6e0735`). Prior gates on `5effbb5`, `2fc96e6`, and `aedb32b` remain historical evidence only.
 
 ## Handoff rule
 

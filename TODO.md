@@ -679,7 +679,7 @@ Only after native structured + fallback generation paths are verified:
 
 ### P2B stop condition
 
-P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `5bfa5a9` (or merge HEAD; freeze baseline). Implementation targets are met in tree (semantic contract, public custom-only `speechText`, superseded attachment idle/output production on `2561949`; gated regression synchronized on `5bfa5a9`). P2E is next after freeze; P2C/P6 have not started.
+P2B stop condition is **not met** until the key-free Synthetic plus Compose gate is green on `5bfa5a9` (or merge HEAD; freeze baseline). Implementation targets are met in tree (semantic contract, public custom-only `speechText` with projection mode/telemetry, superseded attachment idle/output production on `2561949`; gated regression synchronized on `5bfa5a9`–`c6e0735`). P2E is next after freeze; P2C/P6 have not started.
 
 ---
 
