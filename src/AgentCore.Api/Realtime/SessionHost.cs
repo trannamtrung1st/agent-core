@@ -1131,6 +1131,71 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<CommandAck> RespondApprovalAsync(
+        string connectionId,
+        ClientCommand<ApprovalResponsePayload> command,
+        CancellationToken cancellationToken)
+    {
+        var envelope = Validate(command, attach: false, expectedType: "agent.approval.respond");
+        if (!envelope.Accepted)
+        {
+            return envelope;
+        }
+
+        if (!Guid.TryParse(command.ResponseId, out var responseId) || responseId == Guid.Empty)
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "responseId is required.", false, null);
+        }
+
+        var payload = command.Payload ?? new ApprovalResponsePayload();
+        if (!Guid.TryParse(payload.ApprovalId, out var approvalId) || approvalId == Guid.Empty)
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "approvalId is required.", false, null);
+        }
+
+        if (payload.Decision is not ("approve" or "reject"))
+        {
+            return Reject(command.EventId, "Validation", "ValidationError", "decision must be approve or reject.", false, null);
+        }
+
+        var decision = payload.Decision == "approve"
+            ? ToolApprovalDecision.Approve
+            : ToolApprovalDecision.Reject;
+
+        return await AdmitControlAsync(connectionId, command, async live =>
+        {
+            var result = await live.Runtime.RespondApprovalAsync(
+                    responseId,
+                    approvalId,
+                    decision,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (result is null)
+            {
+                return Reject(
+                    command.EventId,
+                    "Transport",
+                    "Backpressure",
+                    "The session mailbox is full. Stop or retry after the current work drains.",
+                    false,
+                    1000);
+            }
+
+            return result switch
+            {
+                ResponseApprovalResult.Accepted or ResponseApprovalResult.Idempotent => Accept(command.EventId),
+                ResponseApprovalResult.Stale => Reject(
+                    command.EventId,
+                    "Protocol",
+                    "StaleCommand",
+                    "approvalId does not match the pending approval.",
+                    false,
+                    null),
+                _ => Reject(command.EventId, "Validation", "ValidationError", "Unknown approvalId.", false, null)
+            };
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<CommandAck> CancelResponseAsync(
         string connectionId,
         ClientCommand<CancelResponsePayload> command,
@@ -2231,6 +2296,16 @@ public static class SessionEventMapper
                 ["kind"] = ToProgressKind(progress.Kind),
                 ["state"] = ToProgressState(progress.State),
                 ["message"] = progress.Message
+            }),
+            ApprovalRequestedOutput approval => ("agent.approval.requested", new Dictionary<string, object?>
+            {
+                ["approvalId"] = approval.ApprovalId.ToString(),
+                ["operationId"] = approval.OperationId.ToString(),
+                ["toolName"] = approval.ToolName,
+                ["effect"] = approval.Effect,
+                ["summary"] = approval.Summary,
+                ["details"] = approval.Details,
+                ["expiresAt"] = approval.ExpiresAt.ToString("O")
             }),
             ErrorOutput error => ("error", new Dictionary<string, object?>
             {

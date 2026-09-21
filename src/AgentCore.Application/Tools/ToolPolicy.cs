@@ -9,7 +9,8 @@ public static class ToolPolicy
     public static ToolPolicyDecision EvaluateExecution(
         AgentDefinition definition,
         string toolName,
-        IToolConfigurationGate configurationGate)
+        IToolConfigurationGate configurationGate,
+        ToolApprovalGrant? grant = null)
     {
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
         {
@@ -31,6 +32,18 @@ public static class ToolPolicy
             && !configurationGate.IsConfigured(toolName))
         {
             return ToolPolicyDecision.Deny;
+        }
+
+        if (descriptor.Effect is ToolEffect.SensitiveWrite or ToolEffect.Destructive)
+        {
+            if (grant is null
+                || !string.Equals(grant.ToolName, toolName, StringComparison.Ordinal)
+                || grant.ActionHash.Length == 0)
+            {
+                return ToolPolicyDecision.RequireApproval;
+            }
+
+            return ToolPolicyDecision.Allow;
         }
 
         return ToolPolicyDecision.Allow;

@@ -528,6 +528,7 @@ function dropLiveTransport(connection: "reconnecting" | "failed"): void {
     captureLive: false,
     attachmentId: null,
     activeProgress: null,
+    pendingApproval: null,
     ...(connection === "reconnecting"
       ? { error: null, sessionError: null, errorFatal: false, errorHoldSequence: 0 }
       : {})
@@ -561,6 +562,7 @@ function markConnectionFailed(message: string, options?: { force?: boolean }): v
     captureLive: false,
     attachmentId: null,
     activeProgress: null,
+    pendingApproval: null,
     pendingSendQueue: []
   });
 }
@@ -3212,6 +3214,43 @@ async function cancelServerResponse(responseId: string): Promise<void> {
 
   pendingStops.set(responseId, stopPromise);
   return stopPromise;
+}
+
+export async function respondToApproval(decision: "approve" | "reject"): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  const pending = snapshot.pendingApproval;
+  if (!pending || !snapshot.sessionId) {
+    return;
+  }
+
+  const ack = await dispatchHubCommand((dispatchSequence) =>
+    invoke(
+      "RespondApproval",
+      "agent.approval.respond",
+      { approvalId: pending.approvalId, decision },
+      dispatchSequence,
+      pending.responseId
+    )
+  );
+
+  if (ack?.accepted) {
+    useSessionStore.setState({ pendingApproval: null });
+    return;
+  }
+
+  if (ack?.error?.code === "StaleCommand") {
+    useSessionStore.setState({ pendingApproval: null });
+    return;
+  }
+
+  useSessionStore.setState({
+    error: ack?.error?.message ?? "Approval response was not accepted.",
+    sessionError: sessionErrorFromWire(
+      ack?.error,
+      ack?.error?.message ?? "Approval response was not accepted."
+    ),
+    errorFatal: false
+  });
 }
 
 export async function requestVoice(): Promise<void> {

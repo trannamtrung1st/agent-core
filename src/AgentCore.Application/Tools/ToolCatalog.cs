@@ -18,6 +18,7 @@ public static class ToolCatalog
     public const string SandboxRun = "sandbox.run";
     public const string WebSearch = "web.search";
     public const string WebFetch = "web.fetch";
+    public const string DemoSensitiveAction = "demo.sensitive_action";
 
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,

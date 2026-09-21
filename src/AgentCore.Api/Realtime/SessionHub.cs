@@ -29,6 +29,12 @@ public sealed class SessionHub(SessionHost host) : Hub
         return Complete(host.CancelResponseAsync(Context.ConnectionId, command, Context.ConnectionAborted));
     }
 
+    public Task<CommandAck> RespondApproval(ClientCommand<ApprovalResponsePayload> command)
+    {
+        command.Payload ??= new ApprovalResponsePayload();
+        return Complete(host.RespondApprovalAsync(Context.ConnectionId, command, Context.ConnectionAborted));
+    }
+
     public Task<CommandAck> SetMode(ClientCommand<SetModePayload> command) =>
         Complete(host.SetModeAsync(Context.ConnectionId, command, Context.ConnectionAborted));
 

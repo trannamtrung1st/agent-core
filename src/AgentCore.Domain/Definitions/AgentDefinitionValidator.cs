@@ -5,7 +5,7 @@ namespace AgentCore.Domain.Definitions;
 public static class AgentDefinitionValidator
 {
     private static readonly Regex IdPattern = new("^[a-z0-9-]{1,64}$", RegexOptions.Compiled);
-    private static readonly Regex ToolPattern = new("^[a-z][a-z0-9.]{0,63}$", RegexOptions.Compiled);
+    private static readonly Regex ToolPattern = new("^[a-z][a-z0-9._]{0,63}$", RegexOptions.Compiled);
     private static readonly HashSet<string> InterruptionStyles =
         ["acknowledgeThenContinue", "answerNewTurn"];
     private static readonly HashSet<string> ResponseLengths = ["concise", "balanced"];

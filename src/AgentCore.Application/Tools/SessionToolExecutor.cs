@@ -23,6 +23,12 @@ public sealed class SessionToolExecutor(
 {
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;
+
+    public ToolPolicyDecision EvaluateExecutionPolicy(
+        AgentDefinition definition,
+        string toolName,
+        ToolApprovalGrant? grant = null) =>
+        ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, grant);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -33,13 +39,20 @@ public sealed class SessionToolExecutor(
         Guid sessionId,
         ModelToolCall call,
         int remainingOutputBytes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ToolApprovalGrant? approvalGrant = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(call.Name)
-            || ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate) != ToolPolicyDecision.Allow)
+        var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant);
+        if (policy == ToolPolicyDecision.Deny
+            || string.IsNullOrWhiteSpace(call.Name))
         {
             return TextResult(Error("forbidden", "Tool is not permitted for this role."));
+        }
+
+        if (policy == ToolPolicyDecision.RequireApproval)
+        {
+            return TextResult(Error("approval_required", "Tool execution requires explicit approval."));
         }
 
         JsonElement args;
@@ -61,6 +74,16 @@ public sealed class SessionToolExecutor(
         if (LooksLikeSessionMutation(args) || LooksLikeHostPath(args))
         {
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
+        }
+
+        if (approvalGrant is not null)
+        {
+            var boundHash = ToolActionHash.Compute(call.Name, args);
+            if (!string.Equals(boundHash, approvalGrant.ActionHash, StringComparison.Ordinal)
+                || !string.Equals(call.Name, approvalGrant.ToolName, StringComparison.Ordinal))
+            {
+                return TextResult(Error("stale_approval", "Approval no longer matches the requested action."));
+            }
         }
 
         try
@@ -96,6 +119,8 @@ public sealed class SessionToolExecutor(
                 ToolCatalog.WebFetch => FitResult(
                     remainingOutputBytes,
                     await FetchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.DemoSensitiveAction => TextResult(
+                    ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
         }
@@ -774,6 +799,32 @@ public sealed class SessionToolExecutor(
         {
             return Convert.ToBase64String(bytes);
         }
+    }
+
+    private static string ExecuteDemoSensitiveAction(
+        Guid sessionId,
+        JsonElement args,
+        ToolApprovalGrant? approvalGrant)
+    {
+        if (approvalGrant is null)
+        {
+            return Error("approval_required", "Tool execution requires explicit approval.");
+        }
+
+        if (!TryString(args, "label", out var label))
+        {
+            return Error("invalid", "label is required.");
+        }
+
+        var actionHash = ToolActionHash.Compute(ToolCatalog.DemoSensitiveAction, args);
+        if (!string.Equals(actionHash, approvalGrant.ActionHash, StringComparison.Ordinal))
+        {
+            return Error("stale_approval", "Approval no longer matches the requested action.");
+        }
+
+        return DemoSensitiveActionStore.TryExecute(sessionId, approvalGrant.ApprovalId, label, out var result)
+            ? result
+            : result;
     }
 
     private static string Error(string code, string message) =>

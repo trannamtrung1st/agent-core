@@ -102,6 +102,13 @@ public sealed record CancelResponseReceived(
     Guid ResponseId,
     TaskCompletionSource<ResponseCancelResult>? Completed = null) : SessionInput(Context);
 
+public sealed record ApprovalResponseReceived(
+    EventContext Context,
+    Guid ResponseId,
+    Guid ApprovalId,
+    ToolApprovalDecision Decision,
+    TaskCompletionSource<ResponseApprovalResult>? Completed = null) : SessionInput(Context);
+
 public sealed record MuteReceived(EventContext Context, bool Muted) : SessionInput(Context);
 
 public sealed record SynthesisResultReceived(
@@ -333,10 +340,20 @@ public sealed record ResponseProgressOutput(
     Guid? OperationId = null,
     string? Message = null) : OutputPayload;
 
+public sealed record ApprovalRequestedOutput(
+    Guid ApprovalId,
+    Guid OperationId,
+    string ToolName,
+    string Effect,
+    string Summary,
+    IReadOnlyDictionary<string, string> Details,
+    DateTimeOffset ExpiresAt) : OutputPayload;
+
 public static class ResponseProgressMessages
 {
     public const string ReadingAttachments = "Reading attachments…";
     public const string RunningTools = "Running tools…";
+    public const string WaitingForApproval = "Waiting for your approval…";
     public const string Finalizing = "Finalizing response…";
     public const int MaxLength = 80;
 

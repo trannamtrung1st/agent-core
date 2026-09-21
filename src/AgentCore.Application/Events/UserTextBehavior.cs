@@ -14,6 +14,20 @@ public enum ResponseCancelResult
     Unknown = 3
 }
 
+public enum ResponseApprovalResult
+{
+    Accepted = 0,
+    Stale = 1,
+    Unknown = 2,
+    Idempotent = 3
+}
+
+public enum ToolApprovalDecision
+{
+    Approve,
+    Reject
+}
+
 public static class UserTextBehaviors
 {
     public static bool TryParse(string? raw, out UserTextBehavior behavior)

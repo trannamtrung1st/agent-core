@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
@@ -856,6 +857,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case CancelResponseReceived cancel:
                     await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
+                    break;
+                case ApprovalResponseReceived approval:
+                    await HandleApprovalResponseAsync(approval, cancellationToken).ConfigureAwait(false);
                     break;
                 case EndSessionReceived ended:
                     await HandleEndAsync(ended, cancellationToken).ConfigureAwait(false);
@@ -2139,14 +2143,59 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     ToolExecutionResult executionResult;
                     var toolStarted = Stopwatch.GetTimestamp();
+                    ToolApprovalGrant? approvalGrant = null;
                     try
                     {
+                        JsonElement args;
+                        try
+                        {
+                            args = JsonSerializer.Deserialize<JsonElement>(
+                                string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
+                            if (args.ValueKind != JsonValueKind.Object)
+                            {
+                                executionResult = ToolExecutionResult.FromText(
+                                    """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
+                                goto AfterToolExecution;
+                            }
+                        }
+                        catch (JsonException)
+                        {
+                            executionResult = ToolExecutionResult.FromText(
+                                """{"error":"invalid","message":"Tool arguments were malformed."}""");
+                            goto AfterToolExecution;
+                        }
+
+                        var actionHash = ToolActionHash.Compute(call.Name, args);
+                        var policy = _tools.EvaluateExecutionPolicy(_snapshot.Definition, call.Name);
+                        if (policy == ToolPolicyDecision.RequireApproval)
+                        {
+                            approvalGrant = await WaitForToolApprovalAsync(
+                                    cause,
+                                    request.ResponseId,
+                                    operationId,
+                                    call,
+                                    args,
+                                    actionHash,
+                                    toolCts.Token)
+                                .ConfigureAwait(false);
+                            if (approvalGrant is null
+                                || approvalGrant.RuntimeEpoch != _epoch
+                                || approvalGrant.ResponseId != request.ResponseId
+                                || approvalGrant.OperationId != operationId)
+                            {
+                                executionResult = ToolExecutionResult.FromText(
+                                    """{"error":"rejected","message":"Action was not approved."}""");
+                                goto AfterToolExecution;
+                            }
+                        }
+
                         executionResult = await _tools.ExecuteAsync(
                                 _snapshot.Definition,
                                 SessionId,
                                 call,
                                 ToolLimits.MaxOutputBytes - outputBytes,
-                                toolCts.Token)
+                                toolCts.Token,
+                                approvalGrant)
                             .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
@@ -2173,6 +2222,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    AfterToolExecution:
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
@@ -2517,6 +2567,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
+        ClearPendingApproval();
 
         _responseLifecycle = ResponseLifecycle.Superseded;
         _outputActivity = OutputActivity.Interrupted;
@@ -3308,6 +3359,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void ClearActive()
     {
+        ClearPendingApproval();
         _activeResponseId = null;
         _activeEntryId = null;
         _modelFinishReason = null;

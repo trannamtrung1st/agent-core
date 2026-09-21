@@ -154,6 +154,27 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         if (toolRounds == 0
+            && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
+            && Offers(request, ToolCatalog.DemoSensitiveAction))
+        {
+            yield return new ModelToolCallEvent(new ModelToolCall(
+                "call-sensitive",
+                ToolCatalog.DemoSensitiveAction,
+                """{"label":"Synthetic sensitive approval"}"""));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
+
+        if (toolRounds == 1
+            && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
+            && lastTool.Contains("completed", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new ModelTextDelta("Sensitive action completed after approval.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
+        if (toolRounds == 0
             && lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             && Offers(request, ToolCatalog.AttachmentsRead)
             && TryReadManifestAttachmentId(request, out var historicalAttachmentId))
@@ -296,8 +317,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("compliance case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || request.Messages.Any(message => message.Role == ModelRole.Tool);
     }
+
+    public const string SensitiveApprovalMarker = "sensitive approval";
 
     public const string HistoricalImageRereadMarker = "[test:historical-image-reread]";
 

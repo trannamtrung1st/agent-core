@@ -221,6 +221,16 @@ public sealed class CancelResponsePayload
 }
 
 [MessagePackObject]
+public sealed class ApprovalResponsePayload
+{
+    [Key("approvalId")]
+    public string ApprovalId { get; set; } = "";
+
+    [Key("decision")]
+    public string Decision { get; set; } = "";
+}
+
+[MessagePackObject]
 public sealed class ServerEvent
 {
     [Key("protocolVersion")]

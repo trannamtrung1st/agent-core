@@ -23,6 +23,7 @@ import {
   applySpeechLocale,
   applySessionModel,
   cancelRenderedResponse,
+  respondToApproval,
   setDraft,
   setMuted
 } from "../../services/realtime";
@@ -42,6 +43,7 @@ import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
+import { ApprovalModal } from "./ApprovalModal";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import { SessionRail } from "./SessionRail";
 import { voiceControlEnabled } from "../../speech/voiceEnablement";
@@ -230,6 +232,11 @@ export function ChatApp() {
 
   return (
     <AntApp className="antd-root" message={{ duration: 3, maxCount: 3 }}>
+      <ApprovalModal
+        approval={state.pendingApproval}
+        onApprove={() => void respondToApproval("approve")}
+        onReject={() => void respondToApproval("reject")}
+      />
       <Layout className="app-layout">
         {isNarrow ? null : (
           <Sider className="app-sider" theme="light" width={siderWidth}>

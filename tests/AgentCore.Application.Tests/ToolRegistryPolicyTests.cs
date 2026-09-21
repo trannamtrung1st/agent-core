@@ -15,6 +15,16 @@ public sealed class ToolRegistryPolicyTests
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.AttachmentsRead));
         Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.WorkspaceWrite));
         Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.SandboxRun));
+        Assert.Equal(ToolEffect.SensitiveWrite, ToolCatalog.EffectOf(ToolCatalog.DemoSensitiveAction));
+    }
+
+    [Fact]
+    public void Sensitive_execution_requires_approval_without_grant()
+    {
+        var definition = Definition("general-assistant", 3, [ToolCatalog.DemoSensitiveAction]);
+        Assert.Equal(
+            ToolPolicyDecision.RequireApproval,
+            ToolPolicy.EvaluateExecution(definition, ToolCatalog.DemoSensitiveAction, ToolConfigurationGates.AllowAll));
     }
 
     [Fact]
@@ -81,6 +91,22 @@ public sealed class ToolRegistryPolicyTests
             ToolLimits.MaxOutputBytes);
         Assert.Contains("forbidden", examinerDenied.Text, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static AgentDefinition Definition(string id, int version, IReadOnlyList<string> tools) =>
+        new(
+            1,
+            id,
+            version,
+            new AgentIdentity("Test", "Role", "desc", "Tone"),
+            [],
+            "instructions",
+            new BehaviorPolicy("answerNewTurn", true, true),
+            new ConversationPolicy("balanced", false, "en", 2048),
+            new InitiativePolicy(false, 60_000, 120_000, 1, ["longSilence"], 0),
+            new VoiceConfiguration(false, "default", 1.0),
+            new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new RoleEnvironment(ToolAllowlist: tools));
 
     private static AgentContext Context(
         AgentDefinition definition,

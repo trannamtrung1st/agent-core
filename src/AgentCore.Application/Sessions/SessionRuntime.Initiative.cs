@@ -360,6 +360,7 @@ public sealed partial class SessionRuntime
         CancelBrainEvaluation();
         _deactivated = false;
         _activeResponseId = null;
+        ClearPendingApproval();
         _progressOwnerResponseId = null;
         _progressLive = false;
         _progressStartedTimestamp = 0;
@@ -409,6 +410,7 @@ public sealed partial class SessionRuntime
         _timerGeneration++;
         _turnGeneration++;
         _epoch = _ids.NewId();
+        ClearPendingApproval();
         _environmentQueue.Clear();
         ClearPendingPostResponseIdleDelay();
         _lastArmedIdleDelay = null;

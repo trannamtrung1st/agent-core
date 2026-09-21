@@ -122,6 +122,7 @@ Every control uses metadata above plus payload below. Empty payload is `{}`.
 | session.mode.set | SetMode | mode: text\|voice |
 | user.text | SendText | text: string <=8,000 (blank allowed only with bindable `attachmentIds`); attachmentIds?: UUID[] max 10; behavior?: `queue`\|`interrupt` (omit=`interrupt`; unknown values are rejected) |
 | agent.response.cancel | CancelResponse | empty `{}`; top-level `responseId` is the expected generation to stop (required UUID; creates no user entry) |
+| agent.approval.respond | RespondApproval | approvalId: UUID, decision: `approve`\|`reject`; top-level `responseId` is the owning live generation (required UUID) |
 | user.speech.started | SpeechStarted | streamId: UUID, utteranceId: UUID, sampleOffset: integer, activityScore: number 0..1 |
 | user.speech.ended | SpeechEnded | streamId, utteranceId, sampleOffset: integer, durationMs: nonnegative number |
 | client.speech.evidence | SpeechEvidence | kind: `started`\|`partial`\|`final`\|`ended`\|`failed`; utteranceId: UUID; revision?: integer >=0; text?: string <=8,000; confidence?: number 0..1; activityScore?: number 0..1; durationMs?: nonnegative number |
@@ -148,6 +149,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | transcript.discarded | utteranceId |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
 | agent.progress | kind: preparing\|readingAttachments\|runningTool\|waitingExternal\|finalizing, state: started\|updated\|completed\|failed, operationId?: UUID, message?: trusted bounded status string. The owning `responseId` is on the envelope, not nested in the payload. Transient live status only: never `session.ready` history, GET `/messages`, TTS/`clientSpeech` input, provider reasoning, or durable assistant text. Runtime-generated `operationId` is not a provider tool-call id. `session.state.changed.outputState` is unchanged and remains additive. |
+| agent.approval.requested | approvalId: UUID, operationId: UUID, toolName: string, effect: readOnly\|write\|sensitiveWrite\|destructive, summary: bounded safe string, details: bounded string map, expiresAt: ISO-8601 timestamp. Owning `responseId` is on the envelope. Live-session only; never history or `session.ready` replay. No credentials, provider bodies, or raw binary. |
 | agent.speech.projection | mode: same\|custom\|none, text: accepted playback projection for the live response (Voice); published when validated speech is ready (`custom`) or when `same` completion fallback is applied; never raw markers or native JSON; not a separate history entry. Clients must not treat `same`/`none` projections as public semantic `speechText` (only `custom` maps to history `speechText`) |
 | agent.text.delta | text, textStart: UTF-16 offset of **display** text |
 | agent.text.completed | textLength: integer (display) |
