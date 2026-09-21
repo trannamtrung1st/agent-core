@@ -1,17 +1,70 @@
+import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
-import { Button, Dropdown, Flex, Slider, Tag, Typography, theme } from "antd";
-import { CheckOutlined, DownOutlined } from "@ant-design/icons";
+import { Button, Dropdown, Flex, Slider, Tag, Tooltip, Typography, theme } from "antd";
+import {
+  BulbOutlined,
+  CheckOutlined,
+  CodeOutlined,
+  DownOutlined,
+  EyeOutlined,
+  ToolOutlined
+} from "@ant-design/icons";
 
 export const DEFAULT_MODEL_KEY = "default";
 
 export type ModelCatalogItem = {
   key: string;
   displayName: string;
+  tools: boolean;
   vision: boolean;
+  structuredOutput: boolean;
   reasoning: boolean;
   supportedReasoningEfforts: readonly string[];
   defaultReasoningEffort?: string | null;
 };
+
+type CapabilityIcon = ComponentType<{ "aria-hidden"?: boolean }>;
+
+const MODEL_CAPABILITIES: readonly {
+  label: string;
+  isEnabled: (model: ModelCatalogItem) => boolean;
+  Icon: CapabilityIcon;
+}[] = [
+  { label: "Vision", isEnabled: (model) => model.vision, Icon: EyeOutlined },
+  { label: "Reasoning capable", isEnabled: (model) => model.reasoning, Icon: BulbOutlined },
+  { label: "Tools", isEnabled: (model) => model.tools, Icon: ToolOutlined },
+  {
+    label: "Structured output",
+    isEnabled: (model) => model.structuredOutput,
+    Icon: CodeOutlined
+  }
+];
+
+function ModelOptionCapabilityIcon({ label, Icon }: { label: string; Icon: CapabilityIcon }) {
+  return (
+    <Tooltip title={label}>
+      <span className="model-picker-option-capability" role="img" aria-label={label}>
+        <Icon aria-hidden />
+      </span>
+    </Tooltip>
+  );
+}
+
+function ModelOptionCapabilities({ model }: { model: ModelCatalogItem }) {
+  const { token } = theme.useToken();
+  const enabled = MODEL_CAPABILITIES.filter((capability) => capability.isEnabled(model));
+  if (enabled.length === 0) {
+    return null;
+  }
+
+  return (
+    <Flex align="center" gap={token.marginXXS} className="model-picker-option-caps">
+      {enabled.map((capability) => (
+        <ModelOptionCapabilityIcon key={capability.label} label={capability.label} Icon={capability.Icon} />
+      ))}
+    </Flex>
+  );
+}
 
 export function modelSelectValue(
   sessionKey: string | null,
@@ -210,11 +263,7 @@ export function ModelPicker({
               <Flex align="center" justify="space-between" gap={token.paddingXS} style={{ width: "100%", minWidth: 0 }}>
                 <span className="model-picker-option-name">{model.displayName}</span>
                 <Flex align="center" gap={token.paddingXS} className="model-picker-option-end">
-                  {model.vision ? (
-                    <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
-                      Vision
-                    </Tag>
-                  ) : null}
+                  <ModelOptionCapabilities model={model} />
                   {model.key === defaultKey ? (
                     <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
                       Default
@@ -285,7 +334,7 @@ export function ModelPicker({
             </Tag>
           ) : null}
           {showEffort ? (
-            <Typography.Text type="secondary" className="model-picker-effort" aria-label="Reasoning">
+            <Typography.Text type="secondary" className="model-picker-effort" aria-label="Reasoning effort">
               {formatEffortLabel(effortValue)}
             </Typography.Text>
           ) : null}

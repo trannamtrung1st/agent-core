@@ -681,14 +681,27 @@ body,
   flex: 0 0 auto;
 }
 
-.model-picker-option-mark {
+.model-picker-option-mark,
+.model-picker-option-capability {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
   flex-shrink: 0;
-  color: var(--ac-color-text);
   font-size: 12px;
+}
+
+.model-picker-option-mark {
+  width: 14px;
+  color: var(--ac-color-text);
+}
+
+.model-picker-option-capability {
+  width: 14px;
+  color: var(--ac-color-text-secondary);
+}
+
+.model-picker-option-caps {
+  flex: 0 0 auto;
 }
 
 .model-picker-option.ant-btn:not(:disabled):hover,

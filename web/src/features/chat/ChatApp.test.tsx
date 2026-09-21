@@ -771,7 +771,7 @@ describe("ChatApp model selection", () => {
     const view = await act(async () => renderChat());
     const newChatModel = screen.getByRole("button", { name: "Model" });
     expect(newChatModel.closest("form.composer")).not.toBeNull();
-    expect(screen.getByLabelText("Reasoning")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reasoning effort")).toBeInTheDocument();
 
     await act(async () => {
       useSessionStore.setState({
@@ -811,7 +811,7 @@ describe("ChatApp model selection", () => {
     await act(async () => renderChat());
     expect(screen.getByRole("button", { name: "Model" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Model" }).closest("form.composer")).not.toBeNull();
-    expect(screen.getByLabelText("Reasoning")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reasoning effort")).toBeInTheDocument();
   });
 
   it("hides model controls on a paused session", async () => {

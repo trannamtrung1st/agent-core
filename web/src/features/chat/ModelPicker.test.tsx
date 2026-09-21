@@ -13,7 +13,9 @@ const models = [
   {
     key: "scripted-alpha",
     displayName: "Scripted Alpha",
+    tools: true,
     vision: false,
+    structuredOutput: false,
     reasoning: true,
     supportedReasoningEfforts: ["low", "medium", "high"],
     defaultReasoningEffort: "medium"
@@ -21,7 +23,9 @@ const models = [
   {
     key: "scripted-beta",
     displayName: "Scripted Beta",
+    tools: true,
     vision: false,
+    structuredOutput: true,
     reasoning: false,
     supportedReasoningEfforts: [],
     defaultReasoningEffort: null
@@ -29,7 +33,9 @@ const models = [
   {
     key: "scripted-vision",
     displayName: "Scripted Vision",
+    tools: true,
     vision: true,
+    structuredOutput: false,
     reasoning: false,
     supportedReasoningEfforts: [],
     defaultReasoningEffort: null
@@ -77,7 +83,7 @@ describe("effortSelectValue", () => {
 });
 
 describe("ModelPicker", () => {
-  it("shows a Vision indicator on vision-capable models", async () => {
+  it("shows capability icons for each enabled catalog flag", async () => {
     render(
       <ModelPicker
         models={models}
@@ -91,7 +97,18 @@ describe("ModelPicker", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
     const listbox = await screen.findByRole("listbox");
-    expect(within(listbox).getByText("Vision")).toBeInTheDocument();
+    expect(within(listbox).getAllByRole("img", { name: "Vision" })).toHaveLength(1);
+    expect(within(listbox).getAllByRole("img", { name: "Reasoning capable" })).toHaveLength(1);
+    expect(within(listbox).getAllByRole("img", { name: "Tools" })).toHaveLength(3);
+    expect(within(listbox).getAllByRole("img", { name: "Structured output" })).toHaveLength(1);
+
+    const alphaOption = within(listbox).getByTitle("Scripted Alpha").closest('[role="option"]');
+    expect(alphaOption).toBeTruthy();
+    expect(within(alphaOption as HTMLElement).getByRole("img", { name: "Reasoning capable" })).toBeInTheDocument();
+    expect(within(alphaOption as HTMLElement).queryByRole("img", { name: "Vision" })).not.toBeInTheDocument();
+
+    const betaOption = within(listbox).getByTitle("Scripted Beta").closest('[role="option"]');
+    expect(within(betaOption as HTMLElement).getByRole("img", { name: "Structured output" })).toBeInTheDocument();
   });
 
   it("lists each catalog model once and marks Default on the system default", async () => {
@@ -130,8 +147,8 @@ describe("ModelPicker", () => {
       />
     );
 
-    expect(screen.getByLabelText("Reasoning")).toHaveTextContent("Medium");
-    expect(screen.getByRole("button", { name: "Model" })).toContainElement(screen.getByLabelText("Reasoning"));
+    expect(screen.getByLabelText("Reasoning effort")).toHaveTextContent("Medium");
+    expect(screen.getByRole("button", { name: "Model" })).toContainElement(screen.getByLabelText("Reasoning effort"));
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
     expect(await screen.findByRole("slider")).toBeInTheDocument();
     const listbox = await screen.findByRole("listbox");
