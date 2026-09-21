@@ -761,14 +761,27 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             var diagnostic = await ReadProviderErrorAsync(response, cancellationToken).ConfigureAwait(false);
             var phase = RequestPhase(request);
-            _logger?.LogWarning(
-                "Language model rejected request. Status {Status} Model {Model} Phase {Phase} ProviderCode {ProviderCode} ProviderType {ProviderType} Reason {Reason}",
-                status,
-                _options.DefaultModel,
-                phase,
-                diagnostic.Code,
-                diagnostic.Type,
-                diagnostic.Message);
+            if (_options.LogProviderErrorMessages)
+            {
+                _logger?.LogWarning(
+                    "Language model rejected request. Status {Status} Model {Model} Phase {Phase} ProviderCode {ProviderCode} ProviderType {ProviderType} Reason {Reason}",
+                    status,
+                    _options.DefaultModel,
+                    phase,
+                    diagnostic.Code,
+                    diagnostic.Type,
+                    diagnostic.Message);
+            }
+            else
+            {
+                _logger?.LogWarning(
+                    "Language model rejected request. Status {Status} Model {Model} Phase {Phase} ProviderCode {ProviderCode} ProviderType {ProviderType}",
+                    status,
+                    _options.DefaultModel,
+                    phase,
+                    diagnostic.Code,
+                    diagnostic.Type);
+            }
             var safeMessage = phase == "follow-up"
                 ? $"Provider rejected follow-up request ({status})."
                 : $"Provider rejected the request ({status}).";

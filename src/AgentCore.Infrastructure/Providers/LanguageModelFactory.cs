@@ -27,6 +27,6 @@ internal static class LanguageModelFactory
             http,
             options,
             provider.GetRequiredService<TimeProvider>(),
-            logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger<OpenAICompatibleLanguageModel>());
+            logger: provider.GetService<ILoggerFactory>()?.CreateLogger<OpenAICompatibleLanguageModel>());
     }
 }

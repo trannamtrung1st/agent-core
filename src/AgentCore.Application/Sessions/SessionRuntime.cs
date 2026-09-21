@@ -2198,6 +2198,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         approvalDetailsOverride = prepared.Preparation.Details;
                                     }
                                 }
+                                else if (policy == ToolPolicyDecision.RequireApproval
+                                    && string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
+                                {
+                                    var prepared = _tools.PrepareHttpRequestApproval(args);
+                                    if (prepared.Preparation is null)
+                                    {
+                                        executionResult = ToolExecutionResult.FromText(
+                                            prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare HTTP request approval."}""");
+                                        preparedFailed = true;
+                                        actionHash = string.Empty;
+                                    }
+                                    else
+                                    {
+                                        actionHash = prepared.Preparation.ActionHash;
+                                        approvalSummaryOverride = prepared.Preparation.Summary;
+                                        approvalDetailsOverride = prepared.Preparation.Details;
+                                    }
+                                }
                                 else
                                 {
                                     actionHash = ToolActionHash.Compute(call.Name, args);

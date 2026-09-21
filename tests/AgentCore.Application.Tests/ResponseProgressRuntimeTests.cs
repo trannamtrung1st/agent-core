@@ -636,6 +636,13 @@ public sealed class ResponseProgressRuntimeTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public ValueTask MoveAsync(
+            Guid sessionId,
+            string sourceLogicalPath,
+            string destinationLogicalPath,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
     }

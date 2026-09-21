@@ -57,7 +57,7 @@ public static class RolePermissions
             return false;
         }
 
-        if (normalized.Contains("..", StringComparison.Ordinal)
+        if (WorkspaceLogicalPath.HasParentSegment(normalized)
             || Path.IsPathRooted(normalized) && !normalized.StartsWith('/'))
         {
             return false;

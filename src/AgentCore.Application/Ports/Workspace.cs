@@ -45,5 +45,11 @@ public interface ISessionWorkspace
         IReadOnlyList<WorkspaceTextEdit> edits,
         CancellationToken cancellationToken = default);
 
+    ValueTask MoveAsync(
+        Guid sessionId,
+        string sourceLogicalPath,
+        string destinationLogicalPath,
+        CancellationToken cancellationToken = default);
+
     ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }

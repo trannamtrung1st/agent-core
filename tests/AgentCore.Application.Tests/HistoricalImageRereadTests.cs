@@ -493,6 +493,57 @@ public sealed class HistoricalImageRereadTests
         Assert.DoesNotContain(encoded, history, StringComparison.Ordinal);
     }
 
+    [LiveProviderFact]
+    public async Task Real_session_historical_image_reread_completes_with_visible_output()
+    {
+        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+        using var http = new HttpClient();
+        var model = new SemanticResponseLanguageModel(new OpenAICompatibleLanguageModel(
+            http,
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "https://openrouter.ai/api/v1/",
+                ApiKey = key,
+                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
+                Vision = true,
+                Tools = true,
+                StructuredOutput = true,
+                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 20, StreamIdleSeconds = 45, TotalSeconds = 90 }
+            }));
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var store = new InMemoryMemoryStore();
+        var output = new CapturingSessionOutput();
+        await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "photo.png",
+            "image/png",
+            new MemoryStream(PngBytes()),
+            false);
+        Assert.True(await runtime.SubmitUserTextAsync("Here is a photo. Describe it in one sentence.", attachmentIds: [uploaded.AttachmentId]));
+        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        await output.WaitForAsync(
+            item => item.Payload is ResponseCompletedOutput completed && !completed.Failed,
+            first.Token);
+        Assert.True(await runtime.SubmitUserTextAsync("Review the image again and describe its colors."));
+        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        await output.WaitForAsync(
+            item => output.Items.Select(entry => entry.Payload).OfType<ResponseCompletedOutput>().Count(item => !item.Failed) >= 2,
+            second.Token);
+        await runtime.WaitUntilIdleAsync();
+
+        var terminals = output.Items.Select(item => item.Payload).OfType<ResponseCompletedOutput>().ToArray();
+        Assert.True(terminals.Length >= 2);
+        Assert.False(terminals[^1].Failed);
+        var persisted = (await store.LoadAsync(runtime.SessionId))!;
+        var assistant = persisted.Entries.Where(entry => entry.Role == ConversationRole.Assistant).ToArray();
+        Assert.True(assistant.Length >= 2);
+        Assert.False(string.IsNullOrWhiteSpace(assistant[^1].Text));
+    }
+
     private static byte[] StructuredSse(string displayText)
     {
         var payload = JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -910,6 +961,23 @@ public sealed class HistoricalImageRereadTests
             }
 
             return await inner.ProcessTurnAsync(sessionId, attachmentIds, cancellationToken).ConfigureAwait(false);
+        }
+    }
+}
+
+public sealed class LiveProviderFactAttribute : FactAttribute
+{
+    public LiveProviderFactAttribute()
+    {
+        var optIn = string.Equals(Environment.GetEnvironmentVariable("AGENTCORE_LIVE_PROVIDER_TESTS"), "1", StringComparison.Ordinal);
+        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+        if (!optIn)
+        {
+            Skip = "Opt-in AGENTCORE_LIVE_PROVIDER_TESTS=1 is required; default suites must not call OpenRouter.";
+        }
+        else if (string.IsNullOrWhiteSpace(key))
+        {
+            Skip = "OPENROUTER_API_KEY is missing.";
         }
     }
 }

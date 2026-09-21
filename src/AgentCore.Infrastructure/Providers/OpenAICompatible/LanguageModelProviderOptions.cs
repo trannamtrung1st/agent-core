@@ -29,6 +29,11 @@ public sealed class LanguageModelProviderOptions
     public bool Vision { get; set; }
     public bool Tools { get; set; }
     public bool StructuredOutput { get; set; }
+    /// <summary>
+    /// When true, include the provider's free-form error message in local logs after redaction.
+    /// Disabled by default because that text can echo ordinary private user content.
+    /// </summary>
+    public bool LogProviderErrorMessages { get; set; }
     public Dictionary<string, string> AdditionalHeaders { get; set; } = [];
     public ProviderTimeoutOptions Timeouts { get; set; } = new();
 }

@@ -13,6 +13,8 @@ internal static class WebSearchProviderRegistration
         services.TryAddSingleton<IPublicWebTransport, SocketsPublicWebTransport>();
         services.TryAddSingleton<IPublicWebFetcher>(provider =>
             new PublicWebFetcher(provider.GetRequiredService<IPublicWebTransport>()));
+        services.TryAddSingleton<IHttpRequestClient>(provider =>
+            new HttpRequestClient(provider.GetRequiredService<IPublicWebTransport>()));
         services.AddHttpClient(BraveWebSearchProvider.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromSeconds(PublicWebLimits.TotalTimeoutSeconds);

@@ -109,6 +109,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
             Vision = source.Vision,
             Tools = source.Tools,
             StructuredOutput = source.StructuredOutput,
+            LogProviderErrorMessages = source.LogProviderErrorMessages,
             AdditionalHeaders = new Dictionary<string, string>(source.AdditionalHeaders, StringComparer.Ordinal),
             Timeouts = new ProviderTimeoutOptions
             {

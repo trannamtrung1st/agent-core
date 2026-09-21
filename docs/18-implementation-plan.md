@@ -289,9 +289,9 @@ P3A introduces typed non-text tool results, safe historical image rehydration th
 | P3A-3 projection | OpenAI `MapMessages` tool→multipart sequence; Scripted historical reread | **Observed** |
 | P3A-4 verification | Playwright historical reread + non-vision refusal; docs; full §23 gate | **Observed** |
 
-## P3B–P3E — Tools, web, approval, email (observed/frozen)
+## P3B–P3F — Tools, web, approval, email, assistant capability closure
 
-P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects (Bcc drop, indeterminate send replay, MIME header injection, approval clocks vs 30 s/120 s tool timers, policy-before-Gmail, multi-tool image wire order, wrong Gmail send URL / draft-id TOCTOU). Key-free correction HEAD `e255916` (`ec4dedc`/`2561167` email send binding, then `general-assistant` v5 and `web.fetch` multi-address/`transport_error`/charset) is green, including hosted workflow `35631259704` on `e564565`. P3 is **reopened narrowly** for provider diagnostics on the Real GPT-4o mini historical-image failure. See the [P3 closure report](reports/p3-freeze-candidate.md).
+P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects. Key-free correction HEAD `e255916` is historical. P3F closes the assistant capability gap: working-directory path segments, `workspace.search` / `workspace.move`, approval-gated `http.request`, `general-assistant` v7, and a 32-name allowlist bound (`AgentDefinitionValidator.MaxToolAllowlistEntries`). `demo.sensitive_action` remains on `approval-demo` for the harness. Sandbox networking, calendar, and GitHub mutations stay outside this closure. See the [P3 closure report](reports/p3-freeze-candidate.md).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -299,11 +299,25 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3B-2 workspace/artifacts | `workspace.list`/`patch`, `artifacts.create_from_workspace` | **Observed** (TDP) |
 | P3C-1 public web foundation | SSRF-safe fetch, search ports, Synthetic/Brave | **Observed** (TDP) |
 | P3C-2 web tools | `web.search`/`web.fetch`, `general-assistant` v2 | **Observed** (TDP) |
-| P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
-| P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw`, draft-id guard, non-retry after indeterminate, `general-assistant` v6, `WorkspaceLogicalPath` cwd | **Observed** on key-free HEAD `e255916` plus narrow reopen work; P3 freeze reopened for historical-image diagnostics |
-| P3E reconcile | Full §23 gate, docs/TODO/report alignment, whole-output then email/approval corrections | **Observed** (local key-free gate on this correction tree) |
+| P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action on `approval-demo`; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
+| P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw` | **Observed** |
+| P3E reconcile | Docs/TODO/report alignment for the earlier correction | **Observed** |
+| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, provider error message off by default | **Observed** on this tree; freeze SHA recorded after the key-free gate |
 
-**Roadmap handoff:** **P4** (context compaction and memory) per `TODO.md` and proposal §26.
+General Assistant exit for this closure:
+
+- naturally read/write/patch/list/search its own workspace
+- use relative paths like a normal working directory
+- inspect current and historical attachments
+- search the public web when Brave is configured
+- fetch pages/data
+- make bounded approved generic HTTP/API requests
+- create/export artifacts
+- use the offline sandbox
+- search/read/draft/send email with the existing approval boundary
+- surface actionable failures instead of an opaque provider body
+
+**Roadmap handoff:** **P4** (context compaction and memory) after the P3F freeze SHA.
 
 ## Handoff rule
 

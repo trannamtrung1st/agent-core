@@ -53,7 +53,7 @@ public sealed class SessionToolExecutorTests
             Support(),
             sessionId,
             new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"/etc/passwd","content":"x"}"""));
-        Assert.Contains("forbidden", host, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path_outside_workspace", host, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(workspace.Writes);
 
         var windows = await ExecuteTextAsync(
@@ -414,6 +414,13 @@ trailer<< /Root 1 0 R >>
             string logicalPath,
             string expectedSha256Hex,
             IReadOnlyList<WorkspaceTextEdit> edits,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask MoveAsync(
+            Guid sessionId,
+            string sourceLogicalPath,
+            string destinationLogicalPath,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

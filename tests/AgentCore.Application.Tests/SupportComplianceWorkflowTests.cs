@@ -230,6 +230,13 @@ public sealed class SupportComplianceWorkflowTests
             CancellationToken cancellationToken = default) =>
             inner.PatchTextAsync(sessionId, definition, logicalPath, expectedSha256Hex, edits, cancellationToken);
 
+        public ValueTask MoveAsync(
+            Guid sessionId,
+            string sourceLogicalPath,
+            string destinationLogicalPath,
+            CancellationToken cancellationToken = default) =>
+            inner.MoveAsync(sessionId, sourceLogicalPath, destinationLogicalPath, cancellationToken);
+
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             if (Interlocked.Increment(ref _deletes) == 1)

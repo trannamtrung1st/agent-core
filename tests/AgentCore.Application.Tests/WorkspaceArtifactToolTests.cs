@@ -25,26 +25,26 @@ public sealed class WorkspaceArtifactToolTests
             executor,
             definition,
             session,
-            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"test.txt","content":"i love Trung"}"""));
+            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"notes.txt","content":"sample workspace content"}"""));
         using (var writeDoc = JsonDocument.Parse(wrote))
         {
-            Assert.Equal("/workspace/working/test.txt", writeDoc.RootElement.GetProperty("path").GetString());
+            Assert.Equal("/workspace/working/notes.txt", writeDoc.RootElement.GetProperty("path").GetString());
         }
 
         await ExecuteTextAsync(
             executor,
             definition,
             session,
-            new ModelToolCall("c2", ToolCatalog.WorkspaceWrite, """{"path":"tot.txt","content":"tot"}"""));
+            new ModelToolCall("c2", ToolCatalog.WorkspaceWrite, """{"path":"draft.txt","content":"hello workspace"}"""));
 
         var read = await ExecuteTextAsync(
             executor,
             definition,
             session,
-            new ModelToolCall("c3", ToolCatalog.WorkspaceRead, """{"path":"tot.txt"}"""));
+            new ModelToolCall("c3", ToolCatalog.WorkspaceRead, """{"path":"draft.txt"}"""));
         using var readDoc = JsonDocument.Parse(read);
-        Assert.Equal("/workspace/working/tot.txt", readDoc.RootElement.GetProperty("path").GetString());
-        Assert.Equal("tot", readDoc.RootElement.GetProperty("content").GetString());
+        Assert.Equal("/workspace/working/draft.txt", readDoc.RootElement.GetProperty("path").GetString());
+        Assert.Equal("hello workspace", readDoc.RootElement.GetProperty("content").GetString());
     }
 
     [Fact]
@@ -166,6 +166,71 @@ public sealed class WorkspaceArtifactToolTests
         Assert.Contains("createdAt", verify, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Workspace_search_matches_text_and_skips_binary_contents()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var definition = WorkspaceTools();
+        await workspace.EnsureAsync(session, definition);
+        await workspace.WriteAsync(session, "/workspace/working/notes.md", "sample workspace content"u8.ToArray());
+        await workspace.WriteAsync(session, "/workspace/working/reports/summary.txt", "hello workspace"u8.ToArray());
+        await workspace.WriteAsync(session, "/workspace/working/draft..txt", "sample in a dotted name"u8.ToArray());
+        await workspace.WriteAsync(session, "/workspace/working/pixel.bin", new byte[] { 0, 1, 2, 3 });
+        var executor = new SessionToolExecutor(workspace: workspace);
+
+        var json = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall(
+                "c1",
+                ToolCatalog.WorkspaceSearch,
+                """{"query":"sample"}"""));
+        using var document = JsonDocument.Parse(json);
+        var matches = document.RootElement.GetProperty("matches");
+        Assert.Equal(2, matches.GetArrayLength());
+        Assert.Contains("/workspace/working/notes.md", json, StringComparison.Ordinal);
+        Assert.Contains("/workspace/working/draft..txt", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("pixel.bin", json, StringComparison.Ordinal);
+        Assert.Contains("sample workspace content", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Workspace_move_renames_a_relative_file_without_overwrite()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var definition = WorkspaceTools();
+        await workspace.EnsureAsync(session, definition);
+        var executor = new SessionToolExecutor(workspace: workspace);
+        await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"draft.txt","content":"hello workspace"}"""));
+        var moved = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c2", ToolCatalog.WorkspaceMove, """{"source":"draft.txt","destination":"reports/draft.txt"}"""));
+        Assert.Contains("/workspace/working/reports/draft.txt", moved, StringComparison.Ordinal);
+        var read = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c3", ToolCatalog.WorkspaceRead, """{"path":"reports/draft.txt"}"""));
+        Assert.Equal("hello workspace", JsonDocument.Parse(read).RootElement.GetProperty("content").GetString());
+        var missing = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c4", ToolCatalog.WorkspaceRead, """{"path":"draft.txt"}"""));
+        Assert.Contains("NotFound", missing, StringComparison.Ordinal);
+    }
+
     private static async Task<string> ExecuteTextAsync(
         SessionToolExecutor executor,
         AgentDefinition definition,
@@ -192,6 +257,8 @@ public sealed class WorkspaceArtifactToolTests
             ToolCatalog.WorkspaceRead,
             ToolCatalog.WorkspaceWrite,
             ToolCatalog.WorkspacePatch,
+            ToolCatalog.WorkspaceSearch,
+            ToolCatalog.WorkspaceMove,
             ToolCatalog.ArtifactsVerify,
             ToolCatalog.ArtifactsCreateFromWorkspace
         ]));

@@ -1,12 +1,12 @@
-# P3 — Tools and external integrations (narrow reopen)
+# P3 — Tools and external integrations (capability closure)
 
-This report records the **P3 correction freeze** after the `27efe17` closure was reopened. Hosted Synthetic workflow run `35612462847` completed successfully on that earlier HEAD; post-closure review then found email/approval boundary defects that undermine exact-draft send approval. This tree implements that correction pass (including Gmail `drafts.send` with approved `message.raw` on `ec4dedc`).
-
-P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)).
+This report records the P3 capability closure after the `27efe17` freeze was reopened for email/approval corrections and then for assistant workspace, HTTP, and diagnostic follow-up. P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)).
 
 ## Freeze status
 
-**P3 freeze reopened narrowly** (2026-09-22). Key-free gates on `e255916` (workflow `35630920349`) and `e564565` (workflow `35631259704`) are green. A Real historical-image reread with GPT-4o mini (`openai/gpt-4o-mini-2024-07-18`) failed after `attachments.read`, and the UI only showed `Failed` because 400/422 bodies were discarded. A direct OpenRouter probe of that tool-transcript plus synthetic user image, with tools and strict structured output, returned HTTP 200 for a 1×1 PNG, as did a fresh observation of the same image. The wire projection is unchanged. This correction keeps the provider reason in sanitized logs and adds a fake two-call runtime harness. **P4 waits** until a Real failure reports a provider reason.
+**P3F capability closure is implemented on this tree.** `general-assistant` v7 can read, write, patch, list, search, and move its workspace with working-directory paths; inspect attachments; search the public web when Brave is configured; fetch pages; make bounded approved `http.request` calls; create and export artifacts; use the offline sandbox; and use the existing email approval boundary. `demo.sensitive_action` is on `approval-demo`, not Riley. Sandbox networking is deferred and is not a P3 blocker. The freeze SHA is recorded after the key-free gate on this tree. **P4** follows that SHA.
+
+Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (workflow `35631259704`) stay historical. A Real GPT-4o mini historical-image follow-up previously failed in the UI after `attachments.read`. The public failure remains `Provider rejected follow-up request (400).` Provider logs now keep status, model, phase, code, and type by default. The free-form provider message is behind `LogProviderErrorMessages`, disabled by default. The opt-in adapter probe requires a final non-tool completion with visible text and fails if the model emits another tool call. An opt-in SessionRuntime probe (`Real_session_historical_image_reread_completes_with_visible_output`) requires `ResponseCompletedOutput.Failed == false` on both turns. Default suites do not call OpenRouter.
 
 | Gate | Status |
 | --- | --- |
@@ -17,8 +17,8 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 | Local key-free gate after the usability correction | Historical on `e255916`. This narrow reopen adds focused adapter and runtime coverage; it is not a new full freeze gate. |
 | P3 implementation / key-free gate | **Green** on `e255916` (`35630920349`) and `e564565` (`35631259704`) |
 | P3 Real historical-image reread | **UI failure reproduced.** A minimal OpenRouter replay of the same follow-up shape returned HTTP 200. Provider reason from the UI failure was not available. |
-| P3 freeze | **Reopened narrowly** for provider diagnostics and the historical-image follow-up harness. `e255916` is not the freeze SHA. |
-| P4 | **Wait** |
+| P3 freeze | **Capability closure implemented.** Freeze SHA is recorded after the key-free gate on this tree. `e255916` is not the freeze SHA. |
+| P4 | **Next** after that SHA |
 
 Historical image reread still requires a model with **Tools and Vision**. The Real default DeepSeek V4.1 Flash is tools-capable and vision-incapable, so `attachments.read` returns `vision_required`. That refusal is expected. GPT-4o mini has both capabilities. A Real reread on that model failed in the UI; a minimal OpenRouter replay of the follow-up returned HTTP 200. Synthetic coverage remains `scripted-vision` / `historical-image-reread`, plus a fake OpenAI-compatible two-call runtime test.
 
@@ -50,8 +50,26 @@ Historical image reread still requires a model with **Tools and Vision**. The Re
 | P3C-2 | `web.search` / `web.fetch`, configuration gate, `general-assistant` v2 | TDP batch `e538626` |
 | P3D-1 | `RequireApproval`, `agent.approval.requested` / `RespondApproval`, UI modal, `demo.sensitive_action`; human wait isolated from 30 s/120 s clocks | TDP batch `eed3169` plus this correction |
 | P3D-2 | `email.*` tools, exact-draft hash including Bcc, MimeKit Gmail MIME, Synthetic/Gmail providers, `general-assistant` v4 then v5 full demo allowlist | TDP batch `1aeec60` plus this correction |
+| P3F | `workspace.search`, `workspace.move`, segment-normalized cwd paths, approval-gated `http.request`, `general-assistant` v7, allowlist maximum 32, provider message logging off by default | This closure |
 
-Deferred unchanged: generic `http.request`, sandbox networking modes, calendar, P4–P6, plugin marketplace, browser OAuth.
+Deferred outside P3: sandbox networking modes, calendar, GitHub mutations, P4–P6, plugin marketplace, browser OAuth. Authenticated `http.request` credentials stay a later `credentialAlias` design and are not accepted from the model.
+
+## Key-free gate (P3F capability closure)
+
+Local gate on 2026-09-22, before the freeze SHA was recorded:
+
+| Stage | Result |
+| --- | --- |
+| Domain tests | 77 passed |
+| Infrastructure tests | 261 passed / 7 skipped |
+| Application tests | 556 passed / 1 skipped (opt-in Real SessionRuntime historical-image probe) |
+| API tests | 165 passed |
+| Web Vitest | 384 passed |
+| Web production build | OK |
+| `CI=1 pnpm exec playwright test` | 46 passed |
+| `./scripts/compose-sqlite-volume.sh` | passed |
+
+Optional Real probes stay skipped: no `AGENTCORE_LIVE_PROVIDER_TESTS=1` run, and `BRAVE_SEARCH_API_KEY` is not configured in user-secrets or the environment. Configure Brave with `dotnet user-secrets set BRAVE_SEARCH_API_KEY <value> --project src/AgentCore.Api` when a Real demo needs `web.search`.
 
 ## Final key-free gate (correction tree)
 

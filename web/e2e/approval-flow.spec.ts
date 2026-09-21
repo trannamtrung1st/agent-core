@@ -5,6 +5,8 @@ test.describe.configure({ mode: "serial" });
 test("sensitive approval modal approves synthetic action", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("combobox", { name: "Identity" }).click();
+  await page.locator(".ant-select-item-option", { hasText: "Harper — Approval harness" }).click();
 
   await page.getByLabel("Message").fill("Please run sensitive approval for the harness.");
   await page.getByRole("button", { name: "Send" }).click();
@@ -21,6 +23,8 @@ test("sensitive approval modal approves synthetic action", async ({ page }) => {
 test("sensitive approval modal reject dismisses without executing", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("combobox", { name: "Identity" }).click();
+  await page.locator(".ant-select-item-option", { hasText: "Harper — Approval harness" }).click();
 
   await page.getByLabel("Message").fill("Need sensitive approval for reject path.");
   await page.getByRole("button", { name: "Send" }).click();
@@ -35,6 +39,8 @@ test("sensitive approval modal reject dismisses without executing", async ({ pag
 test("sensitive approval modal approve via keyboard", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("combobox", { name: "Identity" }).click();
+  await page.locator(".ant-select-item-option", { hasText: "Harper — Approval harness" }).click();
 
   await page.getByLabel("Message").fill("Please run sensitive approval for the harness.");
   await page.getByRole("button", { name: "Send" }).click();

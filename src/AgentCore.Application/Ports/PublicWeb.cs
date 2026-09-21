@@ -29,3 +29,30 @@ public interface IPublicWebFetcher
         PublicWebFetchRequest request,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record HttpRequestHeader(string Name, string Value);
+
+public sealed record HttpToolRequest(
+    string Method,
+    Uri Url,
+    IReadOnlyList<HttpRequestHeader> Headers,
+    byte[] Body,
+    bool FollowRedirects);
+
+public sealed record HttpToolResponse(
+    int StatusCode,
+    string FinalUrl,
+    string? ContentType,
+    string Body,
+    bool Truncated,
+    bool Untrusted,
+    string? RedirectLocation,
+    string? ErrorCode,
+    string? ErrorMessage);
+
+public interface IHttpRequestClient
+{
+    ValueTask<HttpToolResponse> SendAsync(
+        HttpToolRequest request,
+        CancellationToken cancellationToken = default);
+}

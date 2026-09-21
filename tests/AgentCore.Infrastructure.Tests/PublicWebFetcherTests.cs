@@ -169,6 +169,19 @@ public sealed class PublicWebFetcherTests
         public ValueTask<PublicWebTransportResponse> GetAsync(Uri uri, CancellationToken cancellationToken)
         {
             CallCount++;
+            return Dequeue(uri);
+        }
+
+        public ValueTask<PublicWebTransportResponse> SendAsync(
+            PublicWebOutboundRequest request,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Dequeue(request.Uri);
+        }
+
+        private ValueTask<PublicWebTransportResponse> Dequeue(Uri uri)
+        {
             if (_responses.Count == 0)
             {
                 throw new InvalidOperationException("No fake response queued.");
@@ -187,11 +200,21 @@ public sealed class PublicWebFetcherTests
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             return new PublicWebTransportResponse(200, null, "text/plain", "late"u8.ToArray());
         }
+
+        public ValueTask<PublicWebTransportResponse> SendAsync(
+            PublicWebOutboundRequest request,
+            CancellationToken cancellationToken) =>
+            GetAsync(request.Uri, cancellationToken);
     }
 
     private sealed class ThrowingTransport : IPublicWebTransport
     {
         public ValueTask<PublicWebTransportResponse> GetAsync(Uri uri, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("connection reset");
+
+        public ValueTask<PublicWebTransportResponse> SendAsync(
+            PublicWebOutboundRequest request,
+            CancellationToken cancellationToken) =>
             throw new HttpRequestException("connection reset");
     }
 }

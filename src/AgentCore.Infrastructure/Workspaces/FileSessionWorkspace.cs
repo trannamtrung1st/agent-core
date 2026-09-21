@@ -6,6 +6,7 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
 
@@ -300,6 +301,64 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         }
     }
 
+    public async ValueTask MoveAsync(
+        Guid sessionId,
+        string sourceLogicalPath,
+        string destinationLogicalPath,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDeleted(sessionId);
+        var source = Normalize(sourceLogicalPath);
+        var destination = Normalize(destinationLogicalPath);
+        RolePermissions.EnsureLogicalPathAllowed(source, sessionId);
+        RolePermissions.EnsureLogicalPathAllowed(destination, sessionId);
+        if (!IsWritableFile(source) || !IsWritableFile(destination))
+        {
+            throw AgentCoreErrors.Forbidden("Execution view writes are limited to /workspace.");
+        }
+
+        if (IsForbiddenPersist(source) || IsForbiddenPersist(destination))
+        {
+            throw AgentCoreErrors.Forbidden("Runtime internals and secret files cannot be stored in the workspace.");
+        }
+
+        if (string.Equals(source, destination, StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.Validation("source and destination are the same path.");
+        }
+
+        var gate = Gate(sessionId);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDeleted(sessionId);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            linked.Token.ThrowIfCancellationRequested();
+            var sourcePhysical = MapWorkspaceFile(sessionId, source);
+            var destinationPhysical = MapWorkspaceFile(sessionId, destination);
+            DenyEscapingLinks(sourcePhysical, SessionRoot(sessionId));
+            DenyEscapingLinks(destinationPhysical, SessionRoot(sessionId));
+            if (!File.Exists(sourcePhysical) || Directory.Exists(sourcePhysical))
+            {
+                throw AgentCoreErrors.NotFound("Workspace path was not found.");
+            }
+
+            if (File.Exists(destinationPhysical) || Directory.Exists(destinationPhysical))
+            {
+                throw AgentCoreErrors.Conflict("Destination already exists.");
+            }
+
+            var parent = Path.GetDirectoryName(destinationPhysical)!;
+            DenyEscapingLinks(parent, SessionRoot(sessionId));
+            Directory.CreateDirectory(parent);
+            File.Move(sourcePhysical, destinationPhysical);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         _deleted[sessionId] = 1;
@@ -516,7 +575,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
     private string MapWorkspacePath(Guid sessionId, string path)
     {
         var relative = path["/workspace".Length..].TrimStart('/');
-        if (relative.Contains("..", StringComparison.Ordinal))
+        if (WorkspaceLogicalPath.HasParentSegment(relative))
         {
             throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
         }
@@ -556,7 +615,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         {
             DenyEscapingLinks(file, source);
             var relative = Path.GetRelativePath(source, file).Replace('\\', '/');
-            if (relative.Contains("..", StringComparison.Ordinal)
+            if (WorkspaceLogicalPath.HasParentSegment(relative)
                 || relative.StartsWith("knowledge/", StringComparison.OrdinalIgnoreCase)
                 || relative.StartsWith("harness/", StringComparison.OrdinalIgnoreCase)
                 || IsForbiddenPersist("/workspace/working/" + relative))

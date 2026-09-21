@@ -12,12 +12,15 @@ public static class ToolCatalog
     public const string WorkspaceList = "workspace.list";
     public const string WorkspaceWrite = "workspace.write";
     public const string WorkspacePatch = "workspace.patch";
+    public const string WorkspaceSearch = "workspace.search";
+    public const string WorkspaceMove = "workspace.move";
     public const string ArtifactsCreate = "artifacts.create";
     public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";
     public const string ArtifactsVerify = "artifacts.verify";
     public const string SandboxRun = "sandbox.run";
     public const string WebSearch = "web.search";
     public const string WebFetch = "web.fetch";
+    public const string HttpRequest = "http.request";
     public const string EmailSearch = "email.search";
     public const string EmailRead = "email.read";
     public const string EmailCreateDraft = "email.create_draft";

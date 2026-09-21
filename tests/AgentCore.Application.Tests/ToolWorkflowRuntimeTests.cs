@@ -220,6 +220,13 @@ public sealed class ToolWorkflowRuntimeTests
             Writes.Add(logicalPath);
         }
 
+        public ValueTask MoveAsync(
+            Guid sessionId,
+            string sourceLogicalPath,
+            string destinationLogicalPath,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
+
         public ValueTask<WorkspacePatchResult> PatchTextAsync(
             Guid sessionId,
             AgentDefinition definition,

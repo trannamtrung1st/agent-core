@@ -177,6 +177,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
             provider.GetService<IEmailProvider>(),
+            provider.GetService<IHttpRequestClient>(),
             provider.GetRequiredService<IToolConfigurationGate>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(

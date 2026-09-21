@@ -6,6 +6,25 @@ namespace AgentCore.Application.Tools;
 public static class WorkspaceLogicalPath
 {
     public const string WorkingDirectory = "/workspace/working";
+    public const string OutsideWorkspaceMessage = "Only approved session workspace paths can be accessed.";
+
+    public static bool HasParentSegment(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        foreach (var token in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token == "..")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public static bool TryResolve(string? raw, Guid sessionId, out string canonical, out string errorCode, out string message)
     {
@@ -20,40 +39,75 @@ public static class WorkspaceLogicalPath
         }
 
         var trimmed = raw.Replace('\\', '/').Trim();
-        while (trimmed.StartsWith("./", StringComparison.Ordinal))
+        if (trimmed is "/")
         {
-            trimmed = trimmed[2..];
-        }
-
-        if (trimmed is "" or ".")
-        {
-            canonical = WorkingDirectory;
+            canonical = "/";
             return Finalize(sessionId, canonical, out errorCode, out message);
         }
 
-        if (IsExplicitLogicalRoot(trimmed))
+        var explicitRoot = IsExplicitLogicalRoot(trimmed);
+        if (!explicitRoot && trimmed.StartsWith('/'))
         {
-            canonical = NormalizeAbsolute(trimmed);
-            return Finalize(sessionId, canonical, out errorCode, out message);
+            return Outside(out canonical, out errorCode, out message);
         }
 
-        if (trimmed.StartsWith('/'))
+        var segments = new List<string>();
+        var anchor = explicitRoot ? 1 : 0;
+        if (!explicitRoot)
         {
-            errorCode = "path_outside_workspace";
-            message = "Only files inside the session workspace can be modified.";
-            return false;
+            segments.Add("workspace");
+            segments.Add("working");
+            anchor = segments.Count;
+            while (trimmed.StartsWith("./", StringComparison.Ordinal))
+            {
+                trimmed = trimmed[2..];
+            }
+
+            if (trimmed is "" or ".")
+            {
+                canonical = WorkingDirectory;
+                return Finalize(sessionId, canonical, out errorCode, out message);
+            }
         }
 
-        if (trimmed.Contains("..", StringComparison.Ordinal))
+        foreach (var segment in trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
-            errorCode = "path_outside_workspace";
-            message = "Only files inside the session workspace can be modified.";
-            return false;
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                if (segments.Count <= anchor)
+                {
+                    return Outside(out canonical, out errorCode, out message);
+                }
+
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+
+            segments.Add(segment);
         }
 
-        trimmed = trimmed.TrimStart('/');
-        canonical = trimmed.Length == 0 ? WorkingDirectory : $"{WorkingDirectory}/{trimmed}";
-        canonical = NormalizeAbsolute(canonical);
+        if (segments.Count == 0)
+        {
+            return Outside(out canonical, out errorCode, out message);
+        }
+
+        var startedInWorking = !explicitRoot
+            || trimmed.Equals(WorkingDirectory, StringComparison.Ordinal)
+            || trimmed.StartsWith(WorkingDirectory + "/", StringComparison.Ordinal);
+        var usedParent = HasParentSegment(trimmed);
+        canonical = "/" + string.Join('/', segments);
+        if (usedParent && startedInWorking
+            && canonical != WorkingDirectory
+            && !canonical.StartsWith(WorkingDirectory + "/", StringComparison.Ordinal))
+        {
+            return Outside(out canonical, out errorCode, out message);
+        }
+
         return Finalize(sessionId, canonical, out errorCode, out message);
     }
 
@@ -69,6 +123,14 @@ public static class WorkspaceLogicalPath
         }
 
         return canonical;
+    }
+
+    private static bool Outside(out string canonical, out string errorCode, out string message)
+    {
+        canonical = "";
+        errorCode = "path_outside_workspace";
+        message = OutsideWorkspaceMessage;
+        return false;
     }
 
     private static bool Finalize(Guid sessionId, string canonical, out string errorCode, out string message)
@@ -89,25 +151,4 @@ public static class WorkspaceLogicalPath
         path.StartsWith("/agent", StringComparison.Ordinal)
         || path.StartsWith("/attachments", StringComparison.Ordinal)
         || path.StartsWith("/workspace", StringComparison.Ordinal);
-
-    private static string NormalizeAbsolute(string path)
-    {
-        var normalized = path.Replace('\\', '/').Trim();
-        if (!normalized.StartsWith('/'))
-        {
-            normalized = "/" + normalized;
-        }
-
-        while (normalized.Contains("//", StringComparison.Ordinal))
-        {
-            normalized = normalized.Replace("//", "/", StringComparison.Ordinal);
-        }
-
-        if (normalized.Length > 1)
-        {
-            normalized = normalized.TrimEnd('/');
-        }
-
-        return normalized;
-    }
 }

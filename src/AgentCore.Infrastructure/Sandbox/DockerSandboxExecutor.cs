@@ -291,7 +291,7 @@ public static class SandboxCommand
         {
             var path = arguments[0].Replace('\\', '/');
             if (!path.StartsWith("/workspace/working/", StringComparison.Ordinal)
-                || path.Contains("..", StringComparison.Ordinal)
+                || WorkspaceLogicalPath.HasParentSegment(path)
                 || path.Contains('\0'))
             {
                 error = "Sandbox cat is limited to /workspace/working.";

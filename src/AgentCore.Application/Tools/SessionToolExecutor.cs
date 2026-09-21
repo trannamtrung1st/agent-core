@@ -10,7 +10,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
 
-public sealed class SessionToolExecutor(
+public sealed partial class SessionToolExecutor(
     RoleKnowledgeService? knowledge = null,
     IAttachmentStore? attachments = null,
     IAttachmentProcessor? processor = null,
@@ -20,6 +20,7 @@ public sealed class SessionToolExecutor(
     IWebSearchProvider? webSearch = null,
     IPublicWebFetcher? publicWebFetcher = null,
     IEmailProvider? emailProvider = null,
+    IHttpRequestClient? httpRequestClient = null,
     IToolConfigurationGate? configurationGate = null)
 {
     private readonly IToolConfigurationGate _configurationGate =
@@ -78,7 +79,8 @@ public sealed class SessionToolExecutor(
         }
 
         if (approvalGrant is not null
-            && !string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
+            && !string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal)
+            && !string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
         {
             var boundHash = ToolActionHash.Compute(call.Name, args);
             if (!string.Equals(boundHash, approvalGrant.ActionHash, StringComparison.Ordinal)
@@ -106,6 +108,11 @@ public sealed class SessionToolExecutor(
                     await WriteWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WorkspacePatch => TextResult(
                     await PatchWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceSearch => FitResult(
+                    remainingOutputBytes,
+                    await SearchWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceMove => TextResult(
+                    await MoveWorkspaceAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreate => TextResult(
                     await CreateArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreateFromWorkspace => TextResult(
@@ -121,6 +128,9 @@ public sealed class SessionToolExecutor(
                 ToolCatalog.WebFetch => FitResult(
                     remainingOutputBytes,
                     await FetchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.HttpRequest => FitResult(
+                    remainingOutputBytes,
+                    await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 ToolCatalog.EmailSearch => FitResult(

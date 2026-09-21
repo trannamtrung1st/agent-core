@@ -574,7 +574,12 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.True(
             rejected is null,
             (rejected?.Failure.SafeMessage ?? "rejected") + " " + string.Join(" | ", logger.Messages));
-        Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted);
+        Assert.DoesNotContain(events, item => item is ModelToolCallEvent);
+        var completed = events.OfType<ModelCompleted>().LastOrDefault();
+        Assert.NotNull(completed);
+        Assert.NotEqual(ModelStopReason.ToolCalls, completed.Reason);
+        var visible = string.Concat(events.OfType<ModelTextDelta>().Select(delta => delta.Text));
+        Assert.False(string.IsNullOrWhiteSpace(visible));
     }
 
     [LiveProviderFact]
@@ -1117,7 +1122,8 @@ public sealed class OpenAICompatibleLanguageModelTests
                 ApiKey = "test-key",
                 Tools = true,
                 Vision = true,
-                StructuredOutput = true
+                StructuredOutput = true,
+                LogProviderErrorMessages = true
             },
             logger: logger);
         var request = new ModelRequest(
@@ -1159,6 +1165,49 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains("phase=follow-up", telemetry.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain("review the image again", telemetry.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain(Convert.ToBase64String(png), telemetry.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Rejected_follow_up_omits_provider_message_unless_diagnostic_logging_is_enabled()
+    {
+        var handler = new ErrorBodyHandler(
+            HttpStatusCode.BadRequest,
+            """
+            {"error":{"message":"private note about the draft","code":"invalid_request_error","type":"invalid_request_error"}}
+            """);
+        var logger = new ListLogger();
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
+                ApiKey = "test-key",
+                Tools = true
+            },
+            logger: logger);
+        var events = await CollectAsync(
+            model,
+            new ModelRequest(
+                Guid.NewGuid(),
+                [
+                    new ModelMessage(ModelRole.User, "continue"),
+                    new ModelMessage(
+                        ModelRole.Tool,
+                        """{"ok":true}""",
+                        ToolCallId: "call_1",
+                        Name: ToolCatalog.KnowledgeRetrieve)
+                ]));
+        var failed = Assert.IsType<ModelFailed>(Assert.Single(events));
+        Assert.Equal("Provider rejected follow-up request (400).", failed.Failure.SafeMessage);
+        var logged = Assert.Single(logger.Messages);
+        Assert.Contains("Status 400", logged, StringComparison.Ordinal);
+        Assert.Contains("openai/gpt-4o-mini-2024-07-18", logged, StringComparison.Ordinal);
+        Assert.Contains("follow-up", logged, StringComparison.Ordinal);
+        Assert.Contains("invalid_request_error", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("private note", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("Reason", logged, StringComparison.Ordinal);
     }
 
     [Fact]

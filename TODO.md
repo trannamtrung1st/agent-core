@@ -9,8 +9,8 @@ Current roadmap:
 1. **P2A — first-class progress semantics** is **observed** and frozen;
 2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
 3. **P2E — multimodal/image input usability and capability handling** — **observed/frozen** (2026-09-21 key-free Synthetic + Compose gate on freeze HEAD);
-4. **P3 — tools and external integrations** correction freeze is the commit containing [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md) after the email/approval tail and the `web.fetch` / `general-assistant` v5 usability correction; hosted workflow `35627313751` was green on docs HEAD `06198a9`;
-5. **P4 — add context compaction and memory** after P3;
+4. **P3 — tools and external integrations** capability closure is P3F (`workspace.search`/`workspace.move`, approval-gated `http.request`, `general-assistant` v7). The freeze SHA is recorded with the key-free gate in [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md);
+5. **P4 — add context compaction and memory** after the P3 freeze;
 6. add configurable triggers;
 7. add durable background work;
 8. productize the agent harness/admin lifecycle;
@@ -20,7 +20,7 @@ P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dc
 
 P2D session model selection is implemented and remains closed.
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** multimodal image-input capability closure is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (implementation commits `0eeb27c`–`a502266` plus documentation on that freeze HEAD). Do not reopen P2E without a reproducible regression. Optional Real vision (`gpt-4o-mini-2024-07-18`) and structured-response probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. **P2C** personalization boundary is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2C freeze HEAD (implementation commits `4ae1095`–`c636b28` plus documentation on that freeze HEAD). Do not reopen P2C without a reproducible regression. **P2-Final** mandatory whole-output review **complete** (2026-09-21; TDP production evidence). Closure repair on `47d6ff6` (Real-catalog fallback, post-commit profile notification, preferredName trim). **P2 closed/frozen** on `47d6ff65142d2d454c4aa3101b0f43a38f01389a` (`47d6ff6`) with CI/Synthetic + Compose green (workflow run `35552740853`). Optional Real structured-response and vision probes **skipped/unverified**. Do not reopen P2 without a reproducible regression. Active roadmap: **P3 correction freeze** then **P4**. P6 implementation has not started.
+P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** multimodal image-input capability closure is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (implementation commits `0eeb27c`–`a502266` plus documentation on that freeze HEAD). Do not reopen P2E without a reproducible regression. Optional Real vision (`gpt-4o-mini-2024-07-18`) and structured-response probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. **P2C** personalization boundary is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2C freeze HEAD (implementation commits `4ae1095`–`c636b28` plus documentation on that freeze HEAD). Do not reopen P2C without a reproducible regression. **P2-Final** mandatory whole-output review **complete** (2026-09-21; TDP production evidence). Closure repair on `47d6ff6` (Real-catalog fallback, post-commit profile notification, preferredName trim). **P2 closed/frozen** on `47d6ff65142d2d454c4aa3101b0f43a38f01389a` (`47d6ff6`) with CI/Synthetic + Compose green (workflow run `35552740853`). Optional Real structured-response and vision probes **skipped/unverified**. Do not reopen P2 without a reproducible regression. Active roadmap: **P3 capability-closure freeze**, then **P4**. P6 implementation has not started.
 
 Current-turn image input already has substantial implementation and must not be redesigned from scratch:
 
@@ -949,7 +949,7 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
-**P3 freeze on `27efe17` reopened** (2026-09-21) after review of the email/approval boundary. The correction pass covers: Gmail Bcc preservation and exact-draft approval preview; MimeKit MIME plus CR/LF/NUL rejection; Gmail `drafts.send` with approved `message.raw` and draft-id guard; indeterminate/cancel-after-dispatch send consumption; approval wait isolated from 30 s/120 s execution clocks; execution policy before Gmail preview; multi-tool historical-image wire order; single owner for `waitingExternal` completion; `general-assistant` v5→v6 demo tools and workspace working-directory path resolution (`WorkspaceLogicalPath`); `web.fetch` multi-address/`transport_error`/charset (key-free HEAD `e255916`, workflows `35630920349` and `35631259704` green). **P3 is reopened narrowly** for Real GPT-4o mini historical-image follow-up diagnostics (provider 400/422 body logging, fake two-call runtime harness; minimal OpenRouter replay of the wire shape returned HTTP 200). See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P4 waits** until that narrow reopen is closed.
+**P3 capability closure (P3F)** adds working-directory segment normalization, `workspace.search` and `workspace.move`, approval-gated `http.request`, and `general-assistant` v7. Earlier correction evidence remains: Gmail Bcc preservation and exact-draft approval; MimeKit MIME; Gmail `drafts.send`; indeterminate send consumption; approval-clock isolation; `web.fetch` multi-address/`transport_error` (key-free HEAD `e255916`). Provider 400/422 responses stay a safe public message. Logs include status, model, phase, provider code, and type; the free-form provider message requires `LogProviderErrorMessages` and is off by default. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P4** follows the P3 freeze SHA.
 
 Already present:
 
@@ -1012,9 +1012,9 @@ P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focuse
 
 ## Typed external actions
 
-- [ ] Prefer typed domain actions over generic HTTP mutations.
+Prefer typed domain actions over generic HTTP mutations when a workflow is repeated and has a stable contract. That is a design decision, not an open P3 task.
 
-Examples:
+Examples that can come after P4, while `http.request` covers the gap:
 
 ```text
 github.create_issue
@@ -1028,7 +1028,7 @@ Credentials never enter model context.
 
 ## Approval policy
 
-- [x] Live-session approval for sensitive/destructive tools (`RequireApproval`, `agent.approval.requested` / `RespondApproval`, `email.send` exact-draft gate, `demo.sensitive_action`).
+- [x] Live-session approval for sensitive/destructive tools (`RequireApproval`, `agent.approval.requested` / `RespondApproval`, `email.send` exact-draft gate, `http.request` method/URL/header/body-hash gate, `demo.sensitive_action` on `approval-demo`).
 
 Conceptually, later typed integrations reuse the same policy:
 
@@ -1038,7 +1038,7 @@ Conceptually, later typed integrations reuse the same policy:
 
 ## Sandbox and network-policy evolution
 
-- [ ] Keep `sandbox.run` as the generic execution escape hatch.
+- [x] Keep `sandbox.run` as the generic execution escape hatch.
 
 Maintain:
 
@@ -1052,28 +1052,41 @@ Maintain:
 - bounded output;
 - network disabled by default.
 
-- [ ] Add sandbox network policy only when a concrete workflow requires it.
+Sandbox network policy is **deferred / not a P3 blocker**. Add it in a later sandbox/infrastructure phase only when a concrete workflow requires it. Possible modes remain `none`, restricted public web, and an explicit host allowlist. Never unrestricted by default. Do not give the sandbox unrestricted networking; `http.request` is the mediated network capability.
 
-Possible modes:
+## P3F — Bounded `http.request`
 
-- `none`;
-- restricted public web;
-- explicit host allowlist.
+- [x] Add generic `http.request` because typed tools cannot reasonably cover arbitrary public APIs.
 
-Never unrestricted by default.
+This first version:
 
-## Generic `http.request`
+- `SensitiveWrite` exact-action approval bound to normalized method, URL, permitted headers, and body SHA-256;
+- methods GET, HEAD, POST, PUT, PATCH, DELETE, with `web.fetch` preferred for ordinary GETs;
+- public-DNS/SSRF/rebinding/redirect protections reused from `web.fetch`;
+- localhost, private, link-local, and metadata targets rejected;
+- request, response, and time caps;
+- no automatic retry of non-idempotent methods;
+- every returned body marked untrusted;
+- no model-supplied Authorization, Cookie, Proxy-Authorization, or API keys.
 
-- [ ] Add generic `http.request` only if typed tools cannot reasonably cover real workflows.
+Later authenticated generic requests should use trusted `credentialAlias` values bound server-side to exact hosts and methods. Credentials must never enter the model context.
 
-If added, require:
+## P3 exit
 
-- allowed hosts;
-- allowed methods;
-- request/response limits;
-- timeout;
-- named credential aliases;
-- authorization/approval checks.
+General Assistant can:
+
+- naturally read/write/patch/list/search its own workspace
+- use relative paths like a normal working directory
+- inspect current and historical attachments
+- search the public web when Brave is configured
+- fetch pages/data
+- make bounded approved generic HTTP/API requests
+- create/export artifacts
+- use the offline sandbox
+- search/read/draft/send email with the existing approval boundary
+- surface actionable failures instead of opaque "Failed"
+
+Then freeze P3 and move to P4 memory/compaction. Unrestricted sandbox networking, browser automation, calendar, GitHub mutations, and a plugin marketplace are not part of this closure.
 
 ---
 
