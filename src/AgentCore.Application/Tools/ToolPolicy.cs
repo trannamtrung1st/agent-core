@@ -6,7 +6,10 @@ namespace AgentCore.Application.Tools;
 
 public static class ToolPolicy
 {
-    public static ToolPolicyDecision EvaluateExecution(AgentDefinition definition, string toolName)
+    public static ToolPolicyDecision EvaluateExecution(
+        AgentDefinition definition,
+        string toolName,
+        IToolConfigurationGate configurationGate)
     {
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
         {
@@ -18,8 +21,14 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
-        if (descriptor.OfferRule == ToolOfferRule.RoleAllowlist
+        if (descriptor.OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows
             && !RoleEnvironments.Of(definition).ToolList.Contains(toolName, StringComparer.Ordinal))
+        {
+            return ToolPolicyDecision.Deny;
+        }
+
+        if (descriptor.OfferRule == ToolOfferRule.ConfigurationWhenRoleAllows
+            && !configurationGate.IsConfigured(toolName))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -27,7 +36,11 @@ public static class ToolPolicy
         return ToolPolicyDecision.Allow;
     }
 
-    public static bool IsOffered(ToolDescriptor descriptor, AgentDefinition definition, AgentContext? context)
+    public static bool IsOffered(
+        ToolDescriptor descriptor,
+        AgentDefinition definition,
+        AgentContext? context,
+        IToolConfigurationGate configurationGate)
     {
         if (context is not null && !context.ModelSupportsTools)
         {
@@ -46,10 +59,18 @@ public static class ToolPolicy
                 StringComparer.Ordinal),
             ToolOfferRule.SessionAttachmentsWhenRoleAllows => context is not null
                 && ToolCatalog.SessionHasAttachments(context),
+            ToolOfferRule.ConfigurationWhenRoleAllows =>
+                RoleEnvironments.Of(definition).ToolList.Contains(descriptor.Name, StringComparer.Ordinal)
+                && configurationGate.IsConfigured(descriptor.Name),
             _ => false
         };
     }
 
-    public static bool IsOffered(AgentDefinition definition, AgentContext context, string toolName) =>
-        ToolRegistry.TryGet(toolName, out var descriptor) && IsOffered(descriptor, definition, context);
+    public static bool IsOffered(
+        AgentDefinition definition,
+        AgentContext context,
+        string toolName,
+        IToolConfigurationGate configurationGate) =>
+        ToolRegistry.TryGet(toolName, out var descriptor)
+        && IsOffered(descriptor, definition, context, configurationGate);
 }

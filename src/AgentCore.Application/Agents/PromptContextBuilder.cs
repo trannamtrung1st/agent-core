@@ -15,8 +15,14 @@ public sealed record PromptSections(
     IReadOnlyList<ModelMessage> TurnMessages,
     string AttachmentManifestSystem);
 
-public sealed class PromptContextBuilder
+public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGate = null)
 {
+    private readonly IToolConfigurationGate _configurationGate =
+        configurationGate ?? ToolConfigurationGates.Unconfigured;
+
+    public IReadOnlyList<ModelToolDefinition> OfferTools(AgentDefinition definition, AgentContext? context) =>
+        ToolCatalog.For(definition, context, _configurationGate);
+
     public const string VoiceModeOutputGuidance = """
         Speak naturally: convey the point and, when useful, name the relevant on-screen detail so the listener can follow without hearing the whole document. For a long written answer with brief speech, keep the full answer on screen. Spoken wording may match the display or differ; omit a separate spoken form when the display itself is natural to say aloud.
         """;
@@ -220,7 +226,7 @@ public sealed class PromptContextBuilder
         return string.Join('\n', lines);
     }
 
-    private static string BuildEnvironmentSystem(AgentContext context)
+    private string BuildEnvironmentSystem(AgentContext context)
     {
         var role = RoleEnvironments.Of(context.Definition);
         var harness = role.HarnessList.Count == 0 ? "(none)" : string.Join(", ", role.HarnessList);
@@ -228,7 +234,7 @@ public sealed class PromptContextBuilder
             ? "(none)"
             : string.Join(", ", role.KnowledgeList.Select(item => item.Identity));
         var roleTools = role.ToolList.Count == 0 ? "(none)" : string.Join(", ", role.ToolList);
-        var effective = ToolCatalog.For(context.Definition, context);
+        var effective = OfferTools(context.Definition, context);
         var effectiveTools = effective.Count == 0 ? "(none)" : string.Join(", ", effective.Select(tool => tool.Name));
         return string.Join('\n',
         [
@@ -332,7 +338,7 @@ public sealed class PromptContextBuilder
         return selected;
     }
 
-    private static string BuildAttachmentManifestSystem(AgentContext context)
+    private string BuildAttachmentManifestSystem(AgentContext context)
     {
         var items = SelectManifestItems(context);
         if (items.Count == 0)
@@ -340,7 +346,10 @@ public sealed class PromptContextBuilder
             return string.Empty;
         }
 
-        var attachmentReadAvailable = ToolCatalog.OffersAttachmentRead(context.Definition, context);
+        var attachmentReadAvailable = ToolCatalog.OffersAttachmentRead(
+            context.Definition,
+            context,
+            _configurationGate);
         var entries = items.Select(item => JsonSerializer.Serialize(new
         {
             displayName = SanitizeManifestLabel(item.DisplayName),
@@ -378,7 +387,7 @@ public sealed class PromptContextBuilder
         return $"{entry.Text}\n[Sent attachments: {refs}]";
     }
 
-    private static IReadOnlyList<ModelMessage> BuildTurnMessages(AgentContext context)
+    private IReadOnlyList<ModelMessage> BuildTurnMessages(AgentContext context)
     {
         var currentBatch = context.Trigger.Kind == TriggerKind.UserTurn
             ? TrailingUserSuffix.Of(context.History)
@@ -475,7 +484,7 @@ public sealed class PromptContextBuilder
                         return BuildCurrentUserMessage(
                             entry.Text,
                             contents,
-                            ToolCatalog.OffersAttachmentRead(context.Definition, context),
+                            ToolCatalog.OffersAttachmentRead(context.Definition, context, _configurationGate),
                             allocations);
                     }
                 }
@@ -651,7 +660,8 @@ public static class ConversationSummary
     }
 }
 
-public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeEvaluator? initiativeEvaluator = null) : IAgentBrain
+public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeEvaluator? initiativeEvaluator = null)
+    : IAgentBrain
 {
     public async ValueTask<AgentDecision> DecideAsync(
         AgentContext context,
@@ -661,7 +671,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
         cancellationToken.ThrowIfCancellationRequested();
         if (context.Trigger.Kind == TriggerKind.UserTurn)
         {
-            return new Speak(WithTools(context, builder.Build(context, responseId)));
+            return new Speak(WithTools(context, builder.Build(context, responseId), builder));
         }
 
         if (context.InitiativeHeld)
@@ -693,7 +703,7 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
 
         if (initiativeEvaluator is null)
         {
-            return new Speak(WithTools(context, builder.Build(context, responseId)));
+            return new Speak(WithTools(context, builder.Build(context, responseId), builder));
         }
 
         return await initiativeEvaluator.EvaluateAsync(context, responseId, cancellationToken).ConfigureAwait(false);
@@ -708,9 +718,9 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
             _ => false
         };
 
-    private static ModelRequest WithTools(AgentContext context, ModelRequest request)
+    private static ModelRequest WithTools(AgentContext context, ModelRequest request, PromptContextBuilder builder)
     {
-        var tools = ToolCatalog.For(context.Definition, context);
+        var tools = builder.OfferTools(context.Definition, context);
         return tools.Count == 0 ? request : request with { Tools = tools };
     }
 

@@ -21,8 +21,9 @@ public sealed class ToolRegistryPolicyTests
     public void Unknown_tools_are_denied_at_execution()
     {
         var definition = SampleDefinitions.Support;
-        Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, "process"));
-        Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, "shell"));
+        var gate = ToolConfigurationGates.AllowAll;
+        Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, "process", gate));
+        Assert.Equal(ToolPolicyDecision.Deny, ToolPolicy.EvaluateExecution(definition, "shell", gate));
     }
 
     [Fact]
@@ -30,7 +31,7 @@ public sealed class ToolRegistryPolicyTests
     {
         Assert.Equal(
             ToolPolicyDecision.Deny,
-            ToolPolicy.EvaluateExecution(SampleDefinitions.Support, ToolCatalog.WorkspaceRead));
+            ToolPolicy.EvaluateExecution(SampleDefinitions.Support, ToolCatalog.WorkspaceRead, ToolConfigurationGates.AllowAll));
     }
 
     [Fact]
@@ -41,15 +42,16 @@ public sealed class ToolRegistryPolicyTests
 
         var definition = SampleDefinitions.Support;
         var withoutAttachments = Context(definition, modelSupportsTools: true, sessionAttachments: []);
-        Assert.False(ToolPolicy.IsOffered(definition, withoutAttachments, ToolCatalog.AttachmentsRead));
-        Assert.False(ToolCatalog.OffersAttachmentRead(definition, withoutAttachments));
+        var gate = ToolConfigurationGates.AllowAll;
+        Assert.False(ToolPolicy.IsOffered(definition, withoutAttachments, ToolCatalog.AttachmentsRead, gate));
+        Assert.False(ToolCatalog.OffersAttachmentRead(definition, withoutAttachments, gate));
 
         var withAttachment = Context(
             definition,
             modelSupportsTools: true,
             sessionAttachments: [new SessionAttachmentManifestItem(Guid.NewGuid(), "a.png", "image/png", 1)]);
-        Assert.True(ToolPolicy.IsOffered(definition, withAttachment, ToolCatalog.AttachmentsRead));
-        Assert.True(ToolCatalog.OffersAttachmentRead(definition, withAttachment));
+        Assert.True(ToolPolicy.IsOffered(definition, withAttachment, ToolCatalog.AttachmentsRead, gate));
+        Assert.True(ToolCatalog.OffersAttachmentRead(definition, withAttachment, gate));
     }
 
     [Fact]
@@ -57,7 +59,7 @@ public sealed class ToolRegistryPolicyTests
     {
         var definition = SampleDefinitions.Support;
         var context = Context(definition, modelSupportsTools: false, sessionAttachments: []);
-        Assert.Empty(ToolCatalog.For(definition, context));
+        Assert.Empty(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll));
     }
 
     [Fact]

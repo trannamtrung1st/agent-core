@@ -16,6 +16,7 @@ using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.PublicWeb;
+using AgentCore.Infrastructure.Tools;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -62,7 +63,11 @@ public static class InfrastructureServiceCollectionExtensions
                 profile,
                 languageModel ?? new LanguageModelProviderOptions { Adapter = "Scripted" },
                 provider.GetRequiredService<IModelCatalog>()));
-        services.TryAddSingleton<PromptContextBuilder>();
+        services.TryAddSingleton<IToolConfigurationGate>(provider => new ToolConfigurationGate(
+            provider.GetService<IWebSearchProvider>(),
+            provider.GetService<IPublicWebFetcher>()));
+        services.TryAddSingleton<PromptContextBuilder>(provider =>
+            new PromptContextBuilder(provider.GetRequiredService<IToolConfigurationGate>()));
         services.TryAddSingleton<IInitiativeEvaluator>(provider =>
             new DefaultInitiativeEvaluator(
                 provider.GetRequiredService<PromptContextBuilder>(),
@@ -158,18 +163,21 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
+        WebSearchProviderRegistration.AddPublicWeb(services, profile);
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
             provider.GetService<IAttachmentStore>(),
             provider.GetService<IAttachmentProcessor>(),
             provider.GetService<ISessionWorkspace>(),
             provider.GetService<IArtifactStore>(),
-            provider.GetService<ISandboxExecutor>()));
+            provider.GetService<ISandboxExecutor>(),
+            provider.GetService<IWebSearchProvider>(),
+            provider.GetService<IPublicWebFetcher>(),
+            provider.GetRequiredService<IToolConfigurationGate>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),
                 provider.GetService<IArtifactStore>()));
-        WebSearchProviderRegistration.AddPublicWeb(services, profile);
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

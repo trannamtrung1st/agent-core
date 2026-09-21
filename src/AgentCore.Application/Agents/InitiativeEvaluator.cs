@@ -51,7 +51,7 @@ public static class InitiativeEvaluator
                     new StaySilent(stay.Reason, CountsTowardSilentCap: true, NextWaitMs: stay.NextWaitMs),
                 InitiativeParsedDecision.Speak speak =>
                     new Speak(
-                        WithTools(context, builder.Build(context, responseId, speak.Plan)),
+                        WithTools(context, builder, builder.Build(context, responseId, speak.Plan)),
                         NextWaitMs: speak.NextWaitMs,
                         Plan: speak.Plan),
                 InitiativeParsedDecision.InvalidPlan =>
@@ -303,9 +303,9 @@ public static class InitiativeEvaluator
         return text[..max];
     }
 
-    private static ModelRequest WithTools(AgentContext context, ModelRequest request)
+    private static ModelRequest WithTools(AgentContext context, PromptContextBuilder builder, ModelRequest request)
     {
-        var tools = ToolCatalog.For(context.Definition, context);
+        var tools = builder.OfferTools(context.Definition, context);
         return tools.Count == 0 ? request : request with { Tools = tools };
     }
 

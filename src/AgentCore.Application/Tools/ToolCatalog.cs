@@ -16,8 +16,13 @@ public static class ToolCatalog
     public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";
     public const string ArtifactsVerify = "artifacts.verify";
     public const string SandboxRun = "sandbox.run";
+    public const string WebSearch = "web.search";
+    public const string WebFetch = "web.fetch";
 
-    public static IReadOnlyList<ModelToolDefinition> For(AgentDefinition definition, AgentContext? context = null)
+    public static IReadOnlyList<ModelToolDefinition> For(
+        AgentDefinition definition,
+        AgentContext? context,
+        IToolConfigurationGate configurationGate)
     {
         if (context is not null && !context.ModelSupportsTools)
         {
@@ -29,8 +34,8 @@ public static class ToolCatalog
         foreach (var name in RoleEnvironments.Of(definition).ToolList)
         {
             if (!ToolRegistry.TryGet(name, out var descriptor)
-                || descriptor.OfferRule != ToolOfferRule.RoleAllowlist
-                || !ToolPolicy.IsOffered(descriptor, definition, context)
+                || descriptor.OfferRule is not (ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows)
+                || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
                 || !seen.Add(name))
             {
                 continue;
@@ -41,7 +46,7 @@ public static class ToolCatalog
 
         if (ToolRegistry.TryGet(AttachmentsRead, out var attachmentDescriptor)
             && attachmentDescriptor.OfferRule == ToolOfferRule.SessionAttachmentsWhenRoleAllows
-            && ToolPolicy.IsOffered(attachmentDescriptor, definition, context)
+            && ToolPolicy.IsOffered(attachmentDescriptor, definition, context, configurationGate)
             && seen.Add(AttachmentsRead))
         {
             offered.Add(attachmentDescriptor.ModelDefinition);
@@ -50,8 +55,11 @@ public static class ToolCatalog
         return offered;
     }
 
-    public static bool OffersAttachmentRead(AgentDefinition definition, AgentContext context) =>
-        ToolPolicy.IsOffered(definition, context, AttachmentsRead);
+    public static bool OffersAttachmentRead(
+        AgentDefinition definition,
+        AgentContext context,
+        IToolConfigurationGate configurationGate) =>
+        ToolPolicy.IsOffered(definition, context, AttachmentsRead, configurationGate);
 
     public static bool SessionHasAttachments(AgentContext context) =>
         context.SessionAttachments is { Count: > 0 }

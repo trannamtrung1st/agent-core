@@ -16,8 +16,13 @@ public sealed class SessionToolExecutor(
     IAttachmentProcessor? processor = null,
     ISessionWorkspace? workspace = null,
     IArtifactStore? artifacts = null,
-    ISandboxExecutor? sandbox = null)
+    ISandboxExecutor? sandbox = null,
+    IWebSearchProvider? webSearch = null,
+    IPublicWebFetcher? publicWebFetcher = null,
+    IToolConfigurationGate? configurationGate = null)
 {
+    private readonly IToolConfigurationGate _configurationGate =
+        configurationGate ?? ToolConfigurationGates.Unconfigured;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -32,7 +37,7 @@ public sealed class SessionToolExecutor(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(call.Name)
-            || ToolPolicy.EvaluateExecution(definition, call.Name) != ToolPolicyDecision.Allow)
+            || ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate) != ToolPolicyDecision.Allow)
         {
             return TextResult(Error("forbidden", "Tool is not permitted for this role."));
         }
@@ -85,6 +90,12 @@ public sealed class SessionToolExecutor(
                 ToolCatalog.SandboxRun => FitResult(
                     remainingOutputBytes,
                     await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WebSearch => FitResult(
+                    remainingOutputBytes,
+                    await SearchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WebFetch => FitResult(
+                    remainingOutputBytes,
+                    await FetchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
         }
@@ -538,6 +549,108 @@ public sealed class SessionToolExecutor(
             sha256Hex = created.Sha256Hex,
             workspaceLogicalPath = created.WorkspaceLogicalPath
         });
+    }
+
+    private async Task<string> SearchWebAsync(
+        JsonElement args,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken)
+    {
+        if (webSearch is null || !webSearch.IsAvailable)
+        {
+            return Error("unavailable", "Web search is not configured.");
+        }
+
+        if (!TryString(args, "query", out var query))
+        {
+            return Error("invalid", "query is required.");
+        }
+
+        if (query.Length > WebToolLimits.MaxSearchQueryLength)
+        {
+            return Error("invalid", $"query must be at most {WebToolLimits.MaxSearchQueryLength} characters.");
+        }
+
+        var limit = WebToolLimits.DefaultSearchLimit;
+        if (args.TryGetProperty("limit", out var limitProperty))
+        {
+            if (limitProperty.ValueKind != JsonValueKind.Number || !limitProperty.TryGetInt32(out limit))
+            {
+                return Error("invalid", "limit must be an integer.");
+            }
+        }
+
+        limit = Math.Clamp(limit, 1, WebToolLimits.MaxSearchLimit);
+        var started = Stopwatch.GetTimestamp();
+        var result = await webSearch
+            .SearchAsync(new WebSearchRequest(query, limit), cancellationToken)
+            .ConfigureAwait(false);
+        RuntimeTelemetry.Record("web.search", RuntimeTelemetry.ElapsedMs(started));
+        var items = result.Results.Select(item => new
+        {
+            title = item.Title,
+            url = item.Url,
+            snippet = item.Snippet
+        }).ToArray();
+        return ToolJsonResults.FitToBudget(
+            remainingOutputBytes,
+            JsonSerializer.Serialize(new
+            {
+                untrustedWebContent = true,
+                query,
+                results = items,
+                truncated = result.Truncated
+            }));
+    }
+
+    private async Task<string> FetchWebAsync(
+        JsonElement args,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken)
+    {
+        if (publicWebFetcher is null)
+        {
+            return Error("unavailable", "Web fetch is not configured.");
+        }
+
+        if (!TryString(args, "url", out var urlText))
+        {
+            return Error("invalid", "url is required.");
+        }
+
+        if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url)
+            || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
+        {
+            return Error("invalid", "url must be an absolute http or https URL.");
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var result = await publicWebFetcher
+            .FetchAsync(new PublicWebFetchRequest(url), cancellationToken)
+            .ConfigureAwait(false);
+        RuntimeTelemetry.Record("web.fetch", RuntimeTelemetry.ElapsedMs(started));
+        if (result.ErrorCode is not null)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                untrustedWebContent = true,
+                finalUrl = result.FinalUrl,
+                error = result.ErrorCode,
+                message = result.ErrorMessage
+            });
+        }
+
+        return ToolJsonResults.FitJsonWithContentField(
+            remainingOutputBytes,
+            result.Text,
+            (text, truncated) => JsonSerializer.Serialize(new
+            {
+                untrustedWebContent = true,
+                finalUrl = result.FinalUrl,
+                contentType = result.ContentType,
+                text,
+                truncated = truncated || result.Truncated
+            }));
     }
 
     private async Task<string> RunSandboxAsync(

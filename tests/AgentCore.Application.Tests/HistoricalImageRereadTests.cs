@@ -248,7 +248,10 @@ public sealed class HistoricalImageRereadTests
             ],
             ModelSupportsTools: false,
             LanguageModel: new VisionOnlyLanguageModel());
-        Assert.False(ToolCatalog.OffersAttachmentRead(context.Definition, context));
+        Assert.False(ToolCatalog.OffersAttachmentRead(
+            context.Definition,
+            context,
+            ToolConfigurationGates.AllowAll));
         var manifest = new PromptContextBuilder().BuildSections(context).AttachmentManifestSystem;
         Assert.DoesNotContain("attachments.read", manifest, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("unavailable with the current model", manifest, StringComparison.OrdinalIgnoreCase);
