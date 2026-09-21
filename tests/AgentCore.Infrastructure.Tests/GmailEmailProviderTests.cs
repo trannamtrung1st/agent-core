@@ -132,6 +132,18 @@ public sealed class GmailEmailProviderTests
     }
 
     [Fact]
+    public async Task Send_rejects_mismatched_draft_id_before_http()
+    {
+        var handler = new GmailScriptedHandler();
+        var provider = CreateProvider(handler);
+        var approved = HarnessApprovedDraft();
+        await Assert.ThrowsAsync<AgentCoreException>(() => provider.SendDraftAsync(
+            new EmailSendDraftRequest("other-draft", approved)).AsTask());
+        Assert.Equal(0, handler.TokenPostCount);
+        Assert.Null(handler.LastSendPath);
+    }
+
+    [Fact]
     public async Task Send_4xx_is_definite_failure()
     {
         var handler = new GmailScriptedHandler { SendStatus = HttpStatusCode.BadRequest };

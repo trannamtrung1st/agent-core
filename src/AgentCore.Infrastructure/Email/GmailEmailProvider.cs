@@ -170,6 +170,11 @@ public sealed class GmailEmailProvider(
     public async ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
     {
         var approved = request.ApprovedDraft;
+        if (!string.Equals(request.DraftId, approved.DraftId, StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.Validation("Draft id does not match the approved snapshot.");
+        }
+
         var raw = GmailMime.BuildRawMessage(
             approved.To,
             approved.Cc,

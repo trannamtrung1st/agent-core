@@ -1,8 +1,12 @@
 # P3 — Tools and external integrations (correction freeze)
 
-This report records the **P3 correction freeze** after the `27efe17` closure was reopened. Hosted Synthetic workflow run `35612462847` completed successfully on that earlier HEAD; post-closure review then found email/approval boundary defects that undermine exact-draft send approval. This tree implements that correction pass. Freeze SHA is the commit that lands this report.
+This report records the **P3 correction freeze** after the `27efe17` closure was reopened. Hosted Synthetic workflow run `35612462847` completed successfully on that earlier HEAD; post-closure review then found email/approval boundary defects that undermine exact-draft send approval. This tree implements that correction pass (including Gmail `drafts.send` with approved `message.raw` on `ec4dedc`).
 
 P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)).
+
+## Freeze status
+
+**Correction freeze candidate** (2026-09-21). Gmail `POST /users/me/drafts/send` with approved `message.raw` landed on `ec4dedc` (`5e468e3` lacked the documented endpoint). **Freeze documentation** (this report, README, implementation plan, and `TODO.md`) and the Gmail draft-id guard land in the commit that updates this report. Treat P3 as re-frozen only after hosted Synthetic + Compose workflow is green on that commit.
 
 ## Why `27efe17` is not the freeze SHA
 
@@ -33,13 +37,13 @@ Deferred unchanged: generic `http.request`, sandbox networking modes, calendar, 
 
 ## Final key-free gate (correction tree)
 
-Commands match `.github/workflows/synthetic.yml` (2026-09-21). Local rerun after the email/approval correction:
+Commands match `.github/workflows/synthetic.yml` (2026-09-21). Local rerun after `ec4dedc` plus draft-id guard and documentation alignment:
 
 | Stage | Result |
 | --- | --- |
 | `tests/realtime-js` `npm ci` | OK |
 | Domain tests | 76 passed |
-| Infrastructure tests | 244 passed / 12 skipped |
+| Infrastructure tests | 251 passed / 6 skipped |
 | Application tests (`--blame-hang --blame-hang-timeout 5m`) | 535 passed |
 | API tests | 165 passed |
 | Web Vitest | 384 passed |

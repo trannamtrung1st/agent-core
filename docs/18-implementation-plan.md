@@ -291,7 +291,7 @@ P3A introduces typed non-text tool results, safe historical image rehydration th
 
 ## P3B–P3E — Tools, web, approval, email (observed/frozen)
 
-P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects (Bcc drop, indeterminate send replay, MIME header injection, approval clocks vs 30 s/120 s tool timers, policy-before-Gmail, multi-tool image wire order). This correction pass is the new freeze tree. See the [P3 closure report](reports/p3-freeze-candidate.md).
+P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects (Bcc drop, indeterminate send replay, MIME header injection, approval clocks vs 30 s/120 s tool timers, policy-before-Gmail, multi-tool image wire order, wrong Gmail send URL / draft-id TOCTOU). Correction implementation HEAD is `ec4dedc`; see the [P3 closure report](reports/p3-freeze-candidate.md).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -300,7 +300,7 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3C-1 public web foundation | SSRF-safe fetch, search ports, Synthetic/Brave | **Observed** (TDP) |
 | P3C-2 web tools | `web.search`/`web.fetch`, `general-assistant` v2 | **Observed** (TDP) |
 | P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
-| P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, non-retry after indeterminate | **Observed** (correction) |
+| P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw`, non-retry after indeterminate | **Observed** (correction; HEAD `ec4dedc`) |
 | P3E reconcile | Full §23 gate, docs/TODO/report alignment, whole-output then email/approval corrections | **Observed** (local key-free gate on this correction tree) |
 
 **Roadmap handoff:** **P4** (context compaction and memory) per `TODO.md` and proposal §26.

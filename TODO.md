@@ -949,7 +949,7 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
-**P3 freeze on `27efe17` reopened** (2026-09-21) after review of the email/approval boundary. The correction pass covers: Gmail Bcc preservation and exact-draft approval preview; MimeKit MIME plus CR/LF/NUL rejection; indeterminate/cancel-after-dispatch send consumption; approval wait isolated from 30 s/120 s execution clocks; execution policy before Gmail preview; multi-tool historical-image wire order; single owner for `waitingExternal` completion. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P4** follows.
+**P3 freeze on `27efe17` reopened** (2026-09-21) after review of the email/approval boundary. The correction pass covers: Gmail Bcc preservation and exact-draft approval preview; MimeKit MIME plus CR/LF/NUL rejection; Gmail `drafts.send` with approved `message.raw` (implementation HEAD `ec4dedc`); indeterminate/cancel-after-dispatch send consumption; approval wait isolated from 30 s/120 s execution clocks; execution policy before Gmail preview; multi-tool historical-image wire order; single owner for `waitingExternal` completion. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). Confirm hosted Synthetic + Compose on `ec4dedc` before re-freezing P3. **P4** follows.
 
 Already present:
 
