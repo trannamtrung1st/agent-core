@@ -267,9 +267,19 @@ public sealed class SessionToolExecutor(
             processorVersion = image.ProcessorVersion,
             contentProvided = true
         });
-        var text = ToolJsonResults.FitToBudget(remainingOutputBytes, metadata);
+        if (Encoding.UTF8.GetByteCount(metadata) > Math.Max(0, remainingOutputBytes))
+        {
+            return TextResult(ToolJsonResults.FitToBudget(
+                remainingOutputBytes,
+                JsonSerializer.Serialize(new
+                {
+                    error = "output_limit",
+                    message = "Image metadata could not fit the remaining tool output budget."
+                })));
+        }
+
         return new ToolExecutionResult(
-            text,
+            metadata,
             [new ModelImageContent(image.ContentType, sanitized, image.DisplayName)]);
     }
 

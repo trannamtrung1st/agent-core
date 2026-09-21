@@ -232,15 +232,17 @@ public sealed class SessionToolExecutorTests
             "image/png",
             new MemoryStream(PngBytes()),
             false);
-        var result = await ExecuteTextAsync(
-            executor,
+        var typed = await executor.ExecuteAsync(
             Support(),
             sessionId,
             new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
             48);
-        Assert.True(System.Text.Encoding.UTF8.GetByteCount(result) <= 48);
-        using var json = JsonDocument.Parse(result);
-        Assert.True(json.RootElement.TryGetProperty("truncated", out _) || json.RootElement.TryGetProperty("kind", out _));
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(typed.Text) <= 48);
+        Assert.Null(typed.Parts);
+        using var json = JsonDocument.Parse(typed.Text);
+        Assert.True(
+            (json.RootElement.TryGetProperty("error", out var error) && error.GetString() == "output_limit")
+            || json.RootElement.TryGetProperty("truncated", out _));
     }
 
     [Fact]

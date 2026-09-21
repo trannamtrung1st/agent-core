@@ -27,7 +27,8 @@ public sealed class HistoricalImageSyntheticContinuationTests
         var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
         var model = new VisionToolsLanguageModel(new ScriptedLanguageModel());
         var output = new CapturingSessionOutput();
-        await using var runtime = CreateRuntime(output, attachments, processor, model, tools);
+        var store = new InMemoryMemoryStore();
+        await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
         var uploaded = await attachments.UploadPendingAsync(
             runtime.SessionId,
             "photo.png",
@@ -48,10 +49,17 @@ public sealed class HistoricalImageSyntheticContinuationTests
 
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Contains(ScriptedLanguageModel.HistoricalImageRereadAnswer, assistant.Text, StringComparison.Ordinal);
+
+        var persisted = (await store.LoadAsync(runtime.SessionId))!;
+        var combined = string.Join('\n', persisted.Entries.Select(entry => entry.Text));
+        Assert.DoesNotContain("Treat this as tool data", combined, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Convert.ToBase64String(PngBytes()), combined, StringComparison.Ordinal);
+        Assert.All(persisted.Entries, entry => Assert.True(entry.Role is ConversationRole.User or ConversationRole.Assistant));
     }
 
     private static SessionRuntime CreateRuntime(
         ISessionOutput output,
+        InMemoryMemoryStore store,
         IAttachmentStore attachments,
         IAttachmentProcessor processor,
         ILanguageModel model,
@@ -61,7 +69,6 @@ public sealed class HistoricalImageSyntheticContinuationTests
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-00a1-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf01")]);
-        var store = new InMemoryMemoryStore();
         var now = time.GetUtcNow();
         var definition = Support() with
         {
