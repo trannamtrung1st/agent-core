@@ -302,7 +302,7 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action on `approval-demo`; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
 | P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw` | **Observed** |
 | P3E reconcile | Docs/TODO/report alignment for the earlier correction | **Observed** |
-| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, provider error message off by default | **Observed** on this tree; freeze SHA recorded after the key-free gate |
+| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, provider error message off by default | **Observed / frozen** on `da93489` |
 
 General Assistant exit for this closure:
 
@@ -317,7 +317,7 @@ General Assistant exit for this closure:
 - search/read/draft/send email with the existing approval boundary
 - surface actionable failures instead of an opaque provider body
 
-**Roadmap handoff:** **P4** (context compaction and memory) after the P3F freeze SHA.
+**Roadmap handoff:** **P4** (context compaction and memory). P3F is frozen on `da93489`.
 
 ## Handoff rule
 

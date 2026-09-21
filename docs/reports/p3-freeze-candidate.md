@@ -4,7 +4,7 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 
 ## Freeze status
 
-**P3F capability closure is implemented on this tree.** `general-assistant` v7 can read, write, patch, list, search, and move its workspace with working-directory paths; inspect attachments; search the public web when Brave is configured; fetch pages; make bounded approved `http.request` calls; create and export artifacts; use the offline sandbox; and use the existing email approval boundary. `demo.sensitive_action` is on `approval-demo`, not Riley. Sandbox networking is deferred and is not a P3 blocker. The freeze SHA is recorded after the key-free gate on this tree. **P4** follows that SHA.
+**P3F capability closure is implemented on this tree.** `general-assistant` v7 can read, write, patch, list, search, and move its workspace with working-directory paths; inspect attachments; search the public web when Brave is configured; fetch pages; make bounded approved `http.request` calls; create and export artifacts; use the offline sandbox; and use the existing email approval boundary. `demo.sensitive_action` is on `approval-demo`, not Riley. Sandbox networking is deferred and is not a P3 blocker. The freeze SHA is `da9348957eba36a8efb9d70c170dab90f1b50f32` (`da93489`). **P4** follows that SHA.
 
 Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (workflow `35631259704`) stay historical. A Real GPT-4o mini historical-image follow-up previously failed in the UI after `attachments.read`. The public failure remains `Provider rejected follow-up request (400).` Provider logs now keep status, model, phase, code, and type by default. The free-form provider message is behind `LogProviderErrorMessages`, disabled by default. The opt-in adapter probe requires a final non-tool completion with visible text and fails if the model emits another tool call. An opt-in SessionRuntime probe (`Real_session_historical_image_reread_completes_with_visible_output`) requires `ResponseCompletedOutput.Failed == false` on both turns. Default suites do not call OpenRouter.
 
@@ -17,8 +17,8 @@ Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (w
 | Local key-free gate after the usability correction | Historical on `e255916`. This narrow reopen adds focused adapter and runtime coverage; it is not a new full freeze gate. |
 | P3 implementation / key-free gate | **Green** on `e255916` (`35630920349`) and `e564565` (`35631259704`) |
 | P3 Real historical-image reread | **UI failure reproduced.** A minimal OpenRouter replay of the same follow-up shape returned HTTP 200. Provider reason from the UI failure was not available. |
-| P3 freeze | **Capability closure implemented.** Freeze SHA is recorded after the key-free gate on this tree. `e255916` is not the freeze SHA. |
-| P4 | **Next** after that SHA |
+| P3 freeze | **Frozen** on `da93489`. `e255916` is not the freeze SHA. |
+| P4 | **Next** |
 
 Historical image reread still requires a model with **Tools and Vision**. The Real default DeepSeek V4.1 Flash is tools-capable and vision-incapable, so `attachments.read` returns `vision_required`. That refusal is expected. GPT-4o mini has both capabilities. A Real reread on that model failed in the UI; a minimal OpenRouter replay of the follow-up returned HTTP 200. Synthetic coverage remains `scripted-vision` / `historical-image-reread`, plus a fake OpenAI-compatible two-call runtime test.
 
@@ -56,7 +56,7 @@ Deferred outside P3: sandbox networking modes, calendar, GitHub mutations, P4–
 
 ## Key-free gate (P3F capability closure)
 
-Local gate on 2026-09-22, before the freeze SHA was recorded:
+Local gate on 2026-09-22 for freeze `da93489`:
 
 | Stage | Result |
 | --- | --- |
