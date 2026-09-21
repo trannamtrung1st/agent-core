@@ -1,10 +1,11 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
-using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
 
@@ -191,6 +192,114 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
                 4096,
                 FileOptions.Asynchronous);
             await stream.WriteAsync(bytes, linked.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async ValueTask<WorkspacePatchResult> PatchTextAsync(
+        Guid sessionId,
+        AgentDefinition definition,
+        string logicalPath,
+        string expectedSha256Hex,
+        IReadOnlyList<WorkspaceTextEdit> edits,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDeleted(sessionId);
+        if (edits.Count == 0 || edits.Count > WorkspaceLimits.MaxPatchEdits)
+        {
+            throw AgentCoreErrors.Validation("Patch must include between 1 and 32 edits.");
+        }
+
+        foreach (var edit in edits)
+        {
+            if (string.IsNullOrEmpty(edit.OldText))
+            {
+                throw AgentCoreErrors.Validation("Each edit oldText must be non-empty.");
+            }
+        }
+
+        if (!IsLowerHexSha256(expectedSha256Hex))
+        {
+            throw AgentCoreErrors.Validation("expectedSha256 must be a lowercase SHA-256 hex digest.");
+        }
+
+        var path = Normalize(logicalPath);
+        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
+        if (!IsWritableFile(path))
+        {
+            throw AgentCoreErrors.Forbidden("Execution view writes are limited to /workspace.");
+        }
+
+        if (IsForbiddenPersist(path))
+        {
+            throw AgentCoreErrors.Forbidden("Runtime internals and secret files cannot be stored in the workspace.");
+        }
+
+        await EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
+        var gate = Gate(sessionId);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDeleted(sessionId);
+            var linked = CancellationTokenSource.CreateLinkedTokenSource(Writer(sessionId).Token, cancellationToken);
+            linked.Token.ThrowIfCancellationRequested();
+            var physical = MapWorkspaceFile(sessionId, path);
+            DenyEscapingLinks(physical, SessionRoot(sessionId));
+            if (!File.Exists(physical) || Directory.Exists(physical))
+            {
+                throw AgentCoreErrors.NotFound("Workspace path was not found.");
+            }
+
+            var originalBytes = await File.ReadAllBytesAsync(physical, linked.Token).ConfigureAwait(false);
+            if (!TryDecodeStrictUtf8(originalBytes, out var text))
+            {
+                throw AgentCoreErrors.Validation("Workspace file must be strict UTF-8 text.");
+            }
+
+            var previousHash = ComputeSha256Hex(originalBytes);
+            if (!string.Equals(previousHash, expectedSha256Hex, StringComparison.Ordinal))
+            {
+                throw AgentCoreErrors.Conflict("Workspace file hash does not match expectedSha256.");
+            }
+
+            var updated = text;
+            foreach (var edit in edits)
+            {
+                var occurrences = CountOccurrences(updated, edit.OldText);
+                if (occurrences != 1)
+                {
+                    throw AgentCoreErrors.Conflict("Each edit oldText must match exactly once in the current file content.");
+                }
+
+                updated = updated.Replace(edit.OldText, edit.NewText, StringComparison.Ordinal);
+            }
+
+            var newBytes = Encoding.UTF8.GetBytes(updated);
+            var used = Measure(SessionWorkspaceDir(sessionId));
+            var existing = originalBytes.Length;
+            if (used - existing + newBytes.Length > _maxWritableBytes)
+            {
+                throw AgentCoreErrors.WorkspaceQuotaExceeded();
+            }
+
+            await using var stream = new FileStream(
+                physical,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                4096,
+                FileOptions.Asynchronous);
+            await stream.WriteAsync(newBytes, linked.Token).ConfigureAwait(false);
+
+            return new WorkspacePatchResult(
+                path,
+                previousHash,
+                ComputeSha256Hex(newBytes),
+                newBytes.Length,
+                edits.Count);
         }
         finally
         {
@@ -632,5 +741,47 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         {
             throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
         }
+    }
+
+    private static bool IsLowerHexSha256(string value) =>
+        value.Length == 64 && value.All(static c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+
+    private static bool TryDecodeStrictUtf8(byte[] bytes, out string text)
+    {
+        text = "";
+        try
+        {
+            text = Encoding.GetEncoding(
+                    "utf-8",
+                    EncoderFallback.ExceptionFallback,
+                    DecoderFallback.ExceptionFallback)
+                .GetString(bytes);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            return false;
+        }
+    }
+
+    private static string ComputeSha256Hex(byte[] bytes) =>
+        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        if (needle.Length == 0)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        var index = 0;
+        while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
     }
 }

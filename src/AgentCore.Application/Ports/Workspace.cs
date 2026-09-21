@@ -6,6 +6,15 @@ public sealed record WorkspaceNode(string LogicalPath, bool Directory, long Byte
 
 public sealed record WorkspaceContent(string LogicalPath, string ContentType, byte[] Bytes);
 
+public sealed record WorkspaceTextEdit(string OldText, string NewText);
+
+public sealed record WorkspacePatchResult(
+    string LogicalPath,
+    string PreviousSha256Hex,
+    string NewSha256Hex,
+    long ByteSize,
+    int EditsApplied);
+
 public interface ISessionWorkspace
 {
     ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default);
@@ -26,6 +35,14 @@ public interface ISessionWorkspace
         Guid sessionId,
         string logicalPath,
         ReadOnlyMemory<byte> bytes,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<WorkspacePatchResult> PatchTextAsync(
+        Guid sessionId,
+        AgentDefinition definition,
+        string logicalPath,
+        string expectedSha256Hex,
+        IReadOnlyList<WorkspaceTextEdit> edits,
         CancellationToken cancellationToken = default);
 
     ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);

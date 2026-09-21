@@ -9,8 +9,11 @@ public static class ToolCatalog
     public const string KnowledgeRetrieve = "knowledge.retrieve";
     public const string AttachmentsRead = "attachments.read";
     public const string WorkspaceRead = "workspace.read";
+    public const string WorkspaceList = "workspace.list";
     public const string WorkspaceWrite = "workspace.write";
+    public const string WorkspacePatch = "workspace.patch";
     public const string ArtifactsCreate = "artifacts.create";
+    public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";
     public const string ArtifactsVerify = "artifacts.verify";
     public const string SandboxRun = "sandbox.run";
 

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -100,6 +101,39 @@ public sealed class FileSessionWorkspaceTests
     }
 
     [Fact]
+    public async Task PatchTextAsync_rejects_invalid_utf8_and_ambiguous_edits()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var definition = Examiner();
+        await workspace.EnsureAsync(session, definition);
+        const string path = "/workspace/working/binary.txt";
+        await workspace.WriteAsync(session, path, new byte[] { 0xFF, 0xFE });
+
+        await Assert.ThrowsAsync<AgentCoreException>(() =>
+            workspace.PatchTextAsync(
+                session,
+                definition,
+                path,
+                new string('a', 64),
+                [new WorkspaceTextEdit("x", "y")]).AsTask());
+
+        await workspace.WriteAsync(session, path, "aa"u8.ToArray());
+        var hash = Sha256Hex("aa");
+        var ambiguous = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            workspace.PatchTextAsync(
+                session,
+                definition,
+                path,
+                hash,
+                [new WorkspaceTextEdit("a", "b")]).AsTask());
+        Assert.Equal("Conflict", ambiguous.Code);
+        var content = await workspace.ReadAsync(session, definition, path);
+        Assert.Equal("aa", Encoding.UTF8.GetString(content.Bytes));
+    }
+
+    [Fact]
     public async Task Concurrent_writes_respect_quota()
     {
         using var dir = new TempDir();
@@ -126,6 +160,9 @@ public sealed class FileSessionWorkspaceTests
             return ex;
         }
     }
+
+    private static string Sha256Hex(string text) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
     private static AgentDefinition Examiner() => new(
         1,

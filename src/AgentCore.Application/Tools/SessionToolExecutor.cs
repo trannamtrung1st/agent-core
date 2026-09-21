@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
-using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
@@ -70,10 +70,16 @@ public sealed class SessionToolExecutor(
                 ToolCatalog.WorkspaceRead => FitResult(
                     remainingOutputBytes,
                     await ReadWorkspaceAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceList => TextResult(
+                    await ListWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.WorkspaceWrite => TextResult(
                     await WriteWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspacePatch => TextResult(
+                    await PatchWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsCreate => TextResult(
                     await CreateArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.ArtifactsCreateFromWorkspace => TextResult(
+                    await CreateArtifactFromWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsVerify => TextResult(
                     await VerifyArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.SandboxRun => FitResult(
@@ -318,6 +324,103 @@ public sealed class SessionToolExecutor(
             }));
     }
 
+    private async Task<string> ListWorkspaceAsync(
+        AgentDefinition definition,
+        Guid sessionId,
+        JsonElement args,
+        CancellationToken cancellationToken)
+    {
+        if (workspace is null)
+        {
+            return Error("unavailable", "Workspace is unavailable.");
+        }
+
+        var path = "/workspace/working";
+        if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty("path", out var pathElement) && pathElement.ValueKind == JsonValueKind.String)
+        {
+            path = pathElement.GetString() ?? path;
+        }
+
+        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
+        await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
+        var nodes = await workspace.ListAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
+        var truncated = nodes.Count > WorkspaceLimits.MaxListEntries;
+        var slice = truncated ? nodes.Take(WorkspaceLimits.MaxListEntries).ToArray() : nodes;
+        return JsonSerializer.Serialize(new
+        {
+            path,
+            truncated,
+            entries = slice.Select(node => new
+            {
+                path = node.LogicalPath,
+                directory = node.Directory,
+                byteSize = node.ByteSize,
+                writable = node.Writable
+            })
+        });
+    }
+
+    private async Task<string> PatchWorkspaceAsync(
+        AgentDefinition definition,
+        Guid sessionId,
+        JsonElement args,
+        CancellationToken cancellationToken)
+    {
+        if (workspace is null
+            || !TryString(args, "path", out var path)
+            || !TryString(args, "expectedSha256", out var expectedSha256)
+            || !args.TryGetProperty("edits", out var editsElement)
+            || editsElement.ValueKind != JsonValueKind.Array)
+        {
+            return Error("invalid", "path, expectedSha256, and edits are required.");
+        }
+
+        if (editsElement.GetArrayLength() > WorkspaceLimits.MaxPatchEdits)
+        {
+            return Error("invalid", "At most 32 edits are permitted per patch.");
+        }
+
+        var edits = new List<WorkspaceTextEdit>();
+        foreach (var item in editsElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !TryString(item, "oldText", out var oldText)
+                || !TryString(item, "newText", out var newText))
+            {
+                return Error("invalid", "Each edit requires oldText and newText.");
+            }
+
+            if (string.IsNullOrEmpty(oldText))
+            {
+                return Error("invalid", "Each edit oldText must be non-empty.");
+            }
+
+            edits.Add(new WorkspaceTextEdit(oldText, newText));
+        }
+
+        if (edits.Count == 0)
+        {
+            return Error("invalid", "At least one edit is required.");
+        }
+
+        var result = await workspace.PatchTextAsync(
+                sessionId,
+                definition,
+                path,
+                expectedSha256,
+                edits,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return JsonSerializer.Serialize(new
+        {
+            path = result.LogicalPath,
+            previousSha256 = result.PreviousSha256Hex,
+            newSha256 = result.NewSha256Hex,
+            byteSize = result.ByteSize,
+            editsApplied = result.EditsApplied
+        });
+    }
+
     private async Task<string> WriteWorkspaceAsync(
         AgentDefinition definition,
         Guid sessionId,
@@ -388,8 +491,52 @@ public sealed class SessionToolExecutor(
         {
             artifactId = record.ArtifactId,
             displayName = record.DisplayName,
+            contentType = record.ContentType,
+            byteSize = record.ByteSize,
             sha256Hex = record.Sha256Hex,
-            sourceAttachmentId = record.SourceAttachmentId
+            sourceAttachmentId = record.SourceAttachmentId,
+            workspaceLogicalPath = record.WorkspaceLogicalPath,
+            createdAt = record.CreatedAt
+        });
+    }
+
+    private async Task<string> CreateArtifactFromWorkspaceAsync(
+        AgentDefinition definition,
+        Guid sessionId,
+        JsonElement args,
+        CancellationToken cancellationToken)
+    {
+        if (workspace is null || artifacts is null || !TryString(args, "path", out var path) || !TryString(args, "displayName", out var displayName))
+        {
+            return Error("invalid", "path and displayName are required.");
+        }
+
+        if (!path.StartsWith("/workspace/", StringComparison.Ordinal))
+        {
+            return Error("forbidden", "Only session-local /workspace paths are permitted.");
+        }
+
+        TryString(args, "contentType", out var contentType);
+        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
+        await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
+        var content = await workspace.ReadAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
+        var created = await artifacts.CreateAsync(
+                sessionId,
+                displayName,
+                string.IsNullOrWhiteSpace(contentType) ? content.ContentType : contentType,
+                content.Bytes,
+                sourceAttachmentId: null,
+                workspaceLogicalPath: content.LogicalPath,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return JsonSerializer.Serialize(new
+        {
+            artifactId = created.ArtifactId,
+            displayName = created.DisplayName,
+            contentType = created.ContentType,
+            byteSize = created.ByteSize,
+            sha256Hex = created.Sha256Hex,
+            workspaceLogicalPath = created.WorkspaceLogicalPath
         });
     }
 

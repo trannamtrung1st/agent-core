@@ -23,19 +23,34 @@ public static class ToolRegistry
                 "Read a logical execution-view path under /agent, /attachments, or /workspace.",
                 """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""",
                 ToolEffect.ReadOnly),
+            [ToolCatalog.WorkspaceList] = Descriptor(
+                ToolCatalog.WorkspaceList,
+                "List bounded logical workspace metadata under a path (default /workspace/working).",
+                """{"type":"object","properties":{"path":{"type":"string"}}}""",
+                ToolEffect.ReadOnly),
             [ToolCatalog.WorkspaceWrite] = Descriptor(
                 ToolCatalog.WorkspaceWrite,
                 "Write a UTF-8 file under /workspace only.",
                 """{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}""",
+                ToolEffect.Write),
+            [ToolCatalog.WorkspacePatch] = Descriptor(
+                ToolCatalog.WorkspacePatch,
+                "Apply exact-once UTF-8 text replacements under /workspace with required expectedSha256 precondition.",
+                """{"type":"object","properties":{"path":{"type":"string"},"expectedSha256":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"}},"required":["oldText","newText"]}}},"required":["path","expectedSha256","edits"]}""",
                 ToolEffect.Write),
             [ToolCatalog.ArtifactsCreate] = Descriptor(
                 ToolCatalog.ArtifactsCreate,
                 "Create a session-owned artifact from UTF-8 content.",
                 """{"type":"object","properties":{"displayName":{"type":"string"},"contentType":{"type":"string"},"content":{"type":"string"}},"required":["displayName","content"]}""",
                 ToolEffect.Write),
+            [ToolCatalog.ArtifactsCreateFromWorkspace] = Descriptor(
+                ToolCatalog.ArtifactsCreateFromWorkspace,
+                "Create a session artifact from a logical /workspace file without sending file bytes in arguments.",
+                """{"type":"object","properties":{"path":{"type":"string"},"displayName":{"type":"string"},"contentType":{"type":"string"}},"required":["path","displayName"]}""",
+                ToolEffect.Write),
             [ToolCatalog.ArtifactsVerify] = Descriptor(
                 ToolCatalog.ArtifactsVerify,
-                "Verify a session-owned artifact id.",
+                "Verify a session-owned artifact id and return safe provenance metadata.",
                 """{"type":"object","properties":{"artifactId":{"type":"string"}},"required":["artifactId"]}""",
                 ToolEffect.ReadOnly),
             [ToolCatalog.SandboxRun] = Descriptor(

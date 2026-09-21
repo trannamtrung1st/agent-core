@@ -408,6 +408,15 @@ trailer<< /Root 1 0 R >>
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask<WorkspacePatchResult> PatchTextAsync(
+            Guid sessionId,
+            AgentDefinition definition,
+            string logicalPath,
+            string expectedSha256Hex,
+            IReadOnlyList<WorkspaceTextEdit> edits,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
     }

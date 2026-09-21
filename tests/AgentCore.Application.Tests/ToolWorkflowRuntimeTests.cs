@@ -220,6 +220,15 @@ public sealed class ToolWorkflowRuntimeTests
             Writes.Add(logicalPath);
         }
 
+        public ValueTask<WorkspacePatchResult> PatchTextAsync(
+            Guid sessionId,
+            AgentDefinition definition,
+            string logicalPath,
+            string expectedSha256Hex,
+            IReadOnlyList<WorkspaceTextEdit> edits,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
     }
