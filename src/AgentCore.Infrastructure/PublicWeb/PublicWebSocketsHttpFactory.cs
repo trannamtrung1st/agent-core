@@ -1,0 +1,53 @@
+using System.Net;
+using System.Net.Sockets;
+
+namespace AgentCore.Infrastructure.PublicWeb;
+
+internal static class PublicWebSocketsHttpFactory
+{
+    internal static SocketsHttpHandler CreateHandler(IPublicWebDnsResolver dns) =>
+        new()
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            AutomaticDecompression = DecompressionMethods.None,
+            ConnectCallback = async (context, token) =>
+            {
+                var addresses = await dns.ResolveAsync(context.DnsEndPoint.Host, token).ConfigureAwait(false);
+                foreach (var address in addresses)
+                {
+                    if (!PublicAddressPolicy.IsAllowed(address))
+                    {
+                        continue;
+                    }
+
+                    var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+                    {
+                        NoDelay = true
+                    };
+                    try
+                    {
+                        await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), token)
+                            .ConfigureAwait(false);
+                        return new NetworkStream(socket, ownsSocket: true);
+                    }
+                    catch
+                    {
+                        socket.Dispose();
+                        throw;
+                    }
+                }
+
+                throw new PublicWebFetchException(
+                    "forbidden_host",
+                    "No permitted public address was available for the host.");
+            }
+        };
+
+    internal static HttpRequestMessage CreateGetRequest(Uri uri)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Accept.ParseAdd("text/html, text/plain, application/json, application/xml, */*;q=0.1");
+        return request;
+    }
+}
