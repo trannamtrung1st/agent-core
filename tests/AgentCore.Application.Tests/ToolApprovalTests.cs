@@ -8,6 +8,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Email;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -68,6 +69,14 @@ public sealed class ToolApprovalTests
         await runtime.Runtime.WaitUntilIdleAsync();
         var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Contains("completed after approval", assistant.Text, StringComparison.OrdinalIgnoreCase);
+
+        var completedWaiting = output.Items
+            .Select(item => item.Payload)
+            .OfType<ResponseProgressOutput>()
+            .Count(progress =>
+                progress.Kind == ResponseProgressKind.WaitingExternal
+                && progress.State == ResponseProgressState.Completed);
+        Assert.Equal(1, completedWaiting);
 
         var duplicate = await runtime.Runtime.RespondApprovalAsync(
             runtime.Runtime.ActiveResponseId ?? requested.ApprovalId,
@@ -245,6 +254,50 @@ public sealed class ToolApprovalTests
                 && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task Approval_wait_does_not_consume_per_tool_or_overall_execution_budget()
+    {
+        DemoSensitiveActionStore.Reset();
+        var output = new CapturingSessionOutput();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
+        await using var runtime = await CreateGeneralV3AtTimeAsync(output, time);
+        await runtime.Runtime.AttachAsync();
+
+        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
+        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
+        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
+        time.Advance(ToolLimits.PerTool + TimeSpan.FromSeconds(1));
+        time.Advance(ToolLimits.Overall);
+        Assert.Equal(
+            ResponseApprovalResult.Accepted,
+            await runtime.Runtime.RespondApprovalAsync(
+                runtime.Runtime.ActiveResponseId!.Value,
+                requested.ApprovalId,
+                ToolApprovalDecision.Approve));
+        await runtime.Runtime.WaitUntilIdleAsync();
+        var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Contains("completed after approval", assistant.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Denied_email_send_does_not_read_the_provider_draft()
+    {
+        var tracking = new TrackingEmailProvider();
+        var output = new CapturingSessionOutput();
+        var tools = new SessionToolExecutor(
+            emailProvider: tracking,
+            configurationGate: ToolConfigurationGates.AllowAll);
+        var definition = Definition("examiner", 1, []);
+        var model = new EmailSendOnceLanguageModel();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero));
+        await using var runtime = new Harness(CreateRuntime(output, definition, model, tools, time));
+        await runtime.Runtime.AttachAsync();
+
+        Assert.True(await runtime.Runtime.SubmitUserTextAsync("send the draft"));
+        await runtime.Runtime.WaitUntilIdleAsync();
+        Assert.Equal(0, tracking.GetDraftCount);
+    }
+
     private static async Task<Harness> CreateGeneralV3Async(CapturingSessionOutput output) =>
         await CreateGeneralV3AtTimeAsync(output, new FakeTimeProvider(new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero)));
 
@@ -340,5 +393,54 @@ public sealed class ToolApprovalTests
     private sealed record Harness(SessionRuntime Runtime) : IAsyncDisposable
     {
         public ValueTask DisposeAsync() => Runtime.DisposeAsync();
+    }
+
+    private sealed class EmailSendOnceLanguageModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (request.Messages.Any(message => message.Role == ModelRole.Tool))
+            {
+                yield return new ModelTextDelta("Noted.");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            yield return new ModelToolCallEvent(
+                new ModelToolCall("call-email-send", ToolCatalog.EmailSend, """{"draftId":"draft-denied"}"""));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+
+    private sealed class TrackingEmailProvider : IEmailProvider
+    {
+        private readonly SyntheticEmailProvider _inner = new();
+
+        public int GetDraftCount { get; private set; }
+
+        public bool IsAvailable => _inner.IsAvailable;
+
+        public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default) =>
+            _inner.SearchAsync(request, cancellationToken);
+
+        public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(request, cancellationToken);
+
+        public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) =>
+            _inner.CreateDraftAsync(request, cancellationToken);
+
+        public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default)
+        {
+            GetDraftCount++;
+            return _inner.GetDraftAsync(draftId, cancellationToken);
+        }
+
+        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default) =>
+            _inner.SendDraftAsync(request, cancellationToken);
     }
 }

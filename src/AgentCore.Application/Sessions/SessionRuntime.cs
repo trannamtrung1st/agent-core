@@ -2046,6 +2046,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var toolDeadline = request.Tools is { Count: > 0 };
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, ToolLimits.Overall) : null;
+        var overallDeadline = toolDeadline ? _time.GetUtcNow() + ToolLimits.Overall : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         try
         {
@@ -2117,14 +2118,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
                 foreach (var call in pending)
                 {
-                    using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
-                    using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
                     if (!await AdmitToolActivityAsync(
                                 cause,
                                 request.ResponseId,
                                 OutputActivity.RunningTools,
                                 hold: true,
-                                toolCts.Token)
+                                overallCts.Token)
                             .ConfigureAwait(false))
                     {
                         return;
@@ -2141,7 +2140,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             CancellationToken.None)
                         .ConfigureAwait(false);
 
-                    ToolExecutionResult executionResult;
+                    var executionResult = ToolExecutionResult.FromText(
+                        """{"error":"invalid","message":"Tool execution failed."}""");
                     var toolStarted = Stopwatch.GetTimestamp();
                     ToolApprovalGrant? approvalGrant = null;
                     try
@@ -2155,72 +2155,106 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             {
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
-                                goto AfterToolExecution;
+                                args = default;
                             }
                         }
                         catch (JsonException)
                         {
                             executionResult = ToolExecutionResult.FromText(
                                 """{"error":"invalid","message":"Tool arguments were malformed."}""");
-                            goto AfterToolExecution;
+                            args = default;
                         }
 
-                        string actionHash;
-                        string? approvalSummaryOverride = null;
-                        IReadOnlyDictionary<string, string>? approvalDetailsOverride = null;
-                        if (string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
+                        if (args.ValueKind == JsonValueKind.Object)
                         {
-                            var prepared = await _tools.PrepareEmailSendApprovalAsync(args, toolCts.Token)
-                                .ConfigureAwait(false);
-                            if (prepared.Preparation is null)
+                            var policy = _tools.EvaluateExecutionPolicy(_snapshot.Definition, call.Name);
+                            if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 executionResult = ToolExecutionResult.FromText(
-                                    prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare email send approval."}""");
-                                goto AfterToolExecution;
+                                    """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
                             }
-
-                            actionHash = prepared.Preparation.ActionHash;
-                            approvalSummaryOverride = prepared.Preparation.Summary;
-                            approvalDetailsOverride = prepared.Preparation.Details;
-                        }
-                        else
-                        {
-                            actionHash = ToolActionHash.Compute(call.Name, args);
-                        }
-
-                        var policy = _tools.EvaluateExecutionPolicy(_snapshot.Definition, call.Name);
-                        if (policy == ToolPolicyDecision.RequireApproval)
-                        {
-                            approvalGrant = await WaitForToolApprovalAsync(
-                                    cause,
-                                    request.ResponseId,
-                                    operationId,
-                                    call,
-                                    args,
-                                    actionHash,
-                                    toolCts.Token,
-                                    approvalSummaryOverride,
-                                    approvalDetailsOverride)
-                                .ConfigureAwait(false);
-                            if (approvalGrant is null
-                                || approvalGrant.RuntimeEpoch != _epoch
-                                || approvalGrant.ResponseId != request.ResponseId
-                                || approvalGrant.OperationId != operationId)
+                            else
                             {
-                                executionResult = ToolExecutionResult.FromText(
-                                    """{"error":"rejected","message":"Action was not approved."}""");
-                                goto AfterToolExecution;
+                                string actionHash;
+                                string? approvalSummaryOverride = null;
+                                IReadOnlyDictionary<string, string>? approvalDetailsOverride = null;
+                                var preparedFailed = false;
+                                if (policy == ToolPolicyDecision.RequireApproval
+                                    && string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
+                                {
+                                    var prepared = await _tools.PrepareEmailSendApprovalAsync(args, overallCts.Token)
+                                        .ConfigureAwait(false);
+                                    if (prepared.Preparation is null)
+                                    {
+                                        executionResult = ToolExecutionResult.FromText(
+                                            prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare email send approval."}""");
+                                        preparedFailed = true;
+                                        actionHash = string.Empty;
+                                    }
+                                    else
+                                    {
+                                        actionHash = prepared.Preparation.ActionHash;
+                                        approvalSummaryOverride = prepared.Preparation.Summary;
+                                        approvalDetailsOverride = prepared.Preparation.Details;
+                                    }
+                                }
+                                else
+                                {
+                                    actionHash = ToolActionHash.Compute(call.Name, args);
+                                }
+
+                                if (!preparedFailed
+                                    && policy == ToolPolicyDecision.RequireApproval)
+                                {
+                                    var pausedOverallRemaining = PauseToolClock(overallTimer, overallDeadline);
+                                    try
+                                    {
+                                        approvalGrant = await WaitForToolApprovalAsync(
+                                                cause,
+                                                request.ResponseId,
+                                                operationId,
+                                                call,
+                                                args,
+                                                actionHash,
+                                                cancellationToken,
+                                                approvalSummaryOverride,
+                                                approvalDetailsOverride)
+                                            .ConfigureAwait(false);
+                                    }
+                                    finally
+                                    {
+                                        overallDeadline = ResumeToolClock(
+                                            overallTimer,
+                                            overallCts,
+                                            pausedOverallRemaining);
+                                    }
+
+                                    if (approvalGrant is null
+                                        || approvalGrant.RuntimeEpoch != _epoch
+                                        || approvalGrant.ResponseId != request.ResponseId
+                                        || approvalGrant.OperationId != operationId)
+                                    {
+                                        executionResult = ToolExecutionResult.FromText(
+                                            """{"error":"rejected","message":"Action was not approved."}""");
+                                        preparedFailed = true;
+                                    }
+                                }
+
+                                if (!preparedFailed)
+                                {
+                                    using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
+                                    using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
+                                    executionResult = await _tools.ExecuteAsync(
+                                            _snapshot.Definition,
+                                            SessionId,
+                                            call,
+                                            ToolLimits.MaxOutputBytes - outputBytes,
+                                            toolCts.Token,
+                                            approvalGrant)
+                                        .ConfigureAwait(false);
+                                }
                             }
                         }
-
-                        executionResult = await _tools.ExecuteAsync(
-                                _snapshot.Definition,
-                                SessionId,
-                                call,
-                                ToolLimits.MaxOutputBytes - outputBytes,
-                                toolCts.Token,
-                                approvalGrant)
-                            .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -2246,7 +2280,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
-                    AfterToolExecution:
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
@@ -2411,6 +2444,35 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private static ITimer ScheduleCancel(TimeProvider time, CancellationTokenSource cts, TimeSpan delay) =>
         time.CreateTimer(static state => ((CancellationTokenSource)state!).Cancel(), cts, delay, Timeout.InfiniteTimeSpan);
+
+    private TimeSpan? PauseToolClock(ITimer? timer, DateTimeOffset? deadline)
+    {
+        if (timer is null || deadline is null)
+        {
+            return null;
+        }
+
+        var remaining = deadline.Value - _time.GetUtcNow();
+        timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        return remaining;
+    }
+
+    private DateTimeOffset? ResumeToolClock(ITimer? timer, CancellationTokenSource cts, TimeSpan? remaining)
+    {
+        if (timer is null || remaining is null)
+        {
+            return null;
+        }
+
+        if (remaining.Value <= TimeSpan.Zero)
+        {
+            cts.Cancel();
+            return _time.GetUtcNow();
+        }
+
+        timer.Change(remaining.Value, Timeout.InfiniteTimeSpan);
+        return _time.GetUtcNow() + remaining.Value;
+    }
 
     private async Task HandleModelAsync(ModelResultReceived input, CancellationToken cancellationToken)
     {

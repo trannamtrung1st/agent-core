@@ -52,10 +52,11 @@ public sealed partial class SessionRuntime
         return await WaitOrCancelAsync(completed, ResponseApprovalResult.Unknown, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task HandleApprovalResponseAsync(
+    private Task HandleApprovalResponseAsync(
         ApprovalResponseReceived input,
         CancellationToken cancellationToken)
     {
+        _ = cancellationToken;
         try
         {
             PendingToolApproval? pending;
@@ -67,7 +68,7 @@ public sealed partial class SessionRuntime
             if (pending is null)
             {
                 input.Completed?.TrySetResult(ResponseApprovalResult.Unknown);
-                return;
+                return Task.CompletedTask;
             }
 
             if (pending.Decided
@@ -75,7 +76,7 @@ public sealed partial class SessionRuntime
                 && pending.ResponseId == input.ResponseId)
             {
                 input.Completed?.TrySetResult(ResponseApprovalResult.Idempotent);
-                return;
+                return Task.CompletedTask;
             }
 
             if (pending.ApprovalId != input.ApprovalId
@@ -84,7 +85,7 @@ public sealed partial class SessionRuntime
                 || pending.Epoch != _epoch)
             {
                 input.Completed?.TrySetResult(ResponseApprovalResult.Stale);
-                return;
+                return Task.CompletedTask;
             }
 
             pending.Decided = true;
@@ -93,9 +94,8 @@ public sealed partial class SessionRuntime
                 input.Decision == ToolApprovalDecision.Approve
                     ? ApprovalWaitResult.Approved
                     : ApprovalWaitResult.Rejected);
-            await CompleteWaitingExternalProgressAsync(input.Context, pending.ResponseId, pending.OperationId, cancellationToken)
-                .ConfigureAwait(false);
             input.Completed?.TrySetResult(ResponseApprovalResult.Accepted);
+            return Task.CompletedTask;
         }
         catch
         {

@@ -275,7 +275,7 @@ P2A, P2B, P2D, P2E, and P2C remain observed/frozen on their recorded HEADs. Prop
 
 **Final gate (closure HEAD `47d6ff6`):** proposal §23 key-free Synthetic + Compose gate green on that exact HEAD (hosted workflow run `35552740853`). Observed pass/skip counts are authoritative in TDP production evidence for P2-Final (not duplicated here to avoid doc/SHA drift). Optional Real structured-response and vision probes **SKIPPED — credentials unavailable** (`OPENROUTER_API_KEY` / `OPENAI_API_KEY` absent); do not treat them as verified Real-provider behavior.
 
-**Roadmap handoff:** **P3** is closed/frozen after whole-output correction and manual closure verification; **P4** follows (`TODO.md`, proposal §26).
+**Roadmap handoff:** **P3** freeze was reopened for a focused email/approval correction pass after review of `27efe17`; **P4** follows once this correction tree is frozen (`TODO.md`, proposal §26).
 
 ## P3A — Historical multimodal attachment reread (observed/frozen)
 
@@ -291,7 +291,7 @@ P3A introduces typed non-text tool results, safe historical image rehydration th
 
 ## P3B–P3E — Tools, web, approval, email (observed/frozen)
 
-P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The mandatory whole-output review identified eight integrated correction families; the resulting implementation, lifecycle tests, documentation, and final gates were manually verified after the TDP digest-rebind loop failed to converge. **Status:** **observed/frozen** (2026-09-21). See the [P3 closure report](reports/p3-freeze-candidate.md). Do not reopen P3 without a reproducible regression.
+P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. The freeze on `27efe17` was reopened after review found email/approval boundary defects (Bcc drop, indeterminate send replay, MIME header injection, approval clocks vs 30 s/120 s tool timers, policy-before-Gmail, multi-tool image wire order). This correction pass is the new freeze tree. See the [P3 closure report](reports/p3-freeze-candidate.md).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -299,9 +299,9 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3B-2 workspace/artifacts | `workspace.list`/`patch`, `artifacts.create_from_workspace` | **Observed** (TDP) |
 | P3C-1 public web foundation | SSRF-safe fetch, search ports, Synthetic/Brave | **Observed** (TDP) |
 | P3C-2 web tools | `web.search`/`web.fetch`, `general-assistant` v2 | **Observed** (TDP) |
-| P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action | **Observed** (TDP) |
-| P3D-2 email | `email.*`, Gmail/Synthetic providers, `general-assistant` v4 | **Observed** (TDP) |
-| P3E reconcile | Full §23 gate, docs/TODO/report alignment, whole-output corrections | **Observed** (manual closure verification after TDP output revision 29) |
+| P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
+| P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, non-retry after indeterminate | **Observed** (correction) |
+| P3E reconcile | Full §23 gate, docs/TODO/report alignment, whole-output then email/approval corrections | **Observed** (local key-free gate on this correction tree) |
 
 **Roadmap handoff:** **P4** (context compaction and memory) per `TODO.md` and proposal §26.
 

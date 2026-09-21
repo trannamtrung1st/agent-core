@@ -41,7 +41,7 @@ public sealed class GmailEmailProvider(
             $"https://gmail.googleapis.com/gmail/v1/users/me/messages?q={query}&maxResults={limit}");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Gmail search failed with status {StatusCode}", (int)response.StatusCode);
@@ -86,7 +86,7 @@ public sealed class GmailEmailProvider(
             $"https://gmail.googleapis.com/gmail/v1/users/me/messages/{Uri.EscapeDataString(request.MessageId)}?format=full");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Gmail read failed with status {StatusCode}", (int)response.StatusCode);
@@ -99,8 +99,8 @@ public sealed class GmailEmailProvider(
 
     public async ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default)
     {
+        var raw = GmailMime.BuildRawMessage(request.To, request.Cc, request.Bcc, request.Subject, request.Body);
         var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var raw = BuildRawMessage(request.To, request.Cc, request.Bcc, request.Subject, request.Body);
         var payload = JsonSerializer.Serialize(new { message = new { raw } });
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://gmail.googleapis.com/gmail/v1/users/me/drafts")
@@ -109,7 +109,7 @@ public sealed class GmailEmailProvider(
         };
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Gmail create draft failed with status {StatusCode}", (int)response.StatusCode);
@@ -134,10 +134,10 @@ public sealed class GmailEmailProvider(
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(
             HttpMethod.Get,
-            $"https://gmail.googleapis.com/gmail/v1/users/me/drafts/{Uri.EscapeDataString(draftId)}?format=full");
+            $"https://gmail.googleapis.com/gmail/v1/users/me/drafts/{Uri.EscapeDataString(draftId)}?format=raw");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return null;
@@ -150,19 +150,21 @@ public sealed class GmailEmailProvider(
         }
 
         using var document = JsonDocument.Parse(body);
-        if (!document.RootElement.TryGetProperty("message", out var message))
+        if (!document.RootElement.TryGetProperty("message", out var message)
+            || !message.TryGetProperty("raw", out var rawNode)
+            || rawNode.GetString() is not { Length: > 0 } raw)
         {
             return null;
         }
 
-        var parsed = ParseMessage(message);
-        return new EmailDraftSnapshot(
-            draftId,
-            parsed.To,
-            parsed.Cc,
-            [],
-            parsed.Subject,
-            parsed.Body);
+        try
+        {
+            return GmailMime.ParseDraft(draftId, GmailMime.DecodeBase64Url(raw));
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     public async ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
@@ -173,10 +175,12 @@ public sealed class GmailEmailProvider(
             HttpMethod.Post,
             $"https://gmail.googleapis.com/gmail/v1/users/me/drafts/{Uri.EscapeDataString(request.DraftId)}/send");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var dispatchStarted = false;
         try
         {
+            dispatchStarted = true;
             using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-            var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
             {
                 using var document = JsonDocument.Parse(body);
@@ -194,6 +198,15 @@ public sealed class GmailEmailProvider(
             }
 
             return new EmailSendResult(EmailSendOutcome.Failed, null, "provider", "Gmail send was rejected.");
+        }
+        catch (OperationCanceledException) when (dispatchStarted)
+        {
+            logger.LogWarning("Gmail send cancelled after dispatch; treating as indeterminate");
+            return new EmailSendResult(
+                EmailSendOutcome.Indeterminate,
+                null,
+                "cancelled",
+                "Gmail send outcome is unknown after cancellation.");
         }
         catch (HttpRequestException ex)
         {
@@ -220,7 +233,8 @@ public sealed class GmailEmailProvider(
             })
         };
         using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        // Parse the provider JSON before any log redaction so token/MIME payloads stay intact.
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Gmail token refresh failed with status {StatusCode}", (int)response.StatusCode);
@@ -244,7 +258,7 @@ public sealed class GmailEmailProvider(
             $"https://gmail.googleapis.com/gmail/v1/users/me/messages/{Uri.EscapeDataString(messageId)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = GmailSensitiveRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -342,7 +356,13 @@ public sealed class GmailEmailProvider(
             && body.TryGetProperty("data", out var dataNode)
             && dataNode.GetString() is { Length: > 0 } data)
         {
-            builder.Append(DecodeBase64Url(data));
+            try
+            {
+                builder.Append(Encoding.UTF8.GetString(GmailMime.DecodeBase64Url(data)));
+            }
+            catch (FormatException)
+            {
+            }
         }
 
         if (payload.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array)
@@ -354,51 +374,4 @@ public sealed class GmailEmailProvider(
         }
     }
 
-    private static string DecodeBase64Url(string data)
-    {
-        var padded = data.Replace('-', '+').Replace('_', '/');
-        switch (padded.Length % 4)
-        {
-            case 2: padded += "=="; break;
-            case 3: padded += "="; break;
-        }
-
-        try
-        {
-            return Encoding.UTF8.GetString(Convert.FromBase64String(padded));
-        }
-        catch (FormatException)
-        {
-            return string.Empty;
-        }
-    }
-
-    private static string BuildRawMessage(
-        IReadOnlyList<string> to,
-        IReadOnlyList<string> cc,
-        IReadOnlyList<string> bcc,
-        string subject,
-        string body)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine($"To: {string.Join(", ", to)}");
-        if (cc.Count > 0)
-        {
-            builder.AppendLine($"Cc: {string.Join(", ", cc)}");
-        }
-
-        if (bcc.Count > 0)
-        {
-            builder.AppendLine($"Bcc: {string.Join(", ", bcc)}");
-        }
-
-        builder.AppendLine($"Subject: {subject}");
-        builder.AppendLine("Content-Type: text/plain; charset=utf-8");
-        builder.AppendLine();
-        builder.Append(body);
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(builder.ToString()))
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
-    }
 }

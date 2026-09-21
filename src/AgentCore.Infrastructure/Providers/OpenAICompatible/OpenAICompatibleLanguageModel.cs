@@ -366,19 +366,39 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
     private static object[] MapMessages(IReadOnlyList<ModelMessage> messages)
     {
         var mapped = new List<Dictionary<string, object?>>(messages.Count + 4);
+        var imageContinuations = new List<Dictionary<string, object?>>();
         foreach (var message in messages)
         {
-            if (message.Role == ModelRole.Tool && message.Parts?.OfType<ModelImageContent>().Any() == true)
+            if (message.Role == ModelRole.Tool)
             {
                 mapped.Add(MapToolTextMessage(message));
-                mapped.Add(MapToolImageContinuation(message));
+                if (message.Parts?.OfType<ModelImageContent>().Any() == true)
+                {
+                    imageContinuations.Add(MapToolImageContinuation(message));
+                }
+
                 continue;
             }
 
+            FlushToolImageContinuations(mapped, imageContinuations);
             mapped.Add(MapMessage(message));
         }
 
+        FlushToolImageContinuations(mapped, imageContinuations);
         return mapped.ToArray();
+    }
+
+    private static void FlushToolImageContinuations(
+        List<Dictionary<string, object?>> mapped,
+        List<Dictionary<string, object?>> imageContinuations)
+    {
+        if (imageContinuations.Count == 0)
+        {
+            return;
+        }
+
+        mapped.AddRange(imageContinuations);
+        imageContinuations.Clear();
     }
 
     private static Dictionary<string, object?> MapToolTextMessage(ModelMessage message) =>

@@ -10,6 +10,10 @@ test("email harness approval modal approves synthetic send", async ({ page }) =>
   const modal = page.getByRole("dialog", { name: "Approve sensitive action" });
   await expect(modal).toBeVisible({ timeout: 30_000 });
   await expect(modal).toContainText("Send email");
+  await expect(modal).toContainText("recipient@example.test");
+  await expect(modal).toContainText("bcc@example.test");
+  await expect(modal).toContainText("Harness draft");
+  await expect(modal).toContainText("Synthetic email harness send path.");
 
   await modal.getByRole("button", { name: "Approve" }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });

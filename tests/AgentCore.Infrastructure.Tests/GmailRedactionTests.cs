@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Infrastructure.Email;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -13,6 +14,9 @@ public sealed class GmailRedactionTests
         Assert.DoesNotContain("ya29.secret-value", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("1//refresh", redacted, StringComparison.Ordinal);
         Assert.Contains("[redacted]", redacted, StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(redacted);
+        Assert.Equal("[redacted]", document.RootElement.GetProperty("access_token").GetString());
+        Assert.Equal("[redacted]", document.RootElement.GetProperty("refresh_token").GetString());
     }
 
     [Fact]

@@ -405,7 +405,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 toolEvent = new ModelToolCallEvent(new ModelToolCall(
                     "call-email-draft",
                     ToolCatalog.EmailCreateDraft,
-                    """{"to":["recipient@example.test"],"cc":[],"bcc":[],"subject":"Harness draft","body":"Synthetic email harness send path."}"""));
+                    """{"to":["recipient@example.test"],"cc":[],"bcc":["bcc@example.test"],"subject":"Harness draft","body":"Synthetic email harness send path."}"""));
                 return true;
             case 3 when Offers(request, ToolCatalog.EmailSend):
                 var draftId = ExtractJsonString(lastTool, "draftId") ?? "syn-draft-missing";

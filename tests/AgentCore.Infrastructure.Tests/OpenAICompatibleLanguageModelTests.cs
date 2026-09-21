@@ -960,6 +960,59 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
+    public async Task Multiple_tool_results_keep_tool_messages_together_before_image_continuations()
+    {
+        var handler = StopStream();
+        var model = Create(handler, tools: true, vision: true);
+        var png = "img"u8.ToArray();
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.User, "continue"),
+                new ModelMessage(
+                    ModelRole.Assistant,
+                    string.Empty,
+                    ToolCalls:
+                    [
+                        new ModelToolCall("call_1", ToolCatalog.AttachmentsRead, """{"attachmentId":"019944af-0001-7000-8000-000000000001"}"""),
+                        new ModelToolCall("call_2", ToolCatalog.KnowledgeRetrieve, """{"identity":"x"}""")
+                    ]),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"kind":"image","contentProvided":true}""",
+                    [new ModelImageContent("image/png", png, "x.png")],
+                    ToolCallId: "call_1",
+                    Name: ToolCatalog.AttachmentsRead),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"identity":"x","content":"ok"}""",
+                    ToolCallId: "call_2",
+                    Name: ToolCatalog.KnowledgeRetrieve)
+            ],
+            Tools:
+            [
+                new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read attachment.", """{"type":"object"}"""),
+                new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Knowledge.", """{"type":"object"}""")
+            ]);
+        await CollectAsync(model, request);
+
+        using var document = JsonDocument.Parse(handler.LastBody);
+        var messages = document.RootElement.GetProperty("messages");
+        Assert.Equal(5, messages.GetArrayLength());
+        Assert.Equal("assistant", messages[1].GetProperty("role").GetString());
+        Assert.Equal("tool", messages[2].GetProperty("role").GetString());
+        Assert.Equal("call_1", messages[2].GetProperty("tool_call_id").GetString());
+        Assert.Equal("tool", messages[3].GetProperty("role").GetString());
+        Assert.Equal("call_2", messages[3].GetProperty("tool_call_id").GetString());
+        Assert.Equal("user", messages[4].GetProperty("role").GetString());
+        Assert.Contains(
+            "call_1",
+            messages[4].GetProperty("content")[0].GetProperty("text").GetString() ?? string.Empty,
+            StringComparison.Ordinal);
+        Assert.Equal("image_url", messages[4].GetProperty("content")[1].GetProperty("type").GetString());
+    }
+
+    [Fact]
     public async Task Text_only_tool_result_keeps_single_tool_wire_message()
     {
         var handler = StopStream();

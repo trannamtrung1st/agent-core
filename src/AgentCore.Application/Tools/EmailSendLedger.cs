@@ -7,7 +7,9 @@ public static class EmailSendLedger
     private enum SendClaimState
     {
         InFlight,
-        Completed
+        Sent,
+        DefinitelyFailed,
+        Indeterminate
     }
 
     public readonly record struct ClaimKey(Guid ResponseId, Guid ApprovalId);
@@ -16,21 +18,40 @@ public static class EmailSendLedger
 
     public static bool TryBegin(ClaimKey key)
     {
-        if (Claims.TryGetValue(key, out _))
+        while (true)
         {
-            return false;
-        }
+            if (!Claims.TryGetValue(key, out var state))
+            {
+                return Claims.TryAdd(key, SendClaimState.InFlight);
+            }
 
-        return Claims.TryAdd(key, SendClaimState.InFlight);
+            if (state != SendClaimState.DefinitelyFailed)
+            {
+                return false;
+            }
+
+            if (Claims.TryUpdate(key, SendClaimState.InFlight, SendClaimState.DefinitelyFailed))
+            {
+                return true;
+            }
+        }
     }
 
-    public static void Complete(ClaimKey key) => Claims[key] = SendClaimState.Completed;
+    public static void CompleteSent(ClaimKey key) => Claims[key] = SendClaimState.Sent;
 
-    public static void Abandon(ClaimKey key)
+    public static void MarkDefinitelyFailed(ClaimKey key)
     {
         if (Claims.TryGetValue(key, out var state) && state == SendClaimState.InFlight)
         {
-            Claims.TryRemove(key, out _);
+            Claims[key] = SendClaimState.DefinitelyFailed;
+        }
+    }
+
+    public static void MarkIndeterminate(ClaimKey key)
+    {
+        if (Claims.TryGetValue(key, out var state) && state == SendClaimState.InFlight)
+        {
+            Claims[key] = SendClaimState.Indeterminate;
         }
     }
 

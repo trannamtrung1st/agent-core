@@ -23,8 +23,8 @@ public static partial class GmailSensitiveRedactor
             return value ?? string.Empty;
         }
 
-        var redacted = JsonRefreshTokenPattern().Replace(value, """"refresh_token":"[redacted]"""");
-        redacted = JsonAccessTokenPattern().Replace(redacted, """"access_token":"[redacted]"""");
+        var redacted = JsonRefreshTokenPattern().Replace(value, "\"refresh_token\":\"[redacted]\"");
+        redacted = JsonAccessTokenPattern().Replace(redacted, "\"access_token\":\"[redacted]\"");
         redacted = BearerPattern().Replace(redacted, "Bearer [redacted]");
         redacted = AccessTokenPattern().Replace(redacted, "[redacted]");
         return redacted;

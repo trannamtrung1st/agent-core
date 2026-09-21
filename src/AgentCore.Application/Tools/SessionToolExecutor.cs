@@ -835,23 +835,14 @@ public sealed class SessionToolExecutor(
 
         var normalized = EmailDraftNormalizer.Normalize(draft);
         var actionHash = EmailDraftNormalizer.ComputeSendActionHash(normalized);
-        var toPreview = string.Join(", ", normalized.To.Take(EmailToolLimits.MaxPreviewRecipients));
-        if (normalized.To.Count > EmailToolLimits.MaxPreviewRecipients)
-        {
-            toPreview += ", …";
-        }
-
-        var subject = normalized.Subject;
-        if (subject.Length > EmailToolLimits.MaxPreviewSubjectLength)
-        {
-            subject = subject[..EmailToolLimits.MaxPreviewSubjectLength] + "…";
-        }
-
-        var summary = ToolApprovalPreview.BoundSummary($"Send email to {toPreview}");
+        var summary = ToolApprovalPreview.BoundSummary($"Send email to {FormatRecipientPreview(normalized.To)}");
         var details = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["to"] = ToolApprovalPreview.BoundDetailValue(toPreview),
-            ["subject"] = ToolApprovalPreview.BoundDetailValue(subject)
+            ["To"] = ToolApprovalPreview.BoundDetailValue(FormatRecipientPreview(normalized.To)),
+            ["Cc"] = ToolApprovalPreview.BoundDetailValue(FormatRecipientPreview(normalized.Cc)),
+            ["Bcc"] = ToolApprovalPreview.BoundDetailValue(FormatRecipientPreview(normalized.Bcc)),
+            ["Subject"] = ToolApprovalPreview.BoundDetailValue(TruncatePreview(normalized.Subject, EmailToolLimits.MaxPreviewSubjectLength)),
+            ["Body"] = ToolApprovalPreview.BoundDetailValue(normalized.Body)
         };
         return new EmailSendApprovalPrepareResult(
             new EmailSendApprovalPreparation(actionHash, summary, details),
@@ -980,9 +971,19 @@ public sealed class SessionToolExecutor(
             return Error("invalid", $"subject must be at most {EmailToolLimits.MaxSubjectLength} characters.");
         }
 
+        if (!EmailHeaderSafety.IsSafeSubject(subject))
+        {
+            return Error("invalid", "subject contains control characters.");
+        }
+
         if (body.Length > EmailToolLimits.MaxBodyLength)
         {
             return Error("invalid", $"body must be at most {EmailToolLimits.MaxBodyLength} characters.");
+        }
+
+        if (!EmailHeaderSafety.IsSafeBody(body))
+        {
+            return Error("invalid", "body contains control characters.");
         }
 
         var started = Stopwatch.GetTimestamp();
@@ -1040,19 +1041,25 @@ public sealed class SessionToolExecutor(
         }
 
         var started = Stopwatch.GetTimestamp();
+        var sendStarted = false;
         try
         {
+            sendStarted = true;
             var result = await emailProvider
                 .SendDraftAsync(new EmailSendDraftRequest(draftId), cancellationToken)
                 .ConfigureAwait(false);
             RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
-            if (result.Outcome == EmailSendOutcome.Sent)
+            switch (result.Outcome)
             {
-                EmailSendLedger.Complete(sendClaim);
-            }
-            else
-            {
-                EmailSendLedger.Abandon(sendClaim);
+                case EmailSendOutcome.Sent:
+                    EmailSendLedger.CompleteSent(sendClaim);
+                    break;
+                case EmailSendOutcome.Failed:
+                    EmailSendLedger.MarkDefinitelyFailed(sendClaim);
+                    break;
+                default:
+                    EmailSendLedger.MarkIndeterminate(sendClaim);
+                    break;
             }
 
             return JsonSerializer.Serialize(new
@@ -1065,7 +1072,15 @@ public sealed class SessionToolExecutor(
         }
         catch
         {
-            EmailSendLedger.Abandon(sendClaim);
+            if (sendStarted)
+            {
+                EmailSendLedger.MarkIndeterminate(sendClaim);
+            }
+            else
+            {
+                EmailSendLedger.MarkDefinitelyFailed(sendClaim);
+            }
+
             throw;
         }
     }
@@ -1101,12 +1116,12 @@ public sealed class SessionToolExecutor(
                 continue;
             }
 
-            if (value.Length > EmailToolLimits.MaxRecipientLength)
+            if (!EmailHeaderSafety.TryValidateAddress(value, out var address))
             {
                 return false;
             }
 
-            list.Add(value.Trim());
+            list.Add(address);
             if (list.Count > EmailToolLimits.MaxRecipientsPerField)
             {
                 return false;
@@ -1121,6 +1136,25 @@ public sealed class SessionToolExecutor(
         addresses = list;
         return true;
     }
+
+    private static string FormatRecipientPreview(IReadOnlyList<string> addresses)
+    {
+        if (addresses.Count == 0)
+        {
+            return "(none)";
+        }
+
+        var preview = string.Join(", ", addresses.Take(EmailToolLimits.MaxPreviewRecipients));
+        if (addresses.Count > EmailToolLimits.MaxPreviewRecipients)
+        {
+            preview += ", …";
+        }
+
+        return preview;
+    }
+
+    private static string TruncatePreview(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength] + "…";
 
     private static string ExecuteDemoSensitiveAction(
         Guid sessionId,
