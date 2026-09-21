@@ -14,6 +14,12 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class DockerSandboxExecutorTests
 {
     [Fact]
+    public void Network_isolation_mode_remains_none_for_p3c2_regression()
+    {
+        Assert.Equal("none", DockerSandboxExecutor.DockerNetworkMode);
+    }
+
+    [Fact]
     public void Normalize_rejects_host_network_and_shell_metacharacters()
     {
         Assert.False(SandboxCommand.TryNormalize("cat", ["/etc/passwd"], out _, out _));

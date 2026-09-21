@@ -12,6 +12,8 @@ public sealed class DockerSandboxExecutor(
     string dockerPath = "docker",
     string image = SandboxLimits.Image) : ISandboxExecutor
 {
+    public const string DockerNetworkMode = "none";
+
     public string? LastHostConfigJson { get; private set; }
     public string? LastMountsJson { get; private set; }
     public async ValueTask<SandboxResult> RunAsync(
@@ -43,7 +45,7 @@ public sealed class DockerSandboxExecutor(
                     [
                         "create",
                         "--name", name,
-                        "--network", "none",
+                        "--network", DockerNetworkMode,
                         "--read-only",
                         "--user", "65534:65534",
                         "--cap-drop", "ALL",
