@@ -15,6 +15,7 @@ using AgentCore.Infrastructure.Workspaces;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.PublicWeb;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -168,6 +169,7 @@ public static class InfrastructureServiceCollectionExtensions
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),
                 provider.GetService<IArtifactStore>()));
+        WebSearchProviderRegistration.AddPublicWeb(services, profile);
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();
