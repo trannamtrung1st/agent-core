@@ -36,7 +36,10 @@ typography:
     fontWeight: 400
     lineHeight: 1.4
 rounded:
+  inline: "4px"
   control: "6px"
+  surface: "8px"
+  chip: "12px"
   bubble: "18px"
   composer: "16px"
 spacing:
@@ -65,6 +68,16 @@ components:
     textColor: "{colors.text}"
     rounded: "{rounded.control}"
     padding: "{spacing.controlInner}"
+  file-chip:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.chip}"
+    padding: "8px 12px"
+  queued-messages:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.chip}"
+    padding: "8px 12px"
   spoken-text:
     backgroundColor: "transparent"
     textColor: "{colors.textSecondary}"
@@ -87,7 +100,8 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 
 - Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.
 - Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).
-- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice/Send; header owns identity, Speech locale, and overflow.
+- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, and overflow.
+- Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
 
 ## Colors
@@ -132,6 +146,7 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 - Rail: 280px at 1200px+, 240px from 768–1199px, Drawer below 768px. Shared 16px left edge for New chat, Chats, session titles. Sections use title + gap, not dividing rules.
 - Header: 56px min height, container background, compact block padding, 16px inline.
 - Composer dock: 12px above, 16px below the shell. Toolbar min-height 32px (44px below 768px); wrap with 8px gap.
+- Queued drafts sit above the message well in a 12px-radius elevated container. Rows use an icon / truncated content / actions grid, 8px rhythm, and a 12.5rem maximum expanded list height.
 - After a user send, leave about half the pane for the incoming reply; shrink as the reply grows. Historical turns stay compact.
 - New chat empty: Identity + Speech locale in the intro stack (max 22rem). Model/Reasoning are not duplicated there.
 - Paused: Resume replaces the composer. Ended: quiet ended note only. Model selection lives only in the composer, so neither paused nor ended shows a header Model control.
@@ -146,17 +161,20 @@ Audit: Message placeholder left edge equals the Model name left edge; Model hove
 
 ## Elevation & Depth
 
-Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow on the composer.
+Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow is shared by the composer and its Model overlay.
 
 ### Shadow Vocabulary
-- **Composer lift** (`box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45)`): sticky message well only.
+- **Composer lift** (`box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45)`): sticky message well and its anchored Model overlay.
 
 **The Flat-By-Default Rule.** Surfaces are flat at rest. Do not add card shadows inside transcript turns.
 
 ## Shapes
 
+- **Inline** (4px): inline Markdown code and compact focus outlines.
 - **Control** (6px): AntD buttons, Selects, 32px composer icon/send hits, status tags.
-- **Composer** (16px): message well.
+- **Surface** (8px): session rows, code blocks, and image previews.
+- **Chip** (12px): attachment/file chips and queued-send container.
+- **Composer** (16px): message well and Model overlay.
 - **Bubble** (18px): user turns only. Assistant content is unbubbled Markdown.
 
 Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
@@ -165,7 +183,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ### Buttons
 - **Shape:** 6px radius; icon Send/Attach/Voice are 32×32px (44px tall toolbar on small screens).
-- **Primary:** Send and Voice-on use `{colors.primary}`.
+- **Primary:** Send/Queue and Voice-on use `{colors.primary}`.
 - **Ghost/text:** Attach, overflow, New chat, Model, catalog rows; hover uses `{colors.fill}` only. Suppress Ant Design text-button `::before`/`::after` rings so hover does not flash a border. Selected catalog row is a checkmark, not a persistent fill.
 - **Success:** live microphone control uses `{colors.success}`.
 
@@ -174,24 +192,27 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ### Cards / Containers
 - Composer shell: elevated fill, 16px radius, compact 8px padding, 8px inner gap, 1px border, composer shadow.
+- Queued-send container: elevated fill, 12px radius, 1px border; compact rows divide with a softened border and keep Steer/Remove actions at the trailing edge.
+- File chip: elevated fill, 12px radius, 1px border, 8px × 12px padding. Image previews fit within 240×180px with an 8px radius.
 - Do not nest a card inside each assistant message.
 
 ### Inputs / Fields
 - Message: borderless textarea inside the composer; placeholder secondary text. Follow **The Additive Inset Rule** (shell `{spacing.compact}` + `{spacing.controlInner}` on the field).
-- Model in the composer: one Ant Design `Dropdown` (not Modal, not a pair of Selects). The chip is a single Model text button: model name, optional Default tag, optional reasoning level as secondary text inside the same control (`aria-label="Reasoning"`, Codex-style, not a sibling button), then the chevron. The overlay lists models (Default tag + check for the active row) and, when supported, a footer with Reasoning, current level, and a dotted slider. Overlay chrome matches the composer shell; title, rows, and footer use `{spacing.controlInner}` (8px, same as session rows). Model appears only in the composer; paused and ended sessions show no Model control.
+- Model in the composer: one Ant Design `Dropdown` (not Modal, not a pair of Selects). The chip is a single Model text button: model name, optional Default tag, optional reasoning level as secondary text inside the same control (`aria-label="Reasoning"`, Codex-style, not a sibling button), then the chevron. The overlay lists models with compact, named capability icons for vision, reasoning, tools, and structured output; the default model carries a Default tag and the active row carries a check. When supported, a footer shows Reasoning, the current level, and a dotted slider. Overlay chrome matches the composer shell; title, rows, and footer use `{spacing.controlInner}` (8px, same as session rows). Model appears only in the composer; paused and ended sessions show no Model control.
 - Identity and Speech locale: labeled AntD Selects.
 
 ### Navigation
-- Session row hover fills the whole row including overflow (24px icon, inside row padding, common right edge).
+- Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
 - Header: agent name + 12px timestamp; Speech locale; conversation overflow (End). No Model in the live header.
 
 ### Conversation turns
 - User: right-aligned bubble (`8px 12px`, 18px radius).
+- Live user transcript: the same bubble at 92% opacity with a restrained dashed border; pulse only when reduced motion is not requested.
 - Assistant: when public `speechText` meaningfully differs from display, show **Spoken** first (the TTS projection), then open sanitized Markdown, blocks, and files. Spoken is the same list item: speaker icon (decorative) + visible “Spoken” label (tertiary via CSS), body secondary with `pre-wrap`; 8px stack gap; 8px padding below a 1px border before on-screen detail. Not a second bubble, avatar, or timestamp.
 
 ### Composer toolbar
 - Left: Model (reasoning level inside the Model button when supported), Attach, Voice, microphone.
-- Right: Stop / Queue / Send.
+- Right: context-sensitive Stop / Queue / Send. With queued work above the shell, Steer and Remove stay row actions rather than joining the toolbar.
 - Accessible names stay Model, Reasoning, Attach, Voice, Send, Stop.
 
 ## Do's and Don'ts
@@ -200,6 +221,8 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme="light"` so chat surfaces stay black.
 - **Do** use compact/default/section (8/12/16px) for shells and sibling `gap`; use Ant Design `paddingXS` (8px, `{spacing.controlInner}`) via `theme.useToken()` for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.
 - **Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.
+- **Do** show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.
+- **Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.
 - **Do** compose Model/catalog rows with Ant Design `Button type="text"` and `Flex`; keep `app.css` for shell chrome, overflow, and ring suppression only.
 - **Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.
 - **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
@@ -212,5 +235,6 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Don't** use Layout.Sider `theme="dark"` (navy admin sider).
 - **Don't** treat this file as behavioral authority over `/docs`.
 - **Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.
+- **Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.
 - **Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.
 - **Don't** show Spoken as another conversational turn or from internal generated tails.

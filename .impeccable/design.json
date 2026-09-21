@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-19T06:26:00.000Z",
+  "generatedAt": "2026-09-21T02:57:00.000Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -127,16 +127,32 @@
     {
       "name": "Composer shell",
       "kind": "input",
-      "refersTo": "antd-control",
-      "description": "Elevated message well: Model chip (Dropdown catalog + reasoning footer), attach, field, voice, send. Stays visible in voice. Reasoning level is secondary text inside the Model button. Compact 8px shell plus 8px control inner padding (same as session rows) so Message and Model text share one edge.",
-      "html": "<div class=\"ds-composer\"><textarea class=\"ds-composer-field\" aria-label=\"Message\" placeholder=\"Message Alex...\"></textarea><div class=\"ds-composer-bar\"><button class=\"ds-model\" type=\"button\" aria-label=\"Model\">Scripted Alpha <span class=\"ds-ghost\" aria-label=\"Reasoning\">Medium</span></button><span class=\"ds-ghost\">Attach</span><button class=\"ds-send\" type=\"button\" aria-label=\"Send\"></button></div></div>",
+      "refersTo": "composer-shell",
+      "description": "Elevated message well: Model chip, attachments, field, voice, and context-sensitive Stop/Queue/Send. It stays visible in voice. Compact 8px shell plus 8px control inner padding aligns Message and Model text.",
+      "html": "<div class=\"ds-composer\"><textarea class=\"ds-composer-field\" aria-label=\"Message\" placeholder=\"Message Alex...\"></textarea><div class=\"ds-composer-bar\"><button class=\"ds-model\" type=\"button\" aria-label=\"Model\">Scripted Alpha <span class=\"ds-ghost\" aria-label=\"Reasoning effort\">Medium</span></button><span class=\"ds-ghost\">Attach</span><button class=\"ds-send\" type=\"button\" aria-label=\"Send\"></button></div></div>",
       "css": ".ds-composer { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 16px; background: var(--ac-color-elevated, #1f1f1f); border: 1px solid var(--ac-color-border, #303030); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-composer-field { border: 0; resize: none; min-height: 1.5em; padding: 8px; background: transparent; color: inherit; caret-color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: inherit; } .ds-composer-field::placeholder { color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); } .ds-composer-field:focus { outline: none; } .ds-composer-bar { display: flex; justify-content: space-between; align-items: center; min-height: 32px; gap: 8px; flex-wrap: wrap; } .ds-model { height: auto; min-height: 32px; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; } .ds-model:hover { background: var(--ac-color-fill, rgba(255, 255, 255, 0.08)); } .ds-ghost { color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); font-size: 14px; } .ds-send { width: 32px; height: 32px; border: 0; border-radius: 6px; background: var(--ac-color-primary, #1677ff); }"
+    },
+    {
+      "name": "Model picker",
+      "kind": "custom",
+      "refersTo": "composer-control",
+      "description": "One composer control opens an elevated catalog with Default and selected signals, compact capability icons, and an optional reasoning slider.",
+      "html": "<div class=\"ds-model-picker\"><button class=\"ds-model-trigger\" type=\"button\" aria-label=\"Model\" aria-expanded=\"true\">DeepSeek V4.1 Flash <span>Default</span> <small aria-label=\"Reasoning effort\">Medium</small>⌄</button><div class=\"ds-model-menu\" role=\"listbox\" aria-label=\"Model catalog\"><div class=\"ds-model-title\">Select model</div><button class=\"ds-model-option\" role=\"option\" aria-selected=\"true\"><span>DeepSeek V4.1 Flash</span><span class=\"ds-model-caps\"><svg viewBox=\"0 0 24 24\" aria-label=\"Vision\"><path d=\"M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z\"/></svg><svg viewBox=\"0 0 24 24\" aria-label=\"Reasoning capable\"><path d=\"M9 21h6v-1H9v1Zm3-20a7 7 0 0 0-4 12.7V17h8v-3.3A7 7 0 0 0 12 1Z\"/></svg><b>Default</b>✓</span></button><div class=\"ds-reasoning\"><span>Reasoning</span><span>Medium</span><input aria-label=\"Reasoning effort\" type=\"range\" min=\"0\" max=\"2\" value=\"1\" /></div></div></div>",
+      "css": ".ds-model-picker { width: 320px; color: var(--ac-color-text, rgba(255,255,255,.88)); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-model-trigger, .ds-model-option { border: 0; color: inherit; font: inherit; cursor: pointer; } .ds-model-trigger { min-height: 32px; padding: 8px; border-radius: 6px; background: transparent; } .ds-model-trigger:hover, .ds-model-trigger:focus-visible, .ds-model-option:hover, .ds-model-option:focus-visible { outline: 0; background: var(--ac-color-fill, rgba(255,255,255,.08)); } .ds-model-trigger span { margin-inline: 8px; padding: 1px 6px; border-radius: 6px; background: var(--ac-color-fill, rgba(255,255,255,.08)); } .ds-model-trigger small { margin-inline-end: 8px; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-model-menu { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 8px; border: 1px solid var(--ac-color-border, #303030); border-radius: 16px; background: var(--ac-color-elevated, #1f1f1f); box-shadow: 0 6px 16px rgba(0,0,0,.45); } .ds-model-title { padding-inline: 8px; font-size: 12px; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-model-option { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 8px; border-radius: 6px; background: transparent; text-align: start; } .ds-model-caps { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; } .ds-model-caps svg { width: 14px; height: 14px; fill: currentColor; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-model-caps b { padding: 1px 6px; border-radius: 6px; background: var(--ac-color-fill, rgba(255,255,255,.08)); font-size: 12px; } .ds-reasoning { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 8px; border-top: 1px solid var(--ac-color-border, #303030); } .ds-reasoning span:first-child { color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-reasoning input { grid-column: 1 / -1; width: 100%; accent-color: var(--ac-color-primary, #1677ff); }"
+    },
+    {
+      "name": "Queued messages",
+      "kind": "card",
+      "refersTo": "queued-messages",
+      "description": "Compact local work list above the composer. Rows truncate safely, expansion is bounded, and Steer/Remove remain trailing actions.",
+      "html": "<section class=\"ds-queue\" aria-label=\"Queued messages\"><strong>Queued · 2</strong><div class=\"ds-queue-row\"><span aria-hidden=\"true\">☷</span><span class=\"ds-queue-copy\">Compare the two attachments<small>brief.pdf, notes.txt</small></span><span><button type=\"button\">Steer</button><button type=\"button\" aria-label=\"Remove queued message\">×</button></span></div></section>",
+      "css": ".ds-queue { padding: 8px 12px; border: 1px solid var(--ac-color-border, #303030); border-radius: 12px; background: var(--ac-color-elevated, #1f1f1f); color: var(--ac-color-text, rgba(255,255,255,.88)); font: 400 13px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-queue > strong { color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-queue-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; padding-block: 8px; border-bottom: 1px solid color-mix(in srgb, var(--ac-color-border, #303030) 70%, transparent); } .ds-queue-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-queue-copy small { display: block; overflow: hidden; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); text-overflow: ellipsis; } .ds-queue button { min-height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; } .ds-queue button:hover, .ds-queue button:focus-visible { outline: 0; background: var(--ac-color-fill, rgba(255,255,255,.08)); }"
     },
     {
       "name": "User bubble",
       "kind": "custom",
-      "refersTo": "antd-control",
-      "description": "Right-aligned user turn. Assistant copy stays open Markdown, not a bubble.",
+      "refersTo": "user-bubble",
+      "description": "Right-aligned user turn. Live transcripts reuse it with a restrained dashed state; assistant copy stays open Markdown.",
       "html": "<div class=\"ds-user-turn\"><time class=\"ds-meta\">1:52 PM</time><div class=\"ds-user-bubble\">now?</div></div>",
       "css": ".ds-user-turn { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: 36rem; margin-inline-start: auto; font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-meta { font-size: 12px; color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); } .ds-user-bubble { padding: 8px 12px; background: var(--ac-color-bubble, rgba(255, 255, 255, 0.12)); color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); border-radius: 18px; white-space: pre-wrap; }"
     },
@@ -147,6 +163,14 @@
       "description": "Public TTS projection first on the same assistant turn when it differs from display Markdown. Compact 8px rhythm; not a second bubble.",
       "html": "<section class=\"ds-spoken\" aria-label=\"Spoken\"><div class=\"ds-spoken-caption\"><span aria-hidden=\"true\">♪</span> Spoken</div><p class=\"ds-spoken-body\">Hello. How can I help you today?</p></section>",
       "css": ".ds-spoken { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--ac-color-border, #303030); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-spoken-caption { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; font-weight: 400; color: var(--ac-color-text-tertiary, rgba(255, 255, 255, 0.45)); } .ds-spoken-body { margin: 0; color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); white-space: pre-wrap; }"
+    },
+    {
+      "name": "File chip",
+      "kind": "chip",
+      "refersTo": "file-chip",
+      "description": "Authorized history attachment with safe display name and file kind; image previews use a bounded 240×180px frame.",
+      "html": "<a class=\"ds-file-chip\" href=\"#\" aria-label=\"Download interview-notes.pdf\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 2h8l4 4v16H6V2Zm7 1v5h5\"/></svg><span>interview-notes.pdf<small>PDF</small></span></a>",
+      "css": ".ds-file-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 12px; border: 1px solid var(--ac-color-border, #303030); border-radius: 12px; background: var(--ac-color-elevated, #1f1f1f); color: var(--ac-color-text, rgba(255,255,255,.88)); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; text-decoration: none; } .ds-file-chip:hover { border-color: var(--ac-color-text-tertiary, rgba(255,255,255,.45)); } .ds-file-chip:focus-visible { outline: 2px solid var(--ac-color-primary, #1677ff); outline-offset: 2px; } .ds-file-chip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; } .ds-file-chip span { min-width: 0; overflow-wrap: anywhere; } .ds-file-chip small { display: block; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); }"
     },
     {
       "name": "Interrupted chip",
@@ -160,7 +184,7 @@
       "name": "Session row",
       "kind": "nav",
       "refersTo": "antd-control",
-      "description": "Catalog row: title + time, fill hover across the overflow control, no outline.",
+      "description": "Catalog row: title + time, whole-row fill for hover, focus-within, and active state, including the overflow control.",
       "html": "<div class=\"ds-session-row\"><button class=\"ds-session-open\" type=\"button\">hi Sam <time>12:54 PM</time></button><button class=\"ds-overflow\" type=\"button\" aria-label=\"Actions\">···</button></div>",
       "css": ".ds-session-row { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; background: transparent; color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: 400 14px/1.4 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-session-row:hover, .ds-session-row:focus-within { background: var(--ac-color-fill, rgba(255, 255, 255, 0.08)); } .ds-session-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 8px; padding: 0; border: 0; background: transparent; color: inherit; text-align: start; font: inherit; cursor: pointer; } .ds-session-open time { flex: 0 0 auto; font-size: 12px; color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); } .ds-session-open:hover, .ds-session-open:focus-visible, .ds-overflow:hover, .ds-overflow:focus-visible { background: transparent; border: 0; outline: none; box-shadow: none; } .ds-overflow { width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }"
     },
@@ -175,42 +199,41 @@
   ],
   "narrative": {
     "northStar": "Ant Design operate UI",
-    "overview": "Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with Model/Reasoning, in-flow activity)—not a component dependency or pixel clone.\n\nThe default appearance is Ant Design darkAlgorithm: black layout, #141414 conversation, #1f1f1f elevated composer/code, and #1677ff for primary actions. Product CSS maps those roles; it does not invert the former light palette.",
+    "overview": "Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system; Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone.\n\nThe shipped appearance is Ant Design darkAlgorithm: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from :root custom properties; it does not invert a former light palette or invent a second token catalog.",
     "keyCharacteristics": [
-      "Ant Design v6 darkAlgorithm with Sider theme light so chat surfaces stay black, not navy admin",
-      "ChatGPT/Codex are layout/hierarchy references only; no second kit or pixel clone",
-      "Compact/default/section spacing (8/12/16px) owns shells and sibling gap; Ant Design paddingXS (8px, same as session rows) owns text-control inner padding",
-      "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice/Send; header owns Speech locale",
-      "Spoken is a quieter inset first on the same assistant turn, not a second chat entry",
+      "Ant Design v6 imported directly in product components; app.css only sizes the shell, overflow, product layout, previews, and accessibility.",
+      "Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling gap. Text-control inner padding is {spacing.controlInner} (8px, Ant Design paddingXS, same as a session-row body).",
+      "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, and overflow.",
+      "Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.",
+      "Assistant display Markdown stays primary for reading; persisted public speech text is a quieter Spoken inset first on the same turn when it differs (the TTS projection)."
     ],
     "rules": [
-      { "name": "Direct AntD Rule", "body": "Import antd in product components. Do not invent a design-system wrapper.", "section": "components" },
-      { "name": "Docs Win Rule", "body": "DESIGN.md is lightweight presentation only. /docs owns screens and behavior.", "section": "layout" },
-      { "name": "Role Surfaces Rule", "body": "Map dark roles in product CSS. Do not invert the former light palette.", "section": "colors" },
-      { "name": "Half-Pane Reply Rule", "body": "After a user send, leave about half the conversation pane for the incoming reply so prior turns can stay in view.", "section": "layout" },
+      { "name": "Role Surfaces Rule", "body": "Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.", "section": "colors" },
+      { "name": "One Face Rule", "body": "Do not self-host a display face or costume monospace except for code in Markdown.", "section": "typography" },
+      { "name": "Docs Win Rule", "body": "This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. /docs does.", "section": "layout" },
       { "name": "Compact Rhythm Rule", "body": "Shells, docks, and sibling gap use compact/default/section (8/12/16px). Do not invent extra --ac-space-* steps or 2px CSS gaps.", "section": "layout" },
-      { "name": "Additive Inset Rule", "body": "A padded shell owns the outer inset. Composer and Model overlay shells use compact 8px. Nested text controls keep Ant Design paddingXS (8px, same as session-row body) via theme.useToken(). Align labels by giving equivalent children the same inner padding. Never zero a text button's padding or use negative margin to grow hover fill.", "section": "layout" }
+      { "name": "Additive Inset Rule", "body": "A padded shell owns the outer inset. Nested text controls keep their own inner padding ({spacing.controlInner} = 8px, Ant Design paddingXS via theme.useToken(), same as .session-row-body). Align labels by giving equivalent children the same inner padding. Example: composer {spacing.compact} (8px) + field/button {spacing.controlInner} (8px) so Message and Model text share one edge, while hover fill still has 8px around the glyph. Apply the same stack to the Model Dropdown overlay (shell 8px + 8px on title, catalog rows, and reasoning footer). Icon-only 32×32 toolbar hits stay padding 0.", "section": "layout" },
+      { "name": "Flat-By-Default Rule", "body": "Surfaces are flat at rest. Do not add card shadows inside transcript turns.", "section": "elevation" }
     ],
     "dos": [
-      "Do import antd components in feature files; keep ConfigProvider at the app root with darkAlgorithm.",
-      "Do honor prefers-reduced-motion; keep labeled errors and visible focus.",
-      "Do keep the session rail 280px at 1200px and above, 240px from 768–1199px, and an Ant Design Drawer below 768px.",
-      "Do fill session-row hover with the fill token only, including the overflow control.",
-      "Do leave about half the conversation pane below a user send for the incoming reply.",
-      "Do put Model in the composer when the composer is shown (reasoning level inside the Model button when supported); keep Speech locale in the header and new-chat Identity stack.",
-      "Do use compact/default/section for shells and sibling gap, and Ant Design paddingXS via theme.useToken() for text-control inner padding so Message and Model labels share one edge and match session-row inset.",
-      "Do compose Model and catalog rows with Ant Design Button type=text and Flex; keep app.css for shell chrome and ring suppression only.",
-      "Do render Spoken only when public speechText differs from display text; keep it first on the same turn as the TTS projection, with Markdown as display below.",
-      "Do preserve testids connection and profile.",
-      "Do keep the labeled composer available while voice is live until /docs and tests change together."
+      "Do import antd in feature files; ConfigProvider uses darkAlgorithm. Keep Sider theme=\"light\" so chat surfaces stay black.",
+      "Do use compact/default/section (8/12/16px) for shells and sibling gap; use Ant Design paddingXS (8px, {spacing.controlInner}) via theme.useToken() for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.",
+      "Do put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.",
+      "Do show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.",
+      "Do keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.",
+      "Do compose Model/catalog rows with Ant Design Button type=\"text\" and Flex; keep app.css for shell chrome, overflow, and ring suppression only.",
+      "Do render Spoken only for assistant public speechText that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.",
+      "Do honor prefers-reduced-motion; keep labeled errors, visible focus, and testids connection and profile.",
+      "Do keep the labeled composer available while voice is live until /docs and tests change together.",
+      "Do keep ended history on the same reading column with a quiet ended note, not a disabled input."
     ],
     "donts": [
-      "Don't reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or custom Select.",
-      "Don't add generic wrapper libraries, Ant Design Pro/ProComponents/X, or another CSS framework.",
-      "Don't use Layout.Sider theme dark (navy admin sider).",
-      "Don't treat DESIGN.md as behavioral authority over /docs.",
-      "Don't use a blocking Modal or a second Select/button for model or effort; keep one Dropdown on the Model chip with effort in the overlay footer.",
-      "Don't put Model in both the empty Identity stack and the composer.",
+      "Don't reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.",
+      "Don't add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.",
+      "Don't use Layout.Sider theme=\"dark\" (navy admin sider).",
+      "Don't treat this file as behavioral authority over /docs.",
+      "Don't use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.",
+      "Don't render queued drafts as transcript turns or move pending attachments into a separate dock.",
       "Don't zero a text control's padding, use negative margin, or stack extra child padding to fake alignment with a sibling.",
       "Don't show Spoken as another conversational turn or from internal generated tails."
     ]

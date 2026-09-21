@@ -9,8 +9,8 @@ Current roadmap:
 1. **P2A — first-class progress semantics** is **observed** and frozen;
 2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
 3. **P2E — multimodal/image input usability and capability handling** — **observed/frozen** (2026-09-21 key-free Synthetic + Compose gate on freeze HEAD);
-4. evolve tools and external integrations;
-5. add context compaction and memory;
+4. **P3 — evolve tools and external integrations**, starting with historical multimodal attachment re-inspection;
+5. **P4 — add context compaction and memory** after P3;
 6. add configurable triggers;
 7. add durable background work;
 8. productize the agent harness/admin lifecycle;
@@ -681,7 +681,7 @@ P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + 
 
 ### P2E stop condition
 
-P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection remains a P3 evaluation. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. P6 has not started; roadmap focus is **P3**, then **P4**.
+P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection was explicitly deferred to **P3A** and does not reopen P2E. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. P3 has not started; its first recommended slice is historical multimodal attachment re-inspection. **P4** follows P3. P6 has not started.
 
 ---
 
@@ -842,27 +842,9 @@ silently behaves unpredictably.
 
 ### Current-turn versus historical image access
 
-Current-turn image inspection is the first P2E requirement.
+P2E closed current-turn image inspection only. Historical image re-inspection was explicitly deferred to **P3A — Historical multimodal attachment re-inspection** and does not reopen or block the frozen P2E closure.
 
-Today `attachments.read` deliberately returns metadata for image files rather than putting binary image bytes into a tool result. Do not base64 images into ordinary textual tool results.
-
-- [ ] Define historical image re-inspection deliberately.
-
-Possible future-safe approaches include:
-
-- a typed tool result that can contribute `ModelContentPart`;
-- bounded rehydration of explicitly referenced session images;
-- another provider-neutral multimodal context mechanism.
-
-Do **not**:
-
-- put raw/base64 image data in model-visible text;
-- automatically replay every historical image on every turn;
-- repeatedly pay image-token cost merely because an old image exists in the session.
-
-Historical image re-inspection may be implemented with P3 tool evolution if that produces the cleaner typed-tool-result boundary.
-
-It does **not** block the first P2E closure where newly attached images work reliably in the current user turn.
+The deferred work must continue to avoid raw/base64 image data in ordinary textual tool results and must not automatically replay every historical image on every turn.
 
 ### Supported scope
 
@@ -967,6 +949,8 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
+**P3 has not started.** The first recommended implementation slice is **P3A — Historical multimodal attachment re-inspection**. P4 follows after P3.
+
 Already present:
 
 - static `ToolCatalog`;
@@ -985,7 +969,15 @@ Already present:
 
 Build on this instead of replacing it.
 
-## Tool architecture
+## P3A — Historical multimodal attachment re-inspection
+
+- [ ] Let a model re-inspect a historical session image on demand through the existing durable `attachmentId`, session attachment manifest, `attachments.read`, attachment processor/store, and provider-neutral `ModelContentPart` / `ModelImageContent` path.
+- [ ] Retrieve only explicitly selected session-owned images; do not automatically resend all historical images or duplicate image blobs into conversation history.
+- [ ] Add the smallest provider-neutral typed non-text tool-result or continuation projection needed to rehydrate model-consumable image content. Keep raw/base64 image bytes out of ordinary JSON/text tool results.
+- [ ] Require trusted model **Tools** capability for model-initiated `attachments.read` and **Vision** capability before historical image content reaches the provider. Never silently drop the image, pretend it was seen, or switch models automatically.
+- [ ] Preserve existing text/PDF `attachments.read` behavior, session ownership and cross-session isolation, sanitized/canonical image bytes with truthful MIME, persisted/reopened session support, and runtime-epoch/cancellation/supersession fencing.
+
+## Tool architecture evolution
 
 - [ ] Refactor the static tool path only where real growth requires clearer layers:
 
@@ -994,13 +986,7 @@ Build on this instead of replacing it.
   - **Executor** — performs the action;
   - **Result/Artifact layer** — bounded structured result.
 
-Do not introduce a large plugin framework before a second real external tool provider/integration requires it.
-
-- [ ] Add typed non-text tool results only when required by a concrete workflow.
-
-Historical image re-inspection from P2E is one legitimate trigger if it requires a tool result to contribute `ModelContentPart`.
-
-Do not encode binary media into ordinary JSON/text tool results.
+Do not introduce a large plugin/tool framework before real integrations require it. P3A is the first concrete trigger for typed non-text tool results; further evolution remains driven by demonstrated workflows.
 
 ## Workspace ergonomics
 
@@ -1016,7 +1002,7 @@ Keep:
 - `/workspace` as the writable model area;
 - stale-runtime cancellation guarantees.
 
-## Artifact tools
+## Artifact workflow improvements
 
 - [ ] Improve artifact workflows when required:
 
@@ -1041,32 +1027,6 @@ Requirements:
 - explicit network policy;
 - no credential leakage;
 - separate policy from `sandbox.run`.
-
-## Sandbox
-
-- [ ] Keep `sandbox.run` as the generic execution escape hatch.
-
-Maintain:
-
-- no unrestricted host shell/process tool;
-- read-only root;
-- dropped capabilities;
-- bounded CPU;
-- bounded memory;
-- bounded PIDs;
-- bounded execution time;
-- bounded output;
-- network disabled by default.
-
-- [ ] Add sandbox network policy only when a concrete workflow requires it.
-
-Possible modes:
-
-- `none`;
-- restricted public web;
-- explicit host allowlist.
-
-Never unrestricted by default.
 
 ## Typed external actions
 
@@ -1094,7 +1054,33 @@ Conceptually:
 - configurable ordinary writes;
 - explicit approval for sensitive/destructive actions.
 
-## Generic HTTP
+## Sandbox and network-policy evolution
+
+- [ ] Keep `sandbox.run` as the generic execution escape hatch.
+
+Maintain:
+
+- no unrestricted host shell/process tool;
+- read-only root;
+- dropped capabilities;
+- bounded CPU;
+- bounded memory;
+- bounded PIDs;
+- bounded execution time;
+- bounded output;
+- network disabled by default.
+
+- [ ] Add sandbox network policy only when a concrete workflow requires it.
+
+Possible modes:
+
+- `none`;
+- restricted public web;
+- explicit host allowlist.
+
+Never unrestricted by default.
+
+## Generic `http.request`
 
 - [ ] Add generic `http.request` only if typed tools cannot reasonably cover real workflows.
 
@@ -1582,7 +1568,7 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] OpenAI-compatible image-content mapping.
 - [x] Deterministic PNG→vision-request coverage.
 - [x] User-facing capability-aware image/model admission (P2E).
-- [ ] Historical image re-inspection beyond the original multimodal turn — evaluate under P3.
+- [ ] P3A historical multimodal attachment re-inspection beyond the original turn — first recommended P3 slice; P3 has not started.
 - [x] Existing rich-response envelope with display/speech/blocks.
 - [x] Internal same-mode `speech.text` when playback differs from display.
 - [x] Public/history `speechText` custom-only (P2B).
