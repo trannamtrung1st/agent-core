@@ -169,11 +169,26 @@ public sealed class GmailEmailProvider(
 
     public async ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
     {
+        var approved = request.ApprovedDraft;
+        var raw = GmailMime.BuildRawMessage(
+            approved.To,
+            approved.Cc,
+            approved.Bcc,
+            approved.Subject,
+            approved.Body);
+        var payload = JsonSerializer.Serialize(new
+        {
+            id = request.DraftId,
+            message = new { raw }
+        });
         var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(
             HttpMethod.Post,
-            $"https://gmail.googleapis.com/gmail/v1/users/me/drafts/{Uri.EscapeDataString(request.DraftId)}/send");
+            "https://gmail.googleapis.com/gmail/v1/users/me/drafts/send")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         var dispatchStarted = false;
         try

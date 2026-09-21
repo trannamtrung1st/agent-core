@@ -86,17 +86,49 @@ public sealed class GmailEmailProviderTests
     }
 
     [Fact]
+    public async Task Send_posts_to_drafts_send_with_approved_raw_mime()
+    {
+        var handler = new GmailScriptedHandler();
+        var provider = CreateProvider(handler);
+        var approved = new EmailDraftSnapshot(
+            "draft-1",
+            ["to@example.test"],
+            ["cc@example.test"],
+            ["hidden@example.test"],
+            "Exact subject",
+            "Exact body");
+        var result = await provider.SendDraftAsync(new EmailSendDraftRequest("draft-1", approved));
+
+        Assert.Equal(EmailSendOutcome.Sent, result.Outcome);
+        Assert.Equal("/gmail/v1/users/me/drafts/send", handler.LastSendPath);
+        Assert.NotNull(handler.LastSendBody);
+        using var document = JsonDocument.Parse(handler.LastSendBody!);
+        Assert.Equal("draft-1", document.RootElement.GetProperty("id").GetString());
+        var sentRaw = document.RootElement.GetProperty("message").GetProperty("raw").GetString();
+        Assert.NotNull(sentRaw);
+        var parsed = GmailMime.ParseDraft("draft-1", GmailMime.DecodeBase64Url(sentRaw));
+        Assert.Contains("to@example.test", parsed.To, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("cc@example.test", parsed.Cc, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("hidden@example.test", parsed.Bcc, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("Exact subject", parsed.Subject);
+        Assert.Equal("Exact body", parsed.Body);
+        Assert.Equal(0, handler.LegacyDraftIdSendCount);
+    }
+
+    [Fact]
     public async Task Send_cancellation_after_dispatch_is_indeterminate()
     {
         var handler = new GmailScriptedHandler { HangSend = true };
         var provider = CreateProvider(handler);
         using var cts = new CancellationTokenSource();
-        var sendTask = provider.SendDraftAsync(new EmailSendDraftRequest("draft-1"), cts.Token).AsTask();
+        var approved = HarnessApprovedDraft();
+        var sendTask = provider.SendDraftAsync(new EmailSendDraftRequest("draft-1", approved), cts.Token).AsTask();
         await handler.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
         var result = await sendTask;
         Assert.Equal(EmailSendOutcome.Indeterminate, result.Outcome);
         Assert.Equal("cancelled", result.ErrorCode);
+        Assert.Equal("/gmail/v1/users/me/drafts/send", handler.LastSendPath);
     }
 
     [Fact]
@@ -104,8 +136,9 @@ public sealed class GmailEmailProviderTests
     {
         var handler = new GmailScriptedHandler { SendStatus = HttpStatusCode.BadRequest };
         var provider = CreateProvider(handler);
-        var result = await provider.SendDraftAsync(new EmailSendDraftRequest("draft-1"));
+        var result = await provider.SendDraftAsync(new EmailSendDraftRequest("draft-1", HarnessApprovedDraft()));
         Assert.Equal(EmailSendOutcome.Failed, result.Outcome);
+        Assert.Equal("/gmail/v1/users/me/drafts/send", handler.LastSendPath);
     }
 
     [Fact]
@@ -118,6 +151,15 @@ public sealed class GmailEmailProviderTests
             "Hello\nBcc: evil@example.test",
             "Body"));
     }
+
+    private static EmailDraftSnapshot HarnessApprovedDraft() =>
+        new(
+            "draft-1",
+            ["to@example.test"],
+            ["cc@example.test"],
+            ["hidden@example.test"],
+            "Exact subject",
+            "Exact body");
 
     private static GmailEmailProvider CreateProvider(GmailScriptedHandler handler)
     {
@@ -146,6 +188,9 @@ public sealed class GmailEmailProviderTests
         public string? StoredRaw { get; private set; }
         public int TokenPostCount { get; private set; }
         public int DraftPostCount { get; private set; }
+        public int LegacyDraftIdSendCount { get; private set; }
+        public string? LastSendPath { get; private set; }
+        public string? LastSendBody { get; private set; }
         public bool HangSend { get; init; }
         public bool OmitRawOnGet { get; init; }
         public HttpStatusCode SendStatus { get; init; } = HttpStatusCode.OK;
@@ -193,8 +238,20 @@ public sealed class GmailEmailProviderTests
                 return Json(JsonSerializer.Serialize(payload));
             }
 
-            if (path.Contains("/send", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Post
+                && path.StartsWith("/gmail/v1/users/me/drafts/", StringComparison.Ordinal)
+                && path.EndsWith("/send", StringComparison.Ordinal)
+                && !string.Equals(path, "/gmail/v1/users/me/drafts/send", StringComparison.Ordinal))
             {
+                LegacyDraftIdSendCount++;
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+
+            if (request.Method == HttpMethod.Post
+                && string.Equals(path, "/gmail/v1/users/me/drafts/send", StringComparison.Ordinal))
+            {
+                LastSendPath = path;
+                LastSendBody = await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 SendStarted.TrySetResult();
                 if (HangSend)
                 {

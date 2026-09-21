@@ -316,6 +316,45 @@ public sealed class EmailToolTests
     }
 
     [Fact]
+    public async Task Email_send_passes_normalized_approved_snapshot_to_provider()
+    {
+        var provider = new RecordingSendEmailProvider();
+        var executor = CreateExecutor(provider);
+        var definition = Definition(4, [ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]);
+        var draft = await executor.ExecuteAsync(
+            definition,
+            Guid.NewGuid(),
+            new ModelToolCall(
+                "d1",
+                ToolCatalog.EmailCreateDraft,
+                """{"to":["a@example.test"],"cc":["c@example.test"],"bcc":["hidden@example.test"],"subject":"Preview","body":"Exact body"}"""),
+            ToolLimits.MaxOutputBytes);
+        var draftId = ExtractJsonString(draft.Text, "draftId")!;
+        var args = JsonDocument.Parse($$"""{"draftId":"{{draftId}}"}""").RootElement;
+        var prepared = await executor.PrepareEmailSendApprovalAsync(args);
+        var grant = new ToolApprovalGrant(
+            Guid.NewGuid(),
+            ToolCatalog.EmailSend,
+            prepared.Preparation!.ActionHash,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid());
+
+        await executor.ExecuteAsync(
+            definition,
+            Guid.NewGuid(),
+            new ModelToolCall("s1", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grant);
+
+        Assert.NotNull(provider.LastApproved);
+        Assert.Equal(draftId, provider.LastApproved!.DraftId);
+        Assert.Contains("hidden@example.test", provider.LastApproved.Bcc, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("Preview", provider.LastApproved.Subject);
+        Assert.Equal("Exact body", provider.LastApproved.Body);
+    }
+
+    [Fact]
     public async Task Email_send_approval_preview_includes_recipients_subject_and_body()
     {
         var provider = new SyntheticEmailProvider();
@@ -532,6 +571,32 @@ public sealed class EmailToolTests
 
         public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default) =>
             throw exception;
+    }
+
+    private sealed class RecordingSendEmailProvider : IEmailProvider
+    {
+        private readonly SyntheticEmailProvider _inner = new();
+        public EmailDraftSnapshot? LastApproved { get; private set; }
+
+        public bool IsAvailable => _inner.IsAvailable;
+
+        public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default) =>
+            _inner.SearchAsync(request, cancellationToken);
+
+        public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(request, cancellationToken);
+
+        public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) =>
+            _inner.CreateDraftAsync(request, cancellationToken);
+
+        public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) =>
+            _inner.GetDraftAsync(draftId, cancellationToken);
+
+        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
+        {
+            LastApproved = request.ApprovedDraft;
+            return _inner.SendDraftAsync(request, cancellationToken);
+        }
     }
 
     private sealed class MutatingDraftEmailProvider : IEmailProvider

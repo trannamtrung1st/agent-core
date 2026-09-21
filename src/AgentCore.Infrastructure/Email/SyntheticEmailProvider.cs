@@ -103,6 +103,11 @@ public sealed class SyntheticEmailProvider : IEmailProvider
             return ValueTask.FromResult(new EmailSendResult(EmailSendOutcome.Failed, null, "notFound", "Draft was not found."));
         }
 
+        if (!string.Equals(request.DraftId, request.ApprovedDraft.DraftId, StringComparison.Ordinal))
+        {
+            return ValueTask.FromResult(new EmailSendResult(EmailSendOutcome.Failed, null, "invalid", "Approved draft id does not match."));
+        }
+
         if (_sentByDraft.TryGetValue(request.DraftId, out var existing))
         {
             return ValueTask.FromResult(new EmailSendResult(EmailSendOutcome.Sent, existing, null, null));

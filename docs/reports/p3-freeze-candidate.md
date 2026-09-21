@@ -11,6 +11,7 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 | High | Indeterminate Gmail send could retry the same approval | `EmailSendLedger` is `InFlight → Sent \| DefinitelyFailed \| Indeterminate`; `Sent` and `Indeterminate` block replay; cancellation after dispatch is indeterminate |
 | High | Gmail draft reread dropped Bcc | `GetDraftAsync` uses `format=raw` + MimeKit parse including Bcc; missing raw fails closed; Gmail JSON is parsed unredacted; approval hash and preview bind Bcc |
 | High | Manual MIME headers allowed CR/LF injection | MimeKit builder/parser; CR/LF/NUL rejected in header-bearing input |
+| High | Gmail send used wrong REST path and draft id only (TOCTOU) | `POST /users/me/drafts/send` with hash-validated `message.raw` in the request body; HTTP contract test asserts path and payload |
 | Medium | Advertised 10-minute approval wait was bounded by 30 s/120 s tool timers | Pause overall clock during human wait; start a fresh per-tool timer after approve |
 | Medium | `email.send` read Gmail before execution policy | Deny/forbid stops with zero integration access; RequireApproval then fetches the draft |
 | Medium | Multi-tool historical-image wire order | `MapMessages` emits all `role=tool` messages for a round, then image continuations |
@@ -38,8 +39,8 @@ Commands match `.github/workflows/synthetic.yml` (2026-09-21). Local rerun after
 | --- | --- |
 | `tests/realtime-js` `npm ci` | OK |
 | Domain tests | 76 passed |
-| Infrastructure tests | 249 passed / 6 skipped |
-| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 534 passed |
+| Infrastructure tests | 244 passed / 12 skipped |
+| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 535 passed |
 | API tests | 165 passed |
 | Web Vitest | 384 passed |
 | Web production build | OK |

@@ -1027,7 +1027,8 @@ public sealed class SessionToolExecutor(
             return Error("notFound", "Draft was not found.");
         }
 
-        var actionHash = EmailDraftNormalizer.ComputeSendActionHash(EmailDraftNormalizer.Normalize(draft));
+        var normalized = EmailDraftNormalizer.Normalize(draft);
+        var actionHash = EmailDraftNormalizer.ComputeSendActionHash(normalized);
         if (!string.Equals(actionHash, approvalGrant.ActionHash, StringComparison.Ordinal)
             || !string.Equals(approvalGrant.ToolName, ToolCatalog.EmailSend, StringComparison.Ordinal))
         {
@@ -1046,7 +1047,7 @@ public sealed class SessionToolExecutor(
         {
             sendStarted = true;
             var result = await emailProvider
-                .SendDraftAsync(new EmailSendDraftRequest(draftId), cancellationToken)
+                .SendDraftAsync(new EmailSendDraftRequest(draftId, normalized), cancellationToken)
                 .ConfigureAwait(false);
             RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
             switch (result.Outcome)

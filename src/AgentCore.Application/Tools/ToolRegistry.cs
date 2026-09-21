@@ -89,7 +89,7 @@ public static class ToolRegistry
                 ToolOfferRule.ConfigurationWhenRoleAllows),
             [ToolCatalog.EmailSend] = Descriptor(
                 ToolCatalog.EmailSend,
-                "Send an existing provider draft by draftId. Recipients and body are read from the draft at approval and send time.",
+                "Send an existing provider draft by draftId. Approval binds the exact normalized draft; send dispatches that approved snapshot atomically.",
                 """{"type":"object","properties":{"draftId":{"type":"string"}},"required":["draftId"]}""",
                 ToolEffect.SensitiveWrite,
                 ToolOfferRule.ConfigurationWhenRoleAllows),

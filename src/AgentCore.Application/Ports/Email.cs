@@ -45,7 +45,7 @@ public sealed record EmailDraftSnapshot(
 
 public sealed record EmailDraftResult(EmailDraftSnapshot Draft);
 
-public sealed record EmailSendDraftRequest(string DraftId);
+public sealed record EmailSendDraftRequest(string DraftId, EmailDraftSnapshot ApprovedDraft);
 
 public enum EmailSendOutcome
 {

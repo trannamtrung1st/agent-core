@@ -1008,7 +1008,7 @@ P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focuse
 - [x] Full key-free gate on the `27efe17` closure tree (see historical [p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md) evidence).
 - [x] Canonical docs/TODO/report alignment for observed P3B–P3D behavior.
 - [x] Mandatory whole-output corrections manually verified on `27efe17`. Optional OpenRouter, Brave, and Gmail probes remain **skipped/unverified**.
-- [x] Email/approval correction pass after freeze reopen: exact-draft Bcc, MimeKit MIME, indeterminate send consumption, approval-clock isolation, policy-before-Gmail, multi-tool image wire order; local §23 gate rerun on this tree.
+- [x] Email/approval correction pass after freeze reopen: exact-draft Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw`, indeterminate send consumption, approval-clock isolation, policy-before-Gmail, multi-tool image wire order; local §23 gate rerun on this tree.
 
 ## Typed external actions
 
