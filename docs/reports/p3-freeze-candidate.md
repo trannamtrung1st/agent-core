@@ -2,7 +2,7 @@
 
 This report records the **P3 freeze candidate** after P3A–P3D implementation and the P3E reconciliation gate on a single final HEAD. It does **not** mark P3 observed/frozen: mandatory **whole-output review** must accept the final HEAD before closure per proposal §25.
 
-P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)). P3B–P3D implementation and the final gate below bind to **final HEAD** `81a672a2659dec3229e3ff5a1a5773d36b1b0eee` (`81a672a`).
+P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)). P3B–P3D implementation, whole-output corrective batches 14–21, and the final gate below bind to **final HEAD** `8f0d127d767906ef01fe2b7ed90c52750c102c4e` (`8f0d127`).
 
 ## Observed scope (P3B–P3D)
 
@@ -25,12 +25,12 @@ Commands match `.github/workflows/synthetic.yml` (2026-09-21).
 | --- | --- |
 | `tests/realtime-js` `npm ci` | OK |
 | Domain tests | 76 passed |
-| Infrastructure tests | 207 passed / 12 skipped |
-| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 515 passed |
-| API tests | 163 passed |
+| Infrastructure tests | 235 passed / 12 skipped |
+| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 526 passed |
+| API tests | 165 passed |
 | Web Vitest | 384 passed |
 | Web production build | OK |
-| `CI=1 pnpm exec playwright test` | 44 passed (includes `approval-flow`, `email-harness`, `historical-image-reread`) |
+| `CI=1 pnpm exec playwright test` | 46 passed (includes extended `approval-flow`, `email-harness`, `historical-image-reread`) |
 | `./scripts/compose-sqlite-volume.sh` | `compose sqlite volume check passed` |
 
 ## Optional Real probes (non-substituting)
@@ -50,5 +50,5 @@ Commands match `.github/workflows/synthetic.yml` (2026-09-21).
 ## Traceability
 
 - Proposal: `local/tdp-workspace/inputs/proposals/P3-tools-and-external-integrations-proposal-final.md` §§12–14, 22–25.
-- Canonical docs updated in the P3E batch: [Implementation Plan](../18-implementation-plan.md), `TODO.md`, this report.
-- TDP run `run-20260921T043504-af9f80` production revisions 1–12 record slice dispositions.
+- Canonical docs reconciled in batches 19 and 22: README, docs 03/04/10/12/13/15/16/17/18, [Implementation Plan](../18-implementation-plan.md), `TODO.md`, this report; gate log `local/tdp-workspace/runs/run-20260921T043504-af9f80/gate-8f0d127.log`.
+- TDP run `run-20260921T043504-af9f80` production revisions 1–22 record slice dispositions and whole-output corrective evidence.
