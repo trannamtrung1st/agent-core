@@ -10,25 +10,27 @@ public static class EmailSendLedger
         Completed
     }
 
-    private static readonly ConcurrentDictionary<Guid, SendClaimState> Claims = new();
+    public readonly record struct ClaimKey(Guid ResponseId, Guid ApprovalId);
 
-    public static bool TryBegin(Guid approvalId)
+    private static readonly ConcurrentDictionary<ClaimKey, SendClaimState> Claims = new();
+
+    public static bool TryBegin(ClaimKey key)
     {
-        if (Claims.TryGetValue(approvalId, out _))
+        if (Claims.TryGetValue(key, out _))
         {
             return false;
         }
 
-        return Claims.TryAdd(approvalId, SendClaimState.InFlight);
+        return Claims.TryAdd(key, SendClaimState.InFlight);
     }
 
-    public static void Complete(Guid approvalId) => Claims[approvalId] = SendClaimState.Completed;
+    public static void Complete(ClaimKey key) => Claims[key] = SendClaimState.Completed;
 
-    public static void Abandon(Guid approvalId)
+    public static void Abandon(ClaimKey key)
     {
-        if (Claims.TryGetValue(approvalId, out var state) && state == SendClaimState.InFlight)
+        if (Claims.TryGetValue(key, out var state) && state == SendClaimState.InFlight)
         {
-            Claims.TryRemove(approvalId, out _);
+            Claims.TryRemove(key, out _);
         }
     }
 

@@ -681,7 +681,7 @@ P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + 
 
 ### P2E stop condition
 
-P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection was explicitly deferred to **P3A** and does not reopen P2E. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. **P3A** historical multimodal reread is **observed/frozen** (2026-09-21; gate on `c0f8a85`; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md)). Active P3 work continues with **P3B**; **P4** follows full P3 closure. P6 has not started.
+P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection was explicitly deferred to **P3A** and does not reopen P2E. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. **P3** is **closed/frozen** (2026-09-21) after whole-output corrections and manual closure verification; P3A remains independently frozen on `c0f8a85`. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P4** is next. P6 has not started.
 
 ---
 
@@ -949,7 +949,7 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
-**P3 freeze candidate** (2026-09-21): **P3A** remains **observed/frozen** on `c0f8a85`. **P3B–P3D** are implemented and recorded in TDP run `run-20260921T043504-af9f80`. **P3E** re-ran the full key-free gate on one final HEAD and reconciled docs — see [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **Do not** mark P3 closed/frozen until mandatory whole-output review accepts the final HEAD. **P4** follows after P3 closure.
+**P3 closed/frozen** (2026-09-21): **P3A** remains independently frozen on `c0f8a85`; **P3B–P3E** passed whole-output correction and manual closure verification after TDP run `run-20260921T043504-af9f80` stalled in a digest-rebind loop. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). Do not reopen P3 without a reproducible regression. **P4** follows.
 
 Already present:
 
@@ -1003,11 +1003,11 @@ P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focuse
 
 - [x] `email.search`, `email.read`, `email.create_draft`, `email.send(draftId)` with draft-hash approval and Synthetic/Gmail providers; `general-assistant` v4.
 
-## P3E — Reconcile and freeze candidate
+## P3E — Reconcile and close P3
 
 - [x] Full key-free gate on final HEAD (see [p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md)).
 - [x] Canonical docs/TODO/report alignment for observed P3B–P3D behavior.
-- [ ] Mandatory whole-output review and P3 **observed/frozen** declaration (post-production).
+- [x] Mandatory whole-output corrections manually verified; P3 **observed/frozen**. Optional OpenRouter, Brave, and Gmail probes remain **skipped/unverified**.
 
 ## Typed external actions
 

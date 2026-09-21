@@ -1033,7 +1033,8 @@ public sealed class SessionToolExecutor(
             return Error("stale_approval", "Approval no longer matches the draft content.");
         }
 
-        if (!EmailSendLedger.TryBegin(approvalGrant.ApprovalId))
+        var sendClaim = new EmailSendLedger.ClaimKey(approvalGrant.ResponseId, approvalGrant.ApprovalId);
+        if (!EmailSendLedger.TryBegin(sendClaim))
         {
             return Error("duplicate", "This approval was already used to send email.");
         }
@@ -1047,11 +1048,11 @@ public sealed class SessionToolExecutor(
             RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
             if (result.Outcome == EmailSendOutcome.Sent)
             {
-                EmailSendLedger.Complete(approvalGrant.ApprovalId);
+                EmailSendLedger.Complete(sendClaim);
             }
             else
             {
-                EmailSendLedger.Abandon(approvalGrant.ApprovalId);
+                EmailSendLedger.Abandon(sendClaim);
             }
 
             return JsonSerializer.Serialize(new
@@ -1064,7 +1065,7 @@ public sealed class SessionToolExecutor(
         }
         catch
         {
-            EmailSendLedger.Abandon(approvalGrant.ApprovalId);
+            EmailSendLedger.Abandon(sendClaim);
             throw;
         }
     }

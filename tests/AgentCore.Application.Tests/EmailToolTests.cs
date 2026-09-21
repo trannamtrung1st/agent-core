@@ -170,6 +170,61 @@ public sealed class EmailToolTests
     }
 
     [Fact]
+    public async Task Email_send_duplicate_is_scoped_to_response_identity()
+    {
+        EmailSendLedger.Reset();
+        var provider = new OutcomeEmailProvider(
+            new EmailSendResult(EmailSendOutcome.Sent, "msg-1", null, null),
+            new EmailSendResult(EmailSendOutcome.Sent, "msg-2", null, null));
+        var executor = CreateExecutor(provider);
+        var definition = Definition(4, [ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]);
+        var sessionId = Guid.NewGuid();
+
+        var draft = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall(
+                "d1",
+                ToolCatalog.EmailCreateDraft,
+                """{"to":["a@example.test"],"cc":[],"bcc":[],"subject":"Scope","body":"Body"}"""),
+            ToolLimits.MaxOutputBytes);
+        var draftId = ExtractJsonString(draft.Text, "draftId")!;
+        var args = JsonDocument.Parse($$"""{"draftId":"{{draftId}}"}""").RootElement;
+        var prepared = await executor.PrepareEmailSendApprovalAsync(args);
+        var approvalId = Guid.NewGuid();
+        var grantA = new ToolApprovalGrant(
+            approvalId,
+            ToolCatalog.EmailSend,
+            prepared.Preparation!.ActionHash,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid());
+        var grantB = new ToolApprovalGrant(
+            approvalId,
+            ToolCatalog.EmailSend,
+            prepared.Preparation!.ActionHash,
+            Guid.NewGuid(),
+            grantA.OperationId,
+            grantA.RuntimeEpoch);
+
+        var first = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s1", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grantA);
+        Assert.Contains("\"outcome\":\"sent\"", first.Text, StringComparison.OrdinalIgnoreCase);
+
+        var secondResponseSend = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s2", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grantB);
+        Assert.Contains("\"outcome\":\"sent\"", secondResponseSend.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Email_send_allows_retry_after_indeterminate_outcome()
     {
         EmailSendLedger.Reset();

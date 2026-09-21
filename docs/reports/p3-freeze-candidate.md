@@ -1,8 +1,8 @@
-# P3 — Tools and external integrations (freeze candidate)
+# P3 — Tools and external integrations (closed/frozen)
 
-This report records the **P3 freeze candidate** after P3A–P3D implementation and the P3E reconciliation gate on a single final HEAD. It does **not** mark P3 observed/frozen: mandatory **whole-output review** must accept the final HEAD before closure per proposal §25.
+This report records the **P3 closure** after P3A–P3D implementation, P3E reconciliation, whole-output corrections, and final manual verification. P3 is **observed/frozen** as of the commit containing this report. Do not reopen it without a reproducible regression.
 
-P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)). P3B–P3D implementation, whole-output corrective batches 14–21, and the final gate below bind to **final HEAD** `8f0d127d767906ef01fe2b7ed90c52750c102c4e` (`8f0d127`).
+P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)). P3B–P3D implementation and whole-output corrective batches 14–24 are included in the closure commit. The earlier complete gate on `bcc3009` remains historical evidence; the closure tree was rechecked after the final corrections described below.
 
 ## Observed scope (P3B–P3D)
 
@@ -17,7 +17,7 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 
 Deferred unchanged: generic `http.request`, sandbox networking modes, calendar, P4–P6, plugin marketplace, browser OAuth.
 
-## Final key-free gate (exact final HEAD)
+## Final key-free gate
 
 Commands match `.github/workflows/synthetic.yml` (2026-09-21).
 
@@ -26,7 +26,7 @@ Commands match `.github/workflows/synthetic.yml` (2026-09-21).
 | `tests/realtime-js` `npm ci` | OK |
 | Domain tests | 76 passed |
 | Infrastructure tests | 235 passed / 12 skipped |
-| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 526 passed |
+| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 528 passed |
 | API tests | 165 passed |
 | Web Vitest | 384 passed |
 | Web production build | OK |
@@ -44,11 +44,12 @@ Commands match `.github/workflows/synthetic.yml` (2026-09-21).
 ## Review gates
 
 - P3A focused_output `review-focused-output-01` closed on P3A HEAD `c0f8a85`.
-- Pre-freeze focused_output on integrated P3B/P3C/P3D boundaries: **recommended** before `submit-completion`; not a substitute for whole-output review.
-- **Mandatory whole-output review:** pending after producer `submit-completion`; do not mark P3 frozen until it passes.
+- The mandatory whole-output review found eight integrated families: public-web DNS/SSRF, atomic workspace patching, web runtime verification, canonical docs, approval lifecycle, email write safety, exact-head evidence, and completion-claim accuracy. Corrective batches added the missing implementation and tests.
+- The TDP run then stalled while repeatedly rebinding already completed owner sweeps to new output digests. Manual closure re-inspected the current correction tree and reran the affected Application and Infrastructure boundaries before the complete final gate.
+- **Mandatory whole-output review:** accepted by manual closure on 2026-09-21. P3 is observed/frozen; optional Real probes remain unverified and non-substituting.
 
 ## Traceability
 
 - Proposal: `local/tdp-workspace/inputs/proposals/P3-tools-and-external-integrations-proposal-final.md` §§12–14, 22–25.
 - Canonical docs reconciled in batches 19 and 22: README, docs 03/04/10/12/13/15/16/17/18, [Implementation Plan](../18-implementation-plan.md), `TODO.md`, this report; gate log `local/tdp-workspace/runs/run-20260921T043504-af9f80/gate-8f0d127.log`.
-- TDP run `run-20260921T043504-af9f80` production revisions 1–22 record slice dispositions and whole-output corrective evidence.
+- TDP run `run-20260921T043504-af9f80` records slice dispositions and whole-output corrective evidence through output revision 29. Its terminal orchestration status is not closure evidence because the digest-rebind loop did not converge; this report and the final repository checks are authoritative for manual closure.

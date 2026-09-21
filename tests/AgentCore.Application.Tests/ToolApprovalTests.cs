@@ -204,6 +204,24 @@ public sealed class ToolApprovalTests
     }
 
     [Fact]
+    public async Task Detach_during_approval_prevents_sensitive_execution()
+    {
+        DemoSensitiveActionStore.Reset();
+        var output = new CapturingSessionOutput();
+        await using var runtime = await CreateGeneralV3Async(output);
+        await runtime.Runtime.AttachAsync();
+
+        Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
+        await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
+        await runtime.Runtime.DetachAsync();
+        await runtime.Runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain(
+            runtime.Runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant
+                && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Reject_prevents_sensitive_execution()
     {
         DemoSensitiveActionStore.Reset();
