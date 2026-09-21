@@ -2,8 +2,13 @@ namespace AgentCore.Application.Tools;
 
 public static class ToolConfigurationGates
 {
-    public static IToolConfigurationGate Unconfigured { get; } = new DelegatingToolConfigurationGate(
-        toolName => toolName != ToolCatalog.WebSearch);
+    public static IToolConfigurationGate Unconfigured { get; } = new DelegatingToolConfigurationGate(toolName =>
+        toolName != ToolCatalog.WebSearch
+        && toolName is not (
+            ToolCatalog.EmailSearch
+            or ToolCatalog.EmailRead
+            or ToolCatalog.EmailCreateDraft
+            or ToolCatalog.EmailSend));
 
     public static IToolConfigurationGate AllowAll { get; } = new DelegatingToolConfigurationGate(_ => true);
 

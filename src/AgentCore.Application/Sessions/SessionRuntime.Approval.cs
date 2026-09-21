@@ -123,11 +123,17 @@ public sealed partial class SessionRuntime
         ModelToolCall call,
         JsonElement args,
         string actionHash,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? summaryOverride = null,
+        IReadOnlyDictionary<string, string>? detailsOverride = null)
     {
         var approvalId = _ids.NewId();
         var expiresAt = _time.GetUtcNow().Add(ToolApprovalLimits.Lifetime);
-        var (summary, details) = ToolApprovalPreview.Build(call.Name, args);
+        var (defaultSummary, defaultDetails) = ToolApprovalPreview.Build(call.Name, args);
+        var summary = summaryOverride ?? defaultSummary;
+        var details = detailsOverride is null
+            ? defaultDetails
+            : new Dictionary<string, string>(detailsOverride, StringComparer.Ordinal);
         var effect = ToolCatalog.EffectOf(call.Name);
         var completion = new TaskCompletionSource<ApprovalWaitResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var pending = new PendingToolApproval

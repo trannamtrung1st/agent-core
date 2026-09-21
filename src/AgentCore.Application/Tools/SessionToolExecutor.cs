@@ -19,6 +19,7 @@ public sealed class SessionToolExecutor(
     ISandboxExecutor? sandbox = null,
     IWebSearchProvider? webSearch = null,
     IPublicWebFetcher? publicWebFetcher = null,
+    IEmailProvider? emailProvider = null,
     IToolConfigurationGate? configurationGate = null)
 {
     private readonly IToolConfigurationGate _configurationGate =
@@ -76,7 +77,8 @@ public sealed class SessionToolExecutor(
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
         }
 
-        if (approvalGrant is not null)
+        if (approvalGrant is not null
+            && !string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
         {
             var boundHash = ToolActionHash.Compute(call.Name, args);
             if (!string.Equals(boundHash, approvalGrant.ActionHash, StringComparison.Ordinal)
@@ -121,6 +123,16 @@ public sealed class SessionToolExecutor(
                     await FetchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
+                ToolCatalog.EmailSearch => FitResult(
+                    remainingOutputBytes,
+                    await SearchEmailAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.EmailRead => FitResult(
+                    remainingOutputBytes,
+                    await ReadEmailAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.EmailCreateDraft => TextResult(
+                    await CreateEmailDraftAsync(args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.EmailSend => TextResult(
+                    await SendEmailDraftAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
         }
@@ -799,6 +811,297 @@ public sealed class SessionToolExecutor(
         {
             return Convert.ToBase64String(bytes);
         }
+    }
+
+    public async Task<EmailSendApprovalPrepareResult> PrepareEmailSendApprovalAsync(
+        JsonElement args,
+        CancellationToken cancellationToken = default)
+    {
+        if (emailProvider is null || !emailProvider.IsAvailable)
+        {
+            return new EmailSendApprovalPrepareResult(null, Error("unavailable", "Email is not configured."));
+        }
+
+        if (!TryString(args, "draftId", out var draftId))
+        {
+            return new EmailSendApprovalPrepareResult(null, Error("invalid", "draftId is required."));
+        }
+
+        var draft = await emailProvider.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        if (draft is null)
+        {
+            return new EmailSendApprovalPrepareResult(null, Error("notFound", "Draft was not found."));
+        }
+
+        var normalized = EmailDraftNormalizer.Normalize(draft);
+        var actionHash = EmailDraftNormalizer.ComputeSendActionHash(normalized);
+        var toPreview = string.Join(", ", normalized.To.Take(EmailToolLimits.MaxPreviewRecipients));
+        if (normalized.To.Count > EmailToolLimits.MaxPreviewRecipients)
+        {
+            toPreview += ", …";
+        }
+
+        var subject = normalized.Subject;
+        if (subject.Length > EmailToolLimits.MaxPreviewSubjectLength)
+        {
+            subject = subject[..EmailToolLimits.MaxPreviewSubjectLength] + "…";
+        }
+
+        var summary = ToolApprovalPreview.BoundSummary($"Send email to {toPreview}");
+        var details = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["to"] = ToolApprovalPreview.BoundDetailValue(toPreview),
+            ["subject"] = ToolApprovalPreview.BoundDetailValue(subject)
+        };
+        return new EmailSendApprovalPrepareResult(
+            new EmailSendApprovalPreparation(actionHash, summary, details),
+            null);
+    }
+
+    private async Task<string> SearchEmailAsync(
+        JsonElement args,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken)
+    {
+        if (emailProvider is null || !emailProvider.IsAvailable)
+        {
+            return Error("unavailable", "Email is not configured.");
+        }
+
+        if (!TryString(args, "query", out var query))
+        {
+            return Error("invalid", "query is required.");
+        }
+
+        if (query.Length > EmailToolLimits.MaxSearchQueryLength)
+        {
+            return Error("invalid", $"query must be at most {EmailToolLimits.MaxSearchQueryLength} characters.");
+        }
+
+        var limit = EmailToolLimits.DefaultSearchLimit;
+        if (args.TryGetProperty("limit", out var limitProperty))
+        {
+            if (limitProperty.ValueKind != JsonValueKind.Number || !limitProperty.TryGetInt32(out limit))
+            {
+                return Error("invalid", "limit must be an integer.");
+            }
+        }
+
+        limit = Math.Clamp(limit, 1, EmailToolLimits.MaxSearchLimit);
+        var started = Stopwatch.GetTimestamp();
+        var result = await emailProvider
+            .SearchAsync(new EmailSearchRequest(query, limit), cancellationToken)
+            .ConfigureAwait(false);
+        RuntimeTelemetry.Record("email.search", RuntimeTelemetry.ElapsedMs(started));
+        var items = result.Results.Select(item => new
+        {
+            messageId = item.MessageId,
+            threadId = item.ThreadId,
+            from = item.From,
+            subject = item.Subject,
+            date = item.Date,
+            snippet = item.Snippet
+        }).ToArray();
+        return ToolJsonResults.FitToBudget(
+            remainingOutputBytes,
+            JsonSerializer.Serialize(new { query, results = items, truncated = result.Truncated }));
+    }
+
+    private async Task<string> ReadEmailAsync(
+        JsonElement args,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken)
+    {
+        if (emailProvider is null || !emailProvider.IsAvailable)
+        {
+            return Error("unavailable", "Email is not configured.");
+        }
+
+        if (!TryString(args, "messageId", out var messageId))
+        {
+            return Error("invalid", "messageId is required.");
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var message = await emailProvider
+            .ReadAsync(new EmailReadRequest(messageId), cancellationToken)
+            .ConfigureAwait(false);
+        RuntimeTelemetry.Record("email.read", RuntimeTelemetry.ElapsedMs(started));
+        return ToolJsonResults.FitJsonWithContentField(
+            remainingOutputBytes,
+            message.Body,
+            (body, truncated) => JsonSerializer.Serialize(new
+            {
+                messageId = message.MessageId,
+                threadId = message.ThreadId,
+                from = message.From,
+                to = message.To,
+                cc = message.Cc,
+                date = message.Date,
+                subject = message.Subject,
+                body,
+                bodyTruncated = truncated || message.BodyTruncated,
+                attachments = message.Attachments.Select(attachment => new
+                {
+                    attachmentId = attachment.AttachmentId,
+                    fileName = attachment.FileName,
+                    contentType = attachment.ContentType,
+                    byteSize = attachment.ByteSize
+                })
+            }));
+    }
+
+    private async Task<string> CreateEmailDraftAsync(JsonElement args, CancellationToken cancellationToken)
+    {
+        if (emailProvider is null || !emailProvider.IsAvailable)
+        {
+            return Error("unavailable", "Email is not configured.");
+        }
+
+        if (!TryReadAddressList(args, "to", out var to, required: true)
+            || !TryReadAddressList(args, "cc", out var cc, required: false)
+            || !TryReadAddressList(args, "bcc", out var bcc, required: false))
+        {
+            return Error("invalid", "to must be a non-empty array of addresses.");
+        }
+
+        if (!TryString(args, "subject", out var subject))
+        {
+            return Error("invalid", "subject is required.");
+        }
+
+        if (!TryString(args, "body", out var body))
+        {
+            return Error("invalid", "body is required.");
+        }
+
+        if (subject.Length > EmailToolLimits.MaxSubjectLength)
+        {
+            return Error("invalid", $"subject must be at most {EmailToolLimits.MaxSubjectLength} characters.");
+        }
+
+        if (body.Length > EmailToolLimits.MaxBodyLength)
+        {
+            return Error("invalid", $"body must be at most {EmailToolLimits.MaxBodyLength} characters.");
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var created = await emailProvider
+            .CreateDraftAsync(new EmailCreateDraftRequest(to, cc, bcc, subject, body), cancellationToken)
+            .ConfigureAwait(false);
+        RuntimeTelemetry.Record("email.create_draft", RuntimeTelemetry.ElapsedMs(started));
+        return JsonSerializer.Serialize(new
+        {
+            draftId = created.Draft.DraftId,
+            to = created.Draft.To,
+            cc = created.Draft.Cc,
+            bcc = created.Draft.Bcc,
+            subject = created.Draft.Subject
+        });
+    }
+
+    private async Task<string> SendEmailDraftAsync(
+        JsonElement args,
+        ToolApprovalGrant? approvalGrant,
+        CancellationToken cancellationToken)
+    {
+        if (approvalGrant is null)
+        {
+            return Error("approval_required", "Tool execution requires explicit approval.");
+        }
+
+        if (emailProvider is null || !emailProvider.IsAvailable)
+        {
+            return Error("unavailable", "Email is not configured.");
+        }
+
+        if (!TryString(args, "draftId", out var draftId))
+        {
+            return Error("invalid", "draftId is required.");
+        }
+
+        var draft = await emailProvider.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        if (draft is null)
+        {
+            return Error("notFound", "Draft was not found.");
+        }
+
+        var actionHash = EmailDraftNormalizer.ComputeSendActionHash(EmailDraftNormalizer.Normalize(draft));
+        if (!string.Equals(actionHash, approvalGrant.ActionHash, StringComparison.Ordinal)
+            || !string.Equals(approvalGrant.ToolName, ToolCatalog.EmailSend, StringComparison.Ordinal))
+        {
+            return Error("stale_approval", "Approval no longer matches the draft content.");
+        }
+
+        if (!EmailSendLedger.TryClaim(approvalGrant.ApprovalId))
+        {
+            return Error("duplicate", "This approval was already used to send email.");
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var result = await emailProvider
+            .SendDraftAsync(new EmailSendDraftRequest(draftId), cancellationToken)
+            .ConfigureAwait(false);
+        RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
+        return JsonSerializer.Serialize(new
+        {
+            outcome = result.Outcome.ToString().ToLowerInvariant(),
+            providerMessageId = result.ProviderMessageId,
+            error = result.ErrorCode,
+            message = result.ErrorMessage
+        });
+    }
+
+    private static bool TryReadAddressList(
+        JsonElement args,
+        string name,
+        out IReadOnlyList<string> addresses,
+        bool required)
+    {
+        addresses = [];
+        if (!args.TryGetProperty(name, out var property))
+        {
+            return !required;
+        }
+
+        if (property.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var list = new List<string>();
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            var value = item.GetString() ?? "";
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            if (value.Length > EmailToolLimits.MaxRecipientLength)
+            {
+                return false;
+            }
+
+            list.Add(value.Trim());
+            if (list.Count > EmailToolLimits.MaxRecipientsPerField)
+            {
+                return false;
+            }
+        }
+
+        if (required && list.Count == 0)
+        {
+            return false;
+        }
+
+        addresses = list;
+        return true;
     }
 
     private static string ExecuteDemoSensitiveAction(

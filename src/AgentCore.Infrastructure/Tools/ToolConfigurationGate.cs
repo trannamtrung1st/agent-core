@@ -5,13 +5,16 @@ namespace AgentCore.Infrastructure.Tools;
 
 public sealed class ToolConfigurationGate(
     IWebSearchProvider? webSearch,
-    IPublicWebFetcher? publicWebFetcher) : IToolConfigurationGate
+    IPublicWebFetcher? publicWebFetcher,
+    IEmailProvider? emailProvider) : IToolConfigurationGate
 {
     public bool IsConfigured(string toolName) =>
         toolName switch
         {
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,
             ToolCatalog.WebFetch => publicWebFetcher is not null,
+            ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend
+                => emailProvider?.IsAvailable == true,
             _ => true
         };
 }

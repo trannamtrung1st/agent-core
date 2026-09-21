@@ -21,8 +21,18 @@ public static class ToolApprovalPreview
             return (summary, details);
         }
 
+        if (string.Equals(toolName, ToolCatalog.EmailSend, StringComparison.Ordinal))
+        {
+            var draftId = ReadString(args, "draftId") ?? "draft";
+            return (Bound($"Send email draft {draftId}"), new Dictionary<string, string>(StringComparer.Ordinal));
+        }
+
         return (Bound($"Approve tool {toolName}"), new Dictionary<string, string>(StringComparer.Ordinal));
     }
+
+    public static string BoundSummary(string value) => Bound(value);
+
+    public static string BoundDetailValue(string value) => BoundDetail(value);
 
     private static string? ReadString(JsonElement args, string name) =>
         args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

@@ -18,6 +18,10 @@ public static class ToolCatalog
     public const string SandboxRun = "sandbox.run";
     public const string WebSearch = "web.search";
     public const string WebFetch = "web.fetch";
+    public const string EmailSearch = "email.search";
+    public const string EmailRead = "email.read";
+    public const string EmailCreateDraft = "email.create_draft";
+    public const string EmailSend = "email.send";
     public const string DemoSensitiveAction = "demo.sensitive_action";
 
     public static IReadOnlyList<ModelToolDefinition> For(

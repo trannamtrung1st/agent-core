@@ -2165,7 +2165,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             goto AfterToolExecution;
                         }
 
-                        var actionHash = ToolActionHash.Compute(call.Name, args);
+                        string actionHash;
+                        string? approvalSummaryOverride = null;
+                        IReadOnlyDictionary<string, string>? approvalDetailsOverride = null;
+                        if (string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
+                        {
+                            var prepared = await _tools.PrepareEmailSendApprovalAsync(args, toolCts.Token)
+                                .ConfigureAwait(false);
+                            if (prepared.Preparation is null)
+                            {
+                                executionResult = ToolExecutionResult.FromText(
+                                    prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare email send approval."}""");
+                                goto AfterToolExecution;
+                            }
+
+                            actionHash = prepared.Preparation.ActionHash;
+                            approvalSummaryOverride = prepared.Preparation.Summary;
+                            approvalDetailsOverride = prepared.Preparation.Details;
+                        }
+                        else
+                        {
+                            actionHash = ToolActionHash.Compute(call.Name, args);
+                        }
+
                         var policy = _tools.EvaluateExecutionPolicy(_snapshot.Definition, call.Name);
                         if (policy == ToolPolicyDecision.RequireApproval)
                         {
@@ -2176,7 +2198,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     call,
                                     args,
                                     actionHash,
-                                    toolCts.Token)
+                                    toolCts.Token,
+                                    approvalSummaryOverride,
+                                    approvalDetailsOverride)
                                 .ConfigureAwait(false);
                             if (approvalGrant is null
                                 || approvalGrant.RuntimeEpoch != _epoch

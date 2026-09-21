@@ -15,6 +15,7 @@ using AgentCore.Infrastructure.Workspaces;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Email;
 using AgentCore.Infrastructure.PublicWeb;
 using AgentCore.Infrastructure.Tools;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -65,7 +66,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IModelCatalog>()));
         services.TryAddSingleton<IToolConfigurationGate>(provider => new ToolConfigurationGate(
             provider.GetService<IWebSearchProvider>(),
-            provider.GetService<IPublicWebFetcher>()));
+            provider.GetService<IPublicWebFetcher>(),
+            provider.GetService<IEmailProvider>()));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(provider.GetRequiredService<IToolConfigurationGate>()));
         services.TryAddSingleton<IInitiativeEvaluator>(provider =>
@@ -164,6 +166,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
+        EmailProviderRegistration.AddEmail(services, profile);
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
             provider.GetService<IAttachmentStore>(),
@@ -173,6 +176,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<ISandboxExecutor>(),
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
+            provider.GetService<IEmailProvider>(),
             provider.GetRequiredService<IToolConfigurationGate>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(

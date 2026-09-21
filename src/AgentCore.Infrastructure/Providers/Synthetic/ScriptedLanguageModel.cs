@@ -153,6 +153,22 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptEmailHarness(request, toolRounds, lastUser, lastTool, out var emailEvent))
+        {
+            yield return emailEvent;
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
+
+        if (toolRounds == 4
+            && lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
+            && lastTool.Contains("\"outcome\":\"sent\"", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new ModelTextDelta("Email harness completed after approval.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
         if (toolRounds == 0
             && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             && Offers(request, ToolCatalog.DemoSensitiveAction))
@@ -318,8 +334,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("compliance case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
             || request.Messages.Any(message => message.Role == ModelRole.Tool);
     }
+
+    public const string EmailHarnessMarker = "email harness";
 
     public const string SensitiveApprovalMarker = "sensitive approval";
 
@@ -353,6 +372,106 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private static bool Offers(ModelRequest request, string name) =>
         request.Tools?.Any(tool => string.Equals(tool.Name, name, StringComparison.Ordinal)) == true;
+
+    private static bool TryScriptEmailHarness(
+        ModelRequest request,
+        int toolRounds,
+        string lastUser,
+        string lastTool,
+        out ModelGenerationEvent toolEvent)
+    {
+        toolEvent = null!;
+        if (!lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        switch (toolRounds)
+        {
+            case 0 when Offers(request, ToolCatalog.EmailSearch):
+                toolEvent = new ModelToolCallEvent(new ModelToolCall(
+                    "call-email-search",
+                    ToolCatalog.EmailSearch,
+                    """{"query":"harness","limit":5}"""));
+                return true;
+            case 1 when Offers(request, ToolCatalog.EmailRead):
+                var messageId = ExtractFirstSearchMessageId(lastTool) ?? "syn-msg-harness";
+                toolEvent = new ModelToolCallEvent(new ModelToolCall(
+                    "call-email-read",
+                    ToolCatalog.EmailRead,
+                    $$"""{"messageId":"{{EscapeJson(messageId)}}"}"""));
+                return true;
+            case 2 when Offers(request, ToolCatalog.EmailCreateDraft):
+                toolEvent = new ModelToolCallEvent(new ModelToolCall(
+                    "call-email-draft",
+                    ToolCatalog.EmailCreateDraft,
+                    """{"to":["recipient@example.test"],"cc":[],"bcc":[],"subject":"Harness draft","body":"Synthetic email harness send path."}"""));
+                return true;
+            case 3 when Offers(request, ToolCatalog.EmailSend):
+                var draftId = ExtractJsonString(lastTool, "draftId") ?? "syn-draft-missing";
+                toolEvent = new ModelToolCallEvent(new ModelToolCall(
+                    "call-email-send",
+                    ToolCatalog.EmailSend,
+                    $$"""{"draftId":"{{EscapeJson(draftId)}}"}"""));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string? ExtractFirstSearchMessageId(string toolJson)
+    {
+        if (string.IsNullOrWhiteSpace(toolJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(toolJson);
+            if (!document.RootElement.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var item in results.EnumerateArray())
+            {
+                if (item.TryGetProperty("messageId", out var messageId) && messageId.ValueKind == JsonValueKind.String)
+                {
+                    return messageId.GetString();
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static string? ExtractJsonString(string toolJson, string property)
+    {
+        if (string.IsNullOrWhiteSpace(toolJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(toolJson);
+            if (document.RootElement.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
 
     private static string ExtractArtifactId(string toolJson)
     {
