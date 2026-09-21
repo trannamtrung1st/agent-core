@@ -2,7 +2,7 @@
 
 This report records the **P3 freeze candidate** after P3A–P3D implementation and the P3E reconciliation gate on a single final HEAD. It does **not** mark P3 observed/frozen: mandatory **whole-output review** must accept the final HEAD before closure per proposal §25.
 
-P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)). P3B–P3D implementation and the final gate below bind to **final HEAD** `16f408ada775dc3efaa5ea66ee94bc61b8b2582e` (`16f408a`).
+P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.md](p3a-freeze.md)). P3B–P3D implementation and the final gate below bind to **final HEAD** `81a672a2659dec3229e3ff5a1a5773d36b1b0eee` (`81a672a`).
 
 ## Observed scope (P3B–P3D)
 
