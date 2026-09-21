@@ -275,11 +275,11 @@ P2A, P2B, P2D, P2E, and P2C remain observed/frozen on their recorded HEADs. Prop
 
 **Final gate (closure HEAD `47d6ff6`):** proposal §23 key-free Synthetic + Compose gate green on that exact HEAD (hosted workflow run `35552740853`). Observed pass/skip counts are authoritative in TDP production evidence for P2-Final (not duplicated here to avoid doc/SHA drift). Optional Real structured-response and vision probes **SKIPPED — credentials unavailable** (`OPENROUTER_API_KEY` / `OPENAI_API_KEY` absent); do not treat them as verified Real-provider behavior.
 
-**Roadmap handoff:** active focus **P3** (tool evolution); **P4** (context compaction and memory) follows per plan (`TODO.md`, proposal §26).
+**Roadmap handoff:** **P3** freeze candidate recorded (P3E); **P4** follows after mandatory whole-output review accepts the final HEAD (`TODO.md`, proposal §26).
 
 ## P3A — Historical multimodal attachment reread (observed/frozen)
 
-P3A introduces typed non-text tool results, safe historical image rehydration through `attachments.read`, locked OpenAI-compatible wire projection for image-bearing tool results, and Synthetic verification. **Implementation/gate HEAD:** `c0f8a85` (2026-09-21) with focused-output review closure for P3A-1–P3A-3 on that HEAD; freeze documentation in the P3A-4 production batch commit on `main`. See [P3A freeze report](reports/p3a-freeze.md) for gate counts and optional Real probe status. **Active P3 focus:** P3B trusted registry and workspace/artifact workflows; public-web (P3C) remains after P3B.
+P3A introduces typed non-text tool results, safe historical image rehydration through `attachments.read`, locked OpenAI-compatible wire projection for image-bearing tool results, and Synthetic verification. **Implementation/gate HEAD:** `c0f8a85` (2026-09-21) with focused-output review closure for P3A-1–P3A-3 on that HEAD; freeze documentation in the P3A-4 production batch commit on `main`. See [P3A freeze report](reports/p3a-freeze.md) for gate counts and optional Real probe status.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -288,6 +288,22 @@ P3A introduces typed non-text tool results, safe historical image rehydration th
 | P3A-2 rehydration | `attachments.read` image path + `ToolResultAdmission` vision gate | **Observed** |
 | P3A-3 projection | OpenAI `MapMessages` tool→multipart sequence; Scripted historical reread | **Observed** |
 | P3A-4 verification | Playwright historical reread + non-vision refusal; docs; full §23 gate | **Observed** |
+
+## P3B–P3E — Tools, web, approval, email (freeze candidate)
+
+P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounded public web, live-session approval, and provider-neutral email with draft-bound send approval. **Final key-free gate HEAD:** recorded in [P3 freeze candidate](reports/p3-freeze-candidate.md) (P3E batch). **Status:** freeze **candidate** ready for mandatory whole-output review; not observed/frozen until that gate passes.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P3B-1 registry/policy | `ToolRegistry`, `ToolEffect`, Allow/Deny execution recheck | **Observed** (TDP) |
+| P3B-2 workspace/artifacts | `workspace.list`/`patch`, `artifacts.create_from_workspace` | **Observed** (TDP) |
+| P3C-1 public web foundation | SSRF-safe fetch, search ports, Synthetic/Brave | **Observed** (TDP) |
+| P3C-2 web tools | `web.search`/`web.fetch`, `general-assistant` v2 | **Observed** (TDP) |
+| P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action | **Observed** (TDP) |
+| P3D-2 email | `email.*`, Gmail/Synthetic providers, `general-assistant` v4 | **Observed** (TDP) |
+| P3E reconcile | Full §23 gate on one HEAD, docs/TODO/report alignment | **Candidate** |
+
+**Roadmap handoff after whole-output acceptance:** **P4** (context compaction and memory) per `TODO.md` and proposal §26.
 
 ## Handoff rule
 

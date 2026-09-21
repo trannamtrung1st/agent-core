@@ -949,7 +949,7 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
-**P3 is in progress.** **P3A — Historical multimodal attachment re-inspection** is **observed/frozen** (2026-09-21; implementation `c0f8a85`). Next slices: **P3B** trusted registry and workspace/artifact workflows, then **P3C** public web, **P3D** approvals and email, and **P3E** reconciliation. P4 follows after P3 closure.
+**P3 freeze candidate** (2026-09-21): **P3A** remains **observed/frozen** on `c0f8a85`. **P3B–P3D** are implemented and recorded in TDP run `run-20260921T043504-af9f80`. **P3E** re-ran the full key-free gate on one final HEAD and reconciled docs — see [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **Do not** mark P3 closed/frozen until mandatory whole-output review accepts the final HEAD. **P4** follows after P3 closure.
 
 Already present:
 
@@ -977,58 +977,37 @@ Build on this instead of replacing it.
 - [x] Require trusted model **Tools** capability for model-initiated `attachments.read` and **Vision** capability before historical image content reaches the provider. Never silently drop the image, pretend it was seen, or switch models automatically.
 - [x] Preserve existing text/PDF `attachments.read` behavior, session ownership and cross-session isolation, sanitized/canonical image bytes with truthful MIME, persisted/reopened session support, and runtime-epoch/cancellation/supersession fencing.
 
-P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focused-output review closure for P3A-1–P3A-3 on that HEAD; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md). **P3B** is the active implementation slice.
+P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focused-output review closure for P3A-1–P3A-3 on that HEAD; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md).
 
-## Tool architecture evolution
+## Tool architecture evolution (P3B)
 
-- [ ] Refactor the static tool path only where real growth requires clearer layers:
+- [x] Registry, policy, and executor separation (`ToolRegistry`, `ToolPolicy`, `SessionToolExecutor` recheck).
 
-  - **Registry** — available typed tools and schemas;
-  - **Policy/Authorization** — whether this agent/session/user may call them;
-  - **Executor** — performs the action;
-  - **Result/Artifact layer** — bounded structured result.
+## Workspace ergonomics (P3B)
 
-Do not introduce a large plugin/tool framework before real integrations require it. P3A is the first concrete trigger for typed non-text tool results; further evolution remains driven by demonstrated workflows.
+- [x] `workspace.list` and `workspace.patch` with bounded preconditions.
 
-## Workspace ergonomics
+## Artifact workflow improvements (P3B)
 
-- [ ] Add missing workspace operations when workflows need them:
+- [x] Richer `artifacts.verify`, `artifacts.create_from_workspace`, provenance metadata.
 
-  - `workspace.list`;
-  - `workspace.patch`.
+## Public web tools (P3C)
 
-Keep:
+- [x] `web.search` and `web.fetch` with SSRF-safe fetch, configuration-aware offering, `general-assistant` v2.
 
-- logical-path boundaries;
-- session isolation;
-- `/workspace` as the writable model area;
-- stale-runtime cancellation guarantees.
+## Live approval (P3D-1)
 
-## Artifact workflow improvements
+- [x] `RequireApproval`, `agent.approval.requested` / `RespondApproval`, UI modal, `demo.sensitive_action`.
 
-- [ ] Improve artifact workflows when required:
+## Email integration (P3D-2)
 
-  - inspect metadata;
-  - expose/share with user;
-  - preserve provenance/hash;
-  - materialize from workspace;
-  - never accept arbitrary host paths.
+- [x] `email.search`, `email.read`, `email.create_draft`, `email.send(draftId)` with draft-hash approval and Synthetic/Gmail providers; `general-assistant` v4.
 
-## Public web tools
+## P3E — Reconcile and freeze candidate
 
-- [ ] Add bounded public web tooling:
-
-  - `web.search`;
-  - `web.fetch`.
-
-Requirements:
-
-- SSRF-safe URL handling;
-- bounded response size;
-- bounded timeout;
-- explicit network policy;
-- no credential leakage;
-- separate policy from `sandbox.run`.
+- [x] Full key-free gate on final HEAD (see [p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md)).
+- [x] Canonical docs/TODO/report alignment for observed P3B–P3D behavior.
+- [ ] Mandatory whole-output review and P3 **observed/frozen** declaration (post-production).
 
 ## Typed external actions
 

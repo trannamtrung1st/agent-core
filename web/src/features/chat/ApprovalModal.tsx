@@ -20,7 +20,7 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
       onOk={onApprove}
       onCancel={onReject}
       destroyOnHidden
-      maskClosable={false}
+      mask={{ closable: false }}
       keyboard
     >
       {approval ? (
