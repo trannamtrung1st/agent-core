@@ -349,7 +349,7 @@ public sealed class PromptContextBuilder
             uploadedWithEntrySequence = item.UploadedWithEntrySequence
         }));
         var header = attachmentReadAvailable
-            ? "Files available in this session (user data JSON; use attachments.read with attachmentId when full content is needed):"
+            ? "Files available in this session (user data JSON). Historical files can be reread with attachments.read when that tool is available. For image attachments, successful reread additionally requires a vision-capable model. Use only the attachmentId from this manifest; do not invent ids:"
             : "Files available in this session (user data JSON; full historical reread is unavailable with the current model; any current-turn excerpt supplied below is usable):";
         return string.Join(
             '\n',

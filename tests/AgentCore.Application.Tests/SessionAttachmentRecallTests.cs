@@ -450,6 +450,7 @@ public sealed class SessionAttachmentRecallTests
             ]);
         var manifest = new PromptContextBuilder().BuildSections(context).AttachmentManifestSystem;
         Assert.Contains("attachments.read", manifest, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("vision-capable model", manifest, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

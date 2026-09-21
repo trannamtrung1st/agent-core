@@ -62,25 +62,27 @@ public sealed class SessionToolExecutor(
 
         try
         {
-            var raw = call.Name switch
+            return call.Name switch
             {
-                ToolCatalog.KnowledgeRetrieve => await RetrieveKnowledgeAsync(definition, args, remainingOutputBytes, cancellationToken)
-                    .ConfigureAwait(false),
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
                     .ConfigureAwait(false),
-                ToolCatalog.WorkspaceRead => await ReadWorkspaceAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken)
-                    .ConfigureAwait(false),
-                ToolCatalog.WorkspaceWrite => await WriteWorkspaceAsync(definition, sessionId, args, cancellationToken)
-                    .ConfigureAwait(false),
-                ToolCatalog.ArtifactsCreate => await CreateArtifactAsync(sessionId, args, cancellationToken)
-                    .ConfigureAwait(false),
-                ToolCatalog.ArtifactsVerify => await VerifyArtifactAsync(sessionId, args, cancellationToken)
-                    .ConfigureAwait(false),
-                ToolCatalog.SandboxRun => await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken)
-                    .ConfigureAwait(false),
-                _ => Error("forbidden", "Tool is not permitted for this role.")
+                ToolCatalog.KnowledgeRetrieve => FitResult(
+                    remainingOutputBytes,
+                    await RetrieveKnowledgeAsync(definition, args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceRead => FitResult(
+                    remainingOutputBytes,
+                    await ReadWorkspaceAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WorkspaceWrite => TextResult(
+                    await WriteWorkspaceAsync(definition, sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.ArtifactsCreate => TextResult(
+                    await CreateArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.ArtifactsVerify => TextResult(
+                    await VerifyArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.SandboxRun => FitResult(
+                    remainingOutputBytes,
+                    await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
-            return FitResult(remainingOutputBytes, raw);
         }
         catch (OperationCanceledException)
         {
@@ -122,7 +124,7 @@ public sealed class SessionToolExecutor(
             }));
     }
 
-    private async Task<string> ReadAttachmentAsync(
+    private async Task<ToolExecutionResult> ReadAttachmentAsync(
         Guid sessionId,
         JsonElement args,
         int remainingOutputBytes,
@@ -130,33 +132,26 @@ public sealed class SessionToolExecutor(
     {
         if (attachments is null || !TryString(args, "attachmentId", out var raw) || !Guid.TryParse(raw, out var attachmentId))
         {
-            return Error("invalid", "attachmentId is required.");
+            return TextResult(Error("invalid", "attachmentId is required."));
         }
 
         var record = await attachments.GetAsync(sessionId, attachmentId, cancellationToken).ConfigureAwait(false);
         if (record is null)
         {
-            return Error("notFound", "Attachment was not found.");
+            return TextResult(Error("notFound", "Attachment was not found."));
         }
 
         if (AttachmentMedia.IsImage(record.ContentType))
         {
-            return JsonSerializer.Serialize(new
-            {
-                attachmentId = record.AttachmentId,
-                displayName = record.DisplayName,
-                contentType = record.ContentType,
-                byteSize = record.ByteSize,
-                kind = "image",
-                note = "Binary image bytes are already attached on the user turn for vision. Use that multimodal content; do not treat raw bytes as text."
-            });
+            return await ReadHistoricalImageAsync(sessionId, record, remainingOutputBytes, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (string.Equals(AttachmentMedia.NormalizeContentType(record.ContentType), "application/pdf", StringComparison.OrdinalIgnoreCase))
         {
             if (processor is null)
             {
-                return JsonSerializer.Serialize(new
+                return TextResult(JsonSerializer.Serialize(new
                 {
                     attachmentId = record.AttachmentId,
                     displayName = record.DisplayName,
@@ -164,7 +159,7 @@ public sealed class SessionToolExecutor(
                     byteSize = record.ByteSize,
                     kind = "pdf",
                     note = "PDF extraction is unavailable."
-                });
+                }));
             }
 
             var processed = await processor.ProcessTurnAsync(sessionId, [attachmentId], cancellationToken)
@@ -172,7 +167,7 @@ public sealed class SessionToolExecutor(
             var extracted = processed.FirstOrDefault(item => item.Kind == AttachmentProcessKind.ExtractedText);
             if (extracted is null || string.IsNullOrEmpty(extracted.Text))
             {
-                return JsonSerializer.Serialize(new
+                return TextResult(JsonSerializer.Serialize(new
                 {
                     attachmentId = record.AttachmentId,
                     displayName = record.DisplayName,
@@ -180,10 +175,10 @@ public sealed class SessionToolExecutor(
                     byteSize = record.ByteSize,
                     kind = "pdf",
                     note = "PDF content could not be extracted."
-                });
+                }));
             }
 
-            return ToolJsonResults.FitJsonWithContentField(
+            return TextResult(ToolJsonResults.FitJsonWithContentField(
                 remainingOutputBytes,
                 extracted.Text,
                 (content, truncated) => JsonSerializer.Serialize(new
@@ -195,12 +190,12 @@ public sealed class SessionToolExecutor(
                     provenance = extracted.Provenance,
                     truncated,
                     content
-                }));
+                })));
         }
 
         if (!AttachmentMedia.IsReadableText(record.ContentType))
         {
-            return JsonSerializer.Serialize(new
+            return TextResult(JsonSerializer.Serialize(new
             {
                 attachmentId = record.AttachmentId,
                 displayName = record.DisplayName,
@@ -208,7 +203,7 @@ public sealed class SessionToolExecutor(
                 byteSize = record.ByteSize,
                 kind = "binary",
                 note = "This attachment type is not readable as UTF-8 text through attachments.read."
-            });
+            }));
         }
 
         await using var stream = await attachments.OpenContentAsync(sessionId, attachmentId, cancellationToken)
@@ -230,7 +225,7 @@ public sealed class SessionToolExecutor(
 
         var text = DecodeText(buffer.ToArray());
         var byteTruncated = buffer.Length < record.ByteSize;
-        return ToolJsonResults.FitJsonWithContentField(
+        return TextResult(ToolJsonResults.FitJsonWithContentField(
             remainingOutputBytes,
             text,
             (content, truncated) => JsonSerializer.Serialize(new
@@ -240,8 +235,50 @@ public sealed class SessionToolExecutor(
                 contentType = record.ContentType,
                 truncated = byteTruncated || truncated,
                 content
-            }));
+            })));
     }
+
+    private async Task<ToolExecutionResult> ReadHistoricalImageAsync(
+        Guid sessionId,
+        AttachmentRecord record,
+        int remainingOutputBytes,
+        CancellationToken cancellationToken)
+    {
+        if (processor is null)
+        {
+            return TextResult(AttachmentProcessingFailed());
+        }
+
+        var processed = await processor.ProcessTurnAsync(sessionId, [record.AttachmentId], cancellationToken)
+            .ConfigureAwait(false);
+        var image = processed.FirstOrDefault(item =>
+            item.AttachmentId == record.AttachmentId && item.Kind == AttachmentProcessKind.Image);
+        if (image?.StrippedImage is not { Length: > 0 } sanitized)
+        {
+            return TextResult(AttachmentProcessingFailed());
+        }
+
+        var metadata = JsonSerializer.Serialize(new
+        {
+            attachmentId = record.AttachmentId,
+            displayName = record.DisplayName,
+            contentType = image.ContentType,
+            kind = "image",
+            processorVersion = image.ProcessorVersion,
+            contentProvided = true
+        });
+        var text = ToolJsonResults.FitToBudget(remainingOutputBytes, metadata);
+        return new ToolExecutionResult(
+            text,
+            [new ModelImageContent(image.ContentType, sanitized, image.DisplayName)]);
+    }
+
+    private static string AttachmentProcessingFailed() =>
+        JsonSerializer.Serialize(new
+        {
+            error = "attachment_processing_failed",
+            message = "The image could not be prepared for model input."
+        });
 
     private async Task<string> ReadWorkspaceAsync(
         AgentDefinition definition,

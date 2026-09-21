@@ -2175,6 +2175,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
+                    executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
                     outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {

@@ -18,7 +18,8 @@ public sealed class SessionToolExecutorTests
     public async Task Attachments_read_returns_image_metadata_without_utf8_garbage()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor(attachments: attachments);
+        var processor = new AttachmentProcessor(attachments);
+        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
@@ -26,20 +27,19 @@ public sealed class SessionToolExecutorTests
             "image/png",
             new MemoryStream(PngBytes()),
             false);
-        var result = await ExecuteTextAsync(
-            executor,
-            Support(),
-            sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
-        Assert.Contains("\"kind\":\"image\"", result, StringComparison.Ordinal);
-        Assert.Null((await executor.ExecuteAsync(
+        var typed = await executor.ExecuteAsync(
             Support(),
             sessionId,
             new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes)).Parts);
-        Assert.Contains("image/png", result, StringComparison.Ordinal);
-        Assert.Contains("vision", result, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("\uFFFD", result, StringComparison.Ordinal);
+            ToolLimits.MaxOutputBytes);
+        Assert.Contains("\"kind\":\"image\"", typed.Text, StringComparison.Ordinal);
+        Assert.Contains("contentProvided", typed.Text, StringComparison.Ordinal);
+        Assert.Contains("image/png", typed.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\uFFFD", typed.Text, StringComparison.Ordinal);
+        var image = Assert.IsType<ModelImageContent>(Assert.Single(typed.Parts!));
+        Assert.Equal("image/png", image.ContentType);
+        Assert.NotEmpty(image.Bytes);
+        Assert.DoesNotContain(Convert.ToBase64String(image.Bytes), typed.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -223,7 +223,8 @@ public sealed class SessionToolExecutorTests
     public async Task Image_metadata_is_bounded_to_remaining_output_bytes()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var executor = new SessionToolExecutor(attachments: attachments);
+        var processor = new AttachmentProcessor(attachments);
+        var executor = new SessionToolExecutor(attachments: attachments, processor: processor);
         var sessionId = Guid.NewGuid();
         var uploaded = await attachments.UploadPendingAsync(
             sessionId,
