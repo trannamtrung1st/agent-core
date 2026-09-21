@@ -6,7 +6,19 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 
 ## Freeze status
 
-**Correction freeze candidate** (2026-09-21). Gmail `POST /users/me/drafts/send` with approved `message.raw` landed on `ec4dedc` (`5e468e3` lacked the documented endpoint). **Freeze documentation** (this report, README, implementation plan, and `TODO.md`) and the Gmail draft-id guard land in the commit that updates this report. Treat P3 as re-frozen only after hosted Synthetic + Compose workflow is green on that commit.
+**Correction freeze candidate** (2026-09-21). **Implementation HEAD** `2561167ccf4adb02bda673f08f4b36dd1640987c` (`2561167`) is the correction tail after implementation review: Gmail `POST /users/me/drafts/send` with approved `message.raw` (`ec4dedc`) plus draft-id ↔ approved-snapshot guard before OAuth (`2561167`). Prior batches `5e468e3` and `27efe17` are not freeze SHAs.
+
+| Gate | Status (2026-09-21) |
+| --- | --- |
+| Implementation review (email/approval correction tail) | **Accepted** — no remaining P3 code blockers identified |
+| Local key-free gate (table below) | **Green** on `2561167` |
+| Hosted Compose smoke (`2561167`) | **Green** |
+| Hosted offline Synthetic (`2561167`, workflow run `35626513959`) | **Pending** at last check (Domain passed; remaining jobs in flight) |
+| P3 re-freeze | **Blocked** until hosted offline Synthetic + Compose are green on `2561167` |
+
+**Hosted note:** workflow run `35624825677` on `ec4dedc` failed in Application on `ResponseProgressRuntimeTests.Attachment_progress_starts_and_completes_without_entering_history` (empty global telemetry timeline). Infrastructure—including Gmail contract tests—passed; the failure is treated as an unrelated progress/telemetry flake, not a Gmail regression. If the same test fails on `35626513959`, investigate flake separately rather than reopening P3 architecture.
+
+When workflow run `35626513959` (or a rerun on `2561167`) completes green, record it here and treat **`2561167` as the P3 correction freeze SHA**; roadmap handoff is **P4**.
 
 ## Why `27efe17` is not the freeze SHA
 
@@ -16,6 +28,7 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 | High | Gmail draft reread dropped Bcc | `GetDraftAsync` uses `format=raw` + MimeKit parse including Bcc; missing raw fails closed; Gmail JSON is parsed unredacted; approval hash and preview bind Bcc |
 | High | Manual MIME headers allowed CR/LF injection | MimeKit builder/parser; CR/LF/NUL rejected in header-bearing input |
 | High | Gmail send used wrong REST path and draft id only (TOCTOU) | `POST /users/me/drafts/send` with hash-validated `message.raw` in the request body; HTTP contract test asserts path and payload |
+| Medium | Approved snapshot could disagree with top-level draft id | `SendDraftAsync` rejects `DraftId` ≠ `ApprovedDraft.DraftId` before token HTTP; contract test asserts zero token/send on mismatch |
 | Medium | Advertised 10-minute approval wait was bounded by 30 s/120 s tool timers | Pause overall clock during human wait; start a fresh per-tool timer after approve |
 | Medium | `email.send` read Gmail before execution policy | Deny/forbid stops with zero integration access; RequireApproval then fetches the draft |
 | Medium | Multi-tool historical-image wire order | `MapMessages` emits all `role=tool` messages for a round, then image continuations |
@@ -65,7 +78,7 @@ Earlier hosted evidence on `27efe17` (workflow run `35612462847`) remains histor
 
 - P3A focused_output `review-focused-output-01` closed on P3A HEAD `c0f8a85`.
 - Mandatory whole-output review of the original P3 tree found eight integrated families and landed on `27efe17`.
-- Post-closure review of `28666c1`–`27efe17` found the email/approval defects above. This correction pass is the response; do not treat `27efe17` as the P3 freeze SHA.
+- Post-closure review of `28666c1`–`27efe17` found the email/approval defects above. Correction tail review on `ec4dedc`–`2561167` closed the remaining Gmail send/TOCTOU findings; do not treat `27efe17` or `5e468e3` as the P3 freeze SHA.
 
 ## Traceability
 
