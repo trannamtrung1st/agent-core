@@ -1033,23 +1033,40 @@ public sealed class SessionToolExecutor(
             return Error("stale_approval", "Approval no longer matches the draft content.");
         }
 
-        if (!EmailSendLedger.TryClaim(approvalGrant.ApprovalId))
+        if (!EmailSendLedger.TryBegin(approvalGrant.ApprovalId))
         {
             return Error("duplicate", "This approval was already used to send email.");
         }
 
         var started = Stopwatch.GetTimestamp();
-        var result = await emailProvider
-            .SendDraftAsync(new EmailSendDraftRequest(draftId), cancellationToken)
-            .ConfigureAwait(false);
-        RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
-        return JsonSerializer.Serialize(new
+        try
         {
-            outcome = result.Outcome.ToString().ToLowerInvariant(),
-            providerMessageId = result.ProviderMessageId,
-            error = result.ErrorCode,
-            message = result.ErrorMessage
-        });
+            var result = await emailProvider
+                .SendDraftAsync(new EmailSendDraftRequest(draftId), cancellationToken)
+                .ConfigureAwait(false);
+            RuntimeTelemetry.Record("email.send", RuntimeTelemetry.ElapsedMs(started));
+            if (result.Outcome == EmailSendOutcome.Sent)
+            {
+                EmailSendLedger.Complete(approvalGrant.ApprovalId);
+            }
+            else
+            {
+                EmailSendLedger.Abandon(approvalGrant.ApprovalId);
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                outcome = result.Outcome.ToString().ToLowerInvariant(),
+                providerMessageId = result.ProviderMessageId,
+                error = result.ErrorCode,
+                message = result.ErrorMessage
+            });
+        }
+        catch
+        {
+            EmailSendLedger.Abandon(approvalGrant.ApprovalId);
+            throw;
+        }
     }
 
     private static bool TryReadAddressList(

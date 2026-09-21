@@ -115,6 +115,108 @@ public sealed class EmailToolTests
     }
 
     [Fact]
+    public async Task Email_send_allows_retry_after_definite_failure_then_blocks_after_sent()
+    {
+        EmailSendLedger.Reset();
+        var provider = new OutcomeEmailProvider(
+            new EmailSendResult(EmailSendOutcome.Failed, null, "provider", "Rejected."),
+            new EmailSendResult(EmailSendOutcome.Sent, "msg-1", null, null));
+        var executor = CreateExecutor(provider);
+        var definition = Definition(4, [ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]);
+        var sessionId = Guid.NewGuid();
+
+        var draft = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall(
+                "d1",
+                ToolCatalog.EmailCreateDraft,
+                """{"to":["a@example.test"],"cc":[],"bcc":[],"subject":"Retry","body":"Body"}"""),
+            ToolLimits.MaxOutputBytes);
+        var draftId = ExtractJsonString(draft.Text, "draftId")!;
+        var args = JsonDocument.Parse($$"""{"draftId":"{{draftId}}"}""").RootElement;
+        var prepared = await executor.PrepareEmailSendApprovalAsync(args);
+        var grant = new ToolApprovalGrant(
+            Guid.NewGuid(),
+            ToolCatalog.EmailSend,
+            prepared.Preparation!.ActionHash,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid());
+
+        var failed = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s1", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grant);
+        Assert.Contains("\"outcome\":\"failed\"", failed.Text, StringComparison.OrdinalIgnoreCase);
+
+        var sent = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s2", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grant);
+        Assert.Contains("\"outcome\":\"sent\"", sent.Text, StringComparison.OrdinalIgnoreCase);
+
+        var duplicate = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s3", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grant);
+        Assert.Contains("duplicate", duplicate.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Email_send_allows_retry_after_indeterminate_outcome()
+    {
+        EmailSendLedger.Reset();
+        var provider = new OutcomeEmailProvider(
+            new EmailSendResult(EmailSendOutcome.Indeterminate, null, "transport", "Unknown."),
+            new EmailSendResult(EmailSendOutcome.Sent, "msg-2", null, null));
+        var executor = CreateExecutor(provider);
+        var definition = Definition(4, [ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]);
+        var sessionId = Guid.NewGuid();
+
+        var draft = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall(
+                "d1",
+                ToolCatalog.EmailCreateDraft,
+                """{"to":["a@example.test"],"cc":[],"bcc":[],"subject":"Indeterminate","body":"Body"}"""),
+            ToolLimits.MaxOutputBytes);
+        var draftId = ExtractJsonString(draft.Text, "draftId")!;
+        var args = JsonDocument.Parse($$"""{"draftId":"{{draftId}}"}""").RootElement;
+        var prepared = await executor.PrepareEmailSendApprovalAsync(args);
+        var grant = new ToolApprovalGrant(
+            Guid.NewGuid(),
+            ToolCatalog.EmailSend,
+            prepared.Preparation!.ActionHash,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid());
+
+        var ambiguous = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s1", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grant);
+        Assert.Contains("\"outcome\":\"indeterminate\"", ambiguous.Text, StringComparison.OrdinalIgnoreCase);
+
+        var sent = await executor.ExecuteAsync(
+            definition,
+            sessionId,
+            new ModelToolCall("s2", ToolCatalog.EmailSend, args.GetRawText()),
+            ToolLimits.MaxOutputBytes,
+            approvalGrant: grant);
+        Assert.Contains("\"outcome\":\"sent\"", sent.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Email_send_rejects_hash_mismatch_when_draft_changes()
     {
         EmailSendLedger.Reset();
@@ -209,6 +311,39 @@ public sealed class EmailToolTests
         return document.RootElement.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+    }
+
+    private sealed class OutcomeEmailProvider : IEmailProvider
+    {
+        private readonly Queue<EmailSendResult> _sendOutcomes;
+        private readonly SyntheticEmailProvider _inner = new();
+
+        public OutcomeEmailProvider(params EmailSendResult[] sendOutcomes) =>
+            _sendOutcomes = new Queue<EmailSendResult>(sendOutcomes);
+
+        public bool IsAvailable => _inner.IsAvailable;
+
+        public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default) =>
+            _inner.SearchAsync(request, cancellationToken);
+
+        public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(request, cancellationToken);
+
+        public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) =>
+            _inner.CreateDraftAsync(request, cancellationToken);
+
+        public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) =>
+            _inner.GetDraftAsync(draftId, cancellationToken);
+
+        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
+        {
+            if (_sendOutcomes.Count == 0)
+            {
+                return _inner.SendDraftAsync(request, cancellationToken);
+            }
+
+            return ValueTask.FromResult(_sendOutcomes.Dequeue());
+        }
     }
 
     private sealed class MutatingDraftEmailProvider : IEmailProvider

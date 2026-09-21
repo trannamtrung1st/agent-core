@@ -4,9 +4,33 @@ namespace AgentCore.Application.Tools;
 
 public static class EmailSendLedger
 {
-    private static readonly ConcurrentDictionary<Guid, byte> Executed = new();
+    private enum SendClaimState
+    {
+        InFlight,
+        Completed
+    }
 
-    public static bool TryClaim(Guid approvalId) => Executed.TryAdd(approvalId, 0);
+    private static readonly ConcurrentDictionary<Guid, SendClaimState> Claims = new();
 
-    public static void Reset() => Executed.Clear();
+    public static bool TryBegin(Guid approvalId)
+    {
+        if (Claims.TryGetValue(approvalId, out _))
+        {
+            return false;
+        }
+
+        return Claims.TryAdd(approvalId, SendClaimState.InFlight);
+    }
+
+    public static void Complete(Guid approvalId) => Claims[approvalId] = SendClaimState.Completed;
+
+    public static void Abandon(Guid approvalId)
+    {
+        if (Claims.TryGetValue(approvalId, out var state) && state == SendClaimState.InFlight)
+        {
+            Claims.TryRemove(approvalId, out _);
+        }
+    }
+
+    public static void Reset() => Claims.Clear();
 }
