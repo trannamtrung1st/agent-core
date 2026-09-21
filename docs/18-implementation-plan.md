@@ -229,7 +229,7 @@ P2A key-free gate (2026-09-20): git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f
 
 ## P2B — Validated model response envelope (observed)
 
-This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2E** and **P2C** are observed/frozen. **P2-Final** §23 gate evidence is re-recorded during whole-output review (exact HEAD in TDP production evidence); **P2 closed/frozen** awaits mandatory whole-output review. Do not reopen P2B, P2E, or P2C without a reproducible regression.
+This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2E** and **P2C** are observed/frozen. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review (see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)). Do not reopen P2, P2B, P2E, or P2C without a reproducible regression.
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -243,7 +243,7 @@ This table does not reopen P1, P2D, or P2A. P2B is **frozen** on `e0e8a55`. **P2
 
 ## P2E — Multimodal image-input capability closure (observed)
 
-This table does not reopen P1, P2D, P2A, or P2B. P2-Final gate evidence is recorded during whole-output review (see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)).
+This table does not reopen P1, P2D, P2A, or P2B, or **P2** overall (closed/frozen on `47d6ff6`; see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -256,7 +256,7 @@ This table does not reopen P1, P2D, P2A, or P2B. P2-Final gate evidence is recor
 
 ## P2C — Personalization boundary (observed)
 
-This table does not reopen P1, P2D, P2A, P2B, or P2E. P2-Final gate evidence is recorded during whole-output review (see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)).
+This table does not reopen P1, P2D, P2A, P2B, P2E, or **P2** overall (closed/frozen on `47d6ff6`; see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence)).
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
@@ -269,9 +269,13 @@ This table does not reopen P1, P2D, P2A, P2B, or P2E. P2-Final gate evidence is 
 
 ## P2-Final — Reconcile and close P2 (production evidence)
 
-P2A, P2B, P2D, P2E, and P2C remain observed/frozen on their recorded HEADs. Proposal §26 stop conditions trace to shipped artifacts and the gate below on one unchanged final HEAD. **P2 closed/frozen** is not claimed in this production batch; mandatory whole-output review must complete first (see `TODO.md` P2-Final and proposal §26).
+P2A, P2B, P2D, P2E, and P2C remain observed/frozen on their recorded HEADs. Proposal §26 stop conditions trace to shipped artifacts plus mandatory whole-output review and the final gate on closure HEAD `47d6ff6`. **P2 closed/frozen** on `47d6ff65142d2d454c4aa3101b0f43a38f01389a` (`47d6ff6`, 2026-09-21). Do not reopen P2 without a reproducible regression.
 
-**Final gate (whole-output review):** proposal §23 key-free Synthetic + Compose gate re-run during mandatory whole-output review on one unchanged closure HEAD; exact tested git SHA and observed pass/skip counts are authoritative in TDP production evidence for P2-Final (not duplicated here to avoid doc/SHA drift). Hosted workflow run identity pending push to `origin/main`. Optional Real structured-response and vision probes **SKIPPED — credentials unavailable** (`OPENROUTER_API_KEY` / `OPENAI_API_KEY` absent). Roadmap handoff to P3/P4 follows only after whole-output review closes P2.
+**Mandatory whole-output review:** complete (2026-09-21; TDP production evidence). **Closure repair** on `47d6ff6`: Real-profile catalog fallback when base appsettings ships the full scripted catalog; best-effort live profile notification after durable save; trim `preferredName` before persist.
+
+**Final gate (closure HEAD `47d6ff6`):** proposal §23 key-free Synthetic + Compose gate green on that exact HEAD (hosted workflow run `35552740853`). Observed pass/skip counts are authoritative in TDP production evidence for P2-Final (not duplicated here to avoid doc/SHA drift). Optional Real structured-response and vision probes **SKIPPED — credentials unavailable** (`OPENROUTER_API_KEY` / `OPENAI_API_KEY` absent); do not treat them as verified Real-provider behavior.
+
+**Roadmap handoff:** active focus **P3** (tool evolution); **P4** (context compaction and memory) follows per plan (`TODO.md`, proposal §26).
 
 ## Handoff rule
 
