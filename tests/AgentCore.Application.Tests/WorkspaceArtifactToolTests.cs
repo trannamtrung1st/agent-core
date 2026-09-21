@@ -12,6 +12,58 @@ namespace AgentCore.Application.Tests;
 public sealed class WorkspaceArtifactToolTests
 {
     [Fact]
+    public async Task Workspace_write_and_read_resolve_bare_filenames_from_working_directory()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var definition = WorkspaceTools();
+        await workspace.EnsureAsync(session, definition);
+        var executor = new SessionToolExecutor(workspace: workspace);
+
+        var wrote = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"test.txt","content":"i love Trung"}"""));
+        using (var writeDoc = JsonDocument.Parse(wrote))
+        {
+            Assert.Equal("/workspace/working/test.txt", writeDoc.RootElement.GetProperty("path").GetString());
+        }
+
+        await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c2", ToolCatalog.WorkspaceWrite, """{"path":"tot.txt","content":"tot"}"""));
+
+        var read = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c3", ToolCatalog.WorkspaceRead, """{"path":"tot.txt"}"""));
+        using var readDoc = JsonDocument.Parse(read);
+        Assert.Equal("/workspace/working/tot.txt", readDoc.RootElement.GetProperty("path").GetString());
+        Assert.Equal("tot", readDoc.RootElement.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Workspace_write_rejects_host_absolute_paths_with_path_outside_workspace()
+    {
+        var executor = new SessionToolExecutor(workspace: new FileSessionWorkspace(
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))));
+        var definition = WorkspaceTools();
+        var session = Guid.CreateVersion7();
+        var json = await ExecuteTextAsync(
+            executor,
+            definition,
+            session,
+            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"/test.txt","content":"x"}"""));
+        Assert.Contains("path_outside_workspace", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Workspace_list_returns_logical_metadata_without_physical_paths()
     {
         using var dir = new TempDir();

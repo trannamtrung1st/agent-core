@@ -20,22 +20,22 @@ public static class ToolRegistry
                 ToolOfferRule.SessionAttachmentsWhenRoleAllows),
             [ToolCatalog.WorkspaceRead] = Descriptor(
                 ToolCatalog.WorkspaceRead,
-                "Read a logical execution-view path under /agent, /attachments, or /workspace.",
+                "Read a file from the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt). Explicit /agent, /attachments, and /workspace logical paths may be used when permitted.",
                 """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}""",
                 ToolEffect.ReadOnly),
             [ToolCatalog.WorkspaceList] = Descriptor(
                 ToolCatalog.WorkspaceList,
-                "List bounded logical workspace metadata under a path (default /workspace/working).",
+                "List bounded session workspace metadata. Relative paths resolve from the working directory; omit path to list the working directory.",
                 """{"type":"object","properties":{"path":{"type":"string"}}}""",
                 ToolEffect.ReadOnly),
             [ToolCatalog.WorkspaceWrite] = Descriptor(
                 ToolCatalog.WorkspaceWrite,
-                "Write a UTF-8 file under /workspace only.",
+                "Write a UTF-8 file in the session workspace. Relative paths and bare filenames resolve from the working directory (for example notes.txt).",
                 """{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}""",
                 ToolEffect.Write),
             [ToolCatalog.WorkspacePatch] = Descriptor(
                 ToolCatalog.WorkspacePatch,
-                "Apply exact-once UTF-8 text replacements under /workspace with required expectedSha256 precondition.",
+                "Apply exact-once UTF-8 text replacements in the session workspace. Relative paths resolve from the working directory. Requires expectedSha256.",
                 """{"type":"object","properties":{"path":{"type":"string"},"expectedSha256":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"}},"required":["oldText","newText"]}}},"required":["path","expectedSha256","edits"]}""",
                 ToolEffect.Write),
             [ToolCatalog.ArtifactsCreate] = Descriptor(
@@ -45,7 +45,7 @@ public static class ToolRegistry
                 ToolEffect.Write),
             [ToolCatalog.ArtifactsCreateFromWorkspace] = Descriptor(
                 ToolCatalog.ArtifactsCreateFromWorkspace,
-                "Create a session artifact from a logical /workspace file without sending file bytes in arguments.",
+                "Create a session artifact from a workspace file without sending file bytes in arguments. Relative paths resolve from the working directory.",
                 """{"type":"object","properties":{"path":{"type":"string"},"displayName":{"type":"string"},"contentType":{"type":"string"}},"required":["path","displayName"]}""",
                 ToolEffect.Write),
             [ToolCatalog.ArtifactsVerify] = Descriptor(

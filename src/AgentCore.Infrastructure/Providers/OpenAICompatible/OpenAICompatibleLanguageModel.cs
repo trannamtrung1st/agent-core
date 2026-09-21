@@ -1,14 +1,20 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 
 public sealed class OpenAICompatibleLanguageModel : ILanguageModel
 {
     public const string HttpClientName = "openai-compatible-llm";
+    public const string RequestTelemetryStage = "llm.request";
+    private const int ProviderErrorBodyLimit = 4096;
 
     private static readonly HashSet<string> ForbiddenHeaderNames =
         new(StringComparer.OrdinalIgnoreCase)
@@ -20,18 +26,22 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
     private readonly LanguageModelProviderOptions _options;
     private readonly TimeProvider _time;
     private readonly GenerationCircuitBreaker _breaker;
+    private readonly ILogger<OpenAICompatibleLanguageModel>? _logger;
     private readonly Uri _completions;
+    private int _requestCount;
 
     public OpenAICompatibleLanguageModel(
         HttpClient http,
         LanguageModelProviderOptions options,
         TimeProvider? time = null,
-        GenerationCircuitBreaker? breaker = null)
+        GenerationCircuitBreaker? breaker = null,
+        ILogger<OpenAICompatibleLanguageModel>? logger = null)
     {
         _http = http;
         _options = options;
         _time = time ?? TimeProvider.System;
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
+        _logger = logger;
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = JoinCompletions(options.BaseUrl);
         Capabilities = new ModelCapabilities(
@@ -83,6 +93,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             setupCts,
             TimeSpan.FromSeconds(Math.Max(1, _options.Timeouts.SetupSeconds)));
 
+        var callStarted = Stopwatch.GetTimestamp();
+        var callNumber = Interlocked.Increment(ref _requestCount);
         HttpResponseMessage? response = null;
         ModelFailed? setupFailed = null;
         try
@@ -93,15 +105,18 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            RecordRequest(request, callNumber, callStarted, 0);
             setupFailed = Fail(ProviderErrorCode.Cancelled, "Generation cancelled.");
         }
         catch (OperationCanceledException)
         {
+            RecordRequest(request, callNumber, callStarted, 0);
             setupFailed = Fail(ProviderErrorCode.Timeout, "Language model setup timed out.");
         }
         catch (HttpRequestException)
         {
             _breaker.RecordFailure();
+            RecordRequest(request, callNumber, callStarted, 0);
             setupFailed = Fail(ProviderErrorCode.Unavailable, "Language model transport failed.");
         }
 
@@ -115,7 +130,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             if (!response.IsSuccessStatusCode)
             {
-                var failure = MapStatus(response);
+                var failure = await MapStatusAsync(response, request, totalCts.Token).ConfigureAwait(false);
+                RecordRequest(request, callNumber, callStarted, (int)response.StatusCode);
                 if (failure.Code is ProviderErrorCode.Unavailable or ProviderErrorCode.Timeout)
                 {
                     _breaker.RecordFailure();
@@ -124,6 +140,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 yield return new ModelFailed(failure);
                 yield break;
             }
+
+            RecordRequest(request, callNumber, callStarted, (int)response.StatusCode);
 
             await using var stream = await response.Content.ReadAsStreamAsync(totalCts.Token).ConfigureAwait(false);
             var parser = new SseStreamParser();
@@ -732,17 +750,169 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
     private static ModelFailed Fail(ProviderErrorCode code, string message) =>
         new(new ProviderFailure(code, message));
 
-    private static ProviderFailure MapStatus(HttpResponseMessage response)
+    private async Task<ProviderFailure> MapStatusAsync(
+        HttpResponseMessage response,
+        ModelRequest request,
+        CancellationToken cancellationToken)
     {
         var retry = response.Headers.RetryAfter?.Delta;
-        return (int)response.StatusCode switch
+        var status = (int)response.StatusCode;
+        if (status is 400 or 422)
+        {
+            var diagnostic = await ReadProviderErrorAsync(response, cancellationToken).ConfigureAwait(false);
+            var phase = RequestPhase(request);
+            _logger?.LogWarning(
+                "Language model rejected request. Status {Status} Model {Model} Phase {Phase} ProviderCode {ProviderCode} ProviderType {ProviderType} Reason {Reason}",
+                status,
+                _options.DefaultModel,
+                phase,
+                diagnostic.Code,
+                diagnostic.Type,
+                diagnostic.Message);
+            var safeMessage = phase == "follow-up"
+                ? $"Provider rejected follow-up request ({status})."
+                : $"Provider rejected the request ({status}).";
+            return new ProviderFailure(ProviderErrorCode.InvalidRequest, safeMessage);
+        }
+
+        return status switch
         {
             401 or 403 => new ProviderFailure(ProviderErrorCode.Authentication, "Language model authentication failed."),
             429 => new ProviderFailure(ProviderErrorCode.RateLimited, "Language model rate limited.", retry),
-            400 or 422 => new ProviderFailure(ProviderErrorCode.InvalidRequest, "Language model rejected the request."),
             >= 500 => new ProviderFailure(ProviderErrorCode.Unavailable, "Language model is unavailable."),
             _ => new ProviderFailure(ProviderErrorCode.Unknown, "Language model request failed.")
         };
+    }
+
+    private void RecordRequest(ModelRequest request, int callNumber, long started, int httpStatus)
+    {
+        var imageBytes = 0;
+        var hasImage = false;
+        foreach (var message in request.Messages)
+        {
+            if (message.Parts is null)
+            {
+                continue;
+            }
+
+            foreach (var image in message.Parts.OfType<ModelImageContent>())
+            {
+                hasImage = true;
+                imageBytes += image.Bytes.Length;
+            }
+        }
+
+        var detail =
+            $"model={_options.DefaultModel};provider={_options.Adapter};callNumber={callNumber};responseId={request.ResponseId:D};messageCount={request.Messages.Count};toolCount={request.Messages.Count(message => message.Role == ModelRole.Tool)};hasImage={hasImage};imageBytes={imageBytes};structuredOutput={request.ResponseContract is not null && Capabilities.StructuredOutput};httpStatus={httpStatus};phase={RequestPhase(request)}";
+        RuntimeTelemetry.RecordDiagnostic(RequestTelemetryStage, RuntimeTelemetry.ElapsedMs(started), detail);
+    }
+
+    private static string RequestPhase(ModelRequest request) =>
+        request.Messages.Any(message => message.Role == ModelRole.Tool) ? "follow-up" : "initial";
+
+    private static async Task<ProviderErrorDiagnostic> ReadProviderErrorAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (response.Content is null)
+        {
+            return ProviderErrorDiagnostic.Empty;
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var buffer = new byte[ProviderErrorBodyLimit];
+            var read = 0;
+            while (read < buffer.Length)
+            {
+                var count = await stream.ReadAsync(buffer.AsMemory(read, buffer.Length - read), cancellationToken)
+                    .ConfigureAwait(false);
+                if (count == 0)
+                {
+                    break;
+                }
+
+                read += count;
+            }
+
+            if (read == 0)
+            {
+                return ProviderErrorDiagnostic.Empty;
+            }
+
+            var body = Encoding.UTF8.GetString(buffer, 0, read);
+            using var document = JsonDocument.Parse(body);
+            if (!document.RootElement.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
+            {
+                return ProviderErrorDiagnostic.Empty;
+            }
+
+            return new ProviderErrorDiagnostic(
+                SanitizeProviderText(ReadScalar(error, "message"), 240),
+                SanitizeProviderText(ReadScalar(error, "code"), 80),
+                SanitizeProviderText(ReadScalar(error, "type"), 80));
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or OperationCanceledException)
+        {
+            return ProviderErrorDiagnostic.Empty;
+        }
+    }
+
+    private static string? ReadScalar(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.GetRawText(),
+            _ => null
+        };
+    }
+
+    private static string SanitizeProviderText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var sanitized = DataUrlPattern.Replace(value, "[image]");
+        sanitized = BearerPattern.Replace(sanitized, "[secret]");
+        sanitized = SecretKeyPattern.Replace(sanitized, "[secret]");
+        sanitized = EmailPattern.Replace(sanitized, "[email]");
+        sanitized = LongTokenPattern.Replace(sanitized, "[redacted]");
+        sanitized = sanitized.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
+        return sanitized.Length <= maxLength ? sanitized : sanitized[..maxLength];
+    }
+
+    private static readonly Regex DataUrlPattern = new(
+        @"data:[^\s""]{0,120};base64,[A-Za-z0-9+/=]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex BearerPattern = new(
+        @"bearer\s+\S+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex SecretKeyPattern = new(
+        @"sk-[A-Za-z0-9_\-]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex EmailPattern = new(
+        @"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex LongTokenPattern = new(
+        @"[A-Za-z0-9+/=]{40,}",
+        RegexOptions.Compiled);
+
+    private readonly record struct ProviderErrorDiagnostic(string Message, string Code, string Type)
+    {
+        public static ProviderErrorDiagnostic Empty { get; } = new(string.Empty, string.Empty, string.Empty);
     }
 
     public static Uri JoinCompletions(string? baseUrl)

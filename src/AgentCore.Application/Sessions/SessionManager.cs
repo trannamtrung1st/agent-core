@@ -625,9 +625,11 @@ public sealed class SessionManager
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var workspace = RequireWorkspace();
-        RolePermissions.EnsureLogicalPathAllowed(string.IsNullOrWhiteSpace(prefix) ? "/" : prefix, sessionId);
+        var resolvedPrefix = string.IsNullOrWhiteSpace(prefix)
+            ? WorkspaceLogicalPath.WorkingDirectory
+            : WorkspaceLogicalPath.Resolve(prefix, sessionId);
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        return await workspace.ListAsync(sessionId, snapshot.Definition, prefix, cancellationToken).ConfigureAwait(false);
+        return await workspace.ListAsync(sessionId, snapshot.Definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<WorkspaceContent> ReadWorkspaceAsync(
@@ -637,9 +639,9 @@ public sealed class SessionManager
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         var workspace = RequireWorkspace();
-        RolePermissions.EnsureLogicalPathAllowed(logicalPath, sessionId);
+        var resolvedPath = WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        return await workspace.ReadAsync(sessionId, snapshot.Definition, logicalPath, cancellationToken)
+        return await workspace.ReadAsync(sessionId, snapshot.Definition, resolvedPath, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -661,10 +663,10 @@ public sealed class SessionManager
         }
 
         var workspace = RequireWorkspace();
-        RolePermissions.EnsureLogicalPathAllowed(logicalPath, sessionId);
+        var resolvedPath = WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
         var started = Stopwatch.GetTimestamp();
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        await workspace.WriteAsync(sessionId, logicalPath, bytes, cancellationToken).ConfigureAwait(false);
+        await workspace.WriteAsync(sessionId, resolvedPath, bytes, cancellationToken).ConfigureAwait(false);
         RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));
     }
 

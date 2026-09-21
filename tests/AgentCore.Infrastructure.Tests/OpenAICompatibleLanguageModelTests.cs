@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -15,6 +16,7 @@ using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -519,6 +521,60 @@ public sealed class OpenAICompatibleLanguageModelTests
         await runtime.WaitUntilIdleAsync();
         Assert.Contains(output.TextDeltas, delta => delta.Text == "Hello");
         Assert.Equal(1, handler.PostCount);
+    }
+
+    [LiveProviderFact]
+    public async Task Gpt4oMini_historical_image_follow_up_is_opt_in_only()
+    {
+        var key = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+        var logger = new ListLogger();
+        using var http = new HttpClient();
+        var model = new OpenAICompatibleLanguageModel(
+            http,
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "https://openrouter.ai/api/v1/",
+                ApiKey = key,
+                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
+                Vision = true,
+                Tools = true,
+                StructuredOutput = true,
+                Timeouts = new ProviderTimeoutOptions { SetupSeconds = 20, StreamIdleSeconds = 30, TotalSeconds = 60 }
+            },
+            logger: logger);
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(
+                           new ModelRequest(
+                               Guid.NewGuid(),
+                               [
+                                   new ModelMessage(ModelRole.User, "Review the image again."),
+                                   new ModelMessage(
+                                       ModelRole.Assistant,
+                                       string.Empty,
+                                       ToolCalls: [new ModelToolCall("call_img", ToolCatalog.AttachmentsRead, """{"attachmentId":"019944af-0001-7000-8000-000000000001"}""")]),
+                                   new ModelMessage(
+                                       ModelRole.Tool,
+                                       """{"kind":"image","contentProvided":true}""",
+                                       [new ModelImageContent("image/png", png, "pixel.png")],
+                                       ToolCallId: "call_img",
+                                       Name: ToolCatalog.AttachmentsRead)
+                               ],
+                               MaxOutputTokens: 128,
+                               Tools: [new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read one session attachment.", """{"type":"object"}""")],
+                               ResponseContract: new ModelResponseContract(false))))
+        {
+            events.Add(item);
+        }
+
+        var rejected = events.OfType<ModelFailed>()
+            .FirstOrDefault(item => item.Failure.Code == ProviderErrorCode.InvalidRequest);
+        Assert.True(
+            rejected is null,
+            (rejected?.Failure.SafeMessage ?? "rejected") + " " + string.Join(" | ", logger.Messages));
+        Assert.Contains(events, item => item is ModelTextDelta or ModelCompleted);
     }
 
     [LiveProviderFact]
@@ -1042,6 +1098,70 @@ public sealed class OpenAICompatibleLanguageModelTests
     }
 
     [Fact]
+    public async Task Rejected_follow_up_logs_sanitized_provider_reason_and_request_telemetry()
+    {
+        var png = "img"u8.ToArray();
+        var handler = new ErrorBodyHandler(
+            HttpStatusCode.BadRequest,
+            """
+            {"error":{"message":"invalid message sequence data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo= bearer sk-live-secret user@example.com","code":"invalid_request_error","type":"invalid_request_error"}}
+            """);
+        var logger = new ListLogger();
+        var model = new OpenAICompatibleLanguageModel(
+            new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
+                ApiKey = "test-key",
+                Tools = true,
+                Vision = true,
+                StructuredOutput = true
+            },
+            logger: logger);
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.User, "review the image again"),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"kind":"image","contentProvided":true}""",
+                    [new ModelImageContent("image/png", png, "x.png")],
+                    ToolCallId: "call_1",
+                    Name: ToolCatalog.AttachmentsRead)
+            ],
+            Tools: [new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read attachment.", """{"type":"object"}""")],
+            ResponseContract: new ModelResponseContract(false));
+        var events = await CollectAsync(model, request);
+        var failed = Assert.IsType<ModelFailed>(Assert.Single(events));
+        Assert.Equal(ProviderErrorCode.InvalidRequest, failed.Failure.Code);
+        Assert.Equal("Provider rejected follow-up request (400).", failed.Failure.SafeMessage);
+        Assert.DoesNotContain("QUJD", failed.Failure.SafeMessage, StringComparison.Ordinal);
+        var logged = Assert.Single(logger.Messages);
+        Assert.Contains("invalid message sequence", logged, StringComparison.Ordinal);
+        Assert.Contains("openai/gpt-4o-mini-2024-07-18", logged, StringComparison.Ordinal);
+        Assert.Contains("follow-up", logged, StringComparison.Ordinal);
+        Assert.Contains("[image]", logged, StringComparison.Ordinal);
+        Assert.Contains("[secret]", logged, StringComparison.Ordinal);
+        Assert.Contains("[email]", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("QUJD", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-live-secret", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("user@example.com", logged, StringComparison.Ordinal);
+        Assert.DoesNotContain("test-key", logged, StringComparison.Ordinal);
+        var telemetry = RuntimeTelemetry.SnapshotTimeline()
+            .Last(item => item.Stage == OpenAICompatibleLanguageModel.RequestTelemetryStage
+                && item.Detail?.Contains(request.ResponseId.ToString("D"), StringComparison.Ordinal) == true);
+        Assert.Contains("httpStatus=400", telemetry.Detail, StringComparison.Ordinal);
+        Assert.Contains("hasImage=True", telemetry.Detail, StringComparison.Ordinal);
+        Assert.Contains($"imageBytes={png.Length}", telemetry.Detail, StringComparison.Ordinal);
+        Assert.Contains("structuredOutput=True", telemetry.Detail, StringComparison.Ordinal);
+        Assert.Contains("phase=follow-up", telemetry.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("review the image again", telemetry.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToBase64String(png), telemetry.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Non_vision_model_rejects_tool_image_parts_before_http()
     {
         var handler = StopStream();
@@ -1290,6 +1410,35 @@ internal class ScriptedHandler : HttpMessageHandler
             }
         };
     }
+}
+
+internal sealed class ErrorBodyHandler(HttpStatusCode status, string body) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var response = new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        return Task.FromResult(response);
+    }
+}
+
+internal sealed class ListLogger : ILogger<OpenAICompatibleLanguageModel>
+{
+    public List<string> Messages { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter) =>
+        Messages.Add(formatter(state, exception));
 }
 
 internal sealed class StatusHandler(HttpStatusCode status, TimeSpan retryAfter) : HttpMessageHandler

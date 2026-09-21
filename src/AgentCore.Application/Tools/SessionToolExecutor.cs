@@ -354,7 +354,11 @@ public sealed class SessionToolExecutor(
             return Error("invalid", "path is required.");
         }
 
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
+        if (!TryResolveWorkspacePath(path, sessionId, out path, out var pathError))
+        {
+            return pathError;
+        }
+
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var content = await workspace.ReadAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var take = Math.Min(content.Bytes.Length, Math.Max(0, remainingOutputBytes));
@@ -383,13 +387,17 @@ public sealed class SessionToolExecutor(
             return Error("unavailable", "Workspace is unavailable.");
         }
 
-        var path = "/workspace/working";
+        var path = WorkspaceLogicalPath.WorkingDirectory;
         if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty("path", out var pathElement) && pathElement.ValueKind == JsonValueKind.String)
         {
             path = pathElement.GetString() ?? path;
         }
 
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
+        if (!TryResolveWorkspacePath(path, sessionId, out path, out var pathError))
+        {
+            return pathError;
+        }
+
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var nodes = await workspace.ListAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var truncated = nodes.Count > WorkspaceLimits.MaxListEntries;
@@ -451,6 +459,11 @@ public sealed class SessionToolExecutor(
             return Error("invalid", "At least one edit is required.");
         }
 
+        if (!TryResolveWorkspacePath(path, sessionId, out path, out var pathError))
+        {
+            return pathError;
+        }
+
         var result = await workspace.PatchTextAsync(
                 sessionId,
                 definition,
@@ -482,7 +495,11 @@ public sealed class SessionToolExecutor(
             return Error("invalid", "path and content are required.");
         }
 
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
+        if (!TryResolveWorkspacePath(path, sessionId, out path, out var pathError))
+        {
+            return pathError;
+        }
+
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var bytes = Encoding.UTF8.GetBytes(content);
         await workspace.WriteAsync(sessionId, path, bytes, cancellationToken).ConfigureAwait(false);
@@ -559,13 +576,17 @@ public sealed class SessionToolExecutor(
             return Error("invalid", "path and displayName are required.");
         }
 
+        if (!TryResolveWorkspacePath(path, sessionId, out path, out var pathError))
+        {
+            return pathError;
+        }
+
         if (!path.StartsWith("/workspace/", StringComparison.Ordinal))
         {
-            return Error("forbidden", "Only session-local /workspace paths are permitted.");
+            return Error("path_outside_workspace", "Only files inside the session workspace can be modified.");
         }
 
         TryString(args, "contentType", out var contentType);
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
         await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var content = await workspace.ReadAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
         var created = await artifacts.CreateAsync(
@@ -722,6 +743,22 @@ public sealed class SessionToolExecutor(
         }
 
         TryString(args, "exportPath", out var export);
+        if (!string.IsNullOrWhiteSpace(export)
+            && !TryResolveWorkspacePath(export, sessionId, out export, out var exportError))
+        {
+            return exportError;
+        }
+
+        if (string.Equals(verb, "cat", StringComparison.OrdinalIgnoreCase) && arguments.Count == 1)
+        {
+            if (!TryResolveWorkspacePath(arguments[0], sessionId, out var resolvedCatPath, out var catError))
+            {
+                return catError;
+            }
+
+            arguments[0] = resolvedCatPath;
+        }
+
         var started = Stopwatch.GetTimestamp();
         var result = await sandbox.RunAsync(
                 new SandboxRequest(
@@ -1181,6 +1218,22 @@ public sealed class SessionToolExecutor(
         return DemoSensitiveActionStore.TryExecute(sessionId, approvalGrant.ApprovalId, label, out var result)
             ? result
             : result;
+    }
+
+    private static bool TryResolveWorkspacePath(
+        string raw,
+        Guid sessionId,
+        out string canonical,
+        out string jsonError)
+    {
+        if (WorkspaceLogicalPath.TryResolve(raw, sessionId, out canonical, out var code, out var message))
+        {
+            jsonError = string.Empty;
+            return true;
+        }
+
+        jsonError = Error(code, message);
+        return false;
     }
 
     private static string Error(string code, string message) =>

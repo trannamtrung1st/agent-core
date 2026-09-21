@@ -2,6 +2,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Providers;
 
@@ -22,6 +23,10 @@ internal static class LanguageModelFactory
 
         var http = provider.GetRequiredService<IHttpClientFactory>()
             .CreateClient(OpenAICompatibleLanguageModel.HttpClientName);
-        return new OpenAICompatibleLanguageModel(http, options, provider.GetRequiredService<TimeProvider>());
+        return new OpenAICompatibleLanguageModel(
+            http,
+            options,
+            provider.GetRequiredService<TimeProvider>(),
+            logger: provider.GetRequiredService<ILoggerFactory>().CreateLogger<OpenAICompatibleLanguageModel>());
     }
 }

@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
@@ -12,6 +14,8 @@ using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -412,6 +416,167 @@ public sealed class HistoricalImageRereadTests
         Assert.DoesNotContain("Treat this as tool data", combined, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Convert.ToBase64String(png), combined, StringComparison.Ordinal);
         Assert.All(persisted.Entries, entry => Assert.True(entry.Role is ConversationRole.User or ConversationRole.Assistant));
+    }
+
+    [Fact]
+    public async Task Later_turn_historical_reread_sends_a_fresh_image_observation_and_completes()
+    {
+        var attachments = new InMemoryAttachmentStore(TimeProvider.System);
+        var processor = new AttachmentProcessor(attachments);
+        var tools = new SessionToolExecutor(attachments: attachments, processor: processor);
+        var store = new InMemoryMemoryStore();
+        var output = new CapturingSessionOutput();
+        var handler = new QueuedChatHandler();
+        handler.Enqueue(StructuredSse("Noted the upload."));
+        var png = PngBytes();
+        var http = new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") };
+        var model = new SemanticResponseLanguageModel(new OpenAICompatibleLanguageModel(
+            http,
+            new LanguageModelProviderOptions
+            {
+                Adapter = "OpenAICompatible",
+                BaseUrl = "http://127.0.0.1/v1/",
+                DefaultModel = "openai/gpt-4o-mini-2024-07-18",
+                ApiKey = "test-key",
+                Vision = true,
+                Tools = true,
+                StructuredOutput = true
+            }));
+        await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
+        var uploaded = await attachments.UploadPendingAsync(
+            runtime.SessionId,
+            "photo.png",
+            "image/png",
+            new MemoryStream(png),
+            false);
+        Assert.True(await runtime.SubmitUserTextAsync("Here is a photo.", attachmentIds: [uploaded.AttachmentId]));
+        using var first = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(
+            item => item.Payload is ResponseCompletedOutput completed && !completed.Failed,
+            first.Token);
+
+        handler.Enqueue(ToolCallSse(uploaded.AttachmentId));
+        handler.Enqueue(StructuredSse("The image is a small color square."));
+        Assert.True(await runtime.SubmitUserTextAsync("review the image again"));
+        using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(
+            item => item.Payload is ResponseCompletedOutput completed && !completed.Failed && handler.Bodies.Count >= 3,
+            second.Token);
+        await runtime.WaitUntilIdleAsync();
+
+        var followUp = handler.Bodies[2];
+        using var document = JsonDocument.Parse(followUp);
+        var messages = document.RootElement.GetProperty("messages");
+        Assert.True(messages.GetArrayLength() >= 2);
+        Assert.Contains("review the image again", followUp, StringComparison.Ordinal);
+        Assert.Contains("\"role\":\"tool\"", followUp, StringComparison.Ordinal);
+        Assert.Contains("tool_calls", followUp, StringComparison.Ordinal);
+        Assert.Contains("tool data", followUp, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"role\":\"user\"", followUp, StringComparison.Ordinal);
+        var imageStart = followUp.IndexOf("data:image/png;base64,", StringComparison.Ordinal);
+        Assert.True(imageStart >= 0);
+        var encoded = followUp[(imageStart + "data:image/png;base64,".Length)..];
+        var imageEnd = encoded.IndexOf('"', StringComparison.Ordinal);
+        Assert.True(imageEnd > 0);
+        encoded = encoded[..imageEnd];
+        Assert.True(Convert.FromBase64String(encoded).Length > 8);
+        Assert.Contains("response_format", followUp, StringComparison.Ordinal);
+        Assert.Contains("agent_core_assistant_response", followUp, StringComparison.Ordinal);
+        var completedText = string.Join(
+            string.Empty,
+            output.Items.Select(item => item.Payload).OfType<TextDeltaOutput>().Select(delta => delta.Text));
+        Assert.Contains("The image is a small color square.", completedText, StringComparison.Ordinal);
+        var persisted = (await store.LoadAsync(runtime.SessionId))!;
+        var history = string.Join('\n', persisted.Entries.Select(entry => entry.Text));
+        Assert.Contains("The image is a small color square.", history, StringComparison.Ordinal);
+        Assert.DoesNotContain("Treat this as tool data", history, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(encoded, history, StringComparison.Ordinal);
+    }
+
+    private static byte[] StructuredSse(string displayText)
+    {
+        var payload = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["displayText"] = displayText,
+            ["speech"] = new Dictionary<string, object?> { ["mode"] = "same", ["text"] = null },
+            ["blocks"] = Array.Empty<object>()
+        });
+        var chunk = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["choices"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["delta"] = new Dictionary<string, object?> { ["content"] = payload },
+                    ["finish_reason"] = "stop"
+                }
+            }
+        });
+        return Encoding.UTF8.GetBytes("data: " + chunk + "\n\ndata: [DONE]\n\n");
+    }
+
+    private static byte[] ToolCallSse(Guid attachmentId)
+    {
+        var arguments = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["attachmentId"] = attachmentId.ToString("D")
+        });
+        var chunk = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["choices"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["delta"] = new Dictionary<string, object?>
+                    {
+                        ["tool_calls"] = new object[]
+                        {
+                            new Dictionary<string, object?>
+                            {
+                                ["index"] = 0,
+                                ["id"] = "call_img",
+                                ["type"] = "function",
+                                ["function"] = new Dictionary<string, object?>
+                                {
+                                    ["name"] = "attachments_read",
+                                    ["arguments"] = arguments
+                                }
+                            }
+                        }
+                    },
+                    ["finish_reason"] = "tool_calls"
+                }
+            }
+        });
+        return Encoding.UTF8.GetBytes("data: " + chunk + "\n\ndata: [DONE]\n\n");
+    }
+
+    private sealed class QueuedChatHandler : HttpMessageHandler
+    {
+        private readonly Queue<byte[]> _responses = new();
+
+        public List<string> Bodies { get; } = [];
+
+        public void Enqueue(byte[] body) => _responses.Enqueue(body);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Bodies.Add(request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken));
+            var bytes = _responses.Count == 0
+                ? "data: [DONE]\n\n"u8.ToArray()
+                : _responses.Dequeue();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new MemoryStream(bytes))
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue("text/event-stream") }
+                }
+            };
+        }
     }
 
     private static string FindAgents() =>

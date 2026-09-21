@@ -1,4 +1,4 @@
-# P3 — Tools and external integrations (correction freeze)
+# P3 — Tools and external integrations (narrow reopen)
 
 This report records the **P3 correction freeze** after the `27efe17` closure was reopened. Hosted Synthetic workflow run `35612462847` completed successfully on that earlier HEAD; post-closure review then found email/approval boundary defects that undermine exact-draft send approval. This tree implements that correction pass (including Gmail `drafts.send` with approved `message.raw` on `ec4dedc`).
 
@@ -6,7 +6,7 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 
 ## Freeze status
 
-**P3 correction freeze** (2026-09-22) after the email/approval tail and a final usability correction (`general-assistant` v5 full demo tools; `web.fetch` multi-address fallback, `transport_error`, declared charset).
+**P3 freeze reopened narrowly** (2026-09-22). Key-free gates on `e255916` (workflow `35630920349`) and `e564565` (workflow `35631259704`) are green. A Real historical-image reread with GPT-4o mini (`openai/gpt-4o-mini-2024-07-18`) failed after `attachments.read`, and the UI only showed `Failed` because 400/422 bodies were discarded. A direct OpenRouter probe of that tool-transcript plus synthetic user image, with tools and strict structured output, returned HTTP 200 for a 1×1 PNG, as did a fresh observation of the same image. The wire projection is unchanged. This correction keeps the provider reason in sanitized logs and adds a fake two-call runtime harness. **P4 waits** until a Real failure reports a provider reason.
 
 | Gate | Status |
 | --- | --- |
@@ -14,10 +14,13 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 | Hosted offline Synthetic + Compose on `06198a9` (workflow `35627313751`) | **Green** (backend, frontend, Playwright, Compose). This SHA is docs-only relative to `2561167`. |
 | Hosted offline Synthetic on `2561167` (workflow `35626513959`) | **Failed** at Playwright (`Queued messages` resolved twice). Backend stayed green. Treated as the existing queue flake, not a P3 regression. |
 | Hosted Application flake on `ec4dedc` (`35624825677`, `ResponseProgressRuntimeTests` empty telemetry timeline) | Unrelated to Gmail; not a reopen. |
-| Local key-free gate after the usability correction | Recorded in the table below on the commit that lands this report. |
-| P3 freeze SHA | `e255916` (usability correction). Hosted confirmation is workflow `35630920349` on that SHA (in progress at last check). Prior hosted green: `35627313751` on `06198a9`. `27efe17`, `5e468e3`, and `2561167` are not the freeze SHA. |
+| Local key-free gate after the usability correction | Historical on `e255916`. This narrow reopen adds focused adapter and runtime coverage; it is not a new full freeze gate. |
+| P3 implementation / key-free gate | **Green** on `e255916` (`35630920349`) and `e564565` (`35631259704`) |
+| P3 Real historical-image reread | **UI failure reproduced.** A minimal OpenRouter replay of the same follow-up shape returned HTTP 200. Provider reason from the UI failure was not available. |
+| P3 freeze | **Reopened narrowly** for provider diagnostics and the historical-image follow-up harness. `e255916` is not the freeze SHA. |
+| P4 | **Wait** |
 
-Historical image reread still requires a model with **Tools and Vision**. The Real default DeepSeek V4.1 Flash is tools-capable and vision-incapable, so `attachments.read` returns `vision_required`. Synthetic coverage remains `scripted-vision` / `historical-image-reread`. A non-vision session failing to inspect an old image is expected.
+Historical image reread still requires a model with **Tools and Vision**. The Real default DeepSeek V4.1 Flash is tools-capable and vision-incapable, so `attachments.read` returns `vision_required`. That refusal is expected. GPT-4o mini has both capabilities. A Real reread on that model failed in the UI; a minimal OpenRouter replay of the follow-up returned HTTP 200. Synthetic coverage remains `scripted-vision` / `historical-image-reread`, plus a fake OpenAI-compatible two-call runtime test.
 
 ## Why `27efe17` is not the freeze SHA
 
@@ -32,6 +35,8 @@ Historical image reread still requires a model with **Tools and Vision**. The Re
 | Medium | Advertised 10-minute approval wait was bounded by 30 s/120 s tool timers | Pause overall clock during human wait; start a fresh per-tool timer after approve |
 | Medium | `email.send` read Gmail before execution policy | Deny/forbid stops with zero integration access; RequireApproval then fetches the draft |
 | Medium | Multi-tool historical-image wire order | `MapMessages` emits all `role=tool` messages for a round, then image continuations |
+| High | Real GPT-4o mini historical reread failed after `attachments.read`, and the provider body was discarded | Public 400/422 text is `Provider rejected follow-up request (status)`. Logs keep a bounded sanitized provider code, type, and message. A fake two-call runtime test completes the upload → answer → “review the image again” → `attachments.read` path. A minimal live replay of that wire shape returned HTTP 200, so the projection is unchanged. |
+| Medium | Workspace tools treated bare filenames as `/tot.txt` and surfaced generic forbidden errors | `WorkspaceLogicalPath` resolves relative paths from `/workspace/working` in the tool layer; results return canonical paths; `general-assistant` v6 reinforces working-directory behavior. |
 | Low | `waitingExternal` completed twice | `WaitForToolApprovalAsync` is the sole completion owner |
 | Low | TODO still described P3 as the open step and left Approval policy unchecked | Reconciled in this pass |
 
@@ -70,7 +75,7 @@ Earlier hosted evidence on `27efe17` (workflow run `35612462847`) remains histor
 
 | Probe | Status |
 | --- | --- |
-| OpenRouter historical vision / structured response | **SKIPPED** — no hosted keys in default verification |
+| OpenRouter historical vision / structured response | Minimal GPT-4o mini replay of the image follow-up returned HTTP 200 (1×1 PNG, tools, strict schema), for both the current tool transcript and a fresh observation. The UI failure's provider body was not captured. Default suites still skip live OpenRouter. Optional probe: `Gpt4oMini_historical_image_follow_up_is_opt_in_only`. |
 | Brave `web.search` (Real profile) | **SKIPPED** — `BRAVE_SEARCH_API_KEY` not required for acceptance |
 | Gmail live send/search | **SKIPPED** — trusted-local OAuth env not exercised in CI |
 

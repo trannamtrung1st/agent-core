@@ -23,7 +23,8 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(5, latest!.Version);
+        Assert.Equal(6, latest!.Version);
+        Assert.Contains("working directory", latest.SystemInstructions, StringComparison.OrdinalIgnoreCase);
         var environment = RoleEnvironments.Of(latest);
         Assert.Contains("knowledge.retrieve", environment.ToolList);
         Assert.Contains("sandbox.run", environment.ToolList);
