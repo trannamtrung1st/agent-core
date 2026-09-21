@@ -111,12 +111,31 @@ test("long session opens on the newest page and load-older keeps the anchor", as
     await delayed;
     await route.continue();
   });
+
+  const olderRequestStarted = page.waitForRequest((request) => {
+    const parsed = new URL(request.url());
+    return parsed.pathname === `/api/v1/sessions/${sessionId}/messages`
+      && parsed.searchParams.get("before") === "351";
+  });
+
   const loadOlder = page.getByRole("button", { name: "Load earlier messages" }).click();
+
+  await olderRequestStarted;
+  await loadOlder;
+
   await page.getByRole("textbox", { name: "Message" }).fill("Live during older fetch");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Live during older fetch")).toBeVisible({ timeout: 15_000 });
+
+  const olderResponse = page.waitForResponse((response) => {
+    const parsed = new URL(response.url());
+    return parsed.pathname === `/api/v1/sessions/${sessionId}/messages`
+      && parsed.searchParams.get("before") === "351"
+      && response.ok();
+  });
+
   releaseOlder?.();
-  await loadOlder;
+  await olderResponse;
   await expect(page.getByText("History seed 350")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Live during older fetch")).toBeVisible();
 });
@@ -159,7 +178,14 @@ test("switching session ignores a delayed older-history page", async ({ page }) 
       })
     });
   });
-  void page.getByRole("button", { name: "Load earlier messages" }).click({ noWaitAfter: true }).catch(() => undefined);
+  const olderRequestStarted = page.waitForRequest((request) => {
+    const parsed = new URL(request.url());
+    return parsed.pathname === `/api/v1/sessions/${firstId}/messages`
+      && parsed.searchParams.get("before") === "71";
+  });
+  const loadOlder = page.getByRole("button", { name: "Load earlier messages" }).click();
+  await olderRequestStarted;
+  await loadOlder;
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   releaseOlder?.();
