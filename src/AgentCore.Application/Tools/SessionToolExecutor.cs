@@ -32,9 +32,7 @@ public sealed class SessionToolExecutor(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(call.Name)
-            || !ToolCatalog.IsPermittedForExecution(definition, call.Name)
-            || (!string.Equals(call.Name, ToolCatalog.AttachmentsRead, StringComparison.Ordinal)
-                && !ToolCatalog.For(definition).Any(item => string.Equals(item.Name, call.Name, StringComparison.Ordinal))))
+            || ToolPolicy.EvaluateExecution(definition, call.Name) != ToolPolicyDecision.Allow)
         {
             return TextResult(Error("forbidden", "Tool is not permitted for this role."));
         }
