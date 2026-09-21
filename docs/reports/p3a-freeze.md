@@ -5,24 +5,24 @@ This report records observed P3A behavior from the implementation through P3A-4 
 ## Observed behavior
 
 1. **Typed tool results (P3A-1):** `SessionToolExecutor.ExecuteAsync` returns `ToolExecutionResult` with UTF-8 `Text` counted against the tool-output budget and optional ephemeral `Parts` (for example `ModelImageContent`) that are not embedded as base64 in JSON tool text.
-2. **Historical image rehydration (P3A-2):** `attachments.read` on image attachments runs through `IAttachmentProcessor`, returns metadata JSON in `Text` and sanitized image bytes in `Parts`. `ToolResultAdmission.AdmitForModel` removes image `Parts` when `ILanguageModel.Capabilities.Vision` is false and replaces them with `vision_required` JSON in tool text.
-3. **Provider projection (P3A-3):** `OpenAICompatibleLanguageModel.MapMessages` emits textual `role=tool` then an adjacent Infrastructure-only multipart `role=user` tool-data frame with mapped `image_url` parts. Non-vision adapters reject image-bearing tool `Parts` before HTTP. `ScriptedLanguageModel` supports `[test:historical-image-reread]` for deterministic Synthetic tools+vision continuation.
+2. **Historical image rehydration (P3A-2):** `attachments.read` on image attachments runs through `IAttachmentProcessor`, returns metadata JSON in `Text` and sanitized image bytes in `Parts` when the remaining text budget allows. `ToolResultAdmission.AdmitForModel` removes image `Parts` when `ILanguageModel.Capabilities.Vision` is false and replaces them with `vision_required` JSON in tool text.
+3. **Provider projection (P3A-3):** `OpenAICompatibleLanguageModel.MapMessages` emits textual `role=tool` then an adjacent Infrastructure-only multipart `role=user` tool-data frame with mapped `image_url` parts. Non-vision adapters reject image-bearing tool `Parts` before HTTP. `ScriptedLanguageModel` supports `[test:historical-image-reread]` for deterministic Synthetic tools+vision continuation. Persisted snapshots do not retain wire-only tool-data framing or image base64 from tool continuations.
 4. **User-visible verification (P3A-4):** Playwright `historical-image-reread.spec.ts` covers later-turn Scripted Vision reread and tools-capable Scripted Alpha refusal to claim historical image sight.
 
 ## Freeze status
 
-**Not frozen yet.** Plan acceptance requires P3A-1–P3A-3 **focused_output** review findings closed on the same HEAD as the final key-free gate. Focused review is requested against production output revision 4 (`output_digest` `f0246cbb6babdb60636ba4c8cdd81f77be7be78b6f9912c90eec9cd5ac03fa6e`) covering items `item-55860b7a0539`, `item-af8b8cb86adc`, and `item-e70215227ccf`. P3B must not start until review closure and a reconciled gate on the post-closure HEAD.
+**Observed/frozen** (2026-09-21). **Implementation HEAD** `c0f8a8594c509e0841a2cf7c3078926779c0a5ec` (`c0f8a85`) carries P3A runtime behavior and passed the key-free gate below after focused-output review closure. **Freeze documentation** (this report, [Implementation Plan](../18-implementation-plan.md) P3A section, and `TODO.md`) is committed in the TDP P3A-4 production batch on the same branch immediately after that gate. P3A-1–P3A-3 **focused_output** review loop `review-focused-output-01` closed **verified** on production output revision 5 at `c0f8a85`. **P3B** may proceed; public-web work remains blocked until P3B workspace/registry slices complete per proposal §22.
 
-## Key-free gate (P3A-4 batch, pre-freeze)
+## Key-free gate (implementation HEAD `c0f8a85`)
 
-Commands match `.github/workflows/synthetic.yml` on HEAD `62ea1d8b524d9d0079d9defb397e7e0473b52903` (`62ea1d8`, 2026-09-21), recorded in TDP production batch for `item-70caa87b782c`. This gate is **non-final** until focused-output review closes and any corrective commits re-run the same suite on the reconciled HEAD.
+Commands match `.github/workflows/synthetic.yml` on implementation HEAD `c0f8a85` (2026-09-21), recorded in TDP production batch for `item-70caa87b782c`.
 
 | Stage | Result |
 | --- | --- |
 | `tests/realtime-js` `npm ci` | OK |
 | Domain tests | 76 passed |
 | Infrastructure tests | 202 passed / 12 skipped |
-| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 480 passed, no hang |
+| Application tests (`--blame-hang --blame-hang-timeout 5m`) | 489 passed, no hang |
 | API tests | 162 passed |
 | Web Vitest | 384 passed |
 | Web production build | OK |

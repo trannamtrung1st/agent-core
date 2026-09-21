@@ -681,7 +681,7 @@ P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + 
 
 ### P2E stop condition
 
-P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection was explicitly deferred to **P3A** and does not reopen P2E. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. P3 has not started; its first recommended slice is historical multimodal attachment re-inspection. **P4** follows P3. P6 has not started.
+P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection was explicitly deferred to **P3A** and does not reopen P2E. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. **P3A** historical multimodal reread is **observed/frozen** (2026-09-21; gate on `c0f8a85`; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md)). Active P3 work continues with **P3B**; **P4** follows full P3 closure. P6 has not started.
 
 ---
 
@@ -949,7 +949,7 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
-**P3 has not started.** The first recommended implementation slice is **P3A — Historical multimodal attachment re-inspection**. P4 follows after P3.
+**P3 is in progress.** **P3A — Historical multimodal attachment re-inspection** is **observed/frozen** (2026-09-21; implementation `c0f8a85`). Next slices: **P3B** trusted registry and workspace/artifact workflows, then **P3C** public web, **P3D** approvals and email, and **P3E** reconciliation. P4 follows after P3 closure.
 
 Already present:
 
@@ -977,7 +977,7 @@ Build on this instead of replacing it.
 - [x] Require trusted model **Tools** capability for model-initiated `attachments.read` and **Vision** capability before historical image content reaches the provider. Never silently drop the image, pretend it was seen, or switch models automatically.
 - [x] Preserve existing text/PDF `attachments.read` behavior, session ownership and cross-session isolation, sanitized/canonical image bytes with truthful MIME, persisted/reopened session support, and runtime-epoch/cancellation/supersession fencing.
 
-P3A implementation slices P3A-0–P3A-3 are recorded in TDP production evidence. P3A-4 verification, docs, and freeze gate are in progress; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md). P3B does not start until P3A focused-output review (P3A-1–P3A-3) closes on the freeze HEAD.
+P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focused-output review closure for P3A-1–P3A-3 on that HEAD; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md). **P3B** is the active implementation slice.
 
 ## Tool architecture evolution
 
@@ -1570,7 +1570,7 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] OpenAI-compatible image-content mapping.
 - [x] Deterministic PNG→vision-request coverage.
 - [x] User-facing capability-aware image/model admission (P2E).
-- [ ] P3A historical multimodal attachment re-inspection beyond the original turn — first recommended P3 slice; P3 has not started.
+- [x] P3A historical multimodal attachment re-inspection beyond the original turn — **observed/frozen** (2026-09-21; `c0f8a85`).
 - [x] Existing rich-response envelope with display/speech/blocks.
 - [x] Internal same-mode `speech.text` when playback differs from display.
 - [x] Public/history `speechText` custom-only (P2B).
