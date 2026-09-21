@@ -538,10 +538,20 @@ public sealed class HistoricalImageRereadTests
         var terminals = output.Items.Select(item => item.Payload).OfType<ResponseCompletedOutput>().ToArray();
         Assert.True(terminals.Length >= 2);
         Assert.False(terminals[^1].Failed);
+        var secondTerminalEnvelope = output.Items.Last(item => item.Payload is ResponseCompletedOutput);
+        var secondResponseText = string.Join(
+            string.Empty,
+            output.Items
+                .Where(item => item.ResponseId == secondTerminalEnvelope.ResponseId)
+                .Select(item => item.Payload)
+                .OfType<TextDeltaOutput>()
+                .Select(delta => delta.Text));
+        Assert.False(string.IsNullOrWhiteSpace(secondResponseText));
         var persisted = (await store.LoadAsync(runtime.SessionId))!;
         var assistant = persisted.Entries.Where(entry => entry.Role == ConversationRole.Assistant).ToArray();
         Assert.True(assistant.Length >= 2);
         Assert.False(string.IsNullOrWhiteSpace(assistant[^1].Text));
+        Assert.Contains(secondResponseText.Trim(), assistant[^1].Text, StringComparison.Ordinal);
     }
 
     private static byte[] StructuredSse(string displayText)
