@@ -13,12 +13,13 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 | Implementation review (email/approval correction tail) | **Accepted** — no remaining P3 code blockers identified |
 | Local key-free gate (table below) | **Green** on `2561167` |
 | Hosted Compose smoke (`2561167`) | **Green** |
-| Hosted offline Synthetic (`2561167`, workflow run `35626513959`) | **Pending** at last check (Domain passed; remaining jobs in flight) |
-| P3 re-freeze | **Blocked** until hosted offline Synthetic + Compose are green on `2561167` |
+| Hosted offline Synthetic (`2561167`, workflow run `35626513959`) | **Failed** — all backend stages and web unit/build passed; **Synthetic Playwright** step failed (not Gmail/Application regression) |
+| Hosted offline Synthetic (`06198a9`, workflow run `35627313751`) | **Pending/in progress** at last check (docs-only commit; same runtime as `2561167`) |
+| P3 re-freeze | **Blocked** until hosted offline Synthetic + Compose are green on `2561167` (or doc-equivalent `06198a9` rerun) |
 
 **Hosted note:** workflow run `35624825677` on `ec4dedc` failed in Application on `ResponseProgressRuntimeTests.Attachment_progress_starts_and_completes_without_entering_history` (empty global telemetry timeline). Infrastructure—including Gmail contract tests—passed; the failure is treated as an unrelated progress/telemetry flake, not a Gmail regression. If the same test fails on `35626513959`, investigate flake separately rather than reopening P3 architecture.
 
-When workflow run `35626513959` (or a rerun on `2561167`) completes green, record it here and treat **`2561167` as the P3 correction freeze SHA**; roadmap handoff is **P4**.
+When a hosted offline Synthetic + Compose workflow completes **green** on `2561167` (rerun if `35626513959` Playwright failure is environmental), record the run id here and treat **`2561167` as the P3 correction freeze SHA**; roadmap handoff is **P4**. Treat Playwright-only failures with green backend on the same HEAD as gate/infra follow-up unless they reproduce locally.
 
 ## Why `27efe17` is not the freeze SHA
 
