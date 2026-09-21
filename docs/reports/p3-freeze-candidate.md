@@ -15,7 +15,7 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 | Hosted offline Synthetic on `2561167` (workflow `35626513959`) | **Failed** at Playwright (`Queued messages` resolved twice). Backend stayed green. Treated as the existing queue flake, not a P3 regression. |
 | Hosted Application flake on `ec4dedc` (`35624825677`, `ResponseProgressRuntimeTests` empty telemetry timeline) | Unrelated to Gmail; not a reopen. |
 | Local key-free gate after the usability correction | Recorded in the table below on the commit that lands this report. |
-| P3 freeze SHA | The commit that lands this report (usability correction + this status). Hosted confirmation is the Synthetic workflow for that commit. `27efe17`, `5e468e3`, and `2561167` are not the freeze SHA. |
+| P3 freeze SHA | `e255916` (usability correction). Hosted confirmation is workflow `35630920349` on that SHA (in progress at last check). Prior hosted green: `35627313751` on `06198a9`. `27efe17`, `5e468e3`, and `2561167` are not the freeze SHA. |
 
 Historical image reread still requires a model with **Tools and Vision**. The Real default DeepSeek V4.1 Flash is tools-capable and vision-incapable, so `attachments.read` returns `vision_required`. Synthetic coverage remains `scripted-vision` / `historical-image-reread`. A non-vision session failing to inspect an old image is expected.
 
