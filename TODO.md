@@ -9,7 +9,7 @@ Current roadmap:
 1. **P2A — first-class progress semantics** is **observed** and frozen;
 2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
 3. **P2E — multimodal/image input usability and capability handling** — **observed/frozen** (2026-09-21 key-free Synthetic + Compose gate on freeze HEAD);
-4. **P3 — tools and external integrations** freeze on `27efe17` was reopened; the correction freeze is the commit containing [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md);
+4. **P3 — tools and external integrations** correction freeze is the commit containing [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md) after the email/approval tail and the `web.fetch` / `general-assistant` v5 usability correction; hosted workflow `35627313751` was green on docs HEAD `06198a9`;
 5. **P4 — add context compaction and memory** after P3;
 6. add configurable triggers;
 7. add durable background work;

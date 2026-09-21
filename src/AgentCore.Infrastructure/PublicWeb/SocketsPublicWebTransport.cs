@@ -21,7 +21,7 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns) : IPu
             return new PublicWebTransportResponse(
                 (int)response.StatusCode,
                 redirect,
-                response.Content.Headers.ContentType?.MediaType,
+                response.Content.Headers.ContentType?.ToString(),
                 body);
         }
         catch (HttpRequestException ex)

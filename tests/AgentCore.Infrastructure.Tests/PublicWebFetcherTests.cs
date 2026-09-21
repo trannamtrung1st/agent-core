@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.PublicWeb;
@@ -122,6 +123,32 @@ public sealed class PublicWebFetcherTests
     }
 
     [Fact]
+    public async Task Fetch_decodes_declared_iso_8859_1_charset()
+    {
+        var transport = new FakeTransport();
+        transport.Enqueue(
+            new Uri("https://example.com/latin"),
+            new PublicWebTransportResponse(
+                200,
+                null,
+                "text/plain; charset=iso-8859-1",
+                [0x63, 0x61, 0x66, 0xE9]));
+        IPublicWebFetcher fetcher = new PublicWebFetcher(transport);
+        var result = await fetcher.FetchAsync(new PublicWebFetchRequest(new Uri("https://example.com/latin")));
+        Assert.Null(result.ErrorCode);
+        Assert.Equal("café", result.Text);
+    }
+
+    [Fact]
+    public async Task Fetch_maps_generic_transport_failure_to_transport_error()
+    {
+        IPublicWebFetcher fetcher = new PublicWebFetcher(new ThrowingTransport());
+        var result = await fetcher.FetchAsync(new PublicWebFetchRequest(new Uri("https://example.com/")));
+        Assert.Equal("transport_error", result.ErrorCode);
+        Assert.NotEqual("forbidden_host", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task Synthetic_search_returns_deterministic_bounded_results()
     {
         var provider = new SyntheticWebSearchProvider();
@@ -160,5 +187,11 @@ public sealed class PublicWebFetcherTests
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             return new PublicWebTransportResponse(200, null, "text/plain", "late"u8.ToArray());
         }
+    }
+
+    private sealed class ThrowingTransport : IPublicWebTransport
+    {
+        public ValueTask<PublicWebTransportResponse> GetAsync(Uri uri, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("connection reset");
     }
 }

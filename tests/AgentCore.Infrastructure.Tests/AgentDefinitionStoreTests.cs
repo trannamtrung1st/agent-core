@@ -22,6 +22,15 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(compliance);
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
+        var latest = await store.GetAsync("general-assistant");
+        Assert.Equal(5, latest!.Version);
+        var environment = RoleEnvironments.Of(latest);
+        Assert.Contains("knowledge.retrieve", environment.ToolList);
+        Assert.Contains("sandbox.run", environment.ToolList);
+        Assert.Contains("email.send", environment.ToolList);
+        Assert.DoesNotContain("attachments.read", environment.ToolList);
+        Assert.Contains(environment.KnowledgeList, source => source.Identity == "support-order-policy");
+        Assert.Contains(environment.KnowledgeList, source => source.Identity == "compliance-retention");
         Assert.True(ConversationLanguagePolicy.IsAuto(general.ConversationPolicy.Language));
         Assert.False(general.InitiativePolicy.Enabled);
         Assert.Equal(4096, general.ConversationPolicy.MaxOutputTokens);

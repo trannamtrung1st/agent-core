@@ -62,8 +62,8 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
         {
             return Error(
                 request.Url.ToString(),
-                "forbidden_host",
-                "Host is not permitted for public web fetch.");
+                "transport_error",
+                "Public web fetch failed before a response was received.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -79,25 +79,15 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
             return Error(finalUrl, "unsupported_media_type", "Only textual content types are supported.");
         }
 
-        string text;
-        if (mediaType.Contains("html", StringComparison.Ordinal))
+        var decoded = DecodeText(body, contentType);
+        if (decoded is null)
         {
-            var html = DecodeUtf8(body);
-            if (html is null)
-            {
-                return Error(finalUrl, "invalid_utf8", "Response body must be strict UTF-8 text.");
-            }
+            return Error(finalUrl, "invalid_text", "Response body could not be decoded with the declared charset.");
+        }
 
-            text = PublicWebHtmlTextExtractor.Extract(html);
-        }
-        else
-        {
-            text = DecodeUtf8(body) ?? "";
-            if (text.Length == 0 && body.Length > 0)
-            {
-                return Error(finalUrl, "invalid_utf8", "Response body must be strict UTF-8 text.");
-            }
-        }
+        var text = mediaType.Contains("html", StringComparison.Ordinal)
+            ? PublicWebHtmlTextExtractor.Extract(decoded)
+            : decoded;
 
         var truncated = false;
         if (text.Length > PublicWebLimits.MaxProjectedTextChars)
@@ -113,20 +103,82 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
         mediaType.StartsWith("text/", StringComparison.Ordinal)
         || mediaType is "application/json" or "application/xml" or "application/xhtml+xml";
 
-    private static string? DecodeUtf8(byte[] bytes)
+    private static readonly Encoding Utf8Strict = Encoding.GetEncoding(
+        "utf-8",
+        EncoderFallback.ExceptionFallback,
+        DecoderFallback.ExceptionFallback);
+
+    private static readonly HashSet<string> AllowedCharsets = new(StringComparer.OrdinalIgnoreCase)
     {
+        "utf-8",
+        "utf8",
+        "us-ascii",
+        "ascii",
+        "iso-8859-1",
+        "latin1",
+        "windows-1252"
+    };
+
+    private static string? DecodeText(byte[] bytes, string? contentType)
+    {
+        if (bytes.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var charset = ReadCharset(contentType);
+        Encoding encoding;
+        if (charset is null)
+        {
+            encoding = Utf8Strict;
+        }
+        else if (!AllowedCharsets.Contains(charset))
+        {
+            return null;
+        }
+        else
+        {
+            try
+            {
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                encoding = Encoding.GetEncoding(
+                    charset,
+                    EncoderFallback.ExceptionFallback,
+                    DecoderFallback.ExceptionFallback);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
         try
         {
-            return Encoding.GetEncoding(
-                    "utf-8",
-                    EncoderFallback.ExceptionFallback,
-                    DecoderFallback.ExceptionFallback)
-                .GetString(bytes);
+            return encoding.GetString(bytes);
         }
         catch (DecoderFallbackException)
         {
             return null;
         }
+    }
+
+    private static string? ReadCharset(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return null;
+        }
+
+        foreach (var part in contentType.Split(';'))
+        {
+            var trimmed = part.Trim();
+            if (trimmed.StartsWith("charset=", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed["charset=".Length..].Trim().Trim('"');
+            }
+        }
+
+        return null;
     }
 
     private static PublicWebFetchResult Error(string finalUrl, string? code, string? message) =>

@@ -6,20 +6,18 @@ P3A remains independently frozen on implementation HEAD `c0f8a85` ([p3a-freeze.m
 
 ## Freeze status
 
-**Correction freeze candidate** (2026-09-21). **Implementation HEAD** `2561167ccf4adb02bda673f08f4b36dd1640987c` (`2561167`) is the correction tail after implementation review: Gmail `POST /users/me/drafts/send` with approved `message.raw` (`ec4dedc`) plus draft-id ↔ approved-snapshot guard before OAuth (`2561167`). Prior batches `5e468e3` and `27efe17` are not freeze SHAs.
+**P3 correction freeze** (2026-09-22) after the email/approval tail and a final usability correction (`general-assistant` v5 full demo tools; `web.fetch` multi-address fallback, `transport_error`, declared charset).
 
-| Gate | Status (2026-09-21) |
+| Gate | Status |
 | --- | --- |
-| Implementation review (email/approval correction tail) | **Accepted** — no remaining P3 code blockers identified |
-| Local key-free gate (table below) | **Green** on `2561167` |
-| Hosted Compose smoke (`2561167`) | **Green** |
-| Hosted offline Synthetic (`2561167`, workflow run `35626513959`) | **Failed** — all backend stages and web unit/build passed; **Synthetic Playwright** step failed (not Gmail/Application regression) |
-| Hosted offline Synthetic (`06198a9`, workflow run `35627313751`) | **Pending/in progress** at last check (docs-only commit; same runtime as `2561167`) |
-| P3 re-freeze | **Blocked** until hosted offline Synthetic + Compose are green on `2561167` (or doc-equivalent `06198a9` rerun) |
+| Email/approval implementation review (`ec4dedc`–`2561167`) | **Accepted** |
+| Hosted offline Synthetic + Compose on `06198a9` (workflow `35627313751`) | **Green** (backend, frontend, Playwright, Compose). This SHA is docs-only relative to `2561167`. |
+| Hosted offline Synthetic on `2561167` (workflow `35626513959`) | **Failed** at Playwright (`Queued messages` resolved twice). Backend stayed green. Treated as the existing queue flake, not a P3 regression. |
+| Hosted Application flake on `ec4dedc` (`35624825677`, `ResponseProgressRuntimeTests` empty telemetry timeline) | Unrelated to Gmail; not a reopen. |
+| Local key-free gate after the usability correction | Recorded in the table below on the commit that lands this report. |
+| P3 freeze SHA | The commit that lands this report (usability correction + this status). Hosted confirmation is the Synthetic workflow for that commit. `27efe17`, `5e468e3`, and `2561167` are not the freeze SHA. |
 
-**Hosted note:** workflow run `35624825677` on `ec4dedc` failed in Application on `ResponseProgressRuntimeTests.Attachment_progress_starts_and_completes_without_entering_history` (empty global telemetry timeline). Infrastructure—including Gmail contract tests—passed; the failure is treated as an unrelated progress/telemetry flake, not a Gmail regression. If the same test fails on `35626513959`, investigate flake separately rather than reopening P3 architecture.
-
-When a hosted offline Synthetic + Compose workflow completes **green** on `2561167` (rerun if `35626513959` Playwright failure is environmental), record the run id here and treat **`2561167` as the P3 correction freeze SHA**; roadmap handoff is **P4**. Treat Playwright-only failures with green backend on the same HEAD as gate/infra follow-up unless they reproduce locally.
+Historical image reread still requires a model with **Tools and Vision**. The Real default DeepSeek V4.1 Flash is tools-capable and vision-incapable, so `attachments.read` returns `vision_required`. Synthetic coverage remains `scripted-vision` / `historical-image-reread`. A non-vision session failing to inspect an old image is expected.
 
 ## Why `27efe17` is not the freeze SHA
 
@@ -30,6 +28,7 @@ When a hosted offline Synthetic + Compose workflow completes **green** on `25611
 | High | Manual MIME headers allowed CR/LF injection | MimeKit builder/parser; CR/LF/NUL rejected in header-bearing input |
 | High | Gmail send used wrong REST path and draft id only (TOCTOU) | `POST /users/me/drafts/send` with hash-validated `message.raw` in the request body; HTTP contract test asserts path and payload |
 | Medium | Approved snapshot could disagree with top-level draft id | `SendDraftAsync` rejects `DraftId` ≠ `ApprovedDraft.DraftId` before token HTTP; contract test asserts zero token/send on mismatch |
+| Medium | `web.fetch` gave up after the first permitted address and mapped transport failures to `forbidden_host` | Try every permitted address; connection failure is `transport_error`; textual bodies honor a bounded declared charset |
 | Medium | Advertised 10-minute approval wait was bounded by 30 s/120 s tool timers | Pause overall clock during human wait; start a fresh per-tool timer after approve |
 | Medium | `email.send` read Gmail before execution policy | Deny/forbid stops with zero integration access; RequireApproval then fetches the draft |
 | Medium | Multi-tool historical-image wire order | `MapMessages` emits all `role=tool` messages for a round, then image continuations |
@@ -45,25 +44,25 @@ When a hosted offline Synthetic + Compose workflow completes **green** on `25611
 | P3C-1 | `IWebSearchProvider` / `IPublicWebFetcher`, SSRF-safe fetch, Synthetic/Brave search | TDP batch `ee5fbdf` |
 | P3C-2 | `web.search` / `web.fetch`, configuration gate, `general-assistant` v2 | TDP batch `e538626` |
 | P3D-1 | `RequireApproval`, `agent.approval.requested` / `RespondApproval`, UI modal, `demo.sensitive_action`; human wait isolated from 30 s/120 s clocks | TDP batch `eed3169` plus this correction |
-| P3D-2 | `email.*` tools, exact-draft hash including Bcc, MimeKit Gmail MIME, Synthetic/Gmail providers, `general-assistant` v4 | TDP batch `1aeec60` plus this correction |
+| P3D-2 | `email.*` tools, exact-draft hash including Bcc, MimeKit Gmail MIME, Synthetic/Gmail providers, `general-assistant` v4 then v5 full demo allowlist | TDP batch `1aeec60` plus this correction |
 
 Deferred unchanged: generic `http.request`, sandbox networking modes, calendar, P4–P6, plugin marketplace, browser OAuth.
 
 ## Final key-free gate (correction tree)
 
-Commands match `.github/workflows/synthetic.yml` (2026-09-21). Local rerun after `ec4dedc` plus draft-id guard and documentation alignment:
+Commands match `.github/workflows/synthetic.yml` (2026-09-22). Local rerun after `general-assistant` v5 and the `web.fetch` transport correction:
 
 | Stage | Result |
 | --- | --- |
 | `tests/realtime-js` `npm ci` | OK |
 | Domain tests | 76 passed |
-| Infrastructure tests | 251 passed / 6 skipped |
+| Infrastructure tests | 250 passed / 12 skipped |
 | Application tests (`--blame-hang --blame-hang-timeout 5m`) | 535 passed |
 | API tests | 165 passed |
 | Web Vitest | 384 passed |
 | Web production build | OK |
-| `CI=1 pnpm exec playwright test` | 46 passed (includes `approval-flow`, `email-harness` To/Cc/Bcc/Subject/body, `historical-image-reread`) |
-| `./scripts/compose-sqlite-volume.sh` | `compose sqlite volume check passed` |
+| `CI=1 pnpm exec playwright test` | 46 passed on ports 5090/5183 (5080 was already in use). Includes `historical-image-reread` and `scripted-vision` (3/3) |
+| `./scripts/compose-sqlite-volume.sh` | **Not rerun** — 127.0.0.1:5080 already bound. Last hosted Compose green is workflow `35627313751` on `06198a9` |
 
 Earlier hosted evidence on `27efe17` (workflow run `35612462847`) remains historical; it is not this correction HEAD.
 
