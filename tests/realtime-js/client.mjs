@@ -111,6 +111,19 @@ async function createSession() {
   return response.json();
 }
 
+async function createGeneralAssistantSession(agentVersion = 3) {
+  await ensureOwner();
+  const response = await fetch(`${base}/api/v1/sessions`, {
+    method: "POST",
+    headers: await ownerHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ agentId: "general-assistant", agentVersion, mode: "text" })
+  });
+  if (!response.ok) {
+    throw new Error(`general-assistant create failed ${response.status}`);
+  }
+  return response.json();
+}
+
 async function createVoiceSession() {
   await ensureOwner();
   const response = await fetch(`${base}/api/v1/sessions`, {
@@ -1498,6 +1511,82 @@ async function run() {
       if (users[0] !== "Hello" || users[1] !== "queued later" || assistants.length !== 1) {
         throw new Error(`queue after stop: ${JSON.stringify(history.items)}`);
       }
+      await connection.stop();
+      break;
+    }
+    case "approval-stale-respond": {
+      const session = await createGeneralAssistantSession(3);
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(
+          session.sessionId,
+          1,
+          "user.text",
+          { text: "Please run sensitive approval for the demo." },
+          { attachmentId }
+        )
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      const approvalEvt = await waitForEvent((evt) => evt.type === "agent.approval.requested");
+      if (!approvalEvt.payload?.approvalId || !approvalEvt.payload?.toolName) {
+        throw new Error(`approval payload missing fields: ${JSON.stringify(approvalEvt)}`);
+      }
+      const stale = await connection.invoke(
+        "RespondApproval",
+        command(
+          session.sessionId,
+          2,
+          "agent.approval.respond",
+          { approvalId: crypto.randomUUID(), decision: "approve" },
+          { attachmentId, responseId: approvalEvt.responseId }
+        )
+      );
+      if (stale.accepted || stale.error?.code !== "StaleCommand") {
+        throw new Error(JSON.stringify(stale));
+      }
+      await connection.stop();
+      break;
+    }
+    case "approval-reject-respond": {
+      const session = await createGeneralAssistantSession(3);
+      const connection = await connect();
+      await attachSession(connection, session.sessionId);
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const send = await connection.invoke(
+        "SendText",
+        command(
+          session.sessionId,
+          1,
+          "user.text",
+          { text: "Need sensitive approval now." },
+          { attachmentId }
+        )
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      const approvalEvt = await waitForEvent((evt) => evt.type === "agent.approval.requested");
+      const reject = await connection.invoke(
+        "RespondApproval",
+        command(
+          session.sessionId,
+          2,
+          "agent.approval.respond",
+          { approvalId: approvalEvt.payload.approvalId, decision: "reject" },
+          { attachmentId, responseId: approvalEvt.responseId }
+        )
+      );
+      if (!reject.accepted) {
+        throw new Error(JSON.stringify(reject));
+      }
+      await waitForEvent((evt) => evt.type === "agent.response.completed");
       await connection.stop();
       break;
     }
