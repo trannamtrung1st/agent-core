@@ -2137,11 +2137,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             CancellationToken.None)
                         .ConfigureAwait(false);
 
-                    string result;
+                    ToolExecutionResult executionResult;
                     var toolStarted = Stopwatch.GetTimestamp();
                     try
                     {
-                        result = await _tools.ExecuteAsync(
+                        executionResult = await _tools.ExecuteAsync(
                                 _snapshot.Definition,
                                 SessionId,
                                 call,
@@ -2175,7 +2175,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
-                    outputBytes += Encoding.UTF8.GetByteCount(result);
+                    outputBytes += ToolOutputBudget.TextByteCount(executionResult);
                     if (outputBytes > ToolLimits.MaxOutputBytes)
                     {
                         await PublishProgressAsync(
@@ -2207,7 +2207,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             ResponseProgressMessages.RunningTools,
                             CancellationToken.None)
                         .ConfigureAwait(false);
-                    messages.Add(new ModelMessage(ModelRole.Tool, result, ToolCallId: call.Id, Name: call.Name));
+                    messages.Add(new ModelMessage(
+                        ModelRole.Tool,
+                        executionResult.Text,
+                        Parts: executionResult.Parts,
+                        ToolCallId: call.Id,
+                        Name: call.Name));
                     steps++;
                 }
 

@@ -23,7 +23,7 @@ public sealed class SessionToolExecutor(
         PropertyNameCaseInsensitive = true
     };
 
-    public async Task<string> ExecuteAsync(
+    public async Task<ToolExecutionResult> ExecuteAsync(
         AgentDefinition definition,
         Guid sessionId,
         ModelToolCall call,
@@ -36,7 +36,7 @@ public sealed class SessionToolExecutor(
             || (!string.Equals(call.Name, ToolCatalog.AttachmentsRead, StringComparison.Ordinal)
                 && !ToolCatalog.For(definition).Any(item => string.Equals(item.Name, call.Name, StringComparison.Ordinal))))
         {
-            return Error("forbidden", "Tool is not permitted for this role.");
+            return TextResult(Error("forbidden", "Tool is not permitted for this role."));
         }
 
         JsonElement args;
@@ -47,17 +47,17 @@ public sealed class SessionToolExecutor(
                 JsonOptions);
             if (args.ValueKind != JsonValueKind.Object)
             {
-                return Error("invalid", "Tool arguments must be a JSON object.");
+                return TextResult(Error("invalid", "Tool arguments must be a JSON object."));
             }
         }
         catch (JsonException)
         {
-            return Error("invalid", "Tool arguments were malformed.");
+            return TextResult(Error("invalid", "Tool arguments were malformed."));
         }
 
         if (LooksLikeSessionMutation(args) || LooksLikeHostPath(args))
         {
-            return Error("forbidden", "Tool arguments are not permitted.");
+            return TextResult(Error("forbidden", "Tool arguments are not permitted."));
         }
 
         try
@@ -80,7 +80,7 @@ public sealed class SessionToolExecutor(
                     .ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
-            return ToolJsonResults.FitToBudget(remainingOutputBytes, raw);
+            return FitResult(remainingOutputBytes, raw);
         }
         catch (OperationCanceledException)
         {
@@ -88,9 +88,14 @@ public sealed class SessionToolExecutor(
         }
         catch (AgentCoreException ex)
         {
-            return ToolJsonResults.FitToBudget(remainingOutputBytes, Error(ex.Code, ex.Message));
+            return FitResult(remainingOutputBytes, Error(ex.Code, ex.Message));
         }
     }
+
+    private static ToolExecutionResult TextResult(string text) => ToolExecutionResult.FromText(text);
+
+    private static ToolExecutionResult FitResult(int remainingOutputBytes, string raw) =>
+        TextResult(ToolJsonResults.FitToBudget(remainingOutputBytes, raw));
 
     private async Task<string> RetrieveKnowledgeAsync(
         AgentDefinition definition,

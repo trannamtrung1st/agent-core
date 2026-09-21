@@ -26,12 +26,17 @@ public sealed class SessionToolExecutorTests
             "image/png",
             new MemoryStream(PngBytes()),
             false);
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
+            Support(),
+            sessionId,
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
+        Assert.Contains("\"kind\":\"image\"", result, StringComparison.Ordinal);
+        Assert.Null((await executor.ExecuteAsync(
             Support(),
             sessionId,
             new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
-        Assert.Contains("\"kind\":\"image\"", result, StringComparison.Ordinal);
+            ToolLimits.MaxOutputBytes)).Parts);
         Assert.Contains("image/png", result, StringComparison.Ordinal);
         Assert.Contains("vision", result, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\uFFFD", result, StringComparison.Ordinal);
@@ -43,27 +48,27 @@ public sealed class SessionToolExecutorTests
         var workspace = new RecordingWorkspace();
         var executor = new SessionToolExecutor(workspace: workspace);
         var sessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
-        var host = await executor.ExecuteAsync(
+        var host = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
-            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"/etc/passwd","content":"x"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c1", ToolCatalog.WorkspaceWrite, """{"path":"/etc/passwd","content":"x"}"""));
         Assert.Contains("forbidden", host, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(workspace.Writes);
 
-        var windows = await executor.ExecuteAsync(
+        var windows = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
-            new ModelToolCall("c2", ToolCatalog.WorkspaceWrite, """{"path":"C:\\Windows\\system32","content":"x"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c2", ToolCatalog.WorkspaceWrite, """{"path":"C:\\Windows\\system32","content":"x"}"""));
         Assert.Contains("forbidden", windows, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(workspace.Writes);
 
-        var mutate = await executor.ExecuteAsync(
+        var mutate = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
-            new ModelToolCall("c3", ToolCatalog.KnowledgeRetrieve, """{"identity":"support-order-policy","mutateSession":true}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c3", ToolCatalog.KnowledgeRetrieve, """{"identity":"support-order-policy","mutateSession":true}"""));
         Assert.Contains("forbidden", mutate, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -71,29 +76,29 @@ public sealed class SessionToolExecutorTests
     public async Task Process_and_malformed_payloads_are_denied()
     {
         var executor = new SessionToolExecutor();
-        var process = await executor.ExecuteAsync(
+        var process = await ExecuteTextAsync(
+            executor,
             Support(),
             Guid.NewGuid(),
-            new ModelToolCall("c1", "process", """{"cmd":"ls"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c1", "process", """{"cmd":"ls"}"""));
         Assert.Contains("forbidden", process, StringComparison.OrdinalIgnoreCase);
 
-        var malformed = await executor.ExecuteAsync(
+        var malformed = await ExecuteTextAsync(
+            executor,
             Support(),
             Guid.NewGuid(),
-            new ModelToolCall("c2", ToolCatalog.KnowledgeRetrieve, "{"),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c2", ToolCatalog.KnowledgeRetrieve, "{"));
         Assert.Contains("invalid", malformed, StringComparison.OrdinalIgnoreCase);
 
         var sandbox = new RecordingSandbox();
         var withSandbox = new SessionToolExecutor(sandbox: sandbox);
         foreach (var name in new[] { "process", "shell", "bash", "cmd", "powershell", "exec" })
         {
-            var denied = await withSandbox.ExecuteAsync(
+            var denied = await ExecuteTextAsync(
+                withSandbox,
                 Support(),
                 Guid.NewGuid(),
-                new ModelToolCall("c3", name, """{"cmd":"ls"}"""),
-                ToolLimits.MaxOutputBytes);
+                new ModelToolCall("c3", name, """{"cmd":"ls"}"""));
             Assert.Contains("forbidden", denied, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -107,14 +112,14 @@ public sealed class SessionToolExecutorTests
         var executor = new SessionToolExecutor(artifacts: artifacts);
         var sessionId = Guid.NewGuid();
         var fabricated = Guid.NewGuid();
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
             Artifacts(),
             sessionId,
             new ModelToolCall(
                 "c1",
                 ToolCatalog.ArtifactsCreate,
-                $$"""{"displayName":"note.md","content":"hello","sourceAttachmentId":"{{fabricated:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
+                $$"""{"displayName":"note.md","content":"hello","sourceAttachmentId":"{{fabricated:D}}"}"""));
         Assert.Contains("\"artifactId\"", result, StringComparison.Ordinal);
         Assert.DoesNotContain(fabricated.ToString("D"), result, StringComparison.Ordinal);
         var listed = await artifacts.ListAsync(sessionId);
@@ -127,29 +132,29 @@ public sealed class SessionToolExecutorTests
     {
         var sandbox = new RecordingSandbox();
         var executor = new SessionToolExecutor(sandbox: sandbox);
-        var forbidden = await executor.ExecuteAsync(
+        var forbidden = await ExecuteTextAsync(
+            executor,
             Support(),
             Guid.NewGuid(),
-            new ModelToolCall("c1", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c1", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""));
         Assert.Contains("forbidden", forbidden, StringComparison.OrdinalIgnoreCase);
         Assert.Null(sandbox.Last);
 
-        var allowed = await executor.ExecuteAsync(
+        var allowed = await ExecuteTextAsync(
+            executor,
             Sandboxed(),
             Guid.NewGuid(),
-            new ModelToolCall("c2", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c2", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""));
         Assert.Contains("\"ok\":true", allowed, StringComparison.Ordinal);
         Assert.NotNull(sandbox.Last);
         Assert.Equal("echo", sandbox.Last!.Verb);
 
         var missing = new SessionToolExecutor();
-        var unavailable = await missing.ExecuteAsync(
+        var unavailable = await ExecuteTextAsync(
+            missing,
             Sandboxed(),
             Guid.NewGuid(),
-            new ModelToolCall("c3", ToolCatalog.SandboxRun, """{"verb":"echo"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c3", ToolCatalog.SandboxRun, """{"verb":"echo"}"""));
         Assert.Contains("unavailable", unavailable, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -165,11 +170,11 @@ public sealed class SessionToolExecutorTests
             "text/plain; charset=utf-8",
             new MemoryStream("Retention policy excerpt."u8.ToArray()),
             false);
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
         using var json = JsonDocument.Parse(result);
         Assert.Equal("Retention policy excerpt.", json.RootElement.GetProperty("content").GetString());
     }
@@ -187,11 +192,11 @@ public sealed class SessionToolExecutorTests
             "text/plain",
             new MemoryStream(bytes),
             false);
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
         using var json = JsonDocument.Parse(result);
         Assert.Equal(Convert.ToBase64String(bytes), json.RootElement.GetProperty("content").GetString());
         Assert.DoesNotContain("\uFFFD", result, StringComparison.Ordinal);
@@ -202,7 +207,8 @@ public sealed class SessionToolExecutorTests
     {
         var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var executor = new SessionToolExecutor(knowledge);
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
             Compliance(),
             Guid.NewGuid(),
             new ModelToolCall("c1", ToolCatalog.KnowledgeRetrieve, """{"identity":"compliance-retention"}"""),
@@ -225,7 +231,8 @@ public sealed class SessionToolExecutorTests
             "image/png",
             new MemoryStream(PngBytes()),
             false);
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
             new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
@@ -248,16 +255,24 @@ public sealed class SessionToolExecutorTests
             "application/pdf",
             new MemoryStream(PdfTwoPages()),
             false);
-        var result = await executor.ExecuteAsync(
+        var result = await ExecuteTextAsync(
+            executor,
             Support(),
             sessionId,
-            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""),
-            ToolLimits.MaxOutputBytes);
+            new ModelToolCall("c1", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{uploaded.AttachmentId:D}}"}"""));
         using var json = JsonDocument.Parse(result);
         Assert.Equal("pdf", json.RootElement.GetProperty("kind").GetString());
         Assert.Contains("Alpha page", json.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
         Assert.Contains("Beta page", json.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
     }
+
+    private static async Task<string> ExecuteTextAsync(
+        SessionToolExecutor executor,
+        AgentDefinition definition,
+        Guid sessionId,
+        ModelToolCall call,
+        int remainingOutputBytes = ToolLimits.MaxOutputBytes) =>
+        (await executor.ExecuteAsync(definition, sessionId, call, remainingOutputBytes)).Text;
 
     private static byte[] PdfTwoPages()
     {

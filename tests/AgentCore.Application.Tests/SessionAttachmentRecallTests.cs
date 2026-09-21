@@ -180,11 +180,11 @@ public sealed class SessionAttachmentRecallTests
             Assert.NotNull(userEntry.Attachments);
             Assert.Equal(attachmentId, userEntry.Attachments![0].AttachmentId);
 
-            var directRead = await tools.ExecuteAsync(
+            var directRead = (await tools.ExecuteAsync(
                 SampleDefinitions.Support,
                 sessionId,
                 new ModelToolCall("direct", ToolCatalog.AttachmentsRead, $$"""{"attachmentId":"{{attachmentId:D}}"}"""),
-                ToolLimits.MaxOutputBytes);
+                ToolLimits.MaxOutputBytes)).Text;
             Assert.Contains("Alpha beta gamma delta", directRead, StringComparison.Ordinal);
 
             var reopenOutput = new CapturingSessionOutput();
