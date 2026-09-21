@@ -285,14 +285,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
                 throw AgentCoreErrors.WorkspaceQuotaExceeded();
             }
 
-            await using var stream = new FileStream(
-                physical,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.Asynchronous);
-            await stream.WriteAsync(newBytes, linked.Token).ConfigureAwait(false);
+            await CommitBytesAtomicallyAsync(physical, newBytes, linked.Token).ConfigureAwait(false);
 
             return new WorkspacePatchResult(
                 path,
@@ -766,6 +759,42 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
 
     private static string ComputeSha256Hex(byte[] bytes) =>
         Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static async Task CommitBytesAtomicallyAsync(
+        string physicalPath,
+        byte[] bytes,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(physicalPath)!;
+        var tempPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(physicalPath)}.{Guid.NewGuid():N}.patchtmp");
+        try
+        {
+            await using (var stream = new FileStream(
+                             tempPath,
+                             FileMode.CreateNew,
+                             FileAccess.Write,
+                             FileShare.None,
+                             4096,
+                             FileOptions.Asynchronous))
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(tempPath, physicalPath, overwrite: true);
+        }
+        catch
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            throw;
+        }
+    }
 
     private static int CountOccurrences(string haystack, string needle)
     {

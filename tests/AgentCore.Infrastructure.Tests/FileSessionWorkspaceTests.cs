@@ -134,6 +134,59 @@ public sealed class FileSessionWorkspaceTests
     }
 
     [Fact]
+    public async Task Concurrent_patch_applies_one_winner_and_rejects_stale_hash()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
+        var definition = Examiner();
+        await workspace.EnsureAsync(session, definition);
+        const string path = "/workspace/working/race.txt";
+        await workspace.WriteAsync(session, path, "start"u8.ToArray());
+        var startHash = Sha256Hex("start");
+
+        var first = workspace.PatchTextAsync(
+            session,
+            definition,
+            path,
+            startHash,
+            [new WorkspaceTextEdit("start", "winner")]);
+        var second = workspace.PatchTextAsync(
+            session,
+            definition,
+            path,
+            startHash,
+            [new WorkspaceTextEdit("start", "loser")]);
+        var results = await Task.WhenAll(CapturePatch(first), CapturePatch(second));
+
+        Assert.Contains(results, result => result is null);
+        Assert.Contains(results, result => result is { Code: "Conflict" });
+        var content = await workspace.ReadAsync(session, definition, path);
+        var text = Encoding.UTF8.GetString(content.Bytes);
+        Assert.True(text is "winner" or "loser");
+    }
+
+    [Fact]
+    public async Task Concurrent_patch_respects_quota()
+    {
+        using var dir = new TempDir();
+        var session = Guid.CreateVersion7();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50);
+        var definition = Examiner();
+        await workspace.EnsureAsync(session, definition);
+        const string path = "/workspace/working/quota.txt";
+        await workspace.WriteAsync(session, path, "aa"u8.ToArray());
+        var hash = Sha256Hex("aa");
+        var edit = new WorkspaceTextEdit("aa", new string('b', 40));
+
+        var first = workspace.PatchTextAsync(session, definition, path, hash, [edit]);
+        var second = workspace.PatchTextAsync(session, definition, path, hash, [edit]);
+        var results = await Task.WhenAll(CapturePatch(first), CapturePatch(second));
+        Assert.Contains(results, result => result is null);
+        Assert.Contains(results, result => result is { Code: "WorkspaceQuotaExceeded" } or { Code: "Conflict" });
+    }
+
+    [Fact]
     public async Task Concurrent_writes_respect_quota()
     {
         using var dir = new TempDir();
@@ -146,6 +199,19 @@ public sealed class FileSessionWorkspaceTests
         var results = await Task.WhenAll(Capture(first), Capture(second));
         Assert.Contains(results, result => result is null);
         Assert.Contains(results, result => result is { Code: "WorkspaceQuotaExceeded" });
+    }
+
+    private static async Task<AgentCoreException?> CapturePatch(ValueTask<WorkspacePatchResult> task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+            return null;
+        }
+        catch (AgentCoreException ex)
+        {
+            return ex;
+        }
     }
 
     private static async Task<AgentCoreException?> Capture(ValueTask task)
