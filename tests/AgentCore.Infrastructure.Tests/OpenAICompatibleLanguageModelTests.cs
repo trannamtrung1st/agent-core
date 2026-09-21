@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -915,6 +916,99 @@ public sealed class OpenAICompatibleLanguageModelTests
                 [new ModelMessage(ModelRole.User, "Hi")],
                 ResponseContract: new ModelResponseContract(false)));
         Assert.Equal(ModelStopReason.ContentFiltered, Assert.IsType<ModelCompleted>(filterEvents[^1]).Reason);
+    }
+
+    [Fact]
+    public async Task Image_bearing_tool_result_maps_tool_text_then_wire_only_user_multipart()
+    {
+        var handler = StopStream();
+        var model = Create(handler, tools: true, vision: true);
+        var png = "img"u8.ToArray();
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.User, "continue"),
+                new ModelMessage(
+                    ModelRole.Assistant,
+                    string.Empty,
+                    ToolCalls: [new ModelToolCall("call_1", ToolCatalog.AttachmentsRead, """{"attachmentId":"019944af-0001-7000-8000-000000000001"}""")]),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"kind":"image","contentProvided":true}""",
+                    [new ModelImageContent("image/png", png, "x.png")],
+                    ToolCallId: "call_1",
+                    Name: ToolCatalog.AttachmentsRead)
+            ],
+            Tools: [new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read attachment.", """{"type":"object"}""")]);
+        await CollectAsync(model, request);
+
+        using var document = JsonDocument.Parse(handler.LastBody);
+        var messages = document.RootElement.GetProperty("messages");
+        Assert.Equal(4, messages.GetArrayLength());
+        Assert.Equal("tool", messages[2].GetProperty("role").GetString());
+        Assert.Equal("call_1", messages[2].GetProperty("tool_call_id").GetString());
+        Assert.DoesNotContain(Convert.ToBase64String(png), messages[2].GetRawText(), StringComparison.Ordinal);
+        Assert.Equal("user", messages[3].GetProperty("role").GetString());
+        var continuation = messages[3].GetProperty("content");
+        Assert.Equal(JsonValueKind.Array, continuation.ValueKind);
+        Assert.Contains(
+            "tool data",
+            continuation[0].GetProperty("text").GetString() ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("image_url", continuation[1].GetProperty("type").GetString());
+        Assert.Contains($"data:image/png;base64,{Convert.ToBase64String(png)}", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Text_only_tool_result_keeps_single_tool_wire_message()
+    {
+        var handler = StopStream();
+        var model = Create(handler, tools: true, vision: true);
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.User, "continue"),
+                new ModelMessage(
+                    ModelRole.Assistant,
+                    string.Empty,
+                    ToolCalls: [new ModelToolCall("call_1", ToolCatalog.KnowledgeRetrieve, """{"identity":"x"}""")]),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"identity":"x","content":"ok"}""",
+                    ToolCallId: "call_1",
+                    Name: ToolCatalog.KnowledgeRetrieve)
+            ],
+            Tools: [new ModelToolDefinition(ToolCatalog.KnowledgeRetrieve, "Knowledge.", """{"type":"object"}""")]);
+        await CollectAsync(model, request);
+
+        using var document = JsonDocument.Parse(handler.LastBody);
+        var messages = document.RootElement.GetProperty("messages");
+        Assert.Equal(3, messages.GetArrayLength());
+        Assert.Equal("tool", messages[2].GetProperty("role").GetString());
+        Assert.Equal("call_1", messages[2].GetProperty("tool_call_id").GetString());
+    }
+
+    [Fact]
+    public async Task Non_vision_model_rejects_tool_image_parts_before_http()
+    {
+        var handler = StopStream();
+        var model = Create(handler, tools: true, vision: false);
+        var request = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.User, "continue"),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"kind":"image"}""",
+                    [new ModelImageContent("image/png", "img"u8.ToArray(), "x.png")],
+                    ToolCallId: "call_1",
+                    Name: ToolCatalog.AttachmentsRead)
+            ],
+            Tools: [new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read attachment.", """{"type":"object"}""")]);
+        var events = await CollectAsync(model, request);
+        Assert.Equal(0, handler.PostCount);
+        var failed = Assert.IsType<ModelFailed>(Assert.Single(events));
+        Assert.Equal(ProviderErrorCode.UnsupportedCapability, failed.Failure.Code);
     }
 
     [Fact]

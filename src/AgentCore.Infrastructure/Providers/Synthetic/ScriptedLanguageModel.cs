@@ -138,9 +138,30 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         var lastTool = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool)?.Text ?? string.Empty;
+        var lastToolMessage = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
+        if (lastToolMessage?.Parts?.OfType<ModelImageContent>().Any() == true)
+        {
+            yield return new ModelTextDelta(HistoricalImageRereadAnswer);
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
         if (_alwaysToolCall)
         {
             yield return new ModelToolCallEvent(new ModelToolCall($"call-{toolRounds + 1}", ToolCatalog.KnowledgeRetrieve, """{"identity":"support-order-policy"}"""));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
+
+        if (toolRounds == 0
+            && lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
+            && Offers(request, ToolCatalog.AttachmentsRead)
+            && TryReadManifestAttachmentId(request, out var historicalAttachmentId))
+        {
+            yield return new ModelToolCallEvent(new ModelToolCall(
+                "call-historical-image",
+                ToolCatalog.AttachmentsRead,
+                $$"""{"attachmentId":"{{historicalAttachmentId:D}}"}"""));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
@@ -274,7 +295,36 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("order 91", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("compliance case", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || request.Messages.Any(message => message.Role == ModelRole.Tool);
+    }
+
+    public const string HistoricalImageRereadMarker = "[test:historical-image-reread]";
+
+    public const string HistoricalImageRereadAnswer =
+        "Synthetic historical image reread: observed sanitized image content.";
+
+    private static bool TryReadManifestAttachmentId(ModelRequest request, out Guid attachmentId)
+    {
+        attachmentId = Guid.Empty;
+        var manifest = request.Messages.FirstOrDefault(message =>
+            message.Role == ModelRole.System
+            && message.Text.Contains("Files available in this session", StringComparison.Ordinal));
+        if (manifest is null)
+        {
+            return false;
+        }
+
+        const string key = "\"attachmentId\":\"";
+        var start = manifest.Text.IndexOf(key, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return false;
+        }
+
+        start += key.Length;
+        var end = manifest.Text.IndexOf('"', start);
+        return end > start && Guid.TryParse(manifest.Text[start..end], out attachmentId);
     }
 
     private static bool Offers(ModelRequest request, string name) =>

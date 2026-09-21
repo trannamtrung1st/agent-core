@@ -1,4 +1,6 @@
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -28,6 +30,56 @@ public sealed class InMemoryAndScriptedTests
         await store.SaveAsync(snapshot, 0);
         var loaded = await store.LoadAsync(snapshot.SessionId);
         Assert.Equal(snapshot.Revision, loaded!.Revision);
+    }
+
+    [Fact]
+    public async Task Scripted_language_model_requests_attachments_read_then_answers_after_image_tool_part()
+    {
+        var attachmentId = Guid.Parse("019944af-0001-7000-8000-000000000001");
+        var model = new ScriptedLanguageModel();
+        var manifest =
+            $"Files available in this session (user data JSON). Historical files can be reread with attachments.read when that tool is available. For image attachments, successful reread additionally requires a vision-capable model. Use only the attachmentId from this manifest; do not invent ids:\n{{\"displayName\":\"photo.png\",\"attachmentId\":\"{attachmentId:D}\",\"contentType\":\"image/png\",\"uploadedWithEntrySequence\":1}}";
+        var tools = new[] { new ModelToolDefinition(ToolCatalog.AttachmentsRead, "Read", """{"type":"object"}""") };
+
+        var first = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.System, manifest),
+                new ModelMessage(ModelRole.User, $"{ScriptedLanguageModel.HistoricalImageRereadMarker} inspect")
+            ],
+            Tools: tools);
+        var firstEvents = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(first))
+        {
+            firstEvents.Add(item);
+        }
+
+        Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(firstEvents[^1]).Reason);
+        var call = Assert.IsType<ModelToolCallEvent>(firstEvents[0]).Call;
+        Assert.Equal(ToolCatalog.AttachmentsRead, call.Name);
+
+        var second = new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.System, manifest),
+                new ModelMessage(ModelRole.User, $"{ScriptedLanguageModel.HistoricalImageRereadMarker} inspect"),
+                new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: [call]),
+                new ModelMessage(
+                    ModelRole.Tool,
+                    """{"kind":"image","contentProvided":true}""",
+                    [new ModelImageContent("image/png", [1, 2, 3], "photo.png")],
+                    ToolCallId: call.Id,
+                    Name: call.Name)
+            ],
+            Tools: tools);
+        var secondEvents = new List<ModelGenerationEvent>();
+        await foreach (var item in model.GenerateAsync(second))
+        {
+            secondEvents.Add(item);
+        }
+
+        Assert.Equal(ScriptedLanguageModel.HistoricalImageRereadAnswer, Assert.IsType<ModelTextDelta>(secondEvents[0]).Text);
+        Assert.Equal(ModelStopReason.Completed, Assert.IsType<ModelCompleted>(secondEvents[^1]).Reason);
     }
 
     [Fact]
