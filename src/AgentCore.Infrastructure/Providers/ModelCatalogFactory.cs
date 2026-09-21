@@ -264,9 +264,12 @@ internal static class ModelCatalogFactory
 
     private static bool IsSyntheticCatalog(ModelCatalogOptions options) =>
         options.Models.Count > 0
-        && options.Models.All(entry =>
-            string.Equals(entry.Key, ScriptedAlphaKey, StringComparison.Ordinal)
-            || string.Equals(entry.Key, ScriptedBetaKey, StringComparison.Ordinal));
+        && options.Models.All(entry => IsBuiltInScriptedCatalogKey(entry.Key));
+
+    private static bool IsBuiltInScriptedCatalogKey(string key) =>
+        string.Equals(key, ScriptedAlphaKey, StringComparison.Ordinal)
+        || string.Equals(key, ScriptedBetaKey, StringComparison.Ordinal)
+        || string.Equals(key, ScriptedVisionKey, StringComparison.Ordinal);
 
     private static ModelCatalogOptions Bind(IConfiguration? configuration)
     {

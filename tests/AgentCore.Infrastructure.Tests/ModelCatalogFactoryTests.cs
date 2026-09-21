@@ -79,7 +79,9 @@ public sealed class ModelCatalogFactoryTests
                 ["Providers:ModelCatalog:Models:0:Key"] = "scripted-alpha",
                 ["Providers:ModelCatalog:Models:0:ModelId"] = "scripted-alpha",
                 ["Providers:ModelCatalog:Models:1:Key"] = "scripted-beta",
-                ["Providers:ModelCatalog:Models:1:ModelId"] = "scripted-beta"
+                ["Providers:ModelCatalog:Models:1:ModelId"] = "scripted-beta",
+                ["Providers:ModelCatalog:Models:2:Key"] = "scripted-vision",
+                ["Providers:ModelCatalog:Models:2:ModelId"] = "scripted-vision"
             })
             .Build();
         var catalog = ModelCatalogFactory.Create(

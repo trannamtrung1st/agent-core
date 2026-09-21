@@ -122,7 +122,10 @@ public sealed class LocalUserProfileService(
                 throw AgentCoreErrors.Validation(ex.Message);
             }
 
-            merged[pair.Key] = new UserProfileValue(pair.Value, source, now);
+            var storedValue = string.Equals(pair.Key, "preferredName", StringComparison.Ordinal)
+                ? pair.Value.Trim()
+                : pair.Value;
+            merged[pair.Key] = new UserProfileValue(storedValue, source, now);
         }
 
         try
@@ -142,9 +145,20 @@ public sealed class LocalUserProfileService(
         await store.SaveProfileAsync(updated, expectedRevision, cancellationToken).ConfigureAwait(false);
         if (liveUpdates is not null)
         {
-            await liveUpdates.NotifyProfileUpdatedAsync(updated, cancellationToken).ConfigureAwait(false);
+            using var notifyBudget = new CancellationTokenSource(ProfileLiveUpdateNotificationTimeout);
+            try
+            {
+                await liveUpdates
+                    .NotifyProfileUpdatedAsync(updated, notifyBudget.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (notifyBudget.IsCancellationRequested)
+            {
+            }
         }
 
         return updated;
     }
+
+    private static readonly TimeSpan ProfileLiveUpdateNotificationTimeout = TimeSpan.FromSeconds(30);
 }

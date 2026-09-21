@@ -465,6 +465,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     public async ValueTask NotifyProfileUpdatedAsync(UserProfile profile, CancellationToken cancellationToken = default)
     {
+        using var overallBudget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        overallBudget.CancelAfter(ProfileLiveUpdateNotificationTimeout);
         foreach (var live in _live.Values)
         {
             if (live.Runtime.Snapshot.ProfileId != profile.ProfileId)
@@ -472,9 +474,25 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 continue;
             }
 
-            await live.Runtime.ApplyProfileAsync(profile, cancellationToken).ConfigureAwait(false);
+            using var runtimeBudget = CancellationTokenSource.CreateLinkedTokenSource(overallBudget.Token);
+            runtimeBudget.CancelAfter(ProfileLiveUpdatePerRuntimeTimeout);
+            try
+            {
+                await live.Runtime.ApplyProfileAsync(profile, runtimeBudget.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Live profile refresh failed for session {SessionId} at revision {Revision}.",
+                    live.Runtime.Snapshot.SessionId,
+                    profile.Revision);
+            }
         }
     }
+
+    private static readonly TimeSpan ProfileLiveUpdateNotificationTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ProfileLiveUpdatePerRuntimeTimeout = TimeSpan.FromSeconds(5);
 
     public Task StageAttachmentsAsync(Guid sessionId, IReadOnlyList<Guid> attachmentIds, CancellationToken cancellationToken)
     {
