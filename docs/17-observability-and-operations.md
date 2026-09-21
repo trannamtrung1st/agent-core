@@ -81,7 +81,7 @@ curl -sS http://127.0.0.1:5080/health
 Real/hosted Compose is the same `agent-core` service and image with `docker-compose.real.yml` overlaid. It does not replace the default file: `docker compose up` stays Synthetic and key-free so CI and local smoke need no credentials. Use two `-f` flags so Compose does not also load an unrelated override file:
 
 ```text
-# once: cp .env.example .env  && edit OPENROUTER_API_KEY
+# once: cp .env.example .env  && edit OPENROUTER_API_KEY (optional: BRAVE_SEARCH_API_KEY, GMAIL_* for Real web/email)
 docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
 curl -sS http://127.0.0.1:5080/health
 ```

@@ -301,7 +301,7 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3C-2 web tools | `web.search`/`web.fetch`, `general-assistant` v2 | **Observed** (TDP) |
 | P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action | **Observed** (TDP) |
 | P3D-2 email | `email.*`, Gmail/Synthetic providers, `general-assistant` v4 | **Observed** (TDP) |
-| P3E reconcile | Full §23 gate on one HEAD, docs/TODO/report alignment | **Candidate** |
+| P3E reconcile | Full §23 gate on one HEAD, docs/TODO/report alignment | **Candidate** (canonical docs and `.env.example` reconciled on corrective batches; exact-HEAD gate re-run pending) |
 
 **Roadmap handoff after whole-output acceptance:** **P4** (context compaction and memory) per `TODO.md` and proposal §26.
 
