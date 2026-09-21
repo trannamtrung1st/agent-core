@@ -971,11 +971,13 @@ Build on this instead of replacing it.
 
 ## P3A — Historical multimodal attachment re-inspection
 
-- [ ] Let a model re-inspect a historical session image on demand through the existing durable `attachmentId`, session attachment manifest, `attachments.read`, attachment processor/store, and provider-neutral `ModelContentPart` / `ModelImageContent` path.
-- [ ] Retrieve only explicitly selected session-owned images; do not automatically resend all historical images or duplicate image blobs into conversation history.
-- [ ] Add the smallest provider-neutral typed non-text tool-result or continuation projection needed to rehydrate model-consumable image content. Keep raw/base64 image bytes out of ordinary JSON/text tool results.
-- [ ] Require trusted model **Tools** capability for model-initiated `attachments.read` and **Vision** capability before historical image content reaches the provider. Never silently drop the image, pretend it was seen, or switch models automatically.
-- [ ] Preserve existing text/PDF `attachments.read` behavior, session ownership and cross-session isolation, sanitized/canonical image bytes with truthful MIME, persisted/reopened session support, and runtime-epoch/cancellation/supersession fencing.
+- [x] Let a model re-inspect a historical session image on demand through the existing durable `attachmentId`, session attachment manifest, `attachments.read`, attachment processor/store, and provider-neutral `ModelContentPart` / `ModelImageContent` path.
+- [x] Retrieve only explicitly selected session-owned images; do not automatically resend all historical images or duplicate image blobs into conversation history.
+- [x] Add the smallest provider-neutral typed non-text tool-result or continuation projection needed to rehydrate model-consumable image content. Keep raw/base64 image bytes out of ordinary JSON/text tool results.
+- [x] Require trusted model **Tools** capability for model-initiated `attachments.read` and **Vision** capability before historical image content reaches the provider. Never silently drop the image, pretend it was seen, or switch models automatically.
+- [x] Preserve existing text/PDF `attachments.read` behavior, session ownership and cross-session isolation, sanitized/canonical image bytes with truthful MIME, persisted/reopened session support, and runtime-epoch/cancellation/supersession fencing.
+
+P3A implementation slices P3A-0–P3A-3 are recorded in TDP production evidence. P3A-4 verification, docs, and freeze gate are in progress; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md). P3B does not start until P3A focused-output review (P3A-1–P3A-3) closes on the freeze HEAD.
 
 ## Tool architecture evolution
 

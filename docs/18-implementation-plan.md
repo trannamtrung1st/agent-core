@@ -252,7 +252,7 @@ This table does not reopen P1, P2D, P2A, or P2B, or **P2** overall (closed/froze
 | P2E UX | Catalog `vision` metadata; ModelPicker Vision indicator; composer compatibility guard; Synthetic `scripted-vision`; Playwright attach→block→switch→send | **Observed** (P2E-3) |
 | P2E verification | Full proposal §11 regressions plus §23 key-free gate and Compose on one freeze HEAD | **Observed** (P2E-4) |
 
-**P2E freeze HEAD:** `961fb277d913db1edd454b8f635c8017e63a3005` (`961fb27`, 2026-09-21; implementation `0eeb27c`–`a502266` plus freeze documentation on that commit). Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 75 passed; Infrastructure 181 passed / 12 skipped; Application 462 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 157 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed including `scripted-vision.spec.ts`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). P2 overall closure gate on `47d6ff6` (workflow run `35552740853`) — see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence). Optional Real vision probe **SKIPPED — credentials unavailable**. Do not reopen P2E without a reproducible regression. Historical image re-inspection remains out of scope until P3 tool evolution.
+**P2E freeze HEAD:** `961fb277d913db1edd454b8f635c8017e63a3005` (`961fb27`, 2026-09-21; implementation `0eeb27c`–`a502266` plus freeze documentation on that commit). Local gate matching `.github/workflows/synthetic.yml`: `npm ci` in `tests/realtime-js`; Domain 75 passed; Infrastructure 181 passed / 12 skipped; Application 462 with `--blame-hang --blame-hang-timeout 5m` and no hang sequence; API 157 passed; web `pnpm install --frozen-lockfile`, 384 unit tests, production build; `CI=1 pnpm exec playwright test` 40 passed including `scripted-vision.spec.ts`; `./scripts/compose-sqlite-volume.sh` passed (`compose sqlite volume check passed`). P2 overall closure gate on `47d6ff6` (workflow run `35552740853`) — see [P2-Final](#p2-final--reconcile-and-close-p2-production-evidence). Optional Real vision probe **SKIPPED — credentials unavailable**. Do not reopen P2E without a reproducible regression. Historical image re-inspection is owned by [P3A](#p3a--historical-multimodal-attachment-reread-in-progress), not P2E.
 
 ## P2C — Personalization boundary (observed)
 
@@ -276,6 +276,18 @@ P2A, P2B, P2D, P2E, and P2C remain observed/frozen on their recorded HEADs. Prop
 **Final gate (closure HEAD `47d6ff6`):** proposal §23 key-free Synthetic + Compose gate green on that exact HEAD (hosted workflow run `35552740853`). Observed pass/skip counts are authoritative in TDP production evidence for P2-Final (not duplicated here to avoid doc/SHA drift). Optional Real structured-response and vision probes **SKIPPED — credentials unavailable** (`OPENROUTER_API_KEY` / `OPENAI_API_KEY` absent); do not treat them as verified Real-provider behavior.
 
 **Roadmap handoff:** active focus **P3** (tool evolution); **P4** (context compaction and memory) follows per plan (`TODO.md`, proposal §26).
+
+## P3A — Historical multimodal attachment reread (in progress)
+
+P3A introduces typed non-text tool results, safe historical image rehydration through `attachments.read`, locked OpenAI-compatible wire projection for image-bearing tool results, and Synthetic verification. **P3B+ remains blocked** until P3A is frozen on one exact HEAD with mandatory focused-output review closure for P3A-1–P3A-3 on that same HEAD. See [P3A freeze report](reports/p3a-freeze.md) for observed behavior, gate evidence, and freeze status.
+
+| Slice | Production behavior | Evidence |
+| --- | --- | --- |
+| P3A-0 baseline | Green key-free Synthetic gate on implementation-start HEAD | **Observed** |
+| P3A-1 typed results | `ToolExecutionResult` with budgeted `Text` and ephemeral `Parts` | **Observed** |
+| P3A-2 rehydration | `attachments.read` image path + `ToolResultAdmission` vision gate | **Observed** |
+| P3A-3 projection | OpenAI `MapMessages` tool→multipart sequence; Scripted historical reread | **Observed** |
+| P3A-4 verification | Playwright historical reread + non-vision refusal; docs; full §23 gate | **In progress** |
 
 ## Handoff rule
 
