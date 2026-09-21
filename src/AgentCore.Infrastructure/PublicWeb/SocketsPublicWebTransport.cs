@@ -40,26 +40,43 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns) : IPu
                     }
                 }
 
-                throw new HttpRequestException("No permitted public address was available for the host.");
+                throw new PublicWebFetchException(
+                    "forbidden_host",
+                    "No permitted public address was available for the host.");
             }
         };
 
-        using var client = new HttpMessageInvoker(handler, disposeHandler: true);
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        request.Headers.Accept.ParseAdd("text/html, text/plain, application/json, application/xml, */*;q=0.1");
-        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var body = await ReadBoundedBodyAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        Uri? redirect = null;
-        if (response.Headers.Location is { } location)
+        try
         {
-            redirect = location.IsAbsoluteUri ? location : new Uri(uri, location);
-        }
+            using var client = new HttpMessageInvoker(handler, disposeHandler: true);
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Accept.ParseAdd("text/html, text/plain, application/json, application/xml, */*;q=0.1");
+            using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            var body = await ReadBoundedBodyAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            Uri? redirect = null;
+            if (response.Headers.Location is { } location)
+            {
+                redirect = location.IsAbsoluteUri ? location : new Uri(uri, location);
+            }
 
-        return new PublicWebTransportResponse(
-            (int)response.StatusCode,
-            redirect,
-            response.Content.Headers.ContentType?.MediaType,
-            body);
+            return new PublicWebTransportResponse(
+                (int)response.StatusCode,
+                redirect,
+                response.Content.Headers.ContentType?.MediaType,
+                body);
+        }
+        catch (HttpRequestException ex)
+        {
+            for (var inner = ex.InnerException; inner is not null; inner = inner.InnerException)
+            {
+                if (inner is PublicWebFetchException fetchException)
+                {
+                    throw fetchException;
+                }
+            }
+
+            throw;
+        }
     }
 
     private static async Task<byte[]> ReadBoundedBodyAsync(HttpContent? content, CancellationToken cancellationToken)

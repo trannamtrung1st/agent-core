@@ -7,6 +7,11 @@ internal static class PublicAddressPolicy
 {
     public static bool IsAllowed(IPAddress address)
     {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
         if (IPAddress.IsLoopback(address))
         {
             return false;
@@ -30,7 +35,10 @@ internal static class PublicAddressPolicy
 
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
-            if (address.Equals(IPAddress.IPv6Any) || address.IsIPv6LinkLocal || address.IsIPv6Multicast)
+            if (address.Equals(IPAddress.IPv6Any)
+                || address.IsIPv6LinkLocal
+                || address.IsIPv6Multicast
+                || address.IsIPv6SiteLocal)
             {
                 return false;
             }
@@ -45,9 +53,23 @@ internal static class PublicAddressPolicy
             {
                 return false;
             }
+
+            // NAT64 well-known prefix 64:ff9b::/96 — treat as non-public for credential-free fetch.
+            if (bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B)
+            {
+                return false;
+            }
+
+            // Allow only global unicast (2000::/3); deny unique local and other non-public IPv6.
+            if ((bytes[0] & 0xE0) != 0x20)
+            {
+                return false;
+            }
+
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     public static bool IsAllowedHostName(string host)

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Text;
 using AgentCore.Application.Ports;
 
@@ -56,6 +57,13 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
         catch (PublicWebFetchException ex)
         {
             return Error(request.Url.ToString(), ex.Code, ex.Message);
+        }
+        catch (HttpRequestException)
+        {
+            return Error(
+                request.Url.ToString(),
+                "forbidden_host",
+                "Host is not permitted for public web fetch.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

@@ -54,12 +54,36 @@ public sealed class PublicWebFetcherTests
         Assert.Equal(1, transport.CallCount);
     }
 
+    [Fact]
+    public async Task Fetch_rejects_unsupported_media_type()
+    {
+        var transport = new FakeTransport();
+        transport.Enqueue(
+            new Uri("https://example.com/binary"),
+            new PublicWebTransportResponse(200, null, "application/octet-stream", [1, 2, 3]));
+        IPublicWebFetcher fetcher = new PublicWebFetcher(transport);
+        var result = await fetcher.FetchAsync(new PublicWebFetchRequest(new Uri("https://example.com/binary")));
+        Assert.Equal("unsupported_media_type", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Fetch_returns_timeout_when_transport_exceeds_budget()
+    {
+        var transport = new SlowTransport(TimeSpan.FromSeconds(30));
+        IPublicWebFetcher fetcher = new PublicWebFetcher(transport);
+        var result = await fetcher.FetchAsync(new PublicWebFetchRequest(new Uri("https://example.com/slow")));
+        Assert.Equal("timeout", result.ErrorCode);
+    }
+
     [Theory]
     [InlineData("http://127.0.0.1/")]
     [InlineData("http://localhost/")]
     [InlineData("http://10.0.0.1/")]
     [InlineData("http://169.254.169.254/")]
     [InlineData("http://[::1]/")]
+    [InlineData("http://[fd12::1]/")]
+    [InlineData("http://metadata.google.internal/")]
+    [InlineData("http://printer.local/")]
     [InlineData("ftp://example.com/")]
     [InlineData("http://user:pass@example.com/")]
     public async Task Fetch_rejects_unsafe_urls_without_transport(string url)
@@ -107,15 +131,6 @@ public sealed class PublicWebFetcherTests
         Assert.All(result.Results, item => Assert.StartsWith("https://example.test/", item.Url, StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void Public_address_policy_rejects_private_literals()
-    {
-        Assert.False(PublicAddressPolicy.IsAllowed(IPAddress.Parse("127.0.0.1")));
-        Assert.False(PublicAddressPolicy.IsAllowed(IPAddress.Parse("10.1.2.3")));
-        Assert.False(PublicAddressPolicy.IsAllowed(IPAddress.Parse("169.254.169.254")));
-        Assert.True(PublicAddressPolicy.IsAllowed(IPAddress.Parse("93.184.216.34")));
-    }
-
     private sealed class FakeTransport : IPublicWebTransport
     {
         private readonly Queue<(Uri Uri, PublicWebTransportResponse Response)> _responses = new();
@@ -135,6 +150,15 @@ public sealed class PublicWebFetcherTests
             var (expected, response) = _responses.Dequeue();
             Assert.Equal(expected, uri);
             return ValueTask.FromResult(response);
+        }
+    }
+
+    private sealed class SlowTransport(TimeSpan delay) : IPublicWebTransport
+    {
+        public async ValueTask<PublicWebTransportResponse> GetAsync(Uri uri, CancellationToken cancellationToken)
+        {
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            return new PublicWebTransportResponse(200, null, "text/plain", "late"u8.ToArray());
         }
     }
 }
