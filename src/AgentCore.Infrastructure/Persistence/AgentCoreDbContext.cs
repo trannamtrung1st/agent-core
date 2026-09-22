@@ -112,6 +112,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AttachmentRecordRow> Attachments => Set<AttachmentRecordRow>();
     public DbSet<MessageAttachmentRow> MessageAttachments => Set<MessageAttachmentRow>();
     public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
+    public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -186,6 +187,23 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(row => row.Sha256Hex).HasMaxLength(64).IsRequired();
             entity.HasIndex(row => row.SessionId);
+        });
+        modelBuilder.Entity<StructuredMemoryRecord>(entity =>
+        {
+            entity.ToTable("StructuredMemories");
+            entity.HasKey(row => row.MemoryId);
+            entity.Property(row => row.MemoryId).HasMaxLength(36);
+            entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.Subject).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.SubjectKey).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.Content).IsRequired();
+            entity.Property(row => row.Source).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.SourceEntryIdsJson).IsRequired();
+            entity.Property(row => row.SupersedesMemoryId).HasMaxLength(36);
+            entity.HasIndex(row => new { row.SessionId, row.Status });
+            entity.HasIndex(row => new { row.SessionId, row.Kind, row.SubjectKey })
+                .IsUnique()
+                .HasFilter("Status = 0");
         });
     }
 }

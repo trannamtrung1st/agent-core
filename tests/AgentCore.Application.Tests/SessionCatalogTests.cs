@@ -1,6 +1,8 @@
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Memory;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
@@ -202,7 +204,32 @@ public sealed class SessionCatalogTests
         Assert.Contains(listed.Items, item => item.SessionId == created.SessionId && item.Status == SessionStatus.Paused);
     }
 
-    private static SessionManager CreateManager(IMemoryStore store, TimeProvider? time = null)
+    [Fact]
+    public async Task Durable_delete_removes_session_structured_memory()
+    {
+        var sessions = new InMemoryMemoryStore();
+        var memories = new InMemoryStructuredMemoryStore();
+        var manager = CreateManager(sessions, structuredMemory: memories);
+        var created = await manager.CreateAsync("examiner", 1, SessionMode.Text);
+        var service = new StructuredMemoryService(
+            memories,
+            new DeterministicIdGenerator(
+                [Guid.Parse("019944af-0011-7000-8000-000000000001")],
+                [Guid.Parse("019944af-0011-7000-8000-0000000000ff")]),
+            TimeProvider.System);
+        await service.WriteAsync(
+            new TrustedMemoryOwner(created.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "Early fact", "kept until delete", []),
+            new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal)));
+        await manager.DurablyDeleteAsync(created.SessionId);
+        Assert.Empty(await memories.ListActiveAsync(created.SessionId));
+        Assert.Null(await memories.FindAsync(created.SessionId, Guid.Parse("019944af-0011-7000-8000-000000000001")));
+    }
+
+    private static SessionManager CreateManager(
+        IMemoryStore store,
+        TimeProvider? time = null,
+        IStructuredMemoryStore? structuredMemory = null)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
@@ -212,7 +239,8 @@ public sealed class SessionCatalogTests
             store,
             ids,
             time ?? TimeProvider.System,
-            new VoiceAvailability { SpeechAdaptersResolved = true });
+            new VoiceAvailability { SpeechAdaptersResolved = true },
+            structuredMemory: structuredMemory);
     }
 
     private sealed class StaticDefinitions(AgentDefinition definition) : IAgentDefinitionStore

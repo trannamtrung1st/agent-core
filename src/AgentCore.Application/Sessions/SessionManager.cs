@@ -24,6 +24,7 @@ public sealed class SessionManager
     private readonly IArtifactStore? _artifacts;
     private readonly IModelCatalog? _models;
     private readonly ILocalUserProfileService _localProfiles;
+    private readonly IStructuredMemoryStore? _structuredMemory;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -36,7 +37,8 @@ public sealed class SessionManager
         ISessionWorkspace? workspace = null,
         IArtifactStore? artifacts = null,
         IModelCatalog? models = null,
-        ILocalUserProfileService? localProfiles = null)
+        ILocalUserProfileService? localProfiles = null,
+        IStructuredMemoryStore? structuredMemory = null)
     {
         _definitions = definitions;
         _store = store;
@@ -49,6 +51,7 @@ public sealed class SessionManager
         _artifacts = artifacts;
         _models = models;
         _localProfiles = localProfiles ?? new LocalUserProfileService(store, time);
+        _structuredMemory = structuredMemory;
     }
 
     public async Task<SessionSnapshot> CreateAsync(
@@ -297,6 +300,11 @@ public sealed class SessionManager
         if (_artifacts is not null)
         {
             await _artifacts.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_structuredMemory is not null)
+        {
+            await _structuredMemory.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
         }
 
         RuntimeTelemetry.Record("cleanup", RuntimeTelemetry.ElapsedMs(started));
