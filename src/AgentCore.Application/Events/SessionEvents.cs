@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
@@ -183,6 +184,13 @@ public sealed record CompletionReturned(
     int Generation,
     CompletionDecision Decision,
     TaskCompletionSource Processed) : SessionInput(Context);
+
+public sealed record CompactionReturned(
+    EventContext Context,
+    int Generation,
+    long RuntimeEpoch,
+    CompactionOutcome Outcome,
+    TaskCompletionSource<bool> Processed) : SessionInput(Context);
 
 public sealed record SessionOutput(EventContext Context, Guid? ResponseId, OutputPayload Payload);
 

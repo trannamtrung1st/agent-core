@@ -128,6 +128,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _proactiveBrainInFlight;
     private int _completionGeneration;
     private CancellationTokenSource? _completionCts;
+    private int _compactionGeneration;
+    private CancellationTokenSource? _compactionCts;
+    private CompactionFlight? _compactionFlight;
+    internal TaskCompletionSource? TestCompactionSettled { get; set; }
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private TimeSpan? _pendingPostResponseIdleDelay;
@@ -649,6 +653,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        CancelCompaction();
         _persistJobs.Writer.TryComplete();
         foreach (var pair in _pendingPersist)
         {
@@ -828,6 +833,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     finally
                     {
                         completion.Processed.TrySetResult();
+                    }
+
+                    break;
+                case CompactionReturned compaction:
+                    var continueCompaction = false;
+                    try
+                    {
+                        continueCompaction = HandleCompactionReturned(compaction);
+                    }
+                    finally
+                    {
+                        compaction.Processed.TrySetResult(continueCompaction);
+                        TestCompactionSettled?.TrySetResult();
                     }
 
                     break;
@@ -1020,6 +1038,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case BrainReturned brain:
                 brain.Processed.TrySetResult();
+                break;
+            case CompactionReturned compaction:
+                compaction.Processed.TrySetResult(false);
                 break;
             case ModelResultReceived model:
                 model.Processed.TrySetResult();
@@ -1510,6 +1531,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         SchedulePostResponseIdleTimer();
         await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
         LaunchCompletionEvaluation(context);
+        LaunchCompaction(context);
     }
 
     private void LaunchCompletionEvaluation(EventContext cause)
@@ -3648,6 +3670,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Interlocked.Increment(ref _terminalFence);
         _deadlineTimerGeneration++;
         CancelCompletionEvaluation();
+        CancelCompaction();
         _deactivated = true;
         SessionSnapshot applied;
         try
@@ -4188,6 +4211,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return _durableSnapshot;
         }
 
+        var proposed = job.Proposed;
+        var live = _snapshot;
+        if (job.Kind != PersistKind.TerminalEnd
+            && live.SummarizedThroughEntrySequence > proposed.SummarizedThroughEntrySequence)
+        {
+            proposed = proposed with
+            {
+                Summary = live.Summary,
+                SummarizedThroughEntrySequence = live.SummarizedThroughEntrySequence,
+                SummaryFormatVersion = live.SummaryFormatVersion,
+                SummaryGeneratedAt = live.SummaryGeneratedAt,
+                SummaryModel = live.SummaryModel
+            };
+        }
+
         var toSave = job.Kind switch
         {
             PersistKind.TerminalEnd => RebaseForPersist(job.Proposed, SessionStatus.Ended, now) with
@@ -4198,11 +4236,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 LifecycleChangedAt = job.Proposed.LifecycleChangedAt,
                 RuntimeEpoch = job.Proposed.RuntimeEpoch
             },
-            PersistKind.Pause => RebaseForPersist(job.Proposed, SessionStatus.Paused, _durableSnapshot.UpdatedAt),
-            _ => job.Proposed with
+            PersistKind.Pause => RebaseForPersist(proposed, SessionStatus.Paused, _durableSnapshot.UpdatedAt),
+            _ => proposed with
             {
                 Revision = _durableRevision + 1,
-                UpdatedAt = CatalogUpdatedAt(job.Proposed, _durableSnapshot, now)
+                UpdatedAt = CatalogUpdatedAt(proposed, _durableSnapshot, now)
             }
         };
 

@@ -606,7 +606,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             case CompactionFixture.Late:
                 if (_compactionRelease is not null)
                 {
-                    await _compactionRelease.Task.ConfigureAwait(false);
+                    await _compactionRelease.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
