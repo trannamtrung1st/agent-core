@@ -19,7 +19,7 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 | Item | Value |
 | --- | --- |
 | P3 key-free implementation freeze | **`4dbb920`** |
-| Docs-aligned HEAD | **`b672c7a`** |
+| Docs-aligned HEAD | **`d9180df`** |
 | Local key-free gate | **Green** (see [Key-free gate](#key-free-gate-p3f-capability-closure)) |
 | Previous hosted gate (pre–MIME tail) | **`3243d58`** / workflow **`35642864725`** — green |
 | Final-tree hosted gate | **`7497563`** → workflow **`35682607660`** **green**; **`ac795b6`** → workflow **`35682808408`** **in progress** (2026-09-22); **`b672c7a`** docs-only (workflow **`35683144956`** in progress) |
