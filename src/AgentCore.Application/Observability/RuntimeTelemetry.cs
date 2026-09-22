@@ -15,6 +15,7 @@ public static class RuntimeTelemetry
 
     private static readonly Histogram<double> StageMs = Meter.CreateHistogram<double>("stage_duration_ms");
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
+    private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
     private static readonly ConcurrentDictionary<string, List<double>> Samples = new(StringComparer.Ordinal);
@@ -72,6 +73,11 @@ public static class RuntimeTelemetry
     public static void RecordDropped(string kind)
     {
         Dropped.Add(1, new KeyValuePair<string, object?>("kind", kind));
+    }
+
+    public static void RecordMemoryRetrieval(string result)
+    {
+        MemoryRetrieval.Add(1, new KeyValuePair<string, object?>("result", result));
     }
 
     public static IReadOnlyList<TimelineEvent> SnapshotTimeline() => [.. Timeline];

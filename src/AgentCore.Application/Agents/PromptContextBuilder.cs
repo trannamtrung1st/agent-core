@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -62,9 +63,15 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         {
             new(ModelRole.System, sections.IdentitySystem),
             new(ModelRole.System, sections.ModeSystem),
-            new(ModelRole.System, sections.MemorySystem),
-            new(ModelRole.System, sections.EnvironmentSystem)
+            new(ModelRole.System, sections.MemorySystem)
         };
+        var learned = SessionMemoryPrompt.Render(context.LearnedMemories);
+        if (learned.Length > 0)
+        {
+            messages.Add(new ModelMessage(ModelRole.System, learned));
+        }
+
+        messages.Add(new ModelMessage(ModelRole.System, sections.EnvironmentSystem));
         if (!string.IsNullOrEmpty(sections.AttachmentManifestSystem))
         {
             messages.Add(new ModelMessage(ModelRole.System, sections.AttachmentManifestSystem));

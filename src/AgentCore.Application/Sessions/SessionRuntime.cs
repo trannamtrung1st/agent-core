@@ -7,6 +7,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
+using AgentCore.Application.Memory;
 using AgentCore.Application.Models;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -47,6 +48,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IAttachmentStore? _attachments;
     private readonly IAttachmentProcessor? _processor;
     private readonly IUserTurnCapabilityValidator? _turnCapabilities;
+    private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
     private readonly InteractionPolicy _policy;
@@ -176,7 +178,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         VoiceAvailability? voice = null,
         ILanguageModelResolver? modelResolver = null,
         IModelCatalog? catalog = null,
-        IUserTurnCapabilityValidator? turnCapabilities = null)
+        IUserTurnCapabilityValidator? turnCapabilities = null,
+        IStructuredMemoryService? structuredMemory = null)
     {
         _snapshot = snapshot;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
@@ -194,6 +197,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _attachments = attachments;
         _processor = processor;
         _turnCapabilities = turnCapabilities;
+        _structuredMemory = structuredMemory;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
@@ -1922,6 +1926,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             try
             {
                 var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
+                var learned = await SessionMemoryPrompt.LoadAsync(
+                    _structuredMemory,
+                    _snapshot.SessionId,
+                    _snapshot.Definition,
+                    _profile,
+                    _snapshot.Entries,
+                    evaluationToken).ConfigureAwait(false);
                 var context = new AgentContext(
                     _snapshot.Definition,
                     _snapshot.Entries,
@@ -1945,7 +1956,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LanguageModel: model,
                     ReasoningEffort: _snapshot.ModelSelection?.ReasoningEffort,
                     SummarizedThroughEntrySequence: _snapshot.SummarizedThroughEntrySequence,
-                    LastEntrySequence: _snapshot.DurableLastEntrySequence);
+                    LastEntrySequence: _snapshot.DurableLastEntrySequence,
+                    LearnedMemories: learned);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;

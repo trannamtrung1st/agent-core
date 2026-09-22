@@ -209,7 +209,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<SessionToolExecutor>(),
                 provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IModelCatalog>(),
-                provider.GetRequiredService<IUserTurnCapabilityValidator>());
+                provider.GetRequiredService<IUserTurnCapabilityValidator>(),
+                provider.GetRequiredService<IStructuredMemoryService>());
         });
         return services;
     }

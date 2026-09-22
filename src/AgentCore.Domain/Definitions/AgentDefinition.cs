@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Domain.Definitions;
 
 public sealed record AgentDefinition(
@@ -14,7 +16,19 @@ public sealed record AgentDefinition(
     ProviderPreferences ProviderPreferences,
     IReadOnlyDictionary<string, string> Metadata,
     RoleEnvironment? Environment = null,
-    AgentModelDefaults? ModelDefaults = null);
+    AgentModelDefaults? ModelDefaults = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    MemoryPolicy? MemoryPolicy = null);
+
+public sealed record MemoryPolicy(
+    bool SessionMemory = false,
+    bool IdentityUserPromotion = false,
+    bool IdentityUserRetrieval = false,
+    bool UserPromotion = false,
+    bool UserRetrieval = false)
+{
+    public static MemoryPolicy Disabled { get; } = new();
+}
 
 public sealed record AgentIdentity(string Name, string Role, string Description, string Tone);
 

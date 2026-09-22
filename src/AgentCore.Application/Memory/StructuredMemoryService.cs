@@ -266,7 +266,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             now);
     }
 
-    private static bool ContainsSensitive(string value) =>
+    public static bool ContainsSensitive(string value) =>
         SecretPattern.IsMatch(value) || Base64Blob.IsMatch(value);
 
     private static bool ContainsForbidden(string subject, string content, MemoryAdmissionContext admission)

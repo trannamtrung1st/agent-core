@@ -35,7 +35,8 @@ public sealed record AgentContext(
     ILanguageModel? LanguageModel = null,
     string? ReasoningEffort = null,
     long SummarizedThroughEntrySequence = 0,
-    long LastEntrySequence = 0);
+    long LastEntrySequence = 0,
+    IReadOnlyList<Domain.Memory.StructuredMemoryItem>? LearnedMemories = null);
 
 public abstract record AgentDecision;
 

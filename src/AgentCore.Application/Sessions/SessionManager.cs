@@ -825,7 +825,8 @@ public sealed class SessionRuntimeFactory(
     SessionToolExecutor tools,
     ILanguageModelResolver? models = null,
     IModelCatalog? catalog = null,
-    IUserTurnCapabilityValidator? turnCapabilities = null)
+    IUserTurnCapabilityValidator? turnCapabilities = null,
+    IStructuredMemoryService? structuredMemory = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -851,5 +852,6 @@ public sealed class SessionRuntimeFactory(
             tools: tools,
             modelResolver: models,
             catalog: catalog,
-            turnCapabilities: turnCapabilities);
+            turnCapabilities: turnCapabilities,
+            structuredMemory: structuredMemory);
 }
