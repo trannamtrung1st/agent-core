@@ -7,13 +7,13 @@ Reviewed against `main` on **2026-09-22**.
 Current repository HEAD reviewed:
 
 ```text
-02aa333f6c72718a024fcd0be759b2aee9fa89c9
+3e56a26cd3b764c57bbc022e939c7c4a027c224b
 ```
 
 Hosted Synthetic workflow:
 
 ```text
-35685801146 — green
+35692184054 — green
 ```
 
 Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
@@ -60,7 +60,11 @@ Important frozen contracts include:
 - terminal read-only history;
 - conversation language separate from speech locale;
 - replaceable speech providers;
-- deterministic reconnect/pause behavior.
+- deterministic reconnect/pause behavior;
+- explicit queue vs intentional steer/interruption semantics;
+- accepted-send through response-start treated as an in-flight/busy turn;
+- bounded detach grace with reattach continuity;
+- durable terminal interruption-reason visibility.
 
 Do not redesign P1 as part of memory work.
 
@@ -112,12 +116,22 @@ ac795b656e2e8ebd7d97f08d2d6ebc632d100cde
 workflow 35682808408 — green
 ```
 
-Post-freeze CI isolation/locator maintenance is complete through:
+Post-freeze lifecycle/CI maintenance is complete through:
 
 ```text
-02aa333f6c72718a024fcd0be759b2aee9fa89c9
-workflow 35685801146 — green
+3e56a26cd3b764c57bbc022e939c7c4a027c224b
+workflow 35692184054 — green
 ```
+
+This maintenance includes:
+
+- explicit client queue behavior instead of accidental active-turn interruption;
+- distinct `userSteer` interruption semantics;
+- persisted terminal interruption reasons;
+- detach-grace reattach continuity;
+- active response projection on reattach;
+- pending tool-approval replay through `session.ready`;
+- deterministic zero-grace behavior for isolated API/CI fixtures.
 
 P3A historical multimodal attachment re-inspection remains independently frozen on:
 
@@ -144,6 +158,7 @@ Important frozen P3 contracts include:
 - SSRF-safe `web.fetch`;
 - bounded approval-gated `http.request`;
 - live approval protocol/UI;
+- pending live approval recovery across supported reattach;
 - email search/read/draft/send;
 - exact approved-action binding;
 - credentials outside model context;
@@ -186,6 +201,8 @@ Always keep this section.
 
 - [x] Keep Model/Reasoning controls in the active composer.
 
+- [x] Harden queue/steer, interruption, detach-grace reattach, and approval-replay lifecycle behavior after the P3 freeze.
+
 - [ ] Background responses / work continuing after the live Session Runtime are tracked under P6.
 
   Do not change session-deactivation semantics merely to keep ordinary responses running.
@@ -206,6 +223,7 @@ PromptContextBuilder.MaxSummaryCharacters
 HistoryRestoreWindow
 IMemoryStore.ReadHistoryAsync(...)
 durable paginated ConversationEntry history
+durable terminal InterruptReason
 session revision/concurrency semantics
 session-aware language-model resolution
 ```
@@ -270,6 +288,12 @@ Compaction must improve long-session continuity without replacing raw history or
 
   Trailing queued/current user turns must never disappear merely because they cross a compaction boundary.
 
+- [ ] Preserve explicit queue/steer semantics.
+
+  A queued trailing user turn is future conversation input, not evidence that the current assistant response was semantically completed.
+
+  An intentional steer/interrupt must not cause superseded assistant output to be promoted into memory as though it were fully delivered.
+
 - [ ] Preserve assistant delivery semantics.
 
   Historical assistant context continues to use:
@@ -278,6 +302,8 @@ Compaction must improve long-session continuity without replacing raw history or
   - heard prefix for Voice.
 
   Unreceived/unheard assistant tails must not become remembered facts simply because compaction exists.
+
+  Persisted `InterruptReason` is provenance/lifecycle metadata. It is not additional assistant semantic text.
 
 - [ ] Keep raw `ConversationEntry` history unchanged.
 
@@ -305,9 +331,11 @@ Compaction must improve long-session continuity without replacing raw history or
   - recent tail after summary;
   - no summary/raw-history duplication;
   - queued trailing user turns;
+  - intentional user steer with persisted interruption reason;
   - interrupted assistant output;
   - Voice heard-prefix behavior;
   - reopen from persistence;
+  - detach-grace reattach;
   - long transcript with only a bounded runtime restore window.
 
 ### P4A-0 stop condition
@@ -321,6 +349,8 @@ eligible raw history after the summary boundary
 ```
 
 without an LLM generating new summaries yet.
+
+The boundary remains correct for queued turns, interrupted/steered responses, persisted delivery prefixes, reopen, and reattach.
 
 This is the first P4 implementation item.
 
@@ -341,9 +371,13 @@ This is the first P4 implementation item.
   Do not summarize:
 
   - streaming entries;
+  - active responses;
   - incomplete current user batches;
+  - pending live tool-approval state;
   - unpersisted work;
   - stale/superseded runtime state.
+
+  Assistant content must obey the same received/heard-prefix rules used by normal historical prompt construction.
 
 - [ ] Preserve materially useful context:
 
@@ -377,7 +411,8 @@ This is the first P4 implementation item.
   - bounded length;
   - valid source boundary;
   - no raw binary/base64 attachment payloads;
-  - no provider reasoning.
+  - no provider reasoning;
+  - no undelivered assistant tail promoted into semantic memory.
 
 - [ ] Provide deterministic failure behavior.
 
@@ -412,6 +447,12 @@ This is the first P4 implementation item.
 - [ ] Compaction must be cancellable with the Session Runtime.
 
   It must not silently become durable detached/background work.
+
+- [ ] Respect detach-grace semantics.
+
+  A temporary disconnect followed by valid reattach must not create duplicate compaction work or corrupt the summary boundary.
+
+  Actual Session Runtime finalization may cancel in-flight compaction normally.
 
 - [ ] Protect summary commits against stale work.
 
@@ -457,8 +498,12 @@ This is the first P4 implementation item.
   - cancellation;
   - stale compaction result;
   - reconnect/reopen;
+  - detach-grace reattach;
   - interruption;
+  - intentional steer;
+  - persisted interrupt reasons;
   - queued user turns;
+  - pending live approval;
   - provider failure;
   - malformed/oversized summary;
   - repeated incremental compaction.
@@ -484,6 +529,8 @@ A long-running session can exceed the raw prompt-history window while preserving
 Raw history remains authoritative and intact.
 
 Failures safely fall back to the previous summary plus bounded recent history.
+
+Queue/steer, interruption, delivery-prefix, and detach/reattach semantics remain correct across the compaction boundary.
 
 ---
 
@@ -1009,9 +1056,13 @@ This is not a reason to reopen frozen P2E.
   - image-input presence without image-content logging;
   - reasoning presence without reasoning-content logging;
   - response lifecycle;
+  - interruption reason;
+  - queue/steer behavior;
+  - detach/reattach lifecycle;
   - progress lifecycle;
   - speech provider/capability selection;
   - tool calls;
+  - pending tool approvals;
   - sandbox execution;
   - compaction lifecycle;
   - memory retrieval/mutation;
@@ -1027,7 +1078,7 @@ In particular:
 - P1 remains frozen on `dceaccb`;
 - P2 remains frozen on `47d6ff6`;
 - P3 key-free freeze remains `4dbb920`;
-- post-freeze CI maintenance is green through `02aa333`;
+- post-freeze lifecycle/CI maintenance is green through `3e56a26`;
 - P4 is the active roadmap;
 - provider-specific Real gaps do not silently become architecture phases.
 
@@ -1066,7 +1117,13 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Capability-aware model/image admission.
 - [x] Repeated proactive initiative.
 - [x] Client pending-send FIFO.
+- [x] Explicit queue vs intentional steer behavior.
+- [x] ACK-to-response-start busy-gap protection.
 - [x] Steer/interrupt/Stop semantics.
+- [x] Durable assistant interruption reasons.
+- [x] Detach-grace reconnect/reattach continuity.
+- [x] Active response recovery on reattach.
+- [x] Pending tool-approval replay on reattach.
 - [x] Session-owned isolated workspaces.
 - [x] Typed bounded tool execution.
 - [x] Workspace search/move/patch/list/read/write.
