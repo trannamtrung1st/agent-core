@@ -23,6 +23,7 @@ public sealed class AgentCoreOptions
     public int MaxActiveSessions { get; set; } = 10;
     public int MaxEntriesPerSession { get; set; } = 1000;
     public int PendingVoiceTimeoutMs { get; set; } = 30_000;
+    public int DetachGracePeriodSeconds { get; set; } = 30;
 }
 
 public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress, IProfileLiveUpdateNotifier
@@ -337,6 +338,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         }
                         else
                         {
+                            live.CancelDetachGrace();
                             live.ConnectionId = connectionId;
                             live.LastAttachEventId = command.EventId;
                             live.LastAttachFingerprint = fingerprint;
@@ -730,14 +732,54 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return;
         }
 
-        var live = ExtractLive(sessionId, connectionId);
-        if (live is null)
+        Live? live;
+        lock (_gate)
+        {
+            if (!_live.TryGetValue(sessionId, out live)
+                || !string.Equals(live.ConnectionId, connectionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            live.ConnectionId = null;
+            _connections.TryRemove(connectionId, out _);
+        }
+
+        live.FailPendingAdmits();
+        var graceSeconds = Math.Max(0, _options.DetachGracePeriodSeconds);
+        if (graceSeconds == 0)
+        {
+            _ = FinalizeDetachedSessionAsync(sessionId, live);
+            return;
+        }
+
+        live.ScheduleDetachGrace(
+            TimeSpan.FromSeconds(graceSeconds),
+            () => _ = FinalizeDetachedSessionAsync(sessionId, live));
+    }
+
+    private async Task FinalizeDetachedSessionAsync(Guid sessionId, Live live)
+    {
+        Live? extracted;
+        lock (_gate)
+        {
+            if (!_live.TryGetValue(sessionId, out var current)
+                || !ReferenceEquals(current, live)
+                || live.ConnectionId is not null)
+            {
+                return;
+            }
+
+            extracted = ExtractLive(sessionId, connectionId: null);
+        }
+
+        if (extracted is null)
         {
             return;
         }
 
         using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ShutdownLiveAsync(live, sessionId, detachRuntime: true, joinDispatcher: true, budget.Token)
+        await ShutdownLiveAsync(extracted, sessionId, detachRuntime: true, joinDispatcher: true, budget.Token)
             .ConfigureAwait(false);
     }
 
@@ -2019,6 +2061,44 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         public TaskCompletionSource Disposed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool InvalidateAfterPublish { get; set; }
         public CancellationToken DispatchToken => _dispatchLifetime.Token;
+        private CancellationTokenSource? _detachGraceCts;
+
+        public void CancelDetachGrace()
+        {
+            var cts = Interlocked.Exchange(ref _detachGraceCts, null);
+            if (cts is null)
+            {
+                return;
+            }
+
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            cts.Dispose();
+        }
+
+        public void ScheduleDetachGrace(TimeSpan delay, Action onExpired)
+        {
+            CancelDetachGrace();
+            var cts = new CancellationTokenSource();
+            _detachGraceCts = cts;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay, cts.Token).ConfigureAwait(false);
+                    onExpired();
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            });
+        }
 
         public long NextSequence() => Interlocked.Increment(ref _serverSequence);
 
@@ -2052,6 +2132,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
         public void StopDispatch()
         {
+            CancelDetachGrace();
             Evicted = true;
             try
             {

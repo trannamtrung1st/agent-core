@@ -578,19 +578,56 @@ describe("realtime race handling", () => {
     const first = sendDraft();
     await Promise.resolve();
     expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke.mock.calls[0][1].payload).toEqual(
-      expect.objectContaining({ text: "first", behavior: "queue" })
-    );
-    resolveAck({ accepted: true });
-    await first;
-    expect(useSessionStore.getState().liveResponseId).toBeNull();
     useSessionStore.setState({ draft: "second" });
     const second = sendDraft();
     await Promise.resolve();
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
     expect(useSessionStore.getState().pendingSendQueue[0]?.text).toBe("second");
-    await second;
+    resolveAck({ accepted: true });
+    await Promise.all([first, second]);
+    expect(useSessionStore.getState().liveResponseId).toBeNull();
+  });
+
+  it("clears awaiting when response starts before SendText ack completes", async () => {
+    let resolveAck: (value: { accepted: boolean }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(
+      () => new Promise((resolve) => {
+        resolveAck = resolve;
+      })
+    );
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const sending = sendDraft();
+    await Promise.resolve();
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "e-started",
+      sequence: 1,
+      timestamp: "2026-09-22T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r1",
+      type: "agent.response.started",
+      payload: { entryId: "a1", entrySequence: 1 }
+    });
+    resolveAck({ accepted: true });
+    await sending;
+    useSessionStore.setState({ draft: "follow-up" });
+    await sendDraft();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+    expect(useSessionStore.getState().pendingSendQueue[0]?.text).toBe("follow-up");
   });
 
   it("treats in-flight output states as composer busy", async () => {

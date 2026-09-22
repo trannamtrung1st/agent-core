@@ -63,6 +63,7 @@ export type HistoryEntry = {
   attachments?: HistoryAttachment[];
   blocks?: HistoryBlock[];
   finishReason?: string | null;
+  interruptReason?: string | null;
   speechText?: string | null;
 };
 
@@ -386,6 +387,7 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       attachments: asAttachments(row.attachments),
       blocks: asBlocks(row.blocks),
       finishReason: row.finishReason == null ? null : asString(row.finishReason),
+      interruptReason: row.interruptReason == null ? null : asString(row.interruptReason),
       speechText: asSpeechText(row.speechText)
     };
   });
@@ -691,6 +693,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const finishReason = event.type === "agent.response.completed"
         ? asString(event.payload.finishReason) || null
         : null;
+      const interruptReason = event.type === "agent.response.interrupted"
+        ? asString(event.payload.reason) || null
+        : null;
       const tombstones = event.responseId
         ? { ...state.tombstones, [event.responseId]: status as "interrupted" | "completed" | "failed" }
         : state.tombstones;
@@ -713,6 +718,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
                 ...entry,
                 status,
                 finishReason: finishReason ?? entry.finishReason ?? null,
+                interruptReason: interruptReason ?? entry.interruptReason ?? null,
                 speechText: asSpeechText(event.payload.speechText) ?? entry.speechText
               }
             : entry)

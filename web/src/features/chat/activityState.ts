@@ -1,5 +1,7 @@
 import { lifecycleOutcomeLabel } from "./sessionLifecycle";
 
+import { interruptReasonLabel } from "./interruptReason";
+
 export type StatusSource = {
   connection: string;
   pendingVoice: boolean;
@@ -13,6 +15,7 @@ export type StatusSource = {
   liveUserTranscript?: string | null;
   liveAssistantText?: string;
   liveAssistantHasContent?: boolean;
+  liveInterruptReason?: string | null;
   connectionError?: string | null;
   activeProgress?: {
     kind: "preparing" | "readingAttachments" | "runningTool" | "waitingExternal" | "finalizing";
@@ -159,7 +162,7 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
   const live = source.liveResponseId != null;
 
   if (source.outputState === "interrupted" && live) {
-    return { kind: "error", label: "Interrupted" };
+    return { kind: "error", label: interruptReasonLabel(source.liveInterruptReason) ?? "Interrupted" };
   }
 
   if (shouldShowUserSpeaking(source)) {

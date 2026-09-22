@@ -175,6 +175,7 @@ export function ChatApp() {
     liveUserTranscript: state.liveUserTranscript,
     liveAssistantText: liveAssistant?.text,
     liveAssistantHasContent: Boolean(liveAssistant?.blocks?.length),
+    liveInterruptReason: liveAssistant?.interruptReason ?? null,
     connectionError: state.error,
     activeProgress: state.activeProgress
   };

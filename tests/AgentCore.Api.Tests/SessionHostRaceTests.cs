@@ -99,6 +99,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
 
                 services.AddSingleton<ILanguageModel>(
                     new ScriptedLanguageModel(["Hello, this is...", " more text."], releaseModel));
+                services.Configure<AgentCoreOptions>(options => options.DetachGracePeriodSeconds = 0);
             });
         });
 

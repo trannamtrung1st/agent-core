@@ -215,6 +215,36 @@ public sealed class UserTextQueueTests
     }
 
     [Fact]
+    public async Task Detach_while_response_generating_records_disconnected_reason()
+    {
+        var output = new CapturingSessionOutput();
+        var model = new HoldingLanguageModel();
+        var time = Clock();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await WaitForActiveResponseAsync(runtime);
+        var r1 = runtime.ActiveResponseId;
+        Assert.NotNull(r1);
+
+        await runtime.DetachAsync();
+
+        Assert.Contains(
+            output.Items,
+            item => item.ResponseId == r1
+                && item.Payload is ResponseCompletedOutput completed
+                && completed.InterruptReason == "disconnected");
+        model.Release.TrySetResult();
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
     public async Task CancelResponse_is_idempotent_stale_and_unknown()
     {
         var time = Clock();

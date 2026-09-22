@@ -18,7 +18,7 @@ export function ChatMessage({
 }) {
   const isUser = entry.role === "user";
   const speaker = isUser ? "You" : agentName || "Agent";
-  const status = statusLabel(entry.status, entry.finishReason);
+  const status = statusLabel(entry.status, entry.finishReason, entry.interruptReason);
   const timeLabel = formatChatTime(entry.createdAt);
   const hasFiles = Boolean(entry.attachments?.length && sessionId);
   const hasBlocks = Boolean(entry.blocks?.length);
@@ -82,6 +82,7 @@ export function ChatMessage({
           color={entry.status === "failed" ? "red" : "gold"}
           variant="solid"
           className="chat-message-status"
+          title={entry.interruptReason ?? undefined}
         >
           {status}
         </Tag>

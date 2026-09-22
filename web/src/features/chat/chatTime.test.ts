@@ -23,6 +23,7 @@ describe("formatChatTime", () => {
 describe("statusLabel", () => {
   it("labels terminal entry statuses", () => {
     expect(statusLabel("interrupted")).toBe("Interrupted");
+    expect(statusLabel("interrupted", null, "disconnected")).toBe("Disconnected");
     expect(statusLabel("failed")).toBe("Failed");
     expect(statusLabel("completed", "lengthLimit")).toBe("Output limit reached");
     expect(statusLabel("completed")).toBeNull();

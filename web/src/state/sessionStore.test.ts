@@ -449,17 +449,66 @@ describe("applyServerEvent", () => {
         ...emptySession(),
         attachmentId: "a1",
         liveResponseId: "r1",
-        outputState: "agentGenerating"
+        outputState: "agentGenerating",
+        entries: [
+          {
+            entryId: "a1",
+            sequence: 1,
+            sourceEventId: null,
+            role: "assistant",
+            text: "partial",
+            responseId: "r1",
+            status: "streaming",
+            deliveryMode: "text",
+            heardTextEndExclusive: 0,
+            receivedTextEndExclusive: 3,
+            createdAt: "2026-09-22T00:00:00.000Z"
+          }
+        ]
       },
       event({
         type: "agent.response.interrupted",
         sequence: 1,
         responseId: "r1",
-        payload: { reason: "newText" }
+        payload: { reason: "userBargeIn" }
       })
     );
     expect(interrupted.liveResponseId).toBeNull();
     expect(interrupted.outputState).toBe("interrupted");
+    expect(interrupted.entries.find((entry) => entry.responseId === "r1")?.interruptReason).toBe("userBargeIn");
+  });
+
+  it("maps disconnected interruption reason on assistant entries", () => {
+    const state = applyServerEvent(
+      {
+        ...emptySession(),
+        attachmentId: "a1",
+        liveResponseId: "r1",
+        entries: [
+          {
+            entryId: "a1",
+            sequence: 1,
+            sourceEventId: null,
+            role: "assistant",
+            text: "partial",
+            responseId: "r1",
+            status: "streaming",
+            deliveryMode: "text",
+            heardTextEndExclusive: 0,
+            receivedTextEndExclusive: 3,
+            createdAt: "2026-09-22T00:00:00.000Z"
+          }
+        ]
+      },
+      event({
+        type: "agent.response.interrupted",
+        sequence: 2,
+        responseId: "r1",
+        payload: { reason: "disconnected" }
+      })
+    );
+    expect(state.entries[0]?.status).toBe("interrupted");
+    expect(state.entries[0]?.interruptReason).toBe("disconnected");
   });
 
   it("keeps a newer live response in flight when an older one completes", () => {

@@ -536,6 +536,7 @@ function dropLiveTransport(connection: "reconnecting" | "failed"): void {
   void releaseClientSpeech();
   capture.release();
   clearVoiceInputHeldForAgentOutput();
+  clearAwaitingAgentResponseStart();
   useSessionStore.setState({
     connection,
     pendingMode: null,
@@ -773,6 +774,7 @@ function handleEvent(raw: ServerEvent): void {
   if (raw.type === "session.state.changed") {
     const status = String(raw.payload.status ?? "");
     if (status === "paused" || status === "ended") {
+      clearAwaitingAgentResponseStart();
       void stopConnection();
       stopReceipts();
       capture.release();
@@ -797,6 +799,7 @@ function handleEvent(raw: ServerEvent): void {
     startReceipts(raw.responseId);
   }
   if ((raw.type === "agent.response.completed" || raw.type === "agent.response.interrupted") && raw.responseId) {
+    clearAwaitingAgentResponseStart();
     void sendReceipt(true, raw.responseId);
     stopReceipts();
     void tryResumeClientTranscriptAfterAgentOutput();
@@ -2904,6 +2907,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   }
 
   let accepted = false;
+  awaitingAgentResponseStart = true;
   sendRequest = (async () => {
     try {
       const ack = await dispatchHubCommand((sequence) =>
@@ -2935,7 +2939,6 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
 
       pendingUserText = null;
       accepted = true;
-      awaitingAgentResponseStart = true;
       for (const item of pendingAttachmentSnapshot) {
         releasePendingFile(item.localId);
       }
@@ -3100,10 +3103,6 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
 }
 
 export async function sendDraft(): Promise<void> {
-  if (sendRequest) {
-    return sendRequest;
-  }
-
   let snapshot = useSessionStore.getState();
   if (isReadonlySession(snapshot)) {
     return;
@@ -3131,6 +3130,23 @@ export async function sendDraft(): Promise<void> {
   const readyFiles = snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId);
   const readyAttachmentIds = readyFiles.map((item) => item.attachmentId!);
   const text = draft || pendingUserText?.text || "";
+
+  if (sendRequest) {
+    if (
+      snapshot.connection === "ready"
+      && !snapshot.pendingAttachments.some((item) => item.status !== "ready")
+      && (text.length > 0 || readyAttachmentIds.length > 0)
+    ) {
+      if (draft) {
+        useSessionStore.setState({ draft: "" });
+      }
+
+      enqueueLocalSend(text, readyFiles, readyAttachmentIds);
+    }
+
+    return sendRequest;
+  }
+
   if (snapshot.connection !== "ready" || snapshot.pendingAttachments.some((item) => item.status !== "ready")) {
     return;
   }

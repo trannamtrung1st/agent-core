@@ -1204,12 +1204,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!queued && _activeResponseId is { } liveResponse)
         {
             var interruptReason = "userSteer";
-            _logger.LogInformation(
-                "User text interrupts active response {SessionId} {EventId} behavior {Behavior} reason {Reason}",
-                SessionId,
-                cause.EventId,
-                UserTextBehaviors.WireName(input.Behavior),
-                interruptReason);
             await TerminalizeActiveResponseAsync(cause, liveResponse, cancellationToken, interruptReason, requestPersist: false)
                 .ConfigureAwait(false);
             await ApplyPendingVoiceIfIdleAsync(cause, cancellationToken).ConfigureAwait(false);
@@ -2676,6 +2670,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string reason,
         bool requestPersist)
     {
+        _logger.LogInformation(
+            "Active response terminalized {SessionId} {ResponseId} reason {Reason}",
+            SessionId,
+            responseId,
+            reason);
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
         ClearPendingApproval();
