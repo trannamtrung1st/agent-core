@@ -53,6 +53,12 @@ public sealed class SnapshotRecord
     public string? ModelId { get; set; }
     public string? ModelSelectionSource { get; set; }
     public string? ModelReasoningEffort { get; set; }
+    public int SummaryFormatVersion { get; set; }
+    public long? SummaryGeneratedAtUtc { get; set; }
+    public string? SummaryModelCatalogKey { get; set; }
+    public string? SummaryModelProviderAlias { get; set; }
+    public string? SummaryModelId { get; set; }
+    public string? SummaryModelReasoningEffort { get; set; }
     public SessionRecord Session { get; set; } = null!;
 }
 

@@ -171,6 +171,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "SessionSnapshots", "SummaryFormatVersion", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260923025000_SummaryMetadata', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await ColumnExistsAsync(connection, "SessionSnapshots", "LifecycleStatus", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -709,6 +719,12 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.Snapshot.SchemaVersion = snapshot.SchemaVersion;
         row.Snapshot.Summary = snapshot.Summary;
         row.Snapshot.SummarizedThroughEntrySequence = snapshot.SummarizedThroughEntrySequence;
+        row.Snapshot.SummaryFormatVersion = snapshot.SummaryFormatVersion;
+        row.Snapshot.SummaryGeneratedAtUtc = snapshot.SummaryGeneratedAt?.ToUnixTimeMilliseconds();
+        row.Snapshot.SummaryModelCatalogKey = snapshot.SummaryModel?.CatalogKey;
+        row.Snapshot.SummaryModelProviderAlias = snapshot.SummaryModel?.ProviderAlias;
+        row.Snapshot.SummaryModelId = snapshot.SummaryModel?.ModelId;
+        row.Snapshot.SummaryModelReasoningEffort = snapshot.SummaryModel?.ReasoningEffort;
         row.Snapshot.PendingTopic = snapshot.PendingTopic;
         row.Snapshot.ProfileId = snapshot.ProfileId?.ToString("D");
         row.Snapshot.LastEntrySequence = snapshot.DurableLastEntrySequence;
@@ -807,7 +823,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ParseEnumOrNull<LifecycleTransitionSource>(snapshot.LifecycleSource),
             snapshot.LifecycleChangedAtUtc is { } changed ? FromUnix(changed) : null,
             snapshot.SpeechLocaleOverride,
-            ReadModelSelection(snapshot));
+            ReadModelSelection(snapshot),
+            snapshot.SummaryFormatVersion,
+            snapshot.SummaryGeneratedAtUtc is { } generatedAt ? FromUnix(generatedAt) : null,
+            ReadSummaryModel(snapshot));
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>
@@ -899,6 +918,22 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.ModelId,
             Enum.Parse<ModelSelectionSource>(row.ModelSelectionSource),
             row.ModelReasoningEffort);
+    }
+
+    private static ModelGenerationProvenance? ReadSummaryModel(SnapshotRecord row)
+    {
+        if (string.IsNullOrEmpty(row.SummaryModelCatalogKey)
+            || string.IsNullOrEmpty(row.SummaryModelProviderAlias)
+            || string.IsNullOrEmpty(row.SummaryModelId))
+        {
+            return null;
+        }
+
+        return new ModelGenerationProvenance(
+            row.SummaryModelCatalogKey,
+            row.SummaryModelProviderAlias,
+            row.SummaryModelId,
+            row.SummaryModelReasoningEffort);
     }
 
     private static void ApplyModelProvenance(EntryRecord row, ModelGenerationProvenance? provenance)

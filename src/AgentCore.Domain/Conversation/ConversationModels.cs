@@ -239,6 +239,12 @@ public static class SessionTitles
     }
 }
 
+public static class SummaryFormats
+{
+    public const int Legacy = 0;
+    public const int Semantic = 1;
+}
+
 public sealed record SessionSnapshot(
     int SchemaVersion,
     Guid SessionId,
@@ -269,7 +275,10 @@ public sealed record SessionSnapshot(
     LifecycleTransitionSource? LifecycleSource = null,
     DateTimeOffset? LifecycleChangedAt = null,
     string? SpeechLocaleOverride = null,
-    SessionModelSelection? ModelSelection = null)
+    SessionModelSelection? ModelSelection = null,
+    int SummaryFormatVersion = SummaryFormats.Legacy,
+    DateTimeOffset? SummaryGeneratedAt = null,
+    ModelGenerationProvenance? SummaryModel = null)
 {
     public long DurableLastEntrySequence
     {

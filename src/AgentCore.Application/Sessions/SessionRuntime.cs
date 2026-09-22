@@ -4289,22 +4289,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
-    private static SessionSnapshot MergePersisted(SessionSnapshot saved, SessionSnapshot live) =>
-        saved with
+    private static SessionSnapshot MergePersisted(SessionSnapshot saved, SessionSnapshot live)
+    {
+        var liveSummaryWins = live.SummarizedThroughEntrySequence >= saved.SummarizedThroughEntrySequence;
+        return saved with
         {
             Mode = live.Mode,
             PendingMode = live.PendingMode,
             PendingTopic = live.PendingTopic,
-            Summary = live.SummarizedThroughEntrySequence >= saved.SummarizedThroughEntrySequence
-                ? live.Summary
-                : saved.Summary,
+            Summary = liveSummaryWins ? live.Summary : saved.Summary,
             SummarizedThroughEntrySequence = Math.Max(saved.SummarizedThroughEntrySequence, live.SummarizedThroughEntrySequence),
+            SummaryFormatVersion = liveSummaryWins ? live.SummaryFormatVersion : saved.SummaryFormatVersion,
+            SummaryGeneratedAt = liveSummaryWins ? live.SummaryGeneratedAt : saved.SummaryGeneratedAt,
+            SummaryModel = liveSummaryWins ? live.SummaryModel : saved.SummaryModel,
             Entries = MergeEntryOffsets(saved.Entries, live.Entries),
             LastEntrySequence = Math.Max(saved.DurableLastEntrySequence, live.DurableLastEntrySequence),
             Status = live.Status is SessionStatus.Ending or SessionStatus.Ended or SessionStatus.Attached
                 ? live.Status
                 : saved.Status
         };
+    }
 
     private static ConversationEntry[] MergeEntryOffsets(
         IReadOnlyList<ConversationEntry> saved,

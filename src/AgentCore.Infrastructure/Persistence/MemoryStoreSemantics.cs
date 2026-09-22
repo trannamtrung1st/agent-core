@@ -10,6 +10,9 @@ internal static class MemoryStoreSemantics
         && left.PendingMode == right.PendingMode
         && left.Summary == right.Summary
         && left.SummarizedThroughEntrySequence == right.SummarizedThroughEntrySequence
+        && left.SummaryFormatVersion == right.SummaryFormatVersion
+        && left.SummaryGeneratedAt == right.SummaryGeneratedAt
+        && left.SummaryModel == right.SummaryModel
         && left.PendingTopic == right.PendingTopic
         && left.ProfileId == right.ProfileId
         && left.Definition.Id == right.Definition.Id

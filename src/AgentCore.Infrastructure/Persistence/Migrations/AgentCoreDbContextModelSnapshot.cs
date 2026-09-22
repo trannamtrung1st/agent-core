@@ -153,6 +153,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("FinishReason")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("HeardTextEndExclusive")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("InterruptReason")
                         .HasColumnType("TEXT");
 
@@ -167,9 +170,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ModelReasoningEffort")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("HeardTextEndExclusive")
-                        .HasColumnType("INTEGER");
 
                     b.Property<int>("ReceivedTextEndExclusive")
                         .HasColumnType("INTEGER");
@@ -362,6 +362,21 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("LifecycleStatus")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ModelCatalogKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelProviderAlias")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelReasoningEffort")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelSelectionSource")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("PendingTopic")
                         .HasColumnType("TEXT");
 
@@ -383,26 +398,29 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("SpeechLocaleOverride")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ModelCatalogKey")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelProviderAlias")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelReasoningEffort")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelSelectionSource")
-                        .HasColumnType("TEXT");
-
                     b.Property<long>("SummarizedThroughEntrySequence")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Summary")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SummaryFormatVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("SummaryGeneratedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SummaryModelCatalogKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SummaryModelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SummaryModelProviderAlias")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SummaryModelReasoningEffort")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("UpdatedAtUtc")

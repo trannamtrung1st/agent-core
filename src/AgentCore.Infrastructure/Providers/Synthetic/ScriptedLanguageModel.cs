@@ -6,6 +6,16 @@ using AgentCore.Infrastructure.Providers.SemanticResponses;
 
 namespace AgentCore.Infrastructure.Providers.Synthetic;
 
+public enum CompactionFixture
+{
+    Echo,
+    Empty,
+    Malformed,
+    Oversized,
+    Throw,
+    Late
+}
+
 public sealed class ScriptedLanguageModel : ILanguageModel
 {
     private readonly IReadOnlyList<string> _chunks;
@@ -14,6 +24,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly bool _alwaysToolCall;
     private readonly string? _completionDecision;
     private readonly bool _completionProviderFailed;
+    private readonly CompactionFixture _compactionFixture;
+    private readonly TaskCompletionSource? _compactionRelease;
+    private readonly TaskCompletionSource? _compactionStarted;
 
     public ScriptedLanguageModel(
         IReadOnlyList<string>? chunks = null,
@@ -21,7 +34,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         bool emitAfterCancel = false,
         bool alwaysToolCall = false,
         string? completionDecision = null,
-        bool completionProviderFailed = false)
+        bool completionProviderFailed = false,
+        CompactionFixture compactionFixture = CompactionFixture.Echo,
+        TaskCompletionSource? compactionRelease = null,
+        TaskCompletionSource? compactionStarted = null)
     {
         _chunks = chunks ?? DefaultChunks;
         _release = releaseAfterFirstChunk;
@@ -29,6 +45,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         _alwaysToolCall = alwaysToolCall;
         _completionDecision = completionDecision;
         _completionProviderFailed = completionProviderFailed;
+        _compactionFixture = compactionFixture;
+        _compactionRelease = compactionRelease;
+        _compactionStarted = compactionStarted;
     }
 
     public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
@@ -51,6 +70,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (IsCompactionRequest(request))
+        {
+            await foreach (var item in GenerateCompactionAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
+
+            yield break;
+        }
+
         if (TryInitiativeDecision(request, out var initiativeJson))
         {
             yield return new ModelTextDelta(initiativeJson);
@@ -549,6 +578,105 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         return DefaultChunks;
+    }
+
+    private static bool IsCompactionRequest(ModelRequest request) =>
+        request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal));
+
+    private async IAsyncEnumerable<ModelGenerationEvent> GenerateCompactionAsync(
+        ModelRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        _compactionStarted?.TrySetResult();
+        switch (_compactionFixture)
+        {
+            case CompactionFixture.Throw:
+                throw new InvalidOperationException("Synthetic compaction failure.");
+            case CompactionFixture.Empty:
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            case CompactionFixture.Malformed:
+                yield return new ModelTextDelta(ConversationCompactor.Marker + " not a summary");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            case CompactionFixture.Oversized:
+                yield return new ModelTextDelta(new string('s', CompactionPolicy.MaxSummaryCharacters + 1));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            case CompactionFixture.Late:
+                if (_compactionRelease is not null)
+                {
+                    await _compactionRelease.Task.ConfigureAwait(false);
+                }
+                else
+                {
+                    await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+                }
+
+                yield return new ModelTextDelta(EchoCompaction(request));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            default:
+                yield return new ModelTextDelta(EchoCompaction(request));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+        }
+    }
+
+    private static string EchoCompaction(ModelRequest request)
+    {
+        var user = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
+        var parts = new List<string>();
+        foreach (var raw in user.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0
+                || line.StartsWith("Previous ", StringComparison.Ordinal)
+                || line.StartsWith("New durable", StringComparison.Ordinal)
+                || line.Contains("[omitted]", StringComparison.Ordinal)
+                || line.Contains("[no delivered text]", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (line.StartsWith('"') && line.EndsWith('"') && line.Length >= 2)
+            {
+                var quoted = line[1..^1];
+                if (quoted.Length > 0 && quoted != "(none)")
+                {
+                    parts.Add(quoted);
+                }
+
+                continue;
+            }
+
+            var split = line.IndexOf(": ", StringComparison.Ordinal);
+            if (split < 0)
+            {
+                continue;
+            }
+
+            var text = line[(split + 2)..].Trim();
+            var attachments = text.IndexOf(" attachments:", StringComparison.Ordinal);
+            if (attachments >= 0)
+            {
+                text = text[..attachments].TrimEnd();
+            }
+
+            if (text.Length > 0)
+            {
+                parts.Add(text);
+            }
+        }
+
+        var body = string.Join("; ", parts);
+        var limit = CompactionPolicy.MaxSummaryCharacters - 20;
+        if (body.Length > limit)
+        {
+            body = body[..limit];
+        }
+
+        return body.Length == 0 ? "Summary: no new facts" : "Summary: " + body;
     }
 
     private static bool TryInitiativeDecision(ModelRequest request, out string json)
