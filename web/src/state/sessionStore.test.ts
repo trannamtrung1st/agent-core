@@ -838,6 +838,39 @@ describe("agent.progress", () => {
     expect(state.activeProgress).toBeNull();
   });
 
+  it("restores pending approval from session.ready during reattach", () => {
+    const next = applyServerEvent(emptySession(), event({
+      type: "session.ready",
+      sequence: 1,
+      payload: {
+        mode: "text",
+        status: "attached",
+        history: [],
+        activeResponseId: "resp-1",
+        pendingApproval: {
+          approvalId: "appr-1",
+          responseId: "resp-1",
+          operationId: "op-1",
+          toolName: "email.send",
+          effect: "sensitiveWrite",
+          summary: "Send email",
+          details: { to: "a@example.com" },
+          expiresAt: "2026-09-22T12:00:00.000Z"
+        }
+      }
+    }));
+    expect(next.pendingApproval).toEqual({
+      approvalId: "appr-1",
+      responseId: "resp-1",
+      operationId: "op-1",
+      toolName: "email.send",
+      effect: "sensitiveWrite",
+      summary: "Send email",
+      details: { to: "a@example.com" },
+      expiresAt: "2026-09-22T12:00:00.000Z"
+    });
+  });
+
   it("clears progress on session.ready, paused state, and control-sequence reset", () => {
     const withProgress = {
       ...emptySession(),

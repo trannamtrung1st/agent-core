@@ -228,6 +228,16 @@ public sealed record PublicHistoryEntry(
     string? InterruptReason = null,
     string? SpeechText = null);
 
+public sealed record PublicPendingApproval(
+    Guid ApprovalId,
+    Guid ResponseId,
+    Guid OperationId,
+    string ToolName,
+    string Effect,
+    string Summary,
+    IReadOnlyDictionary<string, string> Details,
+    DateTimeOffset ExpiresAt);
+
 public sealed record SessionReadyProjection(
     SessionMode Mode,
     SessionMode? PendingMode,
@@ -245,7 +255,8 @@ public sealed record SessionReadyProjection(
     string OutputTransport,
     SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
     SpeechLocaleResolution? SpeechLocale = null,
-    SessionModelSelection? ModelSelection = null);
+    SessionModelSelection? ModelSelection = null,
+    PublicPendingApproval? PendingApproval = null);
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

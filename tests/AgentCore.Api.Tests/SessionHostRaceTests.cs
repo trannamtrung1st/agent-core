@@ -147,6 +147,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
         Assert.Contains("three points", assistantEntry.Text, StringComparison.OrdinalIgnoreCase);
 
         var secondDelta = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         hubB.On<ServerEvent>("SessionEvent", evt =>
         {
             if (evt.Type == "agent.text.delta"
@@ -157,20 +158,16 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
             {
                 secondDelta.TrySetResult();
             }
-        });
 
-        releaseModel.TrySetResult();
-        await secondDelta.Task.WaitAsync(TimeSpan.FromSeconds(15));
-
-        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        hubB.On<ServerEvent>("SessionEvent", evt =>
-        {
             if (evt.Type == "agent.response.completed"
                 && string.Equals(evt.ResponseId, responseId.ToString(), StringComparison.OrdinalIgnoreCase))
             {
                 completed.TrySetResult();
             }
         });
+
+        releaseModel.TrySetResult();
+        await secondDelta.Task.WaitAsync(TimeSpan.FromSeconds(15));
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Null(host.ActiveResponseId(Guid.Parse(session.SessionId)));
     }

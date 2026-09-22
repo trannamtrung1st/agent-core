@@ -55,6 +55,10 @@ public sealed class ToolApprovalTests
         var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
         var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
         Assert.Equal(ToolCatalog.DemoSensitiveAction, requested.ToolName);
+        var pendingOnReady = runtime.Runtime.BuildPublicPendingApproval();
+        Assert.NotNull(pendingOnReady);
+        Assert.Equal(requested.ApprovalId, pendingOnReady!.ApprovalId);
+        Assert.Equal(requested.Summary, pendingOnReady.Summary);
         Assert.Contains(
             output.Items,
             item => item.Payload is ResponseProgressOutput progress

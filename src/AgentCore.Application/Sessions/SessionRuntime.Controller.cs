@@ -370,7 +370,8 @@ public sealed partial class SessionRuntime
             _voice.EffectivePlan.OutputTransport,
             _snapshot.LifecycleStatus,
             SpeechLocale.Resolve(_snapshot),
-            _snapshot.ModelSelection);
+            _snapshot.ModelSelection,
+            BuildPublicPendingApproval());
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>

@@ -393,6 +393,44 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
   });
 }
 
+export function pendingApprovalFromPayload(raw: unknown, activeResponseId: string | null): PendingApproval | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const approvalId = asString(row.approvalId);
+  if (!approvalId) {
+    return null;
+  }
+
+  const responseId = row.responseId == null ? activeResponseId : asString(row.responseId);
+  if (!responseId) {
+    return null;
+  }
+
+  const detailsRaw = row.details;
+  const details: Record<string, string> = {};
+  if (detailsRaw && typeof detailsRaw === "object" && !Array.isArray(detailsRaw)) {
+    for (const [key, value] of Object.entries(detailsRaw as Record<string, unknown>)) {
+      if (typeof value === "string") {
+        details[key] = value;
+      }
+    }
+  }
+
+  return {
+    approvalId,
+    responseId,
+    operationId: asString(row.operationId),
+    toolName: asString(row.toolName),
+    effect: asString(row.effect),
+    summary: asString(row.summary),
+    details,
+    expiresAt: asString(row.expiresAt)
+  };
+}
+
 function asBlocks(raw: unknown): HistoryBlock[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) {
     return undefined;
@@ -498,7 +536,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         entries: historyFromPayload(payload.history),
         liveResponseId: payload.activeResponseId == null ? null : asString(payload.activeResponseId),
         activeProgress: null,
-        pendingApproval: null,
+        pendingApproval: pendingApprovalFromPayload(
+          payload.pendingApproval,
+          payload.activeResponseId == null ? null : asString(payload.activeResponseId)
+        ),
         tombstones: {},
         lastServerSequence: event.sequence,
         streamId: payload.streamId == null ? null : asString(payload.streamId),

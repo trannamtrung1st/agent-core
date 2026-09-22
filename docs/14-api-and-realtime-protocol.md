@@ -143,13 +143,13 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 
 | Type | Required payload fields |
 | --- | --- |
-| session.ready | mode, pendingMode: text\|voice\|null, status, lifecycleStatus, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), activeResponseId: null |
+| session.ready | mode, pendingMode: text\|voice\|null, status, lifecycleStatus, agent descriptor, streamId: UUID\|null, audioFormat, capabilities, lastEntrySequence, history: entry array (latest 50, public projection), activeResponseId: UUID\|null when a live response survives reattach, pendingApproval: same bounded fields as `agent.approval.requested` plus `responseId` when a tool approval wait is still open (null otherwise) |
 | transcript.partial | utteranceId, revision: integer, text |
 | transcript.final | utteranceId, text, entryId: UUID, entrySequence: integer |
 | transcript.discarded | utteranceId |
 | agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
 | agent.progress | kind: preparing\|readingAttachments\|runningTool\|waitingExternal\|finalizing, state: started\|updated\|completed\|failed, operationId?: UUID, message?: trusted bounded status string. The owning `responseId` is on the envelope, not nested in the payload. Transient live status only: never `session.ready` history, GET `/messages`, TTS/`clientSpeech` input, provider reasoning, or durable assistant text. Runtime-generated `operationId` is not a provider tool-call id. `session.state.changed.outputState` is unchanged and remains additive. |
-| agent.approval.requested | approvalId: UUID, operationId: UUID, toolName: string, effect: readOnly\|write\|sensitiveWrite\|destructive, summary: bounded safe string, details: bounded string map, expiresAt: ISO-8601 timestamp. Owning `responseId` is on the envelope. Live-session only; never history or `session.ready` replay. No credentials, provider bodies, or raw binary. |
+| agent.approval.requested | approvalId: UUID, operationId: UUID, toolName: string, effect: readOnly\|write\|sensitiveWrite\|destructive, summary: bounded safe string, details: bounded string map, expiresAt: ISO-8601 timestamp. Owning `responseId` is on the envelope. Live-session only; not durable history. `session.ready` may replay the same bounded payload (including `responseId`) while an approval wait is still open after reattach. No credentials, provider bodies, or raw binary. |
 | agent.speech.projection | mode: same\|custom\|none, text: accepted playback projection for the live response (Voice); published when validated speech is ready (`custom`) or when `same` completion fallback is applied; never raw markers or native JSON; not a separate history entry. Clients must not treat `same`/`none` projections as public semantic `speechText` (only `custom` maps to history `speechText`) |
 | agent.text.delta | text, textStart: UTF-16 offset of **display** text |
 | agent.text.completed | textLength: integer (display) |

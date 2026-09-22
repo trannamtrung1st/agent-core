@@ -2538,9 +2538,25 @@ public static class SessionEventMapper
                 },
             ["lastEntrySequence"] = ready.LastEntrySequence,
             ["history"] = history,
-            ["activeResponseId"] = ready.ActiveResponseId?.ToString()
+            ["activeResponseId"] = ready.ActiveResponseId?.ToString(),
+            ["pendingApproval"] = ready.PendingApproval is { } pendingApproval
+                ? MapPendingApproval(pendingApproval)
+                : null
         };
     }
+
+    private static Dictionary<string, object?> MapPendingApproval(PublicPendingApproval approval) =>
+        new(StringComparer.Ordinal)
+        {
+            ["approvalId"] = approval.ApprovalId.ToString(),
+            ["responseId"] = approval.ResponseId.ToString(),
+            ["operationId"] = approval.OperationId.ToString(),
+            ["toolName"] = approval.ToolName,
+            ["effect"] = approval.Effect,
+            ["summary"] = approval.Summary,
+            ["details"] = approval.Details,
+            ["expiresAt"] = approval.ExpiresAt.ToString("O")
+        };
 
     private static string ToTrigger(string trigger) => trigger switch
     {

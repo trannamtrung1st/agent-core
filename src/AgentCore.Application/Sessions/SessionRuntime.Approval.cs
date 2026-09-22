@@ -17,6 +17,9 @@ public sealed partial class SessionRuntime
         public required Guid OperationId { get; init; }
         public required Guid Epoch { get; init; }
         public required string ToolName { get; init; }
+        public required string Effect { get; init; }
+        public required string Summary { get; init; }
+        public required IReadOnlyDictionary<string, string> Details { get; init; }
         public required string ActionHash { get; init; }
         public required DateTimeOffset ExpiresAt { get; init; }
         public required TaskCompletionSource<ApprovalWaitResult> Completion { get; init; }
@@ -134,7 +137,7 @@ public sealed partial class SessionRuntime
         var details = detailsOverride is null
             ? defaultDetails
             : new Dictionary<string, string>(detailsOverride, StringComparer.Ordinal);
-        var effect = ToolCatalog.EffectOf(call.Name);
+        var wireEffect = ToWireEffect(ToolCatalog.EffectOf(call.Name));
         var completion = new TaskCompletionSource<ApprovalWaitResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var pending = new PendingToolApproval
         {
@@ -143,6 +146,9 @@ public sealed partial class SessionRuntime
             OperationId = operationId,
             Epoch = _epoch,
             ToolName = call.Name,
+            Effect = wireEffect,
+            Summary = summary,
+            Details = details,
             ActionHash = actionHash,
             ExpiresAt = expiresAt,
             Completion = completion
@@ -161,7 +167,7 @@ public sealed partial class SessionRuntime
                         approvalId,
                         operationId,
                         call.Name,
-                        ToWireEffect(effect),
+                        wireEffect,
                         summary,
                         details,
                         expiresAt)),
@@ -238,6 +244,28 @@ public sealed partial class SessionRuntime
                 ResponseProgressMessages.WaitingForApproval,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    internal PublicPendingApproval? BuildPublicPendingApproval()
+    {
+        lock (_approvalGate)
+        {
+            var pending = _pendingApproval;
+            if (pending is null || pending.Decided)
+            {
+                return null;
+            }
+
+            return new PublicPendingApproval(
+                pending.ApprovalId,
+                pending.ResponseId,
+                pending.OperationId,
+                pending.ToolName,
+                pending.Effect,
+                pending.Summary,
+                pending.Details,
+                pending.ExpiresAt);
+        }
     }
 
     private static string ToWireEffect(ToolEffect effect) => effect switch
