@@ -15,6 +15,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
+[Collection("telemetry-global")]
 public sealed class InitiativePlanTests
 {
     private const string VietnamQuestion = "What do you enjoy most about living in Vietnam?";

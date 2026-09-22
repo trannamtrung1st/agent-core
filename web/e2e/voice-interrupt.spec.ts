@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { queuedMessages } from "./support/queued-messages";
 
 test("Stop flushes live voice playback, keeps the queue, and leaves capture live", async ({ page }) => {
   await page.goto("/");
@@ -18,12 +19,12 @@ test("Stop flushes live voice playback, keeps the queue, and leaves capture live
   await page.getByLabel("Message").fill("Wait");
   await expect(page.getByRole("button", { name: "Queue" })).toBeEnabled();
   await page.getByRole("button", { name: "Queue" }).click();
-  await expect(page.getByLabel("Queued messages")).toContainText("Wait", { timeout: 15_000 });
+  await expect(queuedMessages(page)).toContainText("Wait", { timeout: 15_000 });
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackDiagnostics?.().responseId ?? null)).toBe(r1);
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect.poll(async () => page.evaluate(() => window.__agentCore?.playbackDiagnostics?.().epoch ?? 0), { timeout: 20_000 }).toBeGreaterThan(epochBefore);
-  await expect(page.getByLabel("Queued messages")).toContainText("Wait");
+  await expect(queuedMessages(page)).toContainText("Wait");
   await expect.poll(async () => {
     const snapshot = await page.evaluate(() => window.__agentCore?.playbackDiagnostics?.());
     const ids = Object.keys(snapshot?.rendered ?? {}).filter((id) => id !== r1);
@@ -34,7 +35,7 @@ test("Stop flushes live voice playback, keeps the queue, and leaves capture live
 
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByLabel("Queued messages")).toHaveCount(0, { timeout: 15_000 });
+  await expect(queuedMessages(page)).toHaveCount(0, { timeout: 15_000 });
   await expect.poll(async () => {
     const snapshot = await page.evaluate(() => window.__agentCore?.playbackDiagnostics?.());
     const ids = Object.keys(snapshot?.rendered ?? {}).filter((id) => id !== r1);

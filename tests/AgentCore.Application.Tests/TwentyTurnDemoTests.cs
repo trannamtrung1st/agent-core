@@ -17,10 +17,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
-[CollectionDefinition("isolated-demo", DisableParallelization = true)]
-public sealed class IsolatedDemoCollection;
-
-[Collection("isolated-demo")]
+[Collection("telemetry-global")]
 public sealed class TwentyTurnDemoTests
 {
     private static readonly string[] RequiredStages =

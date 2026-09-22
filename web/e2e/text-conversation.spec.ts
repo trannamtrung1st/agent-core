@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { queuedMessages } from "./support/queued-messages";
 
 async function assistantBodyTextLength(page: Page, index: number): Promise<number> {
   return page
@@ -98,11 +99,11 @@ test("queued send and Stop keep the local queue without starting R2", async ({ p
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await expect(page.getByLabel("Queued messages")).toBeVisible();
-  await expect(page.getByLabel("Queued messages")).toContainText("Hello");
+  await expect(queuedMessages(page)).toBeVisible();
+  await expect(queuedMessages(page)).toContainText("Hello");
   await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toHaveCount(0);
   await page.getByRole("button", { name: "Stop" }).click();
-  await expect(page.getByLabel("Queued messages")).toBeVisible();
+  await expect(queuedMessages(page)).toBeVisible();
   await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
@@ -127,7 +128,7 @@ test("Steer interrupts R1 promptly and auto-dispatch follows completion", async 
   await expect(page.locator(".chat-message-assistant").first().getByText("Interrupted")).toBeVisible({
     timeout: 5_000
   });
-  await expect(page.getByLabel("Queued messages")).toContainText("Beta", { timeout: 15_000 });
+  await expect(queuedMessages(page)).toContainText("Beta", { timeout: 15_000 });
   await expect(page.locator(".chat-message-user").filter({ hasText: "Beta" })).toHaveCount(0);
   await expectAssistantTextLengthStable(page, 0, r1Length);
   await expect(page.locator(".chat-message-user").filter({ hasText: "Alpha" })).toBeVisible({ timeout: 15_000 });
@@ -155,7 +156,7 @@ test("Steer middle queue item keeps head and tail queued", async ({ page }) => {
   await expect(page.locator(".chat-message-assistant").first().getByText("Interrupted")).toBeVisible({
     timeout: 5_000
   });
-  const queue = page.getByLabel("Queued messages");
+  const queue = queuedMessages(page);
   await expect(queue).toContainText("Alpha", { timeout: 15_000 });
   await expect(queue).toContainText("Charlie");
   await expect(queue.getByText("Bravo")).toHaveCount(0);
@@ -178,7 +179,7 @@ test("queued attachment stays with the queued item until dispatch", async ({ pag
   });
   await expect(page.getByRole("button", { name: "Remove queued.txt" })).toBeVisible({ timeout: 15_000 });
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await expect(page.getByLabel("Queued messages")).toContainText("queued.txt");
+  await expect(queuedMessages(page)).toContainText("queued.txt");
   await expect(page.getByRole("link", { name: "queued.txt" })).toHaveCount(0);
   await page.getByRole("button", { name: "Steer queued message 1" }).click();
   await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible({ timeout: 15_000 });

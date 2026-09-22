@@ -4,7 +4,7 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Tests;
 
-[Collection("isolated-demo")]
+[Collection("telemetry-global")]
 public sealed class SpeechTelemetrySurfaceTests
 {
     [Fact]

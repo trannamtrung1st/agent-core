@@ -3,7 +3,7 @@ using AgentCore.Application.Observability;
 
 namespace AgentCore.Application.Tests;
 
-[Collection("isolated-demo")]
+[Collection("telemetry-global")]
 public sealed class UserTextQueueTelemetryTests
 {
     [Fact]
@@ -63,14 +63,11 @@ public sealed class UserTextQueueTelemetryTests
         });
         listener.Start();
 
-        lock (gate)
-        {
-            UserTextQueueTelemetry.Record("queue", queued: true);
-            UserTextQueueTelemetry.Record("interrupt", queued: false);
-            UserTextQueueTelemetry.RecordPendingBatchStarted(99);
-            ResponseCancelTelemetry.RecordRequested();
-            ResponseCancelTelemetry.RecordStale();
-        }
+        UserTextQueueTelemetry.Record("queue", queued: true);
+        UserTextQueueTelemetry.Record("interrupt", queued: false);
+        UserTextQueueTelemetry.RecordPendingBatchStarted(99);
+        ResponseCancelTelemetry.RecordRequested();
+        ResponseCancelTelemetry.RecordStale();
 
         listener.Dispose();
 

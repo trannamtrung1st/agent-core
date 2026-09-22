@@ -15,6 +15,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
+[Collection("telemetry-global")]
 public sealed class InitiativeTests
 {
     [Fact]

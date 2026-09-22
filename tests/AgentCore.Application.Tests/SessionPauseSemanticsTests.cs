@@ -4,6 +4,7 @@ using System.Diagnostics.Metrics;
 
 namespace AgentCore.Application.Tests;
 
+[Collection("telemetry-global")]
 public sealed class SessionPauseSemanticsTests
 {
     [Theory]

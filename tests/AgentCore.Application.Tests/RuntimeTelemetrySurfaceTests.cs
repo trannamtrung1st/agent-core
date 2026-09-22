@@ -2,7 +2,7 @@ using AgentCore.Application.Observability;
 
 namespace AgentCore.Application.Tests;
 
-[Collection("isolated-demo")]
+[Collection("telemetry-global")]
 public sealed class RuntimeTelemetrySurfaceTests
 {
     [Fact]

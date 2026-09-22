@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { queuedMessages } from "./support/queued-messages";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -79,10 +80,10 @@ test("Stop during fake Browser TTS keeps the queued draft", async ({ page }) => 
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Message").fill("Hello");
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await expect(page.getByLabel("Queued messages")).toContainText("Hello");
+  await expect(queuedMessages(page)).toContainText("Hello");
   await page.getByRole("button", { name: "Stop" }).click();
-  await expect(page.getByLabel("Queued messages")).toBeVisible();
-  await expect(page.getByLabel("Queued messages")).toContainText("Hello");
+  await expect(queuedMessages(page)).toBeVisible();
+  await expect(queuedMessages(page)).toContainText("Hello");
   await expect(page.locator(".chat-message-user").filter({ hasText: "Hello" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 });
@@ -95,10 +96,10 @@ test("successful fake playback completion dispatches the queued head", async ({ 
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Message").fill("Queued next");
   await page.locator('button.composer-send[aria-label="Queue"]').click();
-  await expect(page.getByLabel("Queued messages")).toContainText("Queued next");
+  await expect(queuedMessages(page)).toContainText("Queued next");
   await page.evaluate(() => window.__agentCore?.releaseFakeSpeechOutput?.());
   await expect(page.locator(".chat-message-user").filter({ hasText: "Queued next" })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByLabel("Queued messages")).toHaveCount(0);
+  await expect(queuedMessages(page)).toHaveCount(0);
 });
 
 test("barge-in speech interrupts fake Browser TTS", async ({ page }) => {

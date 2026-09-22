@@ -8,6 +8,7 @@ using AgentCore.Infrastructure.Providers.Synthetic;
 
 namespace AgentCore.Application.Tests;
 
+[Collection("telemetry-global")]
 public sealed class InitiativeEvaluatorTests
 {
     [Fact]
