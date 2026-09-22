@@ -9,21 +9,20 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 | SHA role | Commit | Notes |
 | --- | --- | --- |
 | P3F implementation bulk | `da93489` | Workspace search/move, `http.request`, v7 allowlist, cwd normalization |
-| Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); strengthened live SessionRuntime assertions; Playwright `retries: 0` |
-| **P3 key-free implementation freeze** | **`4dbb920`** | `Content-Type` canonicalization, charset parity for `http.request`, Real probe results recorded |
-| Docs-aligned HEAD | **`d9180df`** | P3 key-free bookkeeping complete (canonical framing from `b672c7a`) |
-| Intermediate docs alignment | `ac795b6` | Shared `OutsideWorkspaceMessage`; freeze SHA references |
+| Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); Playwright `retries: 0` |
+| **P3 key-free implementation freeze** | **`4dbb920`** | MIME/charset `http.request` fixes; Real opt-in probe results recorded |
 
-**Closure bookkeeping (2026-09-22):**
+**Closure bookkeeping (durable; do not mirror live Git HEAD here):**
 
 | Item | Value |
 | --- | --- |
 | P3 key-free implementation freeze | **`4dbb920`** |
-| Docs-aligned HEAD | **`d9180df`** |
-| Local key-free gate | **Green** (see [Key-free gate](#key-free-gate-p3f-capability-closure)) |
+| Verified hosted descendant (workspace message + doc alignment) | **`ac795b6`** / workflow **`35682808408`** — **green** (Synthetic offline gates + Compose) |
+| Earlier verified hosted descendant | **`7497563`** / workflow **`35682607660`** — **green** |
 | Previous hosted gate (pre–MIME tail) | **`3243d58`** / workflow **`35642864725`** — green |
-| Final-tree hosted gate | **`7497563`** → workflow **`35682607660`** **green**; **`ac795b6`** → workflow **`35682808408`** **in progress** (2026-09-22); **`b672c7a`** docs-only (workflow **`35683144956`** in progress) |
-| Real GPT-4o mini / OpenRouter | **Known red gap** (tracked separately from P4; see below) |
+| Local key-free gate | **Green** (see [Key-free gate](#key-free-gate-p3f-capability-closure)) |
+| Known Real-provider gap | OpenRouter GPT-4o mini generation / historical-image probe instability — **not P4** |
+| CI telemetry test isolation | Separate maintenance (`ResponseProgressRuntimeTests`, `UserTextQueueTelemetryTests` global listener/timeline flakes) — **not P3 scope** |
 
 **Real GPT-4o mini historical-image reread (OpenRouter, opt-in):** Executed locally on 2026-09-22 with `AGENTCORE_LIVE_PROVIDER_TESTS=1` and configured `OPENROUTER_API_KEY`. Failure character differs from the original UI follow-up **400**:
 
@@ -40,8 +39,8 @@ Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (w
 | --- | --- |
 | Email/approval implementation review (`ec4dedc`–`2561167`) | **Accepted** |
 | Hosted offline Synthetic + Compose on `3243d58` (workflow `35642864725`) | **Green** — Domain 77; Infrastructure 255 / 13 skip; Application 556 / 1 skip; API 165; Vitest 384; Playwright 46 passed (3.8m, no retries) |
-| Hosted offline Synthetic + Compose on `7497563` (workflow `35682607660`) | **Green** (final-tree doc-freeze commit; MIME/charset tail on `4dbb920`) |
-| Hosted offline Synthetic + Compose on `ac795b6` (workflow `35682808408`) | **In progress** (2026-09-22) |
+| Hosted offline Synthetic + Compose on `7497563` (workflow `35682607660`) | **Green** |
+| Hosted offline Synthetic + Compose on `ac795b6` (workflow `35682808408`) | **Green** (verified descendant of `4dbb920`) |
 | P3 Real historical-image SessionRuntime probe | **Failed** (2026-09-22 local opt-in; turn-1 timeout — see above) |
 | P3 Real historical-image adapter probe | **Failed** (2026-09-22 local opt-in; no visible completion) |
 | **P3 key-free implementation freeze** | **`4dbb920`** (architecture/tool surface closed for Synthetic CI) |

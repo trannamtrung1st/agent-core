@@ -3,6 +3,7 @@ using AgentCore.Application.Observability;
 
 namespace AgentCore.Application.Tests;
 
+[Collection("isolated-demo")]
 public sealed class UserTextQueueTelemetryTests
 {
     [Fact]
@@ -35,39 +36,52 @@ public sealed class UserTextQueueTelemetryTests
         };
         listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
         {
-            foreach (var tag in tags)
+            lock (gate)
             {
-                if (tag.Key == "behavior")
+                foreach (var tag in tags)
                 {
-                    behaviors.Add(tag.Value?.ToString() ?? "");
-                }
-                else
-                {
-                    Assert.NotEqual("user-text", tag.Key);
-                    Assert.DoesNotContain("hello", tag.Value?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
-                    Assert.DoesNotContain("notes.txt", tag.Value?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+                    if (tag.Key == "behavior")
+                    {
+                        behaviors.Add(tag.Value?.ToString() ?? "");
+                    }
+                    else
+                    {
+                        Assert.NotEqual("user-text", tag.Key);
+                        Assert.DoesNotContain("hello", tag.Value?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+                        Assert.DoesNotContain("notes.txt", tag.Value?.ToString() ?? "", StringComparison.OrdinalIgnoreCase);
+                    }
                 }
             }
         });
         listener.SetMeasurementEventCallback<int>((_, value, tags, _) =>
         {
-            Assert.Empty(tags.ToArray());
-            sizes.Add(value);
+            lock (gate)
+            {
+                Assert.Empty(tags.ToArray());
+                sizes.Add(value);
+            }
         });
         listener.Start();
 
-        UserTextQueueTelemetry.Record("queue", queued: true);
-        UserTextQueueTelemetry.Record("interrupt", queued: false);
-        UserTextQueueTelemetry.RecordPendingBatchStarted(99);
-        ResponseCancelTelemetry.RecordRequested();
-        ResponseCancelTelemetry.RecordStale();
+        lock (gate)
+        {
+            UserTextQueueTelemetry.Record("queue", queued: true);
+            UserTextQueueTelemetry.Record("interrupt", queued: false);
+            UserTextQueueTelemetry.RecordPendingBatchStarted(99);
+            ResponseCancelTelemetry.RecordRequested();
+            ResponseCancelTelemetry.RecordStale();
+        }
+
         listener.Dispose();
 
-        var capturedBehaviors = behaviors.ToArray();
-        Assert.Contains("queue", capturedBehaviors);
-        Assert.Contains("interrupt", capturedBehaviors);
-        Assert.All(capturedBehaviors, value => Assert.Contains(value, new[] { "queue", "interrupt" }));
-        Assert.Contains(8, sizes.ToArray());
-        Assert.All(sizes.ToArray(), value => Assert.InRange(value, 1, 8));
+        lock (gate)
+        {
+            var capturedBehaviors = behaviors.ToArray();
+            Assert.Contains("queue", capturedBehaviors);
+            Assert.Contains("interrupt", capturedBehaviors);
+            Assert.All(capturedBehaviors, value => Assert.Contains(value, new[] { "queue", "interrupt" }));
+            Assert.Contains(8, sizes.ToArray());
+            Assert.All(sizes.ToArray(), value => Assert.InRange(value, 1, 8));
+        }
     }
 }

@@ -9,7 +9,7 @@ Current roadmap:
 1. **P2A — first-class progress semantics** is **observed** and frozen;
 2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
 3. **P2E — multimodal/image input usability and capability handling** — **observed/frozen** (2026-09-21 key-free Synthetic + Compose gate on freeze HEAD);
-4. **P3 — tools and external integrations** **key-free freeze** on `4dbb920` (implementation bulk `da93489`; hosted gate `3243d58` / workflow `35642864725`). Real GPT-4o mini historical-image reread is an **open Real-provider gap** (not P4). See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md);
+4. **P3 — tools and external integrations** **key-free freeze** on **`4dbb920`** (verified hosted descendant **`ac795b6`** / workflow **`35682808408`** green). Real OpenRouter gap and CI telemetry test flakes are **maintenance**, not P4. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md);
 5. **P4 — add context compaction and memory** next;
 6. add configurable triggers;
 7. add durable background work;
@@ -949,7 +949,7 @@ Do not let personalization grow through accidental prompt inference.
 
 # P3 — Evolve assistant tools from the current bounded baseline
 
-**P3 capability closure (P3F)** adds working-directory segment normalization, `workspace.search` and `workspace.move`, approval-gated `http.request`, and `general-assistant` v7. Earlier correction evidence remains: Gmail Bcc preservation and exact-draft approval; MimeKit MIME; Gmail `drafts.send`; indeterminate send consumption; approval-clock isolation; `web.fetch` multi-address/`transport_error` (key-free HEAD `e255916`). Provider 400/422 responses stay a safe public message. Logs include status, model, phase, provider code, and type; the free-form provider message requires `LogProviderErrorMessages` and is off by default. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P3 key-free freeze** on **`4dbb920`** (see report). **Known Real-provider gap:** OpenRouter GPT-4o mini Real generation/probe instability (initial-turn timeout / missing visible completion); diagnose, then rerun historical-image probes — **not owned by P4**. **P4** (context compaction and memory) is next.
+**P3 capability closure (P3F)** adds working-directory segment normalization, `workspace.search` and `workspace.move`, approval-gated `http.request`, and `general-assistant` v7. Earlier correction evidence remains: Gmail Bcc preservation and exact-draft approval; MimeKit MIME; Gmail `drafts.send`; indeterminate send consumption; approval-clock isolation; `web.fetch` multi-address/`transport_error` (key-free HEAD `e255916`). Provider 400/422 responses stay a safe public message. Logs include status, model, phase, provider code, and type; the free-form provider message requires `LogProviderErrorMessages` and is off by default. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P3 key-free freeze** on **`4dbb920`** (verified hosted **`ac795b6`** / **`35682808408`**). **Known Real-provider gap** and **CI telemetry isolation** are maintenance, not P4. **P4** (context compaction and memory) is next.
 
 Already present:
 

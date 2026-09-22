@@ -23,6 +23,8 @@ public sealed class ResponseProgressRuntimeTests
     [Fact]
     public async Task Attachment_progress_starts_and_completes_without_entering_history()
     {
+        RuntimeTelemetry.Reset();
+        RuntimeTelemetry.Configure(64, contentLogging: false);
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var output = new CapturingSessionOutput();
         await using var runtime = CreateExaminerRuntime(output, attachments, new AttachmentProcessor(attachments));
