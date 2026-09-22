@@ -1,4 +1,3 @@
-using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -78,7 +77,7 @@ internal sealed class HttpRequestClient(IPublicWebTransport transport) : IHttpRe
         }
 
         var mediaType = response.ContentType?.Split(';', 2)[0].Trim().ToLowerInvariant() ?? "";
-        if (!IsTextual(mediaType) || !TryDecodeUtf8(response.Body, out var text))
+        if (!IsTextual(mediaType) || PublicWebTextBodyDecoder.ContainsBinaryNull(response.Body))
         {
             return new HttpToolResponse(
                 response.StatusCode,
@@ -91,6 +90,23 @@ internal sealed class HttpRequestClient(IPublicWebTransport transport) : IHttpRe
                 null,
                 null);
         }
+
+        var decoded = PublicWebTextBodyDecoder.TryDecode(response.Body, response.ContentType);
+        if (decoded is null)
+        {
+            return new HttpToolResponse(
+                response.StatusCode,
+                finalUrl,
+                string.IsNullOrEmpty(mediaType) ? null : mediaType,
+                "",
+                false,
+                true,
+                redirect,
+                null,
+                null);
+        }
+
+        var text = decoded;
 
         var truncated = false;
         if (text.Length > PublicWebLimits.MaxProjectedTextChars)
@@ -117,37 +133,6 @@ internal sealed class HttpRequestClient(IPublicWebTransport transport) : IHttpRe
         || mediaType.Contains("json", StringComparison.Ordinal)
         || mediaType.Contains("xml", StringComparison.Ordinal)
         || mediaType is "application/x-www-form-urlencoded";
-
-    private static bool TryDecodeUtf8(byte[] bytes, out string text)
-    {
-        text = "";
-        if (bytes.Length == 0)
-        {
-            return true;
-        }
-
-        var sample = Math.Min(bytes.Length, 8192);
-        for (var index = 0; index < sample; index++)
-        {
-            if (bytes[index] == 0)
-            {
-                return false;
-            }
-        }
-
-        try
-        {
-            text = Encoding.GetEncoding(
-                "utf-8",
-                EncoderFallback.ExceptionFallback,
-                DecoderFallback.ExceptionFallback).GetString(bytes);
-            return true;
-        }
-        catch (DecoderFallbackException)
-        {
-            return false;
-        }
-    }
 
     private static HttpToolResponse Error(string finalUrl, string? code, string? message) =>
         new(0, finalUrl, null, "", false, true, null, code ?? "transport_error", message);

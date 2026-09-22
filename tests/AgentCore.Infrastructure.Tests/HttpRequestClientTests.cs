@@ -47,6 +47,24 @@ public sealed class HttpRequestClientTests
     }
 
     [Fact]
+    public async Task Get_decodes_a_declared_non_utf8_text_charset()
+    {
+        var transport = new QueueTransport();
+        var body = System.Text.Encoding.GetEncoding("iso-8859-1").GetBytes("café");
+        transport.Enqueue(new PublicWebTransportResponse(200, null, "text/plain; charset=iso-8859-1", body));
+        IHttpRequestClient client = new HttpRequestClient(transport);
+        var result = await client.SendAsync(new HttpToolRequest(
+            "GET",
+            new Uri("https://example.com/text"),
+            [],
+            [],
+            FollowRedirects: false));
+        Assert.Null(result.ErrorCode);
+        Assert.Equal("café", result.Body);
+        Assert.False(string.IsNullOrEmpty(result.Body));
+    }
+
+    [Fact]
     public async Task Get_rejects_a_redirect_to_a_private_host()
     {
         var transport = new QueueTransport();

@@ -1,5 +1,4 @@
 using System.Net.Http;
-using System.Text;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.PublicWeb;
@@ -79,7 +78,7 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
             return Error(finalUrl, "unsupported_media_type", "Only textual content types are supported.");
         }
 
-        var decoded = DecodeText(body, contentType);
+        var decoded = PublicWebTextBodyDecoder.TryDecode(body, contentType);
         if (decoded is null)
         {
             return Error(finalUrl, "invalid_text", "Response body could not be decoded with the declared charset.");
@@ -102,84 +101,6 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
     private static bool IsTextual(string mediaType) =>
         mediaType.StartsWith("text/", StringComparison.Ordinal)
         || mediaType is "application/json" or "application/xml" or "application/xhtml+xml";
-
-    private static readonly Encoding Utf8Strict = Encoding.GetEncoding(
-        "utf-8",
-        EncoderFallback.ExceptionFallback,
-        DecoderFallback.ExceptionFallback);
-
-    private static readonly HashSet<string> AllowedCharsets = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "utf-8",
-        "utf8",
-        "us-ascii",
-        "ascii",
-        "iso-8859-1",
-        "latin1",
-        "windows-1252"
-    };
-
-    private static string? DecodeText(byte[] bytes, string? contentType)
-    {
-        if (bytes.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        var charset = ReadCharset(contentType);
-        Encoding encoding;
-        if (charset is null)
-        {
-            encoding = Utf8Strict;
-        }
-        else if (!AllowedCharsets.Contains(charset))
-        {
-            return null;
-        }
-        else
-        {
-            try
-            {
-                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-                encoding = Encoding.GetEncoding(
-                    charset,
-                    EncoderFallback.ExceptionFallback,
-                    DecoderFallback.ExceptionFallback);
-            }
-            catch (ArgumentException)
-            {
-                return null;
-            }
-        }
-
-        try
-        {
-            return encoding.GetString(bytes);
-        }
-        catch (DecoderFallbackException)
-        {
-            return null;
-        }
-    }
-
-    private static string? ReadCharset(string? contentType)
-    {
-        if (string.IsNullOrWhiteSpace(contentType))
-        {
-            return null;
-        }
-
-        foreach (var part in contentType.Split(';'))
-        {
-            var trimmed = part.Trim();
-            if (trimmed.StartsWith("charset=", StringComparison.OrdinalIgnoreCase))
-            {
-                return trimmed["charset=".Length..].Trim().Trim('"');
-            }
-        }
-
-        return null;
-    }
 
     private static PublicWebFetchResult Error(string finalUrl, string? code, string? message) =>
         new(finalUrl, null, "", false, code, message);

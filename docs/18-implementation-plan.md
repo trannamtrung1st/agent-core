@@ -302,13 +302,13 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action on `approval-demo`; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
 | P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw` | **Observed** |
 | P3E reconcile | Docs/TODO/report alignment for the earlier correction | **Observed** |
-| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, provider error message off by default | **Observed / frozen** on `da93489` |
+| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, `Content-Type` canonicalization, shared text charset decode, provider error message off by default | **Observed / key-free frozen** on final green HEAD (see [P3 closure report](reports/p3-freeze-candidate.md); implementation bulk `da93489`) |
 
 General Assistant exit for this closure:
 
 - naturally read/write/patch/list/search its own workspace
 - use relative paths like a normal working directory
-- inspect current and historical attachments
+- inspect current and historical attachments in Synthetic and fake-provider paths; **Real GPT-4o mini historical reread remains red on the opt-in SessionRuntime probe (2026-09-22)**
 - search the public web when Brave is configured
 - fetch pages/data
 - make bounded approved generic HTTP/API requests
@@ -317,7 +317,7 @@ General Assistant exit for this closure:
 - search/read/draft/send email with the existing approval boundary
 - surface actionable failures instead of an opaque provider body
 
-**Roadmap handoff:** **P4** (context compaction and memory). P3F is frozen on `da93489`.
+**Roadmap handoff:** **P4** (context compaction and memory). P3 key-free freeze HEAD is recorded in [P3 closure report](reports/p3-freeze-candidate.md) (hosted green on `3243d58`, workflow `35642864725`; final tail adds HTTP MIME/charset fixes).
 
 ## Handoff rule
 

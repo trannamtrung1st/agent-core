@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -221,9 +222,15 @@ public static class HttpRequestNormalizer
                 return Invalid("A header value is empty or not permitted.", out errorCode, out message);
             }
 
-            if (canonical == "Content-Type" && !IsSafeContentType(value))
+            if (canonical == "Content-Type")
             {
-                return Invalid("Content-Type is not a permitted media type.", out errorCode, out message);
+                if (!TryCanonicalizeContentType(value, out var canonicalContentType))
+                {
+                    return Invalid("Content-Type is not a permitted media type.", out errorCode, out message);
+                }
+
+                list.Add(new HttpRequestHeader(canonical, canonicalContentType));
+                continue;
             }
 
             list.Add(new HttpRequestHeader(canonical, value.Trim()));
@@ -261,15 +268,21 @@ public static class HttpRequestNormalizer
             || normalized.Contains("api_key", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsSafeContentType(string value)
+    private static bool TryCanonicalizeContentType(string value, out string canonical)
     {
-        var slash = value.IndexOf('/');
-        if (slash <= 0 || slash == value.Length - 1)
+        canonical = "";
+        if (!MediaTypeHeaderValue.TryParse(value.Trim(), out var parsed))
         {
             return false;
         }
 
-        return value.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '/' or '+' or '.' or '-' or ';' or '=' or ' ' or '"');
+        if (string.IsNullOrWhiteSpace(parsed.MediaType))
+        {
+            return false;
+        }
+
+        canonical = parsed.ToString();
+        return true;
     }
 
     private static bool TryString(JsonElement args, string name, out string value)

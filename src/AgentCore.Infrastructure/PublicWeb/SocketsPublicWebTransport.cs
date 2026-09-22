@@ -69,7 +69,22 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns) : IPu
         if (outbound.Body.Length > 0)
         {
             request.Content = new ByteArrayContent(outbound.Body);
-            request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType ?? "text/plain; charset=utf-8");
+            MediaTypeHeaderValue mediaType;
+            if (contentType is null)
+            {
+                mediaType = MediaTypeHeaderValue.Parse("text/plain; charset=utf-8");
+            }
+            else
+            {
+                if (!MediaTypeHeaderValue.TryParse(contentType, out var parsed) || parsed is null)
+                {
+                    throw new PublicWebFetchException("invalid", "Content-Type is not a permitted media type.");
+                }
+
+                mediaType = parsed;
+            }
+
+            request.Content.Headers.ContentType = mediaType;
         }
 
         return request;

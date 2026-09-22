@@ -27,6 +27,21 @@ public sealed class HttpRequestToolTests
     }
 
     [Fact]
+    public void Prepare_rejects_malformed_content_type_before_approval()
+    {
+        var client = new RecordingHttpClient();
+        var executor = new SessionToolExecutor(httpRequestClient: client);
+        using var malformed = JsonDocument.Parse(
+            """
+            {"method":"POST","url":"https://example.com/items","headers":{"Content-Type":"application/json; charset=\"utf-8"},"body":"{}"}
+            """);
+        var prepared = executor.PrepareHttpRequestApproval(malformed.RootElement);
+        Assert.Null(prepared.Preparation);
+        Assert.Contains("\"error\":\"invalid\"", prepared.ErrorJson, StringComparison.Ordinal);
+        Assert.Null(client.Last);
+    }
+
+    [Fact]
     public async Task Approved_post_is_bound_to_method_url_headers_and_body_hash()
     {
         var client = new RecordingHttpClient();
