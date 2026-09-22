@@ -66,6 +66,11 @@ public sealed class UserTextQueueTests
         Assert.NotEqual(r1, harness.Runtime.ActiveResponseId);
         Assert.Equal(["Hello", "queued later", "take over"], UserTexts(harness));
         Assert.DoesNotContain(harness.Output.TextDeltas, delta => delta.Text == "R1b");
+        Assert.Contains(
+            harness.Output.Items,
+            item => item.ResponseId == r1
+                && item.Payload is ResponseCompletedOutput completed
+                && completed.InterruptReason == "userSteer");
 
         harness.Model.Gate.TrySetResult();
         await harness.Runtime.WaitUntilIdleAsync();
@@ -144,7 +149,7 @@ public sealed class UserTextQueueTests
             output.Items,
             item => item.ResponseId == r1
                 && item.Payload is ResponseCompletedOutput completed
-                && completed.InterruptReason == "newText");
+                && completed.InterruptReason == "userSteer");
         Assert.Equal(1, model.Calls);
         Assert.DoesNotContain(output.Items, item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
 
@@ -155,6 +160,57 @@ public sealed class UserTextQueueTests
 
         model.Release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
+        await runtime.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Queue_while_response_active_before_started_event_does_not_interrupt()
+    {
+        var inner = new CapturingSessionOutput();
+        var releaseStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var output = new DeferredResponseStartedOutput(inner, releaseStarted);
+        var model = new HoldingLanguageModel();
+        var time = Clock();
+        var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new RecordingAgentBrain(new DefaultAgentBrain(new PromptContextBuilder())),
+            new FakeInterruptionClassifier(),
+            SessionMode.Text);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("first");
+        await WaitForActiveResponseAsync(runtime);
+
+        var r1 = runtime.ActiveResponseId;
+        Assert.NotNull(r1);
+        Assert.DoesNotContain(inner.Items, item => item.Payload is ResponseStartedOutput);
+
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "second",
+            Guid.NewGuid(),
+            CancellationToken.None,
+            null,
+            UserTextBehavior.Queue));
+
+        Assert.Equal(r1, runtime.ActiveResponseId);
+        Assert.DoesNotContain(
+            inner.Items,
+            item => item.ResponseId == r1 && item.Payload is ResponseCompletedOutput);
+
+        releaseStarted.TrySetResult();
+        await inner.WaitForAsync(item => item.Payload is ResponseStartedOutput);
+
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.DoesNotContain(
+            inner.Items,
+            item => item.ResponseId == r1
+                && item.Payload is ResponseCompletedOutput completed
+                && completed.InterruptReason is not null);
+        Assert.Contains(inner.TextDeltas, delta => delta.Text == "T2");
+        Assert.Equal(["first", "second"], UserTextsFromSnapshot(runtime));
         await runtime.DisposeAsync();
     }
 
@@ -526,6 +582,25 @@ public sealed class UserTextQueueTests
         await runtime.DisposeAsync();
     }
 
+    private static string[] UserTextsFromSnapshot(SessionRuntime runtime) =>
+        runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray();
+
+    private static async Task WaitForActiveResponseAsync(SessionRuntime runtime)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (runtime.ActiveResponseId is not null)
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        Assert.Fail("Active response was not established.");
+    }
+
     private static string[] UserTexts(Harness harness) =>
         harness.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray();
 
@@ -592,6 +667,48 @@ public sealed class UserTextQueueTests
     private sealed record Harness(SessionRuntime Runtime, CapturingSessionOutput Output, GatedThenLiveModel Model)
     {
         public SessionSnapshot Snapshot => Runtime.Snapshot;
+    }
+}
+
+file sealed class DeferredResponseStartedOutput(CapturingSessionOutput inner, TaskCompletionSource releaseStarted) : ISessionOutput
+{
+    private readonly List<SessionOutput> _held = [];
+    private int _releaseScheduled;
+
+    public ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default)
+    {
+        if (output.Payload is ResponseStartedOutput)
+        {
+            lock (_held)
+            {
+                _held.Add(output);
+            }
+
+            if (Interlocked.Exchange(ref _releaseScheduled, 1) == 0)
+            {
+                _ = FlushHeldAsync();
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        return inner.PublishAsync(output, cancellationToken);
+    }
+
+    private async Task FlushHeldAsync()
+    {
+        await releaseStarted.Task.ConfigureAwait(false);
+        List<SessionOutput> batch;
+        lock (_held)
+        {
+            batch = [.. _held];
+            _held.Clear();
+        }
+
+        foreach (var item in batch)
+        {
+            await inner.PublishAsync(item).ConfigureAwait(false);
+        }
     }
 }
 

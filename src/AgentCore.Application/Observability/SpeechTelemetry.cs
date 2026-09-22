@@ -44,6 +44,7 @@ public static class SpeechTelemetry
         "userStop",
         "userBargeIn",
         "newText",
+        "userSteer",
         "disconnected",
         "modeChange",
         "ended",

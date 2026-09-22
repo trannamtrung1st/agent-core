@@ -88,7 +88,7 @@ public sealed class TwentyTurnDemoTests
         await interruptOutput.WaitForAsync(item => item.Payload is TextDeltaOutput);
         await interrupting.SubmitUserTextAsync("Wait, stop");
         await interruptOutput.WaitForAsync(
-            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason == "newText");
+            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason == "userSteer");
         gate.TrySetResult();
         await interrupting.WaitUntilIdleAsync();
 

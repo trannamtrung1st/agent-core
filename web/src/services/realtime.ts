@@ -418,7 +418,7 @@ async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
     return;
   }
 
-  if (state.liveResponseId != null || voicePlaybackHoldActive()) {
+  if (composerOutputBusy()) {
     return;
   }
 
@@ -490,6 +490,21 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
 let voiceReadyDowngradeOnNextReady = false;
+let awaitingAgentResponseStart = false;
+
+function clearAwaitingAgentResponseStart(): void {
+  awaitingAgentResponseStart = false;
+}
+
+function composerOutputBusy(): boolean {
+  const snapshot = useSessionStore.getState();
+  return (
+    awaitingAgentResponseStart
+    || voicePlaybackHoldActive()
+    || isSessionModelBusy(snapshot)
+  );
+}
+
 let pendingUserText: {
   eventId: string;
   text: string;
@@ -768,6 +783,7 @@ function handleEvent(raw: ServerEvent): void {
     void hydrateBoundAttachments(next.sessionId);
   }
   if (raw.type === "agent.response.started" && raw.responseId) {
+    clearAwaitingAgentResponseStart();
     outputGate.markStarted(raw.responseId);
     flushEarlyAudio(raw.responseId);
     if (useSessionStore.getState().sttTransport === "clientTranscript") {
@@ -1387,11 +1403,6 @@ function downgradePassiveVoiceAttach(): void {
   );
 }
 
-function composerOutputBusy(): boolean {
-  const snapshot = useSessionStore.getState();
-  return snapshot.liveResponseId != null || voicePlaybackHoldActive();
-}
-
 function syncCapture(): void {
   const state = useSessionStore.getState();
   if (state.connection !== "ready") {
@@ -1573,6 +1584,7 @@ export const realtimeTestHooks =
           reconnectBudgetStarted = 0;
           voiceReadyDowngradeOnNextReady = false;
           voiceModeRequested = false;
+          clearAwaitingAgentResponseStart();
           pendingUserText = null;
           sendRequest = null;
           pendingStops.clear();
@@ -2390,7 +2402,12 @@ function outgoingImageTurnIncompatible(attachments: readonly PendingAttachment[]
   return vision === false;
 }
 
-function composerCanSend(draft: string, pending: PendingAttachment[], connection: string, liveResponseId: string | null, pendingSendQueue: PendingSendItem[]): boolean {
+function composerCanSend(
+  draft: string,
+  pending: PendingAttachment[],
+  connection: string,
+  pendingSendQueue: PendingSendItem[]
+): boolean {
   if (connection !== "ready") {
     return false;
   }
@@ -2414,7 +2431,7 @@ function composerCanSend(draft: string, pending: PendingAttachment[], connection
     return true;
   }
 
-  if (liveResponseId == null && !voicePlaybackHoldActive() && pendingSendQueue.length > 0) {
+  if (!composerOutputBusy() && pendingSendQueue.length > 0) {
     if (composerImageCompatibility().incompatible) {
       return false;
     }
@@ -2498,7 +2515,6 @@ export function composerSendEnabled(): boolean {
     snapshot.draft,
     snapshot.pendingAttachments,
     snapshot.connection,
-    snapshot.liveResponseId,
     snapshot.pendingSendQueue);
 }
 
@@ -2802,7 +2818,7 @@ type OutgoingUserMessage = {
   attachmentIds: string[];
   attachments: PendingAttachment[];
   eventId?: string;
-  behavior?: "interrupt";
+  behavior?: "queue" | "interrupt";
   source?: DispatchSource;
 };
 
@@ -2874,10 +2890,11 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
     }));
   appendOptimisticUserEntry(eventId, text, refs, snapshot.mode);
 
-  const payload: Record<string, unknown> = { text, attachmentIds: readyAttachmentIds };
-  if (message.behavior === "interrupt") {
-    payload.behavior = "interrupt";
-  }
+  const payload: Record<string, unknown> = {
+    text,
+    attachmentIds: readyAttachmentIds,
+    behavior: message.behavior === "interrupt" ? "interrupt" : "queue"
+  };
 
   if (queueLocalId) {
     useSessionStore.setState((state) => ({
@@ -2893,6 +2910,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         invoke("SendText", "user.text", payload, sequence, null, eventId)
       );
       if (!ack?.accepted) {
+        clearAwaitingAgentResponseStart();
         pendingUserText = null;
         removeOptimisticUserEntry(eventId);
         const errorMessage = ack?.error?.message ?? "Message was not accepted.";
@@ -2917,6 +2935,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
 
       pendingUserText = null;
       accepted = true;
+      awaitingAgentResponseStart = true;
       for (const item of pendingAttachmentSnapshot) {
         releasePendingFile(item.localId);
       }
@@ -2929,6 +2948,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         commitOptimisticUserEntry(eventId);
       }
     } catch (error) {
+      clearAwaitingAgentResponseStart();
       const errorMessage = error instanceof Error ? error.message : "Message was not accepted.";
       if (queueLocalId) {
         removeOptimisticUserEntry(eventId);
@@ -2961,8 +2981,7 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
   if (
     isReadonlySession(snapshot)
     || snapshot.connection !== "ready"
-    || snapshot.liveResponseId != null
-    || voicePlaybackHoldActive()
+    || composerOutputBusy()
     || snapshot.pendingSendQueue.length === 0
     || sendRequest
   ) {
@@ -3145,7 +3164,8 @@ export async function sendDraft(): Promise<void> {
   await dispatchOutgoingUserMessage({
     text,
     attachmentIds: readyAttachmentIds,
-    attachments: snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId)
+    attachments: snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId),
+    behavior: "queue"
   });
 }
 

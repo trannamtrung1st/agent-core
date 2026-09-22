@@ -551,7 +551,65 @@ describe("realtime race handling", () => {
         payload: expect.objectContaining({ text: "Hello" })
       })
     );
-    expect(invoke.mock.calls[0][1].payload).not.toHaveProperty("behavior", "queue");
+    expect(invoke.mock.calls[0][1].payload).toEqual(
+      expect.objectContaining({ text: "Hello", behavior: "queue" })
+    );
+  });
+
+  it("queues locally after SendText ack before agent.response.started", async () => {
+    let resolveAck: (value: { accepted: boolean }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(
+      () => new Promise((resolve) => {
+        resolveAck = resolve;
+      })
+    );
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "first",
+      outputState: "idle",
+      liveResponseId: null,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    const first = sendDraft();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls[0][1].payload).toEqual(
+      expect.objectContaining({ text: "first", behavior: "queue" })
+    );
+    resolveAck({ accepted: true });
+    await first;
+    expect(useSessionStore.getState().liveResponseId).toBeNull();
+    useSessionStore.setState({ draft: "second" });
+    const second = sendDraft();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
+    expect(useSessionStore.getState().pendingSendQueue[0]?.text).toBe("second");
+    await second;
+  });
+
+  it("treats in-flight output states as composer busy", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      draft: "Hello",
+      outputState: "waitingForAgent",
+      liveResponseId: null,
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+    await sendDraft();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(1);
   });
 
   it("enables Stop while voice playback continues after the live response completes", () => {

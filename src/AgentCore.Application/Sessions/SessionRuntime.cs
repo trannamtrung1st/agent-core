@@ -1203,7 +1203,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         if (!queued && _activeResponseId is { } liveResponse)
         {
-            await TerminalizeActiveResponseAsync(cause, liveResponse, cancellationToken, "newText", requestPersist: false)
+            var interruptReason = "userSteer";
+            _logger.LogInformation(
+                "User text interrupts active response {SessionId} {EventId} behavior {Behavior} reason {Reason}",
+                SessionId,
+                cause.EventId,
+                UserTextBehaviors.WireName(input.Behavior),
+                interruptReason);
+            await TerminalizeActiveResponseAsync(cause, liveResponse, cancellationToken, interruptReason, requestPersist: false)
                 .ConfigureAwait(false);
             await ApplyPendingVoiceIfIdleAsync(cause, cancellationToken).ConfigureAwait(false);
         }
@@ -2650,7 +2657,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             await AfterResponseTerminalizedAsync(context, cancellationToken).ConfigureAwait(false);
         }
-        else if (reason is "newText")
+        else if (reason is "newText" or "userSteer")
         {
             await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
         }
