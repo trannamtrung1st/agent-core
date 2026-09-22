@@ -4,15 +4,34 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 
 ## Freeze status
 
-**P3F capability closure is implemented.** `general-assistant` v7 can read, write, patch, list, search, and move its workspace with working-directory paths; inspect attachments in Synthetic and fake-provider paths; search the public web when Brave is configured; fetch pages; make bounded approved `http.request` calls (with canonical `Content-Type` validation and shared bounded text charset decoding); create and export artifacts; use the offline sandbox; and use the existing email approval boundary. `demo.sensitive_action` is on `approval-demo`, not Riley. Sandbox networking is deferred and is not a P3 blocker.
+**P3 key-free capability closure is implemented** (not “verified on every optional Real provider”). `general-assistant` v7 can read, write, patch, list, search, and move its workspace with working-directory paths; inspect attachments in Synthetic and fake-provider paths; search the public web when Brave is configured; fetch pages; make bounded approved `http.request` calls (with canonical `Content-Type` validation and shared bounded text charset decoding); create and export artifacts; use the offline sandbox; and use the existing email approval boundary. `demo.sensitive_action` is on `approval-demo`, not Riley. Sandbox networking is deferred and is not a P3 blocker. Stop adding P3 tools; next architectural value is **P4** (context compaction and memory).
 
 | SHA role | Commit | Notes |
 | --- | --- | --- |
 | P3F implementation bulk | `da93489` | Workspace search/move, `http.request`, v7 allowlist, cwd normalization |
-| Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); strengthened live SessionRuntime assertions; Playwright retries removed again |
-| **P3 project freeze (key-free HEAD)** | `4dbb920` | Final tail: `Content-Type` canonicalization, charset parity for `http.request`, Playwright `retries: 0`, Real probe results recorded |
+| Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); strengthened live SessionRuntime assertions; Playwright `retries: 0` |
+| **P3 key-free implementation freeze** | **`4dbb920`** | `Content-Type` canonicalization, charset parity for `http.request`, Real probe results recorded |
+| Docs-aligned HEAD | `ac795b6` | Shared `OutsideWorkspaceMessage`; freeze references aligned |
 
-**Real GPT-4o mini historical-image reread (OpenRouter, opt-in):** Executed locally on 2026-09-22 with `AGENTCORE_LIVE_PROVIDER_TESTS=1` and configured `OPENROUTER_API_KEY`. **`Real_session_historical_image_reread_completes_with_visible_output` failed** — turn one did not reach a successful `ResponseCompletedOutput` within 90s (`TaskCanceledException`). **`Gpt4oMini_historical_image_follow_up_is_opt_in_only` failed** — no terminal `ModelCompleted` with visible text (not the prior UI 400 path). Synthetic coverage (`scripted-vision`, fake two-call runtime, adapter unit fixtures) remains green. **Treat Real historical attachment reread as an open Real-provider gap**, not a Synthetic regression; P4 may carry provider/runtime follow-up if the probe stays red.
+**Closure bookkeeping (2026-09-22):**
+
+| Item | Value |
+| --- | --- |
+| P3 key-free implementation freeze | **`4dbb920`** |
+| Docs-aligned HEAD | **`ac795b6`** |
+| Local key-free gate | **Green** (see [Key-free gate](#key-free-gate-p3f-capability-closure)) |
+| Previous hosted gate (pre–MIME tail) | **`3243d58`** / workflow **`35642864725`** — green |
+| Final-tree hosted gate | **Pending** — `7497563` → workflow **`35682607660`**; `ac795b6` → workflow **`35682808408`** |
+| Real GPT-4o mini / OpenRouter | **Known red gap** (tracked separately from P4; see below) |
+
+**Real GPT-4o mini historical-image reread (OpenRouter, opt-in):** Executed locally on 2026-09-22 with `AGENTCORE_LIVE_PROVIDER_TESTS=1` and configured `OPENROUTER_API_KEY`. Failure character differs from the original UI follow-up **400**:
+
+| Probe | Outcome |
+| --- | --- |
+| `Real_session_historical_image_reread_completes_with_visible_output` | Turn **one** timed out at 90s — the run never reached historical reread |
+| `Gpt4oMini_historical_image_follow_up_is_opt_in_only` | No terminal `ModelCompleted` with visible text |
+
+Do **not** conclude the historical `attachments.read` wire projection is broken from these results alone; they point to broader Real OpenRouter generation/streaming or structured-response interoperability (initial-turn timeout / missing visible completion). **Synthetic and fake-provider historical reread remain verified.** Track remediation under **known Real-provider gaps**, not P4 memory/compaction. Proceed to P4 unless historical-image reread is essential for an immediate Real demo.
 
 Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (workflow `35631259704`) stay historical. Provider logs keep status, model, phase, code, and type by default; free-form provider messages require `LogProviderErrorMessages` (off by default).
 
@@ -20,10 +39,11 @@ Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (w
 | --- | --- |
 | Email/approval implementation review (`ec4dedc`–`2561167`) | **Accepted** |
 | Hosted offline Synthetic + Compose on `3243d58` (workflow `35642864725`) | **Green** — Domain 77; Infrastructure 255 / 13 skip; Application 556 / 1 skip; API 165; Vitest 384; Playwright 46 passed (3.8m, no retries) |
-| P3 Real historical-image SessionRuntime probe | **Failed** (2026-09-22 local opt-in; see above) |
-| P3 Real historical-image adapter probe | **Failed** (same run) |
-| P3 key-free project freeze | **This report’s freeze HEAD** after final tail merge |
-| P4 | **Next** (compaction/memory) |
+| Hosted offline Synthetic + Compose on final tree (`7497563`, `ac795b6`) | **Pending** — workflows **`35682607660`**, **`35682808408`** (MIME/charset tail + doc alignment) |
+| P3 Real historical-image SessionRuntime probe | **Failed** (2026-09-22 local opt-in; turn-1 timeout — see above) |
+| P3 Real historical-image adapter probe | **Failed** (2026-09-22 local opt-in; no visible completion) |
+| **P3 key-free implementation freeze** | **`4dbb920`** (architecture/tool surface closed for Synthetic CI) |
+| P4 | **Next** (context compaction and memory; unrelated to Real OpenRouter probe gap) |
 
 Historical image reread still requires a model with **Tools and Vision**. DeepSeek V4.1 Flash remains tools-capable and vision-incapable (`vision_required` is expected). GPT-4o mini has both capabilities; Real follow-up remains red on the strengthened probes above.
 
