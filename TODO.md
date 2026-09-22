@@ -242,6 +242,28 @@ IStructuredMemoryStore
 
 A broad `IMemoryStore` rename is not required to begin P4A.
 
+P4 provides memory capability and policy seams. It does not turn those capabilities on for every agent.
+
+Planned policy areas, configured later by P7:
+
+```text
+Session policy
+- durable or ephemeral
+- future retention and reopen policy
+
+Session-memory policy
+- enabled / disabled
+
+Cross-session-memory policy
+- disabled
+- same-agent/user memory allowed
+- user-wide memory allowed
+```
+
+A durable transcript does not imply cross-session memory. An examination-style agent may keep a durable transcript and in-session memory while the next session inherits none of that conversational memory. P4 does not implement the P7 admin UI, ephemeral sessions, or learned-memory reset.
+
+Trusted P2C profile values stay authoritative over model-derived memory.
+
 ---
 
 ## P4A — Session context compaction
@@ -659,7 +681,9 @@ If confidence is retained, use it only where policy/retrieval genuinely consumes
 
 A session can retain individually addressable durable facts, goals, decisions, preferences, and open loops with source provenance and explicit correction/deletion behavior.
 
-This remains session-scoped.
+This remains session-scoped until deliberate promotion.
+
+Session memory being stored does not enable cross-session reuse.
 
 ---
 
@@ -667,22 +691,29 @@ This remains session-scoped.
 
 Start only after P4B session memory is reliable.
 
-- [ ] Add explicit/configurable memory scope.
+- [ ] Add explicit memory scope.
 
-Possible scopes:
+Initial scopes:
 
 ```text
-session
-agent
-user
-application/host
+Session
+AgentUser
+User
 ```
 
-Do not expose all scopes merely because the schema can represent them.
+`AgentUser` is the same logical agent id plus the same user/profile, not an agent version and not an arbitrary agent-global bucket. Customer-support memory must not appear to an examiner for the same user.
 
-- [ ] Define ownership and authorization.
+Do not add organization-wide, host-global, or agent-global scope in P4.
 
-- [ ] Define promotion rules from session memory into cross-session memory.
+- [ ] Bind AgentUser ownership to the logical agent id. Do not key it to `AgentVersion`, and do not store learned memory inside the pinned published definition.
+
+- [ ] Define ownership and authorization from trusted runtime context.
+
+- [ ] Promote deliberately from Session to AgentUser or Session to User.
+
+Promotion creates an independent durable memory and preserves provenance. Do not retarget the original session memory's scope.
+
+Promotion follows the cross-session policy. Disabled means no later-session retrieval and no promotion.
 
 - [ ] Define correction/deletion behavior across scopes.
 
@@ -700,13 +731,16 @@ Do not inject an entire user's lifetime memory into every model request.
 
 ### P4C stop condition
 
-Useful durable memory can safely cross sessions without confusing:
+Useful durable memory can safely cross sessions only where policy allows it, without confusing:
 
 - trusted profile data;
+- current conversation;
 - session summary;
-- session memory;
-- user-wide memory;
-- agent/application memory.
+- structured session memory;
+- same-agent memory;
+- user-wide memory.
+
+A saved transcript is not cross-session memory.
 
 ---
 
@@ -883,6 +917,19 @@ An admin agent does not bypass policy because it generated the change itself.
   - test/evaluate;
   - publish immutable version;
   - rollback/deprecate.
+
+Published versions stay immutable. Changing instructions, tools, policies, or identity text publishes a new version rather than mutating a version already pinned by sessions.
+
+- [ ] Expose agent/admin configuration for the P4 policy seams:
+
+  - session persistence, including future retention and reopen policy;
+  - session-memory enablement;
+  - cross-session scope permissions;
+  - whether a new published version inherits learned memory, starts fresh, or migrates selected memory.
+
+- [ ] Add a future **Reset learned memory** operation for an agent's learned cross-session memory.
+
+That operation must not rewrite or delete the published agent definition, and it is not the same thing as resetting identity. Do not treat it as a P4 requirement.
 
 - [ ] Allow an admin agent to improve its harness only through normal bounded tool/policy mechanisms.
 
