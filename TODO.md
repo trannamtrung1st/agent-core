@@ -6,9 +6,7 @@ Reviewed against `main` on **2026-09-23**.
 
 Current repository HEAD reviewed:
 
-```text
-7489a551e8c4e3c84e9daa6373ceb1cc090c0d23
-```
+The P4 local closure candidate SHA is the commit that adds `docs/reports/p4-freeze-candidate.md`. Hosted CI was not re-run for that commit.
 
 Last explicitly verified hosted Synthetic workflow:
 
@@ -16,7 +14,7 @@ Last explicitly verified hosted Synthetic workflow:
 35692184054 — green through 3e56a26
 ```
 
-The current HEAD contains later P3A E2E hardening. Do not imply hosted CI has been re-verified for a later commit unless that run has actually been checked.
+That hosted run does not cover P4. Do not imply hosted CI has been re-verified for a later commit unless that run has actually been checked.
 
 Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
 
@@ -25,15 +23,13 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P3 are closed/frozen.**
-2. **P4A — session context compaction** is next.
-3. **P4B — structured session memory.**
-4. **P4C — durable agent identity and cross-session memory.**
-5. **P5 — events and configurable triggers.**
-6. **P6 — durable background work.**
-7. **P7 — agent harness / admin lifecycle.**
-8. **P8 — harness/platform extensibility.**
-9. **P9 — sandbox evolution when requirements justify it.**
-10. **P10 — multi-user/product infrastructure when requirements justify it.**
+2. **P4 — context compaction, structured memory, and durable identity** has a local closure candidate. Evidence is in `docs/reports/p4-freeze-candidate.md`. Hosted CI was not re-run for that candidate. Optional model memory tools and embeddings were not added.
+3. **P5 — events and configurable triggers.**
+4. **P6 — durable background work.**
+5. **P7 — agent harness / admin lifecycle.**
+6. **P8 — harness/platform extensibility.**
+7. **P9 — sandbox evolution when requirements justify it.**
+8. **P10 — multi-user/product infrastructure when requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
@@ -360,7 +356,7 @@ P4A remains session-local. It does not require the new durable Agent Instance mo
 
 ### P4A-0 — Formalize the existing compaction boundary
 
-- [ ] Treat the existing:
+- [x] Treat the existing:
 
   ```text
   Summary
@@ -369,7 +365,7 @@ P4A remains session-local. It does not require the new durable Agent Instance mo
 
   as the canonical initial compaction seam.
 
-- [ ] Make the prompt-context boundary explicit.
+- [x] Make the prompt-context boundary explicit.
 
   When a valid summary exists:
 
@@ -380,17 +376,17 @@ P4A remains session-local. It does not require the new durable Agent Instance mo
 
   Do not knowingly feed the same historical turns both through the summary and again as ordinary raw history.
 
-- [ ] Preserve the current user batch exactly once.
+- [x] Preserve the current user batch exactly once.
 
   Trailing queued/current user turns must never disappear merely because they cross a compaction boundary.
 
-- [ ] Preserve explicit queue/steer semantics.
+- [x] Preserve explicit queue/steer semantics.
 
   A queued trailing user turn is future conversation input, not evidence that the current assistant response was semantically completed.
 
   An intentional steer/interrupt must not cause superseded assistant output to be promoted into memory as though it were fully delivered.
 
-- [ ] Preserve assistant delivery semantics.
+- [x] Preserve assistant delivery semantics.
 
   Historical assistant context continues to use:
 
@@ -401,11 +397,11 @@ P4A remains session-local. It does not require the new durable Agent Instance mo
 
   Persisted `InterruptReason` is provenance/lifecycle metadata. It is not additional assistant semantic text.
 
-- [ ] Keep raw `ConversationEntry` history unchanged.
+- [x] Keep raw `ConversationEntry` history unchanged.
 
   Compaction is an additional projection, not destructive history rewriting.
 
-- [ ] Define minimal version/provenance metadata for a generated summary.
+- [x] Define minimal version/provenance metadata for a generated summary.
 
   At minimum preserve:
 
@@ -418,7 +414,7 @@ P4A remains session-local. It does not require the new durable Agent Instance mo
 
   Do not over-design the schema.
 
-- [ ] Add boundary tests before adding an LLM compactor.
+- [x] Add boundary tests before adding an LLM compactor.
 
   Cover:
 
@@ -454,15 +450,15 @@ This is the first P4 implementation item.
 
 ### P4A-1 — Generate semantic compaction
 
-- [ ] Add a provider-neutral session compaction service.
+- [x] Add a provider-neutral session compaction service.
 
   It owns compaction semantics, not provider wire format.
 
-- [ ] Read source history from durable server-side history.
+- [x] Read source history from durable server-side history.
 
   Use the existing paginated persistence path rather than requiring the browser to load old messages.
 
-- [ ] Compact only stable durable history.
+- [x] Compact only stable durable history.
 
   Do not summarize:
 
@@ -475,7 +471,7 @@ This is the first P4 implementation item.
 
   Assistant content must obey the same received/heard-prefix rules used by normal historical prompt construction.
 
-- [ ] Preserve materially useful context:
+- [x] Preserve materially useful context:
 
   - unresolved topics;
   - decisions;
@@ -485,21 +481,21 @@ This is the first P4 implementation item.
   - relevant attachment/artifact references;
   - important open loops/tasks.
 
-- [ ] Keep summaries bounded.
+- [x] Keep summaries bounded.
 
   Reuse or deliberately evolve the existing summary-character budget rather than allowing unbounded accumulation.
 
-- [ ] Use the existing model-resolution architecture.
+- [x] Use the existing model-resolution architecture.
 
   Do not hard-code OpenAI, OpenRouter, or a concrete model ID.
 
-- [ ] Initially use the normal session model-selection path unless measured requirements justify a separate compaction model policy.
+- [x] Initially use the normal session model-selection path unless measured requirements justify a separate compaction model policy.
 
   Add a new `ModelPurpose` only when it has meaningful selection semantics.
 
-- [ ] Keep provider wire format in Infrastructure.
+- [x] Keep provider wire format in Infrastructure.
 
-- [ ] Validate generated summaries before persistence.
+- [x] Validate generated summaries before persistence.
 
   At minimum:
 
@@ -510,7 +506,7 @@ This is the first P4 implementation item.
   - no provider reasoning;
   - no undelivered assistant tail promoted into semantic memory.
 
-- [ ] Provide deterministic failure behavior.
+- [x] Provide deterministic failure behavior.
 
   If compaction fails:
 
@@ -520,37 +516,37 @@ This is the first P4 implementation item.
   - do not corrupt the session;
   - do not fabricate a summary.
 
-- [ ] Synthetic tests must not depend on an external model.
+- [x] Synthetic tests must not depend on an external model.
 
 ---
 
 ### P4A-2 — Compaction lifecycle
 
-- [ ] Add a bounded compaction policy.
+- [x] Add a bounded compaction policy.
 
   Do not run an LLM summarization call after every message.
 
   Trigger based on enough unsummarized eligible history to justify compaction.
 
-- [ ] Prefer opportunistic compaction after a completed durable turn.
+- [x] Prefer opportunistic compaction after a completed durable turn.
 
   It should be runtime-internal maintenance, not a P6 `WorkItem`.
 
-- [ ] Do not require a user-visible progress transcript for ordinary compaction.
+- [x] Do not require a user-visible progress transcript for ordinary compaction.
 
   Telemetry is sufficient unless real latency proves a UX surface is needed.
 
-- [ ] Compaction must be cancellable with the Session Runtime.
+- [x] Compaction must be cancellable with the Session Runtime.
 
   It must not silently become durable detached/background work.
 
-- [ ] Respect detach-grace semantics.
+- [x] Respect detach-grace semantics.
 
   A temporary disconnect followed by valid reattach must not create duplicate compaction work or corrupt the summary boundary.
 
   Actual Session Runtime finalization may cancel in-flight compaction normally.
 
-- [ ] Protect summary commits against stale work.
+- [x] Protect summary commits against stale work.
 
   A delayed compaction result must not replace a newer summary.
 
@@ -561,11 +557,11 @@ This is the first P4 implementation item.
   - source-through sequence;
   - runtime/session revision semantics as appropriate.
 
-- [ ] A new user turn must remain usable if compaction has not completed.
+- [x] A new user turn must remain usable if compaction has not completed.
 
   The fallback is the previously committed summary plus the normal bounded raw tail.
 
-- [ ] Repeated compaction should be incremental.
+- [x] Repeated compaction should be incremental.
 
   Conceptually:
 
@@ -583,13 +579,13 @@ This is the first P4 implementation item.
 
 ### P4A verification
 
-- [ ] Domain/Application tests for compaction boundary semantics.
+- [x] Domain/Application tests for compaction boundary semantics.
 
-- [ ] Persistence tests for summary metadata and source boundary.
+- [x] Persistence tests for summary metadata and source boundary.
 
-- [ ] Long-transcript tests proving compaction reads older durable history without materializing the entire transcript in the active Session Runtime.
+- [x] Long-transcript tests proving compaction reads older durable history without materializing the entire transcript in the active Session Runtime.
 
-- [ ] Tests for:
+- [x] Tests for:
 
   - cancellation;
   - stale compaction result;
@@ -604,7 +600,7 @@ This is the first P4 implementation item.
   - malformed/oversized summary;
   - repeated incremental compaction.
 
-- [ ] Prompt tests proving:
+- [x] Prompt tests proving:
 
   ```text
   summary(old history)
@@ -614,7 +610,7 @@ This is the first P4 implementation item.
 
   contains neither omission nor intentional duplication at the boundary.
 
-- [ ] Synthetic end-to-end long-conversation scenario.
+- [x] Synthetic end-to-end long-conversation scenario.
 
 - [ ] Keep hosted compaction probes optional/credential-gated.
 
@@ -650,7 +646,7 @@ P4B remains session-scoped and must not require the final cross-session identity
 
 ### Memory model
 
-- [ ] Introduce structured session-scoped memory.
+- [x] Introduce structured session-scoped memory.
 
 Suggested initial concepts:
 
@@ -678,15 +674,15 @@ openLoop
 
 Do not over-design the taxonomy before real workflows require it.
 
-- [ ] Keep source provenance.
+- [x] Keep source provenance.
 
 A memory should be traceable to relevant conversation evidence or a trusted host/user source.
 
-- [ ] Distinguish model-derived memory from trusted explicit profile fields.
+- [x] Distinguish model-derived memory from trusted explicit profile fields.
 
 A model-derived memory must not silently overwrite a P2C trusted profile value.
 
-- [ ] Keep trusted identity baseline/persona outside structured learned memory.
+- [x] Keep trusted identity baseline/persona outside structured learned memory.
 
   Administrator-authored identity context is configuration/state with stronger trust than model-derived learned memory.
 
@@ -694,7 +690,7 @@ A model-derived memory must not silently overwrite a P2C trusted profile value.
 
 ### Structured-memory persistence
 
-- [ ] Introduce a dedicated structured-memory persistence abstraction when needed.
+- [x] Introduce a dedicated structured-memory persistence abstraction when needed.
 
 Prefer something conceptually like:
 
@@ -704,15 +700,17 @@ IStructuredMemoryStore
 
 Do not repurpose the existing session-persistence `IMemoryStore` without an explicit migration/rename decision.
 
-- [ ] Keep memory policy separate from persistence technology.
+- [x] Keep memory policy separate from persistence technology.
 
 SQLite is sufficient initially.
 
-- [ ] Do not require embeddings or a vector database initially.
+- [x] Do not require embeddings or a vector database initially.
 
 ---
 
 ### Memory access
+
+Optional `memory.search` / `memory.get` / `memory.write` / `memory.update` / `memory.delete` model tools were not added. Ownership is enforced by the trusted Application service. Embeddings were not added. Hosted compaction probes were not run.
 
 - [ ] Add bounded read tools:
 
@@ -735,23 +733,23 @@ SQLite is sufficient initially.
 
 - [ ] Never allow memory tools to bypass session/user ownership.
 
-- [ ] Never store secrets or credentials merely because the model asks to remember them.
+- [x] Never store secrets or credentials merely because the model asks to remember them.
 
 ---
 
 ### Memory correctness
 
-- [ ] Add correction semantics.
+- [x] Add correction semantics.
 
-- [ ] Add deletion semantics.
+- [x] Add deletion semantics.
 
-- [ ] Add replacement/supersession semantics where appropriate.
+- [x] Add replacement/supersession semantics where appropriate.
 
-- [ ] Define conflict handling for contradictory memories.
+- [x] Define conflict handling for contradictory memories.
 
-- [ ] Do not silently promote uncertain conversational guesses into durable user facts.
+- [x] Do not silently promote uncertain conversational guesses into durable user facts.
 
-- [ ] Do not make confidence a fake precision score.
+- [x] Do not make confidence a fake precision score.
 
 If confidence is retained, use it only where policy/retrieval genuinely consumes it.
 
@@ -784,7 +782,7 @@ Memory = durable state with explicit owner/scope
 
 ### P4C-0 — Formalize minimal durable identity ownership
 
-- [ ] Introduce the minimal durable actor concept required to own cross-session memory.
+- [x] Introduce the minimal durable actor concept required to own cross-session memory.
 
   Prefer a domain name such as `AgentInstance` so the existing `AgentIdentity` persona record does not acquire two meanings.
 
@@ -801,7 +799,7 @@ Memory = durable state with explicit owner/scope
 
   Do not over-design the admin lifecycle here; P7 owns full creation/editing/publishing UX.
 
-- [ ] Keep reusable definition and durable identity separate.
+- [x] Keep reusable definition and durable identity separate.
 
   `AgentDefinition` / `AgentDefinitionVersion` owns reusable behavior/capability configuration such as:
 
@@ -815,7 +813,7 @@ Memory = durable state with explicit owner/scope
 
   The durable identity/instance owns continuity of one actor across sessions.
 
-- [ ] Separate persona/baseline from learned memory.
+- [x] Separate persona/baseline from learned memory.
 
   Conceptually:
 
@@ -827,13 +825,13 @@ Memory = durable state with explicit owner/scope
 
   Trusted/admin-authored baseline must not be stored as ordinary model-derived learned memories merely for convenience.
 
-- [ ] Preserve session reproducibility.
+- [x] Preserve session reproducibility.
 
   Historical sessions must retain enough pinned definition/persona configuration to explain what they ran with.
 
   Moving an existing identity from definition version `v1` to `v2` must not rewrite historical sessions.
 
-- [ ] Preserve identity continuity across definition upgrades.
+- [x] Preserve identity continuity across definition upgrades.
 
   Publishing or selecting a newer definition version does not inherently create a new identity and does not inherently reset learned memory.
 
@@ -847,11 +845,11 @@ Memory = durable state with explicit owner/scope
 
   Alice remains the same durable actor unless an explicit create/fork/reset operation says otherwise.
 
-- [ ] Do not attach learned memory to `AgentDefinitionVersion`.
+- [x] Do not attach learned memory to `AgentDefinitionVersion`.
 
   Definition versions are immutable reusable configuration, not mutable relationship state.
 
-- [ ] Define migration/backfill for existing sessions/agents conservatively.
+- [x] Define migration/backfill for existing sessions/agents conservatively.
 
   Existing shipped definitions may initially map to one default instance each if needed for compatibility, but avoid baking that 1:1 compatibility mapping into the permanent model.
 
@@ -865,7 +863,7 @@ P4A/P4B behavior remains unchanged.
 
 ### P4C-1 — Identity-user cross-session memory
 
-- [ ] Add explicit cross-session memory scope.
+- [x] Add explicit cross-session memory scope.
 
 Initial scopes:
 
@@ -884,7 +882,7 @@ It is **not**:
 - an arbitrary agent-global bucket;
 - organization-wide shared conversational memory.
 
-- [ ] Bind `IdentityUser` ownership to trusted runtime context.
+- [x] Bind `IdentityUser` ownership to trusted runtime context.
 
   Conceptually:
 
@@ -894,7 +892,7 @@ It is **not**:
 
   Never trust model-supplied ownership identifiers.
 
-- [ ] Default ordinary cross-session learned memory to the identity-user relationship.
+- [x] Default ordinary cross-session learned memory to the identity-user relationship.
 
   Two identities created from the same definition must not automatically share learned memories.
 
@@ -908,7 +906,7 @@ It is **not**:
 
   Alice's learned relationship memory must not automatically become Bob's memory.
 
-- [ ] Keep different users isolated under the same identity.
+- [x] Keep different users isolated under the same identity.
 
   Example:
 
@@ -920,26 +918,26 @@ It is **not**:
 
   Customer A memory must never be injected into Customer B's prompt.
 
-- [ ] Promote deliberately from Session to IdentityUser.
+- [x] Promote deliberately from Session to IdentityUser.
 
   Promotion creates an independent durable memory and preserves provenance. Do not retarget the original session memory's scope.
 
-- [ ] Cross-session policy must gate both retrieval and promotion.
+- [x] Cross-session policy must gate both retrieval and promotion.
 
   Disabled means:
 
   - no later-session retrieval;
   - no Session → IdentityUser promotion.
 
-- [ ] Define correction/deletion behavior across Session and IdentityUser scopes.
+- [x] Define correction/deletion behavior across Session and IdentityUser scopes.
 
-- [ ] Preserve source provenance after promotion.
+- [x] Preserve source provenance after promotion.
 
-- [ ] Coordinate memory-derived personalization with the P2C trusted profile boundary.
+- [x] Coordinate memory-derived personalization with the P2C trusted profile boundary.
 
   Explicit user/host profile data remains stronger than inferred/model-derived memory.
 
-- [ ] Add bounded retrieval.
+- [x] Add bounded retrieval.
 
   Do not inject an identity-user's lifetime memory into every model request.
 
@@ -953,19 +951,19 @@ One durable agent identity can remember useful learned state across multiple ses
 
 ### P4C-2 — Optional user-wide memory
 
-- [ ] Support deliberate promotion from Session or IdentityUser to User scope only when policy allows it.
+- [x] Support deliberate promotion from Session or IdentityUser to User scope only when policy allows it.
 
-- [ ] User-wide memory represents information intentionally available across otherwise separate identities for the same user.
+- [x] User-wide memory represents information intentionally available across otherwise separate identities for the same user.
 
   This should be uncommon and explicit because it crosses agent-role boundaries.
 
-- [ ] Do not allow an examiner, support agent, or other specialized role to receive user-wide memory merely because the platform has it.
+- [x] Do not allow an examiner, support agent, or other specialized role to receive user-wide memory merely because the platform has it.
 
   Definition/identity policy must still authorize retrieval.
 
-- [ ] Preserve provenance and correction/deletion semantics after promotion.
+- [x] Preserve provenance and correction/deletion semantics after promotion.
 
-- [ ] Keep trusted profile fields distinct from User-scope learned memory.
+- [x] Keep trusted profile fields distinct from User-scope learned memory.
 
   If a value is a trusted explicit profile property, store/manage it through the trusted profile boundary rather than duplicating it as inferred memory.
 
@@ -1023,23 +1021,23 @@ Learned memory is remembered data, not a new source of system-instruction author
 
 ### P4C verification
 
-- [ ] Tests proving two identities from one definition do not share IdentityUser memory.
+- [x] Tests proving two identities from one definition do not share IdentityUser memory.
 
-- [ ] Tests proving two users under one identity do not share IdentityUser memory.
+- [x] Tests proving two users under one identity do not share IdentityUser memory.
 
-- [ ] Tests proving definition-version upgrades preserve identity ownership without rewriting historical sessions.
+- [x] Tests proving definition-version upgrades preserve identity ownership without rewriting historical sessions.
 
-- [ ] Tests proving learned-memory reset/deletion semantics do not destroy trusted identity baseline/persona.
+- [x] Tests proving learned-memory reset/deletion semantics do not destroy trusted identity baseline/persona.
 
   The actual admin reset operation may remain P7, but persistence semantics must permit it cleanly.
 
-- [ ] Tests proving disabled cross-session policy blocks both retrieval and promotion.
+- [x] Tests proving disabled cross-session policy blocks both retrieval and promotion.
 
-- [ ] Tests proving user-wide memory is injected only where identity/definition policy permits it.
+- [x] Tests proving user-wide memory is injected only where identity/definition policy permits it.
 
-- [ ] Tests proving trusted P2C profile fields remain authoritative over contradictory learned memory.
+- [x] Tests proving trusted P2C profile fields remain authoritative over contradictory learned memory.
 
-- [ ] Tests proving provenance survives promotion and later correction/deletion.
+- [x] Tests proving provenance survives promotion and later correction/deletion.
 
 ### P4C stop condition
 
