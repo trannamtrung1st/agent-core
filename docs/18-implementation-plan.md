@@ -302,7 +302,7 @@ P3B–P3D deliver trusted registry/policy, workspace/artifact ergonomics, bounde
 | P3D-1 approval | RequireApproval, protocol/UI, Synthetic sensitive action on `approval-demo`; human wait isolated from 30 s/120 s execution clocks | **Observed** (correction) |
 | P3D-2 email | `email.*`, Gmail/Synthetic providers, exact-draft hash including Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw` | **Observed** |
 | P3E reconcile | Docs/TODO/report alignment for the earlier correction | **Observed** |
-| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, `Content-Type` canonicalization, shared text charset decode, provider error message off by default | **Observed / key-free frozen** on final green HEAD (see [P3 closure report](reports/p3-freeze-candidate.md); implementation bulk `da93489`) |
+| P3F capability closure | `workspace.search`/`workspace.move`, cwd segment normalization, `http.request` as `SensitiveWrite`, v7 allowlist, `Content-Type` canonicalization, shared text charset decode, provider error message off by default | **Observed / key-free frozen** on `4dbb920` (see [P3 closure report](reports/p3-freeze-candidate.md); implementation bulk `da93489`) |
 
 General Assistant exit for this closure:
 

@@ -593,7 +593,7 @@ public sealed partial class SessionToolExecutor(
 
         if (!path.StartsWith("/workspace/", StringComparison.Ordinal))
         {
-            return Error("path_outside_workspace", "Only files inside the session workspace can be modified.");
+            return Error("path_outside_workspace", WorkspaceLogicalPath.OutsideWorkspaceMessage);
         }
 
         TryString(args, "contentType", out var contentType);
