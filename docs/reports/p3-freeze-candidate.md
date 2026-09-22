@@ -11,7 +11,7 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 | P3F implementation bulk | `da93489` | Workspace search/move, `http.request`, v7 allowlist, cwd normalization |
 | Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); strengthened live SessionRuntime assertions; Playwright `retries: 0` |
 | **P3 key-free implementation freeze** | **`4dbb920`** | `Content-Type` canonicalization, charset parity for `http.request`, Real probe results recorded |
-| Docs-aligned HEAD | **`b672c7a`** | P3 key-free bookkeeping; Real gap separated from P4 |
+| Docs-aligned HEAD | **`d9180df`** | P3 key-free bookkeeping complete (canonical framing from `b672c7a`) |
 | Intermediate docs alignment | `ac795b6` | Shared `OutsideWorkspaceMessage`; freeze SHA references |
 
 **Closure bookkeeping (2026-09-22):**
