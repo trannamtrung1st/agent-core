@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForResponseSettled } from "./support/response-settled";
 
 const HISTORICAL_IMAGE_REREAD_MARKER = "[test:historical-image-reread]";
 const HISTORICAL_IMAGE_REREAD_ANSWER =
@@ -37,6 +38,7 @@ test("scripted vision completes a later-turn historical image reread", async ({ 
   await expect(page.locator(".conversation-list").getByText("Hello from synthetic.").last()).toBeVisible({
     timeout: 30_000
   });
+  await waitForResponseSettled(page);
 
   await page.getByLabel("Message").fill(
     `${HISTORICAL_IMAGE_REREAD_MARKER} Please inspect the earlier image.`
@@ -59,6 +61,7 @@ test("tools-capable non-vision model does not claim historical image sight", asy
   await expect(page.locator(".conversation-list").getByText("Hello from synthetic.").last()).toBeVisible({
     timeout: 30_000
   });
+  await waitForResponseSettled(page);
 
   await chooseModel(page, "Scripted Alpha");
   await page.getByLabel("Message").fill(
