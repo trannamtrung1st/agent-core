@@ -2,1194 +2,690 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on 2026-09-21.
+Reviewed against `main` on **2026-09-22**.
 
-Current roadmap:
+Current repository HEAD reviewed:
 
-1. **P2A — first-class progress semantics** is **observed** and frozen;
-2. **P2B — validated model response envelope** is **observed/frozen** on `e0e8a55` (2026-09-20 key-free Synthetic + Compose gate);
-3. **P2E — multimodal/image input usability and capability handling** — **observed/frozen** (2026-09-21 key-free Synthetic + Compose gate on freeze HEAD);
-4. **P3 — tools and external integrations** **key-free freeze** on **`4dbb920`** (verified hosted descendant **`ac795b6`** / workflow **`35682808408`** green). Real OpenRouter gap and CI telemetry test flakes are **maintenance**, not P4. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md);
-5. **P4 — add context compaction and memory** next;
-6. add configurable triggers;
-7. add durable background work;
-8. productize the agent harness/admin lifecycle;
-9. evolve sandbox and multi-user infrastructure only when requirements justify it.
+```text
+02aa333f6c72718a024fcd0be759b2aee9fa89c9
+```
 
-P1A/P1B/P1C remain **frozen** on `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`). Do not reopen P1 without a reproducible regression or a concrete new product requirement.
+Hosted Synthetic workflow:
 
-P2D session model selection is implemented and remains closed.
+```text
+35685801146 — green
+```
 
-P2A first-class progress is **observed** after the 2026-09-20 key-free Synthetic plus Compose gate (git HEAD `5effbb5e0942b2176c970c3a6f1b79fbaa985f8d` plus the P2A working tree). P2B validated model response envelope is **frozen** on `e0e8a55b111b190b63dfe5a2a53d0c59d0a06a59` (`e0e8a55`) with CI/Synthetic + Compose green on that HEAD (workflow run `35496178496`). Do not reopen P2B without a reproducible regression. **P2E** multimodal image-input capability closure is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (implementation commits `0eeb27c`–`a502266` plus documentation on that freeze HEAD). Do not reopen P2E without a reproducible regression. Optional Real vision (`gpt-4o-mini-2024-07-18`) and structured-response probes were **skipped** (no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` in the process). Do not treat those probes as verified Real-provider behavior. **P2C** personalization boundary is **observed/frozen** after the 2026-09-21 key-free Synthetic + Compose gate on the P2C freeze HEAD (implementation commits `4ae1095`–`c636b28` plus documentation on that freeze HEAD). Do not reopen P2C without a reproducible regression. **P2-Final** mandatory whole-output review **complete** (2026-09-21; TDP production evidence). Closure repair on `47d6ff6` (Real-catalog fallback, post-commit profile notification, preferredName trim). **P2 closed/frozen** on `47d6ff65142d2d454c4aa3101b0f43a38f01389a` (`47d6ff6`) with CI/Synthetic + Compose green (workflow run `35552740853`). Optional Real structured-response and vision probes **skipped/unverified**. Do not reopen P2 without a reproducible regression. Active roadmap: **P4**. P3 is frozen on `da93489`. P6 implementation has not started.
-
-Current-turn image input already has substantial implementation and must not be redesigned from scratch:
-
-- image attachments are accepted and processed;
-- decoded image size is bounded;
-- metadata is stripped before model use;
-- Application already has provider-neutral `ModelContentPart`, `ModelTextContent`, and `ModelImageContent`;
-- current-turn image attachments can become `ModelImageContent`;
-- the OpenAI-compatible adapter maps image content to multimodal `image_url` content;
-- `ModelCapabilities` and `ModelDescriptor` already expose Vision capability;
-- `/api/v2/models` already exposes model vision capability;
-- the Real catalog currently marks:
-  - `deepseek-v41-flash` as `vision: false`;
-  - `gpt-4o-mini-2024-07-18` as `vision: true`;
-  - `openrouter-free` as `vision: false`;
-- `PngVisionRuntimeTests` already proves that a PNG attachment reaches a vision-enabled OpenAI-compatible model request.
-
-P2E closed that **capability/UX/correctness** gap without a new multimodal architecture (truthful sanitized MIME/`attachment-processors/2`, layered Vision admission, Synthetic `scripted-vision` UX).
-
-The recent response/voice work is now part of the baseline:
-
-- speech/display are runtime response capabilities, not agent-persona instructions;
-- provider reasoning has its own `ModelReasoningDelta` channel;
-- reasoning must never become assistant display text, speech, TTS input, progress, or conversation history;
-- Real/OpenRouter reasoning configuration uses the native reasoning object and requests hidden reasoning where configured;
-- Voice display publication waits for speech resolution;
-- runtime-authored generic spoken lead-ins have been removed;
-- compatibility display→speech derivation is intentionally conservative around code, tables, dumps, and substantial technical content;
-- envelope may persist same-mode `speech.text` for playback/heard coordinates when spoken output meaningfully differs from display;
-- public/history `speechText` exposes custom semantic speech only;
-- `general-assistant` remains a neutral harness identity;
-- the Real DeepSeek V4.1 Flash reasoning-channel probe is documented in `docs/reports/reasoning-channel-probe.md`.
-
-Do not continue adding marker-specific speech heuristics merely to improve architecture. P2B is the intended replacement.
+Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
 
 ---
 
-## Maintainer notes
+# Current roadmap
 
-Always keep this section even when there is no active work.
+1. **P0–P3 are closed/frozen.**
+2. **P4A — session context compaction** is next.
+3. **P4B — structured session memory.**
+4. **P4C — cross-session memory.**
+5. **P5 — events and configurable triggers.**
+6. **P6 — durable background work.**
+7. **P7 — agent harness / admin lifecycle.**
+8. **P8 — harness/platform extensibility.**
+9. **P9 — sandbox evolution when requirements justify it.**
+10. **P10 — multi-user/product infrastructure when requirements justify it.**
 
-- [x] Add proprietary license to the project.
+Do not reopen a frozen phase without either:
 
-- [ ] Add more general-assistant tools and trusted user/session context where useful.
+- a reproducible regression; or
+- a concrete new product requirement that belongs there rather than in a later phase.
 
-  Examples:
+---
+
+# Current freeze state
+
+## P1 — Conversation/session ergonomics
+
+Frozen on:
+
+```text
+dceaccbad9a4db8908af147b5353805a2b1af288
+```
+
+Important frozen contracts include:
+
+- bounded/paginated durable history;
+- bounded runtime restore;
+- session purpose and lifecycle;
+- deadline / maximum-duration semantics;
+- completion authority;
+- terminal read-only history;
+- conversation language separate from speech locale;
+- replaceable speech providers;
+- deterministic reconnect/pause behavior.
+
+Do not redesign P1 as part of memory work.
+
+---
+
+## P2 — Response, progress, multimodal input and personalization
+
+P2 closed/frozen on:
+
+```text
+47d6ff65142d2d454c4aa3101b0f43a38f01389a
+```
+
+Important frozen contracts include:
+
+- first-class transient response progress;
+- provider reasoning isolated from user-visible output;
+- validated display/speech response semantics;
+- model selection and reasoning effort;
+- model capability metadata;
+- current-turn image input;
+- capability-aware image/model admission;
+- trusted explicit profile fields;
+- no conversational guesses silently becoming trusted profile data.
+
+Specific baselines:
+
+```text
+P2B response envelope: e0e8a55
+P2 final closure:       47d6ff6
+```
+
+Startup validation of contradictory catalog/provider capability configuration was not required for P2E closure. Track that under continuous quality if independently configurable provider capabilities make the problem real.
+
+---
+
+## P3 — Tools and external integrations
+
+P3 key-free freeze:
+
+```text
+4dbb9201de8028e7454b3be70a2e0730ac7c84f7
+```
+
+Verified hosted descendant:
+
+```text
+ac795b656e2e8ebd7d97f08d2d6ebc632d100cde
+workflow 35682808408 — green
+```
+
+Post-freeze CI isolation/locator maintenance is complete through:
+
+```text
+02aa333f6c72718a024fcd0be759b2aee9fa89c9
+workflow 35685801146 — green
+```
+
+P3A historical multimodal attachment re-inspection remains independently frozen on:
+
+```text
+c0f8a85
+```
+
+See:
+
+- `docs/reports/p3-freeze-candidate.md`
+- `docs/reports/p3a-freeze.md`
+
+Known Real-provider historical-image behavior that was not successfully verified remains provider/maintenance work. It does **not** block P4.
+
+Important frozen P3 contracts include:
+
+- registry / policy / execution separation;
+- workspace read/write/list/patch/search/move;
+- working-directory-relative paths;
+- attachment reread, including historical image re-inspection;
+- artifact creation/export/verification;
+- offline `sandbox.run`;
+- `web.search`;
+- SSRF-safe `web.fetch`;
+- bounded approval-gated `http.request`;
+- live approval protocol/UI;
+- email search/read/draft/send;
+- exact approved-action binding;
+- credentials outside model context;
+- network mediation rather than unrestricted sandbox networking.
+
+`general-assistant-v7` is the current full P3 demo harness.
+
+Unrestricted sandbox networking, browser automation, calendar integration, GitHub mutation tools, and a plugin marketplace are not P3 closure requirements.
+
+---
+
+# Maintainer notes
+
+Always keep this section.
+
+- [x] Add proprietary license.
+
+- [x] Establish trusted user/session-context baseline.
+
+  P2C already provides explicit trusted handling for fields such as:
+
   - timezone;
   - preferred language;
   - locale;
-  - explicit user preferences.
+  - preferred name.
 
-  Do not infer durable personal facts from conversational guesses. Coordinate durable personalization with P2C/P4 rather than growing ad-hoc prompt fields.
+  Additional trusted fields should be added only for concrete product requirements.
 
-- [x] Close current image-input usability under P2E.
+  Do not grow ad-hoc prompt fields or infer durable personal facts from conversational guesses.
 
-  Do not create a second multimodal abstraction. Reuse the existing:
+- [x] Establish useful general-assistant tool baseline through P3.
 
-  - attachment store/processor;
-  - `ModelContentPart`;
-  - `ModelImageContent`;
-  - model `Vision` capability;
-  - OpenAI-compatible multimodal mapping.
+  Additional typed integrations should be demand-driven rather than reopening P3 generically.
 
-- [ ] Background responses / continuing work after leaving a session are tracked under P6.
+- [x] Close current-turn image usability under P2E.
 
-  Do not change deactivation semantics independently just to keep responses running in the background.
+- [x] Close historical attachment/image reread under P3A.
 
-- [x] Session model selection and inference controls — completed in P2D.
+- [x] Keep provider reasoning separate from assistant output.
 
-- [x] Persist/publicly expose `speechText` when it meaningfully differs from display.
+- [x] Keep Model/Reasoning controls in the active composer.
 
-- [x] Keep provider reasoning separate from public assistant output.
+- [ ] Background responses / work continuing after the live Session Runtime are tracked under P6.
 
-- [x] Keep Model/Reasoning selection in the composer only; paused and terminal sessions do not show editable model controls.
-
----
-
-# P0 — Green baseline (closed)
-
-**P0A closed and frozen** on `0d118034bf12b2500912f653a79c8fdff6893b0c` (`0d11803`, 2026-09-19). [Synthetic run 35447234418](https://github.com/trannamtrung1st/agent-core/actions/runs/35447234418) completed successfully on that exact `main` commit. Both the Synthetic offline gates and the Synthetic Compose smoke succeeded.
-
-The preceding run on `a9b724d` had one pending-Voice Playwright failure (34 passed / 1 failed). The test clicked Voice before it had established that the held text response was active, so direct activation could correctly show `Listening…` instead of the pending `Starting voice…` state. The production voice lifecycle was not changed to satisfy the test.
-
-## P0A — Closed deterministic-test gap
-
-- [x] Fix the Docker/web regression-fixture build boundary.
-
-  Completed through `62ecf1e` / `6d51117`. The frontend regression fixture loads through the test helper without widening normal Vite filesystem access or globally enabling Node typings.
-
-- [x] Align rich-envelope Playwright assertions with mode-dependent speech labels.
-
-  Completed in `86a4df0`. Text-delivered secondary speech uses `Speech text`; `Spoken` is reserved for Voice delivery.
-
-- [x] Stabilize the stale workspace-write cancellation regression.
-
-  Completed in `a9b724d`. The test waits on the actual gated workspace operation before deactivation instead of relying on a runtime-state observation.
-
-- [x] Make the pending-Voice Playwright scenario deterministic.
-
-  Completed in `0d11803`. The test waits for the prior attachment response to finish, then observes the held response's first assistant chunk and Stop control before clicking Voice. It verifies `Starting voice…`, Cancel, zero audio frames before Voice applies, and disconnect cleanup. The focused scenario passed 10 consecutive local runs; the complete 35-test local Playwright suite also passed before the CI run.
-
-- [x] Re-run the complete key-free `.github/workflows/synthetic.yml` gate.
-
-  [Run 35447234418](https://github.com/trannamtrung1st/agent-core/actions/runs/35447234418) reports success for Domain, Infrastructure, Application, API, frontend unit tests and production build, Playwright Chromium, and the Compose owner-capability / SQLite-volume smoke.
-
-- [x] Record the green HEAD and freeze this stabilization tail.
-
-  The verified commit is `0d118034bf12b2500912f653a79c8fdff6893b0c`. Further Browser-STT/Voice changes require a reproducible product regression or a concrete product requirement. Do not start another speculative Voice-hardening pass.
-
----
-
-# Frozen completed work
-
-## P1 — Conversation and session ergonomics
-
-**Frozen:** `dceaccbad9a4db8908af147b5353805a2b1af288` (`dceaccb`).
-
-Authoritative contracts remain in:
-
-- `docs/10-technology-decisions.md`;
-- `docs/18-implementation-plan.md`.
-
-Completed:
-
-- bounded/paginated durable chat history;
-- newest / `before` / `after` history reads;
-- bounded runtime restore;
-- frontend “Load earlier messages” with scroll preservation;
-- stable history merge/dedup;
-- attachment/artifact/speech/status preservation across pagination;
-- generic session purpose model;
-- ongoing vs goal/task sessions;
-- optional deadline / maximum duration;
-- explicit semantic lifecycle status;
-- model `RequestComplete` distinct from deactivation;
-- configurable completion authority;
-- host/system authoritative lifecycle transition;
-- application-specific completion predicates kept outside Agent Core;
-- persisted lifecycle reason/provenance/timestamps;
-- read-only terminal-session history;
-- multilingual speech locale;
-- independent conversation language vs speech locale;
-- session speech-locale override;
-- Browser and hosted speech adapters consuming the effective locale;
-- deterministic fallback behavior when a selected speech provider cannot support the requested locale;
-- real French Chrome Browser-STT/TTS smoke.
-
-Do not redesign P1 as part of P2.
-
----
-
-## P2D — Session model selection and inference controls
-
-Completed.
-
-Current contract includes:
-
-- trusted backend `IModelCatalog`;
-- safe public model descriptors;
-- concrete durable `SessionModelSelection`;
-- trusted catalog key → provider alias / concrete model ID mapping;
-- selection precedence:
-  - explicit host/user;
-  - optional agent default/constraint;
-  - system/operator default;
-- session-aware `ILanguageModelResolver`;
-- `ModelPurpose`:
-  - `Conversation`;
-  - `Initiative`;
-  - `CompletionEvaluation`;
-- request/session-scoped reasoning effort;
-- catalog validation of allowed effort values;
-- model capabilities including:
-  - tools;
-  - vision;
-  - structured output;
-  - reasoning;
-- `GET /api/v2/models`;
-- model selection during session creation;
-- live session model mutation;
-- persist-before-use semantics;
-- `SessionBusy` rejection during active generation;
-- per-assistant-turn model provenance;
-- first-party model/reasoning UI;
-- session isolation;
-- no browser-supplied provider aliases, base URLs, credentials, or arbitrary provider JSON.
-
-Shipped Real development/demo default:
-
-```text
-deepseek-v41-flash
-→ deepseek/deepseek-v4.1-flash
-→ reasoning effort: medium
-→ vision: false
-```
-
-The Real catalog also contains:
-
-```text
-gpt-4o-mini-2024-07-18
-→ openai/gpt-4o-mini-2024-07-18
-→ vision: true
-```
-
-This is a development/demo catalog, not a production model recommendation.
-
-The fact that the default model is non-vision does **not** mean Agent Core lacks an image-input abstraction. Current-turn vision plumbing already exists. Product/capability closure belongs to P2E.
-
-Current UI rule:
-
-- Model/Reasoning lives in the active composer;
-- paused sessions show Resume instead;
-- terminal sessions are read-only;
-- paused/terminal headers do not duplicate Model controls.
-
-Keep P2D closed. Do not reopen model-selection architecture merely to finish image UX.
-
----
-
-# P2 — Response, progress, structured generation, and multimodal input contract
-
-This is the next architectural phase.
-
-Preferred execution order:
-
-```text
-P2A → P2B → P2E
-```
-
-P2C personalization is largely independent and can follow when durable personalization becomes useful.
-
-P2D is already completed and frozen. P2A, P2B, **P2E**, and **P2C** are observed/frozen. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review and closure repair on that HEAD.
-
-P2E reused the existing multimodal foundations rather than creating a second request format.
-
----
-
-## P2A — First-class progress vs final assistant output
-
-Observed. Transient `agent.progress` is distinct from controller `outputState`, provider reasoning, and durable assistant output.
-
-### Progress contract
-
-- [x] Introduce a small provider/runtime-neutral progress model.
-
-Conceptually:
-
-```text
-responseId
-operationId?
-kind
-state
-message?
-```
-
-Possible `kind` values:
-
-- preparing;
-- readingAttachments;
-- runningTool;
-- waitingExternal;
-- finalizing.
-
-Possible `state` values:
-
-- started;
-- updated;
-- completed;
-- failed.
-
-Do not over-design the enum before real consumers need more states.
-
-- [x] Add a first-class realtime progress event.
-
-Conceptually:
-
-```text
-agent.progress
-```
-
-Wire name is `agent.progress` (protocol v1).
-
-- [x] Tie response progress to `responseId`.
-
-Nested tool/external operations may additionally have an `operationId`.
-
-### Reasoning boundary
-
-- [x] Keep `ModelReasoningDelta` completely separate from progress.
-
-Provider reasoning is not user-visible progress.
-
-Never transform provider reasoning into:
-
-- progress messages;
-- display text;
-- speech;
-- TTS;
-- history;
-- artifacts.
-
-Reasoning-presence telemetry may be recorded without logging its content.
-
-### Persistence
-
-- [x] Make ordinary response progress transient by default.
-
-Do not create durable assistant messages such as:
-
-- “Reading attachment…”;
-- “Running tool…”;
-- “Preparing response…”.
-
-- [x] Persist the final assistant result as the conversational record.
-
-- [x] Clear transient progress on:
-
-  - successful response completion;
-  - interruption;
-  - cancellation;
-  - provider failure;
-  - session switch;
-  - disconnect;
-  - stale response/epoch supersession.
-
-- [x] Do not add durable/replayable progress yet.
-
-Current live responses do not resume across reconnect, so ordinary response progress should follow the same lifecycle.
-
-Durable progress belongs to P6 `WorkItem`, where work can genuinely outlive the active Session Runtime.
-
-### Existing controller state
-
-- [x] Keep current coarse `session.state.changed.outputState` initially.
-
-Existing states such as:
-
-- processing attachments;
-- running tools;
-- generating response;
-
-remain useful controller/session state.
-
-P2A progress is an additive semantic/presentation layer, not a requirement to immediately delete every existing state field.
-
-### UI
-
-- [x] Render progress as transient status, not normal assistant chat bubbles.
-
-- [x] Keep one understandable active progress surface per response.
-
-Do not produce a growing transcript of operational status messages.
-
-- [x] Replace/update progress rather than stacking repetitive messages.
-
-- [x] Remove active progress when final output takes over.
-
-- [x] Do not narrate progress through TTS by default.
-
-Voice users should hear the assistant response, not internal/tool activity.
-
-### Verification
-
-- [x] Application tests for:
-
-  - progress start/update/complete;
-  - attachment processing;
-  - tool execution;
-  - interruption;
-  - cancellation;
-  - provider failure;
-  - stale response;
-  - stale runtime epoch;
-  - reasoning never becoming progress.
-
-- [x] Realtime protocol tests.
-
-- [x] frontend tests for progress ownership and cleanup.
-
-- [x] one Playwright progress → final-response workflow.
-
-- [x] reconnect/session-switch regression coverage.
-
-- [x] update protocol/observability docs.
-
-### P2A stop condition
-
-P2A is **observed**. The stop condition holds: first-class semantic event; not fake conversation history; clears on terminal paths; Voice does not narrate operational progress; provider reasoning stays internal; the final assistant result remains the durable record.
-
-Do not add durable background-work execution in this phase.
-
----
-
-## P2B — Validated model response envelope
-
-**Observed/frozen** on `e0e8a55` (2026-09-20). Do not reopen without a reproducible regression. Application consumes a provider-neutral validated semantic response (`same` / `custom` / `none`). Structured-capable catalog models (Synthetic Scripted Beta) do not depend on inline speech markers. Compatibility models (Scripted Alpha) map into the same contract inside Infrastructure. Marker syntax stays out of Domain/Application prompting and SessionRuntime parsing. Agent definitions remain free of TTS, marker, transport, and UI-rendering instructions.
-
-After P2A, the shipped generation contract retired this compatibility debt from Domain/Application:
-
-- free-form `ResponseEnvelopeParser` in SessionRuntime;
-- `[[speech:...]]` in normal prompting;
-- inline rich block markers in Application parsing;
-- marker-aware streaming/display gating in the runtime;
-- compatibility speech derivation as the normal TTS path.
-
-Infrastructure still maps unstructured catalog models through a bounded marker compatibility parser into the same semantic events.
-
-Speech/display are **Agent Core response capabilities**, not Agent Definition persona behavior.
-
-Agent definitions must not contain:
-
-- TTS instructions;
-- marker syntax;
-- transport instructions;
-- UI-rendering syntax;
-- provider-specific structured-output JSON.
-
-### Canonical semantic response
-
-- [x] Define one validated provider-neutral semantic response.
-
-Preferred conceptual shape:
-
-```text
-displayText: string
-
-speech:
-  mode: same | custom | none
-  text?: string
-
-blocks?: [...]
-```
-
-Exact schema may evolve, but preserve the semantic distinction.
-
-#### `displayText`
-
-- required;
-- primary visible conversational response.
-
-#### `speech.mode = same`
-
-The spoken answer is semantically the normal conversational display response.
-
-The runtime may perform deterministic formatting cleanup appropriate for speech, but must not invent a semantic summary.
-
-#### `speech.mode = custom`
-
-`speech.text` is required.
-
-It becomes the authoritative TTS source.
-
-Use this when spoken wording intentionally differs from the visual response.
-
-#### `speech.mode = none`
-
-The response is intentionally visual-only.
-
-No TTS should occur, and this is not a speech/provider error.
-
-This distinction prevents the runtime from confusing:
-
-- “same as display”;
-- “custom speech”;
-- “intentionally no speech”;
-- malformed/missing structured output.
-
-#### `blocks`
-
-Optional richer visual output.
-
-Examples:
-
-- Markdown/detail blocks;
-- attachment references;
-- artifact references;
-- future typed rich content.
-
-Blocks never enter TTS automatically.
-
-### Provider-neutral generation events
-
-- [x] Keep provider wire format inside Infrastructure.
-
-Application/SessionRuntime should consume semantic events, not OpenRouter/OpenAI-specific JSON fields.
-
-Target event concepts may include:
-
-```text
-display delta
-speech projection
-block update
-reasoning delta
-tool call
-completion
-failure
-```
-
-- [x] Keep `ModelReasoningDelta` as a separate internal semantic event.
-
-- [x] Never concatenate reasoning into `ModelTextDelta`.
-
-- [x] Never persist provider reasoning in `ConversationEntry`.
-
-### Native structured generation
-
-- [x] For providers/models with reliable structured-output support, request the validated schema directly.
-
-- [x] Use trusted model-catalog capabilities to determine structured-output availability.
-
-- [x] Validate completed semantic output before durable publication.
-
-- [x] Centralize malformed-response normalization/failure handling.
-
-Do not scatter malformed JSON/schema recovery throughout SessionRuntime.
-
-### Compatibility path
-
-- [x] Keep one bounded compatibility adapter for providers/models that cannot reliably generate the validated structure.
-
-- [x] Temporarily let that adapter understand the existing marker format.
-
-- [x] Convert compatibility output into the same canonical semantic response used by native structured providers.
-
-- [x] Keep marker syntax out of Domain/Application APIs where possible.
-
-The compatibility parser should be an edge adapter, not permanent architecture.
-
-### Streaming
-
-- [x] Preserve useful display streaming where safely possible.
-
-- [x] Never stream raw structured JSON to the user.
-
-- [x] Never treat incomplete marker/JSON fragments as speech.
-
-- [x] Never expose provider reasoning while waiting for validated display content.
-
-- [x] Do not require every semantic field to stream in the first P2B slice.
-
-Correct completion-time validation is preferable to unsafe pseudo-streaming.
-
-### Voice semantics
-
-- [x] `speech.mode = custom`:
-
-  `speech.text` is the authoritative TTS input.
-
-- [x] `speech.mode = same`:
-
-  use the completed conversational display projection.
-
-- [x] `speech.mode = none`:
-
-  do not synthesize speech.
-
-- [x] Never feed these automatically into TTS:
-
-  - code;
-  - tables;
-  - attachment payloads;
-  - artifact payloads;
-  - file dumps;
-  - provider reasoning;
-  - arbitrary rich blocks.
-
-- [x] Keep speech segmentation/playback timing in the runtime speech layer.
-
-- [x] Keep conversation language independent from response projection.
-
-### Persistence
-
-- [x] Persist the validated semantic envelope atomically with the assistant entry.
-
-Preserve:
-
-- display text;
-- meaningful custom speech text;
-- blocks;
-- display/speech delivery coordinates;
-- finish reason;
-- model provenance.
-
-- [x] Do not persist duplicate custom speech when speech is equivalent to display.
-
-- [x] Preserve backward compatibility with old marker-generated conversations.
-
-Do not destructively rewrite historical conversation rows merely for schema cleanliness.
-
-### UI
-
-Keep the current presentation semantics:
-
-- `displayText` always renders normally;
-- absent/equivalent speech does not create duplicated content;
-- meaningfully different speech appears as secondary speech content;
-- Text-delivered custom speech can use the current `Speech text` presentation;
-- Voice-delivered custom speech can use the current `Spoken` presentation;
-- intentionally silent output does not render an empty speech section;
-- no fuzzy semantic deduplication.
-
-### Remove compatibility debt
-
-Only after native structured + fallback generation paths are verified:
-
-- [x] remove `[[speech:...]]` from normal model prompting;
-
-- [x] remove marker parsing from normal runtime flow;
-
-- [x] remove marker-specific streaming/order machinery that is no longer needed;
-
-- [x] remove compatibility-only `SpokenOutput` heuristics;
-
-- [x] retain only deterministic formatting/safety projection required by the canonical response contract;
-
-- [x] keep `general-assistant` transport-agnostic.
-
-### Verification
-
-- [x] Domain tests for semantic response validation.
-
-- [x] Infrastructure tests for:
-
-  - native structured generation;
-  - fallback compatibility parsing;
-  - malformed response;
-  - reasoning fields;
-  - tool calls;
-  - length limit;
-  - content filtering;
-  - provider failure.
-
-- [x] Application tests proving reasoning cannot enter:
-
-  - display;
-  - speech;
-  - TTS;
-  - progress;
-  - persistence/history.
-
-- [x] Voice tests for:
-
-  - `same`;
-  - `custom`;
-  - `none`.
-
-- [x] persistence/history/reopen coverage.
-
-- [x] frontend rich-response tests.
-
-- [x] Playwright structured-response workflow.
-
-- [x] bounded opt-in Real OpenRouter probe using `general-assistant` (skipped this run: no process keys; not claimed verified).
-
-### P2B stop condition
-
-P2B stop condition is **met** — frozen on `e0e8a55` with key-free Synthetic + Compose green (workflow run `35496178496`).
-
-### P2E stop condition
-
-P2E stop condition is **met** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD. Optional Real vision probe **skipped** (credentials unavailable). Historical image re-inspection was explicitly deferred to **P3A** and does not reopen P2E. **P2C** stop condition is **met** — observed/frozen after the 2026-09-21 key-free gate on the P2C freeze HEAD. **P2 closed/frozen** on `47d6ff6` after mandatory whole-output review, closure repair, and proposal §23 gate on that HEAD (workflow run `35552740853`; counts in TDP production evidence). Optional Real probes **skipped/unverified** (credentials unavailable). Do not reopen P2 without a reproducible regression. **P3** freeze on `27efe17` was **reopened** (2026-09-21) for a focused email/approval correction; P3A remains independently frozen on `c0f8a85`. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P4** is next after this correction freeze. P6 has not started.
-
----
-
-## P2E — Multimodal image-input capability closure
-
-The architecture already contains the core image-input path.
-
-Do **not** introduce another image-specific language-model interface.
-
-Existing foundations:
-
-- [x] session-owned image attachments;
-- [x] image signature/content-type classification;
-- [x] bounded decoded-pixel validation;
-- [x] image metadata stripping;
-- [x] provider-neutral `ModelContentPart`;
-- [x] `ModelTextContent`;
-- [x] `ModelImageContent`;
-- [x] current-turn image → model content-part projection;
-- [x] OpenAI-compatible `image_url` mapping;
-- [x] model-level Vision capability;
-- [x] catalog/API Vision capability;
-- [x] a Real catalog entry that supports vision;
-- [x] deterministic application coverage proving PNG image bytes reach a vision-enabled request.
-
-The current product gap is mostly that capability is not presented/enforced early enough.
-
-### Capability-aware admission
-
-- [x] Detect whether the pending/current user turn contains one or more image attachments before starting model generation.
-
-- [x] Resolve the selected session model and validate its Vision capability before generation.
-
-For an image turn with a non-vision model:
-
-- do not send the model request;
-- do not silently drop the image;
-- do not pretend the model saw it;
-- do not automatically switch the user's selected model;
-- return a clear non-fatal capability error.
-
-Example product meaning:
-
-```text
-This model cannot read images. Choose a vision-capable model to send this attachment.
-```
-
-Keep provider/model wire details out of the error.
-
-- [x] Keep attachment upload/storage independent from model capability.
-
-It is valid to upload/stage an image before choosing a model.
-
-Capability validation belongs to the point where the attachment is about to become model input.
-
-### Model picker / composer UX
-
-- [x] Surface Vision capability in the model picker.
-
-At minimum, users must be able to distinguish:
-
-- vision-capable;
-- non-vision.
-
-Do not turn the picker into a dense provider-debug surface.
-
-- [x] When the composer contains image attachments and the current model lacks Vision:
-
-  - show an understandable incompatibility state;
-  - prevent sending until resolved;
-  - keep the draft and attachments intact;
-  - allow the user to select a vision-capable model.
-
-- [x] Re-evaluate compatibility immediately when:
-
-  - model selection changes;
-  - an image is added;
-  - an image is removed;
-  - a pending new-chat model choice changes.
-
-- [x] Do not automatically choose GPT-4o mini or any other model solely because an image was attached.
-
-Model choice remains explicit unless a future agent/session policy defines capability-based routing.
-
-### Image encoding correctness
-
-- [x] Make sanitized image bytes and declared model-input content type agree.
-
-Current processing may transcode formats such as GIF/WebP through a PNG encoder while retaining the original attachment content type.
-
-The model input must never claim:
-
-```text
-image/webp
-```
-
-while carrying PNG bytes, or equivalent mismatches.
-
-Choose one clear rule:
-
-1. preserve the original encoding when it remains safe and supported; or
-2. normalize sanitized model-input images to a canonical format such as PNG/JPEG and update the `ModelImageContent.ContentType` accordingly.
-
-Prefer deterministic normalization over format-specific complexity.
-
-- [x] Add explicit tests for:
-
-  - PNG;
-  - JPEG;
-  - WebP;
-  - GIF, if accepted as an input type.
-
-If GIF animation is not intentionally supported, document that only the sanitized/static projection is used.
-
-### Provider boundary
-
-- [x] Keep `ModelImageContent` provider-neutral.
-
-Provider adapters may map it to:
-
-- OpenAI/OpenRouter `image_url`;
-- another provider's native image block;
-- a future upload/file reference mechanism.
-
-Application must not depend on those formats.
-
-- [x] Keep image bytes out of prompts/logging/telemetry.
-
-Telemetry may record bounded metadata such as:
-
-- image present;
-- content type;
-- byte-size bucket;
-- capability accepted/rejected.
-
-Do not log base64 payloads or raw image bytes.
-
-### Model capability integrity
-
-- [x] Treat catalog capabilities as trusted backend configuration.
-
-The browser may display capability metadata, but it does not declare whether a model supports Vision.
-
-- [x] Keep runtime/provider capability validation as a second defensive boundary.
-
-Even after application preflight, the adapter should continue rejecting image parts if its resolved model does not support Vision.
-
-- [ ] Add startup/configuration validation where useful so contradictory catalog/provider capability declarations fail clearly.
-
-Avoid configuration where:
-
-```text
-catalog.vision = true
-provider.vision = false
-```
-
-silently behaves unpredictably.
-
-### Current-turn versus historical image access
-
-P2E closed current-turn image inspection only. Historical image re-inspection was explicitly deferred to **P3A — Historical multimodal attachment re-inspection** and does not reopen or block the frozen P2E closure.
-
-The deferred work must continue to avoid raw/base64 image data in ordinary textual tool results and must not automatically replay every historical image on every turn.
-
-### Supported scope
-
-First closure target:
-
-```text
-user uploads image
-→ attachment is validated/sanitized
-→ compatible vision model is selected
-→ current user turn contains ModelImageContent
-→ provider adapter sends multimodal request
-→ assistant can answer about the image
-```
-
-Do not add OCR as the primary image architecture.
-
-A multimodal model should receive the image natively when Vision is available.
-
-OCR/document-image extraction may be added later as a separate degraded/tool path if a concrete workflow requires it.
-
-### Verification
-
-- [x] Keep/expand the existing PNG vision runtime test.
-
-- [x] Infrastructure tests for correct multimodal provider mapping.
-
-- [x] Tests that sanitized bytes and MIME type match for every accepted image format.
-
-- [x] Application tests for:
-
-  - vision model + image → accepted;
-  - non-vision model + image → rejected before provider request;
-  - text-only turn + non-vision model → unaffected;
-  - mixed text + image;
-  - multiple images;
-  - image attachment with no textual user message;
-  - cancellation/interruption during image processing;
-  - stale runtime protection.
-
-- [x] API/model-catalog tests preserving Vision capability.
-
-- [x] frontend tests for:
-
-  - Vision indicator;
-  - incompatible image/model state;
-  - model switch resolving the state;
-  - removing the image resolving the state;
-  - draft/attachment preservation after capability rejection.
-
-- [x] one deterministic Playwright flow for:
-
-```text
-attach image
-→ non-vision model is visibly incompatible
-→ choose vision-capable model
-→ send succeeds
-```
-
-Synthetic CI may use a deterministic vision-capable fixture/catalog entry rather than external inference.
-
-- [x] bounded opt-in Real OpenRouter image probe using a known vision-capable catalog model (skipped: no process keys; not claimed verified).
-
-Do not make real vision inference part of default CI.
-
-### P2E stop condition
-
-P2E is **done** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2E freeze HEAD (see [Implementation Plan](docs/18-implementation-plan.md#p2e--multimodal-image-input-capability-closure-observed)).
-
----
-
-## P2C — Personalization boundary
-
-P2C is **done** — observed/frozen after the 2026-09-21 key-free Synthetic + Compose gate on the P2C freeze HEAD (see [Implementation Plan](docs/18-implementation-plan.md#p2c--personalization-boundary-observed)).
-
-Do not let personalization grow through accidental prompt inference.
-
-- [x] Treat absent preferred name as absent.
-
-- [x] Distinguish trusted profile data from conversational guesses (explicit provenance; no model memory-write path).
-
-- [x] Give durable personalization explicit provenance (`userSet`, `hostSet`, `applicationProfile`; `memoryDerived` deferred to P4).
-
-- [x] Treat timezone, language, preferred name, locale, and similar context as explicit trusted allowlisted fields when available.
-
-- [x] Owner `GET|PATCH /api/v2/profile` with optimistic revision and server-side source stamping.
-
-- [x] Live runtime mailbox refresh on subsequent turns without mutating in-flight responses or session revision.
-
-- [x] Coordinate durable personalization with P4 structured memory rather than creating a second unrelated memory system (no inferred durable writes in P2C).
-
----
-
-## P2-Final — Reconcile and close P2
-
-- [x] README, TODO, and canonical docs agree P2A/P2B/P2D frozen and P2E/P2C observed/frozen; owner `GET|PATCH /api/v2/profile` and typed profile persistence are documented.
-
-- [x] Proposal §23 key-free gate (backend, web unit/build, Synthetic Playwright, Compose SQLite volume) re-verified during whole-output review (2026-09-21; exact HEAD in TDP). Optional Real structured-response and vision probes **skipped** (credentials unavailable).
-
-- [x] Mandatory whole-output review complete; **P2 closed/frozen** on `47d6ff6` (closure repair on same HEAD; CI/Synthetic + Compose workflow run `35552740853`). Do not reopen P2 without a reproducible regression. Roadmap focus: **P3 correction freeze** then **P4** per proposal §26.
-
----
-
-# P3 — Evolve assistant tools from the current bounded baseline
-
-**P3 capability closure (P3F)** adds working-directory segment normalization, `workspace.search` and `workspace.move`, approval-gated `http.request`, and `general-assistant` v7. Earlier correction evidence remains: Gmail Bcc preservation and exact-draft approval; MimeKit MIME; Gmail `drafts.send`; indeterminate send consumption; approval-clock isolation; `web.fetch` multi-address/`transport_error` (key-free HEAD `e255916`). Provider 400/422 responses stay a safe public message. Logs include status, model, phase, provider code, and type; the free-form provider message requires `LogProviderErrorMessages` and is off by default. See [docs/reports/p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md). **P3 key-free freeze** on **`4dbb920`** (verified hosted **`ac795b6`** / **`35682808408`**). **Known Real-provider gap** and **CI telemetry isolation** are maintenance, not P4. **P4** (context compaction and memory) is next.
-
-Already present:
-
-- static `ToolCatalog`;
-- role permission checks;
-- `SessionToolExecutor`;
-- `knowledge.retrieve`;
-- `attachments.read`;
-- `workspace.read`;
-- `workspace.write`;
-- `artifacts.create`;
-- `artifacts.verify`;
-- `sandbox.run`;
-- bounded steps/time/output;
-- session-scoped workspace/artifact/sandbox isolation;
-- runtime-epoch protection against stale tool/workspace work.
-
-Build on this instead of replacing it.
-
-## P3A — Historical multimodal attachment re-inspection
-
-- [x] Let a model re-inspect a historical session image on demand through the existing durable `attachmentId`, session attachment manifest, `attachments.read`, attachment processor/store, and provider-neutral `ModelContentPart` / `ModelImageContent` path.
-- [x] Retrieve only explicitly selected session-owned images; do not automatically resend all historical images or duplicate image blobs into conversation history.
-- [x] Add the smallest provider-neutral typed non-text tool-result or continuation projection needed to rehydrate model-consumable image content. Keep raw/base64 image bytes out of ordinary JSON/text tool results.
-- [x] Require trusted model **Tools** capability for model-initiated `attachments.read` and **Vision** capability before historical image content reaches the provider. Never silently drop the image, pretend it was seen, or switch models automatically.
-- [x] Preserve existing text/PDF `attachments.read` behavior, session ownership and cross-session isolation, sanitized/canonical image bytes with truthful MIME, persisted/reopened session support, and runtime-epoch/cancellation/supersession fencing.
-
-P3A slices P3A-0–P3A-4 are **observed/frozen** (gate on `c0f8a85`) with focused-output review closure for P3A-1–P3A-3 on that HEAD; see [docs/reports/p3a-freeze.md](docs/reports/p3a-freeze.md).
-
-## Tool architecture evolution (P3B)
-
-- [x] Registry, policy, and executor separation (`ToolRegistry`, `ToolPolicy`, `SessionToolExecutor` recheck).
-
-## Workspace ergonomics (P3B)
-
-- [x] `workspace.list` and `workspace.patch` with bounded preconditions.
-
-## Artifact workflow improvements (P3B)
-
-- [x] Richer `artifacts.verify`, `artifacts.create_from_workspace`, provenance metadata.
-
-## Public web tools (P3C)
-
-- [x] `web.search` and `web.fetch` with SSRF-safe fetch, configuration-aware offering, `general-assistant` v2.
-
-## Live approval (P3D-1)
-
-- [x] `RequireApproval`, `agent.approval.requested` / `RespondApproval`, UI modal, `demo.sensitive_action`.
-
-## Email integration (P3D-2)
-
-- [x] `email.search`, `email.read`, `email.create_draft`, `email.send(draftId)` with draft-hash approval and Synthetic/Gmail providers; `general-assistant` v4.
-
-## P3E — Reconcile and close P3
-
-- [x] Full key-free gate on the `27efe17` closure tree (see historical [p3-freeze-candidate.md](docs/reports/p3-freeze-candidate.md) evidence).
-- [x] Canonical docs/TODO/report alignment for observed P3B–P3D behavior.
-- [x] Mandatory whole-output corrections manually verified on `27efe17`. Optional OpenRouter, Brave, and Gmail probes remain **skipped/unverified**.
-- [x] Email/approval correction pass after freeze reopen: exact-draft Bcc, MimeKit MIME, Gmail `drafts.send` with approved `message.raw`, indeterminate send consumption, approval-clock isolation, policy-before-Gmail, multi-tool image wire order; local §23 gate rerun on this tree.
-
-## Typed external actions
-
-Prefer typed domain actions over generic HTTP mutations when a workflow is repeated and has a stable contract. That is a design decision, not an open P3 task.
-
-Examples that can come after P4, while `http.request` covers the gap:
-
-```text
-github.create_issue
-calendar.create_event
-support.update_ticket
-```
-
-Tool implementation owns credentials.
-
-Credentials never enter model context.
-
-## Approval policy
-
-- [x] Live-session approval for sensitive/destructive tools (`RequireApproval`, `agent.approval.requested` / `RespondApproval`, `email.send` exact-draft gate, `http.request` method/URL/header/body-hash gate, `demo.sensitive_action` on `approval-demo`).
-
-Conceptually, later typed integrations reuse the same policy:
-
-- automatic safe/read-only actions;
-- configurable ordinary writes;
-- explicit approval for sensitive/destructive actions.
-
-## Sandbox and network-policy evolution
-
-- [x] Keep `sandbox.run` as the generic execution escape hatch.
-
-Maintain:
-
-- no unrestricted host shell/process tool;
-- read-only root;
-- dropped capabilities;
-- bounded CPU;
-- bounded memory;
-- bounded PIDs;
-- bounded execution time;
-- bounded output;
-- network disabled by default.
-
-Sandbox network policy is **deferred / not a P3 blocker**. Add it in a later sandbox/infrastructure phase only when a concrete workflow requires it. Possible modes remain `none`, restricted public web, and an explicit host allowlist. Never unrestricted by default. Do not give the sandbox unrestricted networking; `http.request` is the mediated network capability.
-
-## P3F — Bounded `http.request`
-
-- [x] Add generic `http.request` because typed tools cannot reasonably cover arbitrary public APIs.
-
-This first version:
-
-- `SensitiveWrite` exact-action approval bound to normalized method, URL, permitted headers, and body SHA-256;
-- methods GET, HEAD, POST, PUT, PATCH, DELETE, with `web.fetch` preferred for ordinary GETs;
-- public-DNS/SSRF/rebinding/redirect protections reused from `web.fetch`;
-- localhost, private, link-local, and metadata targets rejected;
-- request, response, and time caps;
-- no automatic retry of non-idempotent methods;
-- every returned body marked untrusted;
-- no model-supplied Authorization, Cookie, Proxy-Authorization, or API keys.
-
-Later authenticated generic requests should use trusted `credentialAlias` values bound server-side to exact hosts and methods. Credentials must never enter the model context.
-
-## P3 exit
-
-General Assistant can:
-
-- naturally read/write/patch/list/search its own workspace
-- use relative paths like a normal working directory
-- inspect current and historical attachments
-- search the public web when Brave is configured
-- fetch pages/data
-- make bounded approved generic HTTP/API requests
-- create/export artifacts
-- use the offline sandbox
-- search/read/draft/send email with the existing approval boundary
-- surface actionable failures instead of opaque "Failed"
-
-Then freeze P3 and move to P4 memory/compaction. Unrestricted sandbox networking, browser automation, calendar, GitHub mutations, and a plugin marketplace are not part of this closure.
+  Do not change session-deactivation semantics merely to keep ordinary responses running.
 
 ---
 
 # P4 — Context compaction and memory
 
+P4 should build on existing persistence and prompt-context foundations rather than introduce a second conversation-history architecture.
+
+Current useful foundations already exist:
+
+```text
+SessionSnapshot.Summary
+SessionSnapshot.SummarizedThroughEntrySequence
+PromptContextBuilder.BuildMemorySystem(...)
+PromptContextBuilder.MaxSummaryCharacters
+HistoryRestoreWindow
+IMemoryStore.ReadHistoryAsync(...)
+durable paginated ConversationEntry history
+session revision/concurrency semantics
+session-aware language-model resolution
+```
+
+Important naming note:
+
+`IMemoryStore` currently means the durable session/profile persistence store. It is **not** the new structured semantic-memory abstraction described in P4B.
+
+Do not silently overload `IMemoryStore` with a second meaning.
+
+If P4B needs a store abstraction, prefer a distinct name such as:
+
+```text
+IStructuredMemoryStore
+```
+
+A broad `IMemoryStore` rename is not required to begin P4A.
+
+---
+
 ## P4A — Session context compaction
 
-Current prompt history is intentionally bounded. Add semantic compaction only when long-running sessions need more context than the current window can safely retain.
+Goal:
 
-- [ ] Add LLM-based session compaction.
+```text
+durable raw conversation
+        ↓
+bounded semantic summary of older history
+        +
+recent raw conversation tail
+        ↓
+model request
+```
 
-Preserve:
+Compaction must improve long-session continuity without replacing raw history or creating a second transcript.
 
-- unresolved topics;
-- decisions;
-- user constraints;
-- goals;
-- relevant references;
-- important open loops.
+---
 
-Requirements:
+### P4A-0 — Formalize the existing compaction boundary
 
-- deterministic fallback;
-- compaction never replaces raw durable history;
-- versioned/replaceable compaction format;
-- clear source range/provenance.
+- [ ] Treat the existing:
 
-- [ ] Make compaction operate over durable paginated history without requiring the browser to load old messages.
+  ```text
+  Summary
+  SummarizedThroughEntrySequence
+  ```
 
-- [ ] Use the model-resolution architecture rather than hard-coding a provider/model.
+  as the canonical initial compaction seam.
 
-Add another `ModelPurpose` only if compaction actually requires different model-selection policy.
+- [ ] Make the prompt-context boundary explicit.
+
+  When a valid summary exists:
+
+  ```text
+  summary = semantic context through sequence N
+  raw prompt tail = eligible entries after sequence N
+  ```
+
+  Do not knowingly feed the same historical turns both through the summary and again as ordinary raw history.
+
+- [ ] Preserve the current user batch exactly once.
+
+  Trailing queued/current user turns must never disappear merely because they cross a compaction boundary.
+
+- [ ] Preserve assistant delivery semantics.
+
+  Historical assistant context continues to use:
+
+  - received prefix for Text;
+  - heard prefix for Voice.
+
+  Unreceived/unheard assistant tails must not become remembered facts simply because compaction exists.
+
+- [ ] Keep raw `ConversationEntry` history unchanged.
+
+  Compaction is an additional projection, not destructive history rewriting.
+
+- [ ] Define minimal version/provenance metadata for a generated summary.
+
+  At minimum preserve:
+
+  ```text
+  format version
+  summarized-through sequence
+  generated-at
+  model provenance where useful
+  ```
+
+  Do not over-design the schema.
+
+- [ ] Add boundary tests before adding an LLM compactor.
+
+  Cover:
+
+  - no summary;
+  - summary through an older entry;
+  - recent tail after summary;
+  - no summary/raw-history duplication;
+  - queued trailing user turns;
+  - interrupted assistant output;
+  - Voice heard-prefix behavior;
+  - reopen from persistence;
+  - long transcript with only a bounded runtime restore window.
+
+### P4A-0 stop condition
+
+The runtime can construct a correct prompt from:
+
+```text
+existing durable summary
++
+eligible raw history after the summary boundary
+```
+
+without an LLM generating new summaries yet.
+
+This is the first P4 implementation item.
+
+---
+
+### P4A-1 — Generate semantic compaction
+
+- [ ] Add a provider-neutral session compaction service.
+
+  It owns compaction semantics, not provider wire format.
+
+- [ ] Read source history from durable server-side history.
+
+  Use the existing paginated persistence path rather than requiring the browser to load old messages.
+
+- [ ] Compact only stable durable history.
+
+  Do not summarize:
+
+  - streaming entries;
+  - incomplete current user batches;
+  - unpersisted work;
+  - stale/superseded runtime state.
+
+- [ ] Preserve materially useful context:
+
+  - unresolved topics;
+  - decisions;
+  - user constraints;
+  - session goals;
+  - relevant references;
+  - relevant attachment/artifact references;
+  - important open loops/tasks.
+
+- [ ] Keep summaries bounded.
+
+  Reuse or deliberately evolve the existing summary-character budget rather than allowing unbounded accumulation.
+
+- [ ] Use the existing model-resolution architecture.
+
+  Do not hard-code OpenAI, OpenRouter, or a concrete model ID.
+
+- [ ] Initially use the normal session model-selection path unless measured requirements justify a separate compaction model policy.
+
+  Add a new `ModelPurpose` only when it has meaningful selection semantics.
+
+- [ ] Keep provider wire format in Infrastructure.
+
+- [ ] Validate generated summaries before persistence.
+
+  At minimum:
+
+  - non-empty when replacement is expected;
+  - bounded length;
+  - valid source boundary;
+  - no raw binary/base64 attachment payloads;
+  - no provider reasoning.
+
+- [ ] Provide deterministic failure behavior.
+
+  If compaction fails:
+
+  - keep the previous summary;
+  - keep raw durable history;
+  - continue using the existing bounded raw-history path;
+  - do not corrupt the session;
+  - do not fabricate a summary.
+
+- [ ] Synthetic tests must not depend on an external model.
+
+---
+
+### P4A-2 — Compaction lifecycle
+
+- [ ] Add a bounded compaction policy.
+
+  Do not run an LLM summarization call after every message.
+
+  Trigger based on enough unsummarized eligible history to justify compaction.
+
+- [ ] Prefer opportunistic compaction after a completed durable turn.
+
+  It should be runtime-internal maintenance, not a P6 `WorkItem`.
+
+- [ ] Do not require a user-visible progress transcript for ordinary compaction.
+
+  Telemetry is sufficient unless real latency proves a UX surface is needed.
+
+- [ ] Compaction must be cancellable with the Session Runtime.
+
+  It must not silently become durable detached/background work.
+
+- [ ] Protect summary commits against stale work.
+
+  A delayed compaction result must not replace a newer summary.
+
+  Bind the result to:
+
+  - session;
+  - prior summary boundary;
+  - source-through sequence;
+  - runtime/session revision semantics as appropriate.
+
+- [ ] A new user turn must remain usable if compaction has not completed.
+
+  The fallback is the previously committed summary plus the normal bounded raw tail.
+
+- [ ] Repeated compaction should be incremental.
+
+  Conceptually:
+
+  ```text
+  previous summary
+  +
+  newly eligible durable history
+  →
+  replacement summary
+  ```
+
+  Do not reread/re-summarize the entire lifetime transcript on every compaction.
+
+---
+
+### P4A verification
+
+- [ ] Domain/Application tests for compaction boundary semantics.
+
+- [ ] Persistence tests for summary metadata and source boundary.
+
+- [ ] Long-transcript tests proving compaction reads older durable history without materializing the entire transcript in the active Session Runtime.
+
+- [ ] Tests for:
+
+  - cancellation;
+  - stale compaction result;
+  - reconnect/reopen;
+  - interruption;
+  - queued user turns;
+  - provider failure;
+  - malformed/oversized summary;
+  - repeated incremental compaction.
+
+- [ ] Prompt tests proving:
+
+  ```text
+  summary(old history)
+  +
+  raw(new history)
+  ```
+
+  contains neither omission nor intentional duplication at the boundary.
+
+- [ ] Synthetic end-to-end long-conversation scenario.
+
+- [ ] Keep hosted compaction probes optional/credential-gated.
+
+### P4A stop condition
+
+A long-running session can exceed the raw prompt-history window while preserving useful older context through a durable, replaceable, provenance-aware summary.
+
+Raw history remains authoritative and intact.
+
+Failures safely fall back to the previous summary plus bounded recent history.
 
 ---
 
 ## P4B — Structured session memory
 
-- [ ] Introduce structured session memory.
+Compaction and structured memory solve different problems.
 
-Suggested concepts:
+```text
+compaction
+= compressed conversational continuity
 
-- facts;
-- preferences;
-- goals;
-- decisions;
-- open loops/tasks;
-- provenance/source;
-- confidence;
-- freshness.
+structured memory
+= individually addressable durable facts/goals/decisions/open loops
+```
 
-- [ ] Add memory tools:
+Do not turn the session summary into an unstructured substitute for typed memory.
 
-  - `memory.search`;
-  - `memory.get`;
-  - controlled `memory.write/update`.
+---
+
+### Memory model
+
+- [ ] Introduce structured session-scoped memory.
+
+Suggested initial concepts:
+
+```text
+memoryId
+sessionId
+kind
+content
+source/provenance
+confidence?
+createdAt
+updatedAt
+freshness/expiry?
+```
+
+Initial kinds may include:
+
+```text
+fact
+preference
+goal
+decision
+openLoop
+```
+
+Do not over-design the taxonomy before real workflows require it.
+
+- [ ] Keep source provenance.
+
+A memory should be traceable to relevant conversation evidence or a trusted host/user source.
+
+- [ ] Distinguish model-derived memory from trusted explicit profile fields.
+
+A model-derived memory must not silently overwrite a P2C trusted profile value.
+
+---
+
+### Structured-memory persistence
+
+- [ ] Introduce a dedicated structured-memory persistence abstraction when needed.
+
+Prefer something conceptually like:
+
+```text
+IStructuredMemoryStore
+```
+
+Do not repurpose the existing session-persistence `IMemoryStore` without an explicit migration/rename decision.
 
 - [ ] Keep memory policy separate from persistence technology.
 
-- [ ] Add correction/deletion semantics before cross-session memory.
+SQLite is sufficient initially.
+
+- [ ] Do not require embeddings or a vector database initially.
+
+---
+
+### Memory access
+
+- [ ] Add bounded read tools:
+
+  ```text
+  memory.search
+  memory.get
+  ```
+
+- [ ] Add controlled mutation semantics:
+
+  ```text
+  memory.write
+  memory.update
+  memory.delete
+  ```
+
+  Exact tool exposure may be staged.
+
+- [ ] Memory mutation remains subject to normal Agent Core tool/policy controls.
+
+- [ ] Never allow memory tools to bypass session/user ownership.
+
+- [ ] Never store secrets or credentials merely because the model asks to remember them.
+
+---
+
+### Memory correctness
+
+- [ ] Add correction semantics.
+
+- [ ] Add deletion semantics.
+
+- [ ] Add replacement/supersession semantics where appropriate.
+
+- [ ] Define conflict handling for contradictory memories.
 
 - [ ] Do not silently promote uncertain conversational guesses into durable user facts.
+
+- [ ] Do not make confidence a fake precision score.
+
+If confidence is retained, use it only where policy/retrieval genuinely consumes it.
+
+---
+
+### P4B stop condition
+
+A session can retain individually addressable durable facts, goals, decisions, preferences, and open loops with source provenance and explicit correction/deletion behavior.
+
+This remains session-scoped.
 
 ---
 
 ## P4C — Cross-session memory
 
-- [ ] Add cross-session memory only after session-scoped memory works reliably.
+Start only after P4B session memory is reliable.
 
-Requirements:
+- [ ] Add explicit/configurable memory scope.
 
-- explicit/configurable scope;
-- user/agent ownership rules;
-- provenance;
-- correction/deletion;
-- promotion rules.
+Possible scopes:
 
-- [ ] Do not require a vector database initially.
+```text
+session
+agent
+user
+application/host
+```
 
-Use embeddings/vector retrieval only when measured quality/scale demonstrates a need.
+Do not expose all scopes merely because the schema can represent them.
+
+- [ ] Define ownership and authorization.
+
+- [ ] Define promotion rules from session memory into cross-session memory.
+
+- [ ] Define correction/deletion behavior across scopes.
+
+- [ ] Preserve provenance after promotion.
+
+- [ ] Coordinate memory-derived personalization with the P2C trusted profile boundary.
+
+Explicit user/host profile data remains stronger than inferred/model-derived memory.
+
+- [ ] Add bounded retrieval.
+
+Do not inject an entire user's lifetime memory into every model request.
+
+- [ ] Add embeddings/vector retrieval only after measured retrieval quality or scale demonstrates the need.
+
+### P4C stop condition
+
+Useful durable memory can safely cross sessions without confusing:
+
+- trusted profile data;
+- session summary;
+- session memory;
+- user-wide memory;
+- agent/application memory.
 
 ---
 
 # P5 — Events and configurable triggers
 
-P1 already provides the generic session-purpose/lifecycle foundation.
+P1 already provides generic session-purpose/lifecycle foundations.
 
 Build trigger semantics before scheduled/durable autonomous work.
 
-- [ ] Expand the event model beyond the current idle/environment triggers.
+- [ ] Expand the event model beyond current idle/environment triggers.
 
 - [ ] Define a generic trigger contract.
 
 Suggested fields:
 
-- trigger type;
-- payload;
-- source;
-- timestamp;
-- dedupe/idempotency key;
-- expiry;
-- target session/agent/work item.
+```text
+trigger type
+payload
+source
+timestamp
+dedupe/idempotency key
+expiry
+target session/agent/work item
+```
 
-- [ ] Add useful trigger sources when required:
+- [ ] Add trigger sources when required:
 
   - scheduled time;
   - recurring schedule;
@@ -1238,7 +734,7 @@ Requirements:
 
 - [ ] Allow work to continue after session deactivation only when explicitly configured/intended.
 
-- [ ] Allow a paused/reopened session to reconnect to existing work without replaying the original user turn.
+- [ ] Allow paused/reopened sessions to reconnect to existing work without replaying the original user turn.
 
 - [ ] Add background research only when a concrete workflow requires it.
 
@@ -1252,7 +748,7 @@ Requirements:
 
 - [ ] Persist durable WorkItem progress/checkpoints separately from ordinary assistant chat history.
 
-- [ ] Deliver completed results to the originating session as the appropriate combination of:
+- [ ] Deliver completed results to the originating session through the appropriate combination of:
 
   - result event;
   - assistant response;
@@ -1266,7 +762,7 @@ Distinguish:
 
 - user-paused conversation;
 - runtime inactivity pause;
-- session disconnected;
+- disconnected session;
 - detached work still running;
 - completed goal;
 - cancelled work;
@@ -1280,14 +776,14 @@ The repository already has:
 
 - versioned role environments;
 - isolated session workspaces;
-- `develop` and `document` agent-work composition skills;
+- `develop` and `document` composition skills;
 - Impeccable UI skill integration.
 
-Productize harness editing only after the core runtime contracts above are stable.
+Productize harness editing only after core runtime contracts are stable.
 
 ## Effective harness context
 
-- [ ] Allow the agent/admin surface to inspect relevant non-secret effective configuration.
+- [ ] Allow the admin surface to inspect relevant non-secret effective configuration.
 
 Never expose:
 
@@ -1310,14 +806,16 @@ Never expose:
   - validation/tests;
   - behavior previews.
 
-- [ ] Require privileged changes to be represented as an explicit intent/payload.
+- [ ] Require privileged changes to be explicit operations.
 
 Flow:
 
-1. agent prepares proposed operation;
-2. UI presents it;
-3. human approves where required;
-4. operation executes through normal policy/tool authorization.
+```text
+agent prepares proposed operation
+→ UI presents operation
+→ human approves where required
+→ normal policy/tool authorization executes it
+```
 
 An admin agent does not bypass policy because it generated the change itself.
 
@@ -1327,7 +825,7 @@ An admin agent does not bypass policy because it generated the change itself.
 
 - [x] Give every session its own isolated runtime workspace.
 
-- [ ] Prevent user sessions from mutating the source harness.
+- [ ] Prevent user sessions from mutating source harnesses.
 
 ## Publishing lifecycle
 
@@ -1339,7 +837,7 @@ An admin agent does not bypass policy because it generated the change itself.
   - publish immutable version;
   - rollback/deprecate.
 
-- [ ] Allow an admin agent to improve its own harness only through the same bounded tool/policy system.
+- [ ] Allow an admin agent to improve its harness only through normal bounded tool/policy mechanisms.
 
 ---
 
@@ -1360,14 +858,14 @@ Possible components:
 - validation/evals;
 - integrations/extensions.
 
-- [ ] Add external tool-provider/plugin extensibility only when a second real provider/integration justifies it.
+- [ ] Add external tool-provider/plugin extensibility only when another real provider/integration justifies it.
 
 MCP-like providers may be adapters.
 
 Requirements:
 
 - native Agent Core tools remain supported;
-- every external provider still passes through Agent Core policy/authorization;
+- external providers still pass through Agent Core policy/authorization;
 - provider credentials remain outside model context.
 
 - [ ] Add reusable harness validation:
@@ -1381,7 +879,7 @@ Requirements:
 
 - [ ] Keep model-provider extensibility separate from tool/integration-provider extensibility.
 
-Do not create one generic abstraction that hides different security and lifecycle boundaries.
+Do not build one generic abstraction that hides different security/lifecycle boundaries.
 
 ---
 
@@ -1426,41 +924,46 @@ Do this when Agent Core moves beyond trusted single-owner/local development.
 
 - [ ] Public-hosting hardening.
 
-- [ ] Separate host credentials/scopes for trusted host integrations where browser users must not possess host authority.
+- [ ] Separate host credentials/scopes where browser users must not possess host authority.
 
-- [ ] Horizontal/distributed Session Runtime only when single-process ownership is an actual constraint.
+- [ ] Horizontal/distributed Session Runtime only when single-process ownership becomes a real constraint.
 
 ---
 
 # Deferred / optional provider work
 
-These items should not block the product roadmap.
+These items do not block the product roadmap.
+
+## Real P3 provider verification
+
+- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from P4.
+
+Keep it:
+
+- bounded;
+- credential-gated;
+- provider-specific;
+- outside default CI.
+
+Do not reopen the provider-neutral P3A architecture unless a provider-independent regression is found.
 
 ## Hosted voice verification
 
 - [ ] Run **HOSTED-04**: one actual non-Synthetic end-to-end Voice smoke using an explicitly selected hosted configuration.
 
-Keep it:
-
-- opt-in;
-- credential-gated;
-- separate from normal CI.
-
----
+Keep it opt-in and credential-gated.
 
 ## Realtime hosted STT
 
-- [ ] Finish or replace the deferred realtime `OpenAiSpeechRecognizer` only when there is a concrete need for hosted streaming STT.
+- [ ] Finish or replace realtime `OpenAiSpeechRecognizer` only when a concrete need exists.
 
 Current valid options already include:
 
-- Browser STT for inexpensive interactive development/demo;
+- Browser STT;
 - OpenAI-compatible batch STT;
-- Synthetic STT for deterministic testing.
+- Synthetic STT.
 
-Do not implement realtime OpenAI STT merely for conceptual adapter symmetry.
-
----
+Do not implement realtime hosted STT merely for adapter symmetry.
 
 ## Native speech-to-speech / realtime reasoning
 
@@ -1472,7 +975,7 @@ STT → text model → TTS
 
 is insufficient.
 
-Keep the composed provider-neutral pipeline as the canonical architecture until then.
+Keep the composed provider-neutral pipeline canonical until then.
 
 ---
 
@@ -1482,33 +985,36 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 
 - [ ] Keep `main` green before beginning the next architectural phase.
 
-- [ ] Add regressions alongside every lifecycle, response, speech, multimodal-input, tool, memory, trigger, and background-work change.
+- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, trigger, and background-work change.
 
-- [ ] Maintain Playwright coverage for user-visible workflows.
+- [ ] Maintain Playwright coverage for meaningful user-visible workflows.
 
 - [ ] Make asynchronous/race-sensitive tests deterministic.
 
-  Prefer explicit gates/events over timing assumptions.
-
-  In particular, do not assert that a transient UI state must be observed unless the test has deterministically held the system in that state.
+Prefer explicit gates/events over timing assumptions.
 
 - [ ] Keep hosted-provider tests explicitly opt-in.
 
-- [ ] Periodically run bounded Real OpenRouter/OpenAI/browser-speech checks when credentials/browser support are available.
+- [ ] Periodically run bounded Real OpenRouter/OpenAI/browser-speech probes when credentials/support are available.
+
+- [ ] Add startup catalog/provider capability-consistency validation if provider capability configuration becomes independently variable enough that contradictory declarations can occur.
+
+This is not a reason to reopen frozen P2E.
 
 - [ ] Maintain observability for:
 
   - model calls;
   - model/provider selection;
-  - model capability selection/rejection;
+  - capability selection/rejection;
   - image-input presence without image-content logging;
-  - reasoning-field presence without reasoning-content logging;
+  - reasoning presence without reasoning-content logging;
   - response lifecycle;
   - progress lifecycle;
   - speech provider/capability selection;
-  - speech projection/fallback reason;
   - tool calls;
   - sandbox execution;
+  - compaction lifecycle;
+  - memory retrieval/mutation;
   - trigger decisions;
   - background work;
   - policy denials;
@@ -1518,17 +1024,16 @@ Keep the composed provider-neutral pipeline as the canonical architecture until 
 
 In particular:
 
-- do not describe deferred adapters as active runtime behavior;
-- do not document P2E or P2C as active; P2A, P2B, P2E, and P2C are observed/frozen (`e0e8a55` for P2B; P2E/P2C freeze HEADs in implementation plan); **P2 closed/frozen** on `47d6ff6` — do not reopen without a reproducible regression; **P3 freeze on `27efe17` was reopened** for email/approval correction, then **P4** (no new P2 implementation);
-- document the existing current-turn vision foundation accurately;
-- distinguish vision-capable from non-vision catalog models;
-- keep provider wire details in Infrastructure/provider docs;
-- keep transport/speech-marker syntax out of Agent Definitions;
-- update freeze/handoff reports when a baseline materially changes.
+- P1 remains frozen on `dceaccb`;
+- P2 remains frozen on `47d6ff6`;
+- P3 key-free freeze remains `4dbb920`;
+- post-freeze CI maintenance is green through `02aa333`;
+- P4 is the active roadmap;
+- provider-specific Real gaps do not silently become architecture phases.
 
 - [ ] Keep TODO focused on current/future work.
 
-Historical verification detail belongs in `docs/reports` rather than continuously expanding completed checklist sections here.
+Detailed historical gate counts, correction narratives, and workflow evidence belong in `docs/reports`.
 
 ---
 
@@ -1540,65 +1045,40 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] React / Vite / TypeScript frontend.
 - [x] Ant Design v6 conversation-first UI.
 - [x] SignalR + MessagePack realtime transport.
-- [x] Synthetic deterministic development/test profile.
-- [x] OpenAI-compatible streaming language-model adapter.
+- [x] Synthetic deterministic test/development profile.
+- [x] OpenAI-compatible streaming model adapter.
 - [x] OpenRouter configuration.
-- [x] Fixed Real development/demo model default.
 - [x] Trusted model catalog.
-- [x] Durable per-session model/reasoning selection.
-- [x] Model capability metadata for tools/vision/structured-output/reasoning.
-- [x] Per-turn assistant model provenance.
-- [x] Separate provider reasoning channel.
-- [x] Reasoning excluded from display/speech/history.
-- [x] Persistent multi-session catalog/history.
-- [x] Paginated durable history.
-- [x] Bounded runtime history restore.
-- [x] Session reopen and terminal read-only history.
-- [x] Generic session purpose and lifecycle policy.
-- [x] Host/user/agent completion-authority model.
-- [x] Session-owned attachments and later-turn attachment references.
-- [x] Image attachment validation and sanitization.
-- [x] Provider-neutral text/image model content parts.
-- [x] Current-turn image projection into multimodal model requests.
-- [x] OpenAI-compatible image-content mapping.
-- [x] Deterministic PNG→vision-request coverage.
-- [x] User-facing capability-aware image/model admission (P2E).
-- [x] P3A historical multimodal attachment re-inspection beyond the original turn — **observed/frozen** (2026-09-21; `c0f8a85`).
-- [x] Existing rich-response envelope with display/speech/blocks.
-- [x] Internal same-mode `speech.text` when playback differs from display.
-- [x] Public/history `speechText` custom-only (P2B).
-- [x] Artifact references and session-owned artifacts.
+- [x] Per-session model/reasoning selection.
+- [x] Model capability metadata.
+- [x] Provider reasoning separated from public assistant output.
+- [x] Validated display/speech response semantics.
+- [x] First-class transient progress semantics.
+- [x] Durable multi-session catalog/history.
+- [x] Paginated durable conversation history.
+- [x] Bounded runtime restore.
+- [x] Session purpose/lifecycle/completion policy.
+- [x] Terminal read-only history.
+- [x] Owner trusted-profile API and persistence.
+- [x] Session attachments and artifacts.
+- [x] Current-turn multimodal image input.
+- [x] Historical attachment/image reread.
+- [x] Capability-aware model/image admission.
 - [x] Repeated proactive initiative.
-- [x] Deactivation/pause lifecycle.
-- [x] Adaptive wait/inactivity behavior.
 - [x] Client pending-send FIFO.
-- [x] Explicit Steer/interrupt behavior.
-- [x] Stop semantics that preserve queued user messages.
-- [x] Versioned role environments.
+- [x] Steer/interrupt/Stop semantics.
 - [x] Session-owned isolated workspaces.
-- [x] Bounded typed tool execution.
-- [x] Knowledge tools.
-- [x] Attachment tools.
-- [x] Workspace tools.
+- [x] Typed bounded tool execution.
+- [x] Workspace search/move/patch/list/read/write.
+- [x] Knowledge and attachment tools.
 - [x] Artifact tools.
-- [x] Docker-backed `sandbox.run`.
-- [x] Sandbox isolation/resource limits.
-- [x] Runtime-epoch protection against stale workspace/tool writes.
-- [x] Synthetic STT/TTS.
-- [x] Full-duplex server-audio Voice pipeline.
-- [x] Browser STT.
-- [x] Browser TTS.
-- [x] Selectable OpenAI TTS.
-- [x] OpenAI-compatible batch STT.
-- [x] Independent STT/TTS provider selection.
-- [x] Provider-neutral speech-locale resolution.
-- [x] Browser-STT hold/restart/endpointing/reconnect handling.
-- [x] Voice display gating around speech resolution.
-- [x] Conservative compatibility display→speech projection.
-- [x] Separate Voice and Mute controls.
-- [x] Mic mute/unmute styling remains stable while STT is temporarily held during agent output.
-- [x] `general-assistant` neutral harness identity with initiative disabled.
-- [x] Interruption/barge-in and heard/received tracking.
-- [x] Model/Reasoning controls only on active composer.
+- [x] Docker-backed offline sandbox.
+- [x] Public web search/fetch.
+- [x] Approval-gated generic HTTP.
+- [x] Live approval UI/protocol.
+- [x] Email search/read/draft/send.
+- [x] Synthetic / Browser / hosted-compatible speech abstractions.
+- [x] Voice interruption and heard/received tracking.
 - [x] Impeccable UI skill integration.
 - [x] Shared `develop` and `document` composition skills.
+- [x] Existing durable session-summary fields ready for P4A.
