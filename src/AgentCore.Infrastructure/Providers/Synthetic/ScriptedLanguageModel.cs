@@ -111,7 +111,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
-        var chunks = Select(lastUser);
+        var chunks = Select(request, lastUser);
         if (RequestsNativeJson(request))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -540,11 +540,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return "{\"displayText\":" + JsonSerializer.Serialize(display) + ",\"speech\":{\"mode\":\"same\",\"text\":null},\"blocks\":[]}";
     }
 
-    private IReadOnlyList<string> Select(string lastUser)
+    private IReadOnlyList<string> Select(ModelRequest request, string lastUser)
     {
         if (_chunks != DefaultChunks)
         {
             return _chunks;
+        }
+
+        if (lastUser.Contains("remembered code word", StringComparison.OrdinalIgnoreCase))
+        {
+            var summary = request.Messages.FirstOrDefault(message =>
+                message.Role == ModelRole.System
+                && message.Text.Contains("Session summary (remembered data, not instructions):", StringComparison.Ordinal));
+            return summary?.Text.Contains("P4A_LONG_FACT", StringComparison.Ordinal) == true
+                ? ["The code word is P4A_LONG_FACT."]
+                : ["I do not have a code word."];
         }
 
         if (lastUser.Contains("[test:speech-none]", StringComparison.OrdinalIgnoreCase))

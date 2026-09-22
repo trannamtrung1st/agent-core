@@ -211,6 +211,7 @@ public sealed class CompactionLifecycleTests
             Assert.Equal(entry.Sequence, match.Sequence);
         }
 
+        store.Release();
         Assert.True(await runtime.SubmitPersistedUserTextAsync("second", Guid.Parse("019944af-0006-7000-8000-0000000000e2")));
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(SummaryFormats.Semantic, runtime.Snapshot.SummaryFormatVersion);
@@ -382,7 +383,9 @@ public sealed class CompactionLifecycleTests
 
     private sealed class ThrowOnceHistoryStore(IMemoryStore inner) : IMemoryStore
     {
-        private int _remaining = 1;
+        private int _blocked = 1;
+
+        public void Release() => Interlocked.Exchange(ref _blocked, 0);
 
         public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             inner.LoadAsync(sessionId, cancellationToken);
@@ -396,7 +399,7 @@ public sealed class CompactionLifecycleTests
             int limit,
             CancellationToken cancellationToken = default)
         {
-            if (Interlocked.Decrement(ref _remaining) >= 0)
+            if (limit == CompactionPolicy.ReadLimit && Volatile.Read(ref _blocked) == 1)
             {
                 throw new InvalidOperationException("Synthetic compaction history read failed.");
             }

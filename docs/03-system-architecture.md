@@ -85,6 +85,7 @@ A created session is inactive until attached. One connection owns a session at a
 - One response is live per session, but historical responses and an in-progress user utterance may coexist.
 - Conversation continuity is per Session, independent of the current text/voice mode. Delivery metadata on each assistant entry selects heard vs received prefix for future context; unseen/unheard tails never enter the model. Phase C stores an optional response envelope (speech + blocks) with those receipts. `displayText` / `speechText` / blocks are session response capabilities owned by the runtime and provider contract, not Agent Definition persona fields. Compatibility `[[speech:]]` markers exist only inside Infrastructure unstructured parsing; SessionRuntime consumes validated `speech.mode` (`same`/`custom`/`none`).
 - No mutable state, transient audio, provider handles or CancellationTokenSource is stored in an Agent Definition.
+- Semantic compaction runs outside the mailbox after a durable completed turn. Only the mailbox may commit a still-current summary. Compaction does not rewrite raw conversation rows.
 
 ## Follow-on P1 observed and frozen
 

@@ -70,7 +70,9 @@ export default defineConfig({
         Persistence__WorkspaceRoot: process.env.Persistence__WorkspaceRoot
           ?? path.join(playwrightData, "workspaces"),
         Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot
-          ?? path.join(playwrightData, "artifacts")
+          ?? path.join(playwrightData, "artifacts"),
+        // Detach grace is 30s, so sequential chats overlap in memory. The product cap of 10 is below that overlap.
+        AgentCore__MaxActiveSessions: "32"
       },
       url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,
