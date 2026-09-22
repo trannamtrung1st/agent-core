@@ -239,6 +239,7 @@ static async Task InitializePersistenceAsync(IServiceProvider services)
         await sqlite.EnsureCreatedAsync().ConfigureAwait(false);
     }
 
+    await services.GetRequiredService<IAgentInstanceService>().BackfillAsync().ConfigureAwait(false);
     await store.RecoverCrashedSessionsAsync().ConfigureAwait(false);
 }
 

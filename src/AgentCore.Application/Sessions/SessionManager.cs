@@ -25,6 +25,7 @@ public sealed class SessionManager
     private readonly IModelCatalog? _models;
     private readonly ILocalUserProfileService _localProfiles;
     private readonly IStructuredMemoryStore? _structuredMemory;
+    private readonly IAgentInstanceService? _instances;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -38,7 +39,8 @@ public sealed class SessionManager
         IArtifactStore? artifacts = null,
         IModelCatalog? models = null,
         ILocalUserProfileService? localProfiles = null,
-        IStructuredMemoryStore? structuredMemory = null)
+        IStructuredMemoryStore? structuredMemory = null,
+        IAgentInstanceService? instances = null)
     {
         _definitions = definitions;
         _store = store;
@@ -52,6 +54,7 @@ public sealed class SessionManager
         _models = models;
         _localProfiles = localProfiles ?? new LocalUserProfileService(store, time);
         _structuredMemory = structuredMemory;
+        _instances = instances;
     }
 
     public async Task<SessionSnapshot> CreateAsync(
@@ -74,7 +77,81 @@ public sealed class SessionManager
 
         var definition = await _definitions.GetAsync(agentId, agentVersion, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound($"Agent '{agentId}' was not found.");
+        Guid? instanceId = null;
+        AgentIdentity? persona = null;
+        if (_instances is not null)
+        {
+            var instance = await _instances.ResolveCompatibilityAsync(definition, cancellationToken).ConfigureAwait(false);
+            instanceId = instance.InstanceId;
+            persona = definition.Identity;
+        }
 
+        return await CreateCoreAsync(
+            definition,
+            instanceId,
+            persona,
+            mode,
+            purpose,
+            policy,
+            maxDuration,
+            speechLocaleOverride,
+            modelKey,
+            reasoningEffort,
+            modelSource,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SessionSnapshot> CreateForInstanceAsync(
+        Guid instanceId,
+        SessionMode mode,
+        CancellationToken cancellationToken = default,
+        SessionPurpose? purpose = null,
+        SessionCompletionPolicy? policy = null,
+        TimeSpan? maxDuration = null,
+        string? speechLocaleOverride = null,
+        string? modelKey = null,
+        string? reasoningEffort = null,
+        ModelSelectionSource modelSource = ModelSelectionSource.SystemDefault)
+    {
+        if (_instances is null)
+        {
+            throw AgentCoreErrors.Validation("Durable agent instances are not configured.");
+        }
+
+        var instance = await _instances.RequireAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var definition = await _definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound(
+                $"Agent '{instance.DefinitionId}' version {instance.ActiveVersion} was not found.");
+        return await CreateCoreAsync(
+            definition,
+            instance.InstanceId,
+            instance.Persona,
+            mode,
+            purpose,
+            policy,
+            maxDuration,
+            speechLocaleOverride,
+            modelKey,
+            reasoningEffort,
+            modelSource,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<SessionSnapshot> CreateCoreAsync(
+        AgentDefinition definition,
+        Guid? instanceId,
+        AgentIdentity? persona,
+        SessionMode mode,
+        SessionPurpose? purpose,
+        SessionCompletionPolicy? policy,
+        TimeSpan? maxDuration,
+        string? speechLocaleOverride,
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource modelSource,
+        CancellationToken cancellationToken)
+    {
         var localeOverride = SpeechLocale.NormalizeOverride(speechLocaleOverride);
         var effectiveLocale = SpeechLocale.Resolve(localeOverride, definition.ConversationPolicy.Language).Effective;
         var voiceAvailable = _voice.IsAvailable(definition, effectiveLocale);
@@ -120,7 +197,9 @@ public sealed class SessionManager
             LifecycleSource: LifecycleTransitionSource.System,
             LifecycleChangedAt: now,
             SpeechLocaleOverride: localeOverride,
-            ModelSelection: BindCreatedModel(definition, modelKey, reasoningEffort, modelSource));
+            ModelSelection: BindCreatedModel(definition, modelKey, reasoningEffort, modelSource),
+            AgentInstanceId: instanceId,
+            PinnedPersona: persona);
         if (SessionLifecycle.DeadlineElapsed(resolvedPurpose, now))
         {
             snapshot = LifecycleTransition.Apply(

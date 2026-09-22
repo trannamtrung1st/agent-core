@@ -21,6 +21,8 @@ public sealed class SessionRecord
     public bool WorkspaceOwned { get; set; } = true;
     public long? ArchivedAtUtc { get; set; }
     public long? DurablyDeletedAtUtc { get; set; }
+    public string? AgentInstanceId { get; set; }
+    public string? PinnedPersonaJson { get; set; }
     public SnapshotRecord? Snapshot { get; set; }
     public List<EntryRecord> Entries { get; set; } = [];
 }
@@ -113,6 +115,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<MessageAttachmentRow> MessageAttachments => Set<MessageAttachmentRow>();
     public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
+    public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -133,6 +136,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Title).HasMaxLength(200).IsRequired();
             entity.Property(row => row.WorkspaceOwned).HasDefaultValue(true);
             entity.HasIndex(row => new { row.DurablyDeletedAtUtc, row.ArchivedAtUtc, row.UpdatedAtUtc, row.SessionId });
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36);
+            entity.HasIndex(row => row.AgentInstanceId);
         });
         modelBuilder.Entity<SnapshotRecord>(entity =>
         {
@@ -204,6 +209,18 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.SessionId, row.Kind, row.SubjectKey })
                 .IsUnique()
                 .HasFilter("Status = 0");
+        });
+        modelBuilder.Entity<AgentInstanceRecord>(entity =>
+        {
+            entity.ToTable("AgentInstances");
+            entity.HasKey(row => row.InstanceId);
+            entity.Property(row => row.InstanceId).HasMaxLength(36);
+            entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.PersonaJson).IsRequired();
+            entity.Property(row => row.Lifecycle).HasMaxLength(32).IsRequired();
+            entity.HasIndex(row => row.DefinitionId)
+                .IsUnique()
+                .HasFilter("Compatibility = 1");
         });
     }
 }

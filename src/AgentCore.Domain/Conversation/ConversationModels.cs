@@ -278,7 +278,9 @@ public sealed record SessionSnapshot(
     SessionModelSelection? ModelSelection = null,
     int SummaryFormatVersion = SummaryFormats.Legacy,
     DateTimeOffset? SummaryGeneratedAt = null,
-    ModelGenerationProvenance? SummaryModel = null)
+    ModelGenerationProvenance? SummaryModel = null,
+    Guid? AgentInstanceId = null,
+    AgentIdentity? PinnedPersona = null)
 {
     public long DurableLastEntrySequence
     {

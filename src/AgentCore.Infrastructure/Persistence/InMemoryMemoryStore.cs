@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
-using AgentCore.Domain.Conversation;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Persistence;
 
@@ -194,6 +195,43 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         {
             var items = _sessions.Values.Select(CloneMeta).ToArray();
             return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, includeArchived));
+        }
+    }
+
+    public ValueTask<IReadOnlyList<SessionSnapshot>> ListMissingInstanceAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var missing = _sessions.Values
+                .Where(snapshot => snapshot.AgentInstanceId is null)
+                .Select(CloneMeta)
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(missing);
+        }
+    }
+
+    public ValueTask AssignInstanceAsync(
+        Guid sessionId,
+        Guid instanceId,
+        AgentIdentity persona,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var existing))
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            _sessions[sessionId] = existing with
+            {
+                AgentInstanceId = existing.AgentInstanceId ?? instanceId,
+                PinnedPersona = existing.PinnedPersona ?? persona
+            };
+            return ValueTask.CompletedTask;
         }
     }
 

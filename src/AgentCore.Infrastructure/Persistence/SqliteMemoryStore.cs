@@ -191,6 +191,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await TableExistsAsync(connection, "AgentInstances", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260923070000_AgentInstance', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await ColumnExistsAsync(connection, "SessionSnapshots", "LifecycleStatus", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -578,6 +588,51 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return new SessionCatalogPage(page, next, hasMore);
     }
 
+    public async ValueTask<IReadOnlyList<SessionSnapshot>> ListMissingInstanceAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.Sessions.AsNoTracking().Include(item => item.Snapshot)
+            .Where(row => row.AgentInstanceId == null)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(row => ToSnapshot(row, [])).ToArray();
+    }
+
+    public async ValueTask AssignInstanceAsync(
+        Guid sessionId,
+        Guid instanceId,
+        AgentIdentity persona,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var key = sessionId.ToString("D");
+        var row = await db.Sessions.SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+        {
+            return;
+        }
+
+        var changed = false;
+        if (string.IsNullOrEmpty(row.AgentInstanceId))
+        {
+            row.AgentInstanceId = instanceId.ToString("D");
+            changed = true;
+        }
+
+        if (string.IsNullOrEmpty(row.PinnedPersonaJson))
+        {
+            row.PinnedPersonaJson = JsonSerializer.Serialize(persona, Json);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private async Task<List<EntryRecord>> LoadRestoreEntryRowsAsync(
         AgentCoreDbContext db,
         string sessionId,
@@ -714,6 +769,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.AgentId = snapshot.Definition.Id;
         row.AgentVersion = snapshot.Definition.Version;
         row.DefinitionJson = JsonSerializer.Serialize(snapshot.Definition, Json);
+        row.AgentInstanceId = snapshot.AgentInstanceId?.ToString("D");
+        row.PinnedPersonaJson = snapshot.PinnedPersona is null
+            ? null
+            : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
         row.Status = snapshot.Status.ToString();
@@ -836,7 +895,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ReadModelSelection(snapshot),
             snapshot.SummaryFormatVersion,
             snapshot.SummaryGeneratedAtUtc is { } generatedAt ? FromUnix(generatedAt) : null,
-            ReadSummaryModel(snapshot));
+            ReadSummaryModel(snapshot),
+            string.IsNullOrEmpty(row.AgentInstanceId) ? null : Guid.Parse(row.AgentInstanceId),
+            string.IsNullOrEmpty(row.PinnedPersonaJson)
+                ? null
+                : JsonSerializer.Deserialize<AgentIdentity>(row.PinnedPersonaJson, Json));
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>

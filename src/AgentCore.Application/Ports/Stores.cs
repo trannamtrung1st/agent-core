@@ -53,6 +53,17 @@ public interface IMemoryStore
         bool includeArchived,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Catalog listing is not implemented by this store.");
+
+    ValueTask<IReadOnlyList<SessionSnapshot>> ListMissingInstanceAsync(
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>([]);
+
+    ValueTask AssignInstanceAsync(
+        Guid sessionId,
+        Guid instanceId,
+        AgentIdentity persona,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.CompletedTask;
 }
 
 public sealed record SessionCatalogPage(

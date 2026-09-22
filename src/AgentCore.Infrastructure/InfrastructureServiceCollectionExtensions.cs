@@ -1,4 +1,5 @@
 using AgentCore.Application.Agents;
+using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Events;
 using AgentCore.Application.Interaction;
@@ -94,6 +95,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<TimeProvider>()));
             services.AddSingleton<IStructuredMemoryStore>(provider => new SqliteStructuredMemoryStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IAgentInstanceStore>(provider => new SqliteAgentInstanceStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -104,6 +107,7 @@ public static class InfrastructureServiceCollectionExtensions
         {
             services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
             services.TryAddSingleton<IStructuredMemoryStore, InMemoryStructuredMemoryStore>();
+            services.TryAddSingleton<IAgentInstanceStore, InMemoryAgentInstanceStore>();
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
@@ -167,6 +171,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         services.TryAddSingleton<IStructuredMemoryService, StructuredMemoryService>();
+        services.TryAddSingleton<IAgentInstanceService, AgentInstanceService>();
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();

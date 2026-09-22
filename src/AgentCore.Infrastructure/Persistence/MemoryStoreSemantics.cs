@@ -34,6 +34,8 @@ internal static class MemoryStoreSemantics
         && left.LifecycleChangedAt == right.LifecycleChangedAt
         && left.SpeechLocaleOverride == right.SpeechLocaleOverride
         && left.ModelSelection == right.ModelSelection
+        && left.AgentInstanceId == right.AgentInstanceId
+        && left.PinnedPersona == right.PinnedPersona
         && IncomingEntriesMatch(left.Entries, right.Entries);
 
     private static bool PurposeEquals(SessionPurpose? left, SessionPurpose? right)
