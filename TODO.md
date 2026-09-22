@@ -2,19 +2,21 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on **2026-09-22**.
+Reviewed against `main` on **2026-09-23**.
 
 Current repository HEAD reviewed:
 
 ```text
-3e56a26cd3b764c57bbc022e939c7c4a027c224b
+7489a551e8c4e3c84e9daa6373ceb1cc090c0d23
 ```
 
-Hosted Synthetic workflow:
+Last explicitly verified hosted Synthetic workflow:
 
 ```text
-35692184054 — green
+35692184054 — green through 3e56a26
 ```
+
+The current HEAD contains later P3A E2E hardening. Do not imply hosted CI has been re-verified for a later commit unless that run has actually been checked.
 
 Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
 
@@ -25,7 +27,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 1. **P0–P3 are closed/frozen.**
 2. **P4A — session context compaction** is next.
 3. **P4B — structured session memory.**
-4. **P4C — cross-session memory.**
+4. **P4C — durable agent identity and cross-session memory.**
 5. **P5 — events and configurable triggers.**
 6. **P6 — durable background work.**
 7. **P7 — agent harness / admin lifecycle.**
@@ -116,11 +118,17 @@ ac795b656e2e8ebd7d97f08d2d6ebc632d100cde
 workflow 35682808408 — green
 ```
 
-Post-freeze lifecycle/CI maintenance is complete through:
+Post-freeze lifecycle/CI maintenance was explicitly verified green through:
 
 ```text
 3e56a26cd3b764c57bbc022e939c7c4a027c224b
 workflow 35692184054 — green
+```
+
+Later P3A E2E terminalization hardening is present through current HEAD:
+
+```text
+7489a551e8c4e3c84e9daa6373ceb1cc090c0d23
 ```
 
 This maintenance includes:
@@ -131,7 +139,8 @@ This maintenance includes:
 - detach-grace reattach continuity;
 - active response projection on reattach;
 - pending tool-approval replay through `session.ready`;
-- deterministic zero-grace behavior for isolated API/CI fixtures.
+- deterministic zero-grace behavior for isolated API/CI fixtures;
+- historical-image reread E2E waiting for response terminalization before later-turn probing.
 
 P3A historical multimodal attachment re-inspection remains independently frozen on:
 
@@ -201,7 +210,15 @@ Always keep this section.
 
 - [x] Keep Model/Reasoning controls in the active composer.
 
-- [x] Harden queue/steer, interruption, detach-grace reattach, and approval-replay lifecycle behavior after the P3 freeze.
+- [x] Harden queue/steer, interruption, detach-grace reattach, approval replay, and historical-image terminalization behavior after the P3 freeze.
+
+- [ ] Keep reusable agent definition separate from durable agent identity/instance before cross-session learned memory is implemented.
+
+  Definition describes reusable behavior/capability. Identity/instance represents one durable actor instantiated from that definition.
+
+- [ ] Keep trusted identity baseline/persona separate from learned memory.
+
+  Resetting learned memory must not delete or rewrite the definition, identity, trusted baseline/persona, knowledge, or historical sessions.
 
 - [ ] Background responses / work continuing after the live Session Runtime are tracked under P6.
 
@@ -244,7 +261,60 @@ A broad `IMemoryStore` rename is not required to begin P4A.
 
 P4 provides memory capability and policy seams. It does not turn those capabilities on for every agent.
 
-Planned policy areas, configured later by P7:
+## P4 ownership model
+
+Before cross-session memory exists, preserve these conceptual boundaries:
+
+```text
+Agent Definition
+= reusable/versioned behavior and capability blueprint
+
+Agent Identity / Agent Instance
+= one durable actor instantiated from a definition
+
+Session
+= one conversation/runtime history
+
+Memory
+= durable remembered state with explicit owner and scope
+```
+
+The current `AgentDefinition` contains an `AgentIdentity` value with name/role/description/tone. That representation was appropriate for the MVP, but do not assume that value is the final durable-identity aggregate.
+
+When P4C introduces the durable actor boundary, prefer terminology that avoids overloading the existing persona record. A likely direction is:
+
+```text
+AgentDefinition / AgentDefinitionVersion
+AgentInstance
+AgentPersona
+Session
+```
+
+Exact names should be chosen during P4C-0 implementation, but the semantic separation is now a roadmap invariant.
+
+Definition versions remain immutable published configuration. Learned memory must not be stored inside a published definition.
+
+An identity/instance may move to a newer definition version without becoming a different identity. New sessions may pin the newer definition version while historical sessions retain their original reproducible configuration.
+
+## Context layers
+
+Treat these as separate sources with different trust/ownership semantics:
+
+```text
+1. definition context
+2. trusted identity baseline/persona
+3. trusted user/profile context
+4. retrieved cross-session learned memory
+5. session summary / structured session memory
+6. recent conversation
+7. current turn/event
+```
+
+Do not collapse trusted configuration and learned/model-derived memory into one storage bucket.
+
+## Planned policy areas
+
+Configured later by P7:
 
 ```text
 Session policy
@@ -256,11 +326,13 @@ Session-memory policy
 
 Cross-session-memory policy
 - disabled
-- same-agent/user memory allowed
+- same identity + user memory allowed
 - user-wide memory allowed
 ```
 
-A durable transcript does not imply cross-session memory. An examination-style agent may keep a durable transcript and in-session memory while the next session inherits none of that conversational memory. P4 does not implement the P7 admin UI, ephemeral sessions, or learned-memory reset.
+A durable transcript does not imply cross-session memory. An examination-style agent may keep a durable transcript and in-session memory while the next session inherits none of that conversational memory.
+
+P4 does not implement the full P7 admin UI, ephemeral-session product UX, or learned-memory reset UI.
 
 Trusted P2C profile values stay authoritative over model-derived memory.
 
@@ -281,6 +353,8 @@ model request
 ```
 
 Compaction must improve long-session continuity without replacing raw history or creating a second transcript.
+
+P4A remains session-local. It does not require the new durable Agent Instance model and must not be blocked on P4C.
 
 ---
 
@@ -570,6 +644,8 @@ structured memory
 
 Do not turn the session summary into an unstructured substitute for typed memory.
 
+P4B remains session-scoped and must not require the final cross-session identity model.
+
 ---
 
 ### Memory model
@@ -609,6 +685,10 @@ A memory should be traceable to relevant conversation evidence or a trusted host
 - [ ] Distinguish model-derived memory from trusted explicit profile fields.
 
 A model-derived memory must not silently overwrite a P2C trusted profile value.
+
+- [ ] Keep trusted identity baseline/persona outside structured learned memory.
+
+  Administrator-authored identity context is configuration/state with stronger trust than model-derived learned memory.
 
 ---
 
@@ -687,60 +767,297 @@ Session memory being stored does not enable cross-session reuse.
 
 ---
 
-## P4C — Cross-session memory
+## P4C — Durable agent identity and cross-session memory
 
 Start only after P4B session memory is reliable.
 
-- [ ] Add explicit memory scope.
+Cross-session memory must not be implemented against an ambiguous "logical agent id" that conflates a reusable definition with a durable actor.
+
+The key invariant is:
+
+```text
+Definition = what kind of agent this is
+Identity/Instance = which persistent agent this is
+Session = one conversation
+Memory = durable state with explicit owner/scope
+```
+
+### P4C-0 — Formalize minimal durable identity ownership
+
+- [ ] Introduce the minimal durable actor concept required to own cross-session memory.
+
+  Prefer a domain name such as `AgentInstance` so the existing `AgentIdentity` persona record does not acquire two meanings.
+
+  A conceptual shape may include:
+
+  ```text
+  agentInstanceId
+  definitionId
+  active/published definition version reference as appropriate
+  trusted persona/baseline reference or snapshot
+  createdAt
+  lifecycle status
+  ```
+
+  Do not over-design the admin lifecycle here; P7 owns full creation/editing/publishing UX.
+
+- [ ] Keep reusable definition and durable identity separate.
+
+  `AgentDefinition` / `AgentDefinitionVersion` owns reusable behavior/capability configuration such as:
+
+  - goals/instructions;
+  - conversation/behavior/initiative policy;
+  - tools and permissions;
+  - provider preferences;
+  - knowledge configuration;
+  - workspace template;
+  - memory policy defaults.
+
+  The durable identity/instance owns continuity of one actor across sessions.
+
+- [ ] Separate persona/baseline from learned memory.
+
+  Conceptually:
+
+  ```text
+  AgentInstance
+  ├── trusted persona / baseline context
+  └── learned memory references/state
+  ```
+
+  Trusted/admin-authored baseline must not be stored as ordinary model-derived learned memories merely for convenience.
+
+- [ ] Preserve session reproducibility.
+
+  Historical sessions must retain enough pinned definition/persona configuration to explain what they ran with.
+
+  Moving an existing identity from definition version `v1` to `v2` must not rewrite historical sessions.
+
+- [ ] Preserve identity continuity across definition upgrades.
+
+  Publishing or selecting a newer definition version does not inherently create a new identity and does not inherently reset learned memory.
+
+  Example:
+
+  ```text
+  Alice + PersonalAssistant v1
+          ↓ upgrade
+  Alice + PersonalAssistant v2
+  ```
+
+  Alice remains the same durable actor unless an explicit create/fork/reset operation says otherwise.
+
+- [ ] Do not attach learned memory to `AgentDefinitionVersion`.
+
+  Definition versions are immutable reusable configuration, not mutable relationship state.
+
+- [ ] Define migration/backfill for existing sessions/agents conservatively.
+
+  Existing shipped definitions may initially map to one default instance each if needed for compatibility, but avoid baking that 1:1 compatibility mapping into the permanent model.
+
+### P4C-0 stop condition
+
+The runtime has an unambiguous durable actor identifier that can own future cross-session memory independently of reusable definition/version identity.
+
+P4A/P4B behavior remains unchanged.
+
+---
+
+### P4C-1 — Identity-user cross-session memory
+
+- [ ] Add explicit cross-session memory scope.
 
 Initial scopes:
 
 ```text
 Session
-AgentUser
+IdentityUser
 User
 ```
 
-`AgentUser` is the same logical agent id plus the same user/profile, not an agent version and not an arbitrary agent-global bucket. Customer-support memory must not appear to an examiner for the same user.
+`IdentityUser` means the same durable agent identity/instance plus the same trusted user/profile owner.
 
-Do not add organization-wide, host-global, or agent-global scope in P4.
+It is **not**:
 
-- [ ] Bind AgentUser ownership to the logical agent id. Do not key it to `AgentVersion`, and do not store learned memory inside the pinned published definition.
+- a definition version;
+- every identity created from the same reusable definition;
+- an arbitrary agent-global bucket;
+- organization-wide shared conversational memory.
 
-- [ ] Define ownership and authorization from trusted runtime context.
+- [ ] Bind `IdentityUser` ownership to trusted runtime context.
 
-- [ ] Promote deliberately from Session to AgentUser or Session to User.
+  Conceptually:
 
-Promotion creates an independent durable memory and preserves provenance. Do not retarget the original session memory's scope.
+  ```text
+  agentInstanceId + user/profile owner
+  ```
 
-Promotion follows the cross-session policy. Disabled means no later-session retrieval and no promotion.
+  Never trust model-supplied ownership identifiers.
 
-- [ ] Define correction/deletion behavior across scopes.
+- [ ] Default ordinary cross-session learned memory to the identity-user relationship.
 
-- [ ] Preserve provenance after promotion.
+  Two identities created from the same definition must not automatically share learned memories.
+
+  Example:
+
+  ```text
+  Definition: Tutor
+  ├── Identity: English Tutor Alice
+  └── Identity: Math Tutor Bob
+  ```
+
+  Alice's learned relationship memory must not automatically become Bob's memory.
+
+- [ ] Keep different users isolated under the same identity.
+
+  Example:
+
+  ```text
+  Support identity: Sam
+  ├── Customer A memory
+  └── Customer B memory
+  ```
+
+  Customer A memory must never be injected into Customer B's prompt.
+
+- [ ] Promote deliberately from Session to IdentityUser.
+
+  Promotion creates an independent durable memory and preserves provenance. Do not retarget the original session memory's scope.
+
+- [ ] Cross-session policy must gate both retrieval and promotion.
+
+  Disabled means:
+
+  - no later-session retrieval;
+  - no Session → IdentityUser promotion.
+
+- [ ] Define correction/deletion behavior across Session and IdentityUser scopes.
+
+- [ ] Preserve source provenance after promotion.
 
 - [ ] Coordinate memory-derived personalization with the P2C trusted profile boundary.
 
-Explicit user/host profile data remains stronger than inferred/model-derived memory.
+  Explicit user/host profile data remains stronger than inferred/model-derived memory.
 
 - [ ] Add bounded retrieval.
 
-Do not inject an entire user's lifetime memory into every model request.
+  Do not inject an identity-user's lifetime memory into every model request.
 
 - [ ] Add embeddings/vector retrieval only after measured retrieval quality or scale demonstrates the need.
+
+### P4C-1 stop condition
+
+One durable agent identity can remember useful learned state across multiple sessions with the same user without leaking that memory to another identity or another user.
+
+---
+
+### P4C-2 — Optional user-wide memory
+
+- [ ] Support deliberate promotion from Session or IdentityUser to User scope only when policy allows it.
+
+- [ ] User-wide memory represents information intentionally available across otherwise separate identities for the same user.
+
+  This should be uncommon and explicit because it crosses agent-role boundaries.
+
+- [ ] Do not allow an examiner, support agent, or other specialized role to receive user-wide memory merely because the platform has it.
+
+  Definition/identity policy must still authorize retrieval.
+
+- [ ] Preserve provenance and correction/deletion semantics after promotion.
+
+- [ ] Keep trusted profile fields distinct from User-scope learned memory.
+
+  If a value is a trusted explicit profile property, store/manage it through the trusted profile boundary rather than duplicating it as inferred memory.
+
+### P4C-2 stop condition
+
+User-wide learned memory can be deliberately shared across eligible identities without weakening role isolation or trusted-profile precedence.
+
+---
+
+### Deferred identity-wide shared state
+
+Do **not** introduce unrestricted identity-global learned conversational memory in P4.
+
+There may later be valid identity-wide operational state such as:
+
+```text
+shared office priorities
+team operating notes
+identity-owned ongoing tasks
+```
+
+That is closer to durable agent/operational state than ordinary relationship memory.
+
+If a concrete workflow requires it, introduce it deliberately as a separate scope/concept rather than overloading `IdentityUser` memory.
+
+Do not add organization-wide or host-global learned-memory scope in P4.
+
+---
+
+### P4C prompt/context composition
+
+When cross-session memory exists, prompt assembly should conceptually preserve this ordering/trust separation:
+
+```text
+definition context
++
+trusted identity persona/baseline
++
+trusted user/profile context
++
+bounded authorized cross-session learned memory
++
+session summary / structured session memory
++
+recent conversation
++
+current turn/event
+```
+
+Exact message ordering remains an Application concern and should follow existing prompt-builder security conventions.
+
+Learned memory is remembered data, not a new source of system-instruction authority.
+
+---
+
+### P4C verification
+
+- [ ] Tests proving two identities from one definition do not share IdentityUser memory.
+
+- [ ] Tests proving two users under one identity do not share IdentityUser memory.
+
+- [ ] Tests proving definition-version upgrades preserve identity ownership without rewriting historical sessions.
+
+- [ ] Tests proving learned-memory reset/deletion semantics do not destroy trusted identity baseline/persona.
+
+  The actual admin reset operation may remain P7, but persistence semantics must permit it cleanly.
+
+- [ ] Tests proving disabled cross-session policy blocks both retrieval and promotion.
+
+- [ ] Tests proving user-wide memory is injected only where identity/definition policy permits it.
+
+- [ ] Tests proving trusted P2C profile fields remain authoritative over contradictory learned memory.
+
+- [ ] Tests proving provenance survives promotion and later correction/deletion.
 
 ### P4C stop condition
 
 Useful durable memory can safely cross sessions only where policy allows it, without confusing:
 
-- trusted profile data;
+- reusable Agent Definition;
+- durable Agent Identity/Instance;
+- trusted identity baseline/persona;
+- trusted user profile;
 - current conversation;
 - session summary;
 - structured session memory;
-- same-agent memory;
-- user-wide memory.
+- identity-user learned memory;
+- optional user-wide learned memory.
 
 A saved transcript is not cross-session memory.
+
+A published definition is not a memory owner.
 
 ---
 
@@ -777,6 +1094,10 @@ target session/agent/work item
 
 - [ ] Make allowed triggers configurable by agent definition/admin.
 
+- [ ] Resolve trigger target ownership explicitly.
+
+  Future triggers should target the appropriate durable identity/instance or work item rather than an ambiguous reusable definition id where actor continuity matters.
+
 - [ ] Later expose safe trigger configuration to end users.
 
 - [ ] Add UI for scheduled/triggered work where useful.
@@ -810,7 +1131,7 @@ Requirements:
 - cancellation;
 - idempotency;
 - stale session/runtime protection;
-- initiating user/session/agent provenance;
+- initiating user/session/agent-instance provenance;
 - bounded retries where appropriate.
 
 - [ ] Allow work to continue after session deactivation only when explicitly configured/intended.
@@ -860,7 +1181,7 @@ The repository already has:
 - `develop` and `document` composition skills;
 - Impeccable UI skill integration.
 
-Productize harness editing only after core runtime contracts are stable.
+Productize harness and durable identity administration only after core runtime contracts are stable.
 
 ## Effective harness context
 
@@ -880,12 +1201,15 @@ Never expose:
 
 - [ ] Allow bounded inspection/modification of:
 
-  - harness workspace;
+  - reusable agent definitions/harness workspace;
   - instructions/configuration;
   - tool/integration configuration;
   - knowledge/assets;
   - validation/tests;
-  - behavior previews.
+  - behavior previews;
+  - durable agent identity/instance configuration;
+  - trusted identity persona/baseline;
+  - memory policy configuration.
 
 - [ ] Require privileged changes to be explicit operations.
 
@@ -902,13 +1226,15 @@ An admin agent does not bypass policy because it generated the change itself.
 
 ### User mode
 
-- [ ] Use an immutable/pinned published agent version.
+- [ ] Use an immutable/pinned published agent definition version for each session.
+
+- [ ] Bind the session to a durable Agent Identity/Instance where the product requires persistent actor continuity.
 
 - [x] Give every session its own isolated runtime workspace.
 
-- [ ] Prevent user sessions from mutating source harnesses.
+- [ ] Prevent user sessions from mutating source harnesses or trusted identity baseline/persona.
 
-## Publishing lifecycle
+## Definition publishing lifecycle
 
 - [ ] Define:
 
@@ -918,18 +1244,60 @@ An admin agent does not bypass policy because it generated the change itself.
   - publish immutable version;
   - rollback/deprecate.
 
-Published versions stay immutable. Changing instructions, tools, policies, or identity text publishes a new version rather than mutating a version already pinned by sessions.
+Published definition versions stay immutable. Changing reusable instructions, tools, policies, or default persona/config publishes a new version rather than mutating a version already pinned by sessions.
+
+## Identity / instance lifecycle
+
+- [ ] Add admin lifecycle for durable identities/instances built from published definitions.
+
+  Likely operations include:
+
+  - create identity/instance from a published definition;
+  - inspect effective definition + persona/baseline;
+  - update trusted persona/baseline through explicit revisioned operations;
+  - move an identity to a newer compatible definition version;
+  - create/fork a fresh identity from the same definition;
+  - deactivate/archive an identity where required.
+
+- [ ] Preserve the distinction between definition upgrade and identity reset.
+
+  Upgrading Alice from definition v1 to v2 does not mean "create a new Alice" and does not automatically erase learned memory.
+
+- [ ] Decide whether trusted identity persona/baseline needs an explicit revision aggregate or a sufficiently reproducible session snapshot.
+
+  Do not let mutable current persona rewrite the meaning of historical sessions.
+
+## Memory policy/admin
 
 - [ ] Expose agent/admin configuration for the P4 policy seams:
 
   - session persistence, including future retention and reopen policy;
   - session-memory enablement;
-  - cross-session scope permissions;
-  - whether a new published version inherits learned memory, starts fresh, or migrates selected memory.
+  - cross-session IdentityUser scope permission;
+  - optional User-scope permission;
+  - retention/freshness rules where later required.
 
-- [ ] Add a future **Reset learned memory** operation for an agent's learned cross-session memory.
+- [ ] Add **Reset learned memory** operations with explicit scope.
 
-That operation must not rewrite or delete the published agent definition, and it is not the same thing as resetting identity. Do not treat it as a P4 requirement.
+  Possible targets:
+
+  ```text
+  this identity + this user
+  this identity across allowed users, only if product/admin policy permits
+  user-wide learned memory
+  ```
+
+  Reset must not rewrite or delete:
+
+  - the published definition/version;
+  - durable identity existence;
+  - trusted persona/baseline;
+  - knowledge/assets;
+  - historical transcripts unless a separate retention operation explicitly does so.
+
+- [ ] Keep "reset identity" separate from "reset learned memory".
+
+  If a product wants a genuinely fresh actor, create/fork a new identity or define an explicit identity reset operation with clear semantics. Do not hide that behind memory deletion.
 
 - [ ] Allow an admin agent to improve its harness only through normal bounded tool/policy mechanisms.
 
@@ -941,16 +1309,31 @@ That operation must not rewrite or delete the published agent definition, and it
 
 Possible components:
 
-- identity/instructions;
-- runtime configuration;
-- tools;
-- policies/permissions;
-- memory;
-- knowledge;
-- triggers;
-- workspace template;
-- validation/evals;
-- integrations/extensions.
+```text
+Reusable Agent Definition
+- instructions/goals
+- runtime configuration
+- tools
+- policies/permissions
+- knowledge
+- trigger defaults
+- workspace template
+- validation/evals
+- integrations/extensions
+
+Durable Agent Identity / Instance
+- identity id
+- trusted persona/baseline
+- active definition/version association
+- lifecycle metadata
+- memory-policy assignment/overrides where allowed
+
+Runtime/User state
+- trusted user profile
+- sessions
+- learned memory
+- work items
+```
 
 - [ ] Add external tool-provider/plugin extensibility only when another real provider/integration justifies it.
 
@@ -968,6 +1351,7 @@ Requirements:
   - missing tool/provider references;
   - invalid permissions;
   - incompatible model/provider capabilities;
+  - invalid definition/identity associations;
   - unsafe configuration;
   - evaluation/test scenarios.
 
@@ -1011,6 +1395,8 @@ Do this when Agent Core moves beyond trusted single-owner/local development.
 - [ ] User/admin authorization and tenancy.
 
 - [ ] Per-user resource ownership and quotas.
+
+- [ ] Enforce tenant ownership across identity, session, memory, work-item, artifact, and integration resources.
 
 - [ ] Secure external-integration credential management.
 
@@ -1079,7 +1465,7 @@ Keep the composed provider-neutral pipeline canonical until then.
 
 - [ ] Keep `main` green before beginning the next architectural phase.
 
-- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, trigger, and background-work change.
+- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, identity, trigger, and background-work change.
 
 - [ ] Maintain Playwright coverage for meaningful user-visible workflows.
 
@@ -1113,6 +1499,8 @@ This is not a reason to reopen frozen P2E.
   - sandbox execution;
   - compaction lifecycle;
   - memory retrieval/mutation;
+  - memory scope/owner without sensitive content logging;
+  - identity/definition resolution;
   - trigger decisions;
   - background work;
   - policy denials;
@@ -1125,8 +1513,10 @@ In particular:
 - P1 remains frozen on `dceaccb`;
 - P2 remains frozen on `47d6ff6`;
 - P3 key-free freeze remains `4dbb920`;
-- post-freeze lifecycle/CI maintenance is green through `3e56a26`;
+- last explicitly verified hosted post-freeze lifecycle/CI baseline is `3e56a26` / workflow `35692184054`;
+- current repository HEAD reviewed is `7489a55`;
 - P4 is the active roadmap;
+- P4C now formalizes reusable definition vs durable identity before cross-session learned memory;
 - provider-specific Real gaps do not silently become architecture phases.
 
 - [ ] Keep TODO focused on current/future work.
@@ -1186,3 +1576,4 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Impeccable UI skill integration.
 - [x] Shared `develop` and `document` composition skills.
 - [x] Existing durable session-summary fields ready for P4A.
+- [ ] Durable Agent Definition vs Agent Identity/Instance separation — planned for P4C before cross-session memory.
