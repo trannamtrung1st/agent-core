@@ -225,6 +225,7 @@ public sealed record PublicHistoryEntry(
     IReadOnlyList<PublicResponseBlock> Blocks,
     IReadOnlyList<PublicHistoryAttachment>? Attachments = null,
     string? FinishReason = null,
+    string? InterruptReason = null,
     string? SpeechText = null);
 
 public sealed record SessionReadyProjection(
@@ -427,6 +428,7 @@ public static class PublicHistory
             blocks,
             attachments,
             entry.FinishReason,
+            entry.InterruptReason,
             speechText);
     }
 

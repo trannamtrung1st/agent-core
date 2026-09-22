@@ -73,6 +73,7 @@ public sealed class EntryRecord
     public string? AttachmentRefsJson { get; set; }
     public string? SourceAdmissionFingerprint { get; set; }
     public string? FinishReason { get; set; }
+    public string? InterruptReason { get; set; }
     public string? ModelCatalogKey { get; set; }
     public string? ModelProviderAlias { get; set; }
     public string? ModelId { get; set; }

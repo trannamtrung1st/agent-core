@@ -2692,7 +2692,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!_responseTerminal)
         {
             _responseTerminal = true;
-            UpdateAssistant(EntryStatus.Interrupted);
+            UpdateAssistant(EntryStatus.Interrupted, reason);
             await PublishAsync(
                     new SessionOutput(
                         context,
@@ -2885,7 +2885,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming);
 
-    private void UpdateAssistant(EntryStatus status)
+    private void UpdateAssistant(EntryStatus status, string? interruptReason = null)
     {
         if (_activeEntryId is not { } entryId)
         {
@@ -2901,7 +2901,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         Envelope = status == EntryStatus.Failed && (!_usesResponseContract || !_semanticReady)
                             ? null
                             : CurrentEnvelope(status != EntryStatus.Streaming),
-                        FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null
+                        FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null,
+                        InterruptReason = status switch
+                        {
+                            EntryStatus.Interrupted => interruptReason ?? entry.InterruptReason,
+                            EntryStatus.Completed or EntryStatus.Failed => null,
+                            _ => entry.InterruptReason
+                        }
                     }
                     : entry)
             .ToArray();

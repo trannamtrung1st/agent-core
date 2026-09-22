@@ -365,7 +365,7 @@ public sealed partial class SessionRuntime
             voice ? _policy.BargeInPolicy : "none",
             _snapshot.DurableLastEntrySequence,
             history,
-            ActiveResponseId: null,
+            _activeResponseId,
             _voice.EffectivePlan.InputTransport,
             _voice.EffectivePlan.OutputTransport,
             _snapshot.LifecycleStatus,

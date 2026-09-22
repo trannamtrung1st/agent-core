@@ -2466,6 +2466,7 @@ public static class SessionEventMapper
                 ["artifactId"] = block.ArtifactId
             }).ToArray(),
             ["finishReason"] = entry.FinishReason,
+            ["interruptReason"] = entry.InterruptReason,
             ["speechText"] = entry.SpeechText
         }).ToArray();
 

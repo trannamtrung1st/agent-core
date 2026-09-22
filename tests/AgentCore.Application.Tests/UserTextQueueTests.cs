@@ -240,6 +240,9 @@ public sealed class UserTextQueueTests
             item => item.ResponseId == r1
                 && item.Payload is ResponseCompletedOutput completed
                 && completed.InterruptReason == "disconnected");
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Interrupted, assistant.Status);
+        Assert.Equal("disconnected", assistant.InterruptReason);
         model.Release.TrySetResult();
         await runtime.DisposeAsync();
     }

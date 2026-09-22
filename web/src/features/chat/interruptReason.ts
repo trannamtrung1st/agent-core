@@ -21,6 +21,6 @@ export function interruptReasonLabel(reason: string | null | undefined): string 
     case "newText":
       return import.meta.env.DEV ? "Interrupted — newText" : "Interrupted";
     default:
-      return import.meta.env.DEV ? `Interrupted — ${reason}` : "Disconnected";
+      return import.meta.env.DEV ? `Interrupted — ${reason}` : "Interrupted";
   }
 }

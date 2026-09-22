@@ -12,4 +12,8 @@ describe("interruptReasonLabel", () => {
     expect(interruptReasonLabel("userStop")).toMatch(/^Interrupted/);
     expect(interruptReasonLabel("userBargeIn")).toMatch(/^Interrupted/);
   });
+
+  it("falls back to Interrupted for unknown reasons in production", () => {
+    expect(interruptReasonLabel("mystery")).toMatch(/^Interrupted/);
+  });
 });

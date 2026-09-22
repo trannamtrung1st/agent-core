@@ -31,6 +31,7 @@ public sealed record ConversationEntry(
     IReadOnlyList<ConversationAttachmentRef>? Attachments = null,
     string? SourceAdmissionFingerprint = null,
     string? FinishReason = null,
+    string? InterruptReason = null,
     ModelGenerationProvenance? ModelProvenance = null);
 
 public sealed record UserProfile(

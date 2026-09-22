@@ -137,7 +137,8 @@ public static partial class HttpMapping
                 item.AttachmentId.ToString(),
                 item.DisplayName,
                 item.ContentType)).ToArray(),
-            projected.SpeechText);
+            projected.SpeechText,
+            projected.InterruptReason);
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AgentCore.Api.Tests;
 
@@ -80,6 +81,98 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
 
         Assert.NotNull(host.LiveSnapshot(sessionId));
         Assert.Equal(Guid.Parse(attachmentB), host.LiveAttachmentId(sessionId));
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task Reattach_during_detach_grace_restores_active_response_and_accepts_deltas()
+    {
+        var releaseModel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                foreach (var descriptor in services.Where(item => item.ServiceType == typeof(ILanguageModel)).ToArray())
+                {
+                    services.Remove(descriptor);
+                }
+
+                services.AddSingleton<ILanguageModel>(
+                    new ScriptedLanguageModel(ScriptedLanguageModel.LongerChunks, releaseModel));
+                services.Configure<AgentCoreOptions>(options => options.DetachGracePeriodSeconds = 120);
+            });
+        });
+
+        var host = factory.Services.GetRequiredService<SessionHost>();
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
+        created.EnsureSuccessStatusCode();
+        var session = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+
+        var hubA = await ConnectFactoryAsync(factory);
+        var readyA = ReadyWaiter(hubA);
+        var attachedA = await hubA.InvokeAsync<CommandAck>("Attach", Attach(session.SessionId));
+        Assert.True(attachedA.Accepted, attachedA.Error?.Message);
+        var attachmentA = await readyA;
+
+        Guid? responseId = null;
+        var firstDelta = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hubA.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type == "agent.text.delta" && evt.ResponseId is not null)
+            {
+                responseId ??= Guid.Parse(evt.ResponseId);
+                firstDelta.TrySetResult();
+            }
+        });
+
+        var sendAck = await hubA.InvokeAsync<CommandAck>(
+            "SendText",
+            Text(session.SessionId, 1, attachmentA, "explain this", Guid.NewGuid().ToString()));
+        Assert.True(sendAck.Accepted, sendAck.Error?.Message);
+        await firstDelta.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.NotNull(responseId);
+        Assert.Equal(responseId, host.ActiveResponseId(Guid.Parse(session.SessionId)));
+
+        await hubA.StopAsync();
+        await hubA.DisposeAsync();
+
+        await using var hubB = await ConnectFactoryAsync(factory);
+        var readyB = ReadyWithActiveResponseWaiter(hubB);
+        var attachedB = await AttachWhenSessionAvailableAsync(hubB, session.SessionId);
+        Assert.True(attachedB.Accepted, attachedB.Error?.Message);
+        var (_, activeResponseId) = await readyB.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.Equal(responseId.ToString(), activeResponseId, StringComparer.OrdinalIgnoreCase);
+        var liveAfterAttach = host.LiveSnapshot(Guid.Parse(session.SessionId))!;
+        var assistantEntry = liveAfterAttach.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Contains("three points", assistantEntry.Text, StringComparison.OrdinalIgnoreCase);
+
+        var secondDelta = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hubB.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type == "agent.text.delta"
+                && string.Equals(evt.ResponseId, responseId.ToString(), StringComparison.OrdinalIgnoreCase)
+                && evt.Payload.TryGetValue("text", out var text)
+                && text is string delta
+                && delta.Contains("First", StringComparison.Ordinal))
+            {
+                secondDelta.TrySetResult();
+            }
+        });
+
+        releaseModel.TrySetResult();
+        await secondDelta.Task.WaitAsync(TimeSpan.FromSeconds(15));
+
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hubB.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type == "agent.response.completed"
+                && string.Equals(evt.ResponseId, responseId.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                completed.TrySetResult();
+            }
+        });
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.Null(host.ActiveResponseId(Guid.Parse(session.SessionId)));
     }
 
     [Fact(Timeout = 30_000)]
@@ -297,5 +390,22 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
             }
         });
         return ready.Task.WaitAsync(TimeSpan.FromSeconds(15));
+    }
+
+    private static Task<(string AttachmentId, string? ActiveResponseId)> ReadyWithActiveResponseWaiter(
+        HubConnection hub)
+    {
+        var ready = new TaskCompletionSource<(string, string?)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type != "session.ready" || evt.AttachmentId is null)
+            {
+                return;
+            }
+
+            evt.Payload.TryGetValue("activeResponseId", out var activeObj);
+            ready.TrySetResult((evt.AttachmentId, activeObj?.ToString()));
+        });
+        return ready.Task;
     }
 }

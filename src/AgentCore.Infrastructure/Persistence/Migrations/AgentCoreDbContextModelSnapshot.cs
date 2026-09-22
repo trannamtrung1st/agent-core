@@ -153,6 +153,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("FinishReason")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("InterruptReason")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ModelCatalogKey")
                         .HasColumnType("TEXT");
 
