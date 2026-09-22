@@ -16,11 +16,19 @@ public enum MemoryItemStatus
     Deleted = 2
 }
 
+public enum MemoryScope
+{
+    Session = 0,
+    IdentityUser = 1
+}
+
 public sealed record MemoryProvenance(
     string Source,
     IReadOnlyList<Guid> SourceEntryIds,
     Guid? SupersedesMemoryId,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    Guid? OriginMemoryId = null,
+    Guid? OriginSessionId = null);
 
 public sealed record StructuredMemoryItem(
     Guid MemoryId,
@@ -32,7 +40,10 @@ public sealed record StructuredMemoryItem(
     string SubjectKey,
     MemoryProvenance Provenance,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    MemoryScope Scope = MemoryScope.Session,
+    Guid? OwnerInstanceId = null,
+    Guid? OwnerProfileId = null)
 {
     public static string CollapseSubject(string value)
     {

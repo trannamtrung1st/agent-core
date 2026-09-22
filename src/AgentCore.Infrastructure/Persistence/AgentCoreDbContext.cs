@@ -205,10 +205,18 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.Source).HasMaxLength(64).IsRequired();
             entity.Property(row => row.SourceEntryIdsJson).IsRequired();
             entity.Property(row => row.SupersedesMemoryId).HasMaxLength(36);
+            entity.Property(row => row.Scope).HasDefaultValue(0);
+            entity.Property(row => row.OwnerInstanceId).HasMaxLength(36);
+            entity.Property(row => row.OwnerProfileId).HasMaxLength(36);
+            entity.Property(row => row.OriginMemoryId).HasMaxLength(36);
+            entity.Property(row => row.OriginSessionId).HasMaxLength(36);
             entity.HasIndex(row => new { row.SessionId, row.Status });
             entity.HasIndex(row => new { row.SessionId, row.Kind, row.SubjectKey })
                 .IsUnique()
-                .HasFilter("Status = 0");
+                .HasFilter("Status = 0 AND Scope = 0");
+            entity.HasIndex(row => new { row.OwnerInstanceId, row.OwnerProfileId, row.Kind, row.SubjectKey })
+                .IsUnique()
+                .HasFilter("Status = 0 AND Scope = 1");
         });
         modelBuilder.Entity<AgentInstanceRecord>(entity =>
         {

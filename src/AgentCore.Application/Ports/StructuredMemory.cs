@@ -17,6 +17,8 @@ public static class MemoryLimits
 
 public sealed record TrustedMemoryOwner(Guid SessionId);
 
+public sealed record TrustedIdentityUserOwner(Guid InstanceId, Guid ProfileId);
+
 public sealed record MemoryAdmissionContext(
     string Source,
     IReadOnlyList<string> ForbiddenFragments,
@@ -65,6 +67,29 @@ public interface IStructuredMemoryStore
     ValueTask TombstoneAsync(StructuredMemoryItem tombstone, CancellationToken cancellationToken = default);
 
     ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
+    ValueTask<StructuredMemoryItem?> FindIdentityUserAsync(
+        Guid instanceId,
+        Guid profileId,
+        Guid memoryId,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<StructuredMemoryItem?> FindActiveIdentityUserBySubjectAsync(
+        Guid instanceId,
+        Guid profileId,
+        MemoryKind kind,
+        string subjectKey,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<StructuredMemoryItem>> ListActiveIdentityUserAsync(
+        Guid instanceId,
+        Guid profileId,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> CountActiveIdentityUserAsync(
+        Guid instanceId,
+        Guid profileId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IStructuredMemoryService
@@ -95,6 +120,34 @@ public interface IStructuredMemoryService
     ValueTask<IReadOnlyList<StructuredMemoryItem>> SearchAsync(
         TrustedMemoryOwner owner,
         MemorySearchQuery query,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<StructuredMemoryItem> PromoteToIdentityUserAsync(
+        TrustedMemoryOwner session,
+        Guid memoryId,
+        TrustedIdentityUserOwner destination,
+        bool promotionAllowed,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<StructuredMemoryItem> UpdateIdentityUserAsync(
+        TrustedIdentityUserOwner owner,
+        MemoryUpdateProposal proposal,
+        bool retrievalAllowed,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<StructuredMemoryItem> DeleteIdentityUserAsync(
+        TrustedIdentityUserOwner owner,
+        Guid memoryId,
+        bool retrievalAllowed,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<StructuredMemoryItem>> SearchIdentityUserAsync(
+        TrustedIdentityUserOwner owner,
+        MemorySearchQuery query,
+        bool retrievalAllowed,
         MemoryAdmissionContext admission,
         CancellationToken cancellationToken = default);
 }

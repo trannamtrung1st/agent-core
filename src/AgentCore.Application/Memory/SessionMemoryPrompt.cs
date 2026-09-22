@@ -19,9 +19,16 @@ public static class SessionMemoryPrompt
         AgentDefinition definition,
         UserProfile? profile,
         IReadOnlyList<ConversationEntry> entries,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? agentInstanceId = null)
     {
-        if (memories is null || definition.MemoryPolicy?.SessionMemory != true)
+        var sessionEnabled = definition.MemoryPolicy?.SessionMemory == true;
+        var identityEnabled = definition.MemoryPolicy?.IdentityUserRetrieval == true
+            && agentInstanceId is Guid instanceId
+            && instanceId != Guid.Empty
+            && profile is not null
+            && profile.ProfileId != Guid.Empty;
+        if (memories is null || (!sessionEnabled && !identityEnabled))
         {
             return [];
         }
@@ -30,11 +37,26 @@ public static class SessionMemoryPrompt
             "session",
             UndeliveredTails(entries),
             OccupiedTrustedSubjects(definition, profile));
-        var found = await memories.SearchAsync(
-            new TrustedMemoryOwner(sessionId),
-            new MemorySearchQuery(null, null),
-            admission,
-            cancellationToken).ConfigureAwait(false);
+        var found = new List<StructuredMemoryItem>();
+        if (sessionEnabled)
+        {
+            found.AddRange(await memories.SearchAsync(
+                new TrustedMemoryOwner(sessionId),
+                new MemorySearchQuery(null, null),
+                admission,
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        if (identityEnabled)
+        {
+            found.AddRange(await memories.SearchIdentityUserAsync(
+                new TrustedIdentityUserOwner(agentInstanceId!.Value, profile!.ProfileId),
+                new MemorySearchQuery(null, null),
+                retrievalAllowed: true,
+                admission,
+                cancellationToken).ConfigureAwait(false));
+        }
+
         var projected = Project(found, admission);
         RuntimeTelemetry.RecordMemoryRetrieval(projected.Count == 0 ? "empty" : "included");
         return projected;

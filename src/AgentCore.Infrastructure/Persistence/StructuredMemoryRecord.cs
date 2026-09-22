@@ -15,4 +15,9 @@ public sealed class StructuredMemoryRecord
     public long ProvenanceRecordedAtUtc { get; set; }
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
+    public int Scope { get; set; }
+    public string? OwnerInstanceId { get; set; }
+    public string? OwnerProfileId { get; set; }
+    public string? OriginMemoryId { get; set; }
+    public string? OriginSessionId { get; set; }
 }

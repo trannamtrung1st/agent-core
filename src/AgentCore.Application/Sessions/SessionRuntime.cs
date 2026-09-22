@@ -1932,7 +1932,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     _snapshot.Definition,
                     _profile,
                     _snapshot.Entries,
-                    evaluationToken).ConfigureAwait(false);
+                    evaluationToken,
+                    _snapshot.AgentInstanceId).ConfigureAwait(false);
                 var context = new AgentContext(
                     _snapshot.Definition,
                     _snapshot.Entries,
