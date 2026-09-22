@@ -11,17 +11,18 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 | P3F implementation bulk | `da93489` | Workspace search/move, `http.request`, v7 allowlist, cwd normalization |
 | Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); strengthened live SessionRuntime assertions; Playwright `retries: 0` |
 | **P3 key-free implementation freeze** | **`4dbb920`** | `Content-Type` canonicalization, charset parity for `http.request`, Real probe results recorded |
-| Docs-aligned HEAD | `ac795b6` | Shared `OutsideWorkspaceMessage`; freeze references aligned |
+| Docs-aligned HEAD | **`b672c7a`** | P3 key-free bookkeeping; Real gap separated from P4 |
+| Intermediate docs alignment | `ac795b6` | Shared `OutsideWorkspaceMessage`; freeze SHA references |
 
 **Closure bookkeeping (2026-09-22):**
 
 | Item | Value |
 | --- | --- |
 | P3 key-free implementation freeze | **`4dbb920`** |
-| Docs-aligned HEAD | **`ac795b6`** |
+| Docs-aligned HEAD | **`b672c7a`** |
 | Local key-free gate | **Green** (see [Key-free gate](#key-free-gate-p3f-capability-closure)) |
 | Previous hosted gate (pre–MIME tail) | **`3243d58`** / workflow **`35642864725`** — green |
-| Final-tree hosted gate | **Pending** — `7497563` → workflow **`35682607660`**; `ac795b6` → workflow **`35682808408`** |
+| Final-tree hosted gate | **`7497563`** → workflow **`35682607660`** **green**; **`ac795b6`** → workflow **`35682808408`** **in progress** (2026-09-22); **`b672c7a`** docs-only (workflow **`35683144956`** in progress) |
 | Real GPT-4o mini / OpenRouter | **Known red gap** (tracked separately from P4; see below) |
 
 **Real GPT-4o mini historical-image reread (OpenRouter, opt-in):** Executed locally on 2026-09-22 with `AGENTCORE_LIVE_PROVIDER_TESTS=1` and configured `OPENROUTER_API_KEY`. Failure character differs from the original UI follow-up **400**:
@@ -39,7 +40,8 @@ Historical key-free gates on `e255916` (workflow `35630920349`) and `e564565` (w
 | --- | --- |
 | Email/approval implementation review (`ec4dedc`–`2561167`) | **Accepted** |
 | Hosted offline Synthetic + Compose on `3243d58` (workflow `35642864725`) | **Green** — Domain 77; Infrastructure 255 / 13 skip; Application 556 / 1 skip; API 165; Vitest 384; Playwright 46 passed (3.8m, no retries) |
-| Hosted offline Synthetic + Compose on final tree (`7497563`, `ac795b6`) | **Pending** — workflows **`35682607660`**, **`35682808408`** (MIME/charset tail + doc alignment) |
+| Hosted offline Synthetic + Compose on `7497563` (workflow `35682607660`) | **Green** (final-tree doc-freeze commit; MIME/charset tail on `4dbb920`) |
+| Hosted offline Synthetic + Compose on `ac795b6` (workflow `35682808408`) | **In progress** (2026-09-22) |
 | P3 Real historical-image SessionRuntime probe | **Failed** (2026-09-22 local opt-in; turn-1 timeout — see above) |
 | P3 Real historical-image adapter probe | **Failed** (2026-09-22 local opt-in; no visible completion) |
 | **P3 key-free implementation freeze** | **`4dbb920`** (architecture/tool surface closed for Synthetic CI) |
