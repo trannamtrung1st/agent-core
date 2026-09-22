@@ -64,6 +64,11 @@ public static class CompletionEvaluator
     {
         var purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault;
         var policy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
+        var boundaryValid = SummaryBoundary.IsValid(
+            snapshot.Summary,
+            snapshot.SummarizedThroughEntrySequence,
+            SummaryBoundary.ResolveLastSequence(snapshot.DurableLastEntrySequence, snapshot.Entries),
+            snapshot.Entries);
         var recent = SummaryBoundary.SelectHistory(
                 snapshot.Summary,
                 snapshot.SummarizedThroughEntrySequence,
@@ -87,6 +92,7 @@ public static class CompletionEvaluator
             purposeDescription = purpose.Description,
             agentCompletion = policy.AgentCompletion.ToString(),
             mode = snapshot.Mode.ToString(),
+            sessionSummary = SummaryBoundary.RememberedData(snapshot.Summary, boundaryValid),
             recentTurns = recent,
             utcNow = now
         };

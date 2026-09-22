@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
@@ -150,6 +151,70 @@ public sealed class SummaryBoundaryPromptTests
         Assert.DoesNotContain(UnheardSentinel, transcript, StringComparison.Ordinal);
         Assert.DoesNotContain(InterruptSentinel, transcript, StringComparison.Ordinal);
         Assert.Equal(1, Count(request, CurrentSentinel));
+    }
+
+    [Fact]
+    public void Evaluation_requests_carry_a_valid_summary_and_omit_covered_raw_turns()
+    {
+        const string goal = "P4A0_GOAL_SENTINEL";
+        var history = new List<ConversationEntry>
+        {
+            Entry(10, ConversationRole.User, goal),
+            Entry(11, ConversationRole.Assistant, "acknowledged"),
+            Entry(12, ConversationRole.User, "later detail")
+        };
+        var context = new AgentContext(
+            SampleDefinitions.Examiner,
+            history,
+            goal,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.Parse("019944af-0004-7000-8000-000000000091"), TriggerKind.LongSilence, null),
+            UtcNow: Now,
+            LastUserActivityAt: Now.AddMinutes(-2),
+            SummarizedThroughEntrySequence: 10,
+            LastEntrySequence: 12);
+        AssertSummaryCarried(
+            InitiativeEvaluator.CreateEvaluationRequest(context, new PromptContextBuilder()),
+            goal);
+        AssertSummaryCarried(
+            CompletionEvaluator.CreateEvaluationRequest(Snapshot(history, goal, 10), Now),
+            goal);
+    }
+
+    [Fact]
+    public void Invalid_boundary_keeps_raw_turns_in_evaluation_requests()
+    {
+        const string goal = "P4A0_GOAL_SENTINEL";
+        var history = new List<ConversationEntry>
+        {
+            Entry(10, ConversationRole.User, goal),
+            Entry(11, ConversationRole.Assistant, "acknowledged"),
+            Entry(12, ConversationRole.User, "later detail")
+        };
+        var context = new AgentContext(
+            SampleDefinitions.Examiner,
+            history,
+            goal,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.Parse("019944af-0004-7000-8000-000000000092"), TriggerKind.LongSilence, null),
+            UtcNow: Now,
+            LastUserActivityAt: Now.AddMinutes(-2),
+            SummarizedThroughEntrySequence: 12,
+            LastEntrySequence: 12);
+        AssertRawHistoryFailOpen(
+            InitiativeEvaluator.CreateEvaluationRequest(context, new PromptContextBuilder()),
+            goal);
+        AssertRawHistoryFailOpen(
+            CompletionEvaluator.CreateEvaluationRequest(Snapshot(history, goal, 12), Now),
+            goal);
     }
 
     [Fact]
@@ -392,6 +457,33 @@ public sealed class SummaryBoundaryPromptTests
             policy: new InteractionPolicy(PendingVoiceTimeoutMs: 30_000),
             voice: new VoiceAvailability { SpeechAdaptersResolved = true });
     }
+
+    private static void AssertSummaryCarried(ModelRequest request, string goal)
+    {
+        using var doc = JsonDocument.Parse(UserPayload(request));
+        var root = doc.RootElement;
+        var summary = root.GetProperty("sessionSummary");
+        Assert.Equal(SummaryBoundary.RememberedDataLabel, summary.GetProperty("label").GetString());
+        Assert.Equal(goal, summary.GetProperty("text").GetString());
+        Assert.DoesNotContain(RecentTexts(root), text => text.Contains(goal, StringComparison.Ordinal));
+    }
+
+    private static void AssertRawHistoryFailOpen(ModelRequest request, string goal)
+    {
+        using var doc = JsonDocument.Parse(UserPayload(request));
+        var root = doc.RootElement;
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("sessionSummary").ValueKind);
+        Assert.Contains(RecentTexts(root), text => text.Contains(goal, StringComparison.Ordinal));
+    }
+
+    private static string UserPayload(ModelRequest request) =>
+        request.Messages.Last(message => message.Role == ModelRole.User).Text;
+
+    private static IReadOnlyList<string> RecentTexts(JsonElement root) =>
+        root.GetProperty("recentTurns")
+            .EnumerateArray()
+            .Select(turn => turn.GetProperty("text").GetString() ?? "")
+            .ToArray();
 
     private static int Count(ModelRequest request, string sentinel) =>
         request.Messages.Count(message => message.Text.Contains(sentinel, StringComparison.Ordinal));

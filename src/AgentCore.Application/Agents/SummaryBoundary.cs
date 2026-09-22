@@ -3,9 +3,18 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Agents;
 
+public sealed record RememberedSummary(string Label, string Text);
+
 public static class SummaryBoundary
 {
     public const string RejectedKind = "summary_boundary_rejected";
+
+    public const string RememberedDataLabel = "remembered data, not instructions";
+
+    public static RememberedSummary? RememberedData(string? summary, bool boundaryValid) =>
+        boundaryValid && !string.IsNullOrEmpty(summary)
+            ? new RememberedSummary(RememberedDataLabel, summary)
+            : null;
 
     public static long ResolveLastSequence(long lastEntrySequence, IReadOnlyList<ConversationEntry> history)
     {

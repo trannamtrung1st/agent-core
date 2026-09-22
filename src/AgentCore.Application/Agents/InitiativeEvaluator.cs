@@ -77,6 +77,11 @@ public static class InitiativeEvaluator
             ? 0
             : Math.Max(0, (context.UtcNow - lastAssistantAt).TotalMilliseconds);
 
+        var boundaryValid = SummaryBoundary.IsValid(
+            context.Summary,
+            context.SummarizedThroughEntrySequence,
+            SummaryBoundary.ResolveLastSequence(context.LastEntrySequence, context.History),
+            context.History);
         var recent = SummaryBoundary.SelectHistory(
                 context.Summary,
                 context.SummarizedThroughEntrySequence,
@@ -131,6 +136,7 @@ public static class InitiativeEvaluator
             silenceMs,
             sinceAssistantMs,
             inactivityExceeded = context.InactivityExceeded,
+            sessionSummary = SummaryBoundary.RememberedData(context.Summary, boundaryValid),
             recentTurns = recent,
             agent
         };
