@@ -317,7 +317,7 @@ General Assistant exit for this closure:
 - search/read/draft/send email with the existing approval boundary
 - surface actionable failures instead of an opaque provider body
 
-**Roadmap handoff:** **P4** (context compaction and memory). P3 key-free freeze HEAD is recorded in [P3 closure report](reports/p3-freeze-candidate.md) (hosted green on `3243d58`, workflow `35642864725`; final tail adds HTTP MIME/charset fixes).
+**Roadmap handoff:** **P4** (context compaction and memory). P3 key-free freeze HEAD is `4dbb920` (see [P3 closure report](reports/p3-freeze-candidate.md); hosted green on `3243d58`, workflow `35642864725`).
 
 ## Handoff rule
 

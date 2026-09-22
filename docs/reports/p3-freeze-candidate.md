@@ -10,7 +10,7 @@ This report records the P3 capability closure after the `27efe17` freeze was reo
 | --- | --- | --- |
 | P3F implementation bulk | `da93489` | Workspace search/move, `http.request`, v7 allowlist, cwd normalization |
 | Key-free gate + probe hardening | `3243d58` | Hosted Synthetic green (workflow `35642864725`); strengthened live SessionRuntime assertions; Playwright retries removed again |
-| **P3 project freeze (key-free HEAD)** | *(set on merge)* | Final tail: `Content-Type` canonicalization, charset parity for `http.request`, Playwright `retries: 0` |
+| **P3 project freeze (key-free HEAD)** | `4dbb920` | Final tail: `Content-Type` canonicalization, charset parity for `http.request`, Playwright `retries: 0`, Real probe results recorded |
 
 **Real GPT-4o mini historical-image reread (OpenRouter, opt-in):** Executed locally on 2026-09-22 with `AGENTCORE_LIVE_PROVIDER_TESTS=1` and configured `OPENROUTER_API_KEY`. **`Real_session_historical_image_reread_completes_with_visible_output` failed** — turn one did not reach a successful `ResponseCompletedOutput` within 90s (`TaskCanceledException`). **`Gpt4oMini_historical_image_follow_up_is_opt_in_only` failed** — no terminal `ModelCompleted` with visible text (not the prior UI 400 path). Synthetic coverage (`scripted-vision`, fake two-call runtime, adapter unit fixtures) remains green. **Treat Real historical attachment reread as an open Real-provider gap**, not a Synthetic regression; P4 may carry provider/runtime follow-up if the probe stays red.
 
@@ -75,7 +75,7 @@ Hosted evidence on **`3243d58`** — GitHub Actions workflow **`35642864725`** (
 | `CI=1 pnpm exec playwright test` | 46 passed (3.8m, zero retries) |
 | `./scripts/compose-sqlite-volume.sh` | passed |
 
-Final tail (this document’s merge commit) reruns the same gate locally before updating the freeze HEAD row above.
+Final tail (merge commit **`4dbb920`**) reruns the same gate locally before updating the freeze HEAD row above.
 
 Optional Real probes stay skipped in CI: no `AGENTCORE_LIVE_PROVIDER_TESTS=1` on hosted runners. Configure Brave with `dotnet user-secrets set BRAVE_SEARCH_API_KEY <value> --project src/AgentCore.Api` when a Real demo needs `web.search`.
 
