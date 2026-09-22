@@ -79,18 +79,25 @@ public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbCon
         var sessionId = item.SessionId.ToString("D");
         var ownerInstance = item.OwnerInstanceId?.ToString("D");
         var ownerProfile = item.OwnerProfileId?.ToString("D");
-        var active = item.Scope == MemoryScope.IdentityUser
-            ? await db.StructuredMemories.CountAsync(
+        var active = item.Scope switch
+        {
+            MemoryScope.IdentityUser => await db.StructuredMemories.CountAsync(
                 row => row.Scope == (int)MemoryScope.IdentityUser
                     && row.OwnerInstanceId == ownerInstance
                     && row.OwnerProfileId == ownerProfile
                     && row.Status == (int)MemoryItemStatus.Active,
-                cancellationToken).ConfigureAwait(false)
-            : await db.StructuredMemories.CountAsync(
+                cancellationToken).ConfigureAwait(false),
+            MemoryScope.User => await db.StructuredMemories.CountAsync(
+                row => row.Scope == (int)MemoryScope.User
+                    && row.OwnerProfileId == ownerProfile
+                    && row.Status == (int)MemoryItemStatus.Active,
+                cancellationToken).ConfigureAwait(false),
+            _ => await db.StructuredMemories.CountAsync(
                 row => row.SessionId == sessionId
                     && row.Scope == (int)MemoryScope.Session
                     && row.Status == (int)MemoryItemStatus.Active,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false)
+        };
         if (active >= MemoryLimits.MaxActiveItems)
         {
             throw new AgentCoreException("MemoryCapacity", "Active session memory is full.", 409);
@@ -304,6 +311,67 @@ public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbCon
         return await db.StructuredMemories.CountAsync(
             item => item.Scope == (int)MemoryScope.IdentityUser
                 && item.OwnerInstanceId == instanceId.ToString("D")
+                && item.OwnerProfileId == profileId.ToString("D")
+                && item.Status == (int)MemoryItemStatus.Active,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<StructuredMemoryItem?> FindUserAsync(
+        Guid profileId,
+        Guid memoryId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.StructuredMemories.AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.MemoryId == memoryId.ToString("D")
+                    && item.Scope == (int)MemoryScope.User
+                    && item.OwnerProfileId == profileId.ToString("D"),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return row is null ? null : Map(row);
+    }
+
+    public async ValueTask<StructuredMemoryItem?> FindActiveUserBySubjectAsync(
+        Guid profileId,
+        MemoryKind kind,
+        string subjectKey,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.StructuredMemories.AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Scope == (int)MemoryScope.User
+                    && item.OwnerProfileId == profileId.ToString("D")
+                    && item.Status == (int)MemoryItemStatus.Active
+                    && item.Kind == (int)kind
+                    && item.SubjectKey == subjectKey,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return row is null ? null : Map(row);
+    }
+
+    public async ValueTask<IReadOnlyList<StructuredMemoryItem>> ListActiveUserAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.StructuredMemories.AsNoTracking()
+            .Where(item => item.Scope == (int)MemoryScope.User
+                && item.OwnerProfileId == profileId.ToString("D")
+                && item.Status == (int)MemoryItemStatus.Active)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(Map).ToArray();
+    }
+
+    public async ValueTask<int> CountActiveUserAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await db.StructuredMemories.CountAsync(
+            item => item.Scope == (int)MemoryScope.User
                 && item.OwnerProfileId == profileId.ToString("D")
                 && item.Status == (int)MemoryItemStatus.Active,
             cancellationToken).ConfigureAwait(false);

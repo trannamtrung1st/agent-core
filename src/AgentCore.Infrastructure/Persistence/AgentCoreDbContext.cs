@@ -217,6 +217,10 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.OwnerInstanceId, row.OwnerProfileId, row.Kind, row.SubjectKey })
                 .IsUnique()
                 .HasFilter("Status = 0 AND Scope = 1");
+            entity.HasIndex(row => new { row.OwnerProfileId, row.Kind, row.SubjectKey })
+                .IsUnique()
+                .HasFilter("Status = 0 AND Scope = 2")
+                .HasDatabaseName("IX_StructuredMemories_UserOwner_Kind_SubjectKey");
         });
         modelBuilder.Entity<AgentInstanceRecord>(entity =>
         {

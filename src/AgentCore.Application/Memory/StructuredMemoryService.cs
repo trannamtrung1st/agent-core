@@ -352,6 +352,222 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         return TakeRanked(ranked);
     }
 
+    public async ValueTask<StructuredMemoryItem> PromoteSessionToUserAsync(
+        TrustedMemoryOwner session,
+        Guid memoryId,
+        TrustedUserOwner destination,
+        bool promotionAllowed,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default)
+    {
+        RequireUserPromotion(destination, promotionAllowed);
+        var source = await RequireActiveAsync(session, memoryId, cancellationToken).ConfigureAwait(false);
+        return await InsertUserCopyAsync(source, destination, admission, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<StructuredMemoryItem> PromoteIdentityUserToUserAsync(
+        TrustedIdentityUserOwner sourceOwner,
+        Guid memoryId,
+        TrustedUserOwner destination,
+        bool promotionAllowed,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default)
+    {
+        RequireUserPromotion(destination, promotionAllowed);
+        if (sourceOwner.ProfileId != destination.ProfileId)
+        {
+            Reject("memory_rejected");
+            throw new AgentCoreException("PolicyDenied", "Cross-session memory is not enabled.", 403);
+        }
+
+        var source = await RequireIdentityAsync(sourceOwner, memoryId, cancellationToken).ConfigureAwait(false);
+        return await InsertUserCopyAsync(source, destination, admission, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<StructuredMemoryItem> UpdateUserAsync(
+        TrustedUserOwner owner,
+        MemoryUpdateProposal proposal,
+        bool retrievalAllowed,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default)
+    {
+        RequireUserRetrieval(owner, retrievalAllowed);
+        var current = await RequireUserAsync(owner, proposal.MemoryId, cancellationToken).ConfigureAwait(false);
+        var admitted = Draft(
+            new TrustedMemoryOwner(current.SessionId),
+            current.Kind,
+            proposal.Subject,
+            proposal.Content,
+            proposal.SourceEntryIds,
+            admission,
+            current.MemoryId);
+        var other = await store.FindActiveUserBySubjectAsync(owner.ProfileId, admitted.Kind, admitted.SubjectKey, cancellationToken)
+            .ConfigureAwait(false);
+        if (other is not null && other.MemoryId != current.MemoryId)
+        {
+            Reject("memory_rejected");
+            throw new AgentCoreException(
+                "Conflict",
+                "An active memory already uses this subject. Update that item.",
+                409);
+        }
+
+        var created = AsUser(admitted, owner, current.Provenance.OriginMemoryId, current.Provenance.OriginSessionId);
+        await store.SupersedeAsync(
+            current with { Status = MemoryItemStatus.Superseded, UpdatedAt = created.UpdatedAt },
+            created,
+            cancellationToken).ConfigureAwait(false);
+        return created;
+    }
+
+    public async ValueTask<StructuredMemoryItem> DeleteUserAsync(
+        TrustedUserOwner owner,
+        Guid memoryId,
+        bool retrievalAllowed,
+        CancellationToken cancellationToken = default)
+    {
+        RequireUserRetrieval(owner, retrievalAllowed);
+        var current = await RequireUserAsync(owner, memoryId, cancellationToken).ConfigureAwait(false);
+        var tombstone = current with
+        {
+            Status = MemoryItemStatus.Deleted,
+            Subject = string.Empty,
+            Content = string.Empty,
+            SubjectKey = string.Empty,
+            UpdatedAt = time.GetUtcNow()
+        };
+        await store.TombstoneAsync(tombstone, cancellationToken).ConfigureAwait(false);
+        return tombstone;
+    }
+
+    public async ValueTask<IReadOnlyList<StructuredMemoryItem>> SearchUserAsync(
+        TrustedUserOwner owner,
+        MemorySearchQuery query,
+        bool retrievalAllowed,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken = default)
+    {
+        if (!retrievalAllowed || owner.ProfileId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var occupied = Occupied(admission);
+        var tokens = Tokens(query.Text);
+        var ranked = new List<(StructuredMemoryItem Item, int Score)>();
+        foreach (var item in await store.ListActiveUserAsync(owner.ProfileId, cancellationToken).ConfigureAwait(false))
+        {
+            if (item.Scope != MemoryScope.User
+                || item.OwnerProfileId != owner.ProfileId
+                || occupied.Contains(item.SubjectKey))
+            {
+                continue;
+            }
+
+            if (query.Kind is not null && item.Kind != query.Kind)
+            {
+                continue;
+            }
+
+            var score = tokens.Count == 0 ? 1 : Score(item, tokens);
+            if (score > 0)
+            {
+                ranked.Add((item, score));
+            }
+        }
+
+        return TakeRanked(ranked);
+    }
+
+    private async ValueTask<StructuredMemoryItem> InsertUserCopyAsync(
+        StructuredMemoryItem source,
+        TrustedUserOwner destination,
+        MemoryAdmissionContext admission,
+        CancellationToken cancellationToken)
+    {
+        var admitted = Draft(
+            new TrustedMemoryOwner(source.SessionId),
+            source.Kind,
+            source.Subject,
+            source.Content,
+            source.Provenance.SourceEntryIds,
+            admission,
+            null);
+        var copy = AsUser(
+            admitted,
+            destination,
+            source.MemoryId,
+            source.Provenance.OriginSessionId ?? source.SessionId);
+        var existing = await store.FindActiveUserBySubjectAsync(
+            destination.ProfileId,
+            copy.Kind,
+            copy.SubjectKey,
+            cancellationToken).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            Reject("memory_rejected");
+            throw new AgentCoreException(
+                "Conflict",
+                "An active memory already uses this subject. Update that item.",
+                409);
+        }
+
+        await store.InsertAsync(copy, cancellationToken).ConfigureAwait(false);
+        return copy;
+    }
+
+    private static StructuredMemoryItem AsUser(
+        StructuredMemoryItem admitted,
+        TrustedUserOwner destination,
+        Guid? originMemoryId,
+        Guid? originSessionId) =>
+        admitted with
+        {
+            Scope = MemoryScope.User,
+            OwnerInstanceId = null,
+            OwnerProfileId = destination.ProfileId,
+            Provenance = admitted.Provenance with
+            {
+                OriginMemoryId = originMemoryId,
+                OriginSessionId = originSessionId
+            }
+        };
+
+    private async ValueTask<StructuredMemoryItem> RequireUserAsync(
+        TrustedUserOwner owner,
+        Guid memoryId,
+        CancellationToken cancellationToken)
+    {
+        var current = await store.FindUserAsync(owner.ProfileId, memoryId, cancellationToken).ConfigureAwait(false);
+        if (current is null
+            || current.Scope != MemoryScope.User
+            || current.OwnerProfileId != owner.ProfileId
+            || current.Status != MemoryItemStatus.Active)
+        {
+            throw AgentCoreErrors.NotFound("Memory was not found.");
+        }
+
+        return current;
+    }
+
+    private static void RequireUserPromotion(TrustedUserOwner owner, bool allowed)
+    {
+        if (!allowed || owner.ProfileId == Guid.Empty)
+        {
+            Reject("memory_rejected");
+            throw new AgentCoreException("PolicyDenied", "Cross-session memory is not enabled.", 403);
+        }
+    }
+
+    private static void RequireUserRetrieval(TrustedUserOwner owner, bool allowed)
+    {
+        if (!allowed || owner.ProfileId == Guid.Empty)
+        {
+            Reject("memory_rejected");
+            throw new AgentCoreException("PolicyDenied", "Cross-session memory is not enabled.", 403);
+        }
+    }
+
     private async ValueTask<StructuredMemoryItem> RequireActiveAsync(
         TrustedMemoryOwner owner,
         Guid memoryId,

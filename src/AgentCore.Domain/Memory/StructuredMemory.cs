@@ -19,7 +19,8 @@ public enum MemoryItemStatus
 public enum MemoryScope
 {
     Session = 0,
-    IdentityUser = 1
+    IdentityUser = 1,
+    User = 2
 }
 
 public sealed record MemoryProvenance(

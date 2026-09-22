@@ -247,12 +247,16 @@ public sealed class InMemoryStructuredMemoryStore : IStructuredMemoryStore
         var count = 0;
         foreach (var item in _items.Values)
         {
-            var sameOwner = candidate.Scope == MemoryScope.IdentityUser
-                ? Owns(item, candidate.OwnerInstanceId ?? Guid.Empty, candidate.OwnerProfileId ?? Guid.Empty)
-                    && item.Status == MemoryItemStatus.Active
-                : item.Scope == MemoryScope.Session
+            var sameOwner = candidate.Scope switch
+            {
+                MemoryScope.IdentityUser => Owns(item, candidate.OwnerInstanceId ?? Guid.Empty, candidate.OwnerProfileId ?? Guid.Empty)
+                    && item.Status == MemoryItemStatus.Active,
+                MemoryScope.User => OwnsUser(item, candidate.OwnerProfileId ?? Guid.Empty)
+                    && item.Status == MemoryItemStatus.Active,
+                _ => item.Scope == MemoryScope.Session
                     && item.SessionId == candidate.SessionId
-                    && item.Status == MemoryItemStatus.Active;
+                    && item.Status == MemoryItemStatus.Active
+            };
             if (sameOwner)
             {
                 count++;
@@ -283,9 +287,16 @@ public sealed class InMemoryStructuredMemoryStore : IStructuredMemoryStore
     }
 
     private StructuredMemoryItem? ActiveConflict(StructuredMemoryItem item) =>
-        item.Scope == MemoryScope.IdentityUser
-            ? FindIdentityUnlocked(item.OwnerInstanceId ?? Guid.Empty, item.OwnerProfileId ?? Guid.Empty, item.Kind, item.SubjectKey)
-            : FindActiveUnlocked(item.SessionId, item.Kind, item.SubjectKey);
+        item.Scope switch
+        {
+            MemoryScope.IdentityUser => FindIdentityUnlocked(
+                item.OwnerInstanceId ?? Guid.Empty,
+                item.OwnerProfileId ?? Guid.Empty,
+                item.Kind,
+                item.SubjectKey),
+            MemoryScope.User => FindUserUnlocked(item.OwnerProfileId ?? Guid.Empty, item.Kind, item.SubjectKey),
+            _ => FindActiveUnlocked(item.SessionId, item.Kind, item.SubjectKey)
+        };
 
     private StructuredMemoryItem? FindIdentityUnlocked(
         Guid instanceId,
@@ -307,8 +318,89 @@ public sealed class InMemoryStructuredMemoryStore : IStructuredMemoryStore
         return null;
     }
 
+    public ValueTask<StructuredMemoryItem?> FindUserAsync(
+        Guid profileId,
+        Guid memoryId,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            return ValueTask.FromResult(
+                _items.TryGetValue(memoryId, out var item) && OwnsUser(item, profileId) ? item : null);
+        }
+    }
+
+    public ValueTask<StructuredMemoryItem?> FindActiveUserBySubjectAsync(
+        Guid profileId,
+        MemoryKind kind,
+        string subjectKey,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            return ValueTask.FromResult(FindUserUnlocked(profileId, kind, subjectKey));
+        }
+    }
+
+    public ValueTask<IReadOnlyList<StructuredMemoryItem>> ListActiveUserAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var items = new List<StructuredMemoryItem>();
+            foreach (var item in _items.Values)
+            {
+                if (OwnsUser(item, profileId) && item.Status == MemoryItemStatus.Active)
+                {
+                    items.Add(item);
+                }
+            }
+
+            return ValueTask.FromResult<IReadOnlyList<StructuredMemoryItem>>(items);
+        }
+    }
+
+    public ValueTask<int> CountActiveUserAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var count = 0;
+            foreach (var item in _items.Values)
+            {
+                if (OwnsUser(item, profileId) && item.Status == MemoryItemStatus.Active)
+                {
+                    count++;
+                }
+            }
+
+            return ValueTask.FromResult(count);
+        }
+    }
+
+    private StructuredMemoryItem? FindUserUnlocked(Guid profileId, MemoryKind kind, string subjectKey)
+    {
+        foreach (var item in _items.Values)
+        {
+            if (OwnsUser(item, profileId)
+                && item.Status == MemoryItemStatus.Active
+                && item.Kind == kind
+                && string.Equals(item.SubjectKey, subjectKey, StringComparison.Ordinal))
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
     private static bool Owns(StructuredMemoryItem item, Guid instanceId, Guid profileId) =>
         item.Scope == MemoryScope.IdentityUser
         && item.OwnerInstanceId == instanceId
         && item.OwnerProfileId == profileId;
+
+    private static bool OwnsUser(StructuredMemoryItem item, Guid profileId) =>
+        item.Scope == MemoryScope.User && item.OwnerProfileId == profileId;
 }

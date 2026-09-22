@@ -28,7 +28,10 @@ public static class SessionMemoryPrompt
             && instanceId != Guid.Empty
             && profile is not null
             && profile.ProfileId != Guid.Empty;
-        if (memories is null || (!sessionEnabled && !identityEnabled))
+        var userEnabled = definition.MemoryPolicy?.UserRetrieval == true
+            && profile is not null
+            && profile.ProfileId != Guid.Empty;
+        if (memories is null || (!sessionEnabled && !identityEnabled && !userEnabled))
         {
             return [];
         }
@@ -51,6 +54,16 @@ public static class SessionMemoryPrompt
         {
             found.AddRange(await memories.SearchIdentityUserAsync(
                 new TrustedIdentityUserOwner(agentInstanceId!.Value, profile!.ProfileId),
+                new MemorySearchQuery(null, null),
+                retrievalAllowed: true,
+                admission,
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        if (userEnabled)
+        {
+            found.AddRange(await memories.SearchUserAsync(
+                new TrustedUserOwner(profile!.ProfileId),
                 new MemorySearchQuery(null, null),
                 retrievalAllowed: true,
                 admission,

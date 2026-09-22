@@ -211,6 +211,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await IndexExistsAsync(connection, "IX_StructuredMemories_UserOwner_Kind_SubjectKey", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260923110000_UserMemory', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await ColumnExistsAsync(connection, "SessionSnapshots", "LifecycleStatus", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(
@@ -1205,6 +1215,21 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     }
 
     private readonly record struct ColumnSpec(string Name, string Type, bool NotNull, bool Pk);
+
+    private static async Task<bool> IndexExistsAsync(
+        System.Data.Common.DbConnection connection,
+        string index,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = $name);";
+        var name = command.CreateParameter();
+        name.ParameterName = "$name";
+        name.Value = index;
+        command.Parameters.Add(name);
+        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return result is long count && count == 1;
+    }
 
     private static async Task<bool> TableExistsAsync(
         System.Data.Common.DbConnection connection,
