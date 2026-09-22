@@ -77,13 +77,17 @@ public static class InitiativeEvaluator
             ? 0
             : Math.Max(0, (context.UtcNow - lastAssistantAt).TotalMilliseconds);
 
-        var recent = context.History
+        var recent = SummaryBoundary.SelectHistory(
+                context.Summary,
+                context.SummarizedThroughEntrySequence,
+                context.LastEntrySequence,
+                context.History)
             .TakeLast(8)
             .Select(entry => new
             {
                 role = entry.Role.ToString(),
                 text = Clip(entry.Role == ConversationRole.Assistant
-                    ? PromptContextBuilder.EligibleAssistantText(entry)
+                    ? AssistantSemanticProjection.Text(entry)
                     : entry.Text, 320),
                 status = entry.Status.ToString()
             });

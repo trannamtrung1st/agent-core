@@ -33,7 +33,9 @@ public sealed record AgentContext(
     DateTimeOffset UtcNow = default,
     DateTimeOffset? LastUserActivityAt = null,
     ILanguageModel? LanguageModel = null,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    long SummarizedThroughEntrySequence = 0,
+    long LastEntrySequence = 0);
 
 public abstract record AgentDecision;
 

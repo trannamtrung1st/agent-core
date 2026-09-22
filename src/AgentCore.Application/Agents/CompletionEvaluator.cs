@@ -64,14 +64,18 @@ public static class CompletionEvaluator
     {
         var purpose = snapshot.Purpose ?? SessionPurpose.OngoingDefault;
         var policy = snapshot.CompletionPolicy ?? SessionCompletionPolicy.Default;
-        var recent = snapshot.Entries
+        var recent = SummaryBoundary.SelectHistory(
+                snapshot.Summary,
+                snapshot.SummarizedThroughEntrySequence,
+                snapshot.DurableLastEntrySequence,
+                snapshot.Entries)
             .TakeLast(8)
             .Select(entry => new
             {
                 role = entry.Role.ToString(),
                 text = Clip(
                     entry.Role == ConversationRole.Assistant
-                        ? PromptContextBuilder.EligibleAssistantText(entry)
+                        ? AssistantSemanticProjection.Text(entry)
                         : entry.Text,
                     320),
                 status = entry.Status.ToString()

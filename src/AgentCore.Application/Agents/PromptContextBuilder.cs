@@ -37,12 +37,18 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
 
     public PromptSections BuildSections(AgentContext context)
     {
+        var history = SummaryBoundary.SelectHistory(
+            context.Summary,
+            context.SummarizedThroughEntrySequence,
+            context.LastEntrySequence,
+            context.History,
+            recordRejection: true);
         var identity = BuildIdentitySystem(context.Definition);
         var mode = BuildModeSystem(context);
         var memory = BuildMemorySystem(context);
         var environment = BuildEnvironmentSystem(context);
         var attachments = BuildAttachmentManifestSystem(context);
-        var turns = BuildTurnMessages(context);
+        var turns = BuildTurnMessages(context, history);
         return new PromptSections(identity, mode, memory, environment, turns, attachments);
     }
 
@@ -194,18 +200,8 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         return text[..max];
     }
 
-    public static string EligibleAssistantText(ConversationEntry entry)
-    {
-        if (entry.DeliveryMode == SessionMode.Voice)
-        {
-            var spoken = entry.Envelope?.SpeechText ?? entry.Text;
-            var end = Math.Clamp(entry.HeardTextEndExclusive, 0, spoken.Length);
-            return spoken[..end];
-        }
-
-        var received = Math.Clamp(entry.ReceivedTextEndExclusive, 0, entry.Text.Length);
-        return entry.Text[..received];
-    }
+    public static string EligibleAssistantText(ConversationEntry entry) =>
+        AssistantSemanticProjection.Text(entry);
 
     private static string BuildModeSystem(AgentContext context)
     {
@@ -293,8 +289,25 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             return [];
         }
 
+        var history = SummaryBoundary.SelectHistory(
+            context.Summary,
+            context.SummarizedThroughEntrySequence,
+            context.LastEntrySequence,
+            context.History);
+        return SelectManifestItems(context, history);
+    }
+
+    private static IReadOnlyList<SessionAttachmentManifestItem> SelectManifestItems(
+        AgentContext context,
+        IReadOnlyList<ConversationEntry> history)
+    {
+        if (context.SessionAttachments is not { Count: > 0 })
+        {
+            return [];
+        }
+
         var referenced = new HashSet<Guid>();
-        foreach (var entry in context.History)
+        foreach (var entry in history)
         {
             if (entry.Attachments is not { Count: > 0 })
             {
@@ -387,13 +400,15 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         return $"{entry.Text}\n[Sent attachments: {refs}]";
     }
 
-    private IReadOnlyList<ModelMessage> BuildTurnMessages(AgentContext context)
+    private IReadOnlyList<ModelMessage> BuildTurnMessages(
+        AgentContext context,
+        IReadOnlyList<ConversationEntry> history)
     {
         var currentBatch = context.Trigger.Kind == TriggerKind.UserTurn
             ? TrailingUserSuffix.Of(context.History)
             : [];
         var currentIds = currentBatch.Select(entry => entry.EntryId).ToHashSet();
-        var eligible = context.History
+        var eligible = history
             .Where(entry => entry.Status != EntryStatus.Streaming)
             .Select(entry => (entry, text: entry.Role == ConversationRole.Assistant
                 ? EligibleAssistantText(entry)
@@ -618,45 +633,6 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         }
 
         return allocations;
-    }
-}
-
-public static class ConversationSummary
-{
-    public static (string Summary, long ThroughSequence) Refresh(
-        IReadOnlyList<ConversationEntry> entries,
-        string existing,
-        long summarizedThrough,
-        int keepNewest = PromptContextBuilder.MaxHistoryEntries)
-    {
-        if (entries.Count <= keepNewest)
-        {
-            return (existing, summarizedThrough);
-        }
-
-        var dropped = entries.Take(entries.Count - keepNewest)
-            .Where(entry => entry.Sequence > summarizedThrough && entry.Status != EntryStatus.Streaming)
-            .ToArray();
-        if (dropped.Length == 0)
-        {
-            return (existing, summarizedThrough);
-        }
-
-        var excerpts = dropped.Select(entry =>
-        {
-            var text = entry.Role == ConversationRole.Assistant
-                ? PromptContextBuilder.EligibleAssistantText(entry)
-                : entry.Text;
-            var clipped = text.Length <= 80 ? text : text[..80];
-            return $"{entry.Role}: {clipped}";
-        });
-        var combined = string.Join(" | ", new[] { existing }.Where(value => value.Length > 0).Concat(excerpts));
-        if (combined.Length > PromptContextBuilder.MaxSummaryCharacters)
-        {
-            combined = combined[^PromptContextBuilder.MaxSummaryCharacters..];
-        }
-
-        return (combined, dropped[^1].Sequence);
     }
 }
 

@@ -1178,14 +1178,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         var titleHints = await AttachmentTitleHintsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         _snapshot = Append(userEntry, titleHints) with { Status = _snapshot.Status };
-        var (summary, through) = ConversationSummary.Refresh(
-            _snapshot.Entries,
-            _snapshot.Summary,
-            _snapshot.SummarizedThroughEntrySequence);
-        if (summary != _snapshot.Summary || through != _snapshot.SummarizedThroughEntrySequence)
-        {
-            _snapshot = _snapshot with { Summary = summary, SummarizedThroughEntrySequence = through };
-        }
 
         var queued = input.Behavior == UserTextBehavior.Queue && _activeResponseId is not null;
         var cause = input.Context;
@@ -1276,15 +1268,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var entries = _snapshot.Entries.Where(entry => entry.EntryId != entryId).ToArray();
-        var (summary, through) = ConversationSummary.Refresh(
-            entries,
-            _snapshot.Summary,
-            _snapshot.SummarizedThroughEntrySequence);
         _snapshot = _snapshot with
         {
             Entries = entries,
-            Summary = summary,
-            SummarizedThroughEntrySequence = through,
             UpdatedAt = _time.GetUtcNow()
         };
     }
@@ -1935,7 +1921,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     UtcNow: _time.GetUtcNow(),
                     LastUserActivityAt: _snapshot.LastUserActivityAt,
                     LanguageModel: model,
-                    ReasoningEffort: _snapshot.ModelSelection?.ReasoningEffort);
+                    ReasoningEffort: _snapshot.ModelSelection?.ReasoningEffort,
+                    SummarizedThroughEntrySequence: _snapshot.SummarizedThroughEntrySequence,
+                    LastEntrySequence: _snapshot.DurableLastEntrySequence);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;

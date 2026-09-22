@@ -856,7 +856,7 @@ public sealed partial class SessionRuntime
             return null;
         }
 
-        var text = PromptContextBuilder.EligibleAssistantText(interrupted);
+        var text = AssistantSemanticProjection.Text(interrupted);
         return text.Length == 0 ? null : text;
     }
 
