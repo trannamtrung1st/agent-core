@@ -749,7 +749,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         var graceSeconds = Math.Max(0, _options.DetachGracePeriodSeconds);
         if (graceSeconds == 0)
         {
-            _ = FinalizeDetachedSessionAsync(sessionId, live);
+            await FinalizeDetachedSessionAsync(sessionId, live).ConfigureAwait(false);
             return;
         }
 

@@ -880,7 +880,7 @@ async function run() {
       const interrupted = await waitForEvent(
         (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
       );
-      if (interrupted.payload?.reason !== "newText") {
+      if (interrupted.payload?.reason !== "userSteer") {
         throw new Error(JSON.stringify(interrupted));
       }
       await connection.stop();
@@ -910,7 +910,7 @@ async function run() {
       const interrupted = await waitForEvent(
         (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
       );
-      if (interrupted.payload?.reason !== "newText") {
+      if (interrupted.payload?.reason !== "userSteer") {
         throw new Error(JSON.stringify(interrupted));
       }
       await connection.stop();

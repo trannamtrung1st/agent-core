@@ -19,6 +19,7 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
             var values = new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["AgentCore:DetachGracePeriodSeconds"] = "0",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Providers:Speech:Recognition:Adapter"] = "Synthetic",
                 ["Providers:Speech:Synthesis:Adapter"] = "Synthetic",

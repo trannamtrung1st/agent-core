@@ -27,6 +27,7 @@ public class KestrelHostFixture : IAsyncLifetime
         start.Environment["Providers__Speech__Recognition__Adapter"] = "Synthetic";
         start.Environment["Providers__Speech__Synthesis__Adapter"] = "Synthetic";
         start.Environment["AgentCore__MaxActiveSessions"] = "1";
+        start.Environment["AgentCore__DetachGracePeriodSeconds"] = "0";
         start.Environment["AgentCore__AgentDirectory"] = Path.Combine(root, "agents");
         foreach (var pair in ExtraEnvironment)
         {

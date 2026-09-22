@@ -117,7 +117,8 @@ public sealed class CapacityOneApiFactory : WebApplicationFactory<Program>
             {
                 ["AgentCore:Profile"] = "Synthetic",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
-                ["AgentCore:MaxActiveSessions"] = "1"
+                ["AgentCore:MaxActiveSessions"] = "1",
+                ["AgentCore:DetachGracePeriodSeconds"] = "0"
             });
         });
         TestHttpDefaults.UseLoopbackCaller(builder);
