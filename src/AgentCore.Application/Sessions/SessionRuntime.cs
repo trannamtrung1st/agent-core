@@ -13,7 +13,9 @@ using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Triggers;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Sessions;
@@ -74,6 +76,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private SessionSnapshot _durableSnapshot;
 
     private UserProfile? _profile;
+    private PendingTriggerProposal? _pendingTriggerProposal;
     private SessionSnapshot _snapshot;
     private Guid _epoch;
     private Guid? _activeResponseId;
@@ -1504,7 +1507,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             try
             {
-                await PumpModelAsync(model, request, input.Context, responseToken).ConfigureAwait(false);
+                await PumpModelAsync(model, request, input.Context, input.Trigger, responseToken).ConfigureAwait(false);
             }
             finally
             {
@@ -2061,6 +2064,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ILanguageModel model,
         ModelRequest request,
         EventContext cause,
+        AgentTrigger trigger,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
@@ -2293,8 +2297,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             call,
                                             ToolLimits.MaxOutputBytes - outputBytes,
                                             toolCts.Token,
-                                            approvalGrant)
+                                            approvalGrant,
+                                            TriggerCommand(trigger))
                                         .ConfigureAwait(false);
+                                    if (executionResult.ReplaceTriggerProposal)
+                                    {
+                                        _pendingTriggerProposal = executionResult.TriggerProposal;
+                                    }
                                 }
                             }
                         }
@@ -2658,12 +2667,36 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
+    private TriggerCommandContext TriggerCommand(AgentTrigger trigger)
+    {
+        var confirming = TriggerAuthorization.IsConfirmationTurn(trigger.Text, _pendingTriggerProposal is not null);
+        TriggerOwner? owner = _snapshot.AgentInstanceId is Guid instance && _snapshot.ProfileId is Guid profile
+            ? new TriggerOwner(instance, profile)
+            : null;
+        string? timeZone = null;
+        if (_profile?.Preferences.TryGetValue("timeZone", out var zone) == true)
+        {
+            timeZone = zone.Value;
+        }
+
+        return new TriggerCommandContext(
+            owner,
+            SessionId,
+            timeZone,
+            TriggerAuthorization.Classify(trigger.Kind, trigger.Text, _pendingTriggerProposal is not null),
+            confirming,
+            _pendingTriggerProposal,
+            trigger.EventId,
+            _time.GetUtcNow());
+    }
+
     private async Task SupersedeAsync(
         EventContext context,
         Guid responseId,
         CancellationToken cancellationToken,
         string reason = "newText")
     {
+        _pendingTriggerProposal = null;
         if (reason is "userStop")
         {
             _allowQueuedSuffixAutoDispatch = false;
@@ -3682,6 +3715,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         Interlocked.Increment(ref _terminalFence);
+        _pendingTriggerProposal = null;
         _deadlineTimerGeneration++;
         CancelCompletionEvaluation();
         CancelCompaction();

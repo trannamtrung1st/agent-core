@@ -58,6 +58,13 @@ public sealed record TriggerRegistrationChange
         DateTimeOffset? nextOccurrenceAtUtc,
         DateTimeOffset? expiresAtUtc) =>
         new(null, schedule, nextOccurrenceAtUtc, expiresAtUtc, hasIntent: false, hasSchedule: true, hasNextOccurrence: true, hasExpiresAt: true);
+
+    public static TriggerRegistrationChange Full(
+        string intent,
+        TriggerSchedule schedule,
+        DateTimeOffset? nextOccurrenceAtUtc,
+        DateTimeOffset? expiresAtUtc) =>
+        new(intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, hasIntent: true, hasSchedule: true, hasNextOccurrence: true, hasExpiresAt: true);
 }
 
 public enum TriggerOccurrenceAdmitKind

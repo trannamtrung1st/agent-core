@@ -26,6 +26,11 @@ public static class ToolCatalog
     public const string EmailCreateDraft = "email.create_draft";
     public const string EmailSend = "email.send";
     public const string DemoSensitiveAction = "demo.sensitive_action";
+    public const string TriggerScheduleOnce = "trigger.schedule_once";
+    public const string TriggerScheduleRecurring = "trigger.schedule_recurring";
+    public const string TriggerList = "trigger.list";
+    public const string TriggerUpdate = "trigger.update";
+    public const string TriggerCancel = "trigger.cancel";
 
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,

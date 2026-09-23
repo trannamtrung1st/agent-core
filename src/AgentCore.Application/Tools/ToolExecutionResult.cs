@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Triggers;
 
 namespace AgentCore.Application.Tools;
 
@@ -8,7 +9,9 @@ namespace AgentCore.Application.Tools;
 /// </summary>
 public sealed record ToolExecutionResult(
     string Text,
-    IReadOnlyList<ModelContentPart>? Parts = null)
+    IReadOnlyList<ModelContentPart>? Parts = null,
+    bool ReplaceTriggerProposal = false,
+    PendingTriggerProposal? TriggerProposal = null)
 {
     public static ToolExecutionResult FromText(string text) => new(text);
 }

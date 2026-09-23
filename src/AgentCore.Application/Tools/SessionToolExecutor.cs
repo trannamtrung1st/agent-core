@@ -6,6 +6,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
@@ -21,7 +22,8 @@ public sealed partial class SessionToolExecutor(
     IPublicWebFetcher? publicWebFetcher = null,
     IEmailProvider? emailProvider = null,
     IHttpRequestClient? httpRequestClient = null,
-    IToolConfigurationGate? configurationGate = null)
+    IToolConfigurationGate? configurationGate = null,
+    ITriggerRegistrationService? triggerRegistrations = null)
 {
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;
@@ -42,7 +44,8 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call,
         int remainingOutputBytes,
         CancellationToken cancellationToken = default,
-        ToolApprovalGrant? approvalGrant = null)
+        ToolApprovalGrant? approvalGrant = null,
+        TriggerCommandContext? triggerCommand = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant);
@@ -143,6 +146,14 @@ public sealed partial class SessionToolExecutor(
                     await CreateEmailDraftAsync(args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.EmailSend => TextResult(
                     await SendEmailDraftAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.TriggerScheduleOnce or ToolCatalog.TriggerScheduleRecurring or ToolCatalog.TriggerList
+                    or ToolCatalog.TriggerUpdate or ToolCatalog.TriggerCancel => await TriggerScheduleCommands.ExecuteAsync(
+                        definition,
+                        triggerRegistrations,
+                        call.Name,
+                        args,
+                        triggerCommand,
+                        cancellationToken).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
         }

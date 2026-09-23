@@ -112,7 +112,32 @@ public static class ToolRegistry
                 ToolCatalog.DemoSensitiveAction,
                 "Execute a bounded synthetic sensitive write for approval testing.",
                 """{"type":"object","properties":{"label":{"type":"string"}},"required":["label"]}""",
-                ToolEffect.SensitiveWrite)
+                ToolEffect.SensitiveWrite),
+            [ToolCatalog.TriggerScheduleOnce] = Descriptor(
+                ToolCatalog.TriggerScheduleOnce,
+                "Create one durable one-shot schedule. Requires authorization from the current user turn. Scheduling does not approve any future tool. Provide intent and exactly one time form: relativeDayOffset plus localTime, localDate plus localTime, or atUtc. Omit timeZone only when the trusted profile timezone should be used. Ask the user when the time or timezone is missing or ambiguous.",
+                """{"type":"object","properties":{"intent":{"type":"string"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"localTime":{"type":"string"},"atUtc":{"type":"string"},"timeZone":{"type":"string"}},"required":["intent"]}""",
+                ToolEffect.Write),
+            [ToolCatalog.TriggerScheduleRecurring] = Descriptor(
+                ToolCatalog.TriggerScheduleRecurring,
+                "Create one durable daily or weekly schedule. Requires authorization from the current user turn. Scheduling does not approve any future tool. kind is daily or weekly. Weekly requests include weekdays. Omit endDate and maxOccurrences only when indefinite recurrence is allowed. Omit timeZone only when the trusted profile timezone should be used.",
+                """{"type":"object","properties":{"intent":{"type":"string"},"kind":{"type":"string"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"startDate":{"type":"string"},"endDate":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["intent","kind","localTime"]}""",
+                ToolEffect.Write),
+            [ToolCatalog.TriggerList] = Descriptor(
+                ToolCatalog.TriggerList,
+                "List durable schedules owned by the current user and agent instance. Requires authorization from the current user turn. Results never include another owner's schedules.",
+                """{"type":"object","properties":{"status":{"type":"string"}}}""",
+                ToolEffect.ReadOnly),
+            [ToolCatalog.TriggerUpdate] = Descriptor(
+                ToolCatalog.TriggerUpdate,
+                "Update a durable schedule owned by the current user. Requires authorization from the current user turn and expectedRevision. Scheduling does not approve any future tool. Do not send a property named revision.",
+                """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"},"intent":{"type":"string"},"kind":{"type":"string"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
+                ToolEffect.Write),
+            [ToolCatalog.TriggerCancel] = Descriptor(
+                ToolCatalog.TriggerCancel,
+                "Cancel a durable schedule owned by the current user. Requires authorization from the current user turn and expectedRevision. Do not send a property named revision.",
+                """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
+                ToolEffect.Write)
         };
 
     public static IEnumerable<ToolDescriptor> All => Registered.Values;

@@ -139,6 +139,46 @@ public static class AgentDefinitionValidator
         }
 
         ValidateEnvironment(RoleEnvironments.Of(definition));
+        ValidateTriggerPolicy(definition.TriggerPolicy);
+    }
+
+    private static void ValidateTriggerPolicy(TriggerPolicy? policy)
+    {
+        if (policy is null)
+        {
+            return;
+        }
+
+        if (policy.MaxActiveRegistrations is < 1 or > 32)
+        {
+            throw new ArgumentException("maxActiveRegistrations must be 1..32.");
+        }
+
+        if (policy.OneShotHorizonDays is < 1 or > 365)
+        {
+            throw new ArgumentException("oneShotHorizonDays must be 1..365.");
+        }
+
+        if (policy.MinRecurrenceDays is < 1 or > 365)
+        {
+            throw new ArgumentException("minRecurrenceDays must be 1..365.");
+        }
+
+        var sources = policy.AllowedSourceKinds;
+        if (sources.Count != sources.Distinct(StringComparer.Ordinal).Count()
+            || sources.Any(source => source is not ("schedule" or "applicationEvent")))
+        {
+            throw new ArgumentException("trigger source kinds are invalid.");
+        }
+
+        if (policy.Enabled
+            && policy.AllowUserScheduling
+            && !policy.AllowOneShot
+            && !policy.AllowDaily
+            && !policy.AllowWeekly)
+        {
+            throw new ArgumentException("enabled scheduling requires a schedule type.");
+        }
     }
 
     private static void ValidateEnvironment(RoleEnvironment environment)

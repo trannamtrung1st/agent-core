@@ -18,7 +18,21 @@ public sealed record AgentDefinition(
     RoleEnvironment? Environment = null,
     AgentModelDefaults? ModelDefaults = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    MemoryPolicy? MemoryPolicy = null);
+    MemoryPolicy? MemoryPolicy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    TriggerPolicy? TriggerPolicy = null);
+
+public sealed record TriggerPolicy(
+    bool Enabled,
+    bool AllowUserScheduling,
+    bool AllowOneShot,
+    bool AllowDaily,
+    bool AllowWeekly,
+    bool AllowIndefiniteRecurrence,
+    int MaxActiveRegistrations,
+    int OneShotHorizonDays,
+    int MinRecurrenceDays,
+    IReadOnlyList<string> AllowedSourceKinds);
 
 public sealed record MemoryPolicy(
     bool SessionMemory = false,

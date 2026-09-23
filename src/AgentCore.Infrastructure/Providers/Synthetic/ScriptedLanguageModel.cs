@@ -198,6 +198,20 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptSchedule(request, toolRounds, lastUser, lastTool, out var scheduleEvent))
+        {
+            if (scheduleEvent is null)
+            {
+                yield return new ModelTextDelta(ScheduleFinalText(lastUser, lastTool));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            yield return scheduleEvent;
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            yield break;
+        }
+
         if (toolRounds == 0
             && lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             && Offers(request, ToolCatalog.DemoSensitiveAction))
@@ -354,6 +368,126 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private sealed record KnowledgeToolPayload(string Identity, string Citation, string Content);
 
+    private static bool TryScriptSchedule(
+        ModelRequest request,
+        int toolRounds,
+        string lastUser,
+        string lastTool,
+        out ModelGenerationEvent? toolEvent)
+    {
+        toolEvent = null;
+        if (!Offers(request, ToolCatalog.TriggerScheduleOnce) && !Offers(request, ToolCatalog.TriggerList))
+        {
+            return false;
+        }
+
+        var scheduleTurn = lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("move that schedule", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
+        if (!scheduleTurn)
+        {
+            return false;
+        }
+
+        if (toolRounds > 0)
+        {
+            if (lastTool.Contains("\"error\"", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (toolRounds == 1 && lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase))
+            {
+                toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerList, "{}");
+                return true;
+            }
+
+            if (toolRounds == 2 && lastUser.Contains("move that schedule", StringComparison.OrdinalIgnoreCase))
+            {
+                toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerUpdate, ScheduleMutationArgs(lastTool, "11:00", includeTime: true));
+                return true;
+            }
+
+            if (toolRounds == 3 && lastUser.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase))
+            {
+                toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerCancel, ScheduleMutationArgs(lastTool, "11:00", includeTime: false));
+                return true;
+            }
+
+            return true;
+        }
+
+        if (lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleRecurring,
+                """{"intent":"Weekly call","kind":"weekly","interval":1,"weekdays":["monday"],"localTime":"09:00"}""");
+            return true;
+        }
+
+        if (lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
+            return true;
+        }
+
+        if (lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerList, "{}");
+            return true;
+        }
+
+        return false;
+    }
+
+    private static ModelToolCallEvent ScheduleCall(int toolRounds, string name, string arguments) =>
+        new(new ModelToolCall($"call-schedule-{toolRounds + 1}", name, arguments));
+
+    private static string ScheduleMutationArgs(string lastTool, string localTime, bool includeTime)
+    {
+        using var document = JsonDocument.Parse(lastTool);
+        var root = document.RootElement;
+        if (root.TryGetProperty("registrations", out var rows))
+        {
+            root = rows[0];
+        }
+
+        var id = root.GetProperty("registrationId").GetString();
+        var revision = root.GetProperty("revision").GetInt64();
+        return includeTime
+            ? $$"""{"registrationId":"{{id}}","expectedRevision":{{revision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}"""
+            : $$"""{"registrationId":"{{id}}","expectedRevision":{{revision}}}""";
+    }
+
+    private static string ScheduleFinalText(string lastUser, string lastTool)
+    {
+        if (lastTool.Contains("confirmation_required", StringComparison.Ordinal))
+        {
+            return "I need you to confirm before I save that.";
+        }
+
+        if (lastTool.Contains("\"error\"", StringComparison.Ordinal))
+        {
+            return "I did not save a schedule.";
+        }
+
+        if (lastTool.Contains("Cancelled", StringComparison.Ordinal))
+        {
+            return "The schedule was cancelled.";
+        }
+
+        return lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
+            ? "Scheduled the Monday call."
+            : "Scheduled Call John.";
+    }
+
     private static bool ShouldScriptTools(ModelRequest request)
     {
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
@@ -364,12 +498,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("move that schedule", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase)
             || request.Messages.Any(message => message.Role == ModelRole.Tool);
     }
 
     public const string EmailHarnessMarker = "email harness";
 
     public const string SensitiveApprovalMarker = "sensitive approval";
+
+    public const string ScheduleForceMarker = "[test:schedule-force]";
 
     public const string HistoricalImageRereadMarker = "[test:historical-image-reread]";
 

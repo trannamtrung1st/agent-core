@@ -146,6 +146,7 @@ public sealed partial class SessionRuntime
 
     private async Task HandleDetachAsync(DetachReceived input, CancellationToken cancellationToken)
     {
+        _pendingTriggerProposal = null;
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             AbandonLiveSpeech(rotateEpoch: true);
