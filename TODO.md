@@ -10,7 +10,7 @@ P5 implementation behavior:
 44a1b87cf0275c96f3ac3c5e19fafb53c737242c
 ```
 
-P5 is not frozen. Whole-phase review rejected the `267fcbd` candidate. Hosted workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) stays historical green evidence. The review repairs are in the next closure candidate and stay inside P5. Do not start P6. Evidence: `docs/reports/p5-freeze-candidate.md`.
+P5 is not frozen. Whole-phase review rejected the `267fcbd` candidate. The review repairs are on `7243323`, and hosted workflow [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) is green on that commit. Do not start P6 until review accepts the candidate. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
 P4 implementation freeze:
 
@@ -1181,6 +1181,6 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-P5 behavior is implemented through P5G, including the whole-phase review repairs (stale schedule revision, lost `AcceptedLive` begin, action-specific authorization, and owner-scoped occurrence dedupe). Hosted workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) remains historical evidence on `267fcbd`. P5 is not frozen until a new closure candidate passes the key-free, Compose, and hosted gates. Do not start **P6** until P5 is frozen.
+P5 behavior is implemented through P5G, including the whole-phase review repairs (stale schedule revision, lost `AcceptedLive` begin, action-specific authorization, and owner-scoped occurrence dedupe). Hosted workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) remains historical evidence on `267fcbd`. Hosted workflow [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) is green on `7243323`. P5 is not frozen until review accepts that candidate. Do not start **P6** until P5 is frozen.
 
 P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.

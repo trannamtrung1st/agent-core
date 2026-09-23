@@ -1,14 +1,14 @@
 # P5 — Events, durable triggers, and configurable scheduling
 
-This report is the P5 closure candidate after the whole-phase review repairs. Hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on `267fcbd` and is historical. That review did **not** freeze P5. The repairs below stay inside P5. Local key-free and Compose gates on the repair tree passed. Hosted run [`35884024153`](https://github.com/trannamtrung1st/agent-core/actions/runs/35884024153) on `53ed9c1` failed in Synthetic Playwright; Compose smoke on that run succeeded. Hosted run [`35886400983`](https://github.com/trannamtrung1st/agent-core/actions/runs/35886400983) on `4687211` failed the same suite: the long-session composer matched queued-message labels, and the reconnect voice click ran while Voice still cancelled durable voice mode. P5 is not frozen. Do not begin P6.
+This report is the P5 closure candidate after the whole-phase review repairs. Hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on `267fcbd` and is historical. That review did **not** freeze P5. The repairs below stay inside P5. Local key-free and Compose gates on the repair tree passed. Hosted run [`35884024153`](https://github.com/trannamtrung1st/agent-core/actions/runs/35884024153) on `53ed9c1` failed in Synthetic Playwright; Compose smoke on that run succeeded. Hosted run [`35886400983`](https://github.com/trannamtrung1st/agent-core/actions/runs/35886400983) on `4687211` failed the same suite: the long-session composer matched queued-message labels, and the reconnect voice click ran while Voice still cancelled durable voice mode. Hosted run [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) on `7243323` is **green** for offline gates and Compose smoke. P5 is not frozen. Do not begin P6.
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
-| Implementation behavior | `44a1b87` (`44a1b87cf0275c96f3ac3c5e19fafb53c737242c`) |
-| Closure documentation | `267fcbd` (`267fcbdcefa8b19ddb65cd8ff0ba84fa6621b823`) |
-| Hosted Synthetic workflow | [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) — **green** on `267fcbd` (push to `main`, 2026-09-23). Synthetic offline gates and Compose smoke both succeeded. |
+| Implementation behavior | `44a1b87` (`44a1b87cf0275c96f3ac3c5e19fafb53c737242c`), review repairs on `53ed9c1` |
+| Browser gate follow-up | `7243323` (`7243323bfd02dffb4616fac511e20d05af9eca67`) |
+| Hosted Synthetic workflow | [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) — **green** on `7243323` (push to `main`, 2026-09-23). Synthetic offline gates and Compose smoke both succeeded. Historical green run [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) remains the pre-review evidence on `267fcbd`. |
 | Optional hosted provider probes | skipped; no credentials required for the scheduler |
 
 An admitted occurrence with no single compatible live runtime stops at `AwaitingDurableWork`. P5 does not create a `WorkItem`, keep a Session Runtime alive for a future fire, or expose a public webhook.
@@ -63,7 +63,7 @@ Infrastructure skips are the opt-in OpenAI and OpenRouter probes. The Applicatio
 
 ## §26 answers on this candidate
 
-The local evidence answers yes for natural one-shot and recurring create, separate-turn list/move/cancel, restart, timezone meaning, owner-scoped duplicate admission, inspect/cancel, current-user action authorization, remembered text, untrusted occurrence data, no standing tool approval, runtime-local timers, one typed non-schedule source, stale-schedule rejection, lost-begin recovery, and a P6 handoff that does not require redesigning the occurrence. P0–P4 suites above stayed green. Hosted Synthetic run `35840226344` on `267fcbd` remains historical. Hosted run `35884024153` on `53ed9c1` is **not** green. P5 remains **not frozen** until review accepts proposal §21 and §26 on a candidate whose hosted gate is green.
+The local evidence answers yes for natural one-shot and recurring create, separate-turn list/move/cancel, restart, timezone meaning, owner-scoped duplicate admission, inspect/cancel, current-user action authorization, remembered text, untrusted occurrence data, no standing tool approval, runtime-local timers, one typed non-schedule source, stale-schedule rejection, lost-begin recovery, and a P6 handoff that does not require redesigning the occurrence. P0–P4 suites above stayed green. Hosted Synthetic run `35889243368` on `7243323` is **green**. Earlier repair pushes `35884024153` and `35886400983` are not. P5 remains **not frozen** until review accepts proposal §21 and §26. Do not begin P6.
 
 ## Limitations that do not reopen the phase
 
