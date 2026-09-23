@@ -38,15 +38,20 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
 
     public PromptSections BuildSections(AgentContext context)
     {
+        var boundaryValid = SummaryBoundary.IsValid(
+            context.Summary,
+            context.SummarizedThroughEntrySequence,
+            SummaryBoundary.ResolveLastSequence(context.LastEntrySequence, context.History),
+            context.History);
         var history = SummaryBoundary.SelectHistory(
             context.Summary,
             context.SummarizedThroughEntrySequence,
             context.LastEntrySequence,
             context.History,
             recordRejection: true);
-        var identity = BuildIdentitySystem(context.Definition);
+        var identity = BuildIdentitySystem(context.Definition, context.EffectiveIdentity);
         var mode = BuildModeSystem(context);
-        var memory = BuildMemorySystem(context);
+        var memory = BuildMemorySystem(context, boundaryValid);
         var environment = BuildEnvironmentSystem(context);
         var attachments = BuildAttachmentManifestSystem(context);
         var turns = BuildTurnMessages(context, history);
@@ -159,13 +164,15 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static string BuildIdentitySystem(AgentDefinition definition) =>
-        string.Join('\n',
+    public static string BuildIdentitySystem(AgentDefinition definition, AgentIdentity? persona = null)
+    {
+        var identity = persona ?? definition.Identity;
+        return string.Join('\n',
         [
             "You are an Agent Core conversational identity.",
-            $"Identity: {definition.Identity.Name}",
-            $"Role: {definition.Identity.Role}",
-            $"Tone: {definition.Identity.Tone}",
+            $"Identity: {identity.Name}",
+            $"Role: {identity.Role}",
+            $"Tone: {identity.Tone}",
             "Goals:",
             .. definition.Goals.Select(goal => $"- {goal}"),
             "System instructions:",
@@ -174,19 +181,21 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             $"Conversation: responseLength={definition.ConversationPolicy.ResponseLength}; askOneQuestionAtATime={definition.ConversationPolicy.AskOneQuestionAtATime}; language={definition.ConversationPolicy.Language}; maxOutputTokens={definition.ConversationPolicy.MaxOutputTokens}.",
             ConversationLanguagePolicy.PromptInstruction(definition.ConversationPolicy.Language)
         ]);
+    }
 
-    public static string BuildInitiativeAgentContext(AgentDefinition definition)
+    public static string BuildInitiativeAgentContext(AgentDefinition definition, AgentIdentity? persona = null)
     {
+        var identity = persona ?? definition.Identity;
         var policy = definition.InitiativePolicy;
         var triggers = string.Join(", ", policy.Triggers);
         return string.Join(
             '\n',
             [
                 $"Agent id: {definition.Id}",
-                $"Name: {definition.Identity.Name}",
-                $"Role: {definition.Identity.Role}",
-                $"Description: {Clip(definition.Identity.Description, 240)}",
-                $"Tone: {definition.Identity.Tone}",
+                $"Name: {identity.Name}",
+                $"Role: {identity.Role}",
+                $"Description: {Clip(identity.Description, 240)}",
+                $"Tone: {identity.Tone}",
                 "Goals:",
                 .. definition.Goals.Select(goal => $"- {goal}"),
                 "System instructions:",
@@ -250,9 +259,9 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         ]);
     }
 
-    private static string BuildMemorySystem(AgentContext context)
+    private static string BuildMemorySystem(AgentContext context, bool boundaryValid)
     {
-        var summary = string.IsNullOrEmpty(context.Summary) ? "(none)" : context.Summary;
+        var summary = boundaryValid && !string.IsNullOrEmpty(context.Summary) ? context.Summary : "(none)";
         var trusted = LocalUserProfile.ForPrompt(context.Profile?.Preferences);
         var preferences = trusted.Count == 0
             ? "(none)"

@@ -97,12 +97,13 @@ public static class InitiativeEvaluator
                 status = entry.Status.ToString()
             });
 
+        var identity = context.EffectiveIdentity;
         var agent = new
         {
             id = context.Definition.Id,
-            name = context.Definition.Identity.Name,
-            role = context.Definition.Identity.Role,
-            tone = context.Definition.Identity.Tone,
+            name = identity.Name,
+            role = identity.Role,
+            tone = identity.Tone,
             goals = context.Definition.Goals,
             systemInstructions = Clip(context.Definition.SystemInstructions, 600),
             conversationPolicy = new
@@ -141,7 +142,7 @@ public static class InitiativeEvaluator
             agent
         };
 
-        var agentContext = PromptContextBuilder.BuildInitiativeAgentContext(context.Definition);
+        var agentContext = PromptContextBuilder.BuildInitiativeAgentContext(context.Definition, identity);
         return new ModelRequest(
             Guid.Empty,
             [

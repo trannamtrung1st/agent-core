@@ -112,6 +112,9 @@ public sealed class SummaryBoundaryPromptTests
 
         Assert.Equal(1, Count(request, BeforeBoundarySentinel));
         Assert.Equal(1, Count(request, CurrentSentinel));
+        Assert.DoesNotContain(
+            request.Messages,
+            message => message.Role == ModelRole.System && message.Text.Contains(SummarySentinel, StringComparison.Ordinal));
         Assert.Contains(SummaryBoundary.RejectedKind, kinds);
         Assert.DoesNotContain(details, value => value.Contains(BeforeBoundarySentinel, StringComparison.Ordinal));
         Assert.DoesNotContain(details, value => value.Contains(CurrentSentinel, StringComparison.Ordinal));

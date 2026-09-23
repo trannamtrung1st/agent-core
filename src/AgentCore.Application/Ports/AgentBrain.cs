@@ -36,7 +36,11 @@ public sealed record AgentContext(
     string? ReasoningEffort = null,
     long SummarizedThroughEntrySequence = 0,
     long LastEntrySequence = 0,
-    IReadOnlyList<Domain.Memory.StructuredMemoryItem>? LearnedMemories = null);
+    IReadOnlyList<Domain.Memory.StructuredMemoryItem>? LearnedMemories = null,
+    AgentIdentity? Persona = null)
+{
+    public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
+}
 
 public abstract record AgentDecision;
 

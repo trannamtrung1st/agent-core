@@ -162,6 +162,61 @@ public sealed class SessionMemoryPromptTests
     }
 
     [Fact]
+    public async Task Saturated_session_memory_still_includes_cross_session_scopes()
+    {
+        const string identityMarker = "SCOPE_IDENTITY_USER_SENTINEL";
+        const string userMarker = "SCOPE_USER_WIDE_SENTINEL";
+        var now = new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        var store = new InMemoryStructuredMemoryStore();
+        var service = Service(store);
+        var instanceId = Guid.Parse("019944af-0012-7000-8000-0000000000e1");
+        for (var index = 0; index < MemoryLimits.PromptMaxItems; index++)
+        {
+            await store.InsertAsync(Item(
+                $"019944af-0012-7000-8000-0000000000{index + 30:D2}",
+                $"session-{index}",
+                $"session-only-{index}",
+                now));
+        }
+
+        await store.InsertAsync(Item(
+            "019944af-0012-7000-8000-000000000050",
+            "identity fact",
+            identityMarker,
+            now,
+            MemoryScope.IdentityUser,
+            instanceId,
+            LocalUserProfile.Id));
+        await store.InsertAsync(Item(
+            "019944af-0012-7000-8000-000000000051",
+            "user fact",
+            userMarker,
+            now,
+            MemoryScope.User,
+            null,
+            LocalUserProfile.Id));
+
+        var definition = SampleDefinitions.Examiner with
+        {
+            MemoryPolicy = new MemoryPolicy(
+                SessionMemory: true,
+                IdentityUserRetrieval: true,
+                UserRetrieval: true)
+        };
+        var projected = await SessionMemoryPrompt.LoadAsync(
+            service,
+            SessionA,
+            definition,
+            Profile(now),
+            [],
+            agentInstanceId: instanceId);
+
+        Assert.Contains(projected, item => item.Content.Contains(identityMarker, StringComparison.Ordinal));
+        Assert.Contains(projected, item => item.Content.Contains(userMarker, StringComparison.Ordinal));
+        Assert.Equal(MemoryLimits.PromptMaxItems, projected.Count);
+    }
+
+    [Fact]
     public async Task Enabled_runtime_prompt_includes_only_that_sessions_learned_fact()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero));
@@ -239,7 +294,14 @@ public sealed class SessionMemoryPromptTests
             },
             now);
 
-    private static StructuredMemoryItem Item(string id, string subject, string content, DateTimeOffset now)
+    private static StructuredMemoryItem Item(
+        string id,
+        string subject,
+        string content,
+        DateTimeOffset now,
+        MemoryScope scope = MemoryScope.Session,
+        Guid? ownerInstanceId = null,
+        Guid? ownerProfileId = null)
     {
         var collapsed = StructuredMemoryItem.CollapseSubject(subject);
         return new StructuredMemoryItem(
@@ -252,7 +314,10 @@ public sealed class SessionMemoryPromptTests
             StructuredMemoryItem.SubjectKeyFor(collapsed),
             new MemoryProvenance("legacy", [], null, now),
             now,
-            now);
+            now,
+            scope,
+            ownerInstanceId,
+            ownerProfileId);
     }
 
     private static StructuredMemoryService Service(IStructuredMemoryStore store) =>

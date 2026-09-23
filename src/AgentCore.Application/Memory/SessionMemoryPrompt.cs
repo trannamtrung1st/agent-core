@@ -40,44 +40,113 @@ public static class SessionMemoryPrompt
             "session",
             UndeliveredTails(entries),
             OccupiedTrustedSubjects(definition, profile));
-        var found = new List<StructuredMemoryItem>();
+        IReadOnlyList<StructuredMemoryItem> sessionItems = [];
+        IReadOnlyList<StructuredMemoryItem> identityItems = [];
+        IReadOnlyList<StructuredMemoryItem> userItems = [];
         if (sessionEnabled)
         {
-            found.AddRange(await memories.SearchAsync(
+            sessionItems = await memories.SearchAsync(
                 new TrustedMemoryOwner(sessionId),
                 new MemorySearchQuery(null, null),
                 admission,
-                cancellationToken).ConfigureAwait(false));
+                cancellationToken).ConfigureAwait(false);
         }
 
         if (identityEnabled)
         {
-            found.AddRange(await memories.SearchIdentityUserAsync(
+            identityItems = await memories.SearchIdentityUserAsync(
                 new TrustedIdentityUserOwner(agentInstanceId!.Value, profile!.ProfileId),
                 new MemorySearchQuery(null, null),
                 retrievalAllowed: true,
                 admission,
-                cancellationToken).ConfigureAwait(false));
+                cancellationToken).ConfigureAwait(false);
         }
 
         if (userEnabled)
         {
-            found.AddRange(await memories.SearchUserAsync(
+            userItems = await memories.SearchUserAsync(
                 new TrustedUserOwner(profile!.ProfileId),
                 new MemorySearchQuery(null, null),
                 retrievalAllowed: true,
                 admission,
-                cancellationToken).ConfigureAwait(false));
+                cancellationToken).ConfigureAwait(false);
         }
 
-        var projected = Project(found, admission);
+        var projected = ProjectLayered(
+            sessionItems,
+            identityItems,
+            userItems,
+            admission,
+            sessionEnabled,
+            identityEnabled,
+            userEnabled);
         RuntimeTelemetry.RecordMemoryRetrieval(projected.Count == 0 ? "empty" : "included");
         return projected;
     }
 
+    private const int CrossSessionScopeMaxItems = 3;
+
     public static IReadOnlyList<StructuredMemoryItem> Project(
         IReadOnlyList<StructuredMemoryItem> items,
-        MemoryAdmissionContext admission)
+        MemoryAdmissionContext admission) =>
+        Project(items, admission, MemoryLimits.PromptMaxItems, 0);
+
+    private static IReadOnlyList<StructuredMemoryItem> ProjectLayered(
+        IReadOnlyList<StructuredMemoryItem> sessionItems,
+        IReadOnlyList<StructuredMemoryItem> identityItems,
+        IReadOnlyList<StructuredMemoryItem> userItems,
+        MemoryAdmissionContext admission,
+        bool sessionEnabled,
+        bool identityEnabled,
+        bool userEnabled)
+    {
+        var enabledScopes = (sessionEnabled ? 1 : 0) + (identityEnabled ? 1 : 0) + (userEnabled ? 1 : 0);
+        if (enabledScopes <= 1)
+        {
+            var singleScope = new List<StructuredMemoryItem>(
+                sessionItems.Count + identityItems.Count + userItems.Count);
+            singleScope.AddRange(sessionItems);
+            singleScope.AddRange(identityItems);
+            singleScope.AddRange(userItems);
+            return Project(singleScope, admission);
+        }
+
+        var identityProjected = Project(identityItems, admission, CrossSessionScopeMaxItems, 0);
+        var identityCharacters = CharacterWeight(identityProjected);
+        var userProjected = Project(
+            userItems,
+            admission,
+            CrossSessionScopeMaxItems,
+            identityCharacters);
+        var crossSessionCharacters = identityCharacters + CharacterWeight(userProjected);
+        var sessionCap = Math.Max(
+            0,
+            MemoryLimits.PromptMaxItems - identityProjected.Count - userProjected.Count);
+        var sessionProjected = Project(sessionItems, admission, sessionCap, crossSessionCharacters);
+        var combined = new List<StructuredMemoryItem>(
+            sessionProjected.Count + identityProjected.Count + userProjected.Count);
+        combined.AddRange(sessionProjected);
+        combined.AddRange(identityProjected);
+        combined.AddRange(userProjected);
+        return combined;
+    }
+
+    private static int CharacterWeight(IReadOnlyList<StructuredMemoryItem> items)
+    {
+        var characters = 0;
+        foreach (var item in items)
+        {
+            characters += item.Subject.Length + item.Content.Length;
+        }
+
+        return characters;
+    }
+
+    private static IReadOnlyList<StructuredMemoryItem> Project(
+        IReadOnlyList<StructuredMemoryItem> items,
+        MemoryAdmissionContext admission,
+        int maxItems,
+        int startingCharacters)
     {
         var occupied = new HashSet<string>(StringComparer.Ordinal);
         foreach (var subject in admission.OccupiedTrustedSubjects)
@@ -90,7 +159,7 @@ public static class SessionMemoryPrompt
         }
 
         var projected = new List<StructuredMemoryItem>();
-        var characters = 0;
+        var characters = startingCharacters;
         foreach (var item in items)
         {
             if (item.Status != MemoryItemStatus.Active || occupied.Contains(item.SubjectKey))
@@ -106,7 +175,7 @@ public static class SessionMemoryPrompt
             }
 
             var weight = item.Subject.Length + item.Content.Length;
-            if (projected.Count >= MemoryLimits.PromptMaxItems
+            if (projected.Count >= maxItems
                 || (projected.Count > 0 && characters + weight > MemoryLimits.PromptMaxCharacters))
             {
                 break;

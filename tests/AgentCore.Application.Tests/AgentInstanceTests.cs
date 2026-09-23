@@ -1,7 +1,11 @@
+using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Testing;
+using AgentCore.Infrastructure.Providers.Synthetic;
+using Microsoft.Extensions.Logging.Abstractions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
@@ -89,6 +93,38 @@ public sealed class AgentInstanceTests
         var fromInstance = await manager.CreateForInstanceAsync(compatibility.InstanceId, SessionMode.Text);
         Assert.Equal(1, fromInstance.Definition.Version);
         Assert.Equal(compatibility.Persona, fromInstance.PinnedPersona);
+    }
+
+    [Fact]
+    public async Task Upgraded_definition_keeps_pinned_persona_in_conversation_prompt()
+    {
+        var sessions = new InMemoryMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var clock = new FakeTimeProvider(Now);
+        var definitions = new VersionedDefinitions(V1(), V2());
+        var service = Service(instances, definitions, sessions, clock, 8);
+        var alice = await service.CreateAsync("examiner", 1);
+        await service.UpgradeAsync(alice.InstanceId, 2);
+        var manager = Manager(definitions, sessions, service, clock, new InMemoryStructuredMemoryStore());
+        var session = await manager.CreateForInstanceAsync(alice.InstanceId, SessionMode.Text);
+        var model = new RecordingLanguageModel(new ScriptedLanguageModel());
+        await using var runtime = new SessionRuntime(
+            session,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            sessions,
+            new CapturingSessionOutput(),
+            Ids(16, "019944af-0019-7000-8000-"),
+            clock,
+            NullLogger<SessionRuntime>.Instance);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+
+        var identity = model.LastRequest!.Messages[0].Text;
+        Assert.Contains($"Tone: {alice.Persona.Tone}", identity, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tone: v2 tone", identity, StringComparison.Ordinal);
+        Assert.Contains("V2_MARKER", identity, StringComparison.Ordinal);
     }
 
     [Fact]
