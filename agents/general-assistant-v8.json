@@ -10,6 +10,13 @@
   "initiativePolicy": {"enabled": false, "silenceThresholdMs": 60000, "cooldownMs": 120000, "maxPerSilencePeriod": 1, "maxConsecutiveProactiveTurns": 0, "triggers": ["longSilence"]},
   "voice": {"enabled": true, "voiceId": "default", "speakingRate": 1.0},
   "providerPreferences": {"languageModel": "primary-llm", "speechRecognizer": "primary-stt", "speechSynthesizer": "primary-tts", "interruptionClassifier": "heuristic"},
+  "memoryPolicy": {
+    "sessionMemory": true,
+    "identityUserPromotion": true,
+    "identityUserRetrieval": true,
+    "userPromotion": false,
+    "userRetrieval": false
+  },
   "triggerPolicy": {
     "enabled": true,
     "allowUserScheduling": true,

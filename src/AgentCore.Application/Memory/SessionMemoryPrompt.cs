@@ -36,10 +36,7 @@ public static class SessionMemoryPrompt
             return [];
         }
 
-        var admission = new MemoryAdmissionContext(
-            "session",
-            UndeliveredTails(entries),
-            OccupiedTrustedSubjects(definition, profile));
+        var admission = CreateAdmissionContext("session", definition, profile, entries);
         IReadOnlyList<StructuredMemoryItem> sessionItems = [];
         IReadOnlyList<StructuredMemoryItem> identityItems = [];
         IReadOnlyList<StructuredMemoryItem> userItems = [];
@@ -233,6 +230,13 @@ public static class SessionMemoryPrompt
 
         return lines.Count == 2 ? string.Empty : string.Join('\n', lines);
     }
+
+    public static MemoryAdmissionContext CreateAdmissionContext(
+        string source,
+        AgentDefinition definition,
+        UserProfile? profile,
+        IReadOnlyList<ConversationEntry> entries) =>
+        new(source, UndeliveredTails(entries), OccupiedTrustedSubjects(definition, profile));
 
     public static HashSet<string> OccupiedTrustedSubjects(AgentDefinition definition, UserProfile? profile)
     {

@@ -1436,6 +1436,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         SessionId,
                         cause.EventId,
                         text.Length);
+                    await TryCaptureExplicitUserMemoryAsync(userEntry, text, ct).ConfigureAwait(false);
                     await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
                 },
                 ended: input.Persisted);
