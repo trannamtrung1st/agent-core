@@ -99,6 +99,25 @@ public sealed class TriggerScheduleCalculatorTests
     }
 
     [Fact]
+    public void Weekly_interval_advances_from_the_admitted_slot_week()
+    {
+        var everyOther = new WeeklySchedule(2, [DayOfWeek.Monday], new TimeOnly(9, 0), "UTC");
+        var created = new DateTimeOffset(2026, 9, 2, 8, 0, 0, TimeSpan.Zero);
+        var offPhase = new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.Zero);
+        Assert.Equal(DayOfWeek.Monday, offPhase.DayOfWeek);
+        var decision = TriggerScheduleAdmission.Decide(Sample(everyOther, offPhase, null, created), offPhase);
+        Assert.Equal(new DateTimeOffset(2026, 9, 28, 9, 0, 0, TimeSpan.Zero), decision.NextAtUtc);
+
+        var aligned = new DateTimeOffset(2026, 9, 7, 9, 0, 0, TimeSpan.Zero);
+        var alignedDecision = TriggerScheduleAdmission.Decide(Sample(everyOther, aligned, null, created), aligned);
+        Assert.Equal(aligned.AddDays(14), alignedDecision.NextAtUtc);
+
+        var bothDays = new WeeklySchedule(2, [DayOfWeek.Monday, DayOfWeek.Wednesday], new TimeOnly(9, 0), "UTC");
+        var sameWeek = TriggerScheduleAdmission.Decide(Sample(bothDays, offPhase, null, created), offPhase);
+        Assert.Equal(new DateTimeOffset(2026, 9, 16, 9, 0, 0, TimeSpan.Zero), sameWeek.NextAtUtc);
+    }
+
+    [Fact]
     public void Recurring_recovery_coalesces_to_the_latest_due_slot()
     {
         var schedule = new DailySchedule(1, new TimeOnly(9, 0), "UTC");

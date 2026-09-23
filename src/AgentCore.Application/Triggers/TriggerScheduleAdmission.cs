@@ -357,8 +357,7 @@ public static class TriggerScheduleAdmission
         }
 
         var zone = TriggerScheduleCalculator.RequireZone(weekly.TimeZoneId);
-        var first = TriggerScheduleCalculator.InitialNext(weekly, registration.Provenance.CreatedAt) ?? storedNext;
-        return WeekIndex(LocalDate(zone, first));
+        return WeekIndex(LocalDate(zone, storedNext));
     }
 
     private static DateTimeOffset? Following(TriggerSchedule schedule, DateTimeOffset slotUtc, int anchorWeek) =>
