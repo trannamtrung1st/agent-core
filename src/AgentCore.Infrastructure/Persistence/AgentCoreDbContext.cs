@@ -116,6 +116,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
     public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
+    public DbSet<TriggerRegistrationRecord> TriggerRegistrations => Set<TriggerRegistrationRecord>();
+    public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -234,5 +236,39 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
                 .IsUnique()
                 .HasFilter("Compatibility = 1");
         });
+        modelBuilder.Entity<TriggerRegistrationRecord>(entity =>
+        {
+            entity.ToTable("TriggerRegistrations");
+            entity.HasKey(row => row.RegistrationId);
+            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.Intent).HasMaxLength(TriggerLimitsIntent).IsRequired();
+            entity.Property(row => row.ScheduleJson).HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.SourceSessionId).HasMaxLength(36);
+            entity.Property(row => row.SourceEventId).HasMaxLength(36);
+            entity.Property(row => row.SuspensionReason).HasMaxLength(200);
+            entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
+            entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.RegistrationId });
+        });
+        modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
+        {
+            entity.ToTable("TriggerOccurrences");
+            entity.HasKey(row => row.OccurrenceId);
+            entity.Property(row => row.OccurrenceId).HasMaxLength(36);
+            entity.Property(row => row.DedupeKey).HasMaxLength(200).IsRequired();
+            entity.Property(row => row.RegistrationId).HasMaxLength(36);
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.EvidenceJson).HasMaxLength(4096).IsRequired();
+            entity.Property(row => row.SourceEventId).HasMaxLength(36);
+            entity.Property(row => row.DispositionReason).HasMaxLength(200);
+            entity.Property(row => row.ClaimId).HasMaxLength(36);
+            entity.HasIndex(row => row.DedupeKey).IsUnique();
+            entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Disposition });
+            entity.HasIndex(row => new { row.Disposition, row.ClaimLeaseExpiresAtUtc });
+        });
     }
+
+    private const int TriggerLimitsIntent = 500;
 }

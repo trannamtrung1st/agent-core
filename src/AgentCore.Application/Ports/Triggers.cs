@@ -1,0 +1,173 @@
+using AgentCore.Domain.Triggers;
+
+namespace AgentCore.Application.Ports;
+
+public sealed record TriggerRegistrationDraft(
+    TriggerOwner Owner,
+    string Intent,
+    TriggerSchedule Schedule,
+    DateTimeOffset? NextOccurrenceAtUtc,
+    DateTimeOffset? ExpiresAtUtc,
+    TriggerAuthorizationOrigin AuthorizationOrigin,
+    Guid? SourceSessionId,
+    Guid? SourceEventId);
+
+public sealed record TriggerRegistrationChange
+{
+    private TriggerRegistrationChange(
+        string? intent,
+        TriggerSchedule? schedule,
+        DateTimeOffset? nextOccurrenceAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        bool hasIntent,
+        bool hasSchedule,
+        bool hasNextOccurrence,
+        bool hasExpiresAt)
+    {
+        Intent = intent;
+        Schedule = schedule;
+        NextOccurrenceAtUtc = nextOccurrenceAtUtc;
+        ExpiresAtUtc = expiresAtUtc;
+        HasIntent = hasIntent;
+        HasSchedule = hasSchedule;
+        HasNextOccurrence = hasNextOccurrence;
+        HasExpiresAt = hasExpiresAt;
+    }
+
+    public string? Intent { get; }
+
+    public TriggerSchedule? Schedule { get; }
+
+    public DateTimeOffset? NextOccurrenceAtUtc { get; }
+
+    public DateTimeOffset? ExpiresAtUtc { get; }
+
+    public bool HasIntent { get; }
+
+    public bool HasSchedule { get; }
+
+    public bool HasNextOccurrence { get; }
+
+    public bool HasExpiresAt { get; }
+
+    public static TriggerRegistrationChange IntentOnly(string intent) =>
+        new(intent, null, null, null, hasIntent: true, hasSchedule: false, hasNextOccurrence: false, hasExpiresAt: false);
+
+    public static TriggerRegistrationChange ScheduleOnly(
+        TriggerSchedule schedule,
+        DateTimeOffset? nextOccurrenceAtUtc,
+        DateTimeOffset? expiresAtUtc) =>
+        new(null, schedule, nextOccurrenceAtUtc, expiresAtUtc, hasIntent: false, hasSchedule: true, hasNextOccurrence: true, hasExpiresAt: true);
+}
+
+public enum TriggerOccurrenceAdmitKind
+{
+    Admitted = 0,
+    Duplicate = 1
+}
+
+public sealed record TriggerOccurrenceAdmitResult(
+    TriggerOccurrenceAdmitKind Kind,
+    TriggerOccurrence Occurrence);
+
+public sealed record TriggerOccurrenceDraft(
+    TriggerOwner Owner,
+    string DedupeKey,
+    Guid? RegistrationId,
+    TriggerSourceKind SourceKind,
+    DateTimeOffset? ScheduledAtUtc,
+    DateTimeOffset ObservedAtUtc,
+    string EvidenceJson,
+    Guid? SourceEventId,
+    long? ScheduleRevision);
+
+public interface ITriggerStore
+{
+    ValueTask<TriggerRegistration> CreateAsync(
+        TriggerRegistration registration,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration?> GetAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+        TriggerOwner owner,
+        TriggerRegistrationStatus? status,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> CountActiveAsync(
+        TriggerOwner owner,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration> UpdateAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string intent,
+        TriggerSchedule schedule,
+        DateTimeOffset? nextOccurrenceAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration> CancelAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        DateTimeOffset cancelledAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(
+        TriggerOccurrence occurrence,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> GetOccurrenceAsync(
+        TriggerOwner owner,
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ITriggerRegistrationService
+{
+    ValueTask<TriggerRegistration> CreateAsync(
+        TriggerRegistrationDraft draft,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration?> GetAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+        TriggerOwner owner,
+        TriggerRegistrationStatus? status,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> CountActiveAsync(
+        TriggerOwner owner,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration> UpdateAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        TriggerRegistrationChange change,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration> CancelAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(
+        TriggerOccurrenceDraft draft,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> GetOccurrenceAsync(
+        TriggerOwner owner,
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default);
+}
