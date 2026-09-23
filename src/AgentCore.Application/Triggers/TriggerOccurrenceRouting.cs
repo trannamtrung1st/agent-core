@@ -137,6 +137,16 @@ public sealed class TriggerOccurrenceRouter(
     {
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         await store.RecoverExpiredClaimsAsync(now, cancellationToken).ConfigureAwait(false);
+        var prepared = await store.ListByDispositionAsync(
+            OccurrenceRoutingDisposition.LivePrepared,
+            TriggerScheduler.DefaultBatchSize,
+            cancellationToken).ConfigureAwait(false);
+        foreach (var occurrence in prepared)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await ResumePreparedAsync(occurrence, now, cancellationToken).ConfigureAwait(false);
+        }
+
         var pending = await store.ListByDispositionAsync(
             OccurrenceRoutingDisposition.Pending,
             TriggerScheduler.DefaultBatchSize,
@@ -232,6 +242,38 @@ public sealed class TriggerOccurrenceRouter(
             .ConfigureAwait(false);
     }
 
+    private async Task ResumePreparedAsync(
+        TriggerOccurrence occurrence,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
+        if (targets.Count != 1)
+        {
+            return;
+        }
+
+        var delivery = new OccurrenceDelivery(
+            occurrence.OccurrenceId,
+            occurrence.Owner,
+            occurrence.SourceKind,
+            occurrence.EvidenceJson);
+        var sessionId = targets[0].SessionId;
+        var accept = await mailbox.SubmitAsync(sessionId, delivery, cancellationToken).ConfigureAwait(false);
+        if (accept == OccurrenceAccept.Unavailable)
+        {
+            return;
+        }
+
+        await FinishBeginAsync(
+            sessionId,
+            occurrence.OccurrenceId,
+            occurrence.RoutingRevision,
+            delivery,
+            now,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task CommitAndBeginAsync(
         Guid sessionId,
         Guid occurrenceId,
@@ -249,27 +291,55 @@ public sealed class TriggerOccurrenceRouter(
             return;
         }
 
+        await FinishBeginAsync(sessionId, occurrenceId, stored.RoutingRevision, delivery, now, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task FinishBeginAsync(
+        Guid sessionId,
+        Guid occurrenceId,
+        long preparedRoutingRevision,
+        OccurrenceDelivery delivery,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
         bool started;
         try
         {
             started = await mailbox.BeginAcceptedAsync(sessionId, delivery, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            RuntimeTelemetry.RecordTriggerScheduler("live_prepared");
+            throw;
+        }
         catch
         {
-            await ReconcileLostBeginAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            await ReconcileDefiniteBeginFailureAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
             throw;
         }
 
         if (!started)
         {
-            await ReconcileLostBeginAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            await ReconcileDefiniteBeginFailureAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var confirmed = await store.ConfirmLiveBeginAsync(
+            occurrenceId,
+            preparedRoutingRevision,
+            now,
+            cancellationToken).ConfigureAwait(false);
+        if (confirmed is null)
+        {
+            RuntimeTelemetry.RecordTriggerScheduler("live_prepared");
             return;
         }
 
         RuntimeTelemetry.RecordTriggerScheduler("accepted_live");
     }
 
-    private async Task ReconcileLostBeginAsync(
+    private async Task ReconcileDefiniteBeginFailureAsync(
         Guid sessionId,
         Guid occurrenceId,
         DateTimeOffset now,

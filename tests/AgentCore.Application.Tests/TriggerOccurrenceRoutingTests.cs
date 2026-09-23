@@ -163,7 +163,12 @@ public sealed class TriggerOccurrenceRoutingTests
             message => message.Role == ModelRole.System && message.Text.Contains(evidence, StringComparison.Ordinal));
         Assert.Equal(
             TriggerAuthorizationClassification.Occurrence,
-            TriggerAuthorization.Classify(TriggerKind.ApplicationEvent, "remind me tomorrow", null).Classification);
+            TriggerAuthorization.Classify(
+                TriggerKind.ApplicationEvent,
+                "remind me tomorrow",
+                null,
+                new HeuristicTriggerCommandAuthorizer(),
+                "en").Classification);
         var assistant = await LoadAsync("general-assistant", 8);
         Assert.Equal(
             ToolPolicyDecision.RequireApproval,
@@ -769,6 +774,13 @@ public sealed class TriggerOccurrenceRoutingTests
             return stored;
         }
 
+        public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            DateTimeOffset confirmedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.ConfirmLiveBeginAsync(occurrenceId, expectedRoutingRevision, confirmedAt, cancellationToken);
+
         public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
             inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);
 
@@ -853,6 +865,13 @@ public sealed class TriggerOccurrenceRoutingTests
 
         public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<TriggerOccurrence?>(null);
+
+        public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            DateTimeOffset confirmedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.ConfirmLiveBeginAsync(occurrenceId, expectedRoutingRevision, confirmedAt, cancellationToken);
 
         public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
             inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);

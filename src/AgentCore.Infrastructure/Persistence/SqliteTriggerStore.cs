@@ -559,7 +559,20 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         MutateOccurrenceAsync(
             occurrenceId,
             current => current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
-                ? current.WithRouting(OccurrenceRoutingDisposition.AcceptedLive, null, current.RoutingRevision + 1, acceptedAt, null, null)
+                ? current.WithRouting(OccurrenceRoutingDisposition.LivePrepared, null, current.RoutingRevision + 1, acceptedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        DateTimeOffset confirmedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.LivePrepared
+                && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithRouting(OccurrenceRoutingDisposition.AcceptedLive, null, current.RoutingRevision + 1, confirmedAt, null, null)
                 : null,
             cancellationToken);
 
@@ -569,7 +582,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         CancellationToken cancellationToken = default) =>
         MutateOccurrenceAsync(
             occurrenceId,
-            current => current.Disposition == OccurrenceRoutingDisposition.AcceptedLive
+            current => current.Disposition == OccurrenceRoutingDisposition.LivePrepared
                 ? current.WithRouting(OccurrenceRoutingDisposition.Pending, null, current.RoutingRevision + 1, revertedAt, null, null)
                 : null,
             cancellationToken);

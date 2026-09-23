@@ -2841,8 +2841,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        var authorizer = _tools.TriggerCommandAuthorizer;
+        var language = _snapshot.Definition.ConversationPolicy.Language;
         var singleConfirmation = texts.Count == 1
-            && TriggerAuthorization.IsConfirmationTurn(texts[0], hasPendingProposal: true);
+            && TriggerAuthorization.IsConfirmationTurn(texts[0], hasPendingProposal: true, authorizer, language);
         if (!singleConfirmation)
         {
             _pendingTriggerProposal = null;
@@ -2851,7 +2853,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private TriggerCommandContext TriggerCommand(AgentTrigger trigger)
     {
-        var confirming = TriggerAuthorization.IsConfirmationTurn(trigger.Text, _pendingTriggerProposal is not null);
+        var authorizer = _tools.TriggerCommandAuthorizer;
+        var language = _snapshot.Definition.ConversationPolicy.Language;
+        var confirming = TriggerAuthorization.IsConfirmationTurn(
+            trigger.Text,
+            _pendingTriggerProposal is not null,
+            authorizer,
+            language);
         TriggerOwner? owner = _snapshot.AgentInstanceId is Guid instance && _snapshot.ProfileId is Guid profile
             ? new TriggerOwner(instance, profile)
             : null;
@@ -2861,11 +2869,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             timeZone = zone.Value;
         }
 
-        var authorization = TriggerAuthorization.Classify(trigger.Kind, trigger.Text, _pendingTriggerProposal);
+        var authorization = TriggerAuthorization.Classify(
+            trigger.Kind,
+            trigger.Text,
+            _pendingTriggerProposal,
+            authorizer,
+            language);
         return new TriggerCommandContext(
             owner,
             SessionId,
             timeZone,
+            trigger.Text,
+            language,
             authorization.Classification,
             authorization.AllowedActions,
             confirming,

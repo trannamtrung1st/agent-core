@@ -498,6 +498,13 @@ public sealed class TriggerSchedulerTests
         public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default) =>
             inner.TryAcceptLiveAsync(occurrenceId, claimId, acceptedAt, cancellationToken);
 
+        public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            DateTimeOffset confirmedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.ConfirmLiveBeginAsync(occurrenceId, expectedRoutingRevision, confirmedAt, cancellationToken);
+
         public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
             inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);
 

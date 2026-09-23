@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 
 namespace AgentCore.Infrastructure.Providers.Synthetic;
@@ -29,6 +30,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly TaskCompletionSource? _compactionStarted;
     private string? _scheduleRegistrationId;
     private long _scheduleRevision;
+    private static readonly ITriggerCommandAuthorizer ScheduleAuthorizer = new HeuristicTriggerCommandAuthorizer();
 
     public ScriptedLanguageModel(
         IReadOnlyList<string>? chunks = null,
@@ -433,20 +435,32 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
-        if (lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase))
+        if (lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("set a reminder", StringComparison.OrdinalIgnoreCase))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
             return true;
         }
 
-        if (lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase))
+        if (lastUser.Contains("hello", StringComparison.OrdinalIgnoreCase)
+            && lastUser.Contains("min", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleOnce,
+                """{"intent":"Hello","relativeDayOffset":0,"localTime":"08:01","timeZone":"UTC"}""");
+            return true;
+        }
+
+        if (ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
             return true;
         }
 
         if (lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("what reminders", StringComparison.OrdinalIgnoreCase))
+            || lastUser.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("show my reminders", StringComparison.OrdinalIgnoreCase))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerList, "{}");
             return true;
@@ -482,18 +496,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     }
 
     private static bool IsScheduleTurn(string lastUser) =>
-        lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("list schedules", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("move that schedule", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("reschedule", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-        || lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
+        lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
+        || ScheduleAuthorizer.AuthorizeCurrentTurn(lastUser, null) != TriggerCommandAction.None
+        || ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null);
 
     private void RememberSchedule(string lastTool)
     {
@@ -558,6 +563,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return "I need you to confirm before I save that.";
         }
 
+        if (lastTool.Contains("current_turn_not_authorized", StringComparison.Ordinal))
+        {
+            return "I did not understand that schedule request.";
+        }
+
         if (lastTool.Contains("\"error\"", StringComparison.Ordinal))
         {
             return "I did not save a schedule.";
@@ -597,18 +607,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("list schedules", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("move that schedule", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("reschedule", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-            || lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase)
+            || IsScheduleTurn(lastUser)
             || request.Messages.Any(message => message.Role == ModelRole.Tool);
     }
 

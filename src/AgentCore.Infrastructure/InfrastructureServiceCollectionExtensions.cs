@@ -175,6 +175,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         services.TryAddSingleton<IStructuredMemoryService, StructuredMemoryService>();
+        services.TryAddSingleton<ITriggerCommandAuthorizer, HeuristicTriggerCommandAuthorizer>();
         services.TryAddSingleton<ITriggerRegistrationService, TriggerRegistrationService>();
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
@@ -198,7 +199,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IEmailProvider>(),
             provider.GetService<IHttpRequestClient>(),
             provider.GetRequiredService<IToolConfigurationGate>(),
-            provider.GetRequiredService<ITriggerRegistrationService>()));
+            provider.GetRequiredService<ITriggerRegistrationService>(),
+            provider.GetRequiredService<ITriggerCommandAuthorizer>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

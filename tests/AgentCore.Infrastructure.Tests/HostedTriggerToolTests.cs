@@ -25,6 +25,8 @@ public sealed class HostedTriggerToolTests
                 Guid.Parse("019944af-00c5-7000-8000-0000000000b1")),
             sessionId,
             "UTC",
+            "Remind me tomorrow at 9 AM to call John.",
+            "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
             TriggerCommandAction.Create,
             false,

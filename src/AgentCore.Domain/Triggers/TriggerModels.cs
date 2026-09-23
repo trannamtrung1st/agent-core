@@ -49,7 +49,8 @@ public enum OccurrenceRoutingDisposition
     Claimed = 1,
     AcceptedLive = 2,
     AwaitingDurableWork = 3,
-    Rejected = 4
+    Rejected = 4,
+    LivePrepared = 5
 }
 
 public readonly record struct TriggerOwner

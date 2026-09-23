@@ -41,6 +41,8 @@ public sealed record TriggerCommandContext(
     TriggerOwner? Owner,
     Guid SessionId,
     string? ProfileTimeZoneId,
+    string? CurrentUserText,
+    string? ConversationLanguage,
     TriggerAuthorizationClassification Classification,
     TriggerCommandAction AllowedActions,
     bool ExecutePendingProposal,
@@ -53,7 +55,9 @@ public static class TriggerAuthorization
     public static TriggerAuthorizationResult Classify(
         TriggerKind kind,
         string? currentUserText,
-        PendingTriggerProposal? pendingProposal)
+        PendingTriggerProposal? pendingProposal,
+        ITriggerCommandAuthorizer authorizer,
+        string? conversationLanguage)
     {
         if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
@@ -70,13 +74,13 @@ public static class TriggerAuthorization
             return new(TriggerAuthorizationClassification.Initiative, TriggerCommandAction.None);
         }
 
-        var requested = ActionsFor(currentUserText);
+        var requested = authorizer.AuthorizeCurrentTurn(currentUserText, conversationLanguage);
         if (requested != TriggerCommandAction.None)
         {
             return new(TriggerAuthorizationClassification.CurrentUserTurn, requested);
         }
 
-        if (pendingProposal is not null && IsConfirmation(currentUserText))
+        if (pendingProposal is not null && authorizer.IsScheduleConfirmation(currentUserText, conversationLanguage))
         {
             return new(TriggerAuthorizationClassification.CurrentUserTurn, ActionForTool(pendingProposal.ToolName));
         }
@@ -84,51 +88,20 @@ public static class TriggerAuthorization
         return new(TriggerAuthorizationClassification.UnrelatedUserTurn, TriggerCommandAction.None);
     }
 
-    public static bool IsConfirmationTurn(string? currentUserText, bool hasPendingProposal) =>
+    public static bool IsConfirmationTurn(
+        string? currentUserText,
+        bool hasPendingProposal,
+        ITriggerCommandAuthorizer authorizer,
+        string? conversationLanguage) =>
         hasPendingProposal
-        && !IsExplicitScheduleRequest(currentUserText)
-        && IsConfirmation(currentUserText);
+        && !IsExplicitScheduleRequest(currentUserText, authorizer, conversationLanguage)
+        && authorizer.IsScheduleConfirmation(currentUserText, conversationLanguage);
 
-    public static bool IsExplicitScheduleRequest(string? text) =>
-        ActionsFor(text) != TriggerCommandAction.None;
-
-    public static TriggerCommandAction ActionsFor(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return TriggerCommandAction.None;
-        }
-
-        var actions = TriggerCommandAction.None;
-        if (text.Contains("remind me", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("every monday", StringComparison.OrdinalIgnoreCase))
-        {
-            actions |= TriggerCommandAction.Create;
-        }
-
-        if (text.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("list schedules", StringComparison.OrdinalIgnoreCase))
-        {
-            actions |= TriggerCommandAction.List;
-        }
-
-        if (text.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("move that schedule", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("reschedule", StringComparison.OrdinalIgnoreCase))
-        {
-            actions |= TriggerCommandAction.Update;
-        }
-
-        if (text.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("cancel the schedule", StringComparison.OrdinalIgnoreCase))
-        {
-            actions |= TriggerCommandAction.Cancel;
-        }
-
-        return actions;
-    }
+    public static bool IsExplicitScheduleRequest(
+        string? text,
+        ITriggerCommandAuthorizer authorizer,
+        string? conversationLanguage) =>
+        authorizer.AuthorizeCurrentTurn(text, conversationLanguage) != TriggerCommandAction.None;
 
     public static TriggerCommandAction ActionForTool(string toolName) => toolName switch
     {
@@ -139,33 +112,22 @@ public static class TriggerAuthorization
         _ => TriggerCommandAction.None
     };
 
-    private static bool IsConfirmation(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        var trimmed = text.Trim();
-        return trimmed.Equals("yes", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("yes, please", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("confirm", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("please do", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("go ahead", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("do that", StringComparison.OrdinalIgnoreCase);
-    }
 }
 
 public static class TriggerScheduleCommands
 {
+    private static readonly ITriggerCommandAuthorizer DefaultAuthorizer = new HeuristicTriggerCommandAuthorizer();
+
     public static async Task<ToolExecutionResult> ExecuteAsync(
         AgentDefinition definition,
         ITriggerRegistrationService? registrations,
         string toolName,
         JsonElement arguments,
         TriggerCommandContext? command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ITriggerCommandAuthorizer? authorizer = null)
     {
+        authorizer ??= DefaultAuthorizer;
         if (registrations is null)
         {
             return Result("unavailable", "Scheduling is unavailable.", clearProposal: true);
@@ -174,6 +136,8 @@ public static class TriggerScheduleCommands
         var context = command ?? new TriggerCommandContext(
             null,
             Guid.Empty,
+            null,
+            null,
             null,
             TriggerAuthorizationClassification.Missing,
             TriggerCommandAction.None,
@@ -204,7 +168,8 @@ public static class TriggerScheduleCommands
         }
 
         var required = TriggerAuthorization.ActionForTool(effectiveName);
-        if (required == TriggerCommandAction.None || (context.AllowedActions & required) == 0)
+        var allowed = ResolveAllowedActions(context, authorizer);
+        if (required == TriggerCommandAction.None || (allowed & required) == 0)
         {
             if (context.Classification is TriggerAuthorizationClassification.Initiative or TriggerAuthorizationClassification.Environment
                 && !context.ExecutePendingProposal
@@ -214,10 +179,20 @@ public static class TriggerScheduleCommands
                 return Confirmation(toolName, arguments);
             }
 
+            if (context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
+                or TriggerAuthorizationClassification.UnrelatedUserTurn)
+            {
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "current_turn_not_authorized");
+                return Result(
+                    "current_turn_not_authorized",
+                    "The current user message does not authorize this schedule action. Clarify the request or use the correct schedule command.",
+                    clearProposal: false);
+            }
+
             RuntimeTelemetry.RecordTriggerRegistration(operation, "forbidden");
             return Result(
                 "forbidden",
-                "Current user authorization is required. History, memory, initiative, and other triggers are not enough.",
+                "This schedule action is not permitted for the current trigger.",
                 clearProposal: true);
         }
 
@@ -697,13 +672,32 @@ public static class TriggerScheduleCommands
         _ => "create"
     };
 
+    private static TriggerCommandAction ResolveAllowedActions(
+        TriggerCommandContext context,
+        ITriggerCommandAuthorizer authorizer)
+    {
+        if (context.ExecutePendingProposal)
+        {
+            return context.PendingProposal is null
+                ? TriggerCommandAction.None
+                : TriggerAuthorization.ActionForTool(context.PendingProposal.ToolName);
+        }
+
+        if (context.Classification == TriggerAuthorizationClassification.CurrentUserTurn)
+        {
+            return authorizer.AuthorizeCurrentTurn(context.CurrentUserText, context.ConversationLanguage);
+        }
+
+        return context.AllowedActions;
+    }
+
     private static ToolExecutionResult Confirmation(string toolName, JsonElement arguments)
     {
         var proposal = new PendingTriggerProposal(toolName, arguments.GetRawText());
         var json = JsonSerializer.Serialize(new
         {
             error = "confirmation_required",
-            message = "Ask the user to confirm this schedule. Nothing was saved.",
+            message = "Ask the user to confirm this exact schedule proposal. Nothing was saved until they approve.",
             tool = toolName
         });
         return new ToolExecutionResult(json, ReplaceTriggerProposal: true, TriggerProposal: proposal);

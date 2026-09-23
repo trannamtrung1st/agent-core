@@ -23,10 +23,16 @@ public sealed partial class SessionToolExecutor(
     IEmailProvider? emailProvider = null,
     IHttpRequestClient? httpRequestClient = null,
     IToolConfigurationGate? configurationGate = null,
-    ITriggerRegistrationService? triggerRegistrations = null)
+    ITriggerRegistrationService? triggerRegistrations = null,
+    ITriggerCommandAuthorizer? triggerAuthorizer = null)
 {
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;
+
+    private readonly ITriggerCommandAuthorizer _triggerAuthorizer =
+        triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
+
+    public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
 
     public ToolPolicyDecision EvaluateExecutionPolicy(
         AgentDefinition definition,
@@ -153,7 +159,8 @@ public sealed partial class SessionToolExecutor(
                         call.Name,
                         args,
                         triggerCommand,
-                        cancellationToken).ConfigureAwait(false),
+                        cancellationToken,
+                        _triggerAuthorizer).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
         }

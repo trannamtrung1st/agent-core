@@ -114,7 +114,7 @@ public sealed class TriggerContractTests
         Assert.Equal(["OneShot", "Daily", "Weekly"], Enum.GetNames<TriggerScheduleKind>());
         Assert.Equal(["Schedule", "ApplicationEvent"], Enum.GetNames<TriggerSourceKind>());
         Assert.Equal(
-            ["Pending", "Claimed", "AcceptedLive", "AwaitingDurableWork", "Rejected"],
+            ["Pending", "Claimed", "AcceptedLive", "AwaitingDurableWork", "Rejected", "LivePrepared"],
             Enum.GetNames<OccurrenceRoutingDisposition>());
     }
 

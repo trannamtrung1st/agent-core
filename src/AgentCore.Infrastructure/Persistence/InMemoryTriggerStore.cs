@@ -315,10 +315,27 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         ValueTask.FromResult(Mutate(occurrenceId, current =>
             current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
                 ? current.WithRouting(
-                    OccurrenceRoutingDisposition.AcceptedLive,
+                    OccurrenceRoutingDisposition.LivePrepared,
                     null,
                     current.RoutingRevision + 1,
                     acceptedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        DateTimeOffset confirmedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.LivePrepared
+            && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.AcceptedLive,
+                    null,
+                    current.RoutingRevision + 1,
+                    confirmedAt,
                     null,
                     null)
                 : null));
@@ -328,7 +345,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         DateTimeOffset revertedAt,
         CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Mutate(occurrenceId, current =>
-            current.Disposition == OccurrenceRoutingDisposition.AcceptedLive
+            current.Disposition == OccurrenceRoutingDisposition.LivePrepared
                 ? current.WithRouting(
                     OccurrenceRoutingDisposition.Pending,
                     null,

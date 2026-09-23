@@ -99,7 +99,13 @@ public sealed class TriggerScheduleRuntimeTests
             triggerCommand: Context(owner, TriggerAuthorizationClassification.CurrentUserTurn, false, null, TriggerCommandAction.Create));
         Assert.Contains("\"status\":\"Active\"", created.Text, StringComparison.Ordinal);
 
-        var list = Context(owner, TriggerAuthorizationClassification.CurrentUserTurn, false, null, TriggerCommandAction.List);
+        var list = Context(
+            owner,
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            false,
+            null,
+            TriggerCommandAction.List,
+            currentUserText: "What reminders do I have?");
         foreach (var name in new[] { ToolCatalog.TriggerScheduleOnce, ToolCatalog.TriggerUpdate, ToolCatalog.TriggerCancel })
         {
             var rejected = await tools.ExecuteAsync(
@@ -108,7 +114,7 @@ public sealed class TriggerScheduleRuntimeTests
                 new ModelToolCall("mistaken", name, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00","registrationId":"019944af-00b6-7000-8000-000000000001","expectedRevision":1}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: list);
-            Assert.Contains("forbidden", rejected.Text, StringComparison.Ordinal);
+            Assert.Contains("current_turn_not_authorized", rejected.Text, StringComparison.Ordinal);
         }
 
         var listed = await tools.ExecuteAsync(
@@ -151,7 +157,10 @@ public sealed class TriggerScheduleRuntimeTests
 
         var saved = Assert.Single(await harness.Store.ListAsync(new TriggerOwner(InstanceId, ProfileId), null));
         Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
-        Assert.Contains("I did not save a schedule.", runtime.Snapshot.Entries[^1].Text, StringComparison.Ordinal);
+        var declined = runtime.Snapshot.Entries[^1].Text;
+        Assert.True(
+            declined.Contains("I did not save a schedule.", StringComparison.Ordinal)
+            || declined.Contains("did not understand that schedule request", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -226,7 +235,12 @@ public sealed class TriggerScheduleRuntimeTests
                 new ModelToolCall("reject", ToolCatalog.TriggerScheduleOnce, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: Context(owner, classification, false, null));
-            Assert.Contains("forbidden", rejected.Text, StringComparison.Ordinal);
+            Assert.Contains(
+                classification == TriggerAuthorizationClassification.UnrelatedUserTurn
+                    ? "current_turn_not_authorized"
+                    : "forbidden",
+                rejected.Text,
+                StringComparison.Ordinal);
             Assert.Null(rejected.TriggerProposal);
         }
 
@@ -243,7 +257,13 @@ public sealed class TriggerScheduleRuntimeTests
             context.SessionId,
             new ModelToolCall("stale", ToolCatalog.TriggerUpdate, """{"registrationId":"019944af-00b2-7000-8000-000000000001","expectedRevision":9,"intent":"Changed"}"""),
             ToolLimits.MaxOutputBytes,
-            triggerCommand: context);
+            triggerCommand: Context(
+                owner,
+                TriggerAuthorizationClassification.CurrentUserTurn,
+                executePending: false,
+                pending: null,
+                TriggerCommandAction.Update,
+                currentUserText: "Move that reminder to 10."));
         Assert.Contains("stale", stale.Text, StringComparison.OrdinalIgnoreCase);
 
         var otherOwner = await tools.ExecuteAsync(
@@ -256,7 +276,8 @@ public sealed class TriggerScheduleRuntimeTests
                 TriggerAuthorizationClassification.CurrentUserTurn,
                 false,
                 null,
-                TriggerCommandAction.Cancel));
+                TriggerCommandAction.Cancel,
+                currentUserText: "Cancel that reminder."));
         Assert.Contains("not_found", otherOwner.Text, StringComparison.Ordinal);
         Assert.Equal(2, await store.CountActiveAsync(owner));
         Assert.Equal("Call John", (await store.GetAsync(owner, Guid.Parse("019944af-00b2-7000-8000-000000000001")))!.Intent);
@@ -298,7 +319,10 @@ public sealed class TriggerScheduleRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("yes"));
         await runtime.WaitUntilIdleAsync();
         Assert.Empty(await harness.Store.ListAsync(owner, null));
-        Assert.Contains("I did not save a schedule.", runtime.Snapshot.Entries[^1].Text, StringComparison.Ordinal);
+        var declined = runtime.Snapshot.Entries[^1].Text;
+        Assert.True(
+            declined.Contains("I did not save a schedule.", StringComparison.Ordinal)
+            || declined.Contains("did not understand that schedule request", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -405,32 +429,92 @@ public sealed class TriggerScheduleRuntimeTests
     public void Memory_and_old_wording_do_not_count_as_the_current_request()
     {
         const string remembered = "Remind me tomorrow at 9 to call John.";
-        Assert.Equal(TriggerCommandAction.Create, TriggerAuthorization.ActionsFor(remembered));
+        Assert.Equal(TriggerCommandAction.Create, Authorizer.AuthorizeCurrentTurn(remembered, "en"));
         Assert.Equal(
             TriggerAuthorizationClassification.UnrelatedUserTurn,
-            TriggerAuthorization.Classify(TriggerKind.UserTurn, "thanks", null).Classification);
+            TriggerAuthorization.Classify(TriggerKind.UserTurn, "thanks", null, Authorizer, "en").Classification);
         var confirmation = TriggerAuthorization.Classify(
             TriggerKind.UserTurn,
             "yes",
-            new PendingTriggerProposal(ToolCatalog.TriggerScheduleOnce, "{}"));
+            new PendingTriggerProposal(ToolCatalog.TriggerScheduleOnce, "{}"),
+            Authorizer,
+            "en");
         Assert.Equal(TriggerAuthorizationClassification.CurrentUserTurn, confirmation.Classification);
         Assert.Equal(TriggerCommandAction.Create, confirmation.AllowedActions);
+        Assert.True(Authorizer.IsScheduleConfirmation("I approve", "en"));
         Assert.Equal(
             TriggerAuthorizationClassification.Initiative,
-            TriggerAuthorization.Classify(TriggerKind.LongSilence, remembered, null).Classification);
-        Assert.Equal(TriggerCommandAction.List, TriggerAuthorization.ActionsFor("What reminders do I have?"));
-        Assert.Equal(TriggerCommandAction.Update, TriggerAuthorization.ActionsFor("Move that reminder to 10."));
-        Assert.Equal(TriggerCommandAction.Cancel, TriggerAuthorization.ActionsFor("Cancel that reminder."));
-        Assert.Equal(TriggerCommandAction.None, TriggerAuthorization.Classify(TriggerKind.UserTurn, "What reminders do I have?", null).AllowedActions & TriggerCommandAction.Create);
+            TriggerAuthorization.Classify(TriggerKind.LongSilence, remembered, null, Authorizer, "en").Classification);
+        Assert.Equal(TriggerCommandAction.List, Authorizer.AuthorizeCurrentTurn("What reminders do I have?", "en"));
+        Assert.Equal(TriggerCommandAction.Update, Authorizer.AuthorizeCurrentTurn("Move that reminder to 10.", "en"));
+        Assert.Equal(TriggerCommandAction.Cancel, Authorizer.AuthorizeCurrentTurn("Cancel that reminder.", "en"));
+        Assert.Equal(
+            TriggerCommandAction.None,
+            TriggerAuthorization.Classify(TriggerKind.UserTurn, "What reminders do I have?", null, Authorizer, "en").AllowedActions
+                & TriggerCommandAction.Create);
+        Assert.Equal(
+            TriggerCommandAction.None,
+            Authorizer.AuthorizeCurrentTurn("don't create a reminder", "en") & TriggerCommandAction.Create);
     }
+
+    [Fact]
+    public async Task Say_hello_in_one_minute_schedules_without_approval()
+    {
+        var harness = await StartAsync();
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+
+        Assert.True(await runtime.SubmitUserTextAsync("say hello to me in 1 minute"));
+        await runtime.WaitUntilIdleAsync();
+
+        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
+        Assert.Contains("Hello", saved.Intent, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry =>
+            entry.Role == ConversationRole.Assistant
+            && entry.Text.Contains("confirm", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Initiative_proposal_persists_after_I_approve()
+    {
+        var harness = await StartAsync(environmentScheduling: true);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
+            Guid.Parse("019944af-00b5-7000-8000-000000000006"),
+            ScriptedLanguageModel.ScheduleForceMarker));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        Assert.True(await runtime.SubmitUserTextAsync("I approve"));
+        await runtime.WaitUntilIdleAsync();
+
+        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        Assert.Equal("Sneaky", saved.Intent);
+    }
+
+    private static readonly ITriggerCommandAuthorizer Authorizer = new HeuristicTriggerCommandAuthorizer();
 
     private static TriggerCommandContext Context(
         TriggerOwner owner,
         TriggerAuthorizationClassification classification,
         bool executePending,
         PendingTriggerProposal? pending,
-        TriggerCommandAction actions = TriggerCommandAction.None) =>
-        new(owner, Guid.Parse("019944af-00b1-7000-8000-0000000000c1"), "UTC", classification, actions, executePending, pending, Guid.Parse("019944af-00b1-7000-8000-0000000000d1"), Now);
+        TriggerCommandAction actions = TriggerCommandAction.None,
+        string? currentUserText = "Remind me tomorrow at 9 AM to call John.") =>
+        new(
+            owner,
+            Guid.Parse("019944af-00b1-7000-8000-0000000000c1"),
+            "UTC",
+            currentUserText,
+            "en",
+            classification,
+            actions,
+            executePending,
+            pending,
+            Guid.Parse("019944af-00b1-7000-8000-0000000000d1"),
+            Now);
 
     private static async Task<Harness> StartAsync(ILanguageModel? model = null, bool environmentScheduling = false)
     {
