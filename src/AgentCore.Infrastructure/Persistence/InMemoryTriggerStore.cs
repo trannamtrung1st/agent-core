@@ -159,6 +159,112 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    public ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(
+        DateTimeOffset asOfUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
+        var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
+        lock (_gate)
+        {
+            var due = _registrations.Values
+                .Where(item => item.Status == TriggerRegistrationStatus.Active
+                    && item.NextOccurrenceAtUtc is DateTimeOffset next
+                    && next <= asOf)
+                .OrderBy(item => item.NextOccurrenceAtUtc)
+                .ThenBy(item => item.RegistrationId)
+                .Take(take)
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(due);
+        }
+    }
+
+    public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedScheduleRevision,
+        DateTimeOffset expectedNextOccurrenceAtUtc,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
+        var expectedNext = TriggerScheduleCalculator.Truncate(expectedNextOccurrenceAtUtc);
+        lock (_gate)
+        {
+            var current = Find(owner, registrationId);
+            if (!IsCurrent(current, expectedScheduleRevision, expectedNext))
+            {
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0));
+            }
+
+            ScheduleAdmission decision;
+            try
+            {
+                decision = TriggerScheduleAdmission.Decide(current!, asOf);
+            }
+            catch (TriggerTimeZoneUnavailableException)
+            {
+                var suspended = current!.WithScheduleAdvance(
+                    TriggerRegistrationStatus.SuspendedPolicy,
+                    null,
+                    current.OccurrenceCount,
+                    current.Revision + 1,
+                    asOf,
+                    "Timezone is unavailable.");
+                _registrations[registrationId] = suspended;
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Rejected, suspended, null, 0));
+            }
+
+            if (decision.Kind is ScheduleAdmissionKind.NotDue)
+            {
+                return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, current, null, 0));
+            }
+
+            if (decision.Kind is not ScheduleAdmissionKind.Admit)
+            {
+                var closed = TriggerScheduleAdmission.Advance(current!, decision, asOf);
+                _registrations[registrationId] = closed;
+                var outcome = decision.Kind == ScheduleAdmissionKind.Expire
+                    ? ScheduledAdmitOutcome.Expired
+                    : ScheduledAdmitOutcome.Completed;
+                return ValueTask.FromResult(new ScheduledAdmitResult(outcome, closed, null, 0));
+            }
+
+            var occurrence = TriggerScheduleAdmission.CreateOccurrence(current!, decision, asOf);
+            if (_dedupeKeys.TryGetValue(occurrence.DedupeKey, out var existingId))
+            {
+                var existing = _occurrences[existingId];
+                var advanced = TriggerScheduleAdmission.Advance(current!, decision, asOf);
+                _registrations[registrationId] = advanced;
+                return ValueTask.FromResult(new ScheduledAdmitResult(
+                    ScheduledAdmitOutcome.Duplicate,
+                    advanced,
+                    existing,
+                    decision.SkippedCount));
+            }
+
+            var updated = TriggerScheduleAdmission.Advance(current!, decision, asOf);
+            _occurrences[occurrence.OccurrenceId] = occurrence;
+            _dedupeKeys[occurrence.DedupeKey] = occurrence.OccurrenceId;
+            _registrations[registrationId] = updated;
+            return ValueTask.FromResult(new ScheduledAdmitResult(
+                ScheduledAdmitOutcome.Admitted,
+                updated,
+                occurrence,
+                decision.SkippedCount));
+        }
+    }
+
+    private static bool IsCurrent(
+        TriggerRegistration? current,
+        long expectedScheduleRevision,
+        DateTimeOffset expectedNext) =>
+        current is not null
+        && current.Status == TriggerRegistrationStatus.Active
+        && current.ScheduleRevision == expectedScheduleRevision
+        && current.NextOccurrenceAtUtc == expectedNext;
+
     private TriggerRegistration? Find(TriggerOwner owner, Guid registrationId) =>
         _registrations.TryGetValue(registrationId, out var registration) && registration.Owner.Equals(owner)
             ? registration

@@ -176,6 +176,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         services.TryAddSingleton<IStructuredMemoryService, StructuredMemoryService>();
         services.TryAddSingleton<ITriggerRegistrationService, TriggerRegistrationService>();
+        services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<IAgentInstanceService, AgentInstanceService>();
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();

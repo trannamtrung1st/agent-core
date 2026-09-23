@@ -70,6 +70,23 @@ public sealed record TriggerOccurrenceAdmitResult(
     TriggerOccurrenceAdmitKind Kind,
     TriggerOccurrence Occurrence);
 
+public enum ScheduledAdmitOutcome
+{
+    Admitted,
+    Duplicate,
+    Stale,
+    NotDue,
+    Expired,
+    Completed,
+    Rejected
+}
+
+public sealed record ScheduledAdmitResult(
+    ScheduledAdmitOutcome Outcome,
+    TriggerRegistration? Registration,
+    TriggerOccurrence? Occurrence,
+    int SkippedCount);
+
 public sealed record TriggerOccurrenceDraft(
     TriggerOwner Owner,
     string DedupeKey,
@@ -126,6 +143,19 @@ public interface ITriggerStore
     ValueTask<TriggerOccurrence?> GetOccurrenceAsync(
         TriggerOwner owner,
         Guid occurrenceId,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(
+        DateTimeOffset asOfUtc,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedScheduleRevision,
+        DateTimeOffset expectedNextOccurrenceAtUtc,
+        DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default);
 }
 

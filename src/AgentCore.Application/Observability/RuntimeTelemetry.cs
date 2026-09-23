@@ -16,6 +16,9 @@ public static class RuntimeTelemetry
     private static readonly Histogram<double> StageMs = Meter.CreateHistogram<double>("stage_duration_ms");
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
     private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
+    private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
+    private static readonly Counter<long> TriggerRegistrationEvents = Meter.CreateCounter<long>("trigger_registration_events");
+    private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
     private static readonly ConcurrentDictionary<string, List<double>> Samples = new(StringComparer.Ordinal);
@@ -78,6 +81,24 @@ public static class RuntimeTelemetry
     public static void RecordMemoryRetrieval(string result)
     {
         MemoryRetrieval.Add(1, new KeyValuePair<string, object?>("result", result));
+    }
+
+    public static void RecordTriggerScheduler(string outcome)
+    {
+        TriggerSchedulerEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+
+    public static void RecordTriggerRegistration(string operation, string outcome)
+    {
+        TriggerRegistrationEvents.Add(
+            1,
+            new KeyValuePair<string, object?>("operation", operation),
+            new KeyValuePair<string, object?>("outcome", outcome));
+    }
+
+    public static void RecordTriggerDueLag(double lagMs)
+    {
+        TriggerDueLagMs.Record(Math.Max(0, lagMs), new KeyValuePair<string, object?>("source", "schedule"));
     }
 
     public static IReadOnlyList<TimelineEvent> SnapshotTimeline() => [.. Timeline];

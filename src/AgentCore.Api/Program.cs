@@ -56,6 +56,7 @@ builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
+builder.Services.AddHostedService<TriggerSchedulerHostedService>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>
 {

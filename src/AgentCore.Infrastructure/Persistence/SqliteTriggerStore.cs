@@ -226,6 +226,113 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         }
     }
 
+    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(
+        DateTimeOffset asOfUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = TriggerScheduleCalculator.Truncate(asOfUtc).ToUnixTimeMilliseconds();
+        var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.TriggerRegistrations.AsNoTracking()
+            .Where(row => row.Status == (int)TriggerRegistrationStatus.Active
+                && row.NextOccurrenceAtUtc != null
+                && row.NextOccurrenceAtUtc <= asOf)
+            .OrderBy(row => row.NextOccurrenceAtUtc)
+            .ThenBy(row => row.RegistrationId)
+            .Take(take)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
+    }
+
+    public async ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedScheduleRevision,
+        DateTimeOffset expectedNextOccurrenceAtUtc,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
+        var expectedNext = TriggerScheduleCalculator.Truncate(expectedNextOccurrenceAtUtc);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var row = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        if (row is null
+            || row.Status != (int)TriggerRegistrationStatus.Active
+            || row.ScheduleRevision != expectedScheduleRevision
+            || row.NextOccurrenceAtUtc != expectedNext.ToUnixTimeMilliseconds())
+        {
+            var current = row is null ? null : TriggerStoreMapping.ToRegistration(row);
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, current, null, 0);
+        }
+
+        var currentRegistration = TriggerStoreMapping.ToRegistration(row);
+        ScheduleAdmission decision;
+        try
+        {
+            decision = TriggerScheduleAdmission.Decide(currentRegistration, asOf);
+        }
+        catch (TriggerTimeZoneUnavailableException)
+        {
+            var suspended = currentRegistration.WithScheduleAdvance(
+                TriggerRegistrationStatus.SuspendedPolicy,
+                null,
+                currentRegistration.OccurrenceCount,
+                currentRegistration.Revision + 1,
+                asOf,
+                "Timezone is unavailable.");
+            ApplyAdvance(row, suspended);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Rejected, suspended, null, 0);
+        }
+
+        if (decision.Kind == ScheduleAdmissionKind.NotDue)
+        {
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.NotDue, currentRegistration, null, 0);
+        }
+
+        if (decision.Kind != ScheduleAdmissionKind.Admit)
+        {
+            var closed = TriggerScheduleAdmission.Advance(currentRegistration, decision, asOf);
+            ApplyAdvance(row, closed);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var outcome = decision.Kind == ScheduleAdmissionKind.Expire
+                ? ScheduledAdmitOutcome.Expired
+                : ScheduledAdmitOutcome.Completed;
+            return new ScheduledAdmitResult(outcome, closed, null, 0);
+        }
+
+        var occurrence = TriggerScheduleAdmission.CreateOccurrence(currentRegistration, decision, asOf);
+        var advanced = TriggerScheduleAdmission.Advance(currentRegistration, decision, asOf);
+        db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(occurrence));
+        ApplyAdvance(row, advanced);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Admitted, advanced, occurrence, decision.SkippedCount);
+        }
+        catch (DbUpdateException exception) when (IsConstraint(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            db.ChangeTracker.Clear();
+            return await ResolveScheduledConflictAsync(
+                db,
+                owner,
+                registrationId,
+                expectedScheduleRevision,
+                expectedNext,
+                occurrence.DedupeKey,
+                decision,
+                asOf,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public async ValueTask<TriggerOccurrence?> GetOccurrenceAsync(
         TriggerOwner owner,
         Guid occurrenceId,
@@ -305,6 +412,78 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         }
 
         return new TriggerOccurrenceAdmitResult(TriggerOccurrenceAdmitKind.Duplicate, mapped);
+    }
+
+    private static async Task<TriggerRegistrationRecord?> TrackRowAsync(
+        AgentCoreDbContext db,
+        TriggerOwner owner,
+        Guid registrationId,
+        CancellationToken cancellationToken)
+    {
+        var id = registrationId.ToString("D");
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        return await db.TriggerRegistrations
+            .FirstOrDefaultAsync(
+                row => row.RegistrationId == id
+                    && row.AgentInstanceId == instanceId
+                    && row.ProfileId == profileId,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static void ApplyAdvance(TriggerRegistrationRecord row, TriggerRegistration advanced)
+    {
+        row.Status = (int)advanced.Status;
+        row.NextOccurrenceAtUtc = advanced.NextOccurrenceAtUtc?.ToUnixTimeMilliseconds();
+        row.OccurrenceCount = advanced.OccurrenceCount;
+        row.Revision = advanced.Revision;
+        row.UpdatedAtUtc = advanced.Provenance.UpdatedAt.ToUnixTimeMilliseconds();
+        row.SuspensionReason = advanced.SuspensionReason;
+    }
+
+    private static async Task<ScheduledAdmitResult> ResolveScheduledConflictAsync(
+        AgentCoreDbContext db,
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedScheduleRevision,
+        DateTimeOffset expectedNext,
+        string dedupeKey,
+        ScheduleAdmission decision,
+        DateTimeOffset asOf,
+        CancellationToken cancellationToken)
+    {
+        var existing = await db.TriggerOccurrences.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.DedupeKey == dedupeKey, cancellationToken)
+            .ConfigureAwait(false);
+        var registrationRow = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        if (existing is null || registrationRow is null)
+        {
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, null, null, 0);
+        }
+
+        var mapped = TriggerStoreMapping.ToOccurrence(existing);
+        if (!mapped.Owner.Equals(owner))
+        {
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, null, null, 0);
+        }
+
+        if (registrationRow.Status == (int)TriggerRegistrationStatus.Active
+            && registrationRow.ScheduleRevision == expectedScheduleRevision
+            && registrationRow.NextOccurrenceAtUtc == expectedNext.ToUnixTimeMilliseconds())
+        {
+            var current = TriggerStoreMapping.ToRegistration(registrationRow);
+            var advanced = TriggerScheduleAdmission.Advance(current, decision, asOf);
+            ApplyAdvance(registrationRow, advanced);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Duplicate, advanced, mapped, decision.SkippedCount);
+        }
+
+        return new ScheduledAdmitResult(
+            ScheduledAdmitOutcome.Duplicate,
+            TriggerStoreMapping.ToRegistration(registrationRow),
+            mapped,
+            0);
     }
 
     private static long? ToUnix(DateTimeOffset? value) => value?.ToUnixTimeMilliseconds();

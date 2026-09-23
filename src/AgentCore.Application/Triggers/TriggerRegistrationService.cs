@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Triggers;
@@ -10,9 +11,46 @@ public sealed class TriggerRegistrationService(
     IIdGenerator ids,
     TimeProvider time) : ITriggerRegistrationService
 {
-    public async ValueTask<TriggerRegistration> CreateAsync(
+    public ValueTask<TriggerRegistration> CreateAsync(
         TriggerRegistrationDraft draft,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ObserveAsync("create", () => CreateCoreAsync(draft, cancellationToken));
+
+    public ValueTask<TriggerRegistration?> GetAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        CancellationToken cancellationToken = default) =>
+        store.GetAsync(owner, registrationId, cancellationToken);
+
+    public ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
+        TriggerOwner owner,
+        TriggerRegistrationStatus? status,
+        CancellationToken cancellationToken = default) =>
+        store.ListAsync(owner, status, cancellationToken);
+
+    public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
+        store.CountActiveAsync(owner, cancellationToken);
+
+    public ValueTask<TriggerRegistration> UpdateAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        TriggerRegistrationChange change,
+        CancellationToken cancellationToken = default) =>
+        ObserveAsync("update", () => UpdateCoreAsync(owner, registrationId, expectedRevision, change, cancellationToken));
+
+    public ValueTask<TriggerRegistration> CancelAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        CancellationToken cancellationToken = default) =>
+        ObserveAsync(
+            "cancel",
+            () => store.CancelAsync(owner, registrationId, expectedRevision, UtcNow(), cancellationToken));
+
+    private async ValueTask<TriggerRegistration> CreateCoreAsync(
+        TriggerRegistrationDraft draft,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var now = UtcNow();
@@ -39,27 +77,12 @@ public sealed class TriggerRegistrationService(
         return await store.CreateAsync(registration, cancellationToken).ConfigureAwait(false);
     }
 
-    public ValueTask<TriggerRegistration?> GetAsync(
-        TriggerOwner owner,
-        Guid registrationId,
-        CancellationToken cancellationToken = default) =>
-        store.GetAsync(owner, registrationId, cancellationToken);
-
-    public ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(
-        TriggerOwner owner,
-        TriggerRegistrationStatus? status,
-        CancellationToken cancellationToken = default) =>
-        store.ListAsync(owner, status, cancellationToken);
-
-    public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
-        store.CountActiveAsync(owner, cancellationToken);
-
-    public async ValueTask<TriggerRegistration> UpdateAsync(
+    private async ValueTask<TriggerRegistration> UpdateCoreAsync(
         TriggerOwner owner,
         Guid registrationId,
         long expectedRevision,
         TriggerRegistrationChange change,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(change);
         var current = await store.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
@@ -96,13 +119,6 @@ public sealed class TriggerRegistrationService(
             UtcNow(),
             cancellationToken).ConfigureAwait(false);
     }
-
-    public ValueTask<TriggerRegistration> CancelAsync(
-        TriggerOwner owner,
-        Guid registrationId,
-        long expectedRevision,
-        CancellationToken cancellationToken = default) =>
-        store.CancelAsync(owner, registrationId, expectedRevision, UtcNow(), cancellationToken);
 
     public async ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(
         TriggerOccurrenceDraft draft,
@@ -171,6 +187,30 @@ public sealed class TriggerRegistrationService(
         catch (JsonException)
         {
             throw AgentCoreErrors.Validation("Occurrence evidence must be JSON.");
+        }
+    }
+
+    private static async ValueTask<T> ObserveAsync<T>(string operation, Func<ValueTask<T>> action)
+    {
+        try
+        {
+            var result = await action().ConfigureAwait(false);
+            RuntimeTelemetry.RecordTriggerRegistration(operation, "succeeded");
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (AgentCoreException exception)
+        {
+            RuntimeTelemetry.RecordTriggerRegistration(operation, exception.Code);
+            throw;
+        }
+        catch (Exception)
+        {
+            RuntimeTelemetry.RecordTriggerRegistration(operation, "failed");
+            throw;
         }
     }
 

@@ -572,6 +572,27 @@ public sealed class TriggerRegistration
             Provenance.WithUpdated(updatedAt),
             SuspensionReason);
 
+    public TriggerRegistration WithScheduleAdvance(
+        TriggerRegistrationStatus status,
+        DateTimeOffset? nextOccurrenceAtUtc,
+        int occurrenceCount,
+        long revision,
+        DateTimeOffset updatedAt,
+        string? suspensionReason) =>
+        new(
+            RegistrationId,
+            Owner,
+            status,
+            Intent,
+            Schedule,
+            nextOccurrenceAtUtc,
+            ExpiresAtUtc,
+            occurrenceCount,
+            revision,
+            ScheduleRevision,
+            Provenance.WithUpdated(updatedAt),
+            suspensionReason);
+
     public TriggerRegistration WithCancellation(long revision, DateTimeOffset cancelledAt) =>
         new(
             RegistrationId,
