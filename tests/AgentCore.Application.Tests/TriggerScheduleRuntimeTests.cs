@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -188,6 +190,129 @@ public sealed class TriggerScheduleRuntimeTests
     }
 
     [Fact]
+    public async Task Unrelated_user_turn_drops_a_pending_schedule_proposal()
+    {
+        var harness = await StartAsync(environmentScheduling: true);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
+            Guid.Parse("019944af-00b5-7000-8000-000000000001"),
+            ScriptedLanguageModel.ScheduleForceMarker));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+        Assert.Contains("confirm", runtime.Snapshot.Entries[^1].Text, StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(await runtime.SubmitUserTextAsync("What is the weather?"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        Assert.True(await runtime.SubmitUserTextAsync("yes"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+        Assert.Contains("I did not save a schedule.", runtime.Snapshot.Entries[^1].Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Confirmation_persists_the_stored_proposal_not_the_model_replacement()
+    {
+        var harness = await StartAsync(environmentScheduling: true);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
+            Guid.Parse("019944af-00b5-7000-8000-000000000002"),
+            ScriptedLanguageModel.ScheduleForceMarker));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        Assert.True(await runtime.SubmitUserTextAsync("yes"));
+        await runtime.WaitUntilIdleAsync();
+
+        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        Assert.Equal(TriggerRegistrationStatus.Active, saved.Status);
+        Assert.Equal("Sneaky", saved.Intent);
+        var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
+        Assert.Equal(new DateTimeOffset(2026, 9, 24, 9, 0, 0, TimeSpan.Zero), schedule.AtUtc);
+    }
+
+    [Fact]
+    public async Task Queued_unrelated_turn_during_proposal_creation_drops_the_proposal()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var harness = await StartAsync(new HoldBeforeEnvironmentScheduleModel(started, release), environmentScheduling: true);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
+            Guid.Parse("019944af-00b5-7000-8000-000000000004"),
+            ScriptedLanguageModel.ScheduleForceMarker));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(
+            true,
+            await runtime.SubmitPersistedUserTextAsync(
+                "What is the weather?",
+                Guid.Parse("019944af-00b5-7000-8000-000000000021"),
+                behavior: UserTextBehavior.Queue));
+        Assert.Contains(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.User && entry.Text == "What is the weather?");
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        Assert.True(await runtime.SubmitUserTextAsync("yes"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+    }
+
+    [Fact]
+    public async Task Idle_speech_final_drops_a_pending_schedule_proposal()
+    {
+        var harness = await StartAsync(environmentScheduling: true);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
+            Guid.Parse("019944af-00b5-7000-8000-000000000005"),
+            ScriptedLanguageModel.ScheduleForceMarker));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        await runtime.SetModeAsync(SessionMode.Voice);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionMode.Voice, runtime.Snapshot.Mode);
+
+        var utterance = Guid.Parse("019944af-00b5-7000-8000-000000000011");
+        await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
+        await runtime.SubmitSpeechAsync(new SpeechFinal(utterance, "What is the weather?", 0.9), 0.9);
+        await runtime.SubmitSpeechAsync(new SpeechEnded(utterance), 0.2);
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        Assert.True(await runtime.SubmitUserTextAsync("yes"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+    }
+
+    [Fact]
+    public async Task User_steer_drops_a_pending_schedule_proposal()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var harness = await StartAsync(new HoldAfterEnvironmentScheduleModel(started), environmentScheduling: true);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
+            Guid.Parse("019944af-00b5-7000-8000-000000000003"),
+            ScriptedLanguageModel.ScheduleForceMarker));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+
+        Assert.True(await runtime.SubmitUserTextAsync("yes"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await harness.Store.ListAsync(owner, null));
+    }
+
+    [Fact]
     public void Memory_and_old_wording_do_not_count_as_the_current_request()
     {
         const string remembered = "Remind me tomorrow at 9 to call John.";
@@ -210,9 +335,20 @@ public sealed class TriggerScheduleRuntimeTests
         PendingTriggerProposal? pending) =>
         new(owner, Guid.Parse("019944af-00b1-7000-8000-0000000000c1"), "UTC", classification, executePending, pending, Guid.Parse("019944af-00b1-7000-8000-0000000000d1"), Now);
 
-    private static async Task<Harness> StartAsync()
+    private static async Task<Harness> StartAsync(ILanguageModel? model = null, bool environmentScheduling = false)
     {
         var definition = await LoadAsync(8);
+        if (environmentScheduling)
+        {
+            definition = definition with
+            {
+                InitiativePolicy = definition.InitiativePolicy with
+                {
+                    Enabled = true,
+                    Triggers = ["environmentUpdate", "longSilence"]
+                }
+            };
+        }
         var time = new FakeTimeProvider(Now);
         var store = new InMemoryTriggerStore();
         var sessionIds = new DeterministicIdGenerator(
@@ -242,7 +378,7 @@ public sealed class TriggerScheduleRuntimeTests
         await memory.SaveAsync(snapshot, 0);
         var runtime = new SessionRuntime(
             snapshot,
-            new ScriptedLanguageModel(),
+            model ?? new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
             memory,
             new CapturingSessionOutput(),
@@ -286,4 +422,57 @@ public sealed class TriggerScheduleRuntimeTests
     }
 
     private sealed record Harness(SessionRuntime Runtime, InMemoryTriggerStore Store);
+
+    private sealed class HoldBeforeEnvironmentScheduleModel(
+        TaskCompletionSource started,
+        TaskCompletionSource release) : ILanguageModel
+    {
+        private readonly ScriptedLanguageModel _inner = new();
+
+        public ModelCapabilities Capabilities => _inner.Capabilities;
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+            var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+            if (toolRounds == 0 && lastUser.Contains(ScriptedLanguageModel.ScheduleForceMarker, StringComparison.Ordinal))
+            {
+                started.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await foreach (var item in _inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
+        }
+    }
+
+    private sealed class HoldAfterEnvironmentScheduleModel(TaskCompletionSource started) : ILanguageModel
+    {
+        private readonly ScriptedLanguageModel _inner = new();
+
+        public ModelCapabilities Capabilities => _inner.Capabilities;
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+            var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+            if (toolRounds > 0 && lastUser.Contains(ScriptedLanguageModel.ScheduleForceMarker, StringComparison.Ordinal))
+            {
+                started.TrySetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+                yield break;
+            }
+
+            await foreach (var item in _inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
+        }
+    }
 }

@@ -1229,6 +1229,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await ApplyPendingVoiceIfIdleAsync(cause, cancellationToken).ConfigureAwait(false);
         }
 
+        RetainProposalOnlyForConfirmingTurn([text]);
+
         try
         {
             RequestPersist(
@@ -1704,6 +1706,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return false;
         }
 
+        RetainProposalOnlyForConfirmingTurn(suffix.Select(entry => entry.Text).ToArray());
         var last = suffix[^1];
         var eventId = last.SourceEventId ?? last.EntryId;
         var batchCause = new EventContext(
@@ -2667,6 +2670,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
+    private void RetainProposalOnlyForConfirmingTurn(IReadOnlyList<string?> texts)
+    {
+        if (_pendingTriggerProposal is null)
+        {
+            return;
+        }
+
+        var singleConfirmation = texts.Count == 1
+            && TriggerAuthorization.IsConfirmationTurn(texts[0], hasPendingProposal: true);
+        if (!singleConfirmation)
+        {
+            _pendingTriggerProposal = null;
+        }
+    }
+
     private TriggerCommandContext TriggerCommand(AgentTrigger trigger)
     {
         var confirming = TriggerAuthorization.IsConfirmationTurn(trigger.Text, _pendingTriggerProposal is not null);
@@ -2732,6 +2750,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             SessionId,
             responseId,
             reason);
+        _pendingTriggerProposal = null;
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
         ClearPendingApproval();

@@ -840,6 +840,7 @@ public sealed partial class SessionRuntime
                         .ConfigureAwait(false);
                 }
 
+                RetainProposalOnlyForConfirmingTurn([text]);
                 var responseId = _ids.NewId();
                 var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
                 _outputActivity = OutputActivity.WaitingForAgent;

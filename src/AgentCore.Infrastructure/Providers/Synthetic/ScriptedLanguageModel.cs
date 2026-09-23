@@ -430,11 +430,21 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
-        if (lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-            || lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
-            || lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase))
+        if (lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}""");
+            return true;
+        }
+
+        if (lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
+            return true;
+        }
+
+        if (lastUser.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
             return true;
         }
 
