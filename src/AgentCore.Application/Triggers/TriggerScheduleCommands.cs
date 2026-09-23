@@ -21,6 +21,20 @@ public enum TriggerAuthorizationClassification
     Missing
 }
 
+[Flags]
+public enum TriggerCommandAction
+{
+    None = 0,
+    Create = 1,
+    List = 2,
+    Update = 4,
+    Cancel = 8
+}
+
+public readonly record struct TriggerAuthorizationResult(
+    TriggerAuthorizationClassification Classification,
+    TriggerCommandAction AllowedActions);
+
 public sealed record PendingTriggerProposal(string ToolName, string ArgumentsJson);
 
 public sealed record TriggerCommandContext(
@@ -28,6 +42,7 @@ public sealed record TriggerCommandContext(
     Guid SessionId,
     string? ProfileTimeZoneId,
     TriggerAuthorizationClassification Classification,
+    TriggerCommandAction AllowedActions,
     bool ExecutePendingProposal,
     PendingTriggerProposal? PendingProposal,
     Guid? SourceEventId,
@@ -35,37 +50,38 @@ public sealed record TriggerCommandContext(
 
 public static class TriggerAuthorization
 {
-    public static TriggerAuthorizationClassification Classify(
+    public static TriggerAuthorizationResult Classify(
         TriggerKind kind,
         string? currentUserText,
-        bool hasPendingProposal)
+        PendingTriggerProposal? pendingProposal)
     {
         if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
-            return TriggerAuthorizationClassification.Occurrence;
+            return new(TriggerAuthorizationClassification.Occurrence, TriggerCommandAction.None);
         }
 
         if (kind == TriggerKind.EnvironmentUpdate)
         {
-            return TriggerAuthorizationClassification.Environment;
+            return new(TriggerAuthorizationClassification.Environment, TriggerCommandAction.None);
         }
 
         if (kind is TriggerKind.LongSilence or TriggerKind.UnfinishedInteraction)
         {
-            return TriggerAuthorizationClassification.Initiative;
+            return new(TriggerAuthorizationClassification.Initiative, TriggerCommandAction.None);
         }
 
-        if (IsExplicitScheduleRequest(currentUserText))
+        var requested = ActionsFor(currentUserText);
+        if (requested != TriggerCommandAction.None)
         {
-            return TriggerAuthorizationClassification.CurrentUserTurn;
+            return new(TriggerAuthorizationClassification.CurrentUserTurn, requested);
         }
 
-        if (hasPendingProposal && IsConfirmation(currentUserText))
+        if (pendingProposal is not null && IsConfirmation(currentUserText))
         {
-            return TriggerAuthorizationClassification.CurrentUserTurn;
+            return new(TriggerAuthorizationClassification.CurrentUserTurn, ActionForTool(pendingProposal.ToolName));
         }
 
-        return TriggerAuthorizationClassification.UnrelatedUserTurn;
+        return new(TriggerAuthorizationClassification.UnrelatedUserTurn, TriggerCommandAction.None);
     }
 
     public static bool IsConfirmationTurn(string? currentUserText, bool hasPendingProposal) =>
@@ -73,22 +89,55 @@ public static class TriggerAuthorization
         && !IsExplicitScheduleRequest(currentUserText)
         && IsConfirmation(currentUserText);
 
-    public static bool IsExplicitScheduleRequest(string? text)
+    public static bool IsExplicitScheduleRequest(string? text) =>
+        ActionsFor(text) != TriggerCommandAction.None;
+
+    public static TriggerCommandAction ActionsFor(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return false;
+            return TriggerCommandAction.None;
         }
 
-        return text.Contains("remind me", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("every monday", StringComparison.OrdinalIgnoreCase)
+        var actions = TriggerCommandAction.None;
+        if (text.Contains("remind me", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("every monday", StringComparison.OrdinalIgnoreCase))
+        {
+            actions |= TriggerCommandAction.Create;
+        }
+
+        if (text.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
             || text.Contains("list my schedules", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("list schedules", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("cancel the schedule", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("list schedules", StringComparison.OrdinalIgnoreCase))
+        {
+            actions |= TriggerCommandAction.List;
+        }
+
+        if (text.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
             || text.Contains("move that schedule", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("reschedule", StringComparison.OrdinalIgnoreCase);
+            || text.Contains("reschedule", StringComparison.OrdinalIgnoreCase))
+        {
+            actions |= TriggerCommandAction.Update;
+        }
+
+        if (text.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("cancel that schedule", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("cancel the schedule", StringComparison.OrdinalIgnoreCase))
+        {
+            actions |= TriggerCommandAction.Cancel;
+        }
+
+        return actions;
     }
+
+    public static TriggerCommandAction ActionForTool(string toolName) => toolName switch
+    {
+        ToolCatalog.TriggerList => TriggerCommandAction.List,
+        ToolCatalog.TriggerUpdate => TriggerCommandAction.Update,
+        ToolCatalog.TriggerCancel => TriggerCommandAction.Cancel,
+        ToolCatalog.TriggerScheduleOnce or ToolCatalog.TriggerScheduleRecurring => TriggerCommandAction.Create,
+        _ => TriggerCommandAction.None
+    };
 
     private static bool IsConfirmation(string? text)
     {
@@ -127,27 +176,12 @@ public static class TriggerScheduleCommands
             Guid.Empty,
             null,
             TriggerAuthorizationClassification.Missing,
+            TriggerCommandAction.None,
             false,
             null,
             null,
             DateTimeOffset.UnixEpoch);
         var operation = Operation(toolName);
-        if (context.Classification != TriggerAuthorizationClassification.CurrentUserTurn)
-        {
-            if (context.Classification is TriggerAuthorizationClassification.Initiative or TriggerAuthorizationClassification.Environment
-                && SchedulingEnabled(definition.TriggerPolicy))
-            {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "confirmation_required");
-                return Confirmation(toolName, arguments);
-            }
-
-            RuntimeTelemetry.RecordTriggerRegistration(operation, "forbidden");
-            return Result(
-                "forbidden",
-                "Current user authorization is required. History, memory, initiative, and other triggers are not enough.",
-                clearProposal: true);
-        }
-
         var effectiveName = toolName;
         var effectiveArguments = arguments;
         if (context.ExecutePendingProposal)
@@ -167,6 +201,24 @@ public static class TriggerScheduleCommands
             {
                 return Result("validation", "The pending schedule proposal is invalid.", clearProposal: true);
             }
+        }
+
+        var required = TriggerAuthorization.ActionForTool(effectiveName);
+        if (required == TriggerCommandAction.None || (context.AllowedActions & required) == 0)
+        {
+            if (context.Classification is TriggerAuthorizationClassification.Initiative or TriggerAuthorizationClassification.Environment
+                && !context.ExecutePendingProposal
+                && SchedulingEnabled(definition.TriggerPolicy))
+            {
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "confirmation_required");
+                return Confirmation(toolName, arguments);
+            }
+
+            RuntimeTelemetry.RecordTriggerRegistration(operation, "forbidden");
+            return Result(
+                "forbidden",
+                "Current user authorization is required. History, memory, initiative, and other triggers are not enough.",
+                clearProposal: true);
         }
 
         if (context.Owner is not TriggerOwner owner)

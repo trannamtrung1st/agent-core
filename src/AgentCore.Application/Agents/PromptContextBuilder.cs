@@ -683,9 +683,14 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
             return new Speak(WithTools(context, builder.Build(context, responseId), builder));
         }
 
-        if (context.Trigger.Kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
+        if (context.Trigger.Kind == TriggerKind.ScheduledOccurrence)
         {
-            return new Speak(WithTools(context, builder.Build(context, responseId), builder));
+            return SpeakOccurrence(context, responseId);
+        }
+
+        if (context.Trigger.Kind == TriggerKind.ApplicationEvent)
+        {
+            return DecideApplicationEvent(context, responseId);
         }
 
         if (context.InitiativeHeld)
@@ -731,6 +736,17 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
             TriggerKind.UnfinishedInteraction => TriggerEnabled(context, "unfinishedInteraction"),
             _ => false
         };
+
+    private Speak SpeakOccurrence(AgentContext context, Guid responseId) =>
+        new(WithTools(context, builder.Build(context, responseId), builder));
+
+    private AgentDecision DecideApplicationEvent(AgentContext context, Guid responseId)
+    {
+        // P5 visibility seam: admission does not force speech. Scheduled reminders
+        // always speak. The allowlisted order-status event is user-visible here;
+        // a later typed event can StaySilent without changing schedule delivery.
+        return SpeakOccurrence(context, responseId);
+    }
 
     private static ModelRequest WithTools(AgentContext context, ModelRequest request, PromptContextBuilder builder)
     {

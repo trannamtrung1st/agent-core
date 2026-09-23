@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Events;
 using AgentCore.Application.Testing;
 using AgentCore.Application.Agents;
@@ -162,7 +163,7 @@ public sealed class TriggerOccurrenceRoutingTests
             message => message.Role == ModelRole.System && message.Text.Contains(evidence, StringComparison.Ordinal));
         Assert.Equal(
             TriggerAuthorizationClassification.Occurrence,
-            TriggerAuthorization.Classify(TriggerKind.ApplicationEvent, "remind me tomorrow", hasPendingProposal: true));
+            TriggerAuthorization.Classify(TriggerKind.ApplicationEvent, "remind me tomorrow", null).Classification);
         var assistant = await LoadAsync("general-assistant", 8);
         Assert.Equal(
             ToolPolicyDecision.RequireApproval,
@@ -255,7 +256,15 @@ public sealed class TriggerOccurrenceRoutingTests
         Assert.Equal(0, (await scheduler.RunOnceAsync(movedDue)).Admitted);
         await Router(harness, [runtime.Snapshot.SessionId], runtime).RouteOnceAsync();
         await runtime.WaitUntilIdleAsync();
-        Assert.Equal(2, (await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.AcceptedLive, 10)).Count);
+        var superseded = (await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.Rejected, 10))
+            .Single(item => item.RegistrationId == movedId);
+        Assert.Equal("Schedule was superseded.", superseded.DispositionReason);
+        var kept = (await harness.Store.GetAsync(owner, movedId))!;
+        Assert.Equal(TriggerRegistrationStatus.Active, kept.Status);
+        Assert.Equal(later, kept.NextOccurrenceAtUtc);
+        Assert.Equal(new TimeOnly(11, 0), Assert.IsType<DailySchedule>(kept.Schedule).LocalTime);
+        Assert.Single(await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.AcceptedLive, 10));
+        Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
 
         var support = await StartAsync();
         await using var supportRuntime = support.Runtime;
@@ -342,6 +351,139 @@ public sealed class TriggerOccurrenceRoutingTests
             OccurrenceRoutingDisposition.AcceptedLive,
             (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence.OccurrenceId))!.Disposition);
         Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+    }
+
+    [Fact]
+    public async Task Reschedule_before_routing_rejects_the_admitted_occurrence()
+    {
+        var harness = await StartAsync("general-assistant", 8);
+        await using var runtime = harness.Runtime;
+        var registrationId = Guid.Parse("019944af-00c3-7000-8000-000000000021");
+        var due = new DateTimeOffset(2026, 9, 23, 9, 0, 0, TimeSpan.Zero);
+        var later = new DateTimeOffset(2026, 9, 23, 11, 0, 0, TimeSpan.Zero);
+        await harness.Store.CreateAsync(new TriggerRegistration(
+            registrationId,
+            harness.Owner,
+            TriggerRegistrationStatus.Active,
+            "Call John",
+            new DailySchedule(1, new TimeOnly(9, 0), "UTC"),
+            due,
+            null,
+            0,
+            1,
+            1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
+            null));
+        var scheduler = new TriggerScheduler(harness.Store, NullLogger<TriggerScheduler>.Instance, harness.Guard);
+        Assert.Equal(1, (await scheduler.RunOnceAsync(due)).Admitted);
+        var admitted = Assert.Single(await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
+        Assert.Equal(due, admitted.ScheduledAtUtc);
+
+        var registration = (await harness.Store.GetAsync(harness.Owner, registrationId))!;
+        await harness.Store.UpdateAsync(
+            harness.Owner,
+            registrationId,
+            registration.Revision,
+            registration.Intent,
+            new DailySchedule(1, new TimeOnly(11, 0), "UTC"),
+            later,
+            null,
+            later);
+        await Router(harness, [runtime.Snapshot.SessionId], runtime).RouteOnceAsync();
+        await runtime.WaitUntilIdleAsync();
+
+        var stale = (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.OccurrenceId))!;
+        Assert.Equal(OccurrenceRoutingDisposition.Rejected, stale.Disposition);
+        Assert.Equal("Schedule was superseded.", stale.DispositionReason);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        var kept = (await harness.Store.GetAsync(harness.Owner, registrationId))!;
+        Assert.Equal(TriggerRegistrationStatus.Active, kept.Status);
+        Assert.Equal(later, kept.NextOccurrenceAtUtc);
+        Assert.Equal(new TimeOnly(11, 0), Assert.IsType<DailySchedule>(kept.Schedule).LocalTime);
+        Assert.Empty(await harness.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.AcceptedLive, 10));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Lost_begin_after_reservation_returns_the_occurrence_to_pending(bool vanishBeforeCommit)
+    {
+        var harness = await StartAsync();
+        await using var runtime = harness.Runtime;
+        var admitted = await Ingress(harness).PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "F-3", "shipped", null);
+        var mailbox = new ReservationMailbox();
+        var store = new BoundaryAcceptStore(harness.Store, mailbox, vanishBeforeCommit);
+        var router = new TriggerOccurrenceRouter(
+            store,
+            harness.Guard,
+            new FixedDirectory([runtime.Snapshot.SessionId]),
+            mailbox,
+            new SystemIdGenerator(TimeProvider.System),
+            harness.Time);
+        await router.RouteOnceAsync();
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.False(mailbox.Started);
+        Assert.Equal(
+            OccurrenceRoutingDisposition.Pending,
+            (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence!.OccurrenceId))!.Disposition);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+
+        var recovered = new TriggerOccurrenceRouter(
+            harness.Store,
+            harness.Guard,
+            new FixedDirectory([runtime.Snapshot.SessionId]),
+            new RuntimeMailbox(runtime),
+            new SystemIdGenerator(TimeProvider.System),
+            harness.Time);
+        await recovered.RouteOnceAsync();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(
+            OccurrenceRoutingDisposition.AcceptedLive,
+            (await harness.Store.GetOccurrenceAsync(harness.Owner, admitted.Occurrence.OccurrenceId))!.Disposition);
+        Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+    }
+
+    [Fact]
+    public async Task Begin_reports_failure_when_the_reservation_is_missing_or_the_runtime_is_closed()
+    {
+        var harness = await StartAsync();
+        var runtime = harness.Runtime;
+        var missing = new OccurrenceDelivery(Guid.NewGuid(), harness.Owner, TriggerSourceKind.ApplicationEvent, "{}");
+        Assert.False(await runtime.BeginAcceptedOccurrenceAsync(missing));
+
+        var reserved = new OccurrenceDelivery(Guid.NewGuid(), harness.Owner, TriggerSourceKind.ApplicationEvent, "{}");
+        Assert.Equal(OccurrenceAccept.Accepted, await runtime.SubmitOccurrenceAsync(reserved));
+        await runtime.DisposeAsync();
+        Assert.False(await runtime.BeginAcceptedOccurrenceAsync(reserved));
+    }
+
+    [Fact]
+    public async Task Order_event_evidence_round_trips_json_controls_and_unicode()
+    {
+        var harness = await StartAsync();
+        await using var runtime = harness.Runtime;
+        var evidence = "line1\nline2\t\"quote\" \\ backslash \u2603";
+        var admitted = await Ingress(harness).PublishOrderStatusAsync(
+            harness.Owner,
+            Guid.NewGuid(),
+            "A\"1",
+            "shipped",
+            evidence);
+        Assert.Equal(DurableEventOutcome.Admitted, admitted.Outcome);
+        using var document = JsonDocument.Parse(admitted.Occurrence!.EvidenceJson);
+        Assert.Equal("A\"1", document.RootElement.GetProperty("orderReference").GetString());
+        Assert.Equal("shipped", document.RootElement.GetProperty("status").GetString());
+        Assert.Equal(evidence, document.RootElement.GetProperty("evidence").GetString());
+
+        var oversized = await Ingress(harness).PublishOrderStatusAsync(
+            harness.Owner,
+            Guid.NewGuid(),
+            "A2",
+            "delayed",
+            new string('x', TriggerLimits.MaxEvidenceBytes));
+        Assert.Equal(DurableEventOutcome.Rejected, oversized.Outcome);
+        Assert.Equal("Evidence is too large.", oversized.Reason);
     }
 
     [Fact]
@@ -516,7 +658,7 @@ public sealed class TriggerOccurrenceRoutingTests
         public Task<OccurrenceAccept> SubmitAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default) =>
             runtime.SubmitOccurrenceAsync(delivery, cancellationToken);
 
-        public Task BeginAcceptedAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default) =>
+        public Task<bool> BeginAcceptedAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default) =>
             runtime.BeginAcceptedOccurrenceAsync(delivery, cancellationToken);
 
         public Task AbandonReservationAsync(Guid sessionId, Guid occurrenceId, CancellationToken cancellationToken = default) =>
@@ -528,11 +670,122 @@ public sealed class TriggerOccurrenceRoutingTests
         public Task<OccurrenceAccept> SubmitAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default) =>
             Task.FromResult(OccurrenceAccept.Unavailable);
 
-        public Task BeginAcceptedAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task<bool> BeginAcceptedAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
 
         public Task AbandonReservationAsync(Guid sessionId, Guid occurrenceId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class ReservationMailbox : IOccurrenceMailbox
+    {
+        private readonly HashSet<Guid> _reserved = [];
+
+        public bool Alive { get; set; } = true;
+
+        public bool Started { get; private set; }
+
+        public Task<OccurrenceAccept> SubmitAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default)
+        {
+            if (!Alive)
+            {
+                return Task.FromResult(OccurrenceAccept.Unavailable);
+            }
+
+            return Task.FromResult(_reserved.Add(delivery.OccurrenceId)
+                ? OccurrenceAccept.Accepted
+                : OccurrenceAccept.Duplicate);
+        }
+
+        public Task<bool> BeginAcceptedAsync(Guid sessionId, OccurrenceDelivery delivery, CancellationToken cancellationToken = default)
+        {
+            if (!Alive || !_reserved.Remove(delivery.OccurrenceId))
+            {
+                return Task.FromResult(false);
+            }
+
+            Started = true;
+            return Task.FromResult(true);
+        }
+
+        public Task AbandonReservationAsync(Guid sessionId, Guid occurrenceId, CancellationToken cancellationToken = default)
+        {
+            _reserved.Remove(occurrenceId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BoundaryAcceptStore(ITriggerStore inner, ReservationMailbox mailbox, bool vanishBeforeCommit) : ITriggerStore
+    {
+        public ValueTask<TriggerRegistration> CreateAsync(TriggerRegistration registration, CancellationToken cancellationToken = default) =>
+            inner.CreateAsync(registration, cancellationToken);
+
+        public ValueTask<TriggerRegistration?> GetAsync(TriggerOwner owner, Guid registrationId, CancellationToken cancellationToken = default) =>
+            inner.GetAsync(owner, registrationId, cancellationToken);
+
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListAsync(TriggerOwner owner, TriggerRegistrationStatus? status, CancellationToken cancellationToken = default) =>
+            inner.ListAsync(owner, status, cancellationToken);
+
+        public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
+            inner.CountActiveAsync(owner, cancellationToken);
+
+        public ValueTask<TriggerRegistration> UpdateAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string intent, TriggerSchedule schedule, DateTimeOffset? nextOccurrenceAtUtc, DateTimeOffset? expiresAtUtc, DateTimeOffset updatedAt, CancellationToken cancellationToken = default) =>
+            inner.UpdateAsync(owner, registrationId, expectedRevision, intent, schedule, nextOccurrenceAtUtc, expiresAtUtc, updatedAt, cancellationToken);
+
+        public ValueTask<TriggerRegistration> CancelAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, DateTimeOffset cancelledAt, CancellationToken cancellationToken = default) =>
+            inner.CancelAsync(owner, registrationId, expectedRevision, cancelledAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(TriggerOccurrence occurrence, CancellationToken cancellationToken = default) =>
+            inner.AdmitOccurrenceAsync(occurrence, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> GetOccurrenceAsync(TriggerOwner owner, Guid occurrenceId, CancellationToken cancellationToken = default) =>
+            inner.GetOccurrenceAsync(owner, occurrenceId, cancellationToken);
+
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default) =>
+            inner.ListDueAsync(asOfUtc, limit, cancellationToken);
+
+        public ValueTask<ScheduledAdmitResult> TryAdmitScheduledAsync(TriggerOwner owner, Guid registrationId, long expectedScheduleRevision, DateTimeOffset expectedNextOccurrenceAtUtc, DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
+            inner.TryAdmitScheduledAsync(owner, registrationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
+
+        public ValueTask<TriggerRegistration?> SuspendPolicyAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
+            inner.SuspendPolicyAsync(owner, registrationId, expectedRevision, reason, suspendedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(Guid occurrenceId, Guid claimId, DateTimeOffset leaseExpiresAtUtc, DateTimeOffset claimedAt, CancellationToken cancellationToken = default) =>
+            inner.TryClaimOccurrenceAsync(occurrenceId, claimId, leaseExpiresAtUtc, claimedAt, cancellationToken);
+
+        public async ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default)
+        {
+            if (vanishBeforeCommit)
+            {
+                mailbox.Alive = false;
+            }
+
+            var stored = await inner.TryAcceptLiveAsync(occurrenceId, claimId, acceptedAt, cancellationToken).ConfigureAwait(false);
+            if (!vanishBeforeCommit)
+            {
+                mailbox.Alive = false;
+            }
+
+            return stored;
+        }
+
+        public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
+            inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> ReleaseClaimAsync(Guid occurrenceId, Guid claimId, DateTimeOffset releasedAt, CancellationToken cancellationToken = default) =>
+            inner.ReleaseClaimAsync(occurrenceId, claimId, releasedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> MarkAwaitingDurableWorkAsync(Guid occurrenceId, Guid claimId, string reason, DateTimeOffset markedAt, CancellationToken cancellationToken = default) =>
+            inner.MarkAwaitingDurableWorkAsync(occurrenceId, claimId, reason, markedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> TryRejectPendingAsync(Guid occurrenceId, string reason, DateTimeOffset rejectedAt, CancellationToken cancellationToken = default) =>
+            inner.TryRejectPendingAsync(occurrenceId, reason, rejectedAt, cancellationToken);
+
+        public ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
+            inner.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken);
+
+        public ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(OccurrenceRoutingDisposition disposition, int limit, CancellationToken cancellationToken = default) =>
+            inner.ListByDispositionAsync(disposition, limit, cancellationToken);
     }
 
     private sealed class AcceptCommittedModel(ILanguageModel inner) : ILanguageModel
@@ -600,6 +853,9 @@ public sealed class TriggerOccurrenceRoutingTests
 
         public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<TriggerOccurrence?>(null);
+
+        public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
+            inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);
 
         public ValueTask<TriggerOccurrence?> ReleaseClaimAsync(Guid occurrenceId, Guid claimId, DateTimeOffset releasedAt, CancellationToken cancellationToken = default) =>
             inner.ReleaseClaimAsync(occurrenceId, claimId, releasedAt, cancellationToken);

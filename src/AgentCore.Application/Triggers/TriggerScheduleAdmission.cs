@@ -73,7 +73,8 @@ public static class TriggerScheduleCalculator
     private static DateTimeOffset? InitialDaily(DailySchedule schedule, DateTimeOffset createdAt)
     {
         var zone = RequireZone(schedule.TimeZoneId);
-        var date = StartDate(zone, createdAt, schedule.StartDate);
+        var createdLocal = LocalDate(zone, createdAt);
+        var date = AlignedDailyDate(schedule, createdLocal);
         for (var step = 0; step <= TriggerLimits.MaxMaxOccurrences; step++)
         {
             if (schedule.EndDate is DateOnly end && date > end)
@@ -93,10 +94,24 @@ public static class TriggerScheduleCalculator
         return null;
     }
 
+    private static DateOnly AlignedDailyDate(DailySchedule schedule, DateOnly createdLocal)
+    {
+        if (schedule.StartDate is not DateOnly start || start >= createdLocal)
+        {
+            return schedule.StartDate ?? createdLocal;
+        }
+
+        var elapsed = createdLocal.DayNumber - start.DayNumber;
+        var steps = elapsed / schedule.IntervalDays;
+        return start.AddDays(steps * schedule.IntervalDays);
+    }
+
     private static DateTimeOffset? InitialWeekly(WeeklySchedule schedule, DateTimeOffset createdAt)
     {
         var zone = RequireZone(schedule.TimeZoneId);
-        var date = StartDate(zone, createdAt, schedule.StartDate);
+        var createdLocal = LocalDate(zone, createdAt);
+        var date = schedule.StartDate is DateOnly start && start > createdLocal ? start : createdLocal;
+        var anchorWeek = schedule.StartDate is DateOnly anchor ? WeekIndex(anchor) : (int?)null;
         var selected = schedule.Weekdays.ToHashSet();
         var limit = (TriggerLimits.MaxMaxOccurrences * 7) + 7;
         for (var step = 0; step <= limit; step++)
@@ -106,7 +121,7 @@ public static class TriggerScheduleCalculator
                 return null;
             }
 
-            if (selected.Contains(date.DayOfWeek))
+            if (selected.Contains(date.DayOfWeek) && OnWeekPhase(date, anchorWeek, schedule.IntervalWeeks))
             {
                 var instant = Resolve(zone, date, schedule.LocalTime);
                 if (instant > createdAt)
@@ -121,10 +136,30 @@ public static class TriggerScheduleCalculator
         return null;
     }
 
-    private static DateOnly StartDate(TimeZoneInfo zone, DateTimeOffset createdAt, DateOnly? startDate)
+    private static bool OnWeekPhase(DateOnly date, int? anchorWeek, int intervalWeeks)
     {
-        var createdLocal = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(createdAt, zone).DateTime);
-        return startDate is DateOnly start && start > createdLocal ? start : createdLocal;
+        if (anchorWeek is null)
+        {
+            return true;
+        }
+
+        var delta = WeekIndex(date) - anchorWeek.Value;
+        var mod = delta % intervalWeeks;
+        if (mod < 0)
+        {
+            mod += intervalWeeks;
+        }
+
+        return mod == 0;
+    }
+
+    private static DateOnly LocalDate(TimeZoneInfo zone, DateTimeOffset instant) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, zone).DateTime);
+
+    private static int WeekIndex(DateOnly date)
+    {
+        var mondayOffset = ((int)date.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        return (date.DayNumber - mondayOffset) / 7;
     }
 
     private static DateTimeOffset Resolve(TimeZoneInfo zone, DateOnly date, TimeOnly time)

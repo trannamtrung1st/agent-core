@@ -99,6 +99,32 @@ public sealed class TriggerScheduleCalculatorTests
     }
 
     [Fact]
+    public void Start_date_keeps_the_interval_phase_when_the_anchor_is_already_past()
+    {
+        var created = new DateTimeOffset(2026, 9, 23, 10, 0, 0, TimeSpan.Zero);
+        var everyOtherDay = new DailySchedule(2, new TimeOnly(9, 0), "UTC", startDate: new DateOnly(2026, 9, 2));
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 24, 9, 0, 0, TimeSpan.Zero),
+            TriggerScheduleCalculator.InitialNext(everyOtherDay, created));
+
+        var futureStart = new DailySchedule(2, new TimeOnly(9, 0), "UTC", startDate: new DateOnly(2026, 9, 10));
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 10, 9, 0, 0, TimeSpan.Zero),
+            TriggerScheduleCalculator.InitialNext(futureStart, new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero)));
+
+        var everyOtherWeek = new WeeklySchedule(
+            2,
+            [DayOfWeek.Monday],
+            new TimeOnly(9, 0),
+            "UTC",
+            startDate: new DateOnly(2026, 9, 7));
+        Assert.Equal(DayOfWeek.Monday, new DateOnly(2026, 9, 7).DayOfWeek);
+        Assert.Equal(
+            new DateTimeOffset(2026, 10, 5, 9, 0, 0, TimeSpan.Zero),
+            TriggerScheduleCalculator.InitialNext(everyOtherWeek, created));
+    }
+
+    [Fact]
     public void Weekly_interval_advances_from_the_admitted_slot_week()
     {
         var everyOther = new WeeklySchedule(2, [DayOfWeek.Monday], new TimeOnly(9, 0), "UTC");

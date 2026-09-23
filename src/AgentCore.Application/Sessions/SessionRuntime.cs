@@ -149,6 +149,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly Queue<OccurrenceDelivery> _occurrenceQueue = new();
     private readonly Dictionary<Guid, OccurrenceDelivery> _reservedOccurrences = new();
     private readonly HashSet<Guid> _acceptedOccurrenceIds = [];
+    private readonly HashSet<Guid> _begunOccurrenceIds = [];
     private const int MaxQueuedOccurrences = 8;
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
@@ -651,7 +652,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task BeginAcceptedOccurrenceAsync(
+    public async Task<bool> BeginAcceptedOccurrenceAsync(
         OccurrenceDelivery delivery,
         CancellationToken cancellationToken = default)
     {
@@ -660,10 +661,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         BeginWork();
         if (!Enqueue(new DurableOccurrenceBeginReceived(context, delivery, started), urgent: false))
         {
-            return;
+            return false;
         }
 
-        await started.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return await started.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task AbandonOccurrenceReservationAsync(
@@ -720,6 +721,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (_reservedOccurrences.Remove(input.Delivery.OccurrenceId))
         {
+            _begunOccurrenceIds.Add(input.Delivery.OccurrenceId);
             if (!IsOutputQuiet() || HasPendingUserBatch())
             {
                 _occurrenceQueue.Enqueue(input.Delivery);
@@ -728,9 +730,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 LaunchOccurrence(input.Context, input.Delivery);
             }
+
+            input.Started.TrySetResult(true);
+            return Task.CompletedTask;
         }
 
-        input.Started.TrySetResult(true);
+        var started = _begunOccurrenceIds.Contains(input.Delivery.OccurrenceId);
+        if (!started)
+        {
+            _acceptedOccurrenceIds.Remove(input.Delivery.OccurrenceId);
+        }
+
+        input.Started.TrySetResult(started);
         return Task.CompletedTask;
     }
 
@@ -2850,11 +2861,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             timeZone = zone.Value;
         }
 
+        var authorization = TriggerAuthorization.Classify(trigger.Kind, trigger.Text, _pendingTriggerProposal);
         return new TriggerCommandContext(
             owner,
             SessionId,
             timeZone,
-            TriggerAuthorization.Classify(trigger.Kind, trigger.Text, _pendingTriggerProposal is not null),
+            authorization.Classification,
+            authorization.AllowedActions,
             confirming,
             _pendingTriggerProposal,
             trigger.EventId,

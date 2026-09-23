@@ -322,7 +322,7 @@ Native audio goes directly to this session without decomposing it into STT/LLM/T
 
 ## P5 trigger ports (observed)
 
-`ITriggerStore` and `ITriggerRegistrationService` are Application ports. Infrastructure supplies the in-memory and SQLite stores. Schedule tools do not accept owner, provenance, or authorization origin. `IDurableApplicationEventIngress` admits one allowlisted `order_status_changed` shape into the same occurrence store. `IEnvironmentEventIngress` remains the live-only environment path. `IOccurrenceMailbox` reserves, then commits `AcceptedLive` before a runtime speaks, or abandons the reservation when acceptance fails.
+`ITriggerStore` and `ITriggerRegistrationService` are Application ports. Infrastructure supplies the in-memory and SQLite stores. Schedule tools do not accept owner, provenance, or authorization origin. A current user turn authorizes only the schedule actions that turn requested (create, list, update, or cancel); a confirmation turn authorizes only the stored proposal. `IDurableApplicationEventIngress` admits one allowlisted `order_status_changed` shape into the same occurrence store. `IEnvironmentEventIngress` remains the live-only environment path. `IOccurrenceMailbox` reserves, then commits `AcceptedLive` before a runtime speaks. Begin reports whether that runtime actually started the occurrence. A failed begin returns the row to `Pending` and abandons the reservation. Occurrence dedupe is scoped by Agent Instance, profile, and dedupe key.
 
 ## Post-MVP
 

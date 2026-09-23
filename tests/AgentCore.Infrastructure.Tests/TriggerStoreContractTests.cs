@@ -153,10 +153,15 @@ public sealed class TriggerStoreContractTests
                 admitted.Occurrence.OccurrenceId,
                 (await service.GetOccurrenceAsync(owner, admitted.Occurrence.OccurrenceId))!.OccurrenceId);
 
-            var stolen = await Assert.ThrowsAsync<AgentCoreException>(() => service.AdmitOccurrenceAsync(
-                draft with { Owner = other }).AsTask());
-            Assert.Equal("Conflict", stolen.Code);
-            Assert.DoesNotContain("A1", stolen.Message, StringComparison.Ordinal);
+            var otherAdmitted = await service.AdmitOccurrenceAsync(draft with { Owner = other });
+            Assert.Equal(TriggerOccurrenceAdmitKind.Admitted, otherAdmitted.Kind);
+            Assert.NotEqual(admitted.Occurrence.OccurrenceId, otherAdmitted.Occurrence.OccurrenceId);
+            var duplicateOwner = await service.AdmitOccurrenceAsync(draft);
+            Assert.Equal(TriggerOccurrenceAdmitKind.Duplicate, duplicateOwner.Kind);
+            Assert.Equal(admitted.Occurrence.OccurrenceId, duplicateOwner.Occurrence.OccurrenceId);
+            var duplicateOther = await service.AdmitOccurrenceAsync(draft with { Owner = other });
+            Assert.Equal(TriggerOccurrenceAdmitKind.Duplicate, duplicateOther.Kind);
+            Assert.Equal(otherAdmitted.Occurrence.OccurrenceId, duplicateOther.Occurrence.OccurrenceId);
 
             var invalid = await Assert.ThrowsAsync<AgentCoreException>(() => service.AdmitOccurrenceAsync(
                 draft with { DedupeKey = "order-status|event-2", EvidenceJson = "not-json" }).AsTask());

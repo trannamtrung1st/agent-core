@@ -41,14 +41,14 @@ public sealed partial class SessionHost
         return live.Runtime.SubmitOccurrenceAsync(delivery, cancellationToken);
     }
 
-    public Task BeginAcceptedAsync(
+    public Task<bool> BeginAcceptedAsync(
         Guid sessionId,
         OccurrenceDelivery delivery,
         CancellationToken cancellationToken = default)
     {
         if (!_live.TryGetValue(sessionId, out var live))
         {
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
 
         return live.Runtime.BeginAcceptedOccurrenceAsync(delivery, cancellationToken);

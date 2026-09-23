@@ -397,21 +397,32 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         TriggerOccurrence occurrence,
         CancellationToken cancellationToken)
     {
-        var existing = await db.TriggerOccurrences.AsNoTracking()
-            .FirstOrDefaultAsync(row => row.DedupeKey == occurrence.DedupeKey, cancellationToken)
+        var existing = await FindByDedupeAsync(db, occurrence.Owner, occurrence.DedupeKey, cancellationToken)
             .ConfigureAwait(false);
         if (existing is null)
         {
             throw AgentCoreErrors.Conflict("Occurrence identifier is already in use.");
         }
 
-        var mapped = TriggerStoreMapping.ToOccurrence(existing);
-        if (!mapped.Owner.Equals(occurrence.Owner))
-        {
-            throw AgentCoreErrors.Conflict("Occurrence identity is already in use.");
-        }
+        return new TriggerOccurrenceAdmitResult(
+            TriggerOccurrenceAdmitKind.Duplicate,
+            TriggerStoreMapping.ToOccurrence(existing));
+    }
 
-        return new TriggerOccurrenceAdmitResult(TriggerOccurrenceAdmitKind.Duplicate, mapped);
+    private static Task<TriggerOccurrenceRecord?> FindByDedupeAsync(
+        AgentCoreDbContext db,
+        TriggerOwner owner,
+        string dedupeKey,
+        CancellationToken cancellationToken)
+    {
+        var instanceId = owner.AgentInstanceId.ToString("D");
+        var profileId = owner.ProfileId.ToString("D");
+        return db.TriggerOccurrences.AsNoTracking()
+            .FirstOrDefaultAsync(
+                row => row.DedupeKey == dedupeKey
+                    && row.AgentInstanceId == instanceId
+                    && row.ProfileId == profileId,
+                cancellationToken);
     }
 
     private static async Task<TriggerRegistrationRecord?> TrackRowAsync(
@@ -453,9 +464,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         DateTimeOffset asOf,
         CancellationToken cancellationToken)
     {
-        var existing = await db.TriggerOccurrences.AsNoTracking()
-            .FirstOrDefaultAsync(row => row.DedupeKey == dedupeKey, cancellationToken)
-            .ConfigureAwait(false);
+        var existing = await FindByDedupeAsync(db, owner, dedupeKey, cancellationToken).ConfigureAwait(false);
         var registrationRow = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
         if (existing is null || registrationRow is null)
         {
@@ -463,10 +472,6 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         }
 
         var mapped = TriggerStoreMapping.ToOccurrence(existing);
-        if (!mapped.Owner.Equals(owner))
-        {
-            return new ScheduledAdmitResult(ScheduledAdmitOutcome.Stale, null, null, 0);
-        }
 
         if (registrationRow.Status == (int)TriggerRegistrationStatus.Active
             && registrationRow.ScheduleRevision == expectedScheduleRevision
@@ -555,6 +560,17 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             occurrenceId,
             current => current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
                 ? current.WithRouting(OccurrenceRoutingDisposition.AcceptedLive, null, current.RoutingRevision + 1, acceptedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(
+        Guid occurrenceId,
+        DateTimeOffset revertedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.AcceptedLive
+                ? current.WithRouting(OccurrenceRoutingDisposition.Pending, null, current.RoutingRevision + 1, revertedAt, null, null)
                 : null,
             cancellationToken);
 

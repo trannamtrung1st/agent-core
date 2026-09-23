@@ -8,9 +8,11 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryTriggerStore : ITriggerStore
 {
     private readonly object _gate = new();
+    private readonly record struct DedupeIdentity(Guid AgentInstanceId, Guid ProfileId, string DedupeKey);
+
     private readonly Dictionary<Guid, TriggerRegistration> _registrations = [];
     private readonly Dictionary<Guid, TriggerOccurrence> _occurrences = [];
-    private readonly Dictionary<string, Guid> _dedupeKeys = new(StringComparer.Ordinal);
+    private readonly Dictionary<DedupeIdentity, Guid> _dedupeKeys = [];
 
     public ValueTask<TriggerRegistration> CreateAsync(
         TriggerRegistration registration,
@@ -117,17 +119,11 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         RequireFreshOccurrence(occurrence);
         lock (_gate)
         {
-            if (_dedupeKeys.TryGetValue(occurrence.DedupeKey, out var existingId))
+            if (_dedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
             {
-                var existing = _occurrences[existingId];
-                if (!existing.Owner.Equals(occurrence.Owner))
-                {
-                    throw AgentCoreErrors.Conflict("Occurrence identity is already in use.");
-                }
-
                 return ValueTask.FromResult(new TriggerOccurrenceAdmitResult(
                     TriggerOccurrenceAdmitKind.Duplicate,
-                    existing));
+                    _occurrences[existingId]));
             }
 
             if (_occurrences.ContainsKey(occurrence.OccurrenceId))
@@ -136,7 +132,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             }
 
             _occurrences[occurrence.OccurrenceId] = occurrence;
-            _dedupeKeys[occurrence.DedupeKey] = occurrence.OccurrenceId;
+            _dedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
             return ValueTask.FromResult(new TriggerOccurrenceAdmitResult(
                 TriggerOccurrenceAdmitKind.Admitted,
                 occurrence));
@@ -232,7 +228,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             }
 
             var occurrence = TriggerScheduleAdmission.CreateOccurrence(current!, decision, asOf);
-            if (_dedupeKeys.TryGetValue(occurrence.DedupeKey, out var existingId))
+            if (_dedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
             {
                 var existing = _occurrences[existingId];
                 var advanced = TriggerScheduleAdmission.Advance(current!, decision, asOf);
@@ -246,7 +242,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 
             var updated = TriggerScheduleAdmission.Advance(current!, decision, asOf);
             _occurrences[occurrence.OccurrenceId] = occurrence;
-            _dedupeKeys[occurrence.DedupeKey] = occurrence.OccurrenceId;
+            _dedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
             _registrations[registrationId] = updated;
             return ValueTask.FromResult(new ScheduledAdmitResult(
                 ScheduledAdmitOutcome.Admitted,
@@ -323,6 +319,21 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     null,
                     current.RoutingRevision + 1,
                     acceptedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(
+        Guid occurrenceId,
+        DateTimeOffset revertedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.AcceptedLive
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.Pending,
+                    null,
+                    current.RoutingRevision + 1,
+                    revertedAt,
                     null,
                     null)
                 : null));
@@ -442,6 +453,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             return next;
         }
     }
+
+    private static DedupeIdentity Dedupe(TriggerOwner owner, string dedupeKey) =>
+        new(owner.AgentInstanceId, owner.ProfileId, dedupeKey);
 
     private static bool IsCurrent(
         TriggerRegistration? current,

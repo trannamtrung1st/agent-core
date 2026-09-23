@@ -26,6 +26,7 @@ public sealed class HostedTriggerToolTests
             sessionId,
             "UTC",
             TriggerAuthorizationClassification.CurrentUserTurn,
+            TriggerCommandAction.Create,
             false,
             null,
             null,

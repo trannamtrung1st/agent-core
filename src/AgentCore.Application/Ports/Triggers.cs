@@ -186,6 +186,11 @@ public interface ITriggerStore
         DateTimeOffset acceptedAt,
         CancellationToken cancellationToken = default);
 
+    ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(
+        Guid occurrenceId,
+        DateTimeOffset revertedAt,
+        CancellationToken cancellationToken = default);
+
     ValueTask<TriggerOccurrence?> ReleaseClaimAsync(
         Guid occurrenceId,
         Guid claimId,

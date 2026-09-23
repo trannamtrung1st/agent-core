@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
@@ -48,7 +49,7 @@ public interface IOccurrenceMailbox
         OccurrenceDelivery delivery,
         CancellationToken cancellationToken = default);
 
-    Task BeginAcceptedAsync(
+    Task<bool> BeginAcceptedAsync(
         Guid sessionId,
         OccurrenceDelivery delivery,
         CancellationToken cancellationToken = default);
@@ -180,6 +181,14 @@ public sealed class TriggerOccurrenceRouter(
                 RuntimeTelemetry.RecordTriggerScheduler("rejected");
                 return;
             }
+
+            if (occurrence.ScheduleRevision != registration.ScheduleRevision)
+            {
+                await store.TryRejectPendingAsync(occurrence.OccurrenceId, "Schedule was superseded.", now, cancellationToken)
+                    .ConfigureAwait(false);
+                RuntimeTelemetry.RecordTriggerScheduler("rejected");
+                return;
+            }
         }
 
         var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
@@ -219,26 +228,56 @@ public sealed class TriggerOccurrenceRouter(
             return;
         }
 
-        if (accepted == OccurrenceAccept.Duplicate)
-        {
-            await store.TryAcceptLiveAsync(occurrence.OccurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
-            RuntimeTelemetry.RecordTriggerScheduler("accepted_live");
-            return;
-        }
-
-        var stored = await store.TryAcceptLiveAsync(occurrence.OccurrenceId, claimId, now, cancellationToken)
+        await CommitAndBeginAsync(targets[0].SessionId, occurrence.OccurrenceId, claimId, delivery, now, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task CommitAndBeginAsync(
+        Guid sessionId,
+        Guid occurrenceId,
+        Guid claimId,
+        OccurrenceDelivery delivery,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var stored = await store.TryAcceptLiveAsync(occurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
         if (stored is null)
         {
-            await mailbox.AbandonReservationAsync(targets[0].SessionId, occurrence.OccurrenceId, cancellationToken)
-                .ConfigureAwait(false);
-            await store.ReleaseClaimAsync(occurrence.OccurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
+            await mailbox.AbandonReservationAsync(sessionId, occurrenceId, cancellationToken).ConfigureAwait(false);
+            await store.ReleaseClaimAsync(occurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
             RuntimeTelemetry.RecordTriggerScheduler("released");
             return;
         }
 
-        await mailbox.BeginAcceptedAsync(targets[0].SessionId, delivery, cancellationToken).ConfigureAwait(false);
+        bool started;
+        try
+        {
+            started = await mailbox.BeginAcceptedAsync(sessionId, delivery, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReconcileLostBeginAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+
+        if (!started)
+        {
+            await ReconcileLostBeginAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         RuntimeTelemetry.RecordTriggerScheduler("accepted_live");
+    }
+
+    private async Task ReconcileLostBeginAsync(
+        Guid sessionId,
+        Guid occurrenceId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await store.RevertAcceptedLiveAsync(occurrenceId, now, cancellationToken).ConfigureAwait(false);
+        await mailbox.AbandonReservationAsync(sessionId, occurrenceId, cancellationToken).ConfigureAwait(false);
+        RuntimeTelemetry.RecordTriggerScheduler("released");
     }
 
     private async Task RejectIneligibleAsync(
@@ -273,6 +312,12 @@ public sealed class DurableOrderEventIngress(
     IIdGenerator ids,
     TimeProvider time) : IDurableApplicationEventIngress
 {
+    private static readonly JsonSerializerOptions EvidenceJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private sealed record OrderStatusEvidence(string OrderReference, string Status, string Evidence);
     public async ValueTask<DurableEventResult> PublishOrderStatusAsync(
         TriggerOwner owner,
         Guid eventId,
@@ -348,7 +393,7 @@ public sealed class DurableOrderEventIngress(
 
         var reference = orderReference.Trim();
         var body = evidence ?? "";
-        normalized = "{\"orderReference\":\"" + Escape(reference) + "\",\"status\":\"" + status + "\",\"evidence\":\"" + Escape(body) + "\"}";
+        normalized = JsonSerializer.Serialize(new OrderStatusEvidence(reference, status, body), EvidenceJsonOptions);
         if (System.Text.Encoding.UTF8.GetByteCount(normalized) > TriggerLimits.MaxEvidenceBytes)
         {
             error = "Evidence is too large.";
@@ -358,9 +403,6 @@ public sealed class DurableOrderEventIngress(
 
         return true;
     }
-
-    private static string Escape(string value) =>
-        value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
 }
 
 public interface IDurableApplicationEventIngress
