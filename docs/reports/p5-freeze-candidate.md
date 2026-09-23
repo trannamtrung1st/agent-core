@@ -1,6 +1,6 @@
 # P5 — Events, durable triggers, and configurable scheduling
 
-This report is the P5 closure candidate after the whole-phase review repairs. Hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on `267fcbd` and is historical. That review did **not** freeze P5. The repairs below stay inside P5. Local key-free and Compose gates on the repair tree passed. Hosted run [`35884024153`](https://github.com/trannamtrung1st/agent-core/actions/runs/35884024153) on `53ed9c1` failed in Synthetic Playwright; Compose smoke on that run succeeded. P5 is not frozen. Do not begin P6.
+This report is the P5 closure candidate after the whole-phase review repairs. Hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on `267fcbd` and is historical. That review did **not** freeze P5. The repairs below stay inside P5. Local key-free and Compose gates on the repair tree passed. Hosted run [`35884024153`](https://github.com/trannamtrung1st/agent-core/actions/runs/35884024153) on `53ed9c1` failed in Synthetic Playwright; Compose smoke on that run succeeded. Hosted run [`35886400983`](https://github.com/trannamtrung1st/agent-core/actions/runs/35886400983) on `4687211` failed the same suite: the long-session composer matched queued-message labels, and the reconnect voice click ran while Voice still cancelled durable voice mode. P5 is not frozen. Do not begin P6.
 
 ## Candidate
 

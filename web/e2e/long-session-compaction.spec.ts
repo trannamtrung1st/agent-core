@@ -21,7 +21,12 @@ test("long session recalls an early fact after compaction", async ({ page }) => 
 });
 
 async function send(page: import("@playwright/test").Page, text: string): Promise<void> {
-  await page.getByLabel("Message").fill(text);
-  await page.getByRole("button", { name: "Send" }).click();
+  const composer = page.getByRole("textbox", { name: "Message", exact: true });
+  await composer.fill(text);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".conversation-scroll").getByText(text, { exact: true })).toBeVisible({
+    timeout: 30_000
+  });
+  await expect(page.getByRole("region", { name: "Queued messages" })).toHaveCount(0);
   await waitForResponseSettled(page);
 }
