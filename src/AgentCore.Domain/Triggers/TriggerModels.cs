@@ -724,6 +724,32 @@ public sealed class TriggerOccurrence
 
     public DateTimeOffset? ClaimLeaseExpiresAtUtc { get; }
 
+    public TriggerOccurrence WithRouting(
+        OccurrenceRoutingDisposition disposition,
+        string? dispositionReason,
+        long routingRevision,
+        DateTimeOffset routingUpdatedAtUtc,
+        Guid? claimId,
+        DateTimeOffset? claimLeaseExpiresAtUtc) =>
+        new(
+            OccurrenceId,
+            DedupeKey,
+            RegistrationId,
+            Owner,
+            SourceKind,
+            ScheduledAtUtc,
+            ObservedAtUtc,
+            AdmittedAtUtc,
+            EvidenceJson,
+            SourceEventId,
+            ScheduleRevision,
+            disposition,
+            dispositionReason,
+            routingRevision,
+            routingUpdatedAtUtc,
+            claimId,
+            claimLeaseExpiresAtUtc);
+
     private static void RequireUtc(DateTimeOffset value, string name)
     {
         if (value.Offset != TimeSpan.Zero)

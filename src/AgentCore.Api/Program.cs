@@ -5,6 +5,7 @@ using AgentCore.Api.Realtime;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Triggers;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
 using AgentCore.Infrastructure.Persistence;
@@ -58,6 +59,8 @@ builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
+builder.Services.AddSingleton<ILiveOccurrenceDirectory>(provider => provider.GetRequiredService<SessionHost>());
+builder.Services.AddSingleton<IOccurrenceMailbox>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 32 * 1024;

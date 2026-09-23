@@ -40,6 +40,11 @@ public static class TriggerAuthorization
         string? currentUserText,
         bool hasPendingProposal)
     {
+        if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
+        {
+            return TriggerAuthorizationClassification.Occurrence;
+        }
+
         if (kind == TriggerKind.EnvironmentUpdate)
         {
             return TriggerAuthorizationClassification.Environment;

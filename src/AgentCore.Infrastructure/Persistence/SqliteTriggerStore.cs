@@ -488,6 +488,194 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
     private static long? ToUnix(DateTimeOffset? value) => value?.ToUnixTimeMilliseconds();
 
+    public async ValueTask<TriggerRegistration?> SuspendPolicyAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string reason,
+        DateTimeOffset suspendedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        if (row is null
+            || row.Status != (int)TriggerRegistrationStatus.Active
+            || row.Revision != expectedRevision)
+        {
+            return null;
+        }
+
+        var suspended = TriggerStoreMapping.ToRegistration(row).WithScheduleAdvance(
+            TriggerRegistrationStatus.SuspendedPolicy,
+            null,
+            row.OccurrenceCount,
+            row.Revision + 1,
+            suspendedAt,
+            reason);
+        row.Status = (int)TriggerRegistrationStatus.SuspendedPolicy;
+        row.NextOccurrenceAtUtc = null;
+        row.Revision = suspended.Revision;
+        row.UpdatedAtUtc = suspended.Provenance.UpdatedAt.ToUnixTimeMilliseconds();
+        row.SuspensionReason = suspended.SuspensionReason;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return suspended;
+    }
+
+    public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset leaseExpiresAtUtc,
+        DateTimeOffset claimedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(occurrenceId, current =>
+        {
+            var expired = current.Disposition == OccurrenceRoutingDisposition.Claimed
+                && current.ClaimLeaseExpiresAtUtc is DateTimeOffset lease
+                && lease <= claimedAt;
+            if (current.Disposition != OccurrenceRoutingDisposition.Pending && !expired)
+            {
+                return null;
+            }
+
+            return current.WithRouting(
+                OccurrenceRoutingDisposition.Claimed,
+                null,
+                current.RoutingRevision + 1,
+                claimedAt,
+                claimId,
+                leaseExpiresAtUtc);
+        }, cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset acceptedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
+                ? current.WithRouting(OccurrenceRoutingDisposition.AcceptedLive, null, current.RoutingRevision + 1, acceptedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> ReleaseClaimAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset releasedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
+                ? current.WithRouting(OccurrenceRoutingDisposition.Pending, null, current.RoutingRevision + 1, releasedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> MarkAwaitingDurableWorkAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        string reason,
+        DateTimeOffset markedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
+                ? current.WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, reason, current.RoutingRevision + 1, markedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> TryRejectPendingAsync(
+        Guid occurrenceId,
+        string reason,
+        DateTimeOffset rejectedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.Pending
+                ? current.WithRouting(OccurrenceRoutingDisposition.Rejected, reason, current.RoutingRevision + 1, rejectedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public async ValueTask<int> RecoverExpiredClaimsAsync(
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.TriggerOccurrences
+            .Where(row => row.Disposition == (int)OccurrenceRoutingDisposition.Claimed
+                && row.ClaimLeaseExpiresAtUtc != null
+                && row.ClaimLeaseExpiresAtUtc <= asOf.ToUnixTimeMilliseconds())
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var row in rows)
+        {
+            var current = TriggerStoreMapping.ToOccurrence(row);
+            var next = current.WithRouting(
+                OccurrenceRoutingDisposition.Pending,
+                null,
+                current.RoutingRevision + 1,
+                asOf,
+                null,
+                null);
+            CopyRouting(row, next);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Count;
+    }
+
+    public async ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(
+        OccurrenceRoutingDisposition disposition,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.TriggerOccurrences.AsNoTracking()
+            .Where(row => row.Disposition == (int)disposition)
+            .OrderBy(row => row.AdmittedAtUtc)
+            .ThenBy(row => row.OccurrenceId)
+            .Take(take)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(TriggerStoreMapping.ToOccurrence).ToArray();
+    }
+
+    private async ValueTask<TriggerOccurrence?> MutateOccurrenceAsync(
+        Guid occurrenceId,
+        Func<TriggerOccurrence, TriggerOccurrence?> change,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var id = occurrenceId.ToString("D");
+        var row = await db.TriggerOccurrences.FirstOrDefaultAsync(item => item.OccurrenceId == id, cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var next = change(TriggerStoreMapping.ToOccurrence(row));
+        if (next is null)
+        {
+            return null;
+        }
+
+        CopyRouting(row, next);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return next;
+    }
+
+    private static void CopyRouting(TriggerOccurrenceRecord row, TriggerOccurrence next)
+    {
+        row.Disposition = (int)next.Disposition;
+        row.DispositionReason = next.DispositionReason;
+        row.RoutingRevision = next.RoutingRevision;
+        row.RoutingUpdatedAtUtc = next.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds();
+        row.ClaimId = next.ClaimId?.ToString("D");
+        row.ClaimLeaseExpiresAtUtc = next.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds();
+    }
+
     private static bool IsConstraint(DbUpdateException exception) =>
         exception.InnerException is SqliteException sqlite
         && sqlite.SqliteErrorCode == 19;

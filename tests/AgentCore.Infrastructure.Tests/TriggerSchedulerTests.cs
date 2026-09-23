@@ -22,6 +22,40 @@ public sealed class TriggerSchedulerTests
     private static readonly DateTimeOffset Due = new(2026, 9, 1, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task Expired_claims_return_to_pending_and_a_second_claim_loses()
+    {
+        await ForEachStore(async store =>
+        {
+            var now = Due;
+            var occurrence = new TriggerOccurrence(
+                Guid.NewGuid(),
+                $"schedule:{Guid.NewGuid():D}",
+                null,
+                new TriggerOwner(InstanceA, ProfileA),
+                TriggerSourceKind.Schedule,
+                now,
+                now,
+                now,
+                "{}",
+                null,
+                1,
+                OccurrenceRoutingDisposition.Pending,
+                null,
+                0,
+                null,
+                null,
+                null);
+            await store.AdmitOccurrenceAsync(occurrence);
+            var claim = Guid.NewGuid();
+            Assert.NotNull(await store.TryClaimOccurrenceAsync(occurrence.OccurrenceId, claim, now.AddSeconds(30), now));
+            Assert.Null(await store.TryClaimOccurrenceAsync(occurrence.OccurrenceId, Guid.NewGuid(), now.AddSeconds(30), now));
+            Assert.Equal(1, await store.RecoverExpiredClaimsAsync(now.AddSeconds(30)));
+            var pending = await store.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10);
+            Assert.Equal(occurrence.OccurrenceId, Assert.Single(pending).OccurrenceId);
+        });
+    }
+
+    [Fact]
     public async Task Due_boundaries_one_shot_recovery_and_recurrence_are_idempotent()
     {
         await ForEachStore(async store =>
@@ -454,6 +488,30 @@ public sealed class TriggerSchedulerTests
 
             return inner.TryAdmitScheduledAsync(owner, registrationId, expectedScheduleRevision, expectedNextOccurrenceAtUtc, asOfUtc, cancellationToken);
         }
+
+        public ValueTask<TriggerRegistration?> SuspendPolicyAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
+            inner.SuspendPolicyAsync(owner, registrationId, expectedRevision, reason, suspendedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(Guid occurrenceId, Guid claimId, DateTimeOffset leaseExpiresAtUtc, DateTimeOffset claimedAt, CancellationToken cancellationToken = default) =>
+            inner.TryClaimOccurrenceAsync(occurrenceId, claimId, leaseExpiresAtUtc, claimedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(Guid occurrenceId, Guid claimId, DateTimeOffset acceptedAt, CancellationToken cancellationToken = default) =>
+            inner.TryAcceptLiveAsync(occurrenceId, claimId, acceptedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> ReleaseClaimAsync(Guid occurrenceId, Guid claimId, DateTimeOffset releasedAt, CancellationToken cancellationToken = default) =>
+            inner.ReleaseClaimAsync(occurrenceId, claimId, releasedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> MarkAwaitingDurableWorkAsync(Guid occurrenceId, Guid claimId, string reason, DateTimeOffset markedAt, CancellationToken cancellationToken = default) =>
+            inner.MarkAwaitingDurableWorkAsync(occurrenceId, claimId, reason, markedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> TryRejectPendingAsync(Guid occurrenceId, string reason, DateTimeOffset rejectedAt, CancellationToken cancellationToken = default) =>
+            inner.TryRejectPendingAsync(occurrenceId, reason, rejectedAt, cancellationToken);
+
+        public ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default) =>
+            inner.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken);
+
+        public ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(OccurrenceRoutingDisposition disposition, int limit, CancellationToken cancellationToken = default) =>
+            inner.ListByDispositionAsync(disposition, limit, cancellationToken);
     }
 
     private sealed class CaptureLogger : ILogger<TriggerScheduler>

@@ -2,7 +2,15 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Ports;
 
-public enum TriggerKind { UserTurn, LongSilence, EnvironmentUpdate, UnfinishedInteraction }
+public enum TriggerKind
+{
+    UserTurn,
+    LongSilence,
+    EnvironmentUpdate,
+    UnfinishedInteraction,
+    ScheduledOccurrence,
+    ApplicationEvent
+}
 
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text, string? EnvironmentKind = null);
 

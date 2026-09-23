@@ -146,6 +146,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly HashSet<Guid> _undurableUserEntryIds = [];
     private bool _allowQueuedSuffixAutoDispatch;
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
+    private readonly Queue<OccurrenceDelivery> _occurrenceQueue = new();
+    private readonly HashSet<Guid> _acceptedOccurrenceIds = [];
+    private const int MaxQueuedOccurrences = 8;
     private int _mailboxPressureSignaled;
     private long _ttsStartedAt;
     private long _segmentPipelineStarted;
@@ -632,6 +635,83 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    public async Task<OccurrenceAccept> SubmitOccurrenceAsync(
+        OccurrenceDelivery delivery,
+        CancellationToken cancellationToken = default)
+    {
+        var accepted = new TaskCompletionSource<OccurrenceAccept>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new DurableOccurrenceReceived(context, delivery, accepted), urgent: false))
+        {
+            return OccurrenceAccept.Unavailable;
+        }
+
+        return await accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleDurableOccurrenceAsync(
+        DurableOccurrenceReceived input,
+        CancellationToken cancellationToken)
+    {
+        var delivery = input.Delivery;
+        if (_snapshot.Status != SessionStatus.Attached
+            || _snapshot.ArchivedAt is not null
+            || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
+            || _snapshot.AgentInstanceId != delivery.Owner.AgentInstanceId
+            || _snapshot.ProfileId != delivery.Owner.ProfileId
+            || !OccurrenceCompatibility.Allows(_snapshot.Definition, delivery.SourceKind))
+        {
+            input.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
+            return;
+        }
+
+        if (!_acceptedOccurrenceIds.Add(delivery.OccurrenceId))
+        {
+            input.Accepted.TrySetResult(OccurrenceAccept.Duplicate);
+            return;
+        }
+
+        if (!IsOutputQuiet() && _occurrenceQueue.Count >= MaxQueuedOccurrences)
+        {
+            _acceptedOccurrenceIds.Remove(delivery.OccurrenceId);
+            input.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
+            return;
+        }
+
+        input.Accepted.TrySetResult(OccurrenceAccept.Accepted);
+        if (!IsOutputQuiet() || HasPendingUserBatch())
+        {
+            _occurrenceQueue.Enqueue(delivery);
+            return;
+        }
+
+        LaunchOccurrence(input.Context, delivery);
+        await Task.CompletedTask.ConfigureAwait(false);
+        _ = cancellationToken;
+    }
+
+    private void DrainOccurrenceQueue(EventContext context)
+    {
+        if (_occurrenceQueue.Count == 0 || !IsOutputQuiet() || HasPendingUserBatch() || _deactivated)
+        {
+            return;
+        }
+
+        LaunchOccurrence(context, _occurrenceQueue.Dequeue());
+    }
+
+    private void LaunchOccurrence(EventContext context, OccurrenceDelivery delivery)
+    {
+        var kind = delivery.SourceKind == TriggerSourceKind.Schedule
+            ? TriggerKind.ScheduledOccurrence
+            : TriggerKind.ApplicationEvent;
+        var responseId = _ids.NewId();
+        var turn = ++_turnGeneration;
+        var trigger = new AgentTrigger(delivery.OccurrenceId, kind, delivery.EvidenceJson);
+        LaunchBrain(context, trigger, responseId, turn);
+    }
+
     public Task WaitUntilIdleAsync(CancellationToken cancellationToken = default)
     {
         TaskCompletionSource idle;
@@ -916,6 +996,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case EnvironmentReceived environment:
                     await HandleEnvironmentAsync(environment, cancellationToken).ConfigureAwait(false);
                     break;
+                case DurableOccurrenceReceived occurrence:
+                    await HandleDurableOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
+                    break;
                 case MailboxSaturatedReceived saturated:
                     await HandleMailboxSaturatedAsync(saturated, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1048,6 +1131,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case CompactionReturned compaction:
                 compaction.Processed.TrySetResult(false);
+                break;
+            case DurableOccurrenceReceived occurrence:
+                occurrence.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
                 break;
             case ModelResultReceived model:
                 model.Processed.TrySetResult();
@@ -1537,6 +1623,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         await DrainEnvironmentAsync(context, cancellationToken).ConfigureAwait(false);
+        DrainOccurrenceQueue(context);
         SchedulePostResponseIdleTimer();
         await ApplyPendingVoiceIfIdleAsync(context, cancellationToken).ConfigureAwait(false);
         LaunchCompletionEvaluation(context);

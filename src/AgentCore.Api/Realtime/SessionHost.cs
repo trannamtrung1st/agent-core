@@ -7,9 +7,11 @@ using AgentCore.Application.Events;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Triggers;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Triggers;
 using AgentCore.Application.Speech;
 using AgentCore.Contracts.Realtime;
-using AgentCore.Domain.Conversation;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -26,7 +28,7 @@ public sealed class AgentCoreOptions
     public int DetachGracePeriodSeconds { get; set; } = 30;
 }
 
-public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress, IProfileLiveUpdateNotifier
+public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, IEnvironmentEventIngress, IProfileLiveUpdateNotifier, ILiveOccurrenceDirectory, IOccurrenceMailbox
 {
     private readonly SessionManager _sessions;
     private readonly SessionRuntimeFactory _factory;
@@ -2564,6 +2566,8 @@ public static class SessionEventMapper
         "LongSilence" => "longSilence",
         "EnvironmentUpdate" => "environmentUpdate",
         "UnfinishedInteraction" => "unfinishedInteraction",
+        "ScheduledOccurrence" => "scheduledOccurrence",
+        "ApplicationEvent" => "applicationEvent",
         _ => "userTurn"
     };
 

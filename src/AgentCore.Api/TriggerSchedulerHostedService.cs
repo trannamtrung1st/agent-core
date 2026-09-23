@@ -6,6 +6,7 @@ namespace AgentCore.Api;
 
 public sealed class TriggerSchedulerHostedService(
     TriggerScheduler scheduler,
+    TriggerOccurrenceRouter router,
     TimeProvider time,
     ILogger<TriggerSchedulerHostedService> logger) : BackgroundService
 {
@@ -18,6 +19,7 @@ public sealed class TriggerSchedulerHostedService(
             try
             {
                 await scheduler.RunOnceAsync(time.GetUtcNow(), stoppingToken).ConfigureAwait(false);
+                await router.RouteOnceAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

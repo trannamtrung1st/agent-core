@@ -1,6 +1,7 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
@@ -178,6 +179,11 @@ public sealed record ProfileUpdatedReceived(
     TaskCompletionSource Applied) : SessionInput(Context);
 
 public sealed record EnvironmentReceived(EventContext Context, EnvironmentEvent Event) : SessionInput(Context);
+
+public sealed record DurableOccurrenceReceived(
+    EventContext Context,
+    OccurrenceDelivery Delivery,
+    TaskCompletionSource<OccurrenceAccept> Accepted) : SessionInput(Context);
 
 public sealed record CompletionReturned(
     EventContext Context,

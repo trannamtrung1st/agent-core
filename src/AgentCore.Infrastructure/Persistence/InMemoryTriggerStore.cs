@@ -256,6 +256,193 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    public ValueTask<TriggerRegistration?> SuspendPolicyAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string reason,
+        DateTimeOffset suspendedAt,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var current = Find(owner, registrationId);
+            if (current is null
+                || current.Status != TriggerRegistrationStatus.Active
+                || current.Revision != expectedRevision)
+            {
+                return ValueTask.FromResult<TriggerRegistration?>(null);
+            }
+
+            var suspended = current.WithScheduleAdvance(
+                TriggerRegistrationStatus.SuspendedPolicy,
+                null,
+                current.OccurrenceCount,
+                current.Revision + 1,
+                suspendedAt,
+                reason);
+            _registrations[registrationId] = suspended;
+            return ValueTask.FromResult<TriggerRegistration?>(suspended);
+        }
+    }
+
+    public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset leaseExpiresAtUtc,
+        DateTimeOffset claimedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+        {
+            var expired = current.Disposition == OccurrenceRoutingDisposition.Claimed
+                && current.ClaimLeaseExpiresAtUtc is DateTimeOffset lease
+                && lease <= claimedAt;
+            if (current.Disposition != OccurrenceRoutingDisposition.Pending && !expired)
+            {
+                return null;
+            }
+
+            return current.WithRouting(
+                OccurrenceRoutingDisposition.Claimed,
+                null,
+                current.RoutingRevision + 1,
+                claimedAt,
+                claimId,
+                leaseExpiresAtUtc);
+        }));
+
+    public ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset acceptedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.AcceptedLive,
+                    null,
+                    current.RoutingRevision + 1,
+                    acceptedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> ReleaseClaimAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset releasedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.Pending,
+                    null,
+                    current.RoutingRevision + 1,
+                    releasedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> MarkAwaitingDurableWorkAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        string reason,
+        DateTimeOffset markedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.AwaitingDurableWork,
+                    reason,
+                    current.RoutingRevision + 1,
+                    markedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> TryRejectPendingAsync(
+        Guid occurrenceId,
+        string reason,
+        DateTimeOffset rejectedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.Pending
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.Rejected,
+                    reason,
+                    current.RoutingRevision + 1,
+                    rejectedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<int> RecoverExpiredClaimsAsync(
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var recovered = 0;
+            foreach (var current in _occurrences.Values.ToArray())
+            {
+                if (current.Disposition != OccurrenceRoutingDisposition.Claimed
+                    || current.ClaimLeaseExpiresAtUtc is not DateTimeOffset lease
+                    || lease > asOfUtc)
+                {
+                    continue;
+                }
+
+                _occurrences[current.OccurrenceId] = current.WithRouting(
+                    OccurrenceRoutingDisposition.Pending,
+                    null,
+                    current.RoutingRevision + 1,
+                    asOfUtc,
+                    null,
+                    null);
+                recovered++;
+            }
+
+            return ValueTask.FromResult(recovered);
+        }
+    }
+
+    public ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(
+        OccurrenceRoutingDisposition disposition,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var items = _occurrences.Values
+                .Where(item => item.Disposition == disposition)
+                .OrderBy(item => item.AdmittedAtUtc)
+                .ThenBy(item => item.OccurrenceId)
+                .Take(Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize))
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<TriggerOccurrence>>(items);
+        }
+    }
+
+    private TriggerOccurrence? Mutate(Guid occurrenceId, Func<TriggerOccurrence, TriggerOccurrence?> change)
+    {
+        lock (_gate)
+        {
+            if (!_occurrences.TryGetValue(occurrenceId, out var current))
+            {
+                return null;
+            }
+
+            var next = change(current);
+            if (next is null)
+            {
+                return null;
+            }
+
+            _occurrences[occurrenceId] = next;
+            return next;
+        }
+    }
+
     private static bool IsCurrent(
         TriggerRegistration? current,
         long expectedScheduleRevision,

@@ -164,6 +164,55 @@ public interface ITriggerStore
         DateTimeOffset expectedNextOccurrenceAtUtc,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerRegistration?> SuspendPolicyAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        string reason,
+        DateTimeOffset suspendedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset leaseExpiresAtUtc,
+        DateTimeOffset claimedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> TryAcceptLiveAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset acceptedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> ReleaseClaimAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        DateTimeOffset releasedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> MarkAwaitingDurableWorkAsync(
+        Guid occurrenceId,
+        Guid claimId,
+        string reason,
+        DateTimeOffset markedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> TryRejectPendingAsync(
+        Guid occurrenceId,
+        string reason,
+        DateTimeOffset rejectedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> RecoverExpiredClaimsAsync(
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<TriggerOccurrence>> ListByDispositionAsync(
+        OccurrenceRoutingDisposition disposition,
+        int limit,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ITriggerRegistrationService

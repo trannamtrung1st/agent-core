@@ -23,17 +23,33 @@ public sealed class TriggerScheduler
 
     private readonly ITriggerStore _store;
     private readonly ILogger<TriggerScheduler> _logger;
+    private readonly ITriggerAdmissionGuard? _guard;
     private readonly int _batchSize;
 
     public TriggerScheduler(ITriggerStore store, ILogger<TriggerScheduler> logger)
-        : this(store, logger, DefaultBatchSize)
+        : this(store, logger, DefaultBatchSize, null)
     {
     }
 
     public TriggerScheduler(ITriggerStore store, ILogger<TriggerScheduler> logger, int batchSize)
+        : this(store, logger, batchSize, null)
+    {
+    }
+
+    public TriggerScheduler(ITriggerStore store, ILogger<TriggerScheduler> logger, ITriggerAdmissionGuard guard)
+        : this(store, logger, DefaultBatchSize, guard)
+    {
+    }
+
+    private TriggerScheduler(
+        ITriggerStore store,
+        ILogger<TriggerScheduler> logger,
+        int batchSize,
+        ITriggerAdmissionGuard? guard)
     {
         _store = store;
         _logger = logger;
+        _guard = guard;
         _batchSize = Math.Clamp(batchSize, 1, DefaultBatchSize);
     }
 
@@ -62,6 +78,25 @@ public sealed class TriggerScheduler
 
             try
             {
+                if (_guard is not null)
+                {
+                    var decision = await _guard.EvaluateAsync(registration.Owner, TriggerSourceKind.Schedule, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (decision.Kind == TriggerAdmissionDecisionKind.Suspend)
+                    {
+                        await _store.SuspendPolicyAsync(
+                            registration.Owner,
+                            registration.RegistrationId,
+                            registration.Revision,
+                            decision.Reason ?? "Scheduling is disabled for this agent.",
+                            asOf,
+                            cancellationToken).ConfigureAwait(false);
+                        rejected++;
+                        RuntimeTelemetry.RecordTriggerScheduler("policy");
+                        continue;
+                    }
+                }
+
                 var result = await _store.TryAdmitScheduledAsync(
                     registration.Owner,
                     registration.RegistrationId,
