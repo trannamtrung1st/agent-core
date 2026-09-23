@@ -65,6 +65,16 @@ jobs:
         run: pnpm exec playwright test
         # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.
 
+      - name: Upload Playwright failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure
+          path: |
+            web/test-results
+            web/playwright-report
+          if-no-files-found: ignore
+
   compose-smoke:
     name: Synthetic Compose smoke
     runs-on: ubuntu-latest

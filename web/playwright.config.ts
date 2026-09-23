@@ -30,6 +30,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  reporter: process.env.CI
+    ? [["github"], ["line"], ["html", { open: "never" }]]
+    : "list",
   use: {
     ...chromium,
     baseURL: webUrl,
