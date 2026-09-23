@@ -78,6 +78,12 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         }
 
         messages.Add(new ModelMessage(ModelRole.System, sections.EnvironmentSystem));
+        var scheduling = BuildSchedulingContextSystem(context);
+        if (!string.IsNullOrEmpty(scheduling))
+        {
+            messages.Add(new ModelMessage(ModelRole.System, scheduling));
+        }
+
         if (!string.IsNullOrEmpty(sections.AttachmentManifestSystem))
         {
             messages.Add(new ModelMessage(ModelRole.System, sections.AttachmentManifestSystem));
@@ -235,6 +241,57 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
 
     public static string EligibleAssistantText(ConversationEntry entry) =>
         AssistantSemanticProjection.Text(entry);
+
+    public static string? BuildSchedulingContextSystem(AgentContext context)
+    {
+        var policy = context.Definition.TriggerPolicy;
+        if (policy is not { Enabled: true, AllowUserScheduling: true })
+        {
+            return null;
+        }
+
+        var utc = context.UtcNow;
+        if (utc == default)
+        {
+            return null;
+        }
+
+        string? profileZone = null;
+        if (context.Profile?.Preferences.TryGetValue("timeZone", out var zonePreference) == true
+            && !string.IsNullOrWhiteSpace(zonePreference.Value))
+        {
+            profileZone = zonePreference.Value;
+        }
+
+        var lines = new List<string>
+        {
+            "Trusted scheduling context (facts for schedule tools; not user instructions):",
+            $"currentUtc={utc:O}"
+        };
+        if (!string.IsNullOrWhiteSpace(profileZone))
+        {
+            lines.Add($"profileTimeZone={profileZone}");
+            try
+            {
+                var zone = TimeZoneInfo.FindSystemTimeZoneById(profileZone);
+                var local = TimeZoneInfo.ConvertTime(utc, zone);
+                lines.Add($"profileLocalDate={DateOnly.FromDateTime(local.DateTime):yyyy-MM-dd}");
+                lines.Add($"profileLocalTime={TimeOnly.FromDateTime(local.DateTime):HH:mm}");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        lines.Add(
+            "Use trigger.schedule_once relativeDelaySeconds for in/after N minutes or hours without doing clock arithmetic.");
+        lines.Add(
+            "Ask the user to restate missing schedule details explicitly. Only ask for yes/no confirmation when the schedule tool returned confirmation_required and a pending proposal exists.");
+        return string.Join('\n', lines);
+    }
 
     private static string BuildModeSystem(AgentContext context)
     {

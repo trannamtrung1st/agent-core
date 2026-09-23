@@ -115,8 +115,8 @@ public static class ToolRegistry
                 ToolEffect.SensitiveWrite),
             [ToolCatalog.TriggerScheduleOnce] = Descriptor(
                 ToolCatalog.TriggerScheduleOnce,
-                "Create one durable one-shot schedule. Requires authorization from the current user turn. Scheduling does not approve any future tool. Provide intent and exactly one time form: relativeDayOffset plus localTime, localDate plus localTime, or atUtc. Omit timeZone only when the trusted profile timezone should be used. Ask the user when the time or timezone is missing or ambiguous.",
-                """{"type":"object","properties":{"intent":{"type":"string"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"localTime":{"type":"string"},"atUtc":{"type":"string"},"timeZone":{"type":"string"}},"required":["intent"]}""",
+                "Create one durable one-shot schedule. Requires authorization from the current user turn. Scheduling does not approve any future tool. Provide intent and exactly one time form: relativeDelaySeconds for in/after N seconds, relativeDayOffset plus localTime, localDate plus localTime, or atUtc. The runtime computes relative delays from trusted currentUtc. timeZone accepts IANA ids or common labels such as Vietnam time. Omit timeZone only when the trusted profile timezone should be used. On validation failure, ask the user to restate the full schedule request; never ask for a bare yes/no unless the tool returned confirmation_required.",
+                """{"type":"object","properties":{"intent":{"type":"string"},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"localTime":{"type":"string"},"atUtc":{"type":"string"},"timeZone":{"type":"string"}},"required":["intent"]}""",
                 ToolEffect.Write),
             [ToolCatalog.TriggerScheduleRecurring] = Descriptor(
                 ToolCatalog.TriggerScheduleRecurring,
@@ -131,7 +131,7 @@ public static class ToolRegistry
             [ToolCatalog.TriggerUpdate] = Descriptor(
                 ToolCatalog.TriggerUpdate,
                 "Update a durable schedule owned by the current user. Requires authorization from the current user turn and expectedRevision. Scheduling does not approve any future tool. Do not send a property named revision.",
-                """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"},"intent":{"type":"string"},"kind":{"type":"string"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
+                """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"},"intent":{"type":"string"},"kind":{"type":"string"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
                 ToolEffect.Write),
             [ToolCatalog.TriggerCancel] = Descriptor(
                 ToolCatalog.TriggerCancel,

@@ -407,10 +407,12 @@ public static class TriggerScheduleCommands
         var hasOffset = arguments.TryGetProperty("relativeDayOffset", out var offsetElement);
         var hasDate = TryString(arguments, "localDate", out var localDateText);
         var hasAt = TryString(arguments, "atUtc", out var atText);
-        var forms = (hasOffset ? 1 : 0) + (hasDate ? 1 : 0) + (hasAt ? 1 : 0);
+        var hasDelay = arguments.TryGetProperty("relativeDelaySeconds", out var delayElement);
+        var forms = (hasOffset ? 1 : 0) + (hasDate ? 1 : 0) + (hasAt ? 1 : 0) + (hasDelay ? 1 : 0);
         if (forms != 1)
         {
-            throw new ArgumentException("Schedule time is missing or ambiguous. Ask the user for one exact time.");
+            throw new ArgumentException(
+                "Schedule time is missing or ambiguous. Use exactly one of relativeDelaySeconds, relativeDayOffset with localTime, localDate with localTime, or atUtc. Ask the user to restate the full request with a clear time. Do not ask for a bare yes/no confirmation.");
         }
 
         DateTimeOffset instant;
@@ -438,6 +440,24 @@ public static class TriggerScheduleCommands
             localDate = ParseDate(localDateText, "localDate");
             localTime = RequireLocalTime(arguments);
             instant = TriggerScheduleCalculator.ResolveWallClock(zone, localDate.Value, localTime.Value);
+        }
+        else if (hasDelay)
+        {
+            if (delayElement.ValueKind != JsonValueKind.Number || !delayElement.TryGetInt32(out var seconds))
+            {
+                throw new ArgumentException("relativeDelaySeconds must be a whole number of seconds.");
+            }
+
+            var maxSeconds = policy.OneShotHorizonDays * 86_400;
+            if (seconds < 1 || seconds > maxSeconds)
+            {
+                throw new ArgumentException("relativeDelaySeconds is outside the scheduling horizon.");
+            }
+
+            instant = now.AddSeconds(seconds);
+            var zoned = TimeZoneInfo.ConvertTime(instant, TriggerScheduleCalculator.RequireZone(zone));
+            localDate = DateOnly.FromDateTime(zoned.DateTime);
+            localTime = TimeOnly.FromDateTime(zoned.DateTime);
         }
         else
         {
@@ -540,15 +560,16 @@ public static class TriggerScheduleCommands
     {
         if (TryString(arguments, "timeZone", out var specified) && !string.IsNullOrWhiteSpace(specified))
         {
-            return TriggerTimeZone.Require(specified);
+            return TriggerTimeZoneNormalization.Resolve(specified);
         }
 
         if (!string.IsNullOrWhiteSpace(context.ProfileTimeZoneId))
         {
-            return TriggerTimeZone.Require(context.ProfileTimeZoneId);
+            return TriggerTimeZoneNormalization.Resolve(context.ProfileTimeZoneId);
         }
 
-        throw new ArgumentException("Timezone is required. Ask the user which timezone to use.");
+        throw new ArgumentException(
+            "Timezone is required. Ask which timezone to use, or pass a common label such as Vietnam time.");
     }
 
     private static string RequireIntent(JsonElement arguments) => TriggerText.RequireIntent(RequireString(arguments, "intent"));
@@ -631,7 +652,8 @@ public static class TriggerScheduleCommands
     private static bool HasOneShotFields(JsonElement arguments) =>
         arguments.TryGetProperty("relativeDayOffset", out _)
         || arguments.TryGetProperty("localDate", out _)
-        || arguments.TryGetProperty("atUtc", out _);
+        || arguments.TryGetProperty("atUtc", out _)
+        || arguments.TryGetProperty("relativeDelaySeconds", out _);
 
     private static string RequireString(JsonElement arguments, string name) =>
         TryString(arguments, name, out var value) && !string.IsNullOrWhiteSpace(value)

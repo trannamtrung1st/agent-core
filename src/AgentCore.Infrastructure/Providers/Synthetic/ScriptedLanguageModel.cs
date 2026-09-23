@@ -448,7 +448,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerScheduleOnce,
-                """{"intent":"Hello","relativeDayOffset":0,"localTime":"08:01","timeZone":"UTC"}""");
+                """{"intent":"Hello","relativeDelaySeconds":60}""");
             return true;
         }
 

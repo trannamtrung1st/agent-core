@@ -8,6 +8,7 @@ public sealed class TriggerCommandAuthorizerTests
 
     [Theory]
     [InlineData("say hello to me in 1 minute", TriggerCommandAction.Create)]
+    [InlineData("say hello to me after 1 minute", TriggerCommandAction.Create)]
     [InlineData("set a reminder tomorrow at 9", TriggerCommandAction.Create)]
     [InlineData("ping me in five minutes", TriggerCommandAction.Create)]
     [InlineData("every Friday remind me to submit the report", TriggerCommandAction.Create)]

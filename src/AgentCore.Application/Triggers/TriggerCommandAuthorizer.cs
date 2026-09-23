@@ -55,7 +55,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex AgentDirectedCreate = new(
-        @"\b(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b)",
+        @"\b(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b|\b(in|after)\s+\d+\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)\b.{0,40}\b(to me|me)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex AgentDirectedCreateVi = new(
