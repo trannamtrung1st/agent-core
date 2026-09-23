@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Typography } from "antd";
 import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
@@ -41,6 +41,8 @@ import { imageModelCompatibility } from "./imageModelCompatibility";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
+import { cancelSessionTrigger, listSessionTriggers } from "../../services/api";
+import { ScheduleDrawer } from "./ScheduleDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
 import { ApprovalModal } from "./ApprovalModal";
@@ -82,7 +84,18 @@ export function ChatApp() {
   const state = useSessionStore();
   const [profile, setProfile] = useState("");
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [scheduleEpoch, setScheduleEpoch] = useState(0);
+  const outputStateRef = useRef(state.outputState);
   const { isNarrow, siderWidth } = useViewport();
+
+  useEffect(() => {
+    const previous = outputStateRef.current;
+    outputStateRef.current = state.outputState;
+    if (schedulesOpen && previous !== "idle" && state.outputState === "idle") {
+      setScheduleEpoch((value) => value + 1);
+    }
+  }, [schedulesOpen, state.outputState]);
 
   useEffect(() => {
     void bootstrap()
@@ -283,6 +296,7 @@ export function ChatApp() {
                 ) : null
               }
               inSession={inSession && !readonly}
+              onSchedules={inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
               onEnd={() => void hangUp()}
             />
             <Flex align="center" gap={8} className="chat-header-meta">
@@ -446,6 +460,17 @@ export function ChatApp() {
             </div>
           </Content>
         </Layout>
+        {state.sessionId ? (
+          <ScheduleDrawer
+            sessionId={state.sessionId}
+            open={schedulesOpen}
+            wide={!isNarrow}
+            refreshKey={scheduleEpoch}
+            onClose={() => setSchedulesOpen(false)}
+            load={listSessionTriggers}
+            cancel={cancelSessionTrigger}
+          />
+        ) : null}
         {isNarrow ? (
           <Drawer
             title={<span id="session-rail-drawer-title">Chats</span>}

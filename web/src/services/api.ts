@@ -59,6 +59,17 @@ export type SessionResponse = {
   model?: SessionModelSelection | null;
 };
 
+export type SessionTrigger = {
+  registrationId: string;
+  intent: string;
+  status: string;
+  scheduleKind: string;
+  timeZone: string;
+  schedule: string;
+  nextOccurrenceAt: string | null;
+  revision: number;
+};
+
 export type HistoryPage = {
   items: unknown[];
   nextAfter: number;
@@ -416,4 +427,40 @@ export async function deleteAllSessions(options?: { includeArchived?: boolean })
 
   const body = (await response.json()) as { deletedCount: number };
   return body.deletedCount;
+}
+
+async function problemMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const problem = (await response.json()) as { title?: string; detail?: string };
+    return problem.detail?.trim() || problem.title?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function listSessionTriggers(sessionId: string): Promise<SessionTrigger[]> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/triggers`);
+  if (!response.ok) {
+    throw new Error(await problemMessage(response, "Unable to load schedules."));
+  }
+
+  const body = (await response.json()) as { items: SessionTrigger[] };
+  return body.items;
+}
+
+export async function cancelSessionTrigger(
+  sessionId: string,
+  registrationId: string,
+  expectedRevision: number
+): Promise<SessionTrigger> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/triggers/${registrationId}/cancel`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expectedRevision })
+  });
+  if (!response.ok) {
+    throw new Error(await problemMessage(response, "Unable to cancel the schedule."));
+  }
+
+  return (await response.json()) as SessionTrigger;
 }

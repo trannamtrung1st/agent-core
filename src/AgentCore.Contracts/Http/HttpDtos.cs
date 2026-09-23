@@ -224,6 +224,20 @@ public sealed record KnowledgeDocumentResponse(
 
 public sealed record WorkspaceNodeResponse(string LogicalPath, bool Directory, long ByteSize, bool Writable);
 
+public sealed record TriggerScheduleResponse(
+    string RegistrationId,
+    string Intent,
+    string Status,
+    string ScheduleKind,
+    string TimeZone,
+    string Schedule,
+    string? NextOccurrenceAt,
+    long Revision);
+
+public sealed record TriggerScheduleListResponse(IReadOnlyList<TriggerScheduleResponse> Items);
+
+public sealed record CancelTriggerRequest(long ExpectedRevision);
+
 public sealed record ArtifactResponse(
     string ArtifactId,
     string SessionId,

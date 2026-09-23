@@ -10,6 +10,7 @@ export function ChatHeader({
   timestamp,
   sessionsToggle,
   speechLocale,
+  onSchedules,
   onEnd,
   inSession
 }: {
@@ -18,6 +19,7 @@ export function ChatHeader({
   timestamp?: string | null;
   sessionsToggle?: ReactNode;
   speechLocale?: ReactNode;
+  onSchedules?: () => void;
   onEnd: () => void;
   inSession: boolean;
 }) {
@@ -58,6 +60,11 @@ export function ChatHeader({
       {speechLocale || inSession ? (
         <Flex align="center" gap={8} className="chat-header-actions">
           {speechLocale}
+          {inSession && onSchedules ? (
+            <Button size="small" aria-label="Schedules" onClick={onSchedules}>
+              Schedules
+            </Button>
+          ) : null}
           {inSession ? (
             <Dropdown menu={{ items }} trigger={["click"]} placement="bottomRight">
               <Button type="text" size="small" className="session-overflow" aria-label="Conversation actions" icon={<MoreOutlined />} />
