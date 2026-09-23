@@ -505,6 +505,26 @@ public sealed class TriggerSchedulerTests
             CancellationToken cancellationToken = default) =>
             inner.ConfirmLiveBeginAsync(occurrenceId, expectedRoutingRevision, confirmedAt, cancellationToken);
 
+        public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            DateTimeOffset revertedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.RevertLivePreparedAsync(occurrenceId, expectedRoutingRevision, revertedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> PromoteLivePreparedAwaitingDurableWorkAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            string reason,
+            DateTimeOffset markedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.PromoteLivePreparedAwaitingDurableWorkAsync(
+                occurrenceId,
+                expectedRoutingRevision,
+                reason,
+                markedAt,
+                cancellationToken);
+
         public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
             inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);
 

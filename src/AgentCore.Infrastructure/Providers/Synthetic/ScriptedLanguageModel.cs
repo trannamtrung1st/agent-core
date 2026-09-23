@@ -497,7 +497,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private static bool IsScheduleTurn(string lastUser) =>
         lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-        || ScheduleAuthorizer.AuthorizeCurrentTurn(lastUser, null) != TriggerCommandAction.None
+        || TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(lastUser, null)
         || ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null);
 
     private void RememberSchedule(string lastTool)

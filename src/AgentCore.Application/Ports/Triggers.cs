@@ -192,6 +192,19 @@ public interface ITriggerStore
         DateTimeOffset confirmedAt,
         CancellationToken cancellationToken = default);
 
+    ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        DateTimeOffset revertedAt,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<TriggerOccurrence?> PromoteLivePreparedAwaitingDurableWorkAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        string reason,
+        DateTimeOffset markedAt,
+        CancellationToken cancellationToken = default);
+
     ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(
         Guid occurrenceId,
         DateTimeOffset revertedAt,

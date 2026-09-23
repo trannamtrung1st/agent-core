@@ -559,7 +559,13 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         MutateOccurrenceAsync(
             occurrenceId,
             current => current.Disposition == OccurrenceRoutingDisposition.Claimed && current.ClaimId == claimId
-                ? current.WithRouting(OccurrenceRoutingDisposition.LivePrepared, null, current.RoutingRevision + 1, acceptedAt, null, null)
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.LivePrepared,
+                    null,
+                    current.RoutingRevision + 1,
+                    acceptedAt,
+                    null,
+                    acceptedAt.Add(TriggerOccurrenceRouter.LivePreparedLease))
                 : null,
             cancellationToken);
 
@@ -573,6 +579,39 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             current => current.Disposition == OccurrenceRoutingDisposition.LivePrepared
                 && current.RoutingRevision == expectedRoutingRevision
                 ? current.WithRouting(OccurrenceRoutingDisposition.AcceptedLive, null, current.RoutingRevision + 1, confirmedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        DateTimeOffset revertedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.LivePrepared
+                && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithRouting(OccurrenceRoutingDisposition.Pending, null, current.RoutingRevision + 1, revertedAt, null, null)
+                : null,
+            cancellationToken);
+
+    public ValueTask<TriggerOccurrence?> PromoteLivePreparedAwaitingDurableWorkAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        string reason,
+        DateTimeOffset markedAt,
+        CancellationToken cancellationToken = default) =>
+        MutateOccurrenceAsync(
+            occurrenceId,
+            current => current.Disposition == OccurrenceRoutingDisposition.LivePrepared
+                && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.AwaitingDurableWork,
+                    reason,
+                    current.RoutingRevision + 1,
+                    markedAt,
+                    null,
+                    null)
                 : null,
             cancellationToken);
 

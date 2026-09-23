@@ -320,7 +320,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     current.RoutingRevision + 1,
                     acceptedAt,
                     null,
-                    null)
+                    acceptedAt.Add(TriggerOccurrenceRouter.LivePreparedLease))
                 : null));
 
     public ValueTask<TriggerOccurrence?> ConfirmLiveBeginAsync(
@@ -336,6 +336,41 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     null,
                     current.RoutingRevision + 1,
                     confirmedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        DateTimeOffset revertedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.LivePrepared
+            && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.Pending,
+                    null,
+                    current.RoutingRevision + 1,
+                    revertedAt,
+                    null,
+                    null)
+                : null));
+
+    public ValueTask<TriggerOccurrence?> PromoteLivePreparedAwaitingDurableWorkAsync(
+        Guid occurrenceId,
+        long expectedRoutingRevision,
+        string reason,
+        DateTimeOffset markedAt,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Mutate(occurrenceId, current =>
+            current.Disposition == OccurrenceRoutingDisposition.LivePrepared
+            && current.RoutingRevision == expectedRoutingRevision
+                ? current.WithRouting(
+                    OccurrenceRoutingDisposition.AwaitingDurableWork,
+                    reason,
+                    current.RoutingRevision + 1,
+                    markedAt,
                     null,
                     null)
                 : null));

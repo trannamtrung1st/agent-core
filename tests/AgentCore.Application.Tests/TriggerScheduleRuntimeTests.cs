@@ -234,7 +234,7 @@ public sealed class TriggerScheduleRuntimeTests
                 context.SessionId,
                 new ModelToolCall("reject", ToolCatalog.TriggerScheduleOnce, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
                 ToolLimits.MaxOutputBytes,
-                triggerCommand: Context(owner, classification, false, null));
+                triggerCommand: Context(owner, classification, false, null, currentUserText: "thanks"));
             Assert.Contains(
                 classification == TriggerAuthorizationClassification.UnrelatedUserTurn
                     ? "current_turn_not_authorized"
@@ -426,10 +426,12 @@ public sealed class TriggerScheduleRuntimeTests
     }
 
     [Fact]
-    public void Memory_and_old_wording_do_not_count_as_the_current_request()
+    public async Task Memory_and_old_wording_do_not_count_as_the_current_request()
     {
         const string remembered = "Remind me tomorrow at 9 to call John.";
-        Assert.Equal(TriggerCommandAction.Create, Authorizer.AuthorizeCurrentTurn(remembered, "en"));
+        Assert.Equal(
+            TriggerCommandAuthorizationDecision.Allow,
+            await Authorizer.AuthorizeCurrentTurnAsync(remembered, "en", TriggerCommandAction.Create));
         Assert.Equal(
             TriggerAuthorizationClassification.UnrelatedUserTurn,
             TriggerAuthorization.Classify(TriggerKind.UserTurn, "thanks", null, Authorizer, "en").Classification);
@@ -445,16 +447,21 @@ public sealed class TriggerScheduleRuntimeTests
         Assert.Equal(
             TriggerAuthorizationClassification.Initiative,
             TriggerAuthorization.Classify(TriggerKind.LongSilence, remembered, null, Authorizer, "en").Classification);
-        Assert.Equal(TriggerCommandAction.List, Authorizer.AuthorizeCurrentTurn("What reminders do I have?", "en"));
-        Assert.Equal(TriggerCommandAction.Update, Authorizer.AuthorizeCurrentTurn("Move that reminder to 10.", "en"));
-        Assert.Equal(TriggerCommandAction.Cancel, Authorizer.AuthorizeCurrentTurn("Cancel that reminder.", "en"));
+        Assert.Equal(
+            TriggerCommandAuthorizationDecision.Allow,
+            await Authorizer.AuthorizeCurrentTurnAsync("What reminders do I have?", "en", TriggerCommandAction.List));
+        Assert.Equal(
+            TriggerCommandAuthorizationDecision.Allow,
+            await Authorizer.AuthorizeCurrentTurnAsync("Move that reminder to 10.", "en", TriggerCommandAction.Update));
+        Assert.Equal(
+            TriggerCommandAuthorizationDecision.Allow,
+            await Authorizer.AuthorizeCurrentTurnAsync("Cancel that reminder.", "en", TriggerCommandAction.Cancel));
         Assert.Equal(
             TriggerCommandAction.None,
-            TriggerAuthorization.Classify(TriggerKind.UserTurn, "What reminders do I have?", null, Authorizer, "en").AllowedActions
-                & TriggerCommandAction.Create);
+            TriggerAuthorization.Classify(TriggerKind.UserTurn, "What reminders do I have?", null, Authorizer, "en").AllowedActions);
         Assert.Equal(
-            TriggerCommandAction.None,
-            Authorizer.AuthorizeCurrentTurn("don't create a reminder", "en") & TriggerCommandAction.Create);
+            TriggerCommandAuthorizationDecision.Deny,
+            await Authorizer.AuthorizeCurrentTurnAsync("don't create a reminder", "en", TriggerCommandAction.Create));
     }
 
     [Fact]

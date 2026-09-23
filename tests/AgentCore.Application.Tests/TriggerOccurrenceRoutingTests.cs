@@ -450,6 +450,34 @@ public sealed class TriggerOccurrenceRoutingTests
     }
 
     [Fact]
+    public async Task Expired_live_prepared_without_runtime_becomes_awaiting_durable_work()
+    {
+        var harness = await StartAsync();
+        var admitted = await Ingress(harness).PublishOrderStatusAsync(harness.Owner, Guid.NewGuid(), "L-1", "shipped", null);
+        var occurrenceId = admitted.Occurrence!.OccurrenceId;
+        var claimId = Guid.NewGuid();
+        var now = harness.Time.GetUtcNow();
+        await harness.Store.TryClaimOccurrenceAsync(
+            occurrenceId,
+            claimId,
+            now.Add(TriggerOccurrenceRouter.ClaimLease),
+            now);
+        Assert.NotNull(await harness.Store.TryAcceptLiveAsync(occurrenceId, claimId, now));
+        harness.Time.Advance(TriggerOccurrenceRouter.LivePreparedLease + TimeSpan.FromSeconds(1));
+        var router = new TriggerOccurrenceRouter(
+            harness.Store,
+            harness.Guard,
+            new FixedDirectory([]),
+            new UnavailableMailbox(),
+            new SystemIdGenerator(TimeProvider.System),
+            harness.Time);
+        await router.RouteOnceAsync();
+        var saved = (await harness.Store.GetOccurrenceAsync(harness.Owner, occurrenceId))!;
+        Assert.Equal(OccurrenceRoutingDisposition.AwaitingDurableWork, saved.Disposition);
+        Assert.Equal("No compatible runtime.", saved.DispositionReason);
+    }
+
+    [Fact]
     public async Task Begin_reports_failure_when_the_reservation_is_missing_or_the_runtime_is_closed()
     {
         var harness = await StartAsync();
@@ -781,6 +809,26 @@ public sealed class TriggerOccurrenceRoutingTests
             CancellationToken cancellationToken = default) =>
             inner.ConfirmLiveBeginAsync(occurrenceId, expectedRoutingRevision, confirmedAt, cancellationToken);
 
+        public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            DateTimeOffset revertedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.RevertLivePreparedAsync(occurrenceId, expectedRoutingRevision, revertedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> PromoteLivePreparedAwaitingDurableWorkAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            string reason,
+            DateTimeOffset markedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.PromoteLivePreparedAwaitingDurableWorkAsync(
+                occurrenceId,
+                expectedRoutingRevision,
+                reason,
+                markedAt,
+                cancellationToken);
+
         public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
             inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);
 
@@ -872,6 +920,26 @@ public sealed class TriggerOccurrenceRoutingTests
             DateTimeOffset confirmedAt,
             CancellationToken cancellationToken = default) =>
             inner.ConfirmLiveBeginAsync(occurrenceId, expectedRoutingRevision, confirmedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> RevertLivePreparedAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            DateTimeOffset revertedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.RevertLivePreparedAsync(occurrenceId, expectedRoutingRevision, revertedAt, cancellationToken);
+
+        public ValueTask<TriggerOccurrence?> PromoteLivePreparedAwaitingDurableWorkAsync(
+            Guid occurrenceId,
+            long expectedRoutingRevision,
+            string reason,
+            DateTimeOffset markedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.PromoteLivePreparedAwaitingDurableWorkAsync(
+                occurrenceId,
+                expectedRoutingRevision,
+                reason,
+                markedAt,
+                cancellationToken);
 
         public ValueTask<TriggerOccurrence?> RevertAcceptedLiveAsync(Guid occurrenceId, DateTimeOffset revertedAt, CancellationToken cancellationToken = default) =>
             inner.RevertAcceptedLiveAsync(occurrenceId, revertedAt, cancellationToken);

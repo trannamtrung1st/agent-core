@@ -133,6 +133,8 @@ public sealed class TriggerOccurrenceRouter(
 {
     public static readonly TimeSpan ClaimLease = TimeSpan.FromSeconds(30);
 
+    public static readonly TimeSpan LivePreparedLease = TimeSpan.FromSeconds(30);
+
     public async Task RouteOnceAsync(CancellationToken cancellationToken = default)
     {
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
@@ -248,17 +250,47 @@ public sealed class TriggerOccurrenceRouter(
         CancellationToken cancellationToken)
     {
         var targets = directory.ListCompatible(occurrence.Owner, occurrence.SourceKind);
-        if (targets.Count != 1)
+        var leaseExpired = occurrence.ClaimLeaseExpiresAtUtc is DateTimeOffset lease && lease <= now;
+        if (!leaseExpired)
         {
+            if (targets.Count != 1)
+            {
+                return;
+            }
+
+            await TryCompletePreparedAsync(occurrence, targets[0].SessionId, now, cancellationToken).ConfigureAwait(false);
             return;
         }
 
+        if (targets.Count != 1)
+        {
+            var reason = targets.Count == 0
+                ? "No compatible runtime."
+                : "Multiple compatible runtimes.";
+            await store.PromoteLivePreparedAwaitingDurableWorkAsync(
+                occurrence.OccurrenceId,
+                occurrence.RoutingRevision,
+                reason,
+                now,
+                cancellationToken).ConfigureAwait(false);
+            RuntimeTelemetry.RecordTriggerScheduler("awaiting_durable_work");
+            return;
+        }
+
+        await TryCompletePreparedAsync(occurrence, targets[0].SessionId, now, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task TryCompletePreparedAsync(
+        TriggerOccurrence occurrence,
+        Guid sessionId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
         var delivery = new OccurrenceDelivery(
             occurrence.OccurrenceId,
             occurrence.Owner,
             occurrence.SourceKind,
             occurrence.EvidenceJson);
-        var sessionId = targets[0].SessionId;
         var accept = await mailbox.SubmitAsync(sessionId, delivery, cancellationToken).ConfigureAwait(false);
         if (accept == OccurrenceAccept.Unavailable)
         {
@@ -315,13 +347,23 @@ public sealed class TriggerOccurrenceRouter(
         }
         catch
         {
-            await ReconcileDefiniteBeginFailureAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            await ReconcileDefiniteBeginFailureAsync(
+                sessionId,
+                occurrenceId,
+                preparedRoutingRevision,
+                now,
+                cancellationToken).ConfigureAwait(false);
             throw;
         }
 
         if (!started)
         {
-            await ReconcileDefiniteBeginFailureAsync(sessionId, occurrenceId, now, cancellationToken).ConfigureAwait(false);
+            await ReconcileDefiniteBeginFailureAsync(
+                sessionId,
+                occurrenceId,
+                preparedRoutingRevision,
+                now,
+                cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -342,10 +384,11 @@ public sealed class TriggerOccurrenceRouter(
     private async Task ReconcileDefiniteBeginFailureAsync(
         Guid sessionId,
         Guid occurrenceId,
+        long preparedRoutingRevision,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await store.RevertAcceptedLiveAsync(occurrenceId, now, cancellationToken).ConfigureAwait(false);
+        await store.RevertLivePreparedAsync(occurrenceId, preparedRoutingRevision, now, cancellationToken).ConfigureAwait(false);
         await mailbox.AbandonReservationAsync(sessionId, occurrenceId, cancellationToken).ConfigureAwait(false);
         RuntimeTelemetry.RecordTriggerScheduler("released");
     }

@@ -74,10 +74,9 @@ public static class TriggerAuthorization
             return new(TriggerAuthorizationClassification.Initiative, TriggerCommandAction.None);
         }
 
-        var requested = authorizer.AuthorizeCurrentTurn(currentUserText, conversationLanguage);
-        if (requested != TriggerCommandAction.None)
+        if (TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(currentUserText, conversationLanguage))
         {
-            return new(TriggerAuthorizationClassification.CurrentUserTurn, requested);
+            return new(TriggerAuthorizationClassification.CurrentUserTurn, TriggerCommandAction.None);
         }
 
         if (pendingProposal is not null && authorizer.IsScheduleConfirmation(currentUserText, conversationLanguage))
@@ -101,7 +100,7 @@ public static class TriggerAuthorization
         string? text,
         ITriggerCommandAuthorizer authorizer,
         string? conversationLanguage) =>
-        authorizer.AuthorizeCurrentTurn(text, conversationLanguage) != TriggerCommandAction.None;
+        TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(text, conversationLanguage);
 
     public static TriggerCommandAction ActionForTool(string toolName) => toolName switch
     {
@@ -168,8 +167,8 @@ public static class TriggerScheduleCommands
         }
 
         var required = TriggerAuthorization.ActionForTool(effectiveName);
-        var allowed = ResolveAllowedActions(context, authorizer);
-        if (required == TriggerCommandAction.None || (allowed & required) == 0)
+        var authorization = await ResolveAuthorizationAsync(context, authorizer, required, cancellationToken).ConfigureAwait(false);
+        if (required == TriggerCommandAction.None || authorization != TriggerCommandAuthorizationDecision.Allow)
         {
             if (context.Classification is TriggerAuthorizationClassification.Initiative or TriggerAuthorizationClassification.Environment
                 && !context.ExecutePendingProposal
@@ -177,6 +176,17 @@ public static class TriggerScheduleCommands
             {
                 RuntimeTelemetry.RecordTriggerRegistration(operation, "confirmation_required");
                 return Confirmation(toolName, arguments);
+            }
+
+            if (authorization == TriggerCommandAuthorizationDecision.Ambiguous
+                && context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
+                    or TriggerAuthorizationClassification.UnrelatedUserTurn)
+            {
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "ambiguous_schedule_request");
+                return Result(
+                    "ambiguous_schedule_request",
+                    "The schedule request is ambiguous. Ask the user to clarify the exact action and time.",
+                    clearProposal: false);
             }
 
             if (context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
@@ -672,23 +682,35 @@ public static class TriggerScheduleCommands
         _ => "create"
     };
 
-    private static TriggerCommandAction ResolveAllowedActions(
+    private static async ValueTask<TriggerCommandAuthorizationDecision> ResolveAuthorizationAsync(
         TriggerCommandContext context,
-        ITriggerCommandAuthorizer authorizer)
+        ITriggerCommandAuthorizer authorizer,
+        TriggerCommandAction required,
+        CancellationToken cancellationToken)
     {
         if (context.ExecutePendingProposal)
         {
-            return context.PendingProposal is null
-                ? TriggerCommandAction.None
-                : TriggerAuthorization.ActionForTool(context.PendingProposal.ToolName);
+            if (context.PendingProposal is null)
+            {
+                return TriggerCommandAuthorizationDecision.Deny;
+            }
+
+            return TriggerAuthorization.ActionForTool(context.PendingProposal.ToolName) == required
+                ? TriggerCommandAuthorizationDecision.Allow
+                : TriggerCommandAuthorizationDecision.Deny;
         }
 
-        if (context.Classification == TriggerAuthorizationClassification.CurrentUserTurn)
+        if (context.Classification == TriggerAuthorizationClassification.CurrentUserTurn
+            || context.Classification == TriggerAuthorizationClassification.UnrelatedUserTurn)
         {
-            return authorizer.AuthorizeCurrentTurn(context.CurrentUserText, context.ConversationLanguage);
+            return await authorizer.AuthorizeCurrentTurnAsync(
+                context.CurrentUserText,
+                context.ConversationLanguage,
+                required,
+                cancellationToken).ConfigureAwait(false);
         }
 
-        return context.AllowedActions;
+        return TriggerCommandAuthorizationDecision.Deny;
     }
 
     private static ToolExecutionResult Confirmation(string toolName, JsonElement arguments)

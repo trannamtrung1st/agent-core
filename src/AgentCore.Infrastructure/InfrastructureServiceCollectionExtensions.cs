@@ -175,7 +175,21 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         services.TryAddSingleton<IStructuredMemoryService, StructuredMemoryService>();
-        services.TryAddSingleton<ITriggerCommandAuthorizer, HeuristicTriggerCommandAuthorizer>();
+        services.TryAddSingleton<HeuristicTriggerCommandAuthorizer>();
+        if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
+        {
+            services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
+                provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>());
+        }
+        else
+        {
+            services.TryAddSingleton<ModelTriggerCommandAuthorizer>(static provider =>
+                new ModelTriggerCommandAuthorizer(
+                    provider.GetRequiredService<ILanguageModel>(),
+                    provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>()));
+            services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
+                provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
+        }
         services.TryAddSingleton<ITriggerRegistrationService, TriggerRegistrationService>();
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
