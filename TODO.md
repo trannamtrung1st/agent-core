@@ -1177,6 +1177,6 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-P5 behavior is implemented through P5G. The remaining closure work is the key-free Synthetic gate, Compose smoke, and a green hosted workflow on the closure commit. Do not start **P6** until that freeze is accepted.
+P5 behavior is implemented through P5G. The local key-free Synthetic gate and Compose smoke passed; counts are in `docs/reports/p5-freeze-candidate.md`. The remaining closure work is a green hosted Synthetic workflow on the closure commit. Do not start **P6** until that run is green and the freeze is accepted.
 
 P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
