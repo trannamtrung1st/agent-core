@@ -185,6 +185,16 @@ public sealed record DurableOccurrenceReceived(
     OccurrenceDelivery Delivery,
     TaskCompletionSource<OccurrenceAccept> Accepted) : SessionInput(Context);
 
+public sealed record DurableOccurrenceBeginReceived(
+    EventContext Context,
+    OccurrenceDelivery Delivery,
+    TaskCompletionSource<bool> Started) : SessionInput(Context);
+
+public sealed record DurableOccurrenceAbandonReceived(
+    EventContext Context,
+    Guid OccurrenceId,
+    TaskCompletionSource<bool> Abandoned) : SessionInput(Context);
+
 public sealed record CompletionReturned(
     EventContext Context,
     int Generation,

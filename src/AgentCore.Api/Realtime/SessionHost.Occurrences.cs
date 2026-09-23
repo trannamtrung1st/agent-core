@@ -40,4 +40,30 @@ public sealed partial class SessionHost
 
         return live.Runtime.SubmitOccurrenceAsync(delivery, cancellationToken);
     }
+
+    public Task BeginAcceptedAsync(
+        Guid sessionId,
+        OccurrenceDelivery delivery,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_live.TryGetValue(sessionId, out var live))
+        {
+            return Task.CompletedTask;
+        }
+
+        return live.Runtime.BeginAcceptedOccurrenceAsync(delivery, cancellationToken);
+    }
+
+    public Task AbandonReservationAsync(
+        Guid sessionId,
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_live.TryGetValue(sessionId, out var live))
+        {
+            return Task.CompletedTask;
+        }
+
+        return live.Runtime.AbandonOccurrenceReservationAsync(occurrenceId, cancellationToken);
+    }
 }

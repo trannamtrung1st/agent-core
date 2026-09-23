@@ -47,6 +47,16 @@ public interface IOccurrenceMailbox
         Guid sessionId,
         OccurrenceDelivery delivery,
         CancellationToken cancellationToken = default);
+
+    Task BeginAcceptedAsync(
+        Guid sessionId,
+        OccurrenceDelivery delivery,
+        CancellationToken cancellationToken = default);
+
+    Task AbandonReservationAsync(
+        Guid sessionId,
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default);
 }
 
 public enum DurableEventOutcome
@@ -196,19 +206,39 @@ public sealed class TriggerOccurrenceRouter(
             return;
         }
 
-        var accepted = await mailbox.SubmitAsync(
-            targets[0].SessionId,
-            new OccurrenceDelivery(occurrence.OccurrenceId, occurrence.Owner, occurrence.SourceKind, occurrence.EvidenceJson),
-            cancellationToken).ConfigureAwait(false);
-        if (accepted is OccurrenceAccept.Accepted or OccurrenceAccept.Duplicate)
+        var delivery = new OccurrenceDelivery(
+            occurrence.OccurrenceId,
+            occurrence.Owner,
+            occurrence.SourceKind,
+            occurrence.EvidenceJson);
+        var accepted = await mailbox.SubmitAsync(targets[0].SessionId, delivery, cancellationToken).ConfigureAwait(false);
+        if (accepted == OccurrenceAccept.Unavailable)
+        {
+            await store.ReleaseClaimAsync(occurrence.OccurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
+            RuntimeTelemetry.RecordTriggerScheduler("released");
+            return;
+        }
+
+        if (accepted == OccurrenceAccept.Duplicate)
         {
             await store.TryAcceptLiveAsync(occurrence.OccurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
             RuntimeTelemetry.RecordTriggerScheduler("accepted_live");
             return;
         }
 
-        await store.ReleaseClaimAsync(occurrence.OccurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
-        RuntimeTelemetry.RecordTriggerScheduler("released");
+        var stored = await store.TryAcceptLiveAsync(occurrence.OccurrenceId, claimId, now, cancellationToken)
+            .ConfigureAwait(false);
+        if (stored is null)
+        {
+            await mailbox.AbandonReservationAsync(targets[0].SessionId, occurrence.OccurrenceId, cancellationToken)
+                .ConfigureAwait(false);
+            await store.ReleaseClaimAsync(occurrence.OccurrenceId, claimId, now, cancellationToken).ConfigureAwait(false);
+            RuntimeTelemetry.RecordTriggerScheduler("released");
+            return;
+        }
+
+        await mailbox.BeginAcceptedAsync(targets[0].SessionId, delivery, cancellationToken).ConfigureAwait(false);
+        RuntimeTelemetry.RecordTriggerScheduler("accepted_live");
     }
 
     private async Task RejectIneligibleAsync(

@@ -147,6 +147,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _allowQueuedSuffixAutoDispatch;
     private readonly Queue<QueuedEnvironment> _environmentQueue = new();
     private readonly Queue<OccurrenceDelivery> _occurrenceQueue = new();
+    private readonly Dictionary<Guid, OccurrenceDelivery> _reservedOccurrences = new();
     private readonly HashSet<Guid> _acceptedOccurrenceIds = [];
     private const int MaxQueuedOccurrences = 8;
     private int _mailboxPressureSignaled;
@@ -650,6 +651,36 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         return await accepted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task BeginAcceptedOccurrenceAsync(
+        OccurrenceDelivery delivery,
+        CancellationToken cancellationToken = default)
+    {
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new DurableOccurrenceBeginReceived(context, delivery, started), urgent: false))
+        {
+            return;
+        }
+
+        await started.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task AbandonOccurrenceReservationAsync(
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default)
+    {
+        var abandoned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = NewContext();
+        BeginWork();
+        if (!Enqueue(new DurableOccurrenceAbandonReceived(context, occurrenceId, abandoned), urgent: false))
+        {
+            return;
+        }
+
+        await abandoned.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task HandleDurableOccurrenceAsync(
         DurableOccurrenceReceived input,
         CancellationToken cancellationToken)
@@ -672,23 +703,46 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
-        if (!IsOutputQuiet() && _occurrenceQueue.Count >= MaxQueuedOccurrences)
+        if (!IsOutputQuiet() && _occurrenceQueue.Count + _reservedOccurrences.Count >= MaxQueuedOccurrences)
         {
             _acceptedOccurrenceIds.Remove(delivery.OccurrenceId);
             input.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
             return;
         }
 
+        _reservedOccurrences[delivery.OccurrenceId] = delivery;
         input.Accepted.TrySetResult(OccurrenceAccept.Accepted);
-        if (!IsOutputQuiet() || HasPendingUserBatch())
-        {
-            _occurrenceQueue.Enqueue(delivery);
-            return;
-        }
-
-        LaunchOccurrence(input.Context, delivery);
         await Task.CompletedTask.ConfigureAwait(false);
         _ = cancellationToken;
+    }
+
+    private Task HandleDurableOccurrenceBeginAsync(DurableOccurrenceBeginReceived input)
+    {
+        if (_reservedOccurrences.Remove(input.Delivery.OccurrenceId))
+        {
+            if (!IsOutputQuiet() || HasPendingUserBatch())
+            {
+                _occurrenceQueue.Enqueue(input.Delivery);
+            }
+            else
+            {
+                LaunchOccurrence(input.Context, input.Delivery);
+            }
+        }
+
+        input.Started.TrySetResult(true);
+        return Task.CompletedTask;
+    }
+
+    private Task HandleDurableOccurrenceAbandonAsync(DurableOccurrenceAbandonReceived input)
+    {
+        if (_reservedOccurrences.Remove(input.OccurrenceId))
+        {
+            _acceptedOccurrenceIds.Remove(input.OccurrenceId);
+        }
+
+        input.Abandoned.TrySetResult(true);
+        return Task.CompletedTask;
     }
 
     private void DrainOccurrenceQueue(EventContext context)
@@ -999,6 +1053,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case DurableOccurrenceReceived occurrence:
                     await HandleDurableOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
                     break;
+                case DurableOccurrenceBeginReceived begin:
+                    await HandleDurableOccurrenceBeginAsync(begin).ConfigureAwait(false);
+                    break;
+                case DurableOccurrenceAbandonReceived abandon:
+                    await HandleDurableOccurrenceAbandonAsync(abandon).ConfigureAwait(false);
+                    break;
                 case MailboxSaturatedReceived saturated:
                     await HandleMailboxSaturatedAsync(saturated, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1134,6 +1194,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 break;
             case DurableOccurrenceReceived occurrence:
                 occurrence.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
+                break;
+            case DurableOccurrenceBeginReceived begin:
+                begin.Started.TrySetResult(false);
+                break;
+            case DurableOccurrenceAbandonReceived abandon:
+                abandon.Abandoned.TrySetResult(false);
                 break;
             case ModelResultReceived model:
                 model.Processed.TrySetResult();
