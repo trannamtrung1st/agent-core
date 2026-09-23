@@ -327,7 +327,7 @@ General Assistant exit for this closure:
 
 **P4 freeze** on **`822028f`**: hosted workflow **`35806764609`** — Synthetic offline gates and Compose smoke **green**. Closure report: [p4-freeze-candidate.md](reports/p4-freeze-candidate.md). Do not reopen P4 without a reproducible regression.
 
-**P5 implementation** is on `44a1b87` (`44a1b87cf0275c96f3ac3c5e19fafb53c737242c`): durable owner-scoped schedules, deterministic scheduler, current-turn tools, one allowlisted durable order event, live-or-`AwaitingDurableWork` routing, and the Schedules drawer. P5 is not frozen until the hosted Synthetic workflow is green on the closure commit. Closure report: [p5-freeze-candidate.md](reports/p5-freeze-candidate.md). Do not begin P6 from this paragraph.
+**P5 implementation** is on `44a1b87` (`44a1b87cf0275c96f3ac3c5e19fafb53c737242c`): durable owner-scoped schedules, deterministic scheduler, current-turn tools, one allowlisted durable order event, live-or-`AwaitingDurableWork` routing, and the Schedules drawer. Closure documentation is on `267fcbd`; hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on that commit. P5 is not frozen until whole-phase review accepts the closure candidate. Closure report: [p5-freeze-candidate.md](reports/p5-freeze-candidate.md). Do not begin P6 from this paragraph.
 
 ## Handoff rule
 

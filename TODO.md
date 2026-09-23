@@ -10,7 +10,7 @@ P5 implementation behavior:
 44a1b87cf0275c96f3ac3c5e19fafb53c737242c
 ```
 
-P5 is not frozen. The local key-free gate and Compose smoke passed on this closure documentation. The hosted Synthetic workflow was not run because `gh` is not authenticated. Evidence: `docs/reports/p5-freeze-candidate.md`.
+P5 is not frozen. Closure commit `267fcbd`: local key-free gate, Compose smoke, and hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) are **green**. Whole-phase freeze acceptance is still pending. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
 P4 implementation freeze:
 
@@ -1170,13 +1170,13 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] P4 structured session memory.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
-- [x] Durable trigger registration/scheduler — P5 implemented; freeze pending the hosted Synthetic workflow.
+- [x] Durable trigger registration/scheduler — P5 implemented; hosted workflow `35840226344` is green on `267fcbd`; freeze pending whole-phase review.
 - [ ] Durable triggered/background execution — P6.
 
 ---
 
 # Next implementation item
 
-P5 behavior is implemented through P5G. The local key-free Synthetic gate and Compose smoke passed; counts are in `docs/reports/p5-freeze-candidate.md`. The remaining closure work is a green hosted Synthetic workflow on the closure commit. Do not start **P6** until that run is green and the freeze is accepted.
+P5 behavior is implemented through P5G. Local and hosted Synthetic gates are green on closure commit `267fcbd` (workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344)); counts are in `docs/reports/p5-freeze-candidate.md`. Remaining closure work: whole-phase W06/final review and explicit freeze acceptance. Do not start **P6** until P5 is frozen.
 
 P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.

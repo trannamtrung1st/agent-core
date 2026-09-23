@@ -1,14 +1,14 @@
 # P5 — Events, durable triggers, and configurable scheduling
 
-This report is the P5 closure candidate. P5 is **not frozen** until the hosted Synthetic workflow is green on the commit that contains this report and the whole-phase review accepts proposal §21 and §26. Do not begin P6 from this candidate.
+This report is the P5 closure candidate. Hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on closure commit `267fcbd`. P5 is **not frozen** until the whole-phase review accepts proposal §21 and §26. Do not begin P6 from this candidate.
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
 | Implementation behavior | `44a1b87` (`44a1b87cf0275c96f3ac3c5e19fafb53c737242c`) |
-| Closure documentation | the commit that adds this report |
-| Hosted Synthetic workflow | not run: `gh` is not authenticated, so this closure commit has no hosted run id |
+| Closure documentation | `267fcbd` (`267fcbdcefa8b19ddb65cd8ff0ba84fa6621b823`) |
+| Hosted Synthetic workflow | [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) — **green** on `267fcbd` (push to `main`, 2026-09-23). Synthetic offline gates and Compose smoke both succeeded. |
 | Optional hosted provider probes | skipped; no credentials required for the scheduler |
 
 An admitted occurrence with no single compatible live runtime stops at `AwaitingDurableWork`. P5 does not create a `WorkItem`, keep a Session Runtime alive for a future fire, or expose a public webhook.
@@ -59,7 +59,7 @@ Infrastructure skips are the opt-in OpenAI and OpenRouter probes. The Applicatio
 
 ## §26 answers on this candidate
 
-The local evidence answers yes for natural one-shot and recurring create, restart, timezone meaning, duplicate admission, inspect/cancel, owner isolation, current-user authorization, remembered text, untrusted occurrence data, no standing tool approval, runtime-local timers, one typed non-schedule source, and a P6 handoff that does not require redesigning the occurrence. P0–P4 suites above stayed green. The hosted workflow answer is still open, so P5 is not closed.
+The local evidence answers yes for natural one-shot and recurring create, restart, timezone meaning, duplicate admission, inspect/cancel, owner isolation, current-user authorization, remembered text, untrusted occurrence data, no standing tool approval, runtime-local timers, one typed non-schedule source, and a P6 handoff that does not require redesigning the occurrence. P0–P4 suites above stayed green. Hosted Synthetic run `35840226344` on closure commit `267fcbd` is **green** on `origin/main`. P5 remains **not frozen** until the whole-phase review accepts proposal §21 and §26 on this candidate.
 
 ## Limitations that do not reopen the phase
 
