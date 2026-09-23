@@ -15,6 +15,8 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | GET /api/v1/sessions/{sessionId}/messages | `limit` 1..100; optional `after` or `before` (not both) | 200 history page | 400 invalid cursor; 404 unknown |
 | DELETE /api/v1/sessions/{sessionId} | No body | 204 after terminal save; repeated known end also 204 | 404 unknown; 503 durable save failed |
 | GET /health | No body | 200 health below | 503 if store/definition startup failed |
+| GET /api/v2/sessions/{sessionId}/triggers | Owner capability | 200 safe schedule list for the session's Agent Instance and trusted profile | 401 missing/invalid capability; 404 session |
+| POST /api/v2/sessions/{sessionId}/triggers/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe schedule | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
 
 Agent list (GET detail returns one item with the same fields):
 
@@ -147,7 +149,7 @@ Speech boundaries include sampleOffset in the same stream coordinate as audio. A
 | transcript.partial | utteranceId, revision: integer, text |
 | transcript.final | utteranceId, text, entryId: UUID, entrySequence: integer |
 | transcript.discarded | utteranceId |
-| agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction |
+| agent.response.started | entryId: UUID, entrySequence: integer, trigger: userTurn\|longSilence\|environmentUpdate\|unfinishedInteraction\|scheduledOccurrence\|applicationEvent |
 | agent.progress | kind: preparing\|readingAttachments\|runningTool\|waitingExternal\|finalizing, state: started\|updated\|completed\|failed, operationId?: UUID, message?: trusted bounded status string. The owning `responseId` is on the envelope, not nested in the payload. Transient live status only: never `session.ready` history, GET `/messages`, TTS/`clientSpeech` input, provider reasoning, or durable assistant text. Runtime-generated `operationId` is not a provider tool-call id. `session.state.changed.outputState` is unchanged and remains additive. |
 | agent.approval.requested | approvalId: UUID, operationId: UUID, toolName: string, effect: readOnly\|write\|sensitiveWrite\|destructive, summary: bounded safe string, details: bounded string map, expiresAt: ISO-8601 timestamp. Owning `responseId` is on the envelope. Live-session only; not durable history. `session.ready` may replay the same bounded payload (including `responseId`) while an approval wait is still open after reattach. No credentials, provider bodies, or raw binary. |
 | agent.speech.projection | mode: same\|custom\|none, text: accepted playback projection for the live response (Voice); published when validated speech is ready (`custom`) or when `same` completion fallback is applied; never raw markers or native JSON; not a separate history entry. Clients must not treat `same`/`none` projections as public semantic `speechText` (only `custom` maps to history `speechText`) |

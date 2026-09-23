@@ -149,6 +149,10 @@ The audience should come away thinking:
 
 That perception is the actual MVP objective.
 
+## P5 schedule management (observed)
+
+On Riley (`general-assistant` v8) with a trusted profile timezone, “remind me tomorrow” persists one owner-scoped one-shot schedule without an approval dialog. The chat header **Schedules** drawer lists intent, schedule, timezone, status, and next occurrence, and cancels the active row after confirmation. A second session for the same instance and profile sees the same row. Customer support does not offer user scheduling. There is no calendar and no admin trigger console.
+
 ## Post-MVP planned until verified
 
 Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.

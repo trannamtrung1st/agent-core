@@ -4,11 +4,13 @@ Ordered by current dependency and product value.
 
 Reviewed against `main` on **2026-09-23**.
 
-Current repository HEAD reviewed:
+P5 implementation behavior:
 
 ```text
-76002a6942da3981dd61392c8f87fd6f0c830340
+44a1b87cf0275c96f3ac3c5e19fafb53c737242c
 ```
+
+P5 is not frozen. The local key-free gate and Compose smoke passed on this closure documentation. The hosted Synthetic workflow was not run because `gh` is not authenticated. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
 P4 implementation freeze:
 
@@ -26,7 +28,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P4 are closed/frozen.**
-2. **P5 — events, durable triggers, and configurable scheduling** is the active roadmap item.
+2. **P5 — events, durable triggers, and configurable scheduling** is implemented and awaiting the freeze gate.
 3. **P6 — durable background work and triggered execution.**
 4. **P7 — agent harness / admin lifecycle.**
 5. **P8 — harness/platform extensibility.**
@@ -181,19 +183,19 @@ Always keep this section.
 
 - [x] Keep trusted identity persona/baseline separate from learned memory.
 
-- [ ] Keep runtime-local timers separate from durable scheduling.
+- [x] Keep runtime-local timers separate from durable scheduling.
 
   Existing `TimerElapsedReceived` / `Task.Delay` behavior belongs to the live `SessionRuntime` lifecycle. It must not become the durable scheduler for reminders or recurring work.
 
-- [ ] Keep trigger registration separate from trigger execution.
+- [x] Keep trigger registration separate from trigger execution.
 
   P5 owns trigger definitions, persistence, scheduling, admission, and normalized occurrences. P6 owns work that must execute or continue without a live Session Runtime.
 
-- [ ] Keep trigger authorization separate from later tool authorization.
+- [x] Keep trigger authorization separate from later tool authorization.
 
   Permission to create or fire a trigger never means permission to perform future sensitive external actions.
 
-- [ ] Background responses / work continuing after the live Session Runtime are tracked under P6.
+- [x] Background responses / work continuing after the live Session Runtime are tracked under P6.
 
   Do not change session-deactivation semantics merely to keep ordinary responses alive.
 
@@ -266,7 +268,7 @@ Durable trigger registration
 - survives session detach/deactivation and process restart
 ```
 
-- [ ] Introduce a provider-neutral durable trigger registration model.
+- [x] Introduce a provider-neutral durable trigger registration model.
 
 Suggested conceptual fields:
 
@@ -298,7 +300,7 @@ SystemPolicy
 
 Do not let the model choose arbitrary ownership identifiers or manufacture authorization provenance.
 
-- [ ] Introduce a normalized trigger occurrence/event.
+- [x] Introduce a normalized trigger occurrence/event.
 
 Suggested conceptual fields:
 
@@ -316,11 +318,11 @@ expiry?
 sourceSessionId?
 ```
 
-- [ ] Keep trigger registration separate from trigger occurrence.
+- [x] Keep trigger registration separate from trigger occurrence.
 
   A recurring registration may produce many occurrences. Updating/cancelling the registration must not rewrite already-completed occurrence history.
 
-- [ ] Make trigger ownership explicit.
+- [x] Make trigger ownership explicit.
 
   Durable user-facing triggers normally belong to:
 
@@ -332,7 +334,7 @@ sourceSessionId?
 
   `sourceSessionId` is provenance only; the originating session is not the trigger owner.
 
-- [ ] Treat trigger payload as data/evidence, not system authority.
+- [x] Treat trigger payload as data/evidence, not system authority.
 
   A scheduled intent such as:
 
@@ -342,7 +344,7 @@ sourceSessionId?
 
   is remembered user intent. It must not be injected as a new system/developer instruction.
 
-- [ ] Add a distinct trigger store abstraction.
+- [x] Add a distinct trigger store abstraction.
 
   Prefer a focused abstraction such as:
 
@@ -354,12 +356,12 @@ sourceSessionId?
 
 ### P5A verification
 
-- [ ] Persistence parity tests for InMemory and SQLite.
-- [ ] Ownership/isolation tests across Agent Instances and users.
-- [ ] Revision/concurrency tests for create/update/cancel.
-- [ ] Tests proving trigger payload cannot alter system-instruction authority.
-- [ ] Tests proving durable registrations survive process/runtime restart.
-- [ ] Tests proving runtime-local timer state is not accidentally persisted as a durable registration.
+- [x] Persistence parity tests for InMemory and SQLite.
+- [x] Ownership/isolation tests across Agent Instances and users.
+- [x] Revision/concurrency tests for create/update/cancel.
+- [x] Tests proving trigger payload cannot alter system-instruction authority.
+- [x] Tests proving durable registrations survive process/runtime restart.
+- [x] Tests proving runtime-local timer state is not accidentally persisted as a durable registration.
 
 ### P5A stop condition
 
@@ -378,15 +380,15 @@ OneShotSchedule
 RecurringSchedule
 ```
 
-- [ ] Add a durable scheduler service outside Session Runtime ownership.
+- [x] Add a durable scheduler service outside Session Runtime ownership.
 
   For the current modular monolith, prefer a simple hosted scheduler backed by the durable trigger store and `TimeProvider`.
 
   Do not add Redis, Kafka, Quartz, Hangfire, Kubernetes, or another scheduler platform unless measured requirements justify it.
 
-- [ ] Persist schedules before acknowledging creation.
+- [x] Persist schedules before acknowledging creation.
 
-- [ ] Use structured schedule arguments rather than exposing raw cron as the primary model-facing contract.
+- [x] Use structured schedule arguments rather than exposing raw cron as the primary model-facing contract.
 
   Example concepts:
 
@@ -408,7 +410,7 @@ RecurringSchedule
 
   Infrastructure may compile this into an internal schedule representation.
 
-- [ ] Preserve timezone semantics explicitly.
+- [x] Preserve timezone semantics explicitly.
 
   Store enough information to distinguish:
 
@@ -420,11 +422,11 @@ RecurringSchedule
 
   Compute/store the next due instant durably, while retaining the original timezone-aware recurrence semantics for later occurrences.
 
-- [ ] Define deterministic daylight-saving behavior for ambiguous or missing local times.
+- [x] Define deterministic daylight-saving behavior for ambiguous or missing local times.
 
   Cover it with tests even if the initial demo timezone does not use DST.
 
-- [ ] Add bounded schedule policy.
+- [x] Add bounded schedule policy.
 
   Policy should be able to constrain:
 
@@ -435,7 +437,7 @@ RecurringSchedule
   - whether indefinite recurrence is allowed;
   - expiry / maximum occurrences where required.
 
-- [ ] Define restart and missed-occurrence behavior.
+- [x] Define restart and missed-occurrence behavior.
 
   Initial policy:
 
@@ -444,9 +446,9 @@ RecurringSchedule
   - missed recurring occurrences are coalesced by default and the next future due time is calculated deterministically;
   - every emitted occurrence has a stable idempotency/dedupe identity.
 
-- [ ] Prefer at-least-once scheduler delivery plus idempotent occurrence admission rather than pretending the infrastructure provides exactly-once execution.
+- [x] Prefer at-least-once scheduler delivery plus idempotent occurrence admission rather than pretending the infrastructure provides exactly-once execution.
 
-- [ ] Scheduler failure must not corrupt or silently delete the registration.
+- [x] Scheduler failure must not corrupt or silently delete the registration.
 
 ### P5B verification
 
@@ -488,15 +490,15 @@ trigger.update
 trigger.cancel
 ```
 
-- [ ] Keep arguments typed and narrow.
+- [x] Keep arguments typed and narrow.
 
   Do not expose arbitrary SQL, code, raw scheduler internals, or unrestricted cron strings to the model.
 
-- [ ] Server-stamp owner, creation time, source event/session, and authorization origin.
+- [x] Server-stamp owner, creation time, source event/session, and authorization origin.
 
   The model supplies the requested schedule/intent, not trusted ownership/security metadata.
 
-- [ ] Treat an explicit current user request as sufficient authorization for low-risk trigger registration.
+- [x] Treat an explicit current user request as sufficient authorization for low-risk trigger registration.
 
   Example:
 
@@ -506,15 +508,15 @@ trigger.cancel
   → no redundant second approval dialog is required
   ```
 
-- [ ] Do not let a non-user-triggered agent run silently create durable schedules in the initial P5 design.
+- [x] Do not let a non-user-triggered agent run silently create durable schedules in the initial P5 design.
 
   If initiative/environment/another schedule makes the agent think a future trigger would be useful, it should propose/ask the user first. After the user confirms in a user turn, the trigger can be created normally.
 
   This prevents self-replicating or silently expanding durable autonomy without requiring a second confirmation for normal explicit requests.
 
-- [ ] Keep ordinary definition/admin policy able to disable trigger-management tools entirely for roles such as examiner/support agents where scheduling is inappropriate.
+- [x] Keep ordinary definition/admin policy able to disable trigger-management tools entirely for roles such as examiner/support agents where scheduling is inappropriate.
 
-- [ ] Trigger creation never grants standing permission for future sensitive actions.
+- [x] Trigger creation never grants standing permission for future sensitive actions.
 
   Example:
 
@@ -524,24 +526,24 @@ trigger.cancel
 
   may authorize creation of the Friday trigger, but future email sends still pass through the normal email/tool authorization policy.
 
-- [ ] Do not introduce standing/bulk future-action approval in P5.
+- [x] Do not introduce standing/bulk future-action approval in P5.
 
   If later required, model it explicitly as delegated authorization with scope, limits, expiry, provenance, and revocation rather than inferring it from trigger existence.
 
-- [ ] Allow user-requested list/update/cancel operations without an extra approval dialog when they affect triggers owned by that same Agent Instance + user.
+- [x] Allow user-requested list/update/cancel operations without an extra approval dialog when they affect triggers owned by that same Agent Instance + user.
 
-- [ ] Prevent cross-owner trigger mutation even if the model provides another id.
+- [x] Prevent cross-owner trigger mutation even if the model provides another id.
 
 ### P5C verification
 
-- [ ] User-requested one-shot creation through the agent.
-- [ ] User-requested recurring creation through the agent.
-- [ ] List/update/cancel own registrations.
-- [ ] Cross-user and cross-instance mutation denied.
-- [ ] Non-user-triggered agent execution cannot silently persist a new durable trigger.
-- [ ] Scheduling-disabled agent definition cannot create triggers.
-- [ ] Trigger registration does not bypass later `RequireApproval` tool policy.
-- [ ] Prompt/tool tests use natural user wording rather than only direct synthetic API calls.
+- [x] User-requested one-shot creation through the agent.
+- [x] User-requested recurring creation through the agent.
+- [x] List/update/cancel own registrations.
+- [x] Cross-user and cross-instance mutation denied.
+- [x] Non-user-triggered agent execution cannot silently persist a new durable trigger.
+- [x] Scheduling-disabled agent definition cannot create triggers.
+- [x] Trigger registration does not bypass later `RequireApproval` tool policy.
+- [x] Prompt/tool tests use natural user wording rather than only direct synthetic API calls.
 
 ### P5C stop condition
 
@@ -553,7 +555,7 @@ A user can naturally ask an eligible agent to create/manage reminders without re
 
 Today `InitiativePolicy.Triggers` controls existing proactive runtime behavior. P5 introduces additional policy concerns that should not be overloaded into one string list indefinitely.
 
-- [ ] Introduce/evolve a dedicated trigger policy boundary.
+- [x] Introduce/evolve a dedicated trigger policy boundary.
 
 Conceptually it should answer:
 
@@ -565,11 +567,11 @@ What limits apply?
 Which external/domain sources are trusted?
 ```
 
-- [ ] Keep `InitiativePolicy` responsible for proactive conversational behavior such as silence thresholds, cooldown, consecutive proactive turns, and whether the agent chooses to speak.
+- [x] Keep `InitiativePolicy` responsible for proactive conversational behavior such as silence thresholds, cooldown, consecutive proactive turns, and whether the agent chooses to speak.
 
-- [ ] Preserve compatibility with existing `longSilence`, `environmentUpdate`, and `unfinishedInteraction` behavior during migration.
+- [x] Preserve compatibility with existing `longSilence`, `environmentUpdate`, and `unfinishedInteraction` behavior during migration.
 
-- [ ] Do not make trigger eligibility equivalent to model initiative.
+- [x] Do not make trigger eligibility equivalent to model initiative.
 
   A trigger can wake/evaluate the agent; normal behavior policy still determines whether/how it responds.
 
@@ -593,19 +595,19 @@ external webhook/event
 
 - [ ] Normalize all sources into the same TriggerOccurrence boundary.
 
-- [ ] Require typed/validated allowlisted event shapes.
+- [x] Require typed/validated allowlisted event shapes.
 
-- [ ] External payloads are untrusted data, never executable instructions.
+- [x] External payloads are untrusted data, never executable instructions.
 
-- [ ] Preserve source authentication/verification outside model context.
+- [x] Preserve source authentication/verification outside model context.
 
-- [ ] Add replay/dedupe protection and bounded payload limits.
+- [x] Add replay/dedupe protection and bounded payload limits.
 
 - [ ] Add rate limits/backpressure appropriate to the source.
 
-- [ ] Keep webhook secrets and provider credentials outside model context.
+- [x] Keep webhook secrets and provider credentials outside model context.
 
-- [ ] Do not make arbitrary public webhook creation a P5 scheduling prerequisite.
+- [x] Do not make arbitrary public webhook creation a P5 scheduling prerequisite.
 
   Add it only when a concrete integration needs it.
 
@@ -619,7 +621,7 @@ At least one typed non-schedule source can produce the same normalized occurrenc
 
 P5 must define what firing means without prematurely implementing all background execution.
 
-- [ ] Route every accepted occurrence through one application boundary.
+- [x] Route every accepted occurrence through one application boundary.
 
   Conceptually:
 
@@ -631,19 +633,19 @@ P5 must define what firing means without prematurely implementing all background
   execution routing
   ```
 
-- [ ] Do not target only an originating live session.
+- [x] Do not target only an originating live session.
 
   Durable trigger ownership is Agent Instance + user. `sourceSessionId` may help result delivery/audit but cannot be the only execution identity.
 
-- [ ] If a compatible live runtime can safely consume the occurrence, allow a bounded live path.
+- [x] If a compatible live runtime can safely consume the occurrence, allow a bounded live path.
 
-- [ ] If execution must happen without a live runtime or must outlive it, hand off to P6 durable work.
+- [x] If execution must happen without a live runtime or must outlive it, hand off to P6 durable work.
 
-- [ ] Do not replay the original user message as though the user just sent it again.
+- [x] Do not replay the original user message as though the user just sent it again.
 
   The current event should be represented as a trigger occurrence with original user intent/provenance.
 
-- [ ] Define occurrence state/provenance sufficiently for P6 to create one idempotent execution per occurrence.
+- [x] Define occurrence state/provenance sufficiently for P6 to create one idempotent execution per occurrence.
 
 ### Important phase boundary
 
@@ -667,7 +669,7 @@ requires **P5 + P6**.
 
 Once durable schedules exist, users should be able to see what the agent has committed to do.
 
-- [ ] Add a minimal API/projection for active trigger registrations.
+- [x] Add a minimal API/projection for active trigger registrations.
 
 Expose safe fields such as:
 
@@ -678,22 +680,22 @@ Expose safe fields such as:
 - active/paused state;
 - created source/provenance where useful.
 
-- [ ] Add at least a minimal user-facing list/cancel/manage surface when scheduled triggers become a real product feature.
+- [x] Add at least a minimal user-facing list/cancel/manage surface when scheduled triggers become a real product feature.
 
   Rich calendar/task UX can wait. Do not hide durable schedules exclusively inside chat history.
 
-- [ ] Do not expose internal scheduler implementation, credentials, raw webhook secrets, or untrusted payload dumps.
+- [x] Do not expose internal scheduler implementation, credentials, raw webhook secrets, or untrusted payload dumps.
 
 ---
 
 ## P5 verification gate
 
-- [ ] Domain/Application tests for registration, occurrence, policy, ownership, authorization origin, and dedupe.
-- [ ] InMemory/SQLite persistence parity.
-- [ ] Deterministic scheduler tests using `TimeProvider`.
-- [ ] API tests for list/update/cancel and ownership checks.
-- [ ] Tool-policy tests for schedule-management tools.
-- [ ] Synthetic end-to-end chat scenario:
+- [x] Domain/Application tests for registration, occurrence, policy, ownership, authorization origin, and dedupe.
+- [x] InMemory/SQLite persistence parity.
+- [x] Deterministic scheduler tests using `TimeProvider`.
+- [x] API tests for list/update/cancel and ownership checks.
+- [x] Tool-policy tests for schedule-management tools.
+- [x] Synthetic end-to-end chat scenario:
 
   ```text
   user asks for one-shot reminder
@@ -703,9 +705,9 @@ Expose safe fields such as:
   → one normalized occurrence is produced
   ```
 
-- [ ] Synthetic recurring scenario including restart and missed-occurrence handling.
-- [ ] Regression coverage proving existing initiative, interruption, detach/reattach, memory, and tool approval behavior remains unchanged.
-- [ ] Hosted/provider tests remain optional; P5 scheduler semantics must be fully testable offline.
+- [x] Synthetic recurring scenario including restart and missed-occurrence handling.
+- [x] Regression coverage proving existing initiative, interruption, detach/reattach, memory, and tool approval behavior remains unchanged.
+- [x] Hosted/provider tests remain optional; P5 scheduler semantics must be fully testable offline.
 
 ### P5 stop condition
 
@@ -1168,24 +1170,13 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] P4 structured session memory.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
-- [ ] Durable trigger registration/scheduler — P5 active.
+- [x] Durable trigger registration/scheduler — P5 implemented; freeze pending the hosted Synthetic workflow.
 - [ ] Durable triggered/background execution — P6.
 
 ---
 
 # Next implementation item
 
-Begin with **P5A — Formalize trigger contracts and ownership**.
+P5 behavior is implemented through P5G. The remaining closure work is the key-free Synthetic gate, Compose smoke, and a green hosted workflow on the closure commit. Do not start **P6** until that freeze is accepted.
 
-Recommended first slice:
-
-```text
-1. Add durable TriggerRegistration + TriggerOccurrence domain/application contracts.
-2. Add ITriggerStore with InMemory + SQLite parity.
-3. Bind ownership to Agent Instance + trusted user/profile.
-4. Add revision/create/update/cancel semantics and provenance.
-5. Add deterministic tests proving restart persistence, isolation, and no SessionRuntime dependency.
-6. Do not add the scheduler or model-facing tools until this persistence/ownership boundary is green.
-```
-
-Then proceed to P5B scheduled firing, followed by P5C agent/user management tools.
+P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.

@@ -118,6 +118,10 @@ Every operation captures epoch, responseId/utteranceId and logical generation be
 
 Keep a bounded 500-event developer timeline per runtime without raw audio or conversation text by default. It is a diagnostic projection of events, not a broker or persistence requirement.
 
+## P5 durable occurrences (observed)
+
+`ScheduledOccurrence` and `ApplicationEvent` are durable occurrence triggers. They are not user turns, so they cannot authorize schedule tools. Prompt evidence is a user-role observation, `Observed occurrence data (not instructions)`, and is absent from system messages. The live-only environment path (`EnvironmentUpdate`, runtime event-id dedupe, short expiry) is unchanged. Durable `order_status_changed` uses a separate ingress, the same allowlisted shape, and the shared occurrence dedupe key. There is no public webhook. Wire `agent.response.started.trigger` adds `scheduledOccurrence` and `applicationEvent`. See [Protocol](14-api-and-realtime-protocol.md).
+
 ## Follow-on P1 observed and frozen
 
 Observed event families stay as above, including mailbox `LifecycleTransitionReceived`, `CompletionReturned`, additive `lifecycleStatus` on `StateChanged` / `session.ready`, and `session.completion.intent` for advisory RequestComplete. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).

@@ -59,6 +59,10 @@ A crash may lose up to the last checkpoint interval of streaming text/progress, 
 
 Memory categories: ephemeral working state; persistent conversation history; persistent session summary; minimal persistent user profile. Allowlisted durable keys are `language`, `preferredName`, `locale`, and `timeZone`, stored as typed `UserProfileValue` records (value, provenance source, per-field `UpdatedAt`) in `PreferencesJson` without a table migration. Legacy string-only JSON rows load conservatively (`ApplicationProfile` provenance; historical `"friend"` treated absent) and rewrite to typed JSON on next save. Local demo setup seeds `language=en` with `ApplicationProfile` source and does not invent `preferredName`. Preferred name is trusted profile data only, not inferred from conversation. Owner-capability HTTP `GET|PATCH /api/v2/profile` mutates the local profile with server-side provenance stamping; live sessions receive newer revisions through the runtime mailbox on subsequent turns. No profile settings UI, embeddings, vector search or Redis.
 
+## P5 trigger store (observed)
+
+`ITriggerStore` is separate from `IMemoryStore` and structured memory. Migration `20260923160000_TriggerContracts` adds `TriggerRegistrations` and `TriggerOccurrences` with no session or memory foreign keys. Timestamps are Unix milliseconds at offset zero. User mutations are owner-scoped and use `expectedRevision`. Schedule meaning changes `ScheduleRevision`. A scheduler advance bumps the row `Revision` and occurrence count, not `ScheduleRevision`. Routing changes bump `RoutingRevision` only. Due scans and claim methods are the scheduler/router's cross-owner path. A missing timezone on the trusted profile blocks a local-time schedule. Ambiguous local times use the earlier UTC offset. A gap in local time shifts forward across the missing clock time. Weekly interval phase follows the Monday-based local week of the stored next occurrence.
+
 ## Post-MVP planned until verified
 
 Observed A–H persistence/layout; Phase I WorkItems are not-applicable (no extra durable job schema). MVP Session.Status `Ended` remains irreversible terminal-end.

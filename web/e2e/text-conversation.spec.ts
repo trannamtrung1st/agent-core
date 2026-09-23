@@ -246,7 +246,7 @@ test("markdown response renders and survives reopen", async ({ page }) => {
 
 async function selectCustomerSupport(page: Page): Promise<void> {
   await page.getByRole("combobox", { name: "Identity" }).click();
-  await page.getByTitle(/Sam —/).click();
+  await page.locator(".ant-select-item-option", { hasText: "Sam — Customer support" }).click();
 }
 
 async function chooseScriptedAlpha(page: Page): Promise<void> {
