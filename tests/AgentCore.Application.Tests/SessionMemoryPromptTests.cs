@@ -217,6 +217,85 @@ public sealed class SessionMemoryPromptTests
     }
 
     [Fact]
+    public async Task Heavy_session_memory_still_renders_cross_session_scopes_in_model_prompt()
+    {
+        const string identityMarker = "SCOPE_CHAR_IDENTITY_USER_SENTINEL";
+        const string userMarker = "SCOPE_CHAR_USER_WIDE_SENTINEL";
+        var now = new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        var store = new InMemoryStructuredMemoryStore();
+        var service = Service(store);
+        var instanceId = Guid.Parse("019944af-0012-7000-8000-0000000000f1");
+        var heavy = new string('x', MemoryLimits.MaxContentCharacters - 1);
+        for (var index = 0; index < MemoryLimits.PromptMaxItems; index++)
+        {
+            await store.InsertAsync(Item(
+                $"019944af-0012-7000-8000-0000000000{index + 60:D2}",
+                $"session-{index}",
+                heavy,
+                now));
+        }
+
+        await store.InsertAsync(Item(
+            "019944af-0012-7000-8000-000000000070",
+            "identity fact",
+            identityMarker,
+            now,
+            MemoryScope.IdentityUser,
+            instanceId,
+            LocalUserProfile.Id));
+        await store.InsertAsync(Item(
+            "019944af-0012-7000-8000-000000000071",
+            "user fact",
+            userMarker,
+            now,
+            MemoryScope.User,
+            null,
+            LocalUserProfile.Id));
+
+        var definition = SampleDefinitions.Examiner with
+        {
+            MemoryPolicy = new MemoryPolicy(
+                SessionMemory: true,
+                IdentityUserRetrieval: true,
+                UserRetrieval: true)
+        };
+        var profile = Profile(now);
+        var learned = await SessionMemoryPrompt.LoadAsync(
+            service,
+            SessionA,
+            definition,
+            profile,
+            [],
+            agentInstanceId: instanceId);
+        Assert.Contains(learned, item => item.Content.Contains(identityMarker, StringComparison.Ordinal));
+        Assert.Contains(learned, item => item.Content.Contains(userMarker, StringComparison.Ordinal));
+        Assert.True(CharacterWeight(learned) <= MemoryLimits.PromptMaxCharacters);
+
+        var rendered = SessionMemoryPrompt.Render(learned);
+        Assert.Contains(identityMarker, rendered, StringComparison.Ordinal);
+        Assert.Contains(userMarker, rendered, StringComparison.Ordinal);
+
+        var request = new PromptContextBuilder().Build(
+            Context(definition, profile, learned),
+            Guid.NewGuid());
+        var learnedBlock = request.Messages.Single(message =>
+            message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+        Assert.Contains(identityMarker, learnedBlock, StringComparison.Ordinal);
+        Assert.Contains(userMarker, learnedBlock, StringComparison.Ordinal);
+    }
+
+    private static int CharacterWeight(IReadOnlyList<StructuredMemoryItem> items)
+    {
+        var characters = 0;
+        foreach (var item in items)
+        {
+            characters += item.Subject.Length + item.Content.Length;
+        }
+
+        return characters;
+    }
+
+    [Fact]
     public async Task Enabled_runtime_prompt_includes_only_that_sessions_learned_fact()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 23, 5, 0, 0, TimeSpan.Zero));

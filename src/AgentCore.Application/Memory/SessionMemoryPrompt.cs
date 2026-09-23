@@ -128,7 +128,37 @@ public static class SessionMemoryPrompt
         combined.AddRange(sessionProjected);
         combined.AddRange(identityProjected);
         combined.AddRange(userProjected);
-        return combined;
+        return TrimSessionForCharacterBudget(combined, identityProjected.Count + userProjected.Count);
+    }
+
+    private static IReadOnlyList<StructuredMemoryItem> TrimSessionForCharacterBudget(
+        IReadOnlyList<StructuredMemoryItem> combined,
+        int reservedTailCount)
+    {
+        if (combined.Count == 0 || reservedTailCount <= 0 || reservedTailCount >= combined.Count)
+        {
+            return combined;
+        }
+
+        var sessionCount = combined.Count - reservedTailCount;
+        var reserved = combined.Skip(sessionCount).ToArray();
+        var session = combined.Take(sessionCount).ToList();
+        var reservedWeight = CharacterWeight(reserved);
+        while (session.Count > 0
+               && reservedWeight + CharacterWeight(session) > MemoryLimits.PromptMaxCharacters)
+        {
+            session.RemoveAt(session.Count - 1);
+        }
+
+        if (session.Count == 0)
+        {
+            return reserved;
+        }
+
+        var trimmed = new List<StructuredMemoryItem>(session.Count + reserved.Length);
+        trimmed.AddRange(session);
+        trimmed.AddRange(reserved);
+        return trimmed;
     }
 
     private static int CharacterWeight(IReadOnlyList<StructuredMemoryItem> items)
@@ -176,7 +206,7 @@ public static class SessionMemoryPrompt
 
             var weight = item.Subject.Length + item.Content.Length;
             if (projected.Count >= maxItems
-                || (projected.Count > 0 && characters + weight > MemoryLimits.PromptMaxCharacters))
+                || characters + weight > MemoryLimits.PromptMaxCharacters)
             {
                 break;
             }
@@ -196,7 +226,7 @@ public static class SessionMemoryPrompt
         }
 
         var lines = new List<string> { LearnedDataLabel, TrustedPrecedence };
-        foreach (var item in Project(items, new MemoryAdmissionContext("session", [], new HashSet<string>(StringComparer.Ordinal))))
+        foreach (var item in items)
         {
             lines.Add($"- {KindLabel(item.Kind)}: {OneLine(item.Subject)} | {OneLine(item.Content)}");
         }
