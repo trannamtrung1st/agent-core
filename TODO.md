@@ -6,15 +6,17 @@ Reviewed against `main` on **2026-09-23**.
 
 Current repository HEAD reviewed:
 
-The P4 local closure candidate SHA is the commit that adds `docs/reports/p4-freeze-candidate.md`. Hosted CI was not re-run for that commit.
-
-Last explicitly verified hosted Synthetic workflow:
-
 ```text
-35692184054 — green through 3e56a26
+822028f7cf17e5a978aced4996022e4085c4efa2
 ```
 
-That hosted run does not cover P4. Do not imply hosted CI has been re-verified for a later commit unless that run has actually been checked.
+Last explicitly verified hosted Synthetic workflow for P4 freeze:
+
+```text
+35806764609 — green on 822028f
+```
+
+Earlier post-P3 lifecycle baseline: `35692184054` — green through `3e56a26` (does not cover P4).
 
 Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
 
@@ -22,14 +24,13 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P3 are closed/frozen.**
-2. **P4 — context compaction, structured memory, and durable identity** has a local closure candidate. Evidence is in `docs/reports/p4-freeze-candidate.md`. Hosted CI was not re-run for that candidate. Optional model memory tools and embeddings were not added.
-3. **P5 — events and configurable triggers.**
-4. **P6 — durable background work.**
-5. **P7 — agent harness / admin lifecycle.**
-6. **P8 — harness/platform extensibility.**
-7. **P9 — sandbox evolution when requirements justify it.**
-8. **P10 — multi-user/product infrastructure when requirements justify it.**
+1. **P0–P4 are closed/frozen.**
+2. **P5 — events and configurable triggers** is the active roadmap item.
+3. **P6 — durable background work.**
+4. **P7 — agent harness / admin lifecycle.**
+5. **P8 — harness/platform extensibility.**
+6. **P9 — sandbox evolution when requirements justify it.**
+7. **P10 — multi-user/product infrastructure when requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
@@ -149,7 +150,7 @@ See:
 - `docs/reports/p3-freeze-candidate.md`
 - `docs/reports/p3a-freeze.md`
 
-Known Real-provider historical-image behavior that was not successfully verified remains provider/maintenance work. It does **not** block P4.
+Known Real-provider historical-image behavior that was not successfully verified remains provider/maintenance work. It does **not** block P5.
 
 Important frozen P3 contracts include:
 
@@ -172,6 +173,39 @@ Important frozen P3 contracts include:
 `general-assistant-v7` is the current full P3 demo harness.
 
 Unrestricted sandbox networking, browser automation, calendar integration, GitHub mutation tools, and a plugin marketplace are not P3 closure requirements.
+
+---
+
+## P4 — Context compaction, structured memory, and durable identity
+
+Frozen on:
+
+```text
+822028f7cf17e5a978aced4996022e4085c4efa2
+```
+
+Verified hosted Synthetic + Compose:
+
+```text
+workflow 35806764609 — green
+```
+
+Evidence: `docs/reports/p4-freeze-candidate.md`.
+
+Important frozen P4 contracts include:
+
+- valid summary boundary with fail-open raw history and no invalid summary in the system-memory block;
+- semantic compaction that does not delete durable transcript rows;
+- stale/cancelled compaction fencing;
+- structured session memory with trusted-profile precedence and session isolation;
+- durable agent instance separate from reusable definition version;
+- pinned instance persona drives runtime identity; goals/instructions/policies follow the pinned definition;
+- IdentityUser memory scoped to instance + trusted profile via copy-on-promotion;
+- optional User-wide memory scoped to trusted profile and definition policy;
+- layered prompt memory budgets across session, IdentityUser, and User scopes (IdentityUser before User when the cross-session character budget is saturated);
+- no vector store, admin memory UI, or model-facing memory tools in P4.
+
+Optional model memory tools and embeddings remain deferred. Do not redesign P4 as part of P5.
 
 ---
 
@@ -208,13 +242,13 @@ Always keep this section.
 
 - [x] Harden queue/steer, interruption, detach-grace reattach, approval replay, and historical-image terminalization behavior after the P3 freeze.
 
-- [ ] Keep reusable agent definition separate from durable agent identity/instance before cross-session learned memory is implemented.
+- [x] Keep reusable agent definition separate from durable agent identity/instance before cross-session learned memory is implemented.
 
-  Definition describes reusable behavior/capability. Identity/instance represents one durable actor instantiated from that definition.
+  Definition describes reusable behavior/capability. Identity/instance represents one durable actor instantiated from that definition. Frozen under P4 (`822028f`).
 
-- [ ] Keep trusted identity baseline/persona separate from learned memory.
+- [x] Keep trusted identity baseline/persona separate from learned memory.
 
-  Resetting learned memory must not delete or rewrite the definition, identity, trusted baseline/persona, knowledge, or historical sessions.
+  Resetting learned memory must not delete or rewrite the definition, identity, trusted baseline/persona, knowledge, or historical sessions. Frozen under P4 (`822028f`).
 
 - [ ] Background responses / work continuing after the live Session Runtime are tracked under P6.
 
@@ -222,7 +256,9 @@ Always keep this section.
 
 ---
 
-# P4 — Context compaction and memory
+# P4 — Context compaction and memory (frozen)
+
+**Frozen on `822028f`.** Do not reopen without a reproducible regression. Historical specification and verification checklist below.
 
 P4 should build on existing persistence and prompt-context foundations rather than introduce a second conversation-history architecture.
 
@@ -1511,10 +1547,10 @@ In particular:
 - P1 remains frozen on `dceaccb`;
 - P2 remains frozen on `47d6ff6`;
 - P3 key-free freeze remains `4dbb920`;
-- last explicitly verified hosted post-freeze lifecycle/CI baseline is `3e56a26` / workflow `35692184054`;
-- current repository HEAD reviewed is `7489a55`;
-- P4 is the active roadmap;
-- P4C now formalizes reusable definition vs durable identity before cross-session learned memory;
+- P4 freeze remains `822028f` / hosted workflow `35806764609` — green;
+- last explicitly verified hosted post-P3 lifecycle baseline is `3e56a26` / workflow `35692184054`;
+- current repository HEAD reviewed is `822028f`;
+- P5 is the active roadmap;
 - provider-specific Real gaps do not silently become architecture phases.
 
 - [ ] Keep TODO focused on current/future work.
@@ -1574,4 +1610,5 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Impeccable UI skill integration.
 - [x] Shared `develop` and `document` composition skills.
 - [x] Existing durable session-summary fields ready for P4A.
-- [ ] Durable Agent Definition vs Agent Identity/Instance separation — planned for P4C before cross-session memory.
+- [x] Durable Agent Definition vs Agent Identity/Instance separation (P4C, frozen `822028f`).
+- [x] P4 context compaction, structured session memory, IdentityUser/User scopes, and prompt layering (frozen `822028f`).
