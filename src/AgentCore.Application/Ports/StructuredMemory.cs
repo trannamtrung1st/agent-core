@@ -144,6 +144,18 @@ public interface IStructuredMemoryService
         MemoryAdmissionContext admission,
         CancellationToken cancellationToken = default);
 
+    ValueTask<StructuredMemoryItem?> FindActiveBySubjectAsync(
+        TrustedMemoryOwner owner,
+        MemoryKind kind,
+        string subject,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<StructuredMemoryItem?> FindActiveIdentityUserBySubjectAsync(
+        TrustedIdentityUserOwner owner,
+        MemoryKind kind,
+        string subject,
+        CancellationToken cancellationToken = default);
+
     ValueTask<StructuredMemoryItem> PromoteToIdentityUserAsync(
         TrustedMemoryOwner session,
         Guid memoryId,

@@ -189,6 +189,32 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         return results;
     }
 
+    public async ValueTask<StructuredMemoryItem?> FindActiveBySubjectAsync(
+        TrustedMemoryOwner owner,
+        MemoryKind kind,
+        string subject,
+        CancellationToken cancellationToken = default)
+    {
+        var subjectKey = StructuredMemoryItem.SubjectKeyFor(StructuredMemoryItem.CollapseSubject(subject));
+        return await store.FindActiveBySubjectAsync(owner.SessionId, kind, subjectKey, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async ValueTask<StructuredMemoryItem?> FindActiveIdentityUserBySubjectAsync(
+        TrustedIdentityUserOwner owner,
+        MemoryKind kind,
+        string subject,
+        CancellationToken cancellationToken = default)
+    {
+        var subjectKey = StructuredMemoryItem.SubjectKeyFor(StructuredMemoryItem.CollapseSubject(subject));
+        return await store.FindActiveIdentityUserBySubjectAsync(
+            owner.InstanceId,
+            owner.ProfileId,
+            kind,
+            subjectKey,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask<StructuredMemoryItem> PromoteToIdentityUserAsync(
         TrustedMemoryOwner session,
         Guid memoryId,

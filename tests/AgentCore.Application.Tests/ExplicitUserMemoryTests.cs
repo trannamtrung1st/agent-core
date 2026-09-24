@@ -12,6 +12,7 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -46,6 +47,72 @@ public sealed class ExplicitUserMemoryTests
     public void TryParse_ignores_non_explicit_requests(string text)
     {
         Assert.False(ExplicitUserMemoryRequests.TryParse(text, out _));
+    }
+
+    [Fact]
+    public void Long_generic_facts_with_shared_prefix_get_distinct_subjects()
+    {
+        var prefix = new string('x', MemoryLimits.MaxSubjectCharacters);
+        var left = prefix + "LEFT_TAIL";
+        var right = prefix + "RIGHT_TAIL";
+        var leftSubject = ExplicitUserMemoryRequests.SubjectForGenericFact(left);
+        var rightSubject = ExplicitUserMemoryRequests.SubjectForGenericFact(right);
+        Assert.NotEqual(leftSubject, rightSubject);
+        Assert.Contains('#', leftSubject);
+    }
+
+    [Fact]
+    public async Task Semantic_correction_uses_exact_subject_lookup_after_many_session_memories()
+    {
+        var store = new InMemoryStructuredMemoryStore();
+        var clock = new FakeTimeProvider(Now);
+        var memories = Service(store, clock, 64);
+        var definition = Enabled();
+        var admission = Admission();
+        var owner = new TrustedMemoryOwner(SessionOne);
+        var identityOwner = new TrustedIdentityUserOwner(Instance, ProfileId);
+        var logger = NullLogger.Instance;
+
+        for (var index = 0; index < 25; index++)
+        {
+            await memories.WriteAsync(
+                owner,
+                new MemoryWriteProposal(MemoryKind.Fact, $"filler {index}", $"noise {index}", []),
+                admission);
+        }
+
+        Assert.Equal(
+            ExplicitUserMemoryCaptureOutcome.Stored,
+            await ExplicitUserMemoryAdmission.TryAdmitAsync(
+                memories,
+                definition,
+                SessionOne,
+                Instance,
+                Profile(),
+                [],
+                Guid.Parse("019944af-0020-7000-8000-0000000000a8"),
+                "Please remember that my project codename is Atlas.",
+                logger));
+        Assert.Equal(
+            ExplicitUserMemoryCaptureOutcome.Updated,
+            await ExplicitUserMemoryAdmission.TryAdmitAsync(
+                memories,
+                definition,
+                SessionOne,
+                Instance,
+                Profile(),
+                [],
+                Guid.Parse("019944af-0020-7000-8000-0000000000a9"),
+                "Please remember that my project codename is Borealis.",
+                logger));
+
+        var identityItems = await memories.SearchIdentityUserAsync(
+            identityOwner,
+            new MemorySearchQuery("codename", null),
+            retrievalAllowed: true,
+            admission);
+        Assert.Contains(identityItems, item => item.Content == "Borealis");
+        Assert.DoesNotContain(identityItems, item => item.Content == CodenameFact);
     }
 
     [Fact]
@@ -226,6 +293,8 @@ public sealed class ExplicitUserMemoryTests
                     ExplicitUserMemoryCapturePrompt.Render(ExplicitUserMemoryCaptureOutcome.Stored)!,
                     captureRequest.Messages.Select(message => message.Text),
                     StringComparer.Ordinal);
+                Assert.Contains("cross-session", captureRequest.Messages.Single(message =>
+                    message.Text.StartsWith("Explicit memory capture", StringComparison.Ordinal)).Text, StringComparison.OrdinalIgnoreCase);
             }
 
             var admission = Admission();

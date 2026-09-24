@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Memory;
@@ -52,9 +54,16 @@ public static partial class ExplicitUserMemoryRequests
             return "Remembered fact";
         }
 
-        return collapsed.Length <= MemoryLimits.MaxSubjectCharacters
-            ? collapsed
-            : collapsed[..MemoryLimits.MaxSubjectCharacters];
+        if (collapsed.Length <= MemoryLimits.MaxSubjectCharacters)
+        {
+            return collapsed;
+        }
+
+        const int hashSuffixLength = 9;
+        var maxPrefix = MemoryLimits.MaxSubjectCharacters - hashSuffixLength;
+        var prefix = collapsed[..maxPrefix].TrimEnd();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant()[..8];
+        return $"{prefix}#{hash}";
     }
 
     private static bool IsUsable(string subject, string content) =>

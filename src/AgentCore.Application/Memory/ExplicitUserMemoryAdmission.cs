@@ -35,99 +35,109 @@ public static class ExplicitUserMemoryAdmission
         var admission = SessionMemoryPrompt.CreateAdmissionContext("user_explicit", definition, profile, entries);
         var owner = new TrustedMemoryOwner(sessionId);
         var proposal = new MemoryWriteProposal(parsed.Kind, parsed.Subject, parsed.Content, [sourceEntryId]);
+        var promotedInstanceId = agentInstanceId is Guid instanceValue && instanceValue != Guid.Empty
+            ? instanceValue
+            : Guid.Empty;
+        var wantsCrossSession = policy.IdentityUserPromotion
+            && promotedInstanceId != Guid.Empty
+            && profile is not null
+            && profile.ProfileId != Guid.Empty;
+
         StructuredMemoryItem sessionItem;
-        ExplicitUserMemoryCaptureOutcome outcome;
-        try
+        ExplicitUserMemoryCaptureOutcome sessionOutcome;
+        var existing = await memories.FindActiveBySubjectAsync(owner, parsed.Kind, parsed.Subject, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is null)
         {
-            sessionItem = await memories.WriteAsync(owner, proposal, admission, cancellationToken).ConfigureAwait(false);
-            outcome = ExplicitUserMemoryCaptureOutcome.Stored;
-        }
-        catch (AgentCoreException ex) when (ex.Code == "Conflict")
-        {
-            var existing = await FindSessionActiveBySubjectAsync(memories, owner, parsed, admission, cancellationToken)
-                .ConfigureAwait(false);
-            if (existing is null)
+            try
             {
-                logger.LogDebug(
-                    "Explicit user memory conflict without an active item for subject {Subject} in session {SessionId}",
-                    parsed.Subject,
-                    sessionId);
+                sessionItem = await memories.WriteAsync(owner, proposal, admission, cancellationToken)
+                    .ConfigureAwait(false);
+                sessionOutcome = ExplicitUserMemoryCaptureOutcome.Stored;
+            }
+            catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "MemoryCapacity")
+            {
+                logger.LogDebug(ex, "Explicit user memory rejected for session {SessionId}", sessionId);
                 return ExplicitUserMemoryCaptureOutcome.Rejected;
             }
-
-            if (string.Equals(existing.Content, parsed.Content, StringComparison.Ordinal))
+        }
+        else if (string.Equals(existing.Content, parsed.Content, StringComparison.Ordinal))
+        {
+            sessionItem = existing;
+            sessionOutcome = ExplicitUserMemoryCaptureOutcome.AlreadyStored;
+        }
+        else
+        {
+            try
             {
-                sessionItem = existing;
-                outcome = ExplicitUserMemoryCaptureOutcome.AlreadyStored;
+                sessionItem = await memories.UpdateAsync(
+                    owner,
+                    new MemoryUpdateProposal(existing.MemoryId, parsed.Subject, parsed.Content, [sourceEntryId]),
+                    admission,
+                    cancellationToken).ConfigureAwait(false);
+                sessionOutcome = ExplicitUserMemoryCaptureOutcome.Updated;
             }
-            else
+            catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "MemoryCapacity")
             {
-                try
-                {
-                    sessionItem = await memories.UpdateAsync(
-                        owner,
-                        new MemoryUpdateProposal(existing.MemoryId, parsed.Subject, parsed.Content, [sourceEntryId]),
-                        admission,
-                        cancellationToken).ConfigureAwait(false);
-                    outcome = ExplicitUserMemoryCaptureOutcome.Updated;
-                }
-                catch (AgentCoreException updateEx) when (updateEx.Code is "MemoryRejected" or "MemoryCapacity")
-                {
-                    logger.LogDebug(updateEx, "Explicit user memory update rejected for session {SessionId}", sessionId);
-                    return ExplicitUserMemoryCaptureOutcome.Rejected;
-                }
+                logger.LogDebug(ex, "Explicit user memory update rejected for session {SessionId}", sessionId);
+                return ExplicitUserMemoryCaptureOutcome.Rejected;
             }
         }
-        catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "MemoryCapacity")
+
+        if (!wantsCrossSession)
         {
-            logger.LogDebug(ex, "Explicit user memory rejected for session {SessionId}", sessionId);
-            return ExplicitUserMemoryCaptureOutcome.Rejected;
+            LogSuccess(logger, sessionId, parsed.Subject, sessionOutcome);
+            return sessionOutcome;
         }
 
-        if (policy.IdentityUserPromotion
-            && agentInstanceId is Guid instanceId
-            && instanceId != Guid.Empty
-            && profile is not null
-            && profile.ProfileId != Guid.Empty)
-        {
-            await SyncIdentityUserAsync(
-                memories,
-                owner,
-                sessionItem,
-                new TrustedIdentityUserOwner(instanceId, profile.ProfileId),
-                [sourceEntryId],
-                admission,
-                logger,
-                sessionId,
-                cancellationToken).ConfigureAwait(false);
-        }
+        var identityOwner = new TrustedIdentityUserOwner(promotedInstanceId, profile!.ProfileId);
+        var identitySynced = await SyncIdentityUserAsync(
+            memories,
+            owner,
+            sessionItem,
+            identityOwner,
+            [sourceEntryId],
+            admission,
+            logger,
+            sessionId,
+            cancellationToken).ConfigureAwait(false);
 
-        if (outcome is ExplicitUserMemoryCaptureOutcome.Stored or ExplicitUserMemoryCaptureOutcome.Updated)
+        var outcome = MapCrossSessionOutcome(sessionOutcome, identitySynced);
+        if (outcome is ExplicitUserMemoryCaptureOutcome.Stored
+            or ExplicitUserMemoryCaptureOutcome.Updated
+            or ExplicitUserMemoryCaptureOutcome.AlreadyStored)
         {
-            logger.LogInformation(
-                "Captured explicit user memory for session {SessionId} subject {Subject} outcome {Outcome}",
-                sessionId,
-                parsed.Subject,
-                outcome);
+            LogSuccess(logger, sessionId, parsed.Subject, outcome);
         }
 
         return outcome;
     }
 
-    private static async ValueTask<StructuredMemoryItem?> FindSessionActiveBySubjectAsync(
-        IStructuredMemoryService memories,
-        TrustedMemoryOwner owner,
-        ExplicitUserMemoryRequests.Parsed parsed,
-        MemoryAdmissionContext admission,
-        CancellationToken cancellationToken)
-    {
-        var subjectKey = StructuredMemoryItem.SubjectKeyFor(StructuredMemoryItem.CollapseSubject(parsed.Subject));
-        var items = await memories.SearchAsync(owner, new MemorySearchQuery(null, parsed.Kind), admission, cancellationToken)
-            .ConfigureAwait(false);
-        return items.FirstOrDefault(item => item.SubjectKey == subjectKey);
-    }
+    private static ExplicitUserMemoryCaptureOutcome MapCrossSessionOutcome(
+        ExplicitUserMemoryCaptureOutcome sessionOutcome,
+        bool identitySynced) =>
+        identitySynced
+            ? sessionOutcome
+            : sessionOutcome switch
+            {
+                ExplicitUserMemoryCaptureOutcome.Stored => ExplicitUserMemoryCaptureOutcome.StoredSessionOnly,
+                ExplicitUserMemoryCaptureOutcome.Updated => ExplicitUserMemoryCaptureOutcome.UpdatedSessionOnly,
+                ExplicitUserMemoryCaptureOutcome.AlreadyStored => ExplicitUserMemoryCaptureOutcome.StoredSessionOnly,
+                _ => sessionOutcome
+            };
 
-    private static async ValueTask SyncIdentityUserAsync(
+    private static void LogSuccess(
+        ILogger logger,
+        Guid sessionId,
+        string subject,
+        ExplicitUserMemoryCaptureOutcome outcome) =>
+        logger.LogInformation(
+            "Captured explicit user memory for session {SessionId} subject {Subject} outcome {Outcome}",
+            sessionId,
+            subject,
+            outcome);
+
+    private static async ValueTask<bool> SyncIdentityUserAsync(
         IStructuredMemoryService memories,
         TrustedMemoryOwner sessionOwner,
         StructuredMemoryItem sessionItem,
@@ -138,13 +148,11 @@ public static class ExplicitUserMemoryAdmission
         Guid sessionId,
         CancellationToken cancellationToken)
     {
-        var identityItems = await memories.SearchIdentityUserAsync(
+        var existing = await memories.FindActiveIdentityUserBySubjectAsync(
             identityOwner,
-            new MemorySearchQuery(null, sessionItem.Kind),
-            retrievalAllowed: true,
-            admission,
+            sessionItem.Kind,
+            sessionItem.Subject,
             cancellationToken).ConfigureAwait(false);
-        var existing = identityItems.FirstOrDefault(item => item.SubjectKey == sessionItem.SubjectKey);
         if (existing is null)
         {
             try
@@ -156,18 +164,37 @@ public static class ExplicitUserMemoryAdmission
                     promotionAllowed: true,
                     admission,
                     cancellationToken).ConfigureAwait(false);
+                return true;
             }
-            catch (AgentCoreException ex) when (ex.Code is "Conflict" or "PolicyDenied" or "MemoryRejected")
+            catch (AgentCoreException ex) when (ex.Code == "Conflict")
+            {
+                existing = await memories.FindActiveIdentityUserBySubjectAsync(
+                    identityOwner,
+                    sessionItem.Kind,
+                    sessionItem.Subject,
+                    cancellationToken).ConfigureAwait(false);
+                if (existing is null)
+                {
+                    logger.LogDebug(ex, "Identity memory promotion conflict without lookup for session {SessionId}", sessionId);
+                    return false;
+                }
+            }
+            catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected")
             {
                 logger.LogDebug(ex, "Identity memory promotion skipped for session {SessionId}", sessionId);
+                return false;
             }
-
-            return;
         }
 
-        if (string.Equals(existing.Content, sessionItem.Content, StringComparison.Ordinal))
+        if (existing is not null
+            && string.Equals(existing.Content, sessionItem.Content, StringComparison.Ordinal))
         {
-            return;
+            return true;
+        }
+
+        if (existing is null)
+        {
+            return false;
         }
 
         try
@@ -182,10 +209,12 @@ public static class ExplicitUserMemoryAdmission
                 retrievalAllowed: true,
                 admission,
                 cancellationToken).ConfigureAwait(false);
+            return true;
         }
         catch (AgentCoreException ex) when (ex.Code is "Conflict" or "PolicyDenied" or "MemoryRejected")
         {
             logger.LogDebug(ex, "Identity memory update skipped for session {SessionId}", sessionId);
+            return false;
         }
     }
 }
