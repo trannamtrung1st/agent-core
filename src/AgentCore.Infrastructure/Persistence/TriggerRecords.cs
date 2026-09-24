@@ -42,4 +42,5 @@ public sealed class TriggerOccurrenceRecord
     public long? RoutingUpdatedAtUtc { get; set; }
     public string? ClaimId { get; set; }
     public long? ClaimLeaseExpiresAtUtc { get; set; }
+    public string? DurableWorkItemId { get; set; }
 }

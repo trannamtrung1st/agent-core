@@ -109,12 +109,33 @@ public sealed class TriggerContractTests
     }
 
     [Fact]
+    public void Accepted_durable_occurrence_keeps_a_work_item_link_and_no_claim()
+    {
+        var owner = new TriggerOwner(
+            Guid.Parse("019944af-0005-7000-8000-0000000000a1"),
+            Guid.Parse("019944af-0005-7000-8000-0000000000b1"));
+        var claim = Guid.Parse("019944af-0005-7000-8000-0000000000e1");
+        var workItemId = Guid.Parse("019944af-0005-7000-8000-0000000000f1");
+        var awaiting = Occurrence(owner, "{}")
+            .WithRouting(OccurrenceRoutingDisposition.Claimed, null, 1, Now, claim, Now.AddMinutes(1))
+            .WithRouting(OccurrenceRoutingDisposition.AwaitingDurableWork, "No compatible runtime", 2, Now, null, null);
+        var accepted = awaiting.WithDurableAcceptance(workItemId, 3, Now);
+        Assert.Equal(OccurrenceRoutingDisposition.AcceptedDurable, accepted.Disposition);
+        Assert.Equal(workItemId, accepted.DurableWorkItemId);
+        Assert.Null(accepted.ClaimId);
+        Assert.Null(accepted.ClaimLeaseExpiresAtUtc);
+        Assert.Equal(3, accepted.RoutingRevision);
+        Assert.Throws<ArgumentException>(() => awaiting.WithDurableAcceptance(workItemId, 2, Now));
+        Assert.Throws<ArgumentException>(() => accepted.WithDurableAcceptance(workItemId, 4, Now));
+    }
+
+    [Fact]
     public void Durable_schedule_kinds_do_not_include_runtime_timers()
     {
         Assert.Equal(["OneShot", "Daily", "Weekly", "FixedInterval"], Enum.GetNames<TriggerScheduleKind>());
         Assert.Equal(["Schedule", "ApplicationEvent"], Enum.GetNames<TriggerSourceKind>());
         Assert.Equal(
-            ["Pending", "Claimed", "AcceptedLive", "AwaitingDurableWork", "Rejected", "LivePrepared"],
+            ["Pending", "Claimed", "AcceptedLive", "AwaitingDurableWork", "Rejected", "LivePrepared", "AcceptedDurable"],
             Enum.GetNames<OccurrenceRoutingDisposition>());
     }
 

@@ -102,6 +102,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -113,8 +115,13 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
             services.TryAddSingleton<IStructuredMemoryStore, InMemoryStructuredMemoryStore>();
             services.TryAddSingleton<IAgentInstanceStore, InMemoryAgentInstanceStore>();
-            services.TryAddSingleton<ITriggerStore, InMemoryTriggerStore>();
-            services.TryAddSingleton<IWorkItemStore, InMemoryWorkItemStore>();
+            services.TryAddSingleton<InMemoryDurableState>();
+            services.TryAddSingleton<ITriggerStore>(provider =>
+                new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>()));
+            services.TryAddSingleton<IWorkItemStore>(provider =>
+                new InMemoryWorkItemStore(provider.GetRequiredService<InMemoryDurableState>()));
+            services.TryAddSingleton<IDurableWorkHandoff>(provider =>
+                new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));

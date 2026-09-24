@@ -253,6 +253,16 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     cancellationToken).ConfigureAwait(false);
             }
 
+            if (await ColumnExistsAsync(connection, "TriggerOccurrences", "DurableWorkItemId", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ('20260924065742_OccurrenceDurableWorkLink', '10.0.12');
+                    """,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (await ColumnExistsAsync(connection, "SessionSnapshots", "LifecycleStatus", cancellationToken).ConfigureAwait(false))
             {
                 await db.Database.ExecuteSqlRawAsync(

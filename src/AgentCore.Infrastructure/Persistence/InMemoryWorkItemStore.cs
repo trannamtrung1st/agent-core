@@ -6,23 +6,32 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class InMemoryWorkItemStore : IWorkItemStore
 {
-    private readonly object _gate = new();
-    private readonly Dictionary<Guid, WorkItem> _items = [];
-    private readonly Dictionary<Guid, Guid> _bySourceOccurrence = [];
+    private readonly InMemoryDurableState _state;
+
+    public InMemoryWorkItemStore()
+        : this(new InMemoryDurableState())
+    {
+    }
+
+    internal InMemoryWorkItemStore(InMemoryDurableState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        _state = state;
+    }
 
     public ValueTask<WorkItemCreateResult> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
-        lock (_gate)
+        lock (_state.Gate)
         {
             if (!item.IsInitialQueued)
             {
                 throw AgentCoreErrors.Validation("Only a new queued work item can be created.");
             }
 
-            if (_bySourceOccurrence.TryGetValue(item.Provenance.SourceOccurrenceId, out var existingId))
+            if (_state.WorkBySource.TryGetValue(item.Provenance.SourceOccurrenceId, out var existingId))
             {
-                var existing = _items[existingId];
+                var existing = _state.WorkItems[existingId];
                 if (!existing.Owner.Equals(item.Owner))
                 {
                     throw AgentCoreErrors.Conflict("Source occurrence is already owned.");
@@ -31,20 +40,20 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
                 return ValueTask.FromResult(new WorkItemCreateResult(WorkItemCreateKind.Existing, existing));
             }
 
-            if (_items.ContainsKey(item.WorkItemId))
+            if (_state.WorkItems.ContainsKey(item.WorkItemId))
             {
                 throw AgentCoreErrors.Conflict("Work item already exists.");
             }
 
-            _items[item.WorkItemId] = item;
-            _bySourceOccurrence[item.Provenance.SourceOccurrenceId] = item.WorkItemId;
+            _state.WorkItems[item.WorkItemId] = item;
+            _state.WorkBySource[item.Provenance.SourceOccurrenceId] = item.WorkItemId;
             return ValueTask.FromResult(new WorkItemCreateResult(WorkItemCreateKind.Created, item));
         }
     }
 
     public ValueTask<WorkItem?> GetAsync(WorkOwner owner, Guid workItemId, CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             return ValueTask.FromResult(Find(owner, workItemId));
         }
@@ -52,23 +61,23 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
 
     public ValueTask<WorkItem?> GetBySourceOccurrenceAsync(Guid sourceOccurrenceId, CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (!_bySourceOccurrence.TryGetValue(sourceOccurrenceId, out var workItemId))
+            if (!_state.WorkBySource.TryGetValue(sourceOccurrenceId, out var workItemId))
             {
                 return ValueTask.FromResult<WorkItem?>(null);
             }
 
-            return ValueTask.FromResult<WorkItem?>(_items[workItemId]);
+            return ValueTask.FromResult<WorkItem?>(_state.WorkItems[workItemId]);
         }
     }
 
     public ValueTask<IReadOnlyList<WorkItem>> ListAsync(WorkOwner owner, int limit, CancellationToken cancellationToken = default)
     {
         var take = Clamp(limit);
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var items = _items.Values
+            var items = _state.WorkItems.Values
                 .Where(item => item.Owner.Equals(owner))
                 .OrderByDescending(item => item.CreatedAtUtc)
                 .ThenByDescending(item => item.WorkItemId)
@@ -84,9 +93,9 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         CancellationToken cancellationToken = default)
     {
         var take = Clamp(limit);
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var items = _items.Values
+            var items = _state.WorkItems.Values
                 .Where(item => IsRunnable(item, asOfUtc))
                 .OrderBy(item => item.CreatedAtUtc)
                 .ThenBy(item => item.WorkItemId)
@@ -103,9 +112,9 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         DateTimeOffset leaseExpiresAtUtc,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (!_items.TryGetValue(workItemId, out var current))
+            if (!_state.WorkItems.TryGetValue(workItemId, out var current))
             {
                 return ValueTask.FromResult<WorkItem?>(null);
             }
@@ -113,7 +122,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             try
             {
                 var updated = current.TakeClaim(generation, claimedAtUtc, leaseExpiresAtUtc);
-                _items[workItemId] = updated;
+                _state.WorkItems[workItemId] = updated;
                 return ValueTask.FromResult<WorkItem?>(updated);
             }
             catch (WorkItemTransitionException exception) when (exception.Failure == WorkTransitionFailure.NotClaimable)
@@ -194,9 +203,9 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
 
     public ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var expired = _items.Values
+            var expired = _state.WorkItems.Values
                 .Where(item => item.Status == WorkItemStatus.Running
                     && item.Claim is not null
                     && item.Claim.LeaseExpiresAtUtc <= asOfUtc)
@@ -205,7 +214,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             {
                 try
                 {
-                    _items[item.WorkItemId] = item.RecoverExpiredClaim(asOfUtc);
+                    _state.WorkItems[item.WorkItemId] = item.RecoverExpiredClaim(asOfUtc);
                 }
                 catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
                 {
@@ -274,9 +283,9 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
 
     private ValueTask<WorkItem> Mutate(Guid workItemId, Func<WorkItem, WorkItem> change, WorkOwner? owner = null)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (!_items.TryGetValue(workItemId, out var current) || (owner is WorkOwner required && !current.Owner.Equals(required)))
+            if (!_state.WorkItems.TryGetValue(workItemId, out var current) || (owner is WorkOwner required && !current.Owner.Equals(required)))
             {
                 throw AgentCoreErrors.NotFound("Work item was not found.");
             }
@@ -284,7 +293,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             try
             {
                 var updated = change(current);
-                _items[workItemId] = updated;
+                _state.WorkItems[workItemId] = updated;
                 return ValueTask.FromResult(updated);
             }
             catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
@@ -295,7 +304,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
     }
 
     private WorkItem? Find(WorkOwner owner, Guid workItemId) =>
-        _items.TryGetValue(workItemId, out var item) && item.Owner.Equals(owner) ? item : null;
+        _state.WorkItems.TryGetValue(workItemId, out var item) && item.Owner.Equals(owner) ? item : null;
 
     private static bool IsRunnable(WorkItem item, DateTimeOffset asOfUtc) =>
         item.Status == WorkItemStatus.Queued

@@ -267,6 +267,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.DispositionReason).HasMaxLength(200);
             entity.Property(row => row.ClaimId).HasMaxLength(36);
+            entity.Property(row => row.DurableWorkItemId).HasMaxLength(36);
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.DedupeKey }).IsUnique();
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Disposition });
             entity.HasIndex(row => new { row.Disposition, row.ClaimLeaseExpiresAtUtc });

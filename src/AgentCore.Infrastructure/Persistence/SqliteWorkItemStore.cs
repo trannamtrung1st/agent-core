@@ -375,7 +375,7 @@ public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> co
         return await query.FirstOrDefaultAsync(item => item.WorkItemId == id, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<WorkApprovalRecord?> LoadApprovalAsync(
+    internal static async Task<WorkApprovalRecord?> LoadApprovalAsync(
         AgentCoreDbContext db,
         WorkItemRecord row,
         CancellationToken cancellationToken)

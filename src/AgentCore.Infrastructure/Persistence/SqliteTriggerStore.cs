@@ -745,7 +745,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 asOf,
                 null,
                 null);
-            CopyRouting(row, next);
+            TriggerStoreMapping.CopyRouting(row, next);
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -789,19 +789,9 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             return null;
         }
 
-        CopyRouting(row, next);
+        TriggerStoreMapping.CopyRouting(row, next);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return next;
-    }
-
-    private static void CopyRouting(TriggerOccurrenceRecord row, TriggerOccurrence next)
-    {
-        row.Disposition = (int)next.Disposition;
-        row.DispositionReason = next.DispositionReason;
-        row.RoutingRevision = next.RoutingRevision;
-        row.RoutingUpdatedAtUtc = next.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds();
-        row.ClaimId = next.ClaimId?.ToString("D");
-        row.ClaimLeaseExpiresAtUtc = next.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds();
     }
 
     private static bool IsConstraint(DbUpdateException exception) =>
@@ -871,8 +861,20 @@ internal static class TriggerStoreMapping
         RoutingRevision = occurrence.RoutingRevision,
         RoutingUpdatedAtUtc = occurrence.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds(),
         ClaimId = occurrence.ClaimId?.ToString("D"),
-        ClaimLeaseExpiresAtUtc = occurrence.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds()
+        ClaimLeaseExpiresAtUtc = occurrence.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds(),
+        DurableWorkItemId = occurrence.DurableWorkItemId?.ToString("D")
     };
+
+    public static void CopyRouting(TriggerOccurrenceRecord row, TriggerOccurrence next)
+    {
+        row.Disposition = (int)next.Disposition;
+        row.DispositionReason = next.DispositionReason;
+        row.RoutingRevision = next.RoutingRevision;
+        row.RoutingUpdatedAtUtc = next.RoutingUpdatedAtUtc?.ToUnixTimeMilliseconds();
+        row.ClaimId = next.ClaimId?.ToString("D");
+        row.ClaimLeaseExpiresAtUtc = next.ClaimLeaseExpiresAtUtc?.ToUnixTimeMilliseconds();
+        row.DurableWorkItemId = next.DurableWorkItemId?.ToString("D");
+    }
 
     public static TriggerOccurrence ToOccurrence(TriggerOccurrenceRecord row) => new(
         Guid.Parse(row.OccurrenceId),
@@ -891,7 +893,8 @@ internal static class TriggerStoreMapping
         row.RoutingRevision,
         FromUnix(row.RoutingUpdatedAtUtc),
         ParseOptional(row.ClaimId),
-        FromUnix(row.ClaimLeaseExpiresAtUtc));
+        FromUnix(row.ClaimLeaseExpiresAtUtc),
+        ParseOptional(row.DurableWorkItemId));
 
     private static DateTimeOffset? FromUnix(long? value) =>
         value is null ? null : DateTimeOffset.FromUnixTimeMilliseconds(value.Value);

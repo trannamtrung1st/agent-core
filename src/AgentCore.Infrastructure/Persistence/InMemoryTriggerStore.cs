@@ -7,26 +7,32 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class InMemoryTriggerStore : ITriggerStore
 {
-    private readonly object _gate = new();
-    private readonly record struct DedupeIdentity(Guid AgentInstanceId, Guid ProfileId, string DedupeKey);
+    private readonly InMemoryDurableState _state;
 
-    private readonly Dictionary<Guid, TriggerRegistration> _registrations = [];
-    private readonly Dictionary<Guid, TriggerOccurrence> _occurrences = [];
-    private readonly Dictionary<DedupeIdentity, Guid> _dedupeKeys = [];
+    public InMemoryTriggerStore()
+        : this(new InMemoryDurableState())
+    {
+    }
+
+    internal InMemoryTriggerStore(InMemoryDurableState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        _state = state;
+    }
 
     public ValueTask<TriggerRegistration> CreateAsync(
         TriggerRegistration registration,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(registration);
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (_registrations.ContainsKey(registration.RegistrationId))
+            if (_state.Registrations.ContainsKey(registration.RegistrationId))
             {
                 throw AgentCoreErrors.Conflict("Trigger registration already exists.");
             }
 
-            _registrations[registration.RegistrationId] = registration;
+            _state.Registrations[registration.RegistrationId] = registration;
             return ValueTask.FromResult(registration);
         }
     }
@@ -36,7 +42,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         Guid registrationId,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             return ValueTask.FromResult(Find(owner, registrationId));
         }
@@ -47,9 +53,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         TriggerRegistrationStatus? status,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var items = _registrations.Values
+            var items = _state.Registrations.Values
                 .Where(item => item.Owner.Equals(owner) && (status is null || item.Status == status))
                 .OrderByDescending(item => item.Provenance.CreatedAt)
                 .ThenByDescending(item => item.RegistrationId)
@@ -63,9 +69,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         int limit,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var items = _registrations.Values
+            var items = _state.Registrations.Values
                 .Where(item =>
                     item.Owner.AgentInstanceId == agentInstanceId
                     && item.Status == TriggerRegistrationStatus.SuspendedPolicy)
@@ -79,9 +85,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var count = _registrations.Values.Count(item =>
+            var count = _state.Registrations.Values.Count(item =>
                 item.Owner.Equals(owner) && item.Status == TriggerRegistrationStatus.Active);
             return ValueTask.FromResult(count);
         }
@@ -98,7 +104,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             var current = Find(owner, registrationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
             var updated = TriggerRegistrationMutations.Update(
@@ -109,7 +115,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 nextOccurrenceAtUtc,
                 expiresAtUtc,
                 updatedAt);
-            _registrations[registrationId] = updated;
+            _state.Registrations[registrationId] = updated;
             return ValueTask.FromResult(updated);
         }
     }
@@ -121,11 +127,11 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         DateTimeOffset cancelledAt,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             var current = Find(owner, registrationId) ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
             var cancelled = TriggerRegistrationMutations.Cancel(current, expectedRevision, cancelledAt);
-            _registrations[registrationId] = cancelled;
+            _state.Registrations[registrationId] = cancelled;
             return ValueTask.FromResult(cancelled);
         }
     }
@@ -136,22 +142,22 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         RequireFreshOccurrence(occurrence);
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (_dedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
+            if (_state.DedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
             {
                 return ValueTask.FromResult(new TriggerOccurrenceAdmitResult(
                     TriggerOccurrenceAdmitKind.Duplicate,
-                    _occurrences[existingId]));
+                    _state.Occurrences[existingId]));
             }
 
-            if (_occurrences.ContainsKey(occurrence.OccurrenceId))
+            if (_state.Occurrences.ContainsKey(occurrence.OccurrenceId))
             {
                 throw AgentCoreErrors.Conflict("Occurrence identifier is already in use.");
             }
 
-            _occurrences[occurrence.OccurrenceId] = occurrence;
-            _dedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
+            _state.Occurrences[occurrence.OccurrenceId] = occurrence;
+            _state.DedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
             return ValueTask.FromResult(new TriggerOccurrenceAdmitResult(
                 TriggerOccurrenceAdmitKind.Admitted,
                 occurrence));
@@ -163,9 +169,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         Guid occurrenceId,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (!_occurrences.TryGetValue(occurrenceId, out var occurrence) || !occurrence.Owner.Equals(owner))
+            if (!_state.Occurrences.TryGetValue(occurrenceId, out var occurrence) || !occurrence.Owner.Equals(owner))
             {
                 return ValueTask.FromResult<TriggerOccurrence?>(null);
             }
@@ -181,9 +187,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
         var take = Math.Clamp(limit, 1, TriggerScheduler.DefaultBatchSize);
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var due = _registrations.Values
+            var due = _state.Registrations.Values
                 .Where(item => item.Status == TriggerRegistrationStatus.Active
                     && item.NextOccurrenceAtUtc is DateTimeOffset next
                     && next <= asOf)
@@ -205,7 +211,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         var asOf = TriggerScheduleCalculator.Truncate(asOfUtc);
         var expectedNext = TriggerScheduleCalculator.Truncate(expectedNextOccurrenceAtUtc);
-        lock (_gate)
+        lock (_state.Gate)
         {
             var current = Find(owner, registrationId);
             if (!IsCurrent(current, expectedScheduleRevision, expectedNext))
@@ -227,7 +233,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     current.Revision + 1,
                     asOf,
                     "Timezone is unavailable.");
-                _registrations[registrationId] = suspended;
+                _state.Registrations[registrationId] = suspended;
                 return ValueTask.FromResult(new ScheduledAdmitResult(ScheduledAdmitOutcome.Rejected, suspended, null, 0));
             }
 
@@ -239,7 +245,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             if (decision.Kind is not ScheduleAdmissionKind.Admit)
             {
                 var closed = TriggerScheduleAdmission.Advance(current!, decision, asOf);
-                _registrations[registrationId] = closed;
+                _state.Registrations[registrationId] = closed;
                 var outcome = decision.Kind == ScheduleAdmissionKind.Expire
                     ? ScheduledAdmitOutcome.Expired
                     : ScheduledAdmitOutcome.Completed;
@@ -247,11 +253,11 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             }
 
             var occurrence = TriggerScheduleAdmission.CreateOccurrence(current!, decision, asOf);
-            if (_dedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
+            if (_state.DedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
             {
-                var existing = _occurrences[existingId];
+                var existing = _state.Occurrences[existingId];
                 var advanced = TriggerScheduleAdmission.Advance(current!, decision, asOf);
-                _registrations[registrationId] = advanced;
+                _state.Registrations[registrationId] = advanced;
                 return ValueTask.FromResult(new ScheduledAdmitResult(
                     ScheduledAdmitOutcome.Duplicate,
                     advanced,
@@ -260,9 +266,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             }
 
             var updated = TriggerScheduleAdmission.Advance(current!, decision, asOf);
-            _occurrences[occurrence.OccurrenceId] = occurrence;
-            _dedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
-            _registrations[registrationId] = updated;
+            _state.Occurrences[occurrence.OccurrenceId] = occurrence;
+            _state.DedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
+            _state.Registrations[registrationId] = updated;
             return ValueTask.FromResult(new ScheduledAdmitResult(
                 ScheduledAdmitOutcome.Admitted,
                 updated,
@@ -279,7 +285,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         DateTimeOffset suspendedAt,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             var current = Find(owner, registrationId);
             if (current is null
@@ -296,7 +302,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 current.Revision + 1,
                 suspendedAt,
                 reason);
-            _registrations[registrationId] = suspended;
+            _state.Registrations[registrationId] = suspended;
             return ValueTask.FromResult<TriggerRegistration?>(suspended);
         }
     }
@@ -308,7 +314,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         DateTimeOffset reactivatedAt,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             var current = Find(owner, registrationId);
             if (current is null
@@ -332,7 +338,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 current.Revision + 1,
                 reactivatedAt,
                 null);
-            _registrations[registrationId] = reactivated;
+            _state.Registrations[registrationId] = reactivated;
             return ValueTask.FromResult<TriggerRegistration?>(reactivated);
         }
     }
@@ -498,10 +504,10 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
             var recovered = 0;
-            foreach (var current in _occurrences.Values.ToArray())
+            foreach (var current in _state.Occurrences.Values.ToArray())
             {
                 if (current.Disposition != OccurrenceRoutingDisposition.Claimed
                     || current.ClaimLeaseExpiresAtUtc is not DateTimeOffset lease
@@ -510,7 +516,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                     continue;
                 }
 
-                _occurrences[current.OccurrenceId] = current.WithRouting(
+                _state.Occurrences[current.OccurrenceId] = current.WithRouting(
                     OccurrenceRoutingDisposition.Pending,
                     null,
                     current.RoutingRevision + 1,
@@ -529,9 +535,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         int limit,
         CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            var items = _occurrences.Values
+            var items = _state.Occurrences.Values
                 .Where(item => item.Disposition == disposition)
                 .OrderBy(item => item.AdmittedAtUtc)
                 .ThenBy(item => item.OccurrenceId)
@@ -543,9 +549,9 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 
     private TriggerOccurrence? Mutate(Guid occurrenceId, Func<TriggerOccurrence, TriggerOccurrence?> change)
     {
-        lock (_gate)
+        lock (_state.Gate)
         {
-            if (!_occurrences.TryGetValue(occurrenceId, out var current))
+            if (!_state.Occurrences.TryGetValue(occurrenceId, out var current))
             {
                 return null;
             }
@@ -556,12 +562,12 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 return null;
             }
 
-            _occurrences[occurrenceId] = next;
+            _state.Occurrences[occurrenceId] = next;
             return next;
         }
     }
 
-    private static DedupeIdentity Dedupe(TriggerOwner owner, string dedupeKey) =>
+    private static InMemoryDurableState.DedupeIdentity Dedupe(TriggerOwner owner, string dedupeKey) =>
         new(owner.AgentInstanceId, owner.ProfileId, dedupeKey);
 
     private static bool IsCurrent(
@@ -574,7 +580,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         && current.NextOccurrenceAtUtc == expectedNext;
 
     private TriggerRegistration? Find(TriggerOwner owner, Guid registrationId) =>
-        _registrations.TryGetValue(registrationId, out var registration) && registration.Owner.Equals(owner)
+        _state.Registrations.TryGetValue(registrationId, out var registration) && registration.Owner.Equals(owner)
             ? registration
             : null;
 

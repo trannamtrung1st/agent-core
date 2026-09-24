@@ -53,7 +53,8 @@ public enum OccurrenceRoutingDisposition
     AcceptedLive = 2,
     AwaitingDurableWork = 3,
     Rejected = 4,
-    LivePrepared = 5
+    LivePrepared = 5,
+    AcceptedDurable = 6
 }
 
 public readonly record struct TriggerOwner
@@ -693,7 +694,8 @@ public sealed class TriggerOccurrence
         long routingRevision,
         DateTimeOffset? routingUpdatedAtUtc,
         Guid? claimId,
-        DateTimeOffset? claimLeaseExpiresAtUtc)
+        DateTimeOffset? claimLeaseExpiresAtUtc,
+        Guid? durableWorkItemId = null)
     {
         if (occurrenceId == Guid.Empty)
         {
@@ -723,6 +725,24 @@ public sealed class TriggerOccurrence
         RequireOptionalId(registrationId, "Registration");
         RequireOptionalId(sourceEventId, "Source event");
         RequireOptionalId(claimId, "Claim");
+        RequireOptionalId(durableWorkItemId, "Durable work item");
+        if (disposition == OccurrenceRoutingDisposition.AcceptedDurable)
+        {
+            if (durableWorkItemId is null)
+            {
+                throw new ArgumentException("Accepted durable work requires a work item.", nameof(durableWorkItemId));
+            }
+
+            if (claimId is not null || claimLeaseExpiresAtUtc is not null)
+            {
+                throw new ArgumentException("Accepted durable work cannot hold a routing claim.", nameof(disposition));
+            }
+        }
+        else if (durableWorkItemId is not null)
+        {
+            throw new ArgumentException("Only accepted durable work can link a work item.", nameof(durableWorkItemId));
+        }
+
         RequireUtc(scheduledAtUtc, "Scheduled");
         RequireUtc(observedAtUtc, "Observed");
         RequireUtc(admittedAtUtc, "Admitted");
@@ -745,6 +765,7 @@ public sealed class TriggerOccurrence
         RoutingUpdatedAtUtc = routingUpdatedAtUtc;
         ClaimId = claimId;
         ClaimLeaseExpiresAtUtc = claimLeaseExpiresAtUtc;
+        DurableWorkItemId = durableWorkItemId;
     }
 
     public Guid OccurrenceId { get; }
@@ -781,6 +802,41 @@ public sealed class TriggerOccurrence
 
     public DateTimeOffset? ClaimLeaseExpiresAtUtc { get; }
 
+    public Guid? DurableWorkItemId { get; }
+
+    public TriggerOccurrence WithDurableAcceptance(Guid workItemId, long routingRevision, DateTimeOffset acceptedAtUtc)
+    {
+        if (Disposition != OccurrenceRoutingDisposition.AwaitingDurableWork)
+        {
+            throw new ArgumentException("Only awaiting durable work can be accepted.", nameof(workItemId));
+        }
+
+        if (routingRevision != RoutingRevision + 1)
+        {
+            throw new ArgumentException("Durable acceptance must advance the routing revision.", nameof(routingRevision));
+        }
+
+        return new TriggerOccurrence(
+            OccurrenceId,
+            DedupeKey,
+            RegistrationId,
+            Owner,
+            SourceKind,
+            ScheduledAtUtc,
+            ObservedAtUtc,
+            AdmittedAtUtc,
+            EvidenceJson,
+            SourceEventId,
+            ScheduleRevision,
+            OccurrenceRoutingDisposition.AcceptedDurable,
+            null,
+            routingRevision,
+            acceptedAtUtc,
+            null,
+            null,
+            workItemId);
+    }
+
     public TriggerOccurrence WithRouting(
         OccurrenceRoutingDisposition disposition,
         string? dispositionReason,
@@ -805,7 +861,8 @@ public sealed class TriggerOccurrence
             routingRevision,
             routingUpdatedAtUtc,
             claimId,
-            claimLeaseExpiresAtUtc);
+            claimLeaseExpiresAtUtc,
+            durableWorkItemId: null);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

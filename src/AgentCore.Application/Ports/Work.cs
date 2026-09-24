@@ -122,3 +122,12 @@ public interface IWorkItemStore
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default);
 }
+
+public interface IDurableWorkHandoff
+{
+    ValueTask<WorkItemCreateResult> AcceptAsync(
+        Guid occurrenceId,
+        WorkItem proposed,
+        DateTimeOffset acceptedAtUtc,
+        CancellationToken cancellationToken = default);
+}
