@@ -239,6 +239,32 @@ public sealed record TriggerScheduleListResponse(IReadOnlyList<TriggerScheduleRe
 
 public sealed record CancelTriggerRequest(long ExpectedRevision);
 
+public sealed record WorkItemResponse(
+    string WorkItemId,
+    string Status,
+    long Revision,
+    string Origin,
+    string? Progress,
+    bool NeedsApproval,
+    string? ApprovalId,
+    long? ApprovalRevision,
+    string? ApprovalPreview,
+    string? ActionHash,
+    bool CancellationAvailable,
+    string? FailureCode,
+    string? FailureSummary,
+    string? KnownEffect,
+    string CreatedAt,
+    string UpdatedAt);
+
+public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
+
+public sealed record WorkItemResultResponse(string WorkItemId, string Text, string CompletedAt);
+
+public sealed record CancelWorkItemRequest(long ExpectedRevision);
+
+public sealed record DecideWorkApprovalRequest(long ExpectedRevision, long ExpectedApprovalRevision, string ActionHash);
+
 public sealed record ArtifactResponse(
     string ArtifactId,
     string SessionId,

@@ -659,6 +659,14 @@ internal sealed class DurableSqliteHostFactory(string dbPath) : WebApplicationFa
 
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+
+            foreach (var store in services.Where(item => item.ServiceType == typeof(IWorkItemStore)).ToArray())
+            {
+                services.Remove(store);
+            }
+
+            services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
         });
         TestHttpDefaults.UseLoopbackCaller(builder);
     }
