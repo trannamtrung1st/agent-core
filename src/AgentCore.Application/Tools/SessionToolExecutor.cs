@@ -43,8 +43,9 @@ public sealed partial class SessionToolExecutor(
     public ToolPolicyDecision EvaluateExecutionPolicy(
         AgentDefinition definition,
         string toolName,
-        ToolApprovalGrant? grant = null) =>
-        ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, grant);
+        ToolApprovalGrant? grant = null,
+        ToolExecutionAdmission? admission = null) =>
+        ToolPolicy.EvaluateExecution(definition, toolName, _configurationGate, grant, admission);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -57,10 +58,23 @@ public sealed partial class SessionToolExecutor(
         int remainingOutputBytes,
         CancellationToken cancellationToken = default,
         ToolApprovalGrant? approvalGrant = null,
-        TriggerCommandContext? triggerCommand = null)
+        TriggerCommandContext? triggerCommand = null,
+        ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant);
+        if (admission?.Detached == true && ToolResources.IsSessionTool(call.Name))
+        {
+            return TextResult(Error("forbidden", "Session context is required."));
+        }
+
+        if (admission is not null
+            && ToolResources.IsOccurrence(admission.TriggerKind)
+            && ToolResources.IsTriggerWrite(call.Name))
+        {
+            return TextResult(Error("forbidden", "Trigger changes are not authorized from occurrence evidence."));
+        }
+
+        var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant, admission);
         if (policy == ToolPolicyDecision.Deny
             || string.IsNullOrWhiteSpace(call.Name))
         {

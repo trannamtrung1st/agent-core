@@ -50,7 +50,8 @@ public sealed record AgentContext(
     AgentIdentity? Persona = null,
     ExplicitUserMemoryCaptureOutcome ExplicitMemoryCapture = ExplicitUserMemoryCaptureOutcome.None,
     ScheduleConversationContext? ScheduleConversation = null,
-    ScheduleDraftContext? ScheduleDraft = null)
+    ScheduleDraftContext? ScheduleDraft = null,
+    bool DetachedExecution = false)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

@@ -65,6 +65,63 @@ public sealed class ToolRegistryPolicyTests
     }
 
     [Fact]
+    public async Task Detached_occurrence_rejects_session_tools_and_trigger_writes()
+    {
+        var definition = Definition(
+            "general-assistant",
+            10,
+            [
+                ToolCatalog.KnowledgeRetrieve,
+                ToolCatalog.WorkspaceRead,
+                ToolCatalog.SandboxRun,
+                ToolCatalog.TriggerScheduleOnce,
+                ToolCatalog.WebFetch
+            ]);
+        var context = new AgentContext(
+            definition,
+            [],
+            "",
+            null,
+            Domain.Conversation.SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.ApplicationEvent, """{"notice":"order shipped"}"""),
+            ModelSupportsTools: true,
+            DetachedExecution: true);
+        var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(tool => tool.Name).ToArray();
+        Assert.Contains(ToolCatalog.KnowledgeRetrieve, offered);
+        Assert.Contains(ToolCatalog.WebFetch, offered);
+        Assert.DoesNotContain(ToolCatalog.WorkspaceRead, offered);
+        Assert.DoesNotContain(ToolCatalog.SandboxRun, offered);
+        Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, offered);
+
+        var admission = new ToolExecutionAdmission(Detached: true, TriggerKind.ApplicationEvent);
+        var executor = new SessionToolExecutor();
+        var forged = await executor.ExecuteAsync(
+            definition,
+            Guid.Empty,
+            new ModelToolCall("w1", ToolCatalog.WorkspaceRead, """{"path":"notes.txt"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: admission);
+        Assert.Contains("Session context is required.", forged.Text, StringComparison.Ordinal);
+        Assert.Equal(
+            ToolPolicyDecision.Deny,
+            ToolPolicy.EvaluateExecution(
+                definition,
+                ToolCatalog.TriggerScheduleOnce,
+                ToolConfigurationGates.AllowAll,
+                admission: admission));
+        Assert.Equal(
+            ToolPolicyDecision.Allow,
+            ToolPolicy.EvaluateExecution(
+                definition,
+                ToolCatalog.KnowledgeRetrieve,
+                ToolConfigurationGates.AllowAll,
+                admission: admission));
+    }
+
+    [Fact]
     public void Non_tools_capable_models_receive_no_offered_tools()
     {
         var definition = SampleDefinitions.Support;

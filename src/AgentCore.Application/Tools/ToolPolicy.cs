@@ -10,7 +10,8 @@ public static class ToolPolicy
         AgentDefinition definition,
         string toolName,
         IToolConfigurationGate configurationGate,
-        ToolApprovalGrant? grant = null)
+        ToolApprovalGrant? grant = null,
+        ToolExecutionAdmission? admission = null)
     {
         if (!ToolRegistry.TryGet(toolName, out var descriptor))
         {
@@ -30,6 +31,18 @@ public static class ToolPolicy
 
         if (descriptor.OfferRule == ToolOfferRule.ConfigurationWhenRoleAllows
             && !configurationGate.IsConfigured(toolName))
+        {
+            return ToolPolicyDecision.Deny;
+        }
+
+        if (admission?.Detached == true && descriptor.Scope == ToolResourceScope.Session)
+        {
+            return ToolPolicyDecision.Deny;
+        }
+
+        if (admission is not null
+            && ToolResources.IsOccurrence(admission.TriggerKind)
+            && ToolResources.IsTriggerWrite(toolName))
         {
             return ToolPolicyDecision.Deny;
         }
@@ -56,6 +69,18 @@ public static class ToolPolicy
         IToolConfigurationGate configurationGate)
     {
         if (context is not null && !context.ModelSupportsTools)
+        {
+            return false;
+        }
+
+        if (context?.DetachedExecution == true && descriptor.Scope == ToolResourceScope.Session)
+        {
+            return false;
+        }
+
+        if (context is not null
+            && ToolResources.IsOccurrence(context.Trigger.Kind)
+            && ToolResources.IsTriggerWrite(descriptor.Name))
         {
             return false;
         }

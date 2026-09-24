@@ -2375,7 +2375,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                         if (args.ValueKind == JsonValueKind.Object)
                         {
-                            var policy = _tools.EvaluateExecutionPolicy(_snapshot.Definition, call.Name);
+                            var policy = _tools.EvaluateExecutionPolicy(
+                                _snapshot.Definition,
+                                call.Name,
+                                admission: new ToolExecutionAdmission(Detached: false, trigger.Kind));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 executionResult = ToolExecutionResult.FromText(
@@ -2477,7 +2480,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             ToolLimits.MaxOutputBytes - outputBytes,
                                             toolCts.Token,
                                             approvalGrant,
-                                            TriggerCommand(trigger))
+                                            TriggerCommand(trigger),
+                                            new ToolExecutionAdmission(Detached: false, trigger.Kind))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {

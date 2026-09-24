@@ -1,6 +1,7 @@
 using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Work;
 
 namespace AgentCore.Application.Work;
@@ -11,8 +12,10 @@ public sealed class DurableReminderExecutor(
     IAgentBrain brain,
     IIdGenerator ids,
     TimeProvider time,
-    WorkCancellationRegistry cancellation)
+    WorkCancellationRegistry cancellation,
+    SessionToolExecutor tools)
 {
+    private readonly DurableOccurrenceExecution occurrence = new(tools, time);
     public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
 
     public async ValueTask<int> ExecuteDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default)
@@ -22,7 +25,7 @@ public sealed class DurableReminderExecutor(
         var ran = 0;
         foreach (var item in due)
         {
-            if (item.Provenance.SourceKind != WorkSourceKind.Schedule)
+            if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent))
             {
                 continue;
             }
@@ -85,14 +88,17 @@ public sealed class DurableReminderExecutor(
                 asOfUtc.AddMinutes(1),
                 asOfUtc,
                 linked.Token).ConfigureAwait(false);
-            running = await work.CheckpointAsync(
-                running.WorkItemId,
-                running.Revision,
-                generation,
-                new WorkCheckpoint(BeforeModelCheckpoint, 0, 0, 0),
-                null,
-                asOfUtc,
-                linked.Token).ConfigureAwait(false);
+            if (!DurableTurnCheckpoint.TryRead(running.Checkpoint, out _))
+            {
+                running = await work.CheckpointAsync(
+                    running.WorkItemId,
+                    running.Revision,
+                    generation,
+                    new WorkCheckpoint(BeforeModelCheckpoint, 0, 0, 0),
+                    null,
+                    asOfUtc,
+                    linked.Token).ConfigureAwait(false);
+            }
 
             AgentContext context;
             try
@@ -104,6 +110,12 @@ public sealed class DurableReminderExecutor(
                 await FailAsync(running, generation, asOfUtc, "context-unavailable", "Pinned context is unavailable.", false, null, CancellationToken.None)
                     .ConfigureAwait(false);
                 return true;
+            }
+
+            if (item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent)
+            {
+                return await ExecuteApplicationAsync(item, running, generation, asOfUtc, context, linked.Token)
+                    .ConfigureAwait(false);
             }
 
             var decision = await brain.DecideAsync(context, ids.NewId(), linked.Token).ConfigureAwait(false);
@@ -188,6 +200,80 @@ public sealed class DurableReminderExecutor(
         {
             cancellation.Unlink(item.WorkItemId, linked);
         }
+    }
+
+    private async ValueTask<bool> ExecuteApplicationAsync(
+        WorkItem item,
+        WorkItem running,
+        Guid generation,
+        DateTimeOffset asOfUtc,
+        AgentContext context,
+        CancellationToken cancellationToken)
+    {
+        var decision = await brain.DecideAsync(context, ids.NewId(), cancellationToken).ConfigureAwait(false);
+        if (decision is not Speak speak || context.LanguageModel is null)
+        {
+            await FailAsync(running, generation, asOfUtc, "event-invalid", "Application event did not produce a model request.", false, null, CancellationToken.None)
+                .ConfigureAwait(false);
+            return true;
+        }
+
+        var outcome = await occurrence.RunAsync(
+            running,
+            speak.Request,
+            context.LanguageModel,
+            context.Definition,
+            context.Trigger.Kind,
+            (current, saved, token) => work.CheckpointAsync(
+                current.WorkItemId,
+                current.Revision,
+                generation,
+                saved,
+                null,
+                asOfUtc,
+                token),
+            cancellationToken).ConfigureAwait(false);
+        if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        switch (outcome)
+        {
+            case DurableOccurrenceCompleted completed:
+                await work.CompleteAsync(
+                    completed.Running.WorkItemId,
+                    completed.Running.Revision,
+                    generation,
+                    completed.Text,
+                    asOfUtc,
+                    CancellationToken.None).ConfigureAwait(false);
+                break;
+            case DurableOccurrenceRetry retry:
+                await FailAsync(
+                    retry.Running,
+                    generation,
+                    asOfUtc,
+                    retry.Code,
+                    retry.Summary,
+                    true,
+                    asOfUtc.Add(RetryDelay(retry.Running.AttemptCount)),
+                    CancellationToken.None).ConfigureAwait(false);
+                break;
+            case DurableOccurrenceFailed failed:
+                await FailAsync(
+                    failed.Running,
+                    generation,
+                    asOfUtc,
+                    failed.Code,
+                    failed.Summary,
+                    false,
+                    null,
+                    CancellationToken.None).ConfigureAwait(false);
+                break;
+        }
+
+        return true;
     }
 
     private async ValueTask<bool> TryCommitCancellationAsync(Guid occurrenceId, Guid generation)

@@ -1,5 +1,6 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Memory;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -56,14 +57,16 @@ public sealed class DurableReminderTests
                 WorkItem.Create(
                     Guid.NewGuid(),
                     new WorkOwner(InstanceId, ProfileId),
-                    Provenance(other.OccurrenceId, WorkSourceKind.ApplicationEvent, other.EvidenceJson, Now),
+                    Provenance(other.OccurrenceId, WorkSourceKind.ApplicationEvent, """{"notice":"order shipped"}""", Now),
                     Pin(selection),
                     3,
                     Now),
                 Now);
-            var preview = await Assert.ThrowsAsync<AgentCoreException>(() =>
-                harness.Factory.CreateAsync(applicationItem.Item).AsTask());
-            Assert.Equal("ValidationError", preview.Code);
+            var applicationContext = await harness.Factory.CreateAsync(applicationItem.Item);
+            Assert.Equal(TriggerKind.ApplicationEvent, applicationContext.Trigger.Kind);
+            Assert.True(applicationContext.DetachedExecution);
+            Assert.Null(applicationContext.ScheduleConversation);
+            Assert.Null(applicationContext.ScheduleDraft);
 
             var context = await harness.Factory.CreateAsync(scheduledItem.Item);
             Assert.Empty(context.History);
@@ -78,12 +81,12 @@ public sealed class DurableReminderTests
             Assert.Equal("Riley", context.EffectiveIdentity.Name);
             Assert.Equal(0, harness.Memories.SessionSearches);
             Assert.Equal(0, harness.Memories.UserSearches);
-            Assert.Equal(1, harness.Memories.IdentitySearches);
+            Assert.True(harness.Memories.IdentitySearches >= 1);
 
             var ran = await harness.Executor.ExecuteDueAsync(Now, 10);
-            Assert.Equal(1, ran);
-            Assert.Equal(1, harness.Model.Calls);
-            var request = harness.Model.Request!;
+            Assert.Equal(2, ran);
+            Assert.Equal(2, harness.Model.Calls);
+            var request = harness.Model.Requests.Single(item => item.Tools is null);
             Assert.Null(request.Tools);
             Assert.Equal(selection.ReasoningEffort, request.ReasoningEffort);
             var prompt = string.Join('\n', request.Messages.Select(message => message.Text));
@@ -111,9 +114,19 @@ public sealed class DurableReminderTests
             var linked = await reopened.Triggers.GetOccurrenceAsync(owner, scheduled.OccurrenceId);
             Assert.Equal(OccurrenceRoutingDisposition.AcceptedDurable, linked!.Disposition);
             Assert.Equal(completed.WorkItemId, linked.DurableWorkItemId);
-            var skipped = await reopened.Work.GetBySourceOccurrenceAsync(other.OccurrenceId);
-            Assert.Equal(WorkItemStatus.Queued, skipped!.Status);
-            Assert.Equal(WorkSourceKind.ApplicationEvent, skipped.Provenance.SourceKind);
+            var observed = await reopened.Work.GetBySourceOccurrenceAsync(other.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, observed!.Status);
+            Assert.Equal(WorkSourceKind.ApplicationEvent, observed.Provenance.SourceKind);
+            Assert.Equal("Oven is ready.", observed.Result!.Text);
+            var eventRequest = harness.Model.Requests.Single(item => item.Tools is not null);
+            var eventPrompt = string.Join('\n', eventRequest.Messages.Select(message => message.Text));
+            Assert.Contains("Observed occurrence data", eventPrompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Scheduled reminder delivery mode.", eventPrompt, StringComparison.Ordinal);
+            var eventTools = eventRequest.Tools!.Select(tool => tool.Name).ToArray();
+            Assert.Contains(ToolCatalog.KnowledgeRetrieve, eventTools);
+            Assert.DoesNotContain(ToolCatalog.WorkspaceRead, eventTools);
+            Assert.DoesNotContain(ToolCatalog.TriggerScheduleOnce, eventTools);
+            Assert.DoesNotContain(SourceSessionId.ToString(), eventPrompt, StringComparison.Ordinal);
         });
     }
 
@@ -319,6 +332,57 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Forged_session_tool_is_rejected_without_opening_a_session()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Left the session closed.", completed.Result!.Text);
+            var toolMessage = harness.Model.Request!.Messages.Single(message => message.Role == ModelRole.Tool);
+            Assert.Contains("Session context is required.", toolMessage.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain(SourceSessionId.ToString(), toolMessage.Text, StringComparison.Ordinal);
+            Assert.Empty((await harness.Sessions.ListCatalogAsync(null, 10, true)).Items);
+            Assert.Equal(0, harness.Knowledge.Calls);
+        }, () => new ForgedSessionToolModel());
+    }
+
+    [Fact]
+    public async Task Read_tool_checkpoint_is_not_replayed_after_recovery()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            var gate = (KnowledgeThenCrashModel)harness.Model.Inner;
+            using var shutdown = new CancellationTokenSource();
+            var run = harness.Executor.ExecuteDueAsync(Now, 10, shutdown.Token).AsTask();
+            await gate.Started.Task;
+            shutdown.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+            Assert.Equal(1, harness.Knowledge.Calls);
+            var paused = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Running, paused!.Status);
+            Assert.Contains("POLICY_SENTINEL", paused.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
+            Assert.Equal(1, harness.Knowledge.Calls);
+            var reopened = await harness.Reopen();
+            var completed = await reopened.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Policy applied.", completed.Result!.Text);
+            Assert.Contains("POLICY_SENTINEL", completed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
+        }, () => new KnowledgeThenCrashModel());
+    }
+
+    [Fact]
     public async Task Expired_inflight_effect_is_not_run_again()
     {
         await ForEachAsync(async harness =>
@@ -354,15 +418,44 @@ public sealed class DurableReminderTests
         }, () => new FailingModel());
     }
 
-    private static async Task<WorkItem> AcceptScheduledAsync(Harness harness, TriggerOccurrence occurrence, int maxAttempts)
+    private static Task<WorkItem> AcceptObservedAsync(Harness harness, TriggerOccurrence occurrence) 
     {
         var selection = SessionModelBinder.PinDefault(harness.Catalog, harness.Definition);
+        return AcceptCoreAsync(
+            harness,
+            occurrence,
+            WorkSourceKind.ApplicationEvent,
+            """{"notice":"order shipped"}""",
+            3,
+            selection);
+    }
+
+    private static Task<WorkItem> AcceptScheduledAsync(Harness harness, TriggerOccurrence occurrence, int maxAttempts)
+    {
+        var selection = SessionModelBinder.PinDefault(harness.Catalog, harness.Definition);
+        return AcceptCoreAsync(
+            harness,
+            occurrence,
+            WorkSourceKind.Schedule,
+            occurrence.EvidenceJson,
+            maxAttempts,
+            selection);
+    }
+
+    private static async Task<WorkItem> AcceptCoreAsync(
+        Harness harness,
+        TriggerOccurrence occurrence,
+        WorkSourceKind kind,
+        string evidence,
+        int maxAttempts,
+        SessionModelSelection selection)
+    {
         var accepted = await harness.Handoff.AcceptAsync(
             occurrence.OccurrenceId,
             WorkItem.Create(
                 Guid.NewGuid(),
                 new WorkOwner(InstanceId, ProfileId),
-                Provenance(occurrence.OccurrenceId, WorkSourceKind.Schedule, occurrence.EvidenceJson, Now),
+                Provenance(occurrence.OccurrenceId, kind, evidence, Now),
                 Pin(selection),
                 maxAttempts,
                 Now),
@@ -520,14 +613,16 @@ public sealed class DurableReminderTests
             catalog,
             new StaticLanguageModelResolver(recording),
             time);
+        var knowledge = new RecordingKnowledgeCatalog();
         var executor = new DurableReminderExecutor(
             work,
             factory,
             new DefaultAgentBrain(new PromptContextBuilder()),
             new GuidGenerator(),
             time,
-            new WorkCancellationRegistry());
-        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, time, () => reopen(triggers, work, handoff));
+            new WorkCancellationRegistry(),
+            new SessionToolExecutor(new RoleKnowledgeService(knowledge, time)));
+        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, time, knowledge, () => reopen(triggers, work, handoff));
     }
 
     private static async Task<AgentDefinition> LoadDefinitionAsync()
@@ -565,6 +660,7 @@ public sealed class DurableReminderTests
         IModelCatalog catalog,
         AgentDefinition definition,
         FakeTimeProvider time,
+        RecordingKnowledgeCatalog knowledge,
         Func<Task<StoreSet>> reopen)
     {
         public ITriggerStore Triggers { get; } = triggers;
@@ -578,6 +674,7 @@ public sealed class DurableReminderTests
         public IModelCatalog Catalog { get; } = catalog;
         public AgentDefinition Definition { get; } = definition;
         public FakeTimeProvider Time { get; } = time;
+        public RecordingKnowledgeCatalog Knowledge { get; } = knowledge;
         public Func<Task<StoreSet>> Reopen { get; } = reopen;
     }
 
@@ -658,12 +755,80 @@ public sealed class DurableReminderTests
         }
     }
 
+    private sealed class ForgedSessionToolModel : ILanguageModel
+    {
+        private int calls;
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var call = Interlocked.Increment(ref calls);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (call == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("w1", ToolCatalog.WorkspaceRead, """{"path":"notes.txt"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Left the session closed.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class KnowledgeThenCrashModel : ILanguageModel
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (!request.Messages.Any(message => message.Role == ModelRole.Tool))
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "k1",
+                    ToolCatalog.KnowledgeRetrieve,
+                    """{"identity":"support-order-policy"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (!Started.Task.IsCompleted)
+            {
+                Started.TrySetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            }
+
+            yield return new ModelTextDelta("Policy applied.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class RecordingKnowledgeCatalog : IApprovedKnowledgeCatalog
+    {
+        public int Calls { get; private set; }
+
+        public ValueTask<string?> ReadContentAsync(string identity, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return ValueTask.FromResult<string?>("POLICY_SENTINEL");
+        }
+    }
+
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel
     {
         public ILanguageModel Inner { get; } = inner;
 
         public int Calls { get; private set; }
         public ModelRequest? Request { get; private set; }
+        public List<ModelRequest> Requests { get; } = [];
         public ModelCapabilities Capabilities => Inner.Capabilities;
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
@@ -672,6 +837,7 @@ public sealed class DurableReminderTests
         {
             Calls++;
             Request = request;
+            Requests.Add(request);
             await foreach (var update in Inner.GenerateAsync(request, cancellationToken))
             {
                 yield return update;

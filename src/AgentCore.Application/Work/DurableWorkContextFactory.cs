@@ -20,9 +20,9 @@ public sealed class DurableWorkContextFactory(
     public async ValueTask<AgentContext> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (item.Provenance.SourceKind != WorkSourceKind.Schedule)
+        if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent))
         {
-            throw AgentCoreErrors.Validation("Only a scheduled reminder can use this context.");
+            throw AgentCoreErrors.Validation("Only scheduled reminders and application events can use this context.");
         }
 
         var instance = await instances.FindAsync(item.Owner.AgentInstanceId, cancellationToken).ConfigureAwait(false);
@@ -83,14 +83,20 @@ public sealed class DurableWorkContextFactory(
             null,
             false,
             null,
-            new AgentTrigger(item.Provenance.SourceOccurrenceId, TriggerKind.ScheduledOccurrence, item.Provenance.EvidenceJson),
+            new AgentTrigger(item.Provenance.SourceOccurrenceId, SourceTrigger(item), item.Provenance.EvidenceJson),
             UtcNow: time.GetUtcNow(),
             LanguageModel: models.Resolve(selection, ModelPurpose.Conversation),
             ReasoningEffort: item.Model.ReasoningEffort,
             LearnedMemories: learned,
             Persona: instance.Persona,
-            ModelSupportsTools: descriptor.Tools);
+            ModelSupportsTools: descriptor.Tools,
+            DetachedExecution: true);
     }
+
+    private static TriggerKind SourceTrigger(WorkItem item) =>
+        item.Provenance.SourceKind == WorkSourceKind.ApplicationEvent
+            ? TriggerKind.ApplicationEvent
+            : TriggerKind.ScheduledOccurrence;
 
     private static bool EffortAllowed(ModelDescriptor descriptor, string? effort)
     {
