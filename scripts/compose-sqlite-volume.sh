@@ -84,6 +84,73 @@ PY
 session_id="$(python3 -c 'import json; print(json.load(open("/tmp/agent-core-session.json"))["sessionId"])')"
 owner_token="$(cat /tmp/agent-core-owner-token.txt)"
 
+cid="$("${compose[@]}" ps -aq agent-core)"
+"${compose[@]}" stop agent-core
+seed_dir="$(mktemp -d)"
+docker cp "$cid":/data/agent-core.db "$seed_dir/agent-core.db"
+docker cp "$cid":/data/agent-core.db-wal "$seed_dir/agent-core.db-wal" 2>/dev/null || true
+docker cp "$cid":/data/agent-core.db-shm "$seed_dir/agent-core.db-shm" 2>/dev/null || true
+python3 - "$seed_dir/agent-core.db" "$session_id" <<'PY'
+import json, sqlite3, sys, time, uuid
+db, session_id = sys.argv[1], sys.argv[2]
+con = sqlite3.connect(db, timeout=30)
+con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+owner = con.execute(
+    """SELECT s.AgentInstanceId, snap.ProfileId
+       FROM Sessions s
+       JOIN SessionSnapshots snap ON snap.SessionId = s.SessionId
+       WHERE s.SessionId=?""",
+    (session_id,),
+).fetchone()
+if owner is None or not owner[0] or not owner[1]:
+    raise SystemExit("session owner was not stored")
+now = int(time.time() * 1000)
+completed_id = str(uuid.uuid4())
+approval_work_id = str(uuid.uuid4())
+approval_id = str(uuid.uuid4())
+generation = str(uuid.uuid4())
+far_future = now + 86_400_000 * 30
+def insert_work(work_id, status, approval, result, checkpoint, created):
+    con.execute(
+        """INSERT INTO WorkItems (
+            WorkItemId, AgentInstanceId, ProfileId, Status, Revision, AttemptCount, MaxAttempts,
+            CancellationRequested, ProgressSummary, ProgressUpdatedAtUtc, CheckpointJson, ResultText, ResultCompletedAtUtc,
+            SideEffectDisposition, SideEffectActionHash, SideEffectUpdatedAtUtc, CurrentApprovalId, SourceOccurrenceId, SourceKind, SourceSessionId,
+            DedupeKey, ObservedAtUtc, EvidenceJson, DefinitionId, DefinitionVersion, PersonaName,
+            ModelCatalogKey, ModelProviderAlias, ModelId, ModelReasoningEffort, CreatedAtUtc, UpdatedAtUtc
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            work_id, owner[0], owner[1], status, 2, 1, 3,
+            0, "Saved result" if result else "Waiting for approval", now, checkpoint, result, now if result else None,
+            1 if approval else 0, approval and "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", now if approval else None, approval, str(uuid.uuid4()), 0, session_id,
+            f"compose-{work_id}", created, "SECRET_EVIDENCE", "examiner", 1, "Examiner",
+            "scripted-alpha", "primary-llm", "scripted-alpha", "medium", created, now,
+        ),
+    )
+insert_work(completed_id, 4, None, "Compose result survived.", "SECRET_CHECKPOINT", now - 2000)
+insert_work(approval_work_id, 2, approval_id, None, "SECRET_CHECKPOINT", now - 1000)
+con.execute(
+    """INSERT INTO WorkApprovals (
+        ApprovalId, WorkItemId, ExecutionGeneration, CheckpointRevision, ToolName, PreparedActionJson,
+        ActionHash, Preview, ExpiresAtUtc, Decision, Consumed, Revision, CreatedAtUtc
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+    (
+        approval_id, approval_work_id, generation, 1, "http.request", '{"body":"SECRET_BODY"}',
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "POST https://example.invalid/compose", far_future, 0, 0, 1, now,
+    ),
+)
+con.commit()
+con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+con.close()
+json.dump({"completedId": completed_id, "approvalWorkId": approval_work_id}, open("/tmp/agent-core-work.json", "w"))
+print("seeded", completed_id, approval_work_id)
+PY
+docker cp "$seed_dir/agent-core.db" "$cid":/data/agent-core.db
+volume="$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/data" }}{{ .Name }}{{ end }}{{ end }}' "$cid")"
+docker run --rm --user root --entrypoint sh -v "$volume":/data agent-core:synthetic -c 'rm -f /data/agent-core.db-wal /data/agent-core.db-shm && chown 1654:1654 /data /data/agent-core.db && chmod 755 /data && chmod 644 /data/agent-core.db'
+rm -rf "$seed_dir"
+
 "${compose[@]}" up -d --force-recreate --no-deps agent-core
 
 ready=0
@@ -118,6 +185,33 @@ with urllib.request.urlopen(req) as response:
     catalog = json.load(response)
 assert any(item["sessionId"] == session_id for item in catalog["items"]), catalog
 print("survived", body["sessionId"], body["status"])
+
+work = json.load(open("/tmp/agent-core-work.json"))
+def get(url):
+    req = urllib.request.Request(url, headers={"X-AgentCore-Owner-Capability": token})
+    with urllib.request.urlopen(req) as response:
+        payload = response.read()
+        return response.status, payload.decode("utf-8")
+
+status, listed = get(f"http://127.0.0.1:5080/api/v2/sessions/{session_id}/work-items")
+assert status == 200, listed
+for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT", "Compose result survived."):
+    assert secret not in listed, secret
+items = json.loads(listed)["items"]
+assert {item["workItemId"] for item in items} >= {work["completedId"], work["approvalWorkId"]}, items
+approval = next(item for item in items if item["workItemId"] == work["approvalWorkId"])
+assert approval["status"] == "needsApproval", approval
+assert approval["approvalPreview"] == "POST https://example.invalid/compose", approval
+status, detail = get(f"http://127.0.0.1:5080/api/v2/sessions/{session_id}/work-items/{work['approvalWorkId']}")
+assert status == 200, detail
+for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
+    assert secret not in detail, secret
+status, result = get(f"http://127.0.0.1:5080/api/v2/sessions/{session_id}/work-items/{work['completedId']}/result")
+assert status == 200, result
+assert "Compose result survived." in result, result
+for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
+    assert secret not in result, secret
+print("work survived", work["completedId"], work["approvalWorkId"])
 PY
 
 spa="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5080/)"

@@ -85,6 +85,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<DurableWorkContextFactory>();
         services.TryAddSingleton<WorkCancellationRegistry>();
         services.TryAddSingleton<DurableReminderExecutor>();
+        services.TryAddSingleton<DurableWorkIntake>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))

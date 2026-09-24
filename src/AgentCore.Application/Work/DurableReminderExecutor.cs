@@ -1,4 +1,5 @@
 using System.Text;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -186,6 +187,7 @@ public sealed class DurableReminderExecutor(
 
             await work.CompleteAsync(running.WorkItemId, running.Revision, generation, result, asOfUtc, CancellationToken.None)
                 .ConfigureAwait(false);
+            RuntimeTelemetry.RecordWork("completed");
             return true;
         }
         catch (OperationCanceledException)
@@ -253,6 +255,7 @@ public sealed class DurableReminderExecutor(
                     completed.Text,
                     asOfUtc,
                     CancellationToken.None).ConfigureAwait(false);
+                RuntimeTelemetry.RecordWork("completed");
                 break;
             case DurableOccurrenceRetry retry:
                 await FailAsync(
@@ -266,6 +269,7 @@ public sealed class DurableReminderExecutor(
                     CancellationToken.None).ConfigureAwait(false);
                 break;
             case DurableOccurrenceSuspended:
+                RuntimeTelemetry.RecordWork("waiting");
                 break;
             case DurableOccurrenceFailed failed:
                 await FailAsync(
@@ -308,10 +312,11 @@ public sealed class DurableReminderExecutor(
             current.KnownEffectSummary,
             time.GetUtcNow(),
             CancellationToken.None).ConfigureAwait(false);
+        RuntimeTelemetry.RecordWork("cancelled");
         return true;
     }
 
-    private ValueTask<WorkItem> FailAsync(
+    private async ValueTask<WorkItem> FailAsync(
         WorkItem running,
         Guid generation,
         DateTimeOffset asOfUtc,
@@ -319,8 +324,9 @@ public sealed class DurableReminderExecutor(
         string summary,
         bool replaySafe,
         DateTimeOffset? nextRetryAtUtc,
-        CancellationToken cancellationToken) =>
-        work.FailAsync(
+        CancellationToken cancellationToken)
+    {
+        var failed = await work.FailAsync(
             running.WorkItemId,
             running.Revision,
             generation,
@@ -329,5 +335,8 @@ public sealed class DurableReminderExecutor(
             replaySafe,
             asOfUtc,
             nextRetryAtUtc,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        RuntimeTelemetry.RecordWork(failed.Status == WorkItemStatus.WaitingToRetry ? "retry" : "failed");
+        return failed;
+    }
 }

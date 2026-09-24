@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using AgentCore.Api;
 using AgentCore.Api.Realtime;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -603,7 +604,7 @@ public sealed class SqliteHostRecoveryTests
     }
 }
 
-internal sealed class DurableSqliteHostFactory(string dbPath) : WebApplicationFactory<Program>
+internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler = true) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -660,6 +661,14 @@ internal sealed class DurableSqliteHostFactory(string dbPath) : WebApplicationFa
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
 
+            foreach (var store in services.Where(item => item.ServiceType == typeof(IAgentInstanceStore)).ToArray())
+            {
+                services.Remove(store);
+            }
+
+            services.AddSingleton<IAgentInstanceStore>(provider => new SqliteAgentInstanceStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+
             foreach (var store in services.Where(item => item.ServiceType == typeof(IWorkItemStore)).ToArray())
             {
                 services.Remove(store);
@@ -667,6 +676,22 @@ internal sealed class DurableSqliteHostFactory(string dbPath) : WebApplicationFa
 
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+
+            foreach (var handoff in services.Where(item => item.ServiceType == typeof(IDurableWorkHandoff)).ToArray())
+            {
+                services.Remove(handoff);
+            }
+
+            services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+
+            if (!runScheduler)
+            {
+                foreach (var hosted in services.Where(item => item.ImplementationType == typeof(TriggerSchedulerHostedService)).ToArray())
+                {
+                    services.Remove(hosted);
+                }
+            }
         });
         TestHttpDefaults.UseLoopbackCaller(builder);
     }

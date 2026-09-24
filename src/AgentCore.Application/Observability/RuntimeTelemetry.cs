@@ -101,6 +101,13 @@ public static class RuntimeTelemetry
         TriggerDueLagMs.Record(Math.Max(0, lagMs), new KeyValuePair<string, object?>("source", "schedule"));
     }
 
+    private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
+
+    public static void RecordWork(string outcome)
+    {
+        WorkEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
+
     public static IReadOnlyList<TimelineEvent> SnapshotTimeline() => [.. Timeline];
 
     public static IReadOnlyDictionary<string, StageStats> SnapshotStats()
