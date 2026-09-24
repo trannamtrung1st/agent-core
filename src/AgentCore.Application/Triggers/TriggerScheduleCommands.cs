@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -49,7 +50,8 @@ public sealed record TriggerCommandContext(
     PendingTriggerProposal? PendingProposal,
     Guid? SourceEventId,
     DateTimeOffset UtcNow,
-    ScheduleConversationContext? ScheduleContext = null);
+    ScheduleConversationContext? ScheduleContext = null,
+    ScheduleDraftContext? ScheduleDraft = null);
 
 public static class TriggerAuthorization
 {
@@ -128,7 +130,8 @@ public static class TriggerScheduleCommands
         CancellationToken cancellationToken,
         ITriggerCommandAuthorizer? authorizer = null,
         IAgentInstanceStore? instances = null,
-        IAgentDefinitionStore? definitions = null)
+        IAgentDefinitionStore? definitions = null,
+        IMemoryStore? profiles = null)
     {
         authorizer ??= DefaultAuthorizer;
         if (registrations is null)
@@ -193,6 +196,17 @@ public static class TriggerScheduleCommands
                     clearProposal: false);
             }
 
+            if (authorization == TriggerCommandAuthorizationDecision.ClassifierUnavailable
+                && context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
+                    or TriggerAuthorizationClassification.UnrelatedUserTurn)
+            {
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "authorization_classifier_unavailable");
+                return Result(
+                    "authorization_classifier_unavailable",
+                    "Schedule authorization is temporarily unavailable. Ask the user to restate the request or try again shortly.",
+                    clearProposal: false);
+            }
+
             if (context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                 or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
@@ -216,23 +230,38 @@ public static class TriggerScheduleCommands
         }
 
         var policyDefinition = definition;
-        if (instances is not null && definitions is not null)
+        var durablePolicyConfigured = instances is not null && definitions is not null && profiles is not null;
+        if (durablePolicyConfigured)
         {
-            policyDefinition = await TriggerDurableSchedulingPolicy.ResolveEffectiveDefinitionAsync(
-                    owner,
-                    instances,
-                    definitions,
-                    cancellationToken)
-                .ConfigureAwait(false)
-                ?? definition;
-            if (!TriggerDurableSchedulingPolicy.AllowsUserScheduling(policyDefinition))
+            if (required is TriggerCommandAction.Create or TriggerCommandAction.Update)
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
-                return Result(
-                    "policy",
-                    "Scheduling is disabled for this agent.",
-                    clearProposal: false);
+                var admission = await TriggerDurableSchedulingPolicy.EvaluateUserSchedulingAsync(
+                        owner,
+                        instances!,
+                        definitions!,
+                        profiles!,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (!admission.Allowed)
+                {
+                    RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+                    return Result(
+                        "policy",
+                        TriggerDurableSchedulingPolicy.PolicyMessage(admission.DenialReason!.Value),
+                        clearProposal: false);
+                }
+
+                policyDefinition = admission.Definition!;
             }
+        }
+        else if (required is TriggerCommandAction.Create or TriggerCommandAction.Update
+                 && !TriggerDurableSchedulingPolicy.AllowsUserScheduling(definition))
+        {
+            RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+            return Result(
+                "policy",
+                "Scheduling is disabled for this agent.",
+                clearProposal: false);
         }
 
         try
@@ -248,7 +277,7 @@ public static class TriggerScheduleCommands
                 ToolCatalog.TriggerUpdate => await UpdateAsync(
                     policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerCancel => await CancelAsync(
-                    policyDefinition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
             return new ToolExecutionResult(json, ReplaceTriggerProposal: true, TriggerProposal: null);
@@ -263,13 +292,21 @@ public static class TriggerScheduleCommands
             };
             return Result(code, exception.Message, clearProposal: false);
         }
+        catch (TriggerScheduleCommandException exception)
+        {
+            return Result(
+                exception.ErrorCode,
+                exception.Message,
+                clearProposal: false,
+                exception.Draft);
+        }
         catch (ArgumentException exception)
         {
-            return Result("validation", exception.Message, clearProposal: false);
+            return Result("schedule_validation_failed", exception.Message, clearProposal: false);
         }
         catch (TriggerTimeZoneUnavailableException)
         {
-            return Result("validation", "Timezone is unavailable. Ask the user for a different timezone.", clearProposal: false);
+            return Result("schedule_validation_failed", "Timezone is unavailable. Ask the user for a different timezone.", clearProposal: false);
         }
     }
 
@@ -281,7 +318,7 @@ public static class TriggerScheduleCommands
         JsonElement arguments,
         CancellationToken cancellationToken)
     {
-        var policy = RequirePolicy(definition, "create");
+        var policy = RequirePolicy(definition, "create", requireUserScheduling: true);
         await RequireCapacityAsync(registrations, owner, policy, cancellationToken).ConfigureAwait(false);
         var intent = RequireIntent(arguments);
         var (schedule, next) = ResolveOneShot(arguments, context, policy);
@@ -307,10 +344,11 @@ public static class TriggerScheduleCommands
         JsonElement arguments,
         CancellationToken cancellationToken)
     {
-        var policy = RequirePolicy(definition, "create");
+        var policy = RequirePolicy(definition, "create", requireUserScheduling: true);
         await RequireCapacityAsync(registrations, owner, policy, cancellationToken).ConfigureAwait(false);
-        var intent = RequireIntent(arguments);
-        var schedule = ResolveRecurring(arguments, context, policy);
+        var merged = MergeDraftArguments(arguments, context);
+        var intent = RequireIntent(merged);
+        var schedule = ResolveRecurring(merged, context, policy);
         var next = TriggerScheduleCalculator.InitialNext(schedule, context.UtcNow)
             ?? throw new ArgumentException("No future occurrence matches this schedule.");
         var created = await registrations.CreateAsync(
@@ -334,7 +372,7 @@ public static class TriggerScheduleCommands
         JsonElement arguments,
         CancellationToken cancellationToken)
     {
-        RequirePolicy(definition, "list");
+        RequirePolicy(definition, "list", requireUserScheduling: false);
         TriggerRegistrationStatus? status = null;
         if (TryString(arguments, "status", out var statusText) && !string.IsNullOrWhiteSpace(statusText))
         {
@@ -361,11 +399,11 @@ public static class TriggerScheduleCommands
         JsonElement arguments,
         CancellationToken cancellationToken)
     {
-        var policy = RequirePolicy(definition, "update");
+        var policy = RequirePolicy(definition, "update", requireUserScheduling: true);
         var id = RequireId(arguments);
-        var expected = RequireRevision(arguments);
         var current = await registrations.GetAsync(owner, id, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+        var expected = ResolveExpectedRevision(arguments, context, current);
         var hasIntent = arguments.TryGetProperty("intent", out _);
         var hasSchedule = HasScheduleFields(arguments);
         TriggerRegistrationChange change;
@@ -404,14 +442,18 @@ public static class TriggerScheduleCommands
         AgentDefinition definition,
         ITriggerRegistrationService registrations,
         TriggerOwner owner,
+        TriggerCommandContext context,
         JsonElement arguments,
         CancellationToken cancellationToken)
     {
-        RequirePolicy(definition, "cancel");
+        RequirePolicy(definition, "cancel", requireUserScheduling: false);
+        var id = RequireId(arguments);
+        var current = await registrations.GetAsync(owner, id, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
         var cancelled = await registrations.CancelAsync(
             owner,
-            RequireId(arguments),
-            RequireRevision(arguments),
+            id,
+            ResolveExpectedRevision(arguments, context, current),
             cancellationToken).ConfigureAwait(false);
         return RegistrationJson(cancelled);
     }
@@ -506,7 +548,80 @@ public static class TriggerScheduleCommands
         TriggerCommandContext context,
         TriggerPolicy policy)
     {
+        if (arguments.TryGetProperty("intervalSeconds", out _))
+        {
+            var kindText = TryString(arguments, "kind", out var kindProbe) ? kindProbe : null;
+            if (kindText is null
+                || (!kindText.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase)
+                    && !kindText.Equals("fixedInterval", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new TriggerScheduleCommandException(
+                    "unsupported_recurrence",
+                    "Sub-day fixed intervals require kind fixed_interval with intervalSeconds. Daily and weekly schedules are calendar-based only.");
+            }
+        }
+
         var kind = RequireString(arguments, "kind");
+        int? cap = arguments.TryGetProperty("maxOccurrences", out var capElement) && capElement.ValueKind != JsonValueKind.Null
+            ? capElement.GetInt32()
+            : null;
+
+        if (kind.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("fixedInterval", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!policy.AllowFixedInterval)
+            {
+                throw new TriggerScheduleCommandException(
+                    "unsupported_recurrence",
+                    "Fixed-interval recurrence is not enabled for this agent.");
+            }
+
+            if (!arguments.TryGetProperty("intervalSeconds", out var secondsElement)
+                || secondsElement.ValueKind != JsonValueKind.Number
+                || !secondsElement.TryGetInt32(out var intervalSeconds))
+            {
+                throw new TriggerScheduleCommandException(
+                    "schedule_validation_failed",
+                    "Fixed-interval schedules require intervalSeconds.");
+            }
+
+            var intent = TryString(arguments, "intent", out var intentText) ? intentText : string.Empty;
+            if (intervalSeconds < policy.MinFixedIntervalSeconds)
+            {
+                throw new TriggerScheduleCommandException(
+                    "recurrence_below_minimum",
+                    $"The minimum supported fixed interval is {policy.MinFixedIntervalSeconds} seconds. Ask the user for a longer interval.",
+                    ScheduleDraftContext.ForFixedIntervalRejection(
+                        intent,
+                        intervalSeconds,
+                        "recurrence_below_minimum",
+                        context.UtcNow));
+            }
+
+            if (intervalSeconds > TriggerLimits.MaxFixedIntervalSeconds)
+            {
+                throw new TriggerScheduleCommandException(
+                    "unsupported_recurrence",
+                    "Fixed interval is longer than the supported maximum.");
+            }
+
+            DateTimeOffset? endAt = null;
+            if (TryString(arguments, "endAtUtc", out var endText) && DateTimeOffset.TryParse(endText, out var parsedEnd))
+            {
+                endAt = TriggerScheduleCalculator.Truncate(parsedEnd.ToUniversalTime());
+            }
+
+            if (cap is null && endAt is null && !policy.AllowIndefiniteRecurrence)
+            {
+                throw new TriggerScheduleCommandException(
+                    "schedule_validation_failed",
+                    "Indefinite recurrence is not enabled. Ask for an end date or occurrence cap.");
+            }
+
+            var anchor = TriggerScheduleCalculator.Truncate(context.UtcNow);
+            return new FixedIntervalSchedule(intervalSeconds, anchor, endAt, cap);
+        }
+
         var zone = RequireTimeZone(arguments, context);
         var localTime = RequireLocalTime(arguments);
         var interval = arguments.TryGetProperty("interval", out var intervalElement) && intervalElement.TryGetInt32(out var parsed)
@@ -514,9 +629,6 @@ public static class TriggerScheduleCommands
             : 1;
         var start = OptionalDate(arguments, "startDate");
         var end = OptionalDate(arguments, "endDate");
-        int? cap = arguments.TryGetProperty("maxOccurrences", out var capElement) && capElement.ValueKind != JsonValueKind.Null
-            ? capElement.GetInt32()
-            : null;
         if (cap is null && end is null && !policy.AllowIndefiniteRecurrence)
         {
             throw new ArgumentException("Indefinite recurrence is not enabled. Ask for an end date or occurrence cap.");
@@ -531,7 +643,9 @@ public static class TriggerScheduleCommands
 
             if (interval < policy.MinRecurrenceDays)
             {
-                throw new ArgumentException("Daily interval is shorter than the policy minimum.");
+                throw new TriggerScheduleCommandException(
+                    "unsupported_recurrence",
+                    "Daily schedules cannot represent sub-day recurrence. Use kind fixed_interval with intervalSeconds for minute or hour cadences.");
             }
 
             return new DailySchedule(interval, localTime, zone, start, end, cap);
@@ -553,7 +667,59 @@ public static class TriggerScheduleCommands
             return new WeeklySchedule(interval, weekdays, localTime, zone, start, end, cap);
         }
 
-        throw new ArgumentException("Schedule kind must be daily or weekly.");
+        throw new TriggerScheduleCommandException(
+            "unsupported_recurrence",
+            "Schedule kind must be fixed_interval, daily, or weekly.");
+    }
+
+    private static JsonElement MergeDraftArguments(JsonElement arguments, TriggerCommandContext context)
+    {
+        if (context.ScheduleDraft is not { IsActive: true } draft)
+        {
+            return arguments;
+        }
+
+        using var document = JsonDocument.Parse(arguments.GetRawText());
+        var root = document.RootElement;
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var property in root.EnumerateObject())
+            {
+                property.WriteTo(writer);
+            }
+
+            if (!root.TryGetProperty("intent", out var intentElement)
+                || intentElement.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(intentElement.GetString()))
+            {
+                writer.WriteString("intent", draft.Intent);
+            }
+
+            if (draft.RecurrenceKind.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!root.TryGetProperty("kind", out _))
+                {
+                    writer.WriteString("kind", "fixed_interval");
+                }
+
+                if (!root.TryGetProperty("intervalSeconds", out _))
+                {
+                    var seconds = ScheduleIntervalLanguage.TryParseIntervalSeconds(context.CurrentUserText)
+                        ?? draft.IntervalSeconds;
+                    if (seconds is int parsed)
+                    {
+                        writer.WriteNumber("intervalSeconds", parsed);
+                    }
+                }
+            }
+
+            writer.WriteEndObject();
+        }
+
+        using var merged = JsonDocument.Parse(stream.ToArray());
+        return merged.RootElement.Clone();
     }
 
     private static async Task RequireCapacityAsync(
@@ -569,20 +735,40 @@ public static class TriggerScheduleCommands
         }
     }
 
-    private static TriggerPolicy RequirePolicy(AgentDefinition definition, string operation)
+    private static TriggerPolicy RequirePolicy(AgentDefinition definition, string operation, bool requireUserScheduling)
     {
         var policy = definition.TriggerPolicy;
-        if (!SchedulingEnabled(policy))
+        if (policy is not { Enabled: true })
         {
             RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
             throw new ArgumentException("Scheduling is disabled for this agent.");
         }
 
-        return policy!;
+        if (requireUserScheduling && !policy.AllowUserScheduling)
+        {
+            RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+            throw new ArgumentException("Scheduling is disabled for this agent.");
+        }
+
+        return policy;
     }
 
     private static bool SchedulingEnabled(TriggerPolicy? policy) =>
         policy is { Enabled: true, AllowUserScheduling: true };
+
+    private static long ResolveExpectedRevision(
+        JsonElement arguments,
+        TriggerCommandContext context,
+        TriggerRegistration current)
+    {
+        var id = RequireId(arguments);
+        if (context.ScheduleContext is { RegistrationId: var referentId } && referentId == id)
+        {
+            return current.Revision;
+        }
+
+        return RequireRevision(arguments);
+    }
 
     private static string RequireTimeZone(JsonElement arguments, TriggerCommandContext context)
     {
@@ -737,6 +923,7 @@ public static class TriggerScheduleCommands
         OneShotSchedule oneShot => oneShot.TimeZoneId,
         DailySchedule daily => daily.TimeZoneId,
         WeeklySchedule weekly => weekly.TimeZoneId,
+        FixedIntervalSchedule => "UTC",
         _ => ""
     };
 
@@ -774,6 +961,7 @@ public static class TriggerScheduleCommands
                 context.ConversationLanguage,
                 required,
                 context.ScheduleContext,
+                context.ScheduleDraft,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -792,9 +980,32 @@ public static class TriggerScheduleCommands
         return new ToolExecutionResult(json, ReplaceTriggerProposal: true, TriggerProposal: proposal);
     }
 
-    private static ToolExecutionResult Result(string code, string message, bool clearProposal) =>
-        new(Error(code, message), ReplaceTriggerProposal: clearProposal, TriggerProposal: null);
+    private static ToolExecutionResult Result(
+        string code,
+        string message,
+        bool clearProposal,
+        ScheduleDraftContext? draft = null) =>
+        new(Error(code, message, draft), ReplaceTriggerProposal: clearProposal, TriggerProposal: null);
 
-    private static string Error(string code, string message) =>
-        JsonSerializer.Serialize(new { error = code, message });
+    private static string Error(string code, string message, ScheduleDraftContext? draft = null)
+    {
+        if (draft is null)
+        {
+            return JsonSerializer.Serialize(new { error = code, message });
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            error = code,
+            message,
+            scheduleDraft = draft.ToJsonObject(),
+            retryGuidance = code switch
+            {
+                "recurrence_below_minimum" => "The user may correct only the interval on the next turn. Do not change the intent.",
+                "unsupported_recurrence" => "Explain supported cadences and ask the user to restate the request.",
+                "authorization_denied" => "Do not retry with different time argument shapes.",
+                _ => "Ask the user to restate the schedule request clearly."
+            }
+        });
+    }
 }

@@ -95,30 +95,21 @@ public sealed class TriggerAdmissionGuard(
         TriggerSourceKind sourceKind,
         CancellationToken cancellationToken = default)
     {
-        var instance = await instances.FindAsync(owner.AgentInstanceId, cancellationToken).ConfigureAwait(false);
-        if (instance is null)
-        {
-            return new TriggerAdmissionDecision(TriggerAdmissionDecisionKind.Suspend, "Agent instance is unavailable.");
-        }
-
-        if (instance.Lifecycle != AgentInstanceLifecycle.Active)
-        {
-            return new TriggerAdmissionDecision(TriggerAdmissionDecisionKind.Suspend, "Agent instance is not active.");
-        }
-
-        var profile = await profiles.LoadProfileAsync(owner.ProfileId, cancellationToken).ConfigureAwait(false);
-        if (profile is null)
-        {
-            return new TriggerAdmissionDecision(TriggerAdmissionDecisionKind.Suspend, "Owner profile is unavailable.");
-        }
-
-        var definition = await TriggerDurableSchedulingPolicy.ResolveEffectiveDefinitionAsync(
-                new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
+        var admission = await TriggerDurableSchedulingPolicy.EvaluateScheduledOccurrenceEligibilityAsync(
+                owner,
                 instances,
                 definitions,
+                profiles,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (definition is null || !OccurrenceCompatibility.Allows(definition, sourceKind))
+        if (!admission.Allowed)
+        {
+            return new TriggerAdmissionDecision(
+                TriggerAdmissionDecisionKind.Suspend,
+                TriggerDurableSchedulingPolicy.PolicyMessage(admission.DenialReason!.Value));
+        }
+
+        if (!OccurrenceCompatibility.Allows(admission.Definition!, sourceKind))
         {
             return new TriggerAdmissionDecision(TriggerAdmissionDecisionKind.Suspend, "Scheduling is disabled for this agent.");
         }

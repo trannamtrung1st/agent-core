@@ -121,6 +121,11 @@ public interface ITriggerStore
         TriggerRegistrationStatus? status,
         CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
+        Guid agentInstanceId,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     ValueTask<int> CountActiveAsync(
         TriggerOwner owner,
         CancellationToken cancellationToken = default);

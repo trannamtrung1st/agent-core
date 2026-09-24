@@ -62,6 +62,24 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
     }
 
+    public async ValueTask<IReadOnlyList<TriggerRegistration>> ListSuspendedPolicyForAgentInstanceAsync(
+        Guid agentInstanceId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var instanceId = agentInstanceId.ToString("D");
+        var suspended = (int)TriggerRegistrationStatus.SuspendedPolicy;
+        var rows = await db.TriggerRegistrations.AsNoTracking()
+            .Where(row => row.AgentInstanceId == instanceId && row.Status == suspended)
+            .OrderByDescending(row => row.CreatedAtUtc)
+            .ThenByDescending(row => row.RegistrationId)
+            .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
+    }
+
     public async ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

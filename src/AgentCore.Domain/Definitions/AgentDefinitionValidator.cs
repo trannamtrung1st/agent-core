@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Domain.Definitions;
 
@@ -164,6 +165,11 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("minRecurrenceDays must be 1..365.");
         }
 
+        if (policy.MinFixedIntervalSeconds is < TriggerLimits.MinFixedIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
+        {
+            throw new ArgumentException("minFixedIntervalSeconds must be between 60 and 604800.");
+        }
+
         var sources = policy.AllowedSourceKinds;
         if (sources.Count != sources.Distinct(StringComparer.Ordinal).Count()
             || sources.Any(source => source is not ("schedule" or "applicationEvent")))
@@ -175,7 +181,8 @@ public static class AgentDefinitionValidator
             && policy.AllowUserScheduling
             && !policy.AllowOneShot
             && !policy.AllowDaily
-            && !policy.AllowWeekly)
+            && !policy.AllowWeekly
+            && !policy.AllowFixedInterval)
         {
             throw new ArgumentException("enabled scheduling requires a schedule type.");
         }

@@ -34,7 +34,7 @@ public sealed class ModelTriggerCommandAuthorizerTests
             "another at 8:52",
             "en",
             TriggerCommandAction.Create);
-        Assert.Equal(TriggerCommandAuthorizationDecision.Deny, decision);
+        Assert.Equal(TriggerCommandAuthorizationDecision.ClassifierUnavailable, decision);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class ModelTriggerCommandAuthorizerTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            authorizer.AuthorizeCurrentTurnAsync("remind me", "en", TriggerCommandAction.Create, null, cts.Token).AsTask());
+            authorizer.AuthorizeCurrentTurnAsync("remind me", "en", TriggerCommandAction.Create, null, null, cts.Token).AsTask());
     }
 
     private sealed class StubLanguageModel(string text) : ILanguageModel

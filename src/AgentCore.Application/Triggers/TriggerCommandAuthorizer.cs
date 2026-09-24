@@ -9,7 +9,8 @@ public enum TriggerCommandAuthorizationDecision
 {
     Deny,
     Allow,
-    Ambiguous
+    Ambiguous,
+    ClassifierUnavailable
 }
 
 public interface ITriggerCommandAuthorizer
@@ -19,6 +20,7 @@ public interface ITriggerCommandAuthorizer
         string? conversationLanguage,
         TriggerCommandAction requestedAction,
         ScheduleConversationContext? scheduleContext = null,
+        ScheduleDraftContext? scheduleDraft = null,
         CancellationToken cancellationToken = default);
 
     bool IsScheduleConfirmation(string? currentUserText, string? conversationLanguage);
@@ -88,6 +90,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         string? conversationLanguage,
         TriggerCommandAction requestedAction,
         ScheduleConversationContext? scheduleContext = null,
+        ScheduleDraftContext? scheduleDraft = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -104,7 +107,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 
         var allowed = requestedAction switch
         {
-            TriggerCommandAction.Create => MatchesCreate(text, conversationLanguage, scheduleContext),
+            TriggerCommandAction.Create => MatchesCreate(text, conversationLanguage, scheduleContext, scheduleDraft),
             TriggerCommandAction.List => MatchesList(text, conversationLanguage),
             TriggerCommandAction.Update => MatchesUpdate(text, conversationLanguage, scheduleContext),
             TriggerCommandAction.Cancel => MatchesCancel(text, conversationLanguage, scheduleContext),
@@ -161,8 +164,15 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
     internal static bool MatchesCreate(
         string text,
         string? conversationLanguage,
-        ScheduleConversationContext? scheduleContext = null)
+        ScheduleConversationContext? scheduleContext = null,
+        ScheduleDraftContext? scheduleDraft = null)
     {
+        if (scheduleDraft is { IsActive: true }
+            && ScheduleIntervalLanguage.LooksLikeIntervalCorrection(text))
+        {
+            return true;
+        }
+
         if (NegatedCreate.IsMatch(text) || InformationalFuture.IsMatch(text) || CapabilityQuestion.IsMatch(text))
         {
             return false;
@@ -219,6 +229,7 @@ public sealed class ModelTriggerCommandAuthorizer(
         string? conversationLanguage,
         TriggerCommandAction requestedAction,
         ScheduleConversationContext? scheduleContext = null,
+        ScheduleDraftContext? scheduleDraft = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(currentUserText))
@@ -237,6 +248,7 @@ public sealed class ModelTriggerCommandAuthorizer(
             conversationLanguage,
             requestedAction,
             scheduleContext,
+            scheduleDraft,
             cancellationToken).ConfigureAwait(false);
         if (heuristicDecision == TriggerCommandAuthorizationDecision.Allow)
         {
@@ -255,7 +267,7 @@ public sealed class ModelTriggerCommandAuthorizer(
         var raw = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
         if (!TryParseDecision(raw, out var decision))
         {
-            return TriggerCommandAuthorizationDecision.Deny;
+            return TriggerCommandAuthorizationDecision.ClassifierUnavailable;
         }
 
         return decision;

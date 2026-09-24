@@ -602,6 +602,7 @@ public sealed class TriggerScheduleRuntimeTests
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf13")]);
         var registrations = new TriggerRegistrationService(store, triggerIds, time);
+        var tools = new SessionToolExecutor(triggerRegistrations: registrations);
         var snapshot = new SessionSnapshot(
             1,
             sessionIds.NewSessionId(),
@@ -629,7 +630,7 @@ public sealed class TriggerScheduleRuntimeTests
             sessionIds,
             time,
             NullLogger<SessionRuntime>.Instance,
-            tools: new SessionToolExecutor(triggerRegistrations: registrations));
+            tools: tools);
         await runtime.AttachAsync();
         var preferences = new Dictionary<string, UserProfileValue>
         {
@@ -641,7 +642,7 @@ public sealed class TriggerScheduleRuntimeTests
         }
 
         await runtime.ApplyProfileAsync(new UserProfile(ProfileId, 1, preferences, Now));
-        return new Harness(runtime, store);
+        return new Harness(runtime, store, memory, tools, model ?? new ScriptedLanguageModel(), time);
     }
 
     private static async Task<AgentDefinition> LoadAsync(int version)
@@ -649,6 +650,8 @@ public sealed class TriggerScheduleRuntimeTests
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         return (await store.GetAsync("general-assistant", version))!;
     }
+
+    internal static string FindAgentsDirectory() => FindAgents();
 
     private static string FindAgents()
     {
@@ -667,7 +670,34 @@ public sealed class TriggerScheduleRuntimeTests
         throw new DirectoryNotFoundException("agents/");
     }
 
-    internal sealed record Harness(SessionRuntime Runtime, InMemoryTriggerStore Store);
+    internal sealed record Harness(
+        SessionRuntime Runtime,
+        InMemoryTriggerStore Store,
+        InMemoryMemoryStore Memory,
+        SessionToolExecutor Tools,
+        ILanguageModel Model,
+        TimeProvider Time)
+    {
+        public async Task<SessionRuntime> ReattachRuntimeAsync()
+        {
+            var snapshot = await Memory.LoadMetadataAsync(Runtime.SessionId).ConfigureAwait(false)
+                ?? Runtime.Snapshot;
+            var runtime = new SessionRuntime(
+                snapshot,
+                Model,
+                new DefaultAgentBrain(new PromptContextBuilder()),
+                Memory,
+                new CapturingSessionOutput(),
+                new DeterministicIdGenerator(
+                    Enumerable.Range(20, 32).Select(index => Guid.Parse($"019944af-00b3-7000-8000-{index:D12}")),
+                    [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf12")]),
+                Time,
+                NullLogger<SessionRuntime>.Instance,
+                tools: Tools);
+            await runtime.AttachAsync().ConfigureAwait(false);
+            return runtime;
+        }
+    };
 
     internal static Task<Harness> StartHarnessForContinuationAsync() =>
         StartAsync(

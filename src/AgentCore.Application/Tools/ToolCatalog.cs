@@ -42,6 +42,11 @@ public static class ToolCatalog
             return [];
         }
 
+        if (context?.Trigger.Kind == TriggerKind.ScheduledOccurrence)
+        {
+            return [];
+        }
+
         var offered = new List<ModelToolDefinition>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in RoleEnvironments.Of(definition).ToolList)

@@ -39,6 +39,12 @@ internal static class TriggerScheduleCodec
             FormatDate(weekly.StartDate),
             FormatDate(weekly.EndDate),
             weekly.MaxOccurrences), Options),
+        FixedIntervalSchedule fixedInterval => JsonSerializer.Serialize(new FixedIntervalDto(
+            "fixedInterval",
+            fixedInterval.IntervalSeconds,
+            fixedInterval.AnchorAtUtc.ToUnixTimeMilliseconds(),
+            fixedInterval.EndAtUtc?.ToUnixTimeMilliseconds(),
+            fixedInterval.MaxOccurrences), Options),
         _ => throw new InvalidOperationException("Schedule kind is not supported.")
     };
 
@@ -53,6 +59,7 @@ internal static class TriggerScheduleCodec
                 "oneShot" => MapOneShot(JsonSerializer.Deserialize<OneShotDto>(json, Options)),
                 "daily" => MapDaily(JsonSerializer.Deserialize<DailyDto>(json, Options)),
                 "weekly" => MapWeekly(JsonSerializer.Deserialize<WeeklyDto>(json, Options)),
+                "fixedInterval" => MapFixedInterval(JsonSerializer.Deserialize<FixedIntervalDto>(json, Options)),
                 _ => throw AgentCoreErrors.Persistence("Stored trigger schedule kind is not supported.")
             };
         }
@@ -145,5 +152,29 @@ internal static class TriggerScheduleCodec
         string TimeZoneId,
         string? StartDate,
         string? EndDate,
+        int? MaxOccurrences);
+
+    private static FixedIntervalSchedule MapFixedInterval(FixedIntervalDto? dto)
+    {
+        if (dto is null)
+        {
+            throw AgentCoreErrors.Persistence("Stored trigger schedule could not be read.");
+        }
+
+        DateTimeOffset? end = dto.EndAtUtc is long endMs
+            ? DateTimeOffset.FromUnixTimeMilliseconds(endMs)
+            : null;
+        return new FixedIntervalSchedule(
+            dto.IntervalSeconds,
+            DateTimeOffset.FromUnixTimeMilliseconds(dto.AnchorAtUtc),
+            end,
+            dto.MaxOccurrences);
+    }
+
+    private sealed record FixedIntervalDto(
+        string Kind,
+        int IntervalSeconds,
+        long AnchorAtUtc,
+        long? EndAtUtc,
         int? MaxOccurrences);
 }

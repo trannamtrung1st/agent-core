@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Ports;
 using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Triggers;
@@ -82,6 +83,46 @@ public sealed record ScheduleConversationContext(
             return null;
         }
     }
+
+    public static ScheduleConversationContext FromRegistration(
+        TriggerRegistration registration,
+        TriggerCommandAction lastAction) =>
+        new(
+            registration.RegistrationId,
+            registration.Revision,
+            lastAction,
+            registration.Intent,
+            TimeZoneOf(registration.Schedule),
+            ScheduleKindOf(registration.Schedule),
+            registration.Status,
+            registration.NextOccurrenceAtUtc);
+
+    public static async ValueTask<ScheduleConversationContext?> TryReconstructLatestReferentAsync(
+        ITriggerRegistrationService registrations,
+        TriggerOwner owner,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await registrations.ListAsync(owner, null, cancellationToken).ConfigureAwait(false);
+        var latest = rows.FirstOrDefault(row => row.Status == TriggerRegistrationStatus.Active);
+        return latest is null ? null : FromRegistration(latest, TriggerCommandAction.Create);
+    }
+
+    private static string TimeZoneOf(TriggerSchedule schedule) => schedule switch
+    {
+        OneShotSchedule oneShot => oneShot.TimeZoneId,
+        DailySchedule daily => daily.TimeZoneId,
+        WeeklySchedule weekly => weekly.TimeZoneId,
+        _ => string.Empty
+    };
+
+    private static TriggerScheduleKind ScheduleKindOf(TriggerSchedule schedule) => schedule switch
+    {
+        OneShotSchedule => TriggerScheduleKind.OneShot,
+        DailySchedule => TriggerScheduleKind.Daily,
+        WeeklySchedule => TriggerScheduleKind.Weekly,
+        FixedIntervalSchedule => TriggerScheduleKind.FixedInterval,
+        _ => TriggerScheduleKind.OneShot
+    };
 
     public IReadOnlyList<string> ToPromptLines()
     {

@@ -78,6 +78,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private UserProfile? _profile;
     private PendingTriggerProposal? _pendingTriggerProposal;
     private ScheduleConversationContext? _scheduleConversationContext;
+    private ScheduleDraftContext? _scheduleDraftContext;
     private SessionSnapshot _snapshot;
     private Guid _epoch;
     private Guid? _activeResponseId;
@@ -2133,7 +2134,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LearnedMemories: learned,
                     Persona: _snapshot.PinnedPersona,
                     ExplicitMemoryCapture: _explicitMemoryCaptureOutcome,
-                    ScheduleConversation: _scheduleConversationContext);
+                    ScheduleConversation: _scheduleConversationContext,
+                    ScheduleDraft: _scheduleDraftContext);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
@@ -2861,6 +2863,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var authorizer = _tools.TriggerCommandAuthorizer;
         var language = _snapshot.Definition.ConversationPolicy.Language;
+        if (trigger.Kind == TriggerKind.UserTurn
+            && !TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(trigger.Text, language, _scheduleConversationContext))
+        {
+            _scheduleDraftContext = null;
+        }
         var confirming = TriggerAuthorization.IsConfirmationTurn(
             trigger.Text,
             _pendingTriggerProposal is not null,
@@ -2894,7 +2901,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _pendingTriggerProposal,
             trigger.EventId,
             _time.GetUtcNow(),
-            _scheduleConversationContext);
+            _scheduleConversationContext,
+            _scheduleDraftContext);
     }
 
     private async Task SupersedeAsync(

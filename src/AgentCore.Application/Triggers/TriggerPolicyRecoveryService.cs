@@ -9,6 +9,11 @@ public interface ITriggerPolicyRecoveryService
         TriggerOwner owner,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken = default);
+
+    ValueTask<int> ReactivateSuspendedForAgentInstanceAsync(
+        Guid agentInstanceId,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class TriggerPolicyRecoveryService(
@@ -34,6 +39,39 @@ public sealed class TriggerPolicyRecoveryService(
             cancellationToken.ThrowIfCancellationRequested();
             var updated = await store.TryReactivatePolicySuspensionAsync(
                 owner,
+                registration.RegistrationId,
+                registration.Revision,
+                asOfUtc,
+                cancellationToken).ConfigureAwait(false);
+            if (updated is not null)
+            {
+                reactivated++;
+            }
+        }
+
+        return reactivated;
+    }
+
+    public async ValueTask<int> ReactivateSuspendedForAgentInstanceAsync(
+        Guid agentInstanceId,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var suspended = await store.ListSuspendedPolicyForAgentInstanceAsync(agentInstanceId, 256, cancellationToken)
+            .ConfigureAwait(false);
+        var reactivated = 0;
+        foreach (var registration in suspended)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var decision = await guard.EvaluateAsync(registration.Owner, TriggerSourceKind.Schedule, cancellationToken)
+                .ConfigureAwait(false);
+            if (decision.Kind != TriggerAdmissionDecisionKind.Allow)
+            {
+                continue;
+            }
+
+            var updated = await store.TryReactivatePolicySuspensionAsync(
+                registration.Owner,
                 registration.RegistrationId,
                 registration.Revision,
                 asOfUtc,

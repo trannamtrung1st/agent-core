@@ -123,9 +123,31 @@ public static class TriggerScheduleEndpoints
             weekly.IntervalWeeks == 1
                 ? $"Every {FormatWeekdays(weekly.Weekdays)} at {weekly.LocalTime:HH:mm}"
                 : $"Every {weekly.IntervalWeeks} weeks on {FormatWeekdays(weekly.Weekdays)} at {weekly.LocalTime:HH:mm}"),
+        FixedIntervalSchedule fixedInterval => (
+            "fixedInterval",
+            "UTC",
+            FormatFixedInterval(fixedInterval)),
         _ => throw new ArgumentOutOfRangeException(nameof(schedule), schedule.GetType().Name, null)
     };
 
     private static string FormatWeekdays(IReadOnlyList<DayOfWeek> weekdays) =>
         string.Join(", ", weekdays.Select(day => day.ToString()));
+
+    private static string FormatFixedInterval(FixedIntervalSchedule schedule)
+    {
+        var seconds = schedule.IntervalSeconds;
+        if (seconds % 3600 == 0)
+        {
+            var hours = seconds / 3600;
+            return hours == 1 ? "Every 1 hour" : $"Every {hours} hours";
+        }
+
+        if (seconds % 60 == 0)
+        {
+            var minutes = seconds / 60;
+            return minutes == 1 ? "Every 1 minute" : $"Every {minutes} minutes";
+        }
+
+        return seconds == 1 ? "Every 1 second" : $"Every {seconds} seconds";
+    }
 }

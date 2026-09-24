@@ -385,7 +385,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         out ModelGenerationEvent? toolEvent)
     {
         toolEvent = null;
-        if (!Offers(request, ToolCatalog.TriggerScheduleOnce) && !Offers(request, ToolCatalog.TriggerList))
+        if (!Offers(request, ToolCatalog.TriggerScheduleOnce)
+            && !Offers(request, ToolCatalog.TriggerList)
+            && !Offers(request, ToolCatalog.TriggerScheduleRecurring))
         {
             return false;
         }
@@ -444,6 +446,35 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("set a reminder", StringComparison.OrdinalIgnoreCase))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Call John","relativeDayOffset":1,"localTime":"09:00"}""");
+            return true;
+        }
+
+        if (lastUser.Contains("check the oven", StringComparison.OrdinalIgnoreCase)
+            && lastUser.Contains("minute", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleOnce,
+                """{"intent":"check the oven","relativeDelaySeconds":60}""");
+            return true;
+        }
+
+        if (lastUser.Contains("say hello to me", StringComparison.OrdinalIgnoreCase)
+            && lastUser.Contains("30", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleRecurring,
+                """{"intent":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+            return true;
+        }
+
+        if (lastUser.Equals("every minute", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleRecurring,
+                """{"kind":"fixed_interval","intervalSeconds":60}""");
             return true;
         }
 

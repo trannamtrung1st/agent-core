@@ -49,7 +49,8 @@ public sealed record AgentContext(
     IReadOnlyList<Domain.Memory.StructuredMemoryItem>? LearnedMemories = null,
     AgentIdentity? Persona = null,
     ExplicitUserMemoryCaptureOutcome ExplicitMemoryCapture = ExplicitUserMemoryCaptureOutcome.None,
-    ScheduleConversationContext? ScheduleConversation = null)
+    ScheduleConversationContext? ScheduleConversation = null,
+    ScheduleDraftContext? ScheduleDraft = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

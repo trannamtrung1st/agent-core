@@ -75,7 +75,8 @@ public sealed class TriggerDurablePolicyTests
             CancellationToken.None,
             new HeuristicTriggerCommandAuthorizer(),
             instances,
-            definitions);
+            definitions,
+            memory);
         Assert.Contains("\"error\":\"policy\"", denied.Text, StringComparison.Ordinal);
         Assert.Empty(await store.ListAsync(owner, null));
     }
@@ -159,6 +160,79 @@ public sealed class TriggerDurablePolicyTests
     }
 
     [Fact]
+    public async Task Schedule_create_denies_when_durable_instance_is_missing()
+    {
+        var definitions = Definitions();
+        var instances = new InMemoryAgentInstanceStore();
+        var memory = new InMemoryMemoryStore();
+        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
+        var instanceId = AgentInstance.CompatibilityFor("general-assistant");
+        await memory.SaveProfileAsync(
+            new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
+            {
+                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now)
+            }, Now),
+            0);
+
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(4), new FakeTimeProvider(Now));
+        var owner = new TriggerOwner(instanceId, ProfileId);
+        var context = new TriggerCommandContext(
+            owner,
+            Guid.NewGuid(),
+            "UTC",
+            "remind me tomorrow at 9",
+            "en",
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            TriggerCommandAction.Create,
+            false,
+            null,
+            Guid.NewGuid(),
+            Now);
+
+        using var args = JsonDocument.Parse("""{"intent":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        var denied = await TriggerScheduleCommands.ExecuteAsync(
+            v9,
+            registrations,
+            ToolCatalog.TriggerScheduleOnce,
+            args.RootElement,
+            context,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer(),
+            instances,
+            definitions,
+            memory);
+        Assert.Contains("\"error\":\"policy\"", denied.Text, StringComparison.Ordinal);
+        Assert.Empty(await store.ListAsync(owner, null));
+    }
+
+    [Fact]
+    public async Task Compatibility_insert_conflict_still_forward_aligns_requested_version()
+    {
+        var definitions = Definitions();
+        var memory = new InMemoryMemoryStore();
+        var clock = new FakeTimeProvider(Now);
+        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
+        var v7 = (await definitions.GetAsync("general-assistant", 7))!;
+        var inner = new InMemoryAgentInstanceStore();
+        var conflictOnInsert = new ConflictOnInsertInstanceStore(
+            inner,
+            new AgentInstance(
+                AgentInstance.CompatibilityFor("general-assistant"),
+                v7.Id,
+                7,
+                v7.Identity,
+                AgentInstanceLifecycle.Active,
+                Now,
+                Now,
+                Compatibility: true));
+        var service = new AgentInstanceService(conflictOnInsert, definitions, memory, Ids(8), clock);
+        var resolved = await service.ResolveCompatibilityAsync(v9);
+        Assert.Equal(9, resolved.ActiveVersion);
+        Assert.Equal(9, (await inner.FindCompatibilityAsync("general-assistant"))!.ActiveVersion);
+    }
+
+    [Fact]
     public async Task Policy_recovery_reactivates_suspended_registration_when_eligible()
     {
         var definitions = Definitions();
@@ -233,4 +307,26 @@ public sealed class TriggerDurablePolicyTests
         new(
             Enumerable.Range(1, count).Select(index => Guid.Parse($"{prefix}{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf15")]);
+
+    private sealed class ConflictOnInsertInstanceStore(IAgentInstanceStore inner, AgentInstance racedWinner) : IAgentInstanceStore
+    {
+        public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
+            inner.FindAsync(instanceId, cancellationToken);
+
+        public ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default) =>
+            inner.FindCompatibilityAsync(definitionId, cancellationToken);
+
+        public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default)
+        {
+            await inner.InsertAsync(racedWinner, cancellationToken).ConfigureAwait(false);
+            throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
+        }
+
+        public ValueTask UpdateActiveVersionAsync(
+            Guid instanceId,
+            int activeVersion,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.UpdateActiveVersionAsync(instanceId, activeVersion, updatedAt, cancellationToken);
+    }
 }

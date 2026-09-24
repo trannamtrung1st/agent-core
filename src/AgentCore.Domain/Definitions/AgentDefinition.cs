@@ -32,7 +32,9 @@ public sealed record TriggerPolicy(
     int MaxActiveRegistrations,
     int OneShotHorizonDays,
     int MinRecurrenceDays,
-    IReadOnlyList<string> AllowedSourceKinds);
+    IReadOnlyList<string> AllowedSourceKinds,
+    bool AllowFixedInterval = false,
+    int MinFixedIntervalSeconds = 60);
 
 public sealed record MemoryPolicy(
     bool SessionMemory = false,

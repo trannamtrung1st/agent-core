@@ -20,6 +20,8 @@
     "maxActiveRegistrations": 32,
     "oneShotHorizonDays": 365,
     "minRecurrenceDays": 1,
+    "allowFixedInterval": true,
+    "minFixedIntervalSeconds": 60,
     "allowedSourceKinds": ["schedule"]
   },
   "metadata": {"scenario": "general-harness", "owner": "demo"},

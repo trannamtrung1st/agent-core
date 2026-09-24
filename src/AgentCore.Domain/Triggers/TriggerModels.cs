@@ -14,6 +14,8 @@ public static class TriggerLimits
     public const int MaxWeekdays = 7;
     public const int MinMaxOccurrences = 1;
     public const int MaxMaxOccurrences = 366;
+    public const int MinFixedIntervalSeconds = 60;
+    public const int MaxFixedIntervalSeconds = 604_800;
 }
 
 public enum TriggerRegistrationStatus
@@ -29,7 +31,8 @@ public enum TriggerScheduleKind
 {
     OneShot = 0,
     Daily = 1,
-    Weekly = 2
+    Weekly = 2,
+    FixedInterval = 3
 }
 
 public enum TriggerSourceKind
@@ -334,6 +337,59 @@ public sealed class DailySchedule : TriggerSchedule
         && string.Equals(TimeZoneId, schedule.TimeZoneId, StringComparison.Ordinal)
         && StartDate == schedule.StartDate
         && EndDate == schedule.EndDate
+        && MaxOccurrences == schedule.MaxOccurrences;
+}
+
+public sealed class FixedIntervalSchedule : TriggerSchedule
+{
+    public FixedIntervalSchedule(
+        int intervalSeconds,
+        DateTimeOffset anchorAtUtc,
+        DateTimeOffset? endAtUtc = null,
+        int? maxOccurrences = null)
+    {
+        if (intervalSeconds is < TriggerLimits.MinFixedIntervalSeconds or > TriggerLimits.MaxFixedIntervalSeconds)
+        {
+            throw new ArgumentException("Fixed interval must be between 60 seconds and 7 days.");
+        }
+
+        if (anchorAtUtc.Offset != TimeSpan.Zero)
+        {
+            throw new ArgumentException("Fixed-interval anchor must be a UTC timestamp.");
+        }
+
+        if (endAtUtc is DateTimeOffset end && end.Offset != TimeSpan.Zero)
+        {
+            throw new ArgumentException("Fixed-interval end must be a UTC timestamp.");
+        }
+
+        if (endAtUtc is DateTimeOffset bounded && bounded <= anchorAtUtc)
+        {
+            throw new ArgumentException("Fixed-interval end must be after the anchor.");
+        }
+
+        RequireOccurrenceCap(maxOccurrences);
+        IntervalSeconds = intervalSeconds;
+        AnchorAtUtc = anchorAtUtc;
+        EndAtUtc = endAtUtc;
+        MaxOccurrences = maxOccurrences;
+    }
+
+    public override TriggerScheduleKind Kind => TriggerScheduleKind.FixedInterval;
+
+    public int IntervalSeconds { get; }
+
+    public DateTimeOffset AnchorAtUtc { get; }
+
+    public DateTimeOffset? EndAtUtc { get; }
+
+    public int? MaxOccurrences { get; }
+
+    public override bool SemanticEquals(TriggerSchedule? other) =>
+        other is FixedIntervalSchedule schedule
+        && IntervalSeconds == schedule.IntervalSeconds
+        && AnchorAtUtc == schedule.AnchorAtUtc
+        && EndAtUtc == schedule.EndAtUtc
         && MaxOccurrences == schedule.MaxOccurrences;
 }
 

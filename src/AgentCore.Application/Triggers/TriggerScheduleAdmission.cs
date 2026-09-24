@@ -53,8 +53,33 @@ public static class TriggerScheduleCalculator
             OneShotSchedule oneShot => Truncate(oneShot.AtUtc),
             DailySchedule daily => InitialDaily(daily, createdAt),
             WeeklySchedule weekly => InitialWeekly(weekly, createdAt),
+            FixedIntervalSchedule fixedInterval => InitialFixed(fixedInterval, createdAt),
             _ => throw new ArgumentException("Schedule kind is not supported.")
         };
+    }
+
+    private static DateTimeOffset? InitialFixed(FixedIntervalSchedule schedule, DateTimeOffset createdAt)
+    {
+        var anchor = Truncate(schedule.AnchorAtUtc);
+        if (schedule.EndAtUtc is DateTimeOffset end && Truncate(end) <= createdAt)
+        {
+            return null;
+        }
+
+        if (createdAt < anchor)
+        {
+            return anchor;
+        }
+
+        var elapsedSeconds = (createdAt - anchor).TotalSeconds;
+        var steps = (long)Math.Floor(elapsedSeconds / schedule.IntervalSeconds) + 1;
+        var next = anchor.AddSeconds(steps * schedule.IntervalSeconds);
+        if (schedule.EndAtUtc is DateTimeOffset bounded && next > Truncate(bounded))
+        {
+            return null;
+        }
+
+        return next;
     }
 
     public static TimeZoneInfo RequireZone(string timeZoneId)
@@ -381,6 +406,7 @@ public static class TriggerScheduleAdmission
     {
         DailySchedule daily => daily.MaxOccurrences,
         WeeklySchedule weekly => weekly.MaxOccurrences,
+        FixedIntervalSchedule fixedInterval => fixedInterval.MaxOccurrences,
         _ => null
     };
 
@@ -400,8 +426,20 @@ public static class TriggerScheduleAdmission
         {
             DailySchedule daily => FollowingDaily(daily, slotUtc),
             WeeklySchedule weekly => FollowingWeekly(weekly, slotUtc, anchorWeek),
+            FixedIntervalSchedule fixedInterval => FollowingFixed(fixedInterval, slotUtc),
             _ => null
         };
+
+    private static DateTimeOffset? FollowingFixed(FixedIntervalSchedule schedule, DateTimeOffset slotUtc)
+    {
+        var next = slotUtc.AddSeconds(schedule.IntervalSeconds);
+        if (schedule.EndAtUtc is DateTimeOffset end && next > TriggerScheduleCalculator.Truncate(end))
+        {
+            return null;
+        }
+
+        return next;
+    }
 
     private static DateTimeOffset? FollowingDaily(DailySchedule schedule, DateTimeOffset slotUtc)
     {
@@ -450,6 +488,12 @@ public static class TriggerScheduleAdmission
 
     private static bool IsAfterEnd(TriggerSchedule schedule, DateTimeOffset instant)
     {
+        if (schedule is FixedIntervalSchedule fixedInterval)
+        {
+            return fixedInterval.EndAtUtc is DateTimeOffset fixedEnd
+                && instant > TriggerScheduleCalculator.Truncate(fixedEnd);
+        }
+
         DateOnly? end = schedule switch
         {
             DailySchedule daily => daily.EndDate,
@@ -470,6 +514,7 @@ public static class TriggerScheduleAdmission
         OneShotSchedule oneShot => oneShot.TimeZoneId,
         DailySchedule daily => daily.TimeZoneId,
         WeeklySchedule weekly => weekly.TimeZoneId,
+        FixedIntervalSchedule => "UTC",
         _ => "UTC"
     };
 
@@ -489,6 +534,7 @@ public static class TriggerScheduleAdmission
     {
         var payload = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
+            ["registrationId"] = registration.RegistrationId,
             ["intent"] = registration.Intent,
             ["scheduleKind"] = registration.Schedule.Kind.ToString(),
             ["scheduledAtUtc"] = scheduled.ToUnixTimeMilliseconds(),

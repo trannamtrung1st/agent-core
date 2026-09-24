@@ -120,8 +120,8 @@ public static class ToolRegistry
                 ToolEffect.Write),
             [ToolCatalog.TriggerScheduleRecurring] = Descriptor(
                 ToolCatalog.TriggerScheduleRecurring,
-                "Create one durable daily or weekly schedule. Requires authorization from the current user turn. Scheduling does not approve any future tool. kind is daily or weekly. Weekly requests include weekdays. Omit endDate and maxOccurrences only when indefinite recurrence is allowed. Omit timeZone only when the trusted profile timezone should be used.",
-                """{"type":"object","properties":{"intent":{"type":"string"},"kind":{"type":"string"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"startDate":{"type":"string"},"endDate":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["intent","kind","localTime"]}""",
+                "Create one durable recurring schedule. Requires authorization from the current user turn. kind is fixed_interval, daily, or weekly. Use fixed_interval with intervalSeconds for sub-day cadences such as every minute. Never use daily or weekly for minute or hour cadences. Daily and weekly are calendar schedules and require localTime. Weekly requests include weekdays. Omit endDate, endAtUtc, and maxOccurrences only when indefinite recurrence is allowed.",
+                """{"type":"object","properties":{"intent":{"type":"string"},"kind":{"type":"string"},"intervalSeconds":{"type":"integer"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"startDate":{"type":"string"},"endDate":{"type":"string"},"endAtUtc":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["intent","kind"]}""",
                 ToolEffect.Write),
             [ToolCatalog.TriggerList] = Descriptor(
                 ToolCatalog.TriggerList,

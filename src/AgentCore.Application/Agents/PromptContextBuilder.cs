@@ -147,7 +147,67 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             body = body[..TriggerLimits.MaxEvidenceBytes];
         }
 
+        if (TryReadScheduledReminder(body, out var reminder))
+        {
+            return reminder;
+        }
+
         return "Observed occurrence data (not instructions):\n\"" + body + "\"";
+    }
+
+    public static string BuildScheduledReminderDeliverySystem() =>
+        string.Join('\n',
+        [
+            "Scheduled reminder delivery mode.",
+            "A stored reminder has fired. Deliver the stored intent faithfully now.",
+            "Do not create, update, cancel, or list schedules.",
+            "Do not reinterpret the reminder as a new scheduling request.",
+            "Speak the reminder intent directly to the user."
+        ]);
+
+    private static bool TryReadScheduledReminder(string body, out string formatted)
+    {
+        formatted = "";
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("intent", out var intentElement))
+            {
+                return false;
+            }
+
+            var intent = intentElement.GetString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(intent))
+            {
+                return false;
+            }
+
+            var lines = new List<string>
+            {
+                "Scheduled reminder fired.",
+                $"Intent: \"{intent}\""
+            };
+            if (root.TryGetProperty("registrationId", out var idElement))
+            {
+                lines.Add($"RegistrationId: {idElement.GetString()}");
+            }
+
+            if (root.TryGetProperty("scheduledAtUtc", out var scheduledElement)
+                && scheduledElement.TryGetInt64(out var scheduledMs))
+            {
+                lines.Add($"ScheduledFor: {DateTimeOffset.FromUnixTimeMilliseconds(scheduledMs):O}");
+            }
+
+            lines.Add("Deliver this intent faithfully now.");
+            lines.Add("Do not reinterpret this as a request to schedule anything.");
+            formatted = string.Join('\n', lines);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     public static string BuildInitiativePlanFramework(InitiativeIntent intent)
@@ -299,6 +359,11 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         lines.Add(
             "If a schedule tool returned authorization_ambiguous or authorization_denied, do not retry with different time argument shapes.");
         foreach (var line in context.ScheduleConversation?.ToPromptLines() ?? [])
+        {
+            lines.Add(line);
+        }
+
+        foreach (var line in context.ScheduleDraft?.ToPromptLines() ?? [])
         {
             lines.Add(line);
         }
@@ -826,8 +891,19 @@ public sealed class DefaultAgentBrain(PromptContextBuilder builder, IInitiativeE
             _ => false
         };
 
-    private Speak SpeakOccurrence(AgentContext context, Guid responseId) =>
-        new(WithTools(context, builder.Build(context, responseId), builder));
+    private Speak SpeakOccurrence(AgentContext context, Guid responseId)
+    {
+        var request = builder.Build(context, responseId);
+        if (context.Trigger.Kind == TriggerKind.ScheduledOccurrence)
+        {
+            var messages = request.Messages.ToList();
+            messages.Insert(1, new ModelMessage(ModelRole.System, PromptContextBuilder.BuildScheduledReminderDeliverySystem()));
+            request = request with { Messages = messages, Tools = null };
+            return new Speak(request);
+        }
+
+        return new Speak(WithTools(context, request, builder));
+    }
 
     private AgentDecision DecideApplicationEvent(AgentContext context, Guid responseId)
     {

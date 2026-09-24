@@ -1,5 +1,15 @@
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Triggers;
+using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Persistence;
+using AgentCore.Application.Testing;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Providers.Synthetic;
 
 namespace AgentCore.Application.Tests;
 
@@ -120,5 +130,95 @@ public sealed class TriggerScheduleContinuationTests
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(TriggerRegistrationStatus.Cancelled, (await harness.Store.GetAsync(owner, second.RegistrationId))!.Status);
         Assert.Equal(TriggerRegistrationStatus.Active, (await harness.Store.GetAsync(owner, first.RegistrationId))!.Status);
+    }
+
+    [Fact]
+    public async Task Reattached_runtime_reconstructs_schedule_referent_from_trigger_store()
+    {
+        var harness = await TriggerScheduleRuntimeTests.StartHarnessForContinuationAsync();
+        await using (var runtime = harness.Runtime)
+        {
+            Assert.True(await runtime.SubmitUserTextAsync("schedule Hello at 8:49 Vietnam time"));
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var reconstructed = await harness.Tools.TryReconstructScheduleConversationContextAsync(InstanceId, ProfileId);
+        Assert.NotNull(reconstructed);
+        var authorizer = new HeuristicTriggerCommandAuthorizer();
+        Assert.Equal(
+            TriggerCommandAuthorizationDecision.Allow,
+            await authorizer.AuthorizeCurrentTurnAsync(
+                "another at 8:55",
+                "en",
+                TriggerCommandAction.Create,
+                reconstructed));
+
+        await using var reattached = await harness.ReattachRuntimeAsync();
+        Assert.NotNull(await harness.Tools.TryReconstructScheduleConversationContextAsync(InstanceId, ProfileId));
+    }
+
+    [Fact]
+    public async Task Update_with_stale_referent_revision_uses_current_registration_revision()
+    {
+        var harness = await TriggerScheduleRuntimeTests.StartHarnessForContinuationAsync();
+        await using (var runtime = harness.Runtime)
+        {
+            Assert.True(await runtime.SubmitUserTextAsync("schedule Hello at 8:49 Vietnam time"));
+            await runtime.WaitUntilIdleAsync();
+        }
+
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+        var created = Assert.Single(await harness.Store.ListAsync(owner, null));
+        var store = harness.Store;
+        var registrations = new TriggerRegistrationService(
+            store,
+            new DeterministicIdGenerator(
+                Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b4-7000-8000-{index:D12}")),
+                [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf13")]),
+            harness.Time);
+        var definition = (await new FileAgentDefinitionStore(
+            TriggerScheduleRuntimeTests.FindAgentsDirectory(),
+            SyntheticProviderAliases.Default).GetAsync("general-assistant", 8))!;
+
+        var registration = (await store.GetAsync(owner, created.RegistrationId))!;
+        await store.UpdateAsync(
+            owner,
+            registration.RegistrationId,
+            registration.Revision,
+            "Hello (revised)",
+            registration.Schedule,
+            registration.NextOccurrenceAtUtc,
+            registration.ExpiresAtUtc,
+            harness.Time.GetUtcNow());
+        var advanced = (await store.GetAsync(owner, registration.RegistrationId))!;
+        Assert.True(advanced.Revision > registration.Revision);
+
+        var staleContext = ScheduleConversationContext.FromRegistration(registration, TriggerCommandAction.Create);
+        var context = new TriggerCommandContext(
+            owner,
+            harness.Runtime.SessionId,
+            "Asia/Ho_Chi_Minh",
+            "move that to 8:50",
+            "en",
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            TriggerCommandAction.Update,
+            false,
+            null,
+            Guid.NewGuid(),
+            harness.Time.GetUtcNow(),
+            staleContext);
+        using var args = JsonDocument.Parse(
+            $$"""{"registrationId":"{{registration.RegistrationId:D}}","expectedRevision":{{registration.Revision}},"relativeDayOffset":0,"localTime":"08:50","timeZone":"Asia/Ho_Chi_Minh"}""");
+        var result = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerUpdate,
+            args.RootElement,
+            context,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", result.Text, StringComparison.Ordinal);
+        var moved = (await store.GetAsync(owner, registration.RegistrationId))!;
+        Assert.Equal(new TimeOnly(8, 50), Assert.IsType<OneShotSchedule>(moved.Schedule).LocalTime);
     }
 }

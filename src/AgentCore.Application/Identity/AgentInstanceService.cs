@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
@@ -10,7 +11,8 @@ public sealed class AgentInstanceService(
     IAgentDefinitionStore definitions,
     IMemoryStore sessions,
     IIdGenerator ids,
-    TimeProvider time) : IAgentInstanceService
+    TimeProvider time,
+    ITriggerPolicyRecoveryService? policyRecovery = null) : IAgentInstanceService
 {
     public async ValueTask<AgentInstance> CreateAsync(
         string definitionId,
@@ -40,19 +42,7 @@ public sealed class AgentInstanceService(
         var existing = await instances.FindCompatibilityAsync(definition.Id, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
-            if (definition.Version > existing.ActiveVersion)
-            {
-                var updatedAt = time.GetUtcNow();
-                await instances.UpdateActiveVersionAsync(
-                        existing.InstanceId,
-                        definition.Version,
-                        updatedAt,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                return existing with { ActiveVersion = definition.Version, UpdatedAt = updatedAt };
-            }
-
-            return existing;
+            return await ForwardAlignCompatibilityAsync(existing, definition, cancellationToken).ConfigureAwait(false);
         }
 
         var now = time.GetUtcNow();
@@ -72,8 +62,9 @@ public sealed class AgentInstanceService(
         }
         catch (AgentCoreException ex) when (ex.Code == "Conflict")
         {
-            return await instances.FindCompatibilityAsync(definition.Id, cancellationToken).ConfigureAwait(false)
+            var reloaded = await instances.FindCompatibilityAsync(definition.Id, cancellationToken).ConfigureAwait(false)
                 ?? throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
+            return await ForwardAlignCompatibilityAsync(reloaded, definition, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -92,6 +83,8 @@ public sealed class AgentInstanceService(
 
         var updatedAt = time.GetUtcNow();
         await instances.UpdateActiveVersionAsync(instance.InstanceId, definition.Version, updatedAt, cancellationToken)
+            .ConfigureAwait(false);
+        await NotifySchedulingEligibilityMayHaveImprovedAsync(instance.InstanceId, updatedAt, cancellationToken)
             .ConfigureAwait(false);
         return instance with { ActiveVersion = definition.Version, UpdatedAt = updatedAt };
     }
@@ -120,6 +113,42 @@ public sealed class AgentInstanceService(
                     cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    private async ValueTask<AgentInstance> ForwardAlignCompatibilityAsync(
+        AgentInstance existing,
+        AgentDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        if (definition.Version <= existing.ActiveVersion)
+        {
+            return existing;
+        }
+
+        var updatedAt = time.GetUtcNow();
+        await instances.UpdateActiveVersionAsync(
+                existing.InstanceId,
+                definition.Version,
+                updatedAt,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await NotifySchedulingEligibilityMayHaveImprovedAsync(existing.InstanceId, updatedAt, cancellationToken)
+            .ConfigureAwait(false);
+        return existing with { ActiveVersion = definition.Version, UpdatedAt = updatedAt };
+    }
+
+    private async ValueTask NotifySchedulingEligibilityMayHaveImprovedAsync(
+        Guid agentInstanceId,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken)
+    {
+        if (policyRecovery is null)
+        {
+            return;
+        }
+
+        await policyRecovery.ReactivateSuspendedForAgentInstanceAsync(agentInstanceId, asOfUtc, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async ValueTask<AgentInstance> CreateCompatibilityAsync(
