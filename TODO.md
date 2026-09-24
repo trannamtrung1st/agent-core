@@ -2,15 +2,18 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on **2026-09-23**.
+Reviewed against `main` on **2026-09-24**.
 
-P5 implementation behavior:
+P5 implementation freeze:
 
 ```text
-44a1b87cf0275c96f3ac3c5e19fafb53c737242c
+4bbc0c17bc54746f87fd211174690659869e3e45
+workflow 35954811544 — green
 ```
 
-P5 is not frozen. Whole-phase review rejected the `267fcbd` candidate. The review repairs are on `7243323`, and hosted workflow [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) is green on that commit. Do not start P6 until review accepts the candidate. Evidence: `docs/reports/p5-freeze-candidate.md`.
+P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
+
+**Current active phase:** P6 — durable background work and triggered execution.
 
 P4 implementation freeze:
 
@@ -27,13 +30,12 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P4 are closed/frozen.**
-2. **P5 — events, durable triggers, and configurable scheduling** is implemented and awaiting the freeze gate.
-3. **P6 — durable background work and triggered execution.**
-4. **P7 — agent harness / admin lifecycle.**
-5. **P8 — harness/platform extensibility.**
-6. **P9 — sandbox evolution when requirements justify it.**
-7. **P10 — multi-user/product infrastructure when requirements justify it.**
+1. **P0–P5 are closed/frozen.**
+2. **P6 — durable background work and triggered execution** is the active phase.
+3. **P7 — agent harness / admin lifecycle.**
+4. **P8 — harness/platform extensibility.**
+5. **P9 — sandbox evolution when requirements justify it.**
+6. **P10 — multi-user/product infrastructure when requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
@@ -163,6 +165,32 @@ P5 should build on the durable Agent Instance boundary. Do not store trigger reg
 
 ---
 
+## P5 — Events, durable triggers, and configurable scheduling
+
+Frozen on:
+
+```text
+4bbc0c17bc54746f87fd211174690659869e3e45
+workflow 35954811544 — green
+```
+
+Evidence: `docs/reports/p5-freeze-candidate.md`.
+
+Important frozen P5 contracts include:
+
+- durable trigger registrations and occurrences owned by Agent Instance + trusted profile;
+- OneShot, Daily, Weekly, and FixedInterval schedules with deterministic offline scheduler semantics;
+- `general-assistant` v10 for fixed-interval policy without mutating v8/v9 definition versions;
+- current-turn, action-specific schedule authorization; bounded referents and one-follow-up drafts;
+- scheduled-occurrence delivery without schedule tools; typed durable `ApplicationEvent` order ingress;
+- owner-scoped dedupe; stale schedule revision rejection; `AcceptedLive` / begin recovery;
+- `AwaitingDurableWork` as the explicit P6 handoff (P5 does not execute it);
+- runtime-local timers remain separate from durable scheduling.
+
+Do not reopen P5 without a reproducible regression or a requirement that genuinely belongs in P5 rather than P6+.
+
+---
+
 # Maintainer notes
 
 Always keep this section.
@@ -203,7 +231,7 @@ Always keep this section.
 
 # P5 — Events, durable triggers, and configurable scheduling
 
-P5 is the active phase.
+P5 is **frozen** on `4bbc0c1`. The checklist below records how the phase was implemented; do not treat it as active work.
 
 ## Goal
 
@@ -1128,11 +1156,9 @@ P1 freeze:  dceaccb
 P2 freeze:  47d6ff6
 P3 freeze:  4dbb920
 P4 freeze:  822028f / workflow 35806764609 green
-repo HEAD reviewed: 76002a6
-active phase: P5
+P5 freeze:  4bbc0c1 / workflow 35954811544 green
+active phase: P6
 ```
-
-At review time, follow-up workflow `35808026110` for `76002a6` was still in progress. Update this note only after checking the actual run result.
 
 - [ ] Keep TODO focused on current/future work.
 
@@ -1174,13 +1200,13 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] P4 structured session memory.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
-- [x] Durable trigger registration/scheduler — P5 implemented and whole-phase review repairs are in progress; not frozen. Do not start P6.
-- [ ] Durable triggered/background execution — P6.
+- [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
+- [ ] Durable triggered/background execution — P6 (active phase).
 
 ---
 
 # Next implementation item
 
-P5 behavior is implemented through P5G, including the whole-phase review repairs (stale schedule revision, lost `AcceptedLive` begin, action-specific authorization, and owner-scoped occurrence dedupe). Hosted workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) remains historical evidence on `267fcbd`. Hosted workflow [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) is green on `7243323`. P5 is not frozen until review accepts that candidate. Do not start **P6** until P5 is frozen.
+**P6 — durable background work and triggered execution.** P5 is frozen on `4bbc0c1`; see `docs/reports/p5-freeze-candidate.md`.
 
-P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
+P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.

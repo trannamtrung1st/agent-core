@@ -4,7 +4,7 @@ This report records the **P4 implementation freeze**. Proposal §14 closure revi
 
 ## Freeze status
 
-**P4 is frozen** on implementation HEAD **`822028f`** (`822028f7cf17e5a978aced4996022e4085c4efa2`, 2026-09-23). Hosted Synthetic offline gates and Compose smoke are **green** on that commit (workflow **`35806764609`**). Optional model memory tools and embeddings were not added. **P5** (events and configurable triggers) is next.
+**P4 is frozen** on implementation HEAD **`822028f`** (`822028f7cf17e5a978aced4996022e4085c4efa2`, 2026-09-23). Hosted Synthetic offline gates and Compose smoke are **green** on that commit (workflow **`35806764609`**). Optional model memory tools and embeddings were not added. **P5** followed and is now frozen on **`4bbc0c1`**; **P6** is next.
 
 | Item | Value |
 | --- | --- |

@@ -1,73 +1,79 @@
 # P5 — Events, durable triggers, and configurable scheduling
 
-This report is the P5 closure candidate after the whole-phase review repairs. Hosted Synthetic workflow [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) is **green** on `267fcbd` and is historical. That review did **not** freeze P5. The repairs below stay inside P5. Local key-free and Compose gates on the repair tree passed. Hosted run [`35884024153`](https://github.com/trannamtrung1st/agent-core/actions/runs/35884024153) on `53ed9c1` failed in Synthetic Playwright; Compose smoke on that run succeeded. Hosted run [`35886400983`](https://github.com/trannamtrung1st/agent-core/actions/runs/35886400983) on `4687211` failed the same suite: the long-session composer matched queued-message labels, and the reconnect voice click ran while Voice still cancelled durable voice mode. Hosted run [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) on `7243323` is **green** for offline gates and Compose smoke. P5 is not frozen. Do not begin P6.
+This report records the **P5 implementation freeze**. Whole-phase review accepted the architecture and repair chain ending on `4bbc0c1`. Do not reopen P5 without a reproducible regression or an explicit product requirement that belongs in a later phase rather than P6+.
 
-## Candidate
+## Freeze status
+
+**P5 is frozen** on implementation HEAD **`4bbc0c1`** (`4bbc0c17bc54746f87fd211174690659869e3e45`, 2026-09-24). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`35954811544`**](https://github.com/trannamtrung1st/agent-core/actions/runs/35954811544)). **P6** (durable background work and triggered execution) is next.
 
 | Item | Value |
 | --- | --- |
-| Implementation behavior | `44a1b87` (`44a1b87cf0275c96f3ac3c5e19fafb53c737242c`), review repairs on `53ed9c1` |
-| Browser gate follow-up | `7243323` (`7243323bfd02dffb4616fac511e20d05af9eca67`) |
-| Hosted Synthetic workflow | [`35889243368`](https://github.com/trannamtrung1st/agent-core/actions/runs/35889243368) — **green** on `7243323` (push to `main`, 2026-09-23). Synthetic offline gates and Compose smoke both succeeded. Historical green run [`35840226344`](https://github.com/trannamtrung1st/agent-core/actions/runs/35840226344) remains the pre-review evidence on `267fcbd`. |
-| Optional hosted provider probes | skipped; no credentials required for the scheduler |
+| **P5 implementation freeze** | **`4bbc0c1`** |
+| Verified hosted Synthetic + Compose | workflow **`35954811544`** — **green** on `4bbc0c1` |
+| Repair chain (historical) | `25f4355` → `11237fc` → `4f7a7bd` → `4bbc0c1`; parent runs `35954173257` and `35952177117` green on `4f7a7bd` / `11237fc` |
+| Initial P5 implementation bulk | `44a1b87` (historical baseline before whole-phase review repairs) |
 
-An admitted occurrence with no single compatible live runtime stops at `AwaitingDurableWork`. P5 does not create a `WorkItem`, keep a Session Runtime alive for a future fire, or expose a public webhook.
+A documentation-only descendant commit records this freeze; it is not a new implementation baseline.
 
 ## What shipped
 
-- Owner is Agent Instance + trusted profile. The source session is provenance.
-- `ITriggerStore` holds registrations and occurrences. Migration `20260923160000_TriggerContracts` adds those tables with no session or memory foreign keys. Migration `20260923220000_OwnerScopedOccurrenceDedupe` scopes occurrence dedupe to the owner.
-- One-shot, daily, and weekly schedules use a trusted timezone. Ambiguous local times use the earlier UTC offset. A missing local time shifts forward across the gap. Weekly interval phase follows the Monday-based local week of the stored next occurrence. A recurring `startDate` is the cadence anchor, including when that date is already past.
-- Routing rejects a pending occurrence whose captured schedule revision no longer matches the registration.
-- A current user turn authorizes only the schedule action that turn requested. Separate turns can create, list, move, and cancel.
-- Occurrence dedupe is unique per Agent Instance, profile, and dedupe key.
-- `AcceptedLive` is stored before speech. If that runtime does not begin the occurrence, the row returns to `Pending`.
-- Scheduled reminders speak. Application-event visibility is a separate decision; the allowlisted order-status occurrence is user-visible, and admission alone does not force speech for a future typed source.
-- Missed one-shots fire once. Missed recurring slots coalesce. Occurrence ids are stable. Delivery is at-least-once, not exactly-once.
-- An explicit current user turn may create, list, update, or cancel without a second approval dialog. Initiative, environment, history, memory, and occurrence runs cannot. A pending proposal survives only for one immediate confirming user turn.
-- Creating a schedule does not approve `email.send` or any other later sensitive tool.
-- Definitions without `TriggerPolicy` cannot schedule. `general-assistant` v8 can. `customer-support` v2 can admit application events only.
-- Durable `order_status_changed` uses a separate ingress from the live-only environment path and the same occurrence boundary.
-- One compatible live runtime accepts the occurrence only after `AcceptedLive` is stored. If begin then fails, the row returns to `Pending` and can be delivered or handed to P6 on a later route. Otherwise a row with no single compatible runtime waits for P6.
-- `GET /api/v2/sessions/{sessionId}/triggers` and `POST .../triggers/{triggerId}/cancel` derive the owner from the session. The DTO is intent, schedule, timezone, status, next occurrence, and revision.
-- The chat header Schedules drawer lists and cancels that owner scope.
+- **Ownership:** durable registrations and occurrences are scoped to **Agent Instance + trusted profile**. The source session is provenance only.
+- **Persistence:** `ITriggerStore` holds registrations and occurrences. Runtime `SessionRuntime` timers remain **ephemeral** lifecycle-local delays, not the durable scheduler.
+- **Schedule kinds:** **OneShot**, **Daily**, **Weekly**, and **FixedInterval** are first-class domain schedules. Calendar schedules preserve wall-clock/timezone semantics (ambiguous local time, DST gaps, weekly phase anchored to stored next occurrence, `startDate` as cadence anchor). **Fixed intervals** preserve elapsed-duration semantics with bounded minimum cadence (`TriggerPolicy`), optional **`EndAtUtc`**, **`maxOccurrences`**, **O(1) missed-slot coalescing** bounded by `EndAtUtc`, and partial conversational updates via `trigger.update` (`intervalSeconds`, `endAtUtc`, and related fields).
+- **Trusted scheduling context:** profile timezone and current-time interpretation for wall-clock fields; **relative delays** (`relativeDelaySeconds`, etc.) are computed at command time and do not require a profile timezone.
+- **Admission and delivery:** missed one-shots fire once; missed recurring slots coalesce with deterministic skipped counts; occurrence ids and dedupe keys are stable; delivery is **at-least-once**. Routing rejects occurrences whose captured **schedule revision** no longer matches the registration. **Owner-scoped** occurrence dedupe.
+- **Authorization:** current user turn authorizes only the **requested schedule action** (create / list / update / cancel). Initiative, environment, history, memory, and occurrence runs cannot manage schedules. **Occurrence evidence does not grant tool authority.** Creating a schedule does not approve later sensitive tools.
+- **Conversational hardening:** bounded **schedule referents** (`ScheduleConversationContext`); **one-follow-up schedule drafts** after recoverable validation failures (`ScheduleDraftAdmission` before `AgentContext`); interval-only corrections retain draft intent; complete new requests with their own intent do not inherit a stale draft.
+- **Occurrence delivery:** scheduled reminders use **reminder-only delivery** (no schedule tools on `ScheduledOccurrence` turns). Application-event visibility is a separate product decision; the allowlisted **`order_status_changed`** durable ingress normalizes into the same occurrence boundary.
+- **Live vs handoff:** compatible live runtime accepts after **`AcceptedLive`** is stored; failed begin returns to **`Pending`**. When no single compatible runtime exists, the row stops at **`AwaitingDurableWork`**. **P5 does not execute `AwaitingDurableWork`; P6 owns headless/background execution.**
+- **Policy and definitions:** `TriggerPolicy` on Agent Definitions gates schedule kinds and limits. **`general-assistant` v10** enables the final P5 scheduling surface (including fixed interval). **v8/v9 remain immutable** historical definitions. **Durable scheduling policy** at create/update is aligned with firing-time eligibility; compatibility-instance forward alignment preserves pinned sessions.
+- **Management surface:** `GET /api/v2/sessions/{sessionId}/triggers` and cancel derive owner from the session. Chat **Schedules** drawer lists **newest first** with intent, schedule summary, timezone, status, next occurrence, and revision; **Suspended** shows reason where applicable. HTTP management is list and cancel; create/update stay on agent tools.
 
 ## Acceptance mapping
 
 | ID | Evidence |
 | --- | --- |
-| AC-E2E-01 | `Separate_turns_create_list_move_and_cancel_without_shared_authority`, `Natural_one_shot_can_be_listed_moved_and_cancelled_without_approval`, `Due_boundaries_one_shot_recovery_and_recurrence_are_idempotent`, `Sqlite_restart_admits_a_missed_one_shot_once`, `Schedule_remains_visible_after_sqlite_restart`, Playwright `e2e/schedules.spec.ts` |
-| AC-E2E-02 | `Natural_monday_schedule_keeps_an_indefinite_wall_clock_recurrence`, `Missed_daily_slots_coalesce_and_weekly_wall_clock_advances`, `London_weekly_schedule_does_not_become_a_fixed_utc_interval` |
-| AC-E2E-03 | The natural list/move/cancel runtime test and `List_and_cancel_are_owner_scoped_and_hide_scheduler_internals` |
-| AC-E2E-04 | Pending-proposal tests: unrelated turn, queued suffix, idle speech final, user steer, and stored-proposal confirmation |
-| AC-E2E-05 | `Occurrence_evidence_is_not_a_user_turn_and_email_still_requires_approval` |
-| AC-E2E-06 | SQLite scheduler restart, `Pending_occurrence_survives_sqlite_restart`, API list after host reopen |
-| AC-E2E-07 | `Both_stores_create_list_update_cancel_and_isolate_owners`, `Occurrence_admission_dedupes_and_hides_other_owners`, owner-scoped API not-found/conflict, `Missing_owner_does_not_admit_or_hand_off` |
-| AC-E2E-08 | `Valid_order_event_routes_once_and_invalid_payloads_do_not` |
+| AC-E2E-01 | Separate-turn create/list/update/cancel, natural one-shot flow, due boundaries, SQLite restart, Playwright `e2e/schedules.spec.ts` |
+| AC-E2E-02 | Daily/weekly wall-clock and DST tests; fixed-interval minimum, update, draft, and coalescing tests (`TriggerScheduleSemanticsTests`, `TriggerScheduleCalculatorTests`, `TriggerScheduleAdmission`) |
+| AC-E2E-03 | Owner-scoped list/cancel; operation-aware authorization |
+| AC-E2E-04 | Pending-proposal and confirmation fencing |
+| AC-E2E-05 | Occurrence evidence vs email approval |
+| AC-E2E-06 | Scheduler restart and pending occurrence survival |
+| AC-E2E-07 | Store parity, owner isolation, API not-found/conflict |
+| AC-E2E-08 | Typed `order_status_changed` ingress |
 
-## Local key-free gate
+Focused automated coverage exists for **LongSilence** initiative paths (examiner/support policies) and for **ApplicationEvent** / environment / unfinished-interaction boundaries where no public manual injection surface is required for P5 freeze.
 
-Commands match `.github/workflows/synthetic.yml`. They ran on the review-repair working tree (stale schedule revision, lost begin, action-specific authorization, owner-scoped dedupe, `startDate` phase, and JSON evidence). Hosted workflow `35840226344` is not evidence for this tree. Hosted run `35884024153` on `53ed9c1` failed at Synthetic Playwright after the other offline steps and Compose smoke succeeded.
+## Key-free gate
 
-| Command | Result |
+Hosted workflow **`35954811544`** on **`4bbc0c1`** passed the repository Synthetic offline job and Compose smoke (`.github/workflows/synthetic.yml`). Provider opt-in probes were not required for P5 freeze.
+
+Representative offline counts on the freeze tree (exact counts may drift slightly with new tests; the hosted workflow is authoritative):
+
+| Area | Result (freeze tree) |
 | --- | --- |
-| Domain `dotnet test` | 83 passed |
-| Infrastructure `dotnet test` | 287 passed, 7 skipped |
-| Application `dotnet test --blame-hang --blame-hang-timeout 5m` | 635 passed, 1 skipped |
-| API `dotnet test` | 169 passed |
-| web `pnpm run test --run`, `pnpm run build` | 52 files, 397 passed; build succeeded |
-| `CI=1 pnpm exec playwright test` | 48 passed |
-| `./scripts/compose-sqlite-volume.sh` | passed (`compose sqlite volume check passed`) |
+| Domain | 83+ passed |
+| Application | 711+ passed, 1 skipped (opt-in historical image) |
+| API | 169 passed |
+| Infrastructure | 288 passed, 7 skipped (opt-in live probes) |
+| web unit/build + Playwright | green on hosted gate |
+| `./scripts/compose-sqlite-volume.sh` | passed on hosted gate |
 
-Infrastructure skips are the opt-in OpenAI and OpenRouter probes. The Application skip is the opt-in Real historical-image reread. Optional hosted provider probes were not run. Web dependencies were already installed; this pass did not repeat `pnpm install --frozen-lockfile`.
+Earlier runs (`35840226344` on `267fcbd`, `35889243368` on `7243323`, failed Playwright on intermediate repair SHAs such as `25f4355`) are **historical** only and are not current freeze evidence.
 
-## §26 answers on this candidate
+## Migrations
 
-The local evidence answers yes for natural one-shot and recurring create, separate-turn list/move/cancel, restart, timezone meaning, owner-scoped duplicate admission, inspect/cancel, current-user action authorization, remembered text, untrusted occurrence data, no standing tool approval, runtime-local timers, one typed non-schedule source, stale-schedule rejection, lost-begin recovery, and a P6 handoff that does not require redesigning the occurrence. P0–P4 suites above stayed green. Hosted Synthetic run `35889243368` on `7243323` is **green**. Earlier repair pushes `35884024153` and `35886400983` are not. P5 remains **not frozen** until review accepts proposal §21 and §26. Do not begin P6.
+- `20260923160000_TriggerContracts`
+- `20260923220000_OwnerScopedOccurrenceDedupe`
 
 ## Limitations that do not reopen the phase
 
-- There is no public webhook, rate limit beyond the bounded evidence payload, calendar UI, or admin trigger console.
-- HTTP management is list and cancel. Update and create stay on the agent tools.
-- Ant Design `List` is still the drawer list. Its deprecation warning is expected.
-- `AwaitingDurableWork` is not executed. P6 owns that work.
+- No public webhook or general external-event registration UI, admin trigger console, or calendar UI.
+- No durable **`WorkItem`** execution in P5.
+- Unattended result delivery and richer event-source adapters remain **P6+**.
+- Optional **dev trigger injector** for manual `EnvironmentUpdate` / `UnfinishedInteraction` probing is deferred harness work, not a P5 stop condition.
+- List/cancel require `TriggerPolicy.Enabled` but not `AllowUserScheduling` (management of existing commitments when new user scheduling is disabled is an explicit product choice).
+
+## P6 handoff
+
+P5 provides reliable trigger registration, scheduling, admission, normalized occurrences, and live-or-`AwaitingDurableWork` routing. **P6** owns executing or continuing work when no compatible Session Runtime is attached.
