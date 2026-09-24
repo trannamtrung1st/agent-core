@@ -1,14 +1,13 @@
-using AgentCore.Application.Triggers;
 using AgentCore.Application.Work;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api;
 
-public sealed class DurableWorkHostedService(
-    DurableReminderExecutor work,
+public sealed class DurableWorkIntakeHostedService(
+    DurableWorkIntake intake,
     TimeProvider time,
-    ILogger<DurableWorkHostedService> logger) : BackgroundService
+    ILogger<DurableWorkIntakeHostedService> logger) : BackgroundService
 {
     public static readonly TimeSpan Cadence = TimeSpan.FromSeconds(1);
 
@@ -18,12 +17,14 @@ public sealed class DurableWorkHostedService(
         {
             try
             {
-                var now = time.GetUtcNow();
-                var executed = await work.ExecuteDueAsync(now, TriggerScheduler.DefaultBatchSize, stoppingToken)
-                    .ConfigureAwait(false);
-                if (executed > 0)
+                var admitted = await intake.AcceptAwaitingAsync(stoppingToken).ConfigureAwait(false);
+                if (admitted.Accepted > 0 || admitted.Existing > 0 || admitted.Skipped > 0)
                 {
-                    logger.LogInformation("Durable work pass executed {ExecutedCount} item(s).", executed);
+                    logger.LogInformation(
+                        "Durable intake pass accepted {AcceptedCount} existing {ExistingCount} skipped {SkippedCount}.",
+                        admitted.Accepted,
+                        admitted.Existing,
+                        admitted.Skipped);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -33,7 +34,7 @@ public sealed class DurableWorkHostedService(
             catch (Exception exception)
             {
                 logger.LogWarning(
-                    "Durable work pass failed ({ExceptionType}).",
+                    "Durable intake pass failed ({ExceptionType}).",
                     exception.GetType().Name);
             }
 

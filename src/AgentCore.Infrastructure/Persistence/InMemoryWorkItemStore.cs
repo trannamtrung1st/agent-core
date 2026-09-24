@@ -306,6 +306,14 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         CancellationToken cancellationToken = default) =>
         Mutate(workItemId, item => item.MarkSideEffect(expectedRevision, generation, disposition, actionHash, updatedAtUtc));
 
+    public ValueTask<WorkItem> ClearSideEffectAsync(
+        Guid workItemId,
+        long expectedRevision,
+        Guid generation,
+        DateTimeOffset clearedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        Mutate(workItemId, item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc));
+
     private ValueTask<WorkItem> Mutate(Guid workItemId, Func<WorkItem, WorkItem> change, WorkOwner? owner = null)
     {
         lock (_state.Gate)

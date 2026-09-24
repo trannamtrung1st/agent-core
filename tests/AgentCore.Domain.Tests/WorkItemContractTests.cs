@@ -299,6 +299,23 @@ public sealed class WorkItemContractTests
     }
 
     [Fact]
+    public void Cleared_side_effect_allows_a_second_dispatch_hash_in_the_same_run()
+    {
+        var claimed = NewItem()
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1))
+            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(2))
+            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddSeconds(3))
+            .ClearSideEffect(5, GenerationA, Now.AddSeconds(4));
+        Assert.Equal(WorkSideEffectDisposition.None, claimed.SideEffect.Disposition);
+        var next = claimed
+            .MarkSideEffect(6, GenerationA, WorkSideEffectDisposition.Prepared, OtherHash, Now.AddSeconds(5))
+            .MarkSideEffect(7, GenerationA, WorkSideEffectDisposition.InFlight, OtherHash, Now.AddSeconds(6));
+        Assert.Equal(OtherHash, next.SideEffect.ActionHash);
+        Assert.Equal(WorkSideEffectDisposition.InFlight, next.SideEffect.Disposition);
+    }
+
+    [Fact]
     public void Safe_retry_stops_at_the_attempt_budget()
     {
         var claimed = NewItem(maxAttempts: 2).TakeClaim(GenerationA, Now, Now.AddMinutes(1));

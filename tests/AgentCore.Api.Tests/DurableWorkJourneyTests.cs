@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Models;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
 using AgentCore.Application.Work;
@@ -143,7 +144,7 @@ public sealed class DurableWorkJourneyTests
                 await OwnerAsync(reopened.Services, Guid.Parse(sessionId)),
                 Guid.Parse(workItemId));
             Assert.Equal(WorkItemStatus.Completed, finished!.Status);
-            Assert.Equal(WorkSideEffectDisposition.Succeeded, finished.SideEffect.Disposition);
+            Assert.Equal(WorkSideEffectDisposition.None, finished.SideEffect.Disposition);
         }
         finally
         {
@@ -226,6 +227,74 @@ public sealed class DurableWorkJourneyTests
                 "late result",
                 nowAgain).AsTask());
             Assert.Equal("Conflict", stillStale.Code);
+        }
+        finally
+        {
+            DeleteDb(db);
+        }
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task Host_intake_admits_second_reminder_while_first_model_execution_is_blocked()
+    {
+        var db = TempDb();
+        try
+        {
+            var gate = new ReminderGateLanguageModel();
+            await using var host = new DurableSqliteHostFactory(db, runScheduler: true, languageModel: gate);
+            var client = OwnerClient(host);
+            var session = await CreateAsync(client, "general-assistant", null);
+            var sessionId = session.SessionId;
+            var now = host.Services.GetRequiredService<TimeProvider>().GetUtcNow();
+            var owner = await OwnerAsync(host.Services, Guid.Parse(sessionId));
+            var triggers = host.Services.GetRequiredService<ITriggerRegistrationService>();
+            var due = now.AddMinutes(-1);
+            await triggers.CreateAsync(
+                new TriggerRegistrationDraft(
+                    new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
+                    "First reminder",
+                    new OneShotSchedule(due, "UTC"),
+                    due,
+                    null,
+                    TriggerAuthorizationOrigin.CurrentUserTurn,
+                    Guid.Parse(sessionId),
+                    null));
+            WorkItemListResponse? listed = null;
+            for (var attempt = 0; attempt < 60 && !gate.Started.Task.IsCompleted; attempt++)
+            {
+                listed = await client.GetFromJsonAsync<WorkItemListResponse>($"/api/v2/sessions/{sessionId}/work-items");
+                if (listed!.Items.Count > 0)
+                {
+                    break;
+                }
+
+                await Task.Delay(250);
+            }
+
+            await gate.Started.Task;
+            await triggers.CreateAsync(
+                new TriggerRegistrationDraft(
+                    new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
+                    "Second reminder",
+                    new OneShotSchedule(due, "UTC"),
+                    due,
+                    null,
+                    TriggerAuthorizationOrigin.CurrentUserTurn,
+                    Guid.Parse(sessionId),
+                    null));
+            var sawTwo = false;
+            for (var attempt = 0; attempt < 40 && !sawTwo; attempt++)
+            {
+                listed = await client.GetFromJsonAsync<WorkItemListResponse>($"/api/v2/sessions/{sessionId}/work-items");
+                sawTwo = listed!.Items.Count >= 2;
+                if (!sawTwo)
+                {
+                    await Task.Delay(250);
+                }
+            }
+
+            Assert.True(sawTwo, "Intake should admit a second reminder while the first model call is still blocked.");
+            gate.Release();
         }
         finally
         {
@@ -375,6 +444,28 @@ public sealed class DurableWorkJourneyTests
             {
                 // The host may still be releasing the file.
             }
+        }
+    }
+
+    private sealed class ReminderGateLanguageModel : ILanguageModel
+    {
+        private readonly TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Started => started;
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: false);
+
+        public void Release() => release.TrySetResult();
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            started.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            yield return new ModelTextDelta("Hello from synthetic.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 }

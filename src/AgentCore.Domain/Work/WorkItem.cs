@@ -755,6 +755,40 @@ public sealed class WorkItem
             updatedAtUtc);
     }
 
+    public WorkItem ClearSideEffect(long expectedRevision, Guid generation, DateTimeOffset updatedAtUtc)
+    {
+        if (SideEffect.Disposition == WorkSideEffectDisposition.None)
+        {
+            return this;
+        }
+
+        RequireOperational(expectedRevision, generation);
+        if (SideEffect.Disposition is not (WorkSideEffectDisposition.Succeeded or WorkSideEffectDisposition.DefinitelyFailed))
+        {
+            throw new WorkItemTransitionException(
+                WorkTransitionFailure.Illegal,
+                "Only a completed operation side effect can be cleared.");
+        }
+
+        var approval = Approval is { Decision: WorkApprovalDecision.Approved } ? null : Approval;
+        return Copy(
+            Status,
+            Revision + 1,
+            AttemptCount,
+            NextRetryAtUtc,
+            Claim,
+            CancellationRequested,
+            CancellationRequestedAtUtc,
+            KnownEffectSummary,
+            Progress,
+            Checkpoint,
+            Result,
+            Failure,
+            WorkSideEffect.None,
+            approval,
+            updatedAtUtc);
+    }
+
     public WorkItemPublicSummary ToPublicSummary() =>
         new(
             WorkItemId,

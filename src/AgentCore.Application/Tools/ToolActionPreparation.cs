@@ -3,7 +3,11 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Application.Tools;
 
-public sealed record ToolApprovalPreparation(string ActionHash, string Preview, string ActionJson);
+public sealed record ToolApprovalPreparation(
+    string ActionHash,
+    string Preview,
+    string ActionJson,
+    IReadOnlyDictionary<string, string>? Details = null);
 
 public static class ToolActionPreparation
 {
@@ -39,7 +43,8 @@ public static class ToolActionPreparation
                 new ToolApprovalPreparation(
                     prepared.Preparation.ActionHash,
                     prepared.Preparation.Summary,
-                    call.ArgumentsJson),
+                    call.ArgumentsJson,
+                    prepared.Preparation.Details),
                 null);
         }
 
@@ -55,7 +60,8 @@ public static class ToolActionPreparation
                 new ToolApprovalPreparation(
                     prepared.Preparation.ActionHash,
                     prepared.Preparation.Summary,
-                    call.ArgumentsJson),
+                    call.ArgumentsJson,
+                    prepared.Preparation.Details),
                 null);
         }
 
@@ -64,7 +70,8 @@ public static class ToolActionPreparation
             new ToolApprovalPreparation(
                 ToolActionHash.Compute(call.Name, args),
                 generic.Summary,
-                call.ArgumentsJson),
+                call.ArgumentsJson,
+                generic.Details),
             null);
     }
 }

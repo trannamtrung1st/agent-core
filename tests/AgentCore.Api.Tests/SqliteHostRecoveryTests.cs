@@ -604,7 +604,7 @@ public sealed class SqliteHostRecoveryTests
     }
 }
 
-internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler = true) : WebApplicationFactory<Program>
+internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler = true, ILanguageModel? languageModel = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -689,10 +689,21 @@ internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler 
             {
                 foreach (var hosted in services.Where(item =>
                              item.ImplementationType == typeof(TriggerSchedulerHostedService)
-                             || item.ImplementationType == typeof(DurableWorkHostedService)).ToArray())
+                             || item.ImplementationType == typeof(DurableWorkHostedService)
+                             || item.ImplementationType == typeof(DurableWorkIntakeHostedService)).ToArray())
                 {
                     services.Remove(hosted);
                 }
+            }
+
+            if (languageModel is not null)
+            {
+                foreach (var model in services.Where(item => item.ServiceType == typeof(ILanguageModel)).ToArray())
+                {
+                    services.Remove(model);
+                }
+
+                services.AddSingleton(languageModel);
             }
         });
         TestHttpDefaults.UseLoopbackCaller(builder);

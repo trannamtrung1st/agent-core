@@ -123,6 +123,13 @@ public interface IWorkItemStore
         string actionHash,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default);
+
+    ValueTask<WorkItem> ClearSideEffectAsync(
+        Guid workItemId,
+        long expectedRevision,
+        Guid generation,
+        DateTimeOffset clearedAtUtc,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IDurableWorkHandoff

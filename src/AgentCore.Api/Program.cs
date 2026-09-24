@@ -58,6 +58,7 @@ builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateN
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
+builder.Services.AddHostedService<DurableWorkIntakeHostedService>();
 builder.Services.AddHostedService<DurableWorkHostedService>();
 builder.Services.AddSingleton<IEnvironmentEventIngress>(provider => provider.GetRequiredService<SessionHost>());
 builder.Services.AddSingleton<ILiveOccurrenceDirectory>(provider => provider.GetRequiredService<SessionHost>());

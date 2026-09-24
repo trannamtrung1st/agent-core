@@ -22,7 +22,7 @@ workflow 35990145456 attempt 2 — green
 
 P6 post-freeze repair in progress (scheduler/worker split, replay safety, detached approval prep, cancellation uncertainty). Last gated SHA `6900bc1`; evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** P7 — next, not started. Do not implement P7.
+**Current active phase:** P6 post-freeze repair (intake/worker separation, per-operation side effects, shared approval prep, cancellation semantics, regression tests, re-freeze gate). **P7** is next and must not start until P6 is re-frozen.
 
 P4 implementation freeze:
 

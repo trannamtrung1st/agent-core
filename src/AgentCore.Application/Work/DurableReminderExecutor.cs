@@ -146,7 +146,13 @@ public sealed class DurableReminderExecutor(
             }
 
             var text = new StringBuilder();
-            await foreach (var update in context.LanguageModel.GenerateAsync(speak.Request, linked.Token).ConfigureAwait(false))
+            using var modelCts = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
+            using var modelTimer = time.CreateTimer(
+                static state => ((CancellationTokenSource)state!).Cancel(),
+                modelCts,
+                ToolLimits.Overall,
+                Timeout.InfiniteTimeSpan);
+            await foreach (var update in context.LanguageModel.GenerateAsync(speak.Request, modelCts.Token).ConfigureAwait(false))
             {
                 switch (update)
                 {

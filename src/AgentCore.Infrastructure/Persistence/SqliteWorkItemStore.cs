@@ -353,6 +353,17 @@ public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> co
             item => item.MarkSideEffect(expectedRevision, generation, disposition, actionHash, updatedAtUtc),
             cancellationToken));
 
+    public ValueTask<WorkItem> ClearSideEffectAsync(
+        Guid workItemId,
+        long expectedRevision,
+        Guid generation,
+        DateTimeOffset clearedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        Required(MutateAsync(
+            workItemId,
+            item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc),
+            cancellationToken));
+
     private async ValueTask<WorkItem?> MutateAsync(
         Guid workItemId,
         Func<WorkItem, WorkItem> change,

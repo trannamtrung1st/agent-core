@@ -146,11 +146,20 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 steps++;
             }
 
+            if (running.SideEffect.Disposition == WorkSideEffectDisposition.Succeeded)
+            {
+                return new DurableOccurrenceFailed(
+                    running,
+                    "tool-result-lost",
+                    "External effect completed but the tool result was not durably recorded.");
+            }
+
             if (!TryArguments(call, out var args))
             {
                 return await AppendResultAsync(
                     call,
-                    ToolExecutionResult.FromText("""{"error":"invalid","message":"Tool arguments must be a JSON object."}"""))
+                    ToolExecutionResult.FromText("""{"error":"invalid","message":"Tool arguments must be a JSON object."}"""),
+                    false)
                     .ConfigureAwait(false);
             }
 
@@ -165,7 +174,8 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 {
                     return await AppendResultAsync(
                         call,
-                        ToolExecutionResult.FromText("""{"error":"rejected","message":"Action was not approved."}"""))
+                        ToolExecutionResult.FromText("""{"error":"rejected","message":"Action was not approved."}"""),
+                        false)
                         .ConfigureAwait(false);
                 }
 
@@ -182,6 +192,16 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                         running,
                         "side-effect-indeterminate",
                         "External effect outcome is unknown and was not replayed.");
+                }
+
+                if (running.SideEffect.Disposition == WorkSideEffectDisposition.Succeeded)
+                {
+                    running = await store.ClearSideEffectAsync(
+                        running.WorkItemId,
+                        running.Revision,
+                        generation,
+                        asOfUtc,
+                        cancellationToken).ConfigureAwait(false);
                 }
 
                 if (running.SideEffect.Disposition == WorkSideEffectDisposition.None)
@@ -266,7 +286,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     cancellationToken).ConfigureAwait(false);
             }
 
-            return await AppendResultAsync(call, execution).ConfigureAwait(false);
+            return await AppendResultAsync(call, execution, dispatchFenced).ConfigureAwait(false);
         }
 
         async ValueTask<DurableOccurrenceOutcome?> SuspendForApprovalAsync(ModelToolCall call, JsonElement args, string hash)
@@ -278,7 +298,8 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 return await AppendResultAsync(
                     call,
                     ToolExecutionResult.FromText(
-                        prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare action approval."}"""))
+                        prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare action approval."}"""),
+                    false)
                     .ConfigureAwait(false);
             }
 
@@ -310,7 +331,10 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             return new DurableOccurrenceSuspended(running);
         }
 
-        async ValueTask<DurableOccurrenceOutcome?> AppendResultAsync(ModelToolCall call, ToolExecutionResult execution)
+        async ValueTask<DurableOccurrenceOutcome?> AppendResultAsync(
+            ModelToolCall call,
+            ToolExecutionResult execution,
+            bool dispatchFenced)
         {
             execution = ToolResultAdmission.AdmitForModel(model, execution);
             outputBytes += ToolOutputBudget.TextByteCount(execution);
@@ -327,6 +351,16 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             }
 
             running = await SaveCheckpointAsync().ConfigureAwait(false);
+            if (dispatchFenced && running.SideEffect.Disposition == WorkSideEffectDisposition.Succeeded)
+            {
+                running = await store.ClearSideEffectAsync(
+                    running.WorkItemId,
+                    running.Revision,
+                    generation,
+                    asOfUtc,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (remaining <= TimeSpan.Zero)
             {
                 return new DurableOccurrenceFailed(running, "tool-budget", "Tool budget is exhausted.");

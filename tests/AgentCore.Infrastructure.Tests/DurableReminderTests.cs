@@ -13,6 +13,7 @@ using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers;
+using AgentCore.Infrastructure.Email;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -572,6 +573,45 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Sequential_nonreplayable_writes_execute_after_each_tool_result_checkpoint()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(2, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+        }, () => new TwoHttpApprovalModel());
+    }
+
+    [Fact]
     public async Task Durable_intake_accepts_awaiting_occurrence_while_another_item_executes()
     {
         await ForEachAsync(async harness =>
@@ -843,7 +883,10 @@ public sealed class DurableReminderTests
             new GuidGenerator(),
             time,
             new WorkCancellationRegistry(),
-            new SessionToolExecutor(new RoleKnowledgeService(knowledge, time), httpRequestClient: http));
+            new SessionToolExecutor(
+                new RoleKnowledgeService(knowledge, time),
+                emailProvider: new SyntheticEmailProvider(),
+                httpRequestClient: http));
         return new Harness(
             triggers,
             work,
@@ -1052,6 +1095,43 @@ public sealed class DurableReminderTests
 
             yield return new ModelTextDelta("Policy applied.");
             yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class TwoHttpApprovalModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var httpResults = request.Messages.Count(message =>
+                message.Role == ModelRole.Tool && string.Equals(message.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal));
+            if (httpResults == 0)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "h1",
+                    ToolCatalog.HttpRequest,
+                    """{"method":"POST","url":"https://example.com/items/1","body":"FIRST"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (httpResults == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "h2",
+                    ToolCatalog.HttpRequest,
+                    """{"method":"POST","url":"https://example.com/items/2","body":"SECOND"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Done.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            await Task.CompletedTask;
         }
     }
 

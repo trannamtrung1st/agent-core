@@ -2390,40 +2390,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 string? approvalSummaryOverride = null;
                                 IReadOnlyDictionary<string, string>? approvalDetailsOverride = null;
                                 var preparedFailed = false;
-                                if (policy == ToolPolicyDecision.RequireApproval
-                                    && string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
+                                if (policy == ToolPolicyDecision.RequireApproval)
                                 {
-                                    var prepared = await _tools.PrepareEmailSendApprovalAsync(args, overallCts.Token)
+                                    var prepared = await ToolActionPreparation.PrepareApprovalAsync(
+                                            _tools,
+                                            call,
+                                            args,
+                                            overallCts.Token)
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {
                                         executionResult = ToolExecutionResult.FromText(
-                                            prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare email send approval."}""");
+                                            prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare action approval."}""");
                                         preparedFailed = true;
                                         actionHash = string.Empty;
                                     }
                                     else
                                     {
                                         actionHash = prepared.Preparation.ActionHash;
-                                        approvalSummaryOverride = prepared.Preparation.Summary;
-                                        approvalDetailsOverride = prepared.Preparation.Details;
-                                    }
-                                }
-                                else if (policy == ToolPolicyDecision.RequireApproval
-                                    && string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
-                                {
-                                    var prepared = _tools.PrepareHttpRequestApproval(args);
-                                    if (prepared.Preparation is null)
-                                    {
-                                        executionResult = ToolExecutionResult.FromText(
-                                            prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare HTTP request approval."}""");
-                                        preparedFailed = true;
-                                        actionHash = string.Empty;
-                                    }
-                                    else
-                                    {
-                                        actionHash = prepared.Preparation.ActionHash;
-                                        approvalSummaryOverride = prepared.Preparation.Summary;
+                                        approvalSummaryOverride = prepared.Preparation.Preview;
                                         approvalDetailsOverride = prepared.Preparation.Details;
                                     }
                                 }
