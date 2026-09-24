@@ -1,6 +1,6 @@
 # P6 — Durable background work and triggered execution
 
-**P6 is closed/frozen** on implementation SHA `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 is green on that exact SHA: Synthetic offline gates and Synthetic Compose smoke both succeeded. Whole-task review 0018 accepted this candidate, including the scripted Manual A result `Hello from synthetic.` and Manual C's equivalent. The commit that records this freeze is a documentation-only descendant and is not the implementation freeze SHA. **P7** is the next phase and is not implemented. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
+**Post-freeze repair (in progress).** Review after `6900bc1` reopened scheduler/worker separation, replay-safety fencing, shared detached approval preparation, and cancellation effect uncertainty before a new freeze SHA. The prior **closed/frozen** evidence on implementation SHA `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` remains the last fully gated baseline until repair completes. Hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 is green on that exact SHA: Synthetic offline gates and Synthetic Compose smoke both succeeded. Whole-task review 0018 accepted this candidate, including the scripted Manual A result `Hello from synthetic.` and Manual C's equivalent. The commit that records this freeze is a documentation-only descendant and is not the implementation freeze SHA. **P7** is the next phase and is not implemented. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
 
 ## Candidate
 
@@ -18,7 +18,7 @@ The commit that adds this workflow id is documentation only. It is not the imple
 ## What shipped
 
 - One `WorkItem` per `AwaitingDurableWork` occurrence. Owner is Agent Instance plus trusted profile. The source session is provenance only.
-- The existing scheduler pass, after P5 routing, accepts awaiting occurrences and runs due work. There is no second scheduler.
+- After post-freeze repair: P5 scheduling/routing stays in `TriggerSchedulerHostedService`; `DurableWorkHostedService` runs intake and due work. There is no second recurrence scheduler.
 - A scheduled reminder is tool-free and does not write chat history.
 - An application event uses the live tool limits and a narrower offer. Session-scoped tools and trigger writes are not available.
 - Sensitive tools suspend without a claim until Background Work approves the exact action hash. The same WorkItem resumes.

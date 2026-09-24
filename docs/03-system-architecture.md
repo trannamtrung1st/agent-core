@@ -108,7 +108,7 @@ Durable schedules and one allowlisted application event are not Session Runtime 
 
 ## P6 durable work (observed)
 
-The same scheduler pass accepts each `AwaitingDurableWork` occurrence as one `WorkItem` and runs due work. P5 still admits schedules and chooses live versus durable. The owner is Agent Instance plus trusted profile. The source session is provenance only. A scheduled reminder is tool-free. An application event uses the same tool limits as a live turn and a narrower offer: session-scoped tools and trigger writes are not available. Sensitive tools suspend without a claim until Background Work approves the exact action hash. Results stay out of chat history. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` still do not continue after `RequestDeactivate`. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
+`DurableWorkHostedService` accepts each `AwaitingDurableWork` occurrence as one `WorkItem` and runs due work on a separate cadence from P5 scheduling and routing. P5 still admits schedules and chooses live versus durable. The owner is Agent Instance plus trusted profile. The source session is provenance only. A scheduled reminder is tool-free. An application event uses the same tool limits as a live turn and a narrower offer: session-scoped tools and trigger writes are not available. Sensitive tools suspend without a claim until Background Work approves the exact action hash. Results stay out of chat history. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` still do not continue after `RequestDeactivate`. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
 ## P3 tools and integrations (observed)
 

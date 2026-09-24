@@ -155,7 +155,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             }
 
             var policy = tools.EvaluateExecutionPolicy(definition, call.Name, admission: admission);
-            var hash = ActionHash(call, args);
+            var hash = await ResolveActionHashAsync(call, args, cancellationToken).ConfigureAwait(false);
             if (policy == ToolPolicyDecision.RequireApproval && !ApprovedFor(running, call, hash))
             {
                 if (running.Approval is { } decided
@@ -172,8 +172,9 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 return await SuspendForApprovalAsync(call, args, hash).ConfigureAwait(false);
             }
 
-            var sensitive = policy == ToolPolicyDecision.RequireApproval;
-            if (sensitive)
+            var needsApproval = policy == ToolPolicyDecision.RequireApproval;
+            var dispatchFenced = needsApproval || ToolCatalog.ReplaySafetyOf(call.Name) != ToolReplaySafety.ReplaySafe;
+            if (dispatchFenced)
             {
                 if (running.SideEffect.Disposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Indeterminate)
                 {
@@ -220,7 +221,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     call,
                     RemainingOutput(outputBytes),
                     toolCts.Token,
-                    approvalGrant: sensitive
+                    approvalGrant: needsApproval
                         ? new ToolApprovalGrant(running.Approval!.ApprovalId, call.Name, hash, Guid.Empty, Guid.Empty, Guid.Empty)
                         : null,
                     admission: admission).ConfigureAwait(false);
@@ -231,7 +232,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             }
             catch (OperationCanceledException)
             {
-                if (!sensitive)
+                if (!dispatchFenced)
                 {
                     execution = ToolExecutionResult.FromText(
                         """{"error":"timeout","message":"Tool deadline reached."}""");
@@ -253,7 +254,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 }
             }
 
-            if (sensitive)
+            if (dispatchFenced)
             {
                 running = await store.MarkSideEffectAsync(
                     running.WorkItemId,
@@ -270,31 +271,20 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
 
         async ValueTask<DurableOccurrenceOutcome?> SuspendForApprovalAsync(ModelToolCall call, JsonElement args, string hash)
         {
-            var prepared = tools.PrepareHttpRequestApproval(args);
-            string preview;
-            string actionJson;
-            string actionHash;
-            if (string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
+            var prepared = await ToolActionPreparation.PrepareApprovalAsync(tools, call, args, cancellationToken)
+                .ConfigureAwait(false);
+            if (prepared.Preparation is null)
             {
-                if (prepared.Preparation is null)
-                {
-                    return await AppendResultAsync(
-                        call,
-                        ToolExecutionResult.FromText(prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare HTTP request approval."}"""))
-                        .ConfigureAwait(false);
-                }
+                return await AppendResultAsync(
+                    call,
+                    ToolExecutionResult.FromText(
+                        prepared.ErrorJson ?? """{"error":"invalid","message":"Unable to prepare action approval."}"""))
+                    .ConfigureAwait(false);
+            }
 
-                preview = prepared.Preparation.Summary;
-                actionHash = prepared.Preparation.ActionHash;
-                actionJson = call.ArgumentsJson;
-            }
-            else
-            {
-                var generic = ToolApprovalPreview.Build(call.Name, args);
-                preview = generic.Summary;
-                actionHash = hash;
-                actionJson = call.ArgumentsJson;
-            }
+            var preview = prepared.Preparation.Preview;
+            var actionHash = prepared.Preparation.ActionHash;
+            var actionJson = prepared.Preparation.ActionJson;
 
             running = await SaveCheckpointAsync().ConfigureAwait(false);
             running = await store.MarkSideEffectAsync(
@@ -356,18 +346,21 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 cancellationToken);
     }
 
-    private string ActionHash(ModelToolCall call, JsonElement args)
+    private async ValueTask<string> ResolveActionHashAsync(
+        ModelToolCall call,
+        JsonElement args,
+        CancellationToken cancellationToken)
     {
-        if (string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
+        if (string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
         {
-            var prepared = tools.PrepareHttpRequestApproval(args);
+            var prepared = await tools.PrepareEmailSendApprovalAsync(args, cancellationToken).ConfigureAwait(false);
             if (prepared.Preparation is not null)
             {
                 return prepared.Preparation.ActionHash;
             }
         }
 
-        return ToolActionHash.Compute(call.Name, args);
+        return ToolActionPreparation.ActionHash(tools, call, args);
     }
 
     private static bool ApprovedFor(WorkItem item, ModelToolCall call, string hash) =>

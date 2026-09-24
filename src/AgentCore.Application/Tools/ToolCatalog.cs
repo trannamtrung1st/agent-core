@@ -90,4 +90,9 @@ public static class ToolCatalog
 
     public static ToolEffect EffectOf(string toolName) =>
         ToolRegistry.TryGet(toolName, out var descriptor) ? descriptor.Effect : throw new KeyNotFoundException($"Unknown tool '{toolName}'.");
+
+    public static ToolReplaySafety ReplaySafetyOf(string toolName) =>
+        ToolRegistry.TryGet(toolName, out var descriptor)
+            ? descriptor.ReplaySafety
+            : throw new KeyNotFoundException($"Unknown tool '{toolName}'.");
 }

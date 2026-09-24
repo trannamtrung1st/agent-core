@@ -20,7 +20,7 @@ P6 implementation freeze:
 workflow 35990145456 attempt 2 — green
 ```
 
-P6 is closed/frozen. Evidence: `docs/reports/p6-freeze-candidate.md`. Whole-task review accepted the candidate, including the scripted Manual A result `Hello from synthetic.` and Manual C's equivalent.
+P6 post-freeze repair in progress (scheduler/worker split, replay safety, detached approval prep, cancellation uncertainty). Last gated SHA `6900bc1`; evidence: `docs/reports/p6-freeze-candidate.md`.
 
 **Current active phase:** P7 — next, not started. Do not implement P7.
 

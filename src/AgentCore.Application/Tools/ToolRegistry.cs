@@ -173,6 +173,15 @@ public static class ToolRegistry
         string parametersJson,
         ToolEffect effect,
         ToolOfferRule offerRule = ToolOfferRule.RoleAllowlist,
-        ToolResourceScope scope = ToolResourceScope.Owner) =>
-        new(new ModelToolDefinition(name, description, parametersJson), effect, offerRule, scope);
+        ToolResourceScope scope = ToolResourceScope.Owner,
+        ToolReplaySafety? replaySafety = null) =>
+        new(
+            new ModelToolDefinition(name, description, parametersJson),
+            effect,
+            offerRule,
+            scope,
+            replaySafety ?? DefaultReplaySafety(effect));
+
+    private static ToolReplaySafety DefaultReplaySafety(ToolEffect effect) =>
+        effect == ToolEffect.ReadOnly ? ToolReplaySafety.ReplaySafe : ToolReplaySafety.NonReplayable;
 }

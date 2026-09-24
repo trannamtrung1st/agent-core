@@ -18,25 +18,36 @@ public sealed class DurableReminderExecutor(
 {
     private readonly DurableOccurrenceExecution occurrence = new(tools, time);
     public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
+    public const int DefaultParallelism = 2;
 
     public async ValueTask<int> ExecuteDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default)
     {
         await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         await work.ExpireDueApprovalsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         var due = await work.ListRunnableAsync(asOfUtc, limit, cancellationToken).ConfigureAwait(false);
-        var ran = 0;
-        foreach (var item in due)
+        var runnable = due
+            .Where(item => item.Provenance.SourceKind is WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent)
+            .ToArray();
+        if (runnable.Length == 0)
         {
-            if (item.Provenance.SourceKind is not (WorkSourceKind.Schedule or WorkSourceKind.ApplicationEvent))
-            {
-                continue;
-            }
-
-            if (await ExecuteAsync(item, asOfUtc, cancellationToken).ConfigureAwait(false))
-            {
-                ran++;
-            }
+            return 0;
         }
+
+        var ran = 0;
+        await Parallel.ForEachAsync(
+            runnable,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = DefaultParallelism,
+                CancellationToken = cancellationToken
+            },
+            async (item, ct) =>
+            {
+                if (await ExecuteAsync(item, asOfUtc, ct).ConfigureAwait(false))
+                {
+                    Interlocked.Increment(ref ran);
+                }
+            }).ConfigureAwait(false);
 
         return ran;
     }
@@ -49,11 +60,17 @@ public sealed class DurableReminderExecutor(
         DateTimeOffset requestedAtUtc,
         CancellationToken cancellationToken = default)
     {
+        var current = await work.GetAsync(owner, workItemId, cancellationToken).ConfigureAwait(false);
+        if (current is null)
+        {
+            throw AgentCoreErrors.NotFound("Work item was not found.");
+        }
+
         var updated = await work.RequestCancellationAsync(
             owner,
             workItemId,
             expectedRevision,
-            knownEffectSummary,
+            WorkCancellationSemantics.MergeKnownEffectSummary(current, knownEffectSummary),
             requestedAtUtc,
             cancellationToken).ConfigureAwait(false);
         cancellation.Signal(workItemId);
@@ -309,7 +326,7 @@ public sealed class DurableReminderExecutor(
             current.WorkItemId,
             current.Revision,
             generation,
-            current.KnownEffectSummary,
+            WorkCancellationSemantics.MergeKnownEffectSummary(current, current.KnownEffectSummary),
             time.GetUtcNow(),
             CancellationToken.None).ConfigureAwait(false);
         RuntimeTelemetry.RecordWork("cancelled");

@@ -30,7 +30,8 @@ public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,
     ToolEffect Effect,
     ToolOfferRule OfferRule = ToolOfferRule.RoleAllowlist,
-    ToolResourceScope Scope = ToolResourceScope.Owner)
+    ToolResourceScope Scope = ToolResourceScope.Owner,
+    ToolReplaySafety ReplaySafety = ToolReplaySafety.ReplaySafe)
 {
     public string Name => ModelDefinition.Name;
 }

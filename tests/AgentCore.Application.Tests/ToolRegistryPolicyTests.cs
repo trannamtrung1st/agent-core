@@ -14,6 +14,8 @@ public sealed class ToolRegistryPolicyTests
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.KnowledgeRetrieve));
         Assert.Equal(ToolEffect.ReadOnly, ToolCatalog.EffectOf(ToolCatalog.AttachmentsRead));
         Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.WorkspaceWrite));
+        Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.EmailCreateDraft));
+        Assert.Equal(ToolReplaySafety.ReplaySafe, ToolCatalog.ReplaySafetyOf(ToolCatalog.KnowledgeRetrieve));
         Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.SandboxRun));
         Assert.Equal(ToolEffect.SensitiveWrite, ToolCatalog.EffectOf(ToolCatalog.DemoSensitiveAction));
     }

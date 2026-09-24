@@ -166,7 +166,7 @@ Timers use TimeProvider generations. User activity, pending upload, parsing/tool
 
 ## P6 detached work (observed)
 
-Durable work does not keep a Session Runtime attached and does not change live turn-taking, interruption, or the microphone-during-playback rule. A due occurrence still prefers one compatible live runtime. When none exists, the scheduler pass accepts the occurrence as a WorkItem and runs it without a browser or SignalR connection. Approval and cancellation for that work happen in Background Work, not on the live response mailbox. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
+Durable work does not keep a Session Runtime attached and does not change live turn-taking, interruption, or the microphone-during-playback rule. A due occurrence still prefers one compatible live runtime. When none exists, durable intake accepts the occurrence as a WorkItem and `DurableWorkHostedService` runs it without a browser or SignalR connection, on a cadence separate from P5 scheduling and routing. Approval and cancellation for that work happen in Background Work, not on the live response mailbox. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
 ## Follow-on P1 observed and frozen
 

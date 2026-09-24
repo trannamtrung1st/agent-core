@@ -16,6 +16,7 @@ using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -495,6 +496,44 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Cancelling_inflight_sensitive_action_records_effect_uncertainty_when_summary_omitted()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            var approved = await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            harness.Http.Hold = true;
+            var run = harness.Executor.ExecuteDueAsync(Now, 10).AsTask();
+            await harness.Http.Started.Task;
+            var running = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            var requested = await harness.Executor.RequestCancellationAsync(
+                owner,
+                approved.WorkItemId,
+                running!.Revision,
+                null,
+                Now);
+            Assert.True(requested.CancellationRequested);
+            await run;
+            var cancelled = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Cancelled, cancelled!.Status);
+            Assert.Equal(WorkCancellationSemantics.UncertainExternalEffect, cancelled.KnownEffectSummary);
+            Assert.Equal(1, harness.Http.Calls);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
     public async Task Inflight_http_is_not_retried_after_a_lost_acknowledgement()
     {
         await ForEachAsync(async harness =>
@@ -530,6 +569,38 @@ public sealed class DurableReminderTests
             var reopened = await harness.Reopen();
             Assert.Equal("side-effect-indeterminate", (await reopened.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId))!.Failure!.Code);
         }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
+    public async Task Durable_intake_accepts_awaiting_occurrence_while_another_item_executes()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var firstOccurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "first reminder");
+            await AcceptScheduledAsync(harness, firstOccurrence, 3);
+            var secondOccurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "second reminder");
+            var gate = (GateModel)harness.Model.Inner;
+            using var shutdown = new CancellationTokenSource();
+            var run = harness.Executor.ExecuteDueAsync(Now, 1, shutdown.Token).AsTask();
+            await gate.Started.Task;
+            var intake = new DurableWorkIntake(
+                harness.Triggers,
+                harness.Handoff,
+                harness.Instances,
+                harness.Definitions,
+                harness.Catalog,
+                new GuidGenerator(),
+                harness.Time,
+                NullLogger<DurableWorkIntake>.Instance);
+            var admitted = await intake.AcceptAwaitingAsync();
+            Assert.Equal(1, admitted.Accepted);
+            var linked = await harness.Triggers.GetOccurrenceAsync(owner, secondOccurrence.OccurrenceId);
+            Assert.Equal(OccurrenceRoutingDisposition.AcceptedDurable, linked!.Disposition);
+            Assert.NotNull(linked.DurableWorkItemId);
+            shutdown.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        }, () => new GateModel());
     }
 
     [Fact]
@@ -773,7 +844,23 @@ public sealed class DurableReminderTests
             time,
             new WorkCancellationRegistry(),
             new SessionToolExecutor(new RoleKnowledgeService(knowledge, time), httpRequestClient: http));
-        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, time, knowledge, http, () => reopen(triggers, work, handoff));
+        return new Harness(
+            triggers,
+            work,
+            handoff,
+            factory,
+            executor,
+            recording,
+            memories,
+            sessions,
+            catalog,
+            definition,
+            instances,
+            definitions,
+            time,
+            knowledge,
+            http,
+            () => reopen(triggers, work, handoff));
     }
 
     private static async Task<AgentDefinition> LoadDefinitionAsync()
@@ -810,6 +897,8 @@ public sealed class DurableReminderTests
         InMemoryMemoryStore sessions,
         IModelCatalog catalog,
         AgentDefinition definition,
+        IAgentInstanceStore instances,
+        IAgentDefinitionStore definitions,
         FakeTimeProvider time,
         RecordingKnowledgeCatalog knowledge,
         GatedHttpClient http,
@@ -825,6 +914,8 @@ public sealed class DurableReminderTests
         public InMemoryMemoryStore Sessions { get; } = sessions;
         public IModelCatalog Catalog { get; } = catalog;
         public AgentDefinition Definition { get; } = definition;
+        public IAgentInstanceStore Instances { get; } = instances;
+        public IAgentDefinitionStore Definitions { get; } = definitions;
         public FakeTimeProvider Time { get; } = time;
         public RecordingKnowledgeCatalog Knowledge { get; } = knowledge;
         public GatedHttpClient Http { get; } = http;

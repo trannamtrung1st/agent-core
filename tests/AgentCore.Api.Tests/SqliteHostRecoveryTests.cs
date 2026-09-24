@@ -687,7 +687,9 @@ internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler 
 
             if (!runScheduler)
             {
-                foreach (var hosted in services.Where(item => item.ImplementationType == typeof(TriggerSchedulerHostedService)).ToArray())
+                foreach (var hosted in services.Where(item =>
+                             item.ImplementationType == typeof(TriggerSchedulerHostedService)
+                             || item.ImplementationType == typeof(DurableWorkHostedService)).ToArray())
                 {
                     services.Remove(hosted);
                 }
