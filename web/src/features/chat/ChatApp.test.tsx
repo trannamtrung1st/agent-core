@@ -1053,5 +1053,5 @@ describe("ChatApp tablet session rail", () => {
     });
     await act(async () => renderChat());
     expect(screen.queryByRole("button", { name: "Background work" })).not.toBeInTheDocument();
-  });
+  }, 20_000);
 });

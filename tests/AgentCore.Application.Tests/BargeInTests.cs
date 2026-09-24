@@ -186,6 +186,7 @@ public sealed class BargeInTests
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.Mode == SessionMode.Voice);
         await runtime.SubmitUserTextAsync("Hello");
         await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
+        await runtime.WaitUntilMailboxDrainedAsync();
         return new VoiceHarness(runtime, time, output);
     }
 
