@@ -41,7 +41,16 @@ import { imageModelCompatibility } from "./imageModelCompatibility";
 import { mapAgentActivity, conversationStatusLabel, conversationStatusTone, pausedSessionMessage } from "./activityState";
 import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
-import { cancelSessionTrigger, listSessionTriggers } from "../../services/api";
+import {
+  approveWorkItem,
+  cancelSessionTrigger,
+  cancelWorkItem,
+  getWorkItemResult,
+  listSessionTriggers,
+  listWorkItems,
+  rejectWorkItem
+} from "../../services/api";
+import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { ScheduleDrawer } from "./ScheduleDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -85,6 +94,7 @@ export function ChatApp() {
   const [profile, setProfile] = useState("");
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [workOpen, setWorkOpen] = useState(false);
   const [scheduleEpoch, setScheduleEpoch] = useState(0);
   const outputStateRef = useRef(state.outputState);
   const { isNarrow, siderWidth } = useViewport();
@@ -297,6 +307,7 @@ export function ChatApp() {
               }
               inSession={inSession && !readonly}
               onSchedules={inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
+              onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
               onEnd={() => void hangUp()}
             />
             <Flex align="center" gap={8} className="chat-header-meta">
@@ -460,6 +471,19 @@ export function ChatApp() {
             </div>
           </Content>
         </Layout>
+        {state.sessionId ? (
+          <BackgroundWorkDrawer
+            sessionId={state.sessionId}
+            open={workOpen}
+            wide={!isNarrow}
+            onClose={() => setWorkOpen(false)}
+            load={listWorkItems}
+            loadResult={getWorkItemResult}
+            cancel={cancelWorkItem}
+            approve={approveWorkItem}
+            reject={rejectWorkItem}
+          />
+        ) : null}
         {state.sessionId ? (
           <ScheduleDrawer
             sessionId={state.sessionId}

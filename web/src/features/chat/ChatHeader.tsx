@@ -11,6 +11,7 @@ export function ChatHeader({
   sessionsToggle,
   speechLocale,
   onSchedules,
+  onBackgroundWork,
   onEnd,
   inSession
 }: {
@@ -20,6 +21,7 @@ export function ChatHeader({
   sessionsToggle?: ReactNode;
   speechLocale?: ReactNode;
   onSchedules?: () => void;
+  onBackgroundWork?: () => void;
   onEnd: () => void;
   inSession: boolean;
 }) {
@@ -57,9 +59,14 @@ export function ChatHeader({
           ) : null}
         </div>
       </Flex>
-      {speechLocale || inSession ? (
+      {speechLocale || inSession || onBackgroundWork ? (
         <Flex align="center" gap={8} className="chat-header-actions">
           {speechLocale}
+          {onBackgroundWork ? (
+            <Button size="small" aria-label="Background work" onClick={onBackgroundWork}>
+              Background work
+            </Button>
+          ) : null}
           {inSession && onSchedules ? (
             <Button size="small" aria-label="Schedules" onClick={onSchedules}>
               Schedules

@@ -59,6 +59,31 @@ export type SessionResponse = {
   model?: SessionModelSelection | null;
 };
 
+export type WorkItem = {
+  workItemId: string;
+  status: string;
+  revision: number;
+  origin: string;
+  progress: string | null;
+  needsApproval: boolean;
+  approvalId: string | null;
+  approvalRevision: number | null;
+  approvalPreview: string | null;
+  actionHash: string | null;
+  cancellationAvailable: boolean;
+  failureCode: string | null;
+  failureSummary: string | null;
+  knownEffect: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkItemResult = {
+  workItemId: string;
+  text: string;
+  completedAt: string;
+};
+
 export type SessionTrigger = {
   registrationId: string;
   intent: string;
@@ -464,4 +489,82 @@ export async function cancelSessionTrigger(
   }
 
   return (await response.json()) as SessionTrigger;
+}
+
+export async function listWorkItems(sessionId: string): Promise<WorkItem[]> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items`);
+  if (!response.ok) {
+    throw new Error(await problemMessage(response, "Unable to load background work."));
+  }
+
+  const body = (await response.json()) as { items: WorkItem[] };
+  return body.items;
+}
+
+export async function getWorkItemResult(sessionId: string, workItemId: string): Promise<WorkItemResult> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items/${workItemId}/result`);
+  if (!response.ok) {
+    throw new Error(await problemMessage(response, "Unable to load the work result."));
+  }
+
+  return (await response.json()) as WorkItemResult;
+}
+
+export async function cancelWorkItem(sessionId: string, workItemId: string, expectedRevision: number): Promise<WorkItem> {
+  const response = await ownerFetch(`/api/v2/sessions/${sessionId}/work-items/${workItemId}/cancel`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expectedRevision })
+  });
+  if (!response.ok) {
+    throw new Error(await problemMessage(response, "Unable to cancel the work."));
+  }
+
+  return (await response.json()) as WorkItem;
+}
+
+export async function approveWorkItem(
+  sessionId: string,
+  workItemId: string,
+  approvalId: string,
+  expectedRevision: number,
+  expectedApprovalRevision: number,
+  actionHash: string
+): Promise<WorkItem> {
+  return decideWorkItem(sessionId, workItemId, approvalId, "approve", expectedRevision, expectedApprovalRevision, actionHash);
+}
+
+export async function rejectWorkItem(
+  sessionId: string,
+  workItemId: string,
+  approvalId: string,
+  expectedRevision: number,
+  expectedApprovalRevision: number,
+  actionHash: string
+): Promise<WorkItem> {
+  return decideWorkItem(sessionId, workItemId, approvalId, "reject", expectedRevision, expectedApprovalRevision, actionHash);
+}
+
+async function decideWorkItem(
+  sessionId: string,
+  workItemId: string,
+  approvalId: string,
+  decision: "approve" | "reject",
+  expectedRevision: number,
+  expectedApprovalRevision: number,
+  actionHash: string
+): Promise<WorkItem> {
+  const response = await ownerFetch(
+    `/api/v2/sessions/${sessionId}/work-items/${workItemId}/approvals/${approvalId}/${decision}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedRevision, expectedApprovalRevision, actionHash })
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await problemMessage(response, "Unable to update the approval."));
+  }
+
+  return (await response.json()) as WorkItem;
 }

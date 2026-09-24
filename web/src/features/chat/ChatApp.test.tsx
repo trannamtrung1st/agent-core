@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdTheme } from "../../app/antdTheme";
 import { emptySession, useSessionStore } from "../../state/sessionStore";
 import { bootstrap, sendDraft, cancelRenderedResponse, resumePausedSession } from "../../services/realtime";
+import { getWorkItemResult, listWorkItems } from "../../services/api";
 import { ChatApp } from "./ChatApp";
 
 function stubMatchMedia(matches: (query: string) => boolean) {
@@ -36,6 +37,18 @@ function rerenderChat(view: ReturnType<typeof render>) {
     </ConfigProvider>
   );
 }
+
+vi.mock("../../services/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/api")>();
+  return {
+    ...actual,
+    listWorkItems: vi.fn(async () => []),
+    getWorkItemResult: vi.fn(),
+    cancelWorkItem: vi.fn(),
+    approveWorkItem: vi.fn(),
+    rejectWorkItem: vi.fn()
+  };
+});
 
 vi.mock("../../services/realtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/realtime")>();
@@ -964,5 +977,81 @@ describe("ChatApp tablet session rail", () => {
     expect(screen.getByRole("navigation", { name: "Chats" })).toBeInTheDocument();
     expect(screen.getByText("Chats")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
+  });
+
+  it("keeps background work available for live, paused, and ended sessions without a transcript result", async () => {
+    vi.mocked(listWorkItems).mockResolvedValue([
+      {
+        workItemId: "work-1",
+        status: "completed",
+        revision: 3,
+        origin: "Scheduled reminder",
+        progress: "Checking the oven",
+        needsApproval: false,
+        approvalId: null,
+        approvalRevision: null,
+        approvalPreview: null,
+        actionHash: null,
+        cancellationAvailable: false,
+        failureCode: null,
+        failureSummary: null,
+        knownEffect: null,
+        createdAt: "2026-09-24T09:00:00.000Z",
+        updatedAt: "2026-09-24T09:01:00.000Z"
+      }
+    ]);
+    vi.mocked(getWorkItemResult).mockResolvedValue({
+      workItemId: "work-1",
+      text: "Oven timer finished.",
+      completedAt: "2026-09-24T09:01:00.000Z"
+    });
+
+    for (const status of ["active", "paused", "ended"] as const) {
+      await act(async () => {
+        useSessionStore.setState({
+          ...emptySession(),
+          sessionId: "s1",
+          connection: status === "active" ? "ready" : "idle",
+          status,
+          agentName: "Alex",
+          agentRole: "Examiner",
+          agents: [{ id: "examiner", version: 1, name: "Alex", role: "Examiner", description: "", voiceAvailable: true }],
+          selectedAgentId: "examiner",
+          entries: [
+            {
+              entryId: "e1",
+              sequence: 1,
+              sourceEventId: "e1",
+              role: "assistant",
+              text: "Hello from the conversation.",
+              responseId: null,
+              status: "completed",
+              deliveryMode: "text",
+              heardTextEndExclusive: 0,
+              receivedTextEndExclusive: 0,
+              createdAt: "2026-09-24T09:00:00.000Z"
+            }
+          ]
+        });
+      });
+      const view = await act(async () => renderChat());
+      expect(screen.getByRole("button", { name: "Background work" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Background work" }));
+      expect(await screen.findByText("Oven timer finished.")).toBeInTheDocument();
+      const conversation = screen.getByRole("region", { name: "Conversation" });
+      expect(within(conversation).getByText("Hello from the conversation.")).toBeInTheDocument();
+      expect(within(conversation).queryByText("Oven timer finished.")).not.toBeInTheDocument();
+      view.unmount();
+    }
+
+    await act(async () => {
+      useSessionStore.setState({
+        ...emptySession(),
+        agents: [],
+        selectedAgentId: "examiner"
+      });
+    });
+    await act(async () => renderChat());
+    expect(screen.queryByRole("button", { name: "Background work" })).not.toBeInTheDocument();
   });
 });
