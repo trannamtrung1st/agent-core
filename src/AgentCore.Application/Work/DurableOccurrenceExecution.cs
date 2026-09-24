@@ -129,9 +129,11 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             }
 
             messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
+            steps += pending.Count;
+            running = await SaveCheckpointAsync().ConfigureAwait(false);
             foreach (var call in pending)
             {
-                var callOutcome = await ExecuteCallAsync(call, countStep: true).ConfigureAwait(false);
+                var callOutcome = await ExecuteCallAsync(call, countStep: false).ConfigureAwait(false);
                 if (callOutcome is not null)
                 {
                     return callOutcome;

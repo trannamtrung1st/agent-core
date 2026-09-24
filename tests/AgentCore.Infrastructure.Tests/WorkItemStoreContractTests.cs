@@ -1,6 +1,8 @@
 using System.Data;
+using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Application.Work;
 using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Persistence;
@@ -435,6 +437,109 @@ public sealed class WorkItemStoreContractTests
             Assert.Equal(WorkItemStatus.Running, legacyUncertain!.Status);
             Assert.Equal(WorkSideEffectDisposition.Indeterminate, legacyUncertain.SideEffect.Disposition);
             Assert.Null(legacyUncertain.SideEffect.ToolCallId);
+        }
+        finally
+        {
+            Release(path);
+        }
+    }
+
+    [Fact]
+    public async Task Legacy_succeeded_without_tool_call_id_binds_by_action_hash_not_first_result()
+    {
+        const string argsA =
+            """{"method":"POST","url":"https://example.com/items/a","body":"FIRST"}""";
+        const string argsB =
+            """{"method":"POST","url":"https://example.com/items/b","body":"SECOND"}""";
+        var hashB = ToolActionHash.Compute(
+            ToolCatalog.HttpRequest,
+            JsonSerializer.Deserialize<JsonElement>(argsB));
+        var path = TempDatabase();
+        var factory = Factory(path);
+        try
+        {
+            await new SqliteMemoryStore(factory, new FakeTimeProvider(Now)).EnsureCreatedAsync();
+            var store = new SqliteWorkItemStore(factory);
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var workItemId = Id(210);
+            var sourceId = Id(211);
+            var generation = Id(212);
+            var created = await store.CreateAsync(NewItem(owner, workItemId, sourceId, Now));
+            var claimed = await store.TryClaimAsync(created.Item.WorkItemId, generation, Now.AddSeconds(1), Now.AddMinutes(1));
+            Assert.NotNull(claimed);
+            var checkpoint = new WorkCheckpoint(
+                DurableToolCallCheckpoint.Write(
+                [
+                    new ModelMessage(
+                        ModelRole.Assistant,
+                        string.Empty,
+                        ToolCalls:
+                        [
+                            new ModelToolCall("a", ToolCatalog.HttpRequest, argsA),
+                            new ModelToolCall("b", ToolCatalog.HttpRequest, argsB)
+                        ]),
+                    new(ModelRole.Tool, """{"ok":true}""", ToolCallId: "a", Name: ToolCatalog.HttpRequest)
+                ]),
+                2,
+                32,
+                1000);
+            var checkpointed = await store.CheckpointAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                generation,
+                checkpoint,
+                "Running",
+                Now.AddSeconds(2));
+            var prepared = await store.MarkSideEffectAsync(
+                checkpointed.WorkItemId,
+                checkpointed.Revision,
+                generation,
+                WorkSideEffectDisposition.Prepared,
+                "b",
+                hashB,
+                Now.AddSeconds(3));
+            var inFlight = await store.MarkSideEffectAsync(
+                prepared.WorkItemId,
+                prepared.Revision,
+                generation,
+                WorkSideEffectDisposition.InFlight,
+                "b",
+                hashB,
+                Now.AddSeconds(4));
+            await store.MarkSideEffectAsync(
+                inFlight.WorkItemId,
+                inFlight.Revision,
+                generation,
+                WorkSideEffectDisposition.Succeeded,
+                "b",
+                hashB,
+                Now.AddSeconds(5));
+
+            await using (var db = await factory.CreateDbContextAsync())
+            {
+                var connection = db.Database.GetDbConnection();
+                if (connection.State != ConnectionState.Open)
+                {
+                    await connection.OpenAsync();
+                }
+
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    UPDATE WorkItems
+                    SET SideEffectToolCallId = NULL
+                    WHERE WorkItemId = $id;
+                    """;
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = "$id";
+                parameter.Value = workItemId.ToString("D");
+                command.Parameters.Add(parameter);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var legacy = await store.GetAsync(owner, workItemId);
+            Assert.Equal(WorkSideEffectDisposition.Succeeded, legacy!.SideEffect.Disposition);
+            Assert.Equal("b", legacy.SideEffect.ToolCallId);
         }
         finally
         {

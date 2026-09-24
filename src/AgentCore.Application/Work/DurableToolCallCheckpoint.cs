@@ -75,18 +75,21 @@ public static class DurableToolCallCheckpoint
         if (disposition == WorkSideEffectDisposition.Succeeded)
         {
             var batchIndex = FindLatestAssistantToolBatchIndex(messages);
-            if (batchIndex >= 0)
+            if (batchIndex < 0)
             {
-                foreach (var call in messages[batchIndex].ToolCalls!)
-                {
-                    if (HasToolResult(messages, call.Id))
-                    {
-                        return call.Id;
-                    }
-                }
+                return null;
             }
 
-            return null;
+            var batch = messages[batchIndex].ToolCalls!;
+            if (!string.IsNullOrWhiteSpace(actionHash))
+            {
+                var hashMatched = batch
+                    .Where(call => MatchesStoredAction(call, actionHash))
+                    .ToArray();
+                return hashMatched.Length == 1 ? hashMatched[0].Id : null;
+            }
+
+            return batch.Count == 1 ? batch[0].Id : null;
         }
 
         return pending.Count == 1 ? pending[0].Id : null;

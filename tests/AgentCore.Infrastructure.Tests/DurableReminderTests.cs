@@ -844,6 +844,97 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Full_tool_batch_reserves_step_budget_before_first_call_executes()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            Assert.Equal(ToolLimits.MaxSteps, waiting.Checkpoint!.StepCount);
+            Assert.Equal(0, harness.Http.Calls);
+        }, () => new MaxBatchHttpApprovalModel());
+    }
+
+    [Fact]
+    public async Task Legacy_succeeded_fence_with_lost_result_does_not_replay_external_write()
+    {
+        await ForEachAsync(async harness =>
+        {
+            const string argsA =
+                """{"method":"POST","url":"https://example.com/items/a","body":"FIRST"}""";
+            const string argsB =
+                """{"method":"POST","url":"https://example.com/items/b","body":"SECOND"}""";
+            var hashB = ToolActionHash.Compute(
+                ToolCatalog.HttpRequest,
+                System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(argsB));
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            var accepted = await AcceptObservedAsync(harness, occurrence);
+            var generation = Guid.NewGuid();
+            var claimed = await harness.Work.TryClaimAsync(accepted.WorkItemId, generation, Now, Now.AddMinutes(1));
+            Assert.NotNull(claimed);
+            var messages = new List<ModelMessage>
+            {
+                new(
+                    ModelRole.Assistant,
+                    string.Empty,
+                    ToolCalls:
+                    [
+                        new ModelToolCall("a", ToolCatalog.HttpRequest, argsA),
+                        new ModelToolCall("b", ToolCatalog.HttpRequest, argsB)
+                    ]),
+                new(ModelRole.Tool, """{"ok":true}""", ToolCallId: "a", Name: ToolCatalog.HttpRequest)
+            };
+            var checkpointed = await harness.Work.CheckpointAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                generation,
+                new WorkCheckpoint(
+                    DurableToolCallCheckpoint.Write(messages),
+                    2,
+                    32,
+                    (int)ToolLimits.Overall.TotalMilliseconds),
+                "Legacy succeeded fence",
+                Now);
+            var prepared = await harness.Work.MarkSideEffectAsync(
+                checkpointed.WorkItemId,
+                checkpointed.Revision,
+                generation,
+                WorkSideEffectDisposition.Prepared,
+                "b",
+                hashB,
+                Now.AddSeconds(1));
+            var inFlight = await harness.Work.MarkSideEffectAsync(
+                prepared.WorkItemId,
+                prepared.Revision,
+                generation,
+                WorkSideEffectDisposition.InFlight,
+                "b",
+                hashB,
+                Now.AddSeconds(2));
+            await harness.Work.MarkSideEffectAsync(
+                inFlight.WorkItemId,
+                inFlight.Revision,
+                generation,
+                WorkSideEffectDisposition.Succeeded,
+                "b",
+                hashB,
+                Now.AddSeconds(3));
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("tool-result-lost", failed.Failure!.Code);
+            Assert.Equal(0, harness.Http.Calls);
+        }, () => new DualHttpApprovalBatchModel());
+    }
+
+    [Fact]
     public async Task Partial_tool_batch_resumes_remaining_calls_before_calling_model_again()
     {
         await ForEachAsync(async harness =>
@@ -1555,6 +1646,37 @@ public sealed class DurableReminderTests
             }
 
             yield return new ModelTextDelta("Policy applied.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class MaxBatchHttpApprovalModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var httpResults = request.Messages.Count(message =>
+                message.Role == ModelRole.Tool && string.Equals(message.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal));
+            if (httpResults == 0)
+            {
+                for (var index = 1; index <= ToolLimits.MaxSteps; index++)
+                {
+                    yield return new ModelToolCallEvent(new ModelToolCall(
+                        $"h{index}",
+                        ToolCatalog.HttpRequest,
+                        $$"""{"method":"POST","url":"https://example.com/items/{{index}}","body":"PAYLOAD"}"""));
+                }
+
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Done.");
             yield return new ModelCompleted(ModelStopReason.Completed);
             await Task.CompletedTask;
         }

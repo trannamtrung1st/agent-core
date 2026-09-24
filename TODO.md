@@ -20,7 +20,7 @@ P6 implementation freeze:
 workflow 35990145456 attempt 2 — green
 ```
 
-P6 post-freeze repair in progress (scheduler/worker split, replay safety, detached approval prep, cancellation uncertainty). Last gated SHA `6900bc1`; evidence: `docs/reports/p6-freeze-candidate.md`.
+P6 post-freeze repair in progress (scheduler/worker split, replay safety, detached approval prep, cancellation uncertainty, legacy SQLite side-effect load, multi-tool resume/step budget, schedule-vs-automation UX). Implementation track `2020724`+ (Compose smoke green); **re-freeze SHA pending** exact-SHA offline gate + faithful wall-clock manual. Last fully gated SHA `6900bc1`; evidence: `docs/reports/p6-freeze-candidate.md`.
 
 **Current active phase:** P6 post-freeze repair (intake/worker separation, per-operation side effects, shared approval prep, cancellation semantics, regression tests, re-freeze gate). **P7** is next and must not start until P6 is re-frozen.
 
