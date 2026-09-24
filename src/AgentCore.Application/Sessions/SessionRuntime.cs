@@ -2130,7 +2130,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     SummarizedThroughEntrySequence: _snapshot.SummarizedThroughEntrySequence,
                     LastEntrySequence: _snapshot.DurableLastEntrySequence,
                     LearnedMemories: learned,
-                    Persona: _snapshot.PinnedPersona);
+                    Persona: _snapshot.PinnedPersona,
+                    ExplicitMemoryCapture: _explicitMemoryCaptureOutcome);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;

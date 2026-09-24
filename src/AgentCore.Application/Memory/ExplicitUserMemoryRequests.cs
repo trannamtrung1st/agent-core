@@ -8,8 +8,6 @@ public static partial class ExplicitUserMemoryRequests
 {
     public sealed record Parsed(MemoryKind Kind, string Subject, string Content);
 
-    private const string RememberedItemSubject = "Remembered item";
-
     public static bool TryParse(string? text, out Parsed? parsed)
     {
         parsed = null;
@@ -37,12 +35,26 @@ public static partial class ExplicitUserMemoryRequests
             var content = match.Groups["content"].Value.Trim();
             if (content.Length > 0 && content.Length <= MemoryLimits.MaxContentCharacters)
             {
-                parsed = new Parsed(MemoryKind.Fact, RememberedItemSubject, content);
+                var subject = SubjectForGenericFact(content);
+                parsed = new Parsed(MemoryKind.Fact, subject, content);
                 return true;
             }
         }
 
         return false;
+    }
+
+    public static string SubjectForGenericFact(string content)
+    {
+        var collapsed = StructuredMemoryItem.CollapseSubject(content);
+        if (collapsed.Length == 0)
+        {
+            return "Remembered fact";
+        }
+
+        return collapsed.Length <= MemoryLimits.MaxSubjectCharacters
+            ? collapsed
+            : collapsed[..MemoryLimits.MaxSubjectCharacters];
     }
 
     private static bool IsUsable(string subject, string content) =>

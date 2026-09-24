@@ -151,7 +151,7 @@ That perception is the actual MVP objective.
 
 ## P5 schedule management (observed)
 
-On Riley (`general-assistant` v8) with a trusted profile timezone, “remind me tomorrow” persists one owner-scoped one-shot schedule without an approval dialog. The chat header **Schedules** drawer lists intent, schedule, timezone, status, and next occurrence, and cancels the active row after confirmation. A second session for the same instance and profile sees the same row. Customer support does not offer user scheduling. There is no calendar and no admin trigger console.
+On Riley (`general-assistant` v8 or v9) with a trusted profile timezone when wall-clock scheduling is used, “remind me tomorrow” persists one owner-scoped one-shot schedule without an approval dialog. Relative delays such as “after 1 minute” do not require a profile timezone. Learned cross-session memory is enabled on `general-assistant` v9 (not v8); explicit “remember …” requests persist for the same Agent Instance and trusted profile across new sessions. The chat header **Schedules** drawer lists intent, schedule, timezone, status, and next occurrence, and cancels the active row after confirmation. A second session for the same instance and profile sees the same row. Customer support does not offer user scheduling. There is no calendar and no admin trigger console.
 
 ## Post-MVP planned until verified
 

@@ -402,7 +402,6 @@ public static class TriggerScheduleCommands
             throw new ArgumentException("One-shot schedules are not enabled.");
         }
 
-        var zone = TimeZone(arguments, context);
         var now = TriggerScheduleCalculator.Truncate(context.UtcNow);
         var hasOffset = arguments.TryGetProperty("relativeDayOffset", out var offsetElement);
         var hasDate = TryString(arguments, "localDate", out var localDateText);
@@ -418,8 +417,10 @@ public static class TriggerScheduleCommands
         DateTimeOffset instant;
         DateOnly? localDate = null;
         TimeOnly? localTime = null;
+        string zone;
         if (hasOffset)
         {
+            zone = RequireTimeZone(arguments, context);
             if (offsetElement.ValueKind != JsonValueKind.Number || !offsetElement.TryGetInt32(out var offset))
             {
                 throw new ArgumentException("relativeDayOffset must be a whole number of days.");
@@ -437,6 +438,7 @@ public static class TriggerScheduleCommands
         }
         else if (hasDate)
         {
+            zone = RequireTimeZone(arguments, context);
             localDate = ParseDate(localDateText, "localDate");
             localTime = RequireLocalTime(arguments);
             instant = TriggerScheduleCalculator.ResolveWallClock(zone, localDate.Value, localTime.Value);
@@ -455,6 +457,7 @@ public static class TriggerScheduleCommands
             }
 
             instant = now.AddSeconds(seconds);
+            zone = OptionalTimeZoneForDisplay(arguments, context);
             var zoned = TimeZoneInfo.ConvertTime(instant, TriggerScheduleCalculator.RequireZone(zone));
             localDate = DateOnly.FromDateTime(zoned.DateTime);
             localTime = TimeOnly.FromDateTime(zoned.DateTime);
@@ -462,6 +465,7 @@ public static class TriggerScheduleCommands
         else
         {
             instant = ParseUtc(atText, "atUtc");
+            zone = OptionalTimeZoneForDisplay(arguments, context);
         }
 
         instant = TriggerScheduleCalculator.Truncate(instant);
@@ -479,7 +483,7 @@ public static class TriggerScheduleCommands
         TriggerPolicy policy)
     {
         var kind = RequireString(arguments, "kind");
-        var zone = TimeZone(arguments, context);
+        var zone = RequireTimeZone(arguments, context);
         var localTime = RequireLocalTime(arguments);
         var interval = arguments.TryGetProperty("interval", out var intervalElement) && intervalElement.TryGetInt32(out var parsed)
             ? parsed
@@ -556,7 +560,7 @@ public static class TriggerScheduleCommands
     private static bool SchedulingEnabled(TriggerPolicy? policy) =>
         policy is { Enabled: true, AllowUserScheduling: true };
 
-    private static string TimeZone(JsonElement arguments, TriggerCommandContext context)
+    private static string RequireTimeZone(JsonElement arguments, TriggerCommandContext context)
     {
         if (TryString(arguments, "timeZone", out var specified) && !string.IsNullOrWhiteSpace(specified))
         {
@@ -570,6 +574,21 @@ public static class TriggerScheduleCommands
 
         throw new ArgumentException(
             "Timezone is required. Ask which timezone to use, or pass a common label such as Vietnam time.");
+    }
+
+    private static string OptionalTimeZoneForDisplay(JsonElement arguments, TriggerCommandContext context)
+    {
+        if (TryString(arguments, "timeZone", out var specified) && !string.IsNullOrWhiteSpace(specified))
+        {
+            return TriggerTimeZoneNormalization.Resolve(specified);
+        }
+
+        if (!string.IsNullOrWhiteSpace(context.ProfileTimeZoneId))
+        {
+            return TriggerTimeZoneNormalization.Resolve(context.ProfileTimeZoneId);
+        }
+
+        return "UTC";
     }
 
     private static string RequireIntent(JsonElement arguments) => TriggerText.RequireIntent(RequireString(arguments, "intent"));

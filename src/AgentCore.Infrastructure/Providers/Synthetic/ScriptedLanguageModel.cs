@@ -452,6 +452,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
+        if (lastUser.Contains("viet nam", StringComparison.OrdinalIgnoreCase)
+            && lastUser.Contains("00:19", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleOnce,
+                """{"intent":"Hello","localDate":"2026-09-24","localTime":"00:19","timeZone":"viet nam time"}""");
+            return true;
+        }
+
         if (ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Different","relativeDayOffset":2,"localTime":"15:00"}""");

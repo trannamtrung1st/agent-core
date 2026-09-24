@@ -23,10 +23,15 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(8, latest!.Version);
+        Assert.Equal(9, latest!.Version);
         Assert.NotNull(latest.TriggerPolicy);
         Assert.True(latest.TriggerPolicy!.Enabled);
         Assert.True(latest.TriggerPolicy.AllowIndefiniteRecurrence);
+        Assert.True(latest.MemoryPolicy?.SessionMemory);
+        Assert.True(latest.MemoryPolicy?.IdentityUserRetrieval);
+        var schedulingOnly = await store.GetAsync("general-assistant", 8);
+        Assert.NotNull(schedulingOnly);
+        Assert.False(schedulingOnly!.MemoryPolicy?.SessionMemory ?? false);
         var pinned = await store.GetAsync("general-assistant", 7);
         Assert.Null(pinned!.TriggerPolicy);
         Assert.Contains("working directory", latest.SystemInstructions, StringComparison.OrdinalIgnoreCase);

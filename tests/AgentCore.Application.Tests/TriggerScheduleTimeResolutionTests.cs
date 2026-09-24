@@ -27,6 +27,28 @@ public sealed class TriggerScheduleTimeResolutionTests
     }
 
     [Fact]
+    public async Task Relative_delay_seconds_does_not_require_profile_timezone()
+    {
+        var created = await CreateOnceAsync(
+            """{"intent":"Hello","relativeDelaySeconds":60}""",
+            profileTimeZoneId: null);
+        var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
+        Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
+        Assert.Equal("UTC", schedule.TimeZoneId);
+    }
+
+    [Fact]
+    public async Task At_utc_does_not_require_profile_timezone()
+    {
+        var created = await CreateOnceAsync(
+            """{"intent":"Hello","atUtc":"2026-09-24T08:30:00Z"}""",
+            profileTimeZoneId: null);
+        var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
+        Assert.Equal(new DateTimeOffset(2026, 9, 24, 8, 30, 0, TimeSpan.Zero), schedule.AtUtc);
+        Assert.Equal("UTC", schedule.TimeZoneId);
+    }
+
+    [Fact]
     public async Task Vietnam_time_label_resolves_wall_clock_at_0019()
     {
         var created = await CreateOnceAsync(
@@ -67,7 +89,9 @@ public sealed class TriggerScheduleTimeResolutionTests
         Assert.False(TriggerScheduleTurnPreflight.IsScheduleRelatedTurn("yes", "en"));
     }
 
-    private static async Task<TriggerRegistration> CreateOnceAsync(string argumentsJson)
+    private static async Task<TriggerRegistration> CreateOnceAsync(
+        string argumentsJson,
+        string? profileTimeZoneId = "UTC")
     {
         var time = new FakeTimeProvider(Now);
         var store = new InMemoryTriggerStore();
@@ -81,7 +105,7 @@ public sealed class TriggerScheduleTimeResolutionTests
         var context = new TriggerCommandContext(
             owner,
             Guid.Parse("019944af-00d1-7000-8000-0000000000c1"),
-            "UTC",
+            profileTimeZoneId,
             "say hello to me after 1 minute",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,

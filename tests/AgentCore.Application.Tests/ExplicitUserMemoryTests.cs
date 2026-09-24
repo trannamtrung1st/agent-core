@@ -29,8 +29,8 @@ public sealed class ExplicitUserMemoryTests
 
     [Theory]
     [InlineData("Please remember that my project codename is Atlas.", "project codename", CodenameFact)]
-    [InlineData("remember P4A_LONG_FACT for later.", "Remembered item", "P4A_LONG_FACT")]
-    [InlineData("Please remember P4A_LONG_FACT for later.", "Remembered item", "P4A_LONG_FACT")]
+    [InlineData("remember P4A_LONG_FACT for later.", "P4A_LONG_FACT", "P4A_LONG_FACT")]
+    [InlineData("Please remember P4A_LONG_FACT for later.", "P4A_LONG_FACT", "P4A_LONG_FACT")]
     public void TryParse_recognizes_explicit_remember_phrases(string text, string subject, string content)
     {
         Assert.True(ExplicitUserMemoryRequests.TryParse(text, out var parsed));
@@ -46,6 +46,147 @@ public sealed class ExplicitUserMemoryTests
     public void TryParse_ignores_non_explicit_requests(string text)
     {
         Assert.False(ExplicitUserMemoryRequests.TryParse(text, out _));
+    }
+
+    [Fact]
+    public async Task Generic_remember_for_later_keeps_multiple_facts()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-explicit-memory-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        var clock = new FakeTimeProvider(Now);
+        var factory = new SqliteFactory(options);
+        var sessions = new SqliteMemoryStore(factory, clock);
+        var memoryStore = new SqliteStructuredMemoryStore(factory);
+        try
+        {
+            await sessions.EnsureCreatedAsync();
+            await sessions.SaveProfileAsync(Profile(), 0);
+            var definition = Enabled();
+            await sessions.SaveAsync(Snapshot(SessionOne, definition), 0);
+            var memories = Service(memoryStore, clock, 24);
+            var model = new ScriptedLanguageModel();
+
+            await using (var runtime = Runtime(
+                (await sessions.LoadAsync(SessionOne))!,
+                sessions,
+                memories,
+                model,
+                clock))
+            {
+                await runtime.AttachAsync();
+                Assert.True(await runtime.SubmitPersistedUserTextAsync(
+                    "remember ALPHA_SENTINEL for later.",
+                    Guid.Parse("019944af-0020-7000-8000-0000000000f1")));
+                await runtime.WaitUntilIdleAsync();
+                Assert.True(await runtime.SubmitPersistedUserTextAsync(
+                    "remember BETA_SENTINEL for later.",
+                    Guid.Parse("019944af-0020-7000-8000-0000000000f2")));
+                await runtime.WaitUntilIdleAsync();
+            }
+
+            var admission = Admission();
+            var owner = new TrustedMemoryOwner(SessionOne);
+            var sessionItems = await memories.SearchAsync(owner, new MemorySearchQuery(null, null), admission);
+            Assert.Contains(sessionItems, item => item.Content == "ALPHA_SENTINEL");
+            Assert.Contains(sessionItems, item => item.Content == "BETA_SENTINEL");
+
+            var identityOwner = new TrustedIdentityUserOwner(Instance, ProfileId);
+            var identityItems = await memories.SearchIdentityUserAsync(
+                identityOwner,
+                new MemorySearchQuery(null, null),
+                retrievalAllowed: true,
+                admission);
+            Assert.Contains(identityItems, item => item.Content == "ALPHA_SENTINEL");
+            Assert.Contains(identityItems, item => item.Content == "BETA_SENTINEL");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Corrected_semantic_subject_updates_identity_memory_in_new_session()
+    {
+        const string corrected = "Borealis";
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-explicit-memory-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        var clock = new FakeTimeProvider(Now);
+        var factory = new SqliteFactory(options);
+        var sessions = new SqliteMemoryStore(factory, clock);
+        var memoryStore = new SqliteStructuredMemoryStore(factory);
+        try
+        {
+            await sessions.EnsureCreatedAsync();
+            await sessions.SaveProfileAsync(Profile(), 0);
+            var definition = Enabled();
+            await sessions.SaveAsync(Snapshot(SessionOne, definition), 0);
+            await sessions.SaveAsync(Snapshot(SessionTwo, definition), 0);
+            var memories = Service(memoryStore, clock, 24);
+            var model = new ScriptedLanguageModel();
+
+            await using (var runtime = Runtime(
+                (await sessions.LoadAsync(SessionOne))!,
+                sessions,
+                memories,
+                model,
+                clock))
+            {
+                await runtime.AttachAsync();
+                Assert.True(await runtime.SubmitPersistedUserTextAsync(
+                    "Please remember that my project codename is Atlas.",
+                    Guid.Parse("019944af-0020-7000-8000-0000000000f3")));
+                await runtime.WaitUntilIdleAsync();
+                Assert.True(await runtime.SubmitPersistedUserTextAsync(
+                    "Please remember that my project codename is Borealis.",
+                    Guid.Parse("019944af-0020-7000-8000-0000000000f4")));
+                await runtime.WaitUntilIdleAsync();
+            }
+
+            var admission = Admission();
+            var identityOwner = new TrustedIdentityUserOwner(Instance, ProfileId);
+            var identityItems = await memories.SearchIdentityUserAsync(
+                identityOwner,
+                new MemorySearchQuery("codename", null),
+                retrievalAllowed: true,
+                admission);
+            Assert.DoesNotContain(identityItems, item => item.Content == CodenameFact);
+            Assert.Contains(identityItems, item => item.Content == corrected);
+
+            var recallModel = new RecordingLanguageModel(new ScriptedLanguageModel());
+            await using (var runtime = Runtime(
+                (await sessions.LoadAsync(SessionTwo))!,
+                sessions,
+                memories,
+                recallModel,
+                clock))
+            {
+                await runtime.AttachAsync();
+                Assert.True(await runtime.SubmitPersistedUserTextAsync(
+                    "What is my project codename?",
+                    Guid.Parse("019944af-0020-7000-8000-0000000000f5")));
+                await runtime.WaitUntilIdleAsync();
+            }
+
+            var request = recallModel.LastRequest;
+            Assert.NotNull(request);
+            var learned = request.Messages.Single(message =>
+                message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+            Assert.Contains(corrected, learned, StringComparison.Ordinal);
+            Assert.DoesNotContain(CodenameFact, learned, StringComparison.Ordinal);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
 
     [Fact]
@@ -79,6 +220,12 @@ public sealed class ExplicitUserMemoryTests
                     "Please remember that my project codename is Atlas.",
                     Guid.Parse("019944af-0020-7000-8000-0000000000e1")));
                 await runtime.WaitUntilIdleAsync();
+                var captureRequest = captureModel.LastRequest;
+                Assert.NotNull(captureRequest);
+                Assert.Contains(
+                    ExplicitUserMemoryCapturePrompt.Render(ExplicitUserMemoryCaptureOutcome.Stored)!,
+                    captureRequest.Messages.Select(message => message.Text),
+                    StringComparer.Ordinal);
             }
 
             var admission = Admission();
@@ -124,6 +271,39 @@ public sealed class ExplicitUserMemoryTests
                 File.Delete(path);
             }
         }
+    }
+
+    [Fact]
+    public async Task General_assistant_v9_enables_memory_without_mutating_v8()
+    {
+        var store = new AgentCore.Infrastructure.Definitions.FileAgentDefinitionStore(
+            FindAgents(),
+            SyntheticProviderAliases.Default);
+        var v8 = await store.GetAsync("general-assistant", 8);
+        var v9 = await store.GetAsync("general-assistant", 9);
+        Assert.NotNull(v8);
+        Assert.NotNull(v9);
+        Assert.False(v8!.MemoryPolicy?.SessionMemory ?? false);
+        Assert.True(v9!.MemoryPolicy?.SessionMemory);
+        Assert.True(v9.MemoryPolicy?.IdentityUserPromotion);
+        Assert.True(v9.MemoryPolicy?.IdentityUserRetrieval);
+    }
+
+    private static string FindAgents()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var agents = Path.Combine(dir.FullName, "agents");
+            if (Directory.Exists(agents))
+            {
+                return agents;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("agents/");
     }
 
     private static SessionRuntime Runtime(

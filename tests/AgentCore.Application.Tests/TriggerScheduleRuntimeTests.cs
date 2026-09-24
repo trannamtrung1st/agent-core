@@ -25,6 +25,7 @@ public sealed class TriggerScheduleRuntimeTests
     private static readonly Guid ProfileId = Guid.Parse("019944af-00b1-7000-8000-0000000000b1");
     private static readonly Guid OtherProfileId = Guid.Parse("019944af-00b1-7000-8000-0000000000b2");
     private static readonly DateTimeOffset Now = new(2026, 9, 23, 8, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset VietnamWallClockNow = new(2026, 9, 23, 17, 17, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task Natural_one_shot_can_be_listed_moved_and_cancelled_without_approval()
@@ -483,6 +484,44 @@ public sealed class TriggerScheduleRuntimeTests
     }
 
     [Fact]
+    public async Task Say_hello_after_one_minute_works_without_profile_timezone()
+    {
+        var harness = await StartAsync(time: new FakeTimeProvider(Now), applyProfileTimeZone: false);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+
+        Assert.True(await runtime.SubmitUserTextAsync("say hello to me after 1 minute"));
+        await runtime.WaitUntilIdleAsync();
+
+        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
+        Assert.Equal(Now.AddMinutes(1), schedule.AtUtc);
+    }
+
+    [Fact]
+    public async Task Vietnam_wall_clock_schedule_is_authorized_without_clarification()
+    {
+        var harness = await StartAsync(
+            time: new FakeTimeProvider(VietnamWallClockNow),
+            applyProfileTimeZone: false);
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+
+        Assert.True(await runtime.SubmitUserTextAsync(
+            "schedule a hello to me at 00:19AM viet nam time"));
+        await runtime.WaitUntilIdleAsync();
+
+        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
+        Assert.Equal("Asia/Ho_Chi_Minh", schedule.TimeZoneId);
+        Assert.Equal(new DateTimeOffset(2026, 9, 23, 17, 19, 0, TimeSpan.Zero), schedule.AtUtc);
+        Assert.Equal(new TimeOnly(0, 19), schedule.LocalTime);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry =>
+            entry.Role == ConversationRole.Assistant
+            && entry.Text.Contains("confirm", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Initiative_proposal_persists_after_I_approve()
     {
         var harness = await StartAsync(environmentScheduling: true);
@@ -523,7 +562,11 @@ public sealed class TriggerScheduleRuntimeTests
             Guid.Parse("019944af-00b1-7000-8000-0000000000d1"),
             Now);
 
-    private static async Task<Harness> StartAsync(ILanguageModel? model = null, bool environmentScheduling = false)
+    private static async Task<Harness> StartAsync(
+        ILanguageModel? model = null,
+        bool environmentScheduling = false,
+        TimeProvider? time = null,
+        bool applyProfileTimeZone = true)
     {
         var definition = await LoadAsync(8);
         if (environmentScheduling)
@@ -537,7 +580,7 @@ public sealed class TriggerScheduleRuntimeTests
                 }
             };
         }
-        var time = new FakeTimeProvider(Now);
+        time ??= new FakeTimeProvider(Now);
         var store = new InMemoryTriggerStore();
         var sessionIds = new DeterministicIdGenerator(
             Enumerable.Range(20, 32).Select(index => Guid.Parse($"019944af-00b3-7000-8000-{index:D12}")),
@@ -575,14 +618,16 @@ public sealed class TriggerScheduleRuntimeTests
             NullLogger<SessionRuntime>.Instance,
             tools: new SessionToolExecutor(triggerRegistrations: registrations));
         await runtime.AttachAsync();
-        await runtime.ApplyProfileAsync(new UserProfile(
-            ProfileId,
-            1,
-            new Dictionary<string, UserProfileValue>
-            {
-                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now)
-            },
-            Now));
+        var preferences = new Dictionary<string, UserProfileValue>
+        {
+            ["language"] = LocalUserProfile.ApplicationProfileValue("en", Now)
+        };
+        if (applyProfileTimeZone)
+        {
+            preferences["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now);
+        }
+
+        await runtime.ApplyProfileAsync(new UserProfile(ProfileId, 1, preferences, Now));
         return new Harness(runtime, store);
     }
 
