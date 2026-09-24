@@ -10,10 +10,14 @@ public sealed class DurableReminderExecutor(
     DurableWorkContextFactory contexts,
     IAgentBrain brain,
     IIdGenerator ids,
-    TimeProvider time)
+    TimeProvider time,
+    WorkCancellationRegistry cancellation)
 {
+    public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
+
     public async ValueTask<int> ExecuteDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default)
     {
+        await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         var due = await work.ListRunnableAsync(asOfUtc, limit, cancellationToken).ConfigureAwait(false);
         var ran = 0;
         foreach (var item in due)
@@ -32,6 +36,31 @@ public sealed class DurableReminderExecutor(
         return ran;
     }
 
+    public async ValueTask<WorkItem> RequestCancellationAsync(
+        WorkOwner owner,
+        Guid workItemId,
+        long expectedRevision,
+        string? knownEffectSummary,
+        DateTimeOffset requestedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var updated = await work.RequestCancellationAsync(
+            owner,
+            workItemId,
+            expectedRevision,
+            knownEffectSummary,
+            requestedAtUtc,
+            cancellationToken).ConfigureAwait(false);
+        cancellation.Signal(workItemId);
+        return updated;
+    }
+
+    internal static TimeSpan RetryDelay(int attemptCount)
+    {
+        var shift = Math.Clamp(attemptCount, 1, 4) - 1;
+        return TimeSpan.FromSeconds(1 << shift);
+    }
+
     private async ValueTask<bool> ExecuteAsync(WorkItem item, DateTimeOffset asOfUtc, CancellationToken cancellationToken)
     {
         var generation = ids.NewId();
@@ -46,71 +75,151 @@ public sealed class DurableReminderExecutor(
             return false;
         }
 
-        AgentContext context;
+        var linked = cancellation.Link(item.WorkItemId, cancellationToken);
         try
         {
-            context = await contexts.CreateAsync(claimed, cancellationToken).ConfigureAwait(false);
-        }
-        catch (AgentCoreException)
-        {
-            await FailAsync(claimed, generation, asOfUtc, "context-unavailable", "Pinned context is unavailable.", false, null, cancellationToken)
-                .ConfigureAwait(false);
-            return true;
-        }
+            var running = await work.RenewClaimAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                generation,
+                asOfUtc.AddMinutes(1),
+                asOfUtc,
+                linked.Token).ConfigureAwait(false);
+            running = await work.CheckpointAsync(
+                running.WorkItemId,
+                running.Revision,
+                generation,
+                new WorkCheckpoint(BeforeModelCheckpoint, 0, 0, 0),
+                null,
+                asOfUtc,
+                linked.Token).ConfigureAwait(false);
 
-        var decision = await brain.DecideAsync(context, ids.NewId(), cancellationToken).ConfigureAwait(false);
-        if (decision is not Speak speak || speak.Request.Tools is not null || context.LanguageModel is null)
-        {
-            await FailAsync(claimed, generation, asOfUtc, "reminder-invalid", "Scheduled reminder did not produce a tool-free request.", false, null, cancellationToken)
-                .ConfigureAwait(false);
-            return true;
-        }
-
-        var text = new StringBuilder();
-        await foreach (var update in context.LanguageModel.GenerateAsync(speak.Request, cancellationToken).ConfigureAwait(false))
-        {
-            switch (update)
+            AgentContext context;
+            try
             {
-                case ModelTextDelta delta:
-                    text.Append(delta.Text);
-                    break;
-                case ModelDisplayDelta display:
-                    text.Append(display.Text);
-                    break;
-                case ModelReasoningDelta:
-                    break;
-                case ModelCompleted:
-                    break;
-                case ModelToolCallEvent:
-                    await FailAsync(claimed, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, cancellationToken)
-                        .ConfigureAwait(false);
-                    return true;
-                case ModelFailed:
-                    await FailAsync(claimed, generation, asOfUtc, "model-unavailable", "The model did not complete the reminder.", true, asOfUtc.AddSeconds(1), cancellationToken)
-                        .ConfigureAwait(false);
-                    return true;
-                default:
-                    await FailAsync(claimed, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, cancellationToken)
-                        .ConfigureAwait(false);
-                    return true;
+                context = await contexts.CreateAsync(running, linked.Token).ConfigureAwait(false);
             }
-        }
+            catch (AgentCoreException)
+            {
+                await FailAsync(running, generation, asOfUtc, "context-unavailable", "Pinned context is unavailable.", false, null, CancellationToken.None)
+                    .ConfigureAwait(false);
+                return true;
+            }
 
-        var result = text.ToString().Trim();
-        if (result.Length == 0)
-        {
-            await FailAsync(claimed, generation, asOfUtc, "empty-result", "Scheduled reminder produced no result.", true, asOfUtc.AddSeconds(1), cancellationToken)
+            var decision = await brain.DecideAsync(context, ids.NewId(), linked.Token).ConfigureAwait(false);
+            if (decision is not Speak speak || speak.Request.Tools is not null || context.LanguageModel is null)
+            {
+                await FailAsync(running, generation, asOfUtc, "reminder-invalid", "Scheduled reminder did not produce a tool-free request.", false, null, CancellationToken.None)
+                    .ConfigureAwait(false);
+                return true;
+            }
+
+            var text = new StringBuilder();
+            await foreach (var update in context.LanguageModel.GenerateAsync(speak.Request, linked.Token).ConfigureAwait(false))
+            {
+                switch (update)
+                {
+                    case ModelTextDelta delta:
+                        text.Append(delta.Text);
+                        break;
+                    case ModelDisplayDelta display:
+                        text.Append(display.Text);
+                        break;
+                    case ModelReasoningDelta:
+                        break;
+                    case ModelCompleted:
+                        break;
+                    case ModelToolCallEvent:
+                        await FailAsync(running, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, CancellationToken.None)
+                            .ConfigureAwait(false);
+                        return true;
+                    case ModelFailed:
+                        await FailAsync(
+                            running,
+                            generation,
+                            asOfUtc,
+                            "model-unavailable",
+                            "The model did not complete the reminder.",
+                            true,
+                            asOfUtc.Add(RetryDelay(running.AttemptCount)),
+                            CancellationToken.None).ConfigureAwait(false);
+                        return true;
+                    default:
+                        await FailAsync(running, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, CancellationToken.None)
+                            .ConfigureAwait(false);
+                        return true;
+                }
+            }
+
+            if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
+            {
+                return true;
+            }
+
+            var result = text.ToString().Trim();
+            if (result.Length == 0)
+            {
+                await FailAsync(
+                    running,
+                    generation,
+                    asOfUtc,
+                    "empty-result",
+                    "Scheduled reminder produced no result.",
+                    true,
+                    asOfUtc.Add(RetryDelay(running.AttemptCount)),
+                    CancellationToken.None).ConfigureAwait(false);
+                return true;
+            }
+
+            await work.CompleteAsync(running.WorkItemId, running.Revision, generation, result, asOfUtc, CancellationToken.None)
                 .ConfigureAwait(false);
             return true;
         }
+        catch (OperationCanceledException)
+        {
+            if (!await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
+            {
+                throw;
+            }
 
-        await work.CompleteAsync(claimed.WorkItemId, claimed.Revision, generation, result, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            cancellation.Unlink(item.WorkItemId, linked);
+        }
+    }
+
+    private async ValueTask<bool> TryCommitCancellationAsync(Guid occurrenceId, Guid generation)
+    {
+        var current = await work.GetBySourceOccurrenceAsync(occurrenceId, CancellationToken.None).ConfigureAwait(false);
+        if (current is not { CancellationRequested: true })
+        {
+            return false;
+        }
+
+        if (current.Status == WorkItemStatus.Cancelled)
+        {
+            return true;
+        }
+
+        if (current.Status != WorkItemStatus.Running)
+        {
+            return true;
+        }
+
+        await work.CommitCancellationAsync(
+            current.WorkItemId,
+            current.Revision,
+            generation,
+            current.KnownEffectSummary,
+            time.GetUtcNow(),
+            CancellationToken.None).ConfigureAwait(false);
         return true;
     }
 
     private ValueTask<WorkItem> FailAsync(
-        WorkItem claimed,
+        WorkItem running,
         Guid generation,
         DateTimeOffset asOfUtc,
         string code,
@@ -119,8 +228,8 @@ public sealed class DurableReminderExecutor(
         DateTimeOffset? nextRetryAtUtc,
         CancellationToken cancellationToken) =>
         work.FailAsync(
-            claimed.WorkItemId,
-            claimed.Revision,
+            running.WorkItemId,
+            running.Revision,
             generation,
             code,
             summary,

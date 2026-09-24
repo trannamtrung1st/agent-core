@@ -26,6 +26,7 @@ public sealed class DurableReminderTests
     private static readonly Guid SourceSessionId = Guid.Parse("019944af-000b-7000-8000-0000000000c1");
     private static readonly DateTimeOffset Now = new(2026, 9, 24, 3, 15, 0, TimeSpan.Zero);
     private const string IdentitySentinel = "IDENTITY_USER_SENTINEL";
+    private const string ActionHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string UserSentinel = "USER_MEMORY_SENTINEL";
     private const string SessionSentinel = "SESSION_MEMORY_SENTINEL";
     private const string ProfileSentinel = "PROFILE_NAME_SENTINEL";
@@ -142,7 +143,231 @@ public sealed class DurableReminderTests
             Assert.Equal("Oven is ready.", completed.Result!.Text);
             Assert.DoesNotContain("REASONING_CHANNEL_SENTINEL", completed.Result.Text, StringComparison.Ordinal);
             Assert.Null(harness.Model.Request!.Tools);
-        }, new ReasoningThenTextModel());
+        }, () => new ReasoningThenTextModel());
+    }
+
+    [Fact]
+    public async Task Expired_claim_recovers_once_and_rejects_the_stale_worker()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            var created = await AcceptScheduledAsync(harness, scheduled, 3);
+            var gate = (GateModel)harness.Model.Inner;
+            using var shutdown = new CancellationTokenSource();
+            var run = harness.Executor.ExecuteDueAsync(Now, 10, shutdown.Token).AsTask();
+            await gate.Started.Task;
+            var running = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.NotNull(running);
+            Assert.Equal(WorkItemStatus.Running, running.Status);
+            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, running.Checkpoint!.PayloadJson);
+            var staleGeneration = running.Claim!.Generation;
+            var staleRevision = running.Revision;
+            shutdown.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(1, await harness.Work.RecoverExpiredClaimsAsync(later));
+            var recovered = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingToRetry, recovered!.Status);
+            Assert.Null(recovered.Claim);
+            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, recovered.Checkpoint!.PayloadJson);
+            var stale = await Assert.ThrowsAsync<AgentCoreException>(() => harness.Work.CompleteAsync(
+                created.WorkItemId,
+                staleRevision,
+                staleGeneration,
+                "late",
+                later).AsTask());
+            Assert.Equal("Conflict", stale.Code);
+
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
+            var reopened = await harness.Reopen();
+            var completed = await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Oven is ready.", completed.Result!.Text);
+            Assert.Equal(DurableReminderExecutor.BeforeModelCheckpoint, completed.Checkpoint!.PayloadJson);
+        }, () => new GateModel());
+    }
+
+    [Fact]
+    public async Task Cancellation_wins_over_completion_for_queued_running_and_waiting_work()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var triggerOwner = new TriggerOwner(InstanceId, ProfileId);
+            var workOwner = new WorkOwner(InstanceId, ProfileId);
+            var queuedOccurrence = await AwaitDurableAsync(harness.Triggers, triggerOwner, Now, "queued reminder");
+            var queued = await AcceptScheduledAsync(harness, queuedOccurrence, 3);
+            var cancelledQueued = await harness.Executor.RequestCancellationAsync(workOwner, queued.WorkItemId, queued.Revision, null, Now);
+            Assert.Equal(WorkItemStatus.Cancelled, cancelledQueued.Status);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now, 10));
+
+            var runningOccurrence = await AwaitDurableAsync(harness.Triggers, triggerOwner, Now, "running reminder");
+            var runningItem = await AcceptScheduledAsync(harness, runningOccurrence, 3);
+            var gate = (GateModel)harness.Model.Inner;
+            var run = harness.Executor.ExecuteDueAsync(Now, 10).AsTask();
+            await gate.Started.Task;
+            var running = await harness.Work.GetBySourceOccurrenceAsync(runningOccurrence.OccurrenceId);
+            var requested = await harness.Executor.RequestCancellationAsync(
+                workOwner,
+                runningItem.WorkItemId,
+                running!.Revision,
+                "Effect unknown.",
+                Now);
+            Assert.True(requested.CancellationRequested);
+            await run;
+            var cancelled = await harness.Work.GetBySourceOccurrenceAsync(runningOccurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Cancelled, cancelled!.Status);
+            Assert.Equal("Effect unknown.", cancelled.KnownEffectSummary);
+            Assert.Null(cancelled.Result);
+            var staleComplete = await Assert.ThrowsAsync<AgentCoreException>(() => harness.Work.CompleteAsync(
+                runningItem.WorkItemId,
+                cancelled.Revision,
+                running.Claim!.Generation,
+                "late",
+                Now.AddMinutes(1)).AsTask());
+            Assert.Equal("ValidationError", staleComplete.Code);
+
+            var waitingOccurrence = await AwaitDurableAsync(harness.Triggers, triggerOwner, Now, "approval reminder");
+            var waitingItem = await AcceptScheduledAsync(harness, waitingOccurrence, 3);
+            var generation = Guid.NewGuid();
+            var claimed = await harness.Work.TryClaimAsync(waitingItem.WorkItemId, generation, Now, Now.AddMinutes(1));
+            var waiting = await harness.Work.BeginApprovalAsync(
+                waitingItem.WorkItemId,
+                claimed!.Revision,
+                generation,
+                Guid.NewGuid(),
+                "demo.sensitive_action",
+                "{}",
+                ActionHash,
+                "Preview",
+                Now.AddMinutes(10),
+                Now);
+            var cancelledWaiting = await harness.Executor.RequestCancellationAsync(
+                workOwner,
+                waiting.WorkItemId,
+                waiting.Revision,
+                null,
+                Now);
+            Assert.Equal(WorkItemStatus.Cancelled, cancelledWaiting.Status);
+            Assert.Null(cancelledWaiting.Claim);
+
+            var reopened = await harness.Reopen();
+            Assert.Equal(WorkItemStatus.Cancelled, (await reopened.Work.GetBySourceOccurrenceAsync(queuedOccurrence.OccurrenceId))!.Status);
+            Assert.Equal(WorkItemStatus.Cancelled, (await reopened.Work.GetBySourceOccurrenceAsync(runningOccurrence.OccurrenceId))!.Status);
+            Assert.Equal(WorkItemStatus.Cancelled, (await reopened.Work.GetBySourceOccurrenceAsync(waitingOccurrence.OccurrenceId))!.Status);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now.AddMinutes(2), 10));
+        }, () => new GateModel());
+    }
+
+    [Fact]
+    public async Task Replay_safe_retry_is_bounded_and_terminal_work_is_not_picked_up()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            var created = await AcceptScheduledAsync(harness, scheduled, 2);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
+            Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now, 10));
+
+            var due = Now.Add(DurableReminderExecutor.RetryDelay(1));
+            harness.Time.SetUtcNow(due);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(due, 10));
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("model-unavailable", failed.Failure!.Code);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(due.AddHours(1), 10));
+
+            var reopened = await harness.Reopen();
+            var stored = await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, stored!.Status);
+            Assert.Equal(created.WorkItemId, stored.WorkItemId);
+        }, () => new FailingModel());
+    }
+
+    [Fact]
+    public async Task Expired_last_attempt_is_not_run_again()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            await AcceptScheduledAsync(harness, scheduled, 1);
+            var gate = (GateModel)harness.Model.Inner;
+            using var shutdown = new CancellationTokenSource();
+            var run = harness.Executor.ExecuteDueAsync(Now, 10, shutdown.Token).AsTask();
+            await gate.Started.Task;
+            shutdown.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(later, 10));
+            Assert.Equal(1, harness.Model.Calls);
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("attempts-exhausted", failed.Failure!.Code);
+            var reopened = await harness.Reopen();
+            Assert.Equal("attempts-exhausted", (await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId))!.Failure!.Code);
+        }, () => new GateModel());
+    }
+
+    [Fact]
+    public async Task Expired_inflight_effect_is_not_run_again()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            var created = await AcceptScheduledAsync(harness, scheduled, 3);
+            var generation = Guid.NewGuid();
+            var claimed = await harness.Work.TryClaimAsync(created.WorkItemId, generation, Now, Now.AddMinutes(1));
+            var prepared = await harness.Work.MarkSideEffectAsync(
+                created.WorkItemId,
+                claimed!.Revision,
+                generation,
+                WorkSideEffectDisposition.Prepared,
+                ActionHash,
+                Now);
+            await harness.Work.MarkSideEffectAsync(
+                created.WorkItemId,
+                prepared.Revision,
+                generation,
+                WorkSideEffectDisposition.InFlight,
+                ActionHash,
+                Now);
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(later, 10));
+            Assert.Equal(0, ((FailingModel)harness.Model.Inner).Calls);
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("side-effect-indeterminate", failed.Failure!.Code);
+            var reopened = await harness.Reopen();
+            Assert.Equal("side-effect-indeterminate", (await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId))!.Failure!.Code);
+        }, () => new FailingModel());
+    }
+
+    private static async Task<WorkItem> AcceptScheduledAsync(Harness harness, TriggerOccurrence occurrence, int maxAttempts)
+    {
+        var selection = SessionModelBinder.PinDefault(harness.Catalog, harness.Definition);
+        var accepted = await harness.Handoff.AcceptAsync(
+            occurrence.OccurrenceId,
+            WorkItem.Create(
+                Guid.NewGuid(),
+                new WorkOwner(InstanceId, ProfileId),
+                Provenance(occurrence.OccurrenceId, WorkSourceKind.Schedule, occurrence.EvidenceJson, Now),
+                Pin(selection),
+                maxAttempts,
+                Now),
+            Now);
+        return accepted.Item;
     }
 
     private static WorkProvenance Provenance(
@@ -202,7 +427,7 @@ public sealed class DurableReminderTests
     private static Task ForEachAsync(Func<Harness, Task> exercise) =>
         ForEachAsync(exercise, null);
 
-    private static async Task ForEachAsync(Func<Harness, Task> exercise, ILanguageModel? model)
+    private static async Task ForEachAsync(Func<Harness, Task> exercise, Func<ILanguageModel>? modelFactory)
     {
         var definition = await LoadDefinitionAsync();
         var state = new InMemoryDurableState();
@@ -212,7 +437,7 @@ public sealed class DurableReminderTests
             new InMemoryWorkItemStore(state),
             new InMemoryDurableWorkHandoff(state),
             static (triggers, work, handoff) => Task.FromResult(new StoreSet(triggers, work, handoff)),
-            model));
+            modelFactory));
 
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-reminder-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>()
@@ -232,7 +457,7 @@ public sealed class DurableReminderTests
                     new SqliteTriggerStore(contexts),
                     new SqliteWorkItemStore(contexts),
                     new SqliteDurableWorkHandoff(contexts))),
-                model));
+                modelFactory));
         }
         finally
         {
@@ -248,7 +473,7 @@ public sealed class DurableReminderTests
         IWorkItemStore work,
         IDurableWorkHandoff handoff,
         Func<ITriggerStore, IWorkItemStore, IDurableWorkHandoff, Task<StoreSet>> reopen,
-        ILanguageModel? model)
+        Func<ILanguageModel>? modelFactory)
     {
         var catalog = new ConfigurationModelCatalog(
             "scripted-alpha",
@@ -285,7 +510,7 @@ public sealed class DurableReminderTests
             false));
         var definitions = new SingleDefinitionStore(definition);
         var memories = new OwnerMemoryDouble(Now);
-        var recording = new RecordingModel(model ?? new ScriptedLanguageModel(["Oven is ready."]));
+        var recording = new RecordingModel(modelFactory?.Invoke() ?? new ScriptedLanguageModel(["Oven is ready."]));
         var time = new FakeTimeProvider(Now);
         var factory = new DurableWorkContextFactory(
             instances,
@@ -300,8 +525,9 @@ public sealed class DurableReminderTests
             factory,
             new DefaultAgentBrain(new PromptContextBuilder()),
             new GuidGenerator(),
-            time);
-        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, () => reopen(triggers, work, handoff));
+            time,
+            new WorkCancellationRegistry());
+        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, time, () => reopen(triggers, work, handoff));
     }
 
     private static async Task<AgentDefinition> LoadDefinitionAsync()
@@ -338,6 +564,7 @@ public sealed class DurableReminderTests
         InMemoryMemoryStore sessions,
         IModelCatalog catalog,
         AgentDefinition definition,
+        FakeTimeProvider time,
         Func<Task<StoreSet>> reopen)
     {
         public ITriggerStore Triggers { get; } = triggers;
@@ -350,6 +577,7 @@ public sealed class DurableReminderTests
         public InMemoryMemoryStore Sessions { get; } = sessions;
         public IModelCatalog Catalog { get; } = catalog;
         public AgentDefinition Definition { get; } = definition;
+        public FakeTimeProvider Time { get; } = time;
         public Func<Task<StoreSet>> Reopen { get; } = reopen;
     }
 
@@ -389,11 +617,54 @@ public sealed class DurableReminderTests
         }
     }
 
-    private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel
+    private sealed class GateModel : ILanguageModel
+    {
+        private int calls;
+
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: false);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var call = Interlocked.Increment(ref calls);
+            if (call == 1)
+            {
+                Started.TrySetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            }
+
+            yield return new ModelTextDelta("Oven is ready.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class FailingModel : ILanguageModel
     {
         public int Calls { get; private set; }
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: false);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "The model did not complete."));
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel
+    {
+        public ILanguageModel Inner { get; } = inner;
+
+        public int Calls { get; private set; }
         public ModelRequest? Request { get; private set; }
-        public ModelCapabilities Capabilities => inner.Capabilities;
+        public ModelCapabilities Capabilities => Inner.Capabilities;
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
             ModelRequest request,
@@ -401,7 +672,7 @@ public sealed class DurableReminderTests
         {
             Calls++;
             Request = request;
-            await foreach (var update in inner.GenerateAsync(request, cancellationToken))
+            await foreach (var update in Inner.GenerateAsync(request, cancellationToken))
             {
                 yield return update;
             }

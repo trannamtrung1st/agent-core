@@ -83,6 +83,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<PromptContextBuilder>(),
                 provider.GetRequiredService<IInitiativeEvaluator>()));
         services.TryAddSingleton<DurableWorkContextFactory>();
+        services.TryAddSingleton<WorkCancellationRegistry>();
         services.TryAddSingleton<DurableReminderExecutor>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
