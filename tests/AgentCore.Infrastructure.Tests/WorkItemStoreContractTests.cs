@@ -246,6 +246,73 @@ public sealed class WorkItemStoreContractTests
     }
 
     [Fact]
+    public async Task Approval_resume_claims_the_same_attempt_at_the_budget_limit()
+    {
+        await ForEachStore(async store =>
+        {
+            await AssertApprovalResumeAsync(store, 1, 0, WorkApprovalDecision.Approved, 40);
+            await AssertApprovalResumeAsync(store, 1, 0, WorkApprovalDecision.Rejected, 50);
+            await AssertApprovalResumeAsync(store, 1, 0, WorkApprovalDecision.Expired, 60);
+            await AssertApprovalResumeAsync(store, 3, 2, WorkApprovalDecision.Approved, 70);
+            await AssertApprovalResumeAsync(store, 3, 2, WorkApprovalDecision.Rejected, 80);
+            await AssertApprovalResumeAsync(store, 3, 2, WorkApprovalDecision.Expired, 90);
+        });
+    }
+
+    [Fact]
+    public async Task Side_effect_dispatch_follows_the_approved_action()
+    {
+        await ForEachStore(async store =>
+        {
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var substituted = await store.CreateAsync(NewItem(owner, Id(100), Id(101), Now));
+            var substitutedGeneration = Id(102);
+            var substitutedClaim = await store.TryClaimAsync(substituted.Item.WorkItemId, substitutedGeneration, Now.AddSeconds(1), Now.AddMinutes(1));
+            Assert.NotNull(substitutedClaim);
+            var prepared = await store.MarkSideEffectAsync(
+                substitutedClaim.WorkItemId,
+                substitutedClaim.Revision,
+                substitutedGeneration,
+                WorkSideEffectDisposition.Prepared,
+                ActionHash,
+                Now.AddSeconds(2));
+            var swapped = await Assert.ThrowsAsync<AgentCoreException>(() => store.MarkSideEffectAsync(
+                prepared.WorkItemId,
+                prepared.Revision,
+                substitutedGeneration,
+                WorkSideEffectDisposition.InFlight,
+                OtherHash,
+                Now.AddSeconds(3)).AsTask());
+            Assert.Equal("Conflict", swapped.Code);
+            var unchanged = await store.GetAsync(owner, prepared.WorkItemId);
+            Assert.Equal(WorkSideEffectDisposition.Prepared, unchanged!.SideEffect.Disposition);
+            Assert.Equal(ActionHash, unchanged.SideEffect.ActionHash);
+
+            var rejected = await RejectedDispatchItemAsync(store, owner, 110, WorkApprovalDecision.Rejected);
+            var rejectedDispatch = await Assert.ThrowsAsync<AgentCoreException>(() => store.MarkSideEffectAsync(
+                rejected.WorkItemId,
+                rejected.Revision,
+                rejected.Claim!.Generation,
+                WorkSideEffectDisposition.InFlight,
+                ActionHash,
+                rejected.UpdatedAtUtc.AddSeconds(1)).AsTask());
+            Assert.Equal("Conflict", rejectedDispatch.Code);
+            Assert.Equal(WorkSideEffectDisposition.None, (await store.GetAsync(owner, rejected.WorkItemId))!.SideEffect.Disposition);
+
+            var expired = await RejectedDispatchItemAsync(store, owner, 120, WorkApprovalDecision.Expired);
+            var expiredDispatch = await Assert.ThrowsAsync<AgentCoreException>(() => store.MarkSideEffectAsync(
+                expired.WorkItemId,
+                expired.Revision,
+                expired.Claim!.Generation,
+                WorkSideEffectDisposition.Succeeded,
+                ActionHash,
+                expired.UpdatedAtUtc.AddSeconds(1)).AsTask());
+            Assert.Equal("Conflict", expiredDispatch.Code);
+            Assert.Equal(WorkSideEffectDisposition.None, (await store.GetAsync(owner, expired.WorkItemId))!.SideEffect.Disposition);
+        });
+    }
+
+    [Fact]
     public async Task Unsafe_side_effect_recovery_does_not_requeue()
     {
         await ForEachStore(async store =>
@@ -373,6 +440,119 @@ public sealed class WorkItemStoreContractTests
         {
             Release(path);
         }
+    }
+
+    private static async Task AssertApprovalResumeAsync(
+        IWorkItemStore store,
+        int maxAttempts,
+        int retriesBeforeFinalAttempt,
+        WorkApprovalDecision decision,
+        int idBase)
+    {
+        var owner = new WorkOwner(InstanceA, ProfileA);
+        var createdAt = Now.AddMinutes(idBase);
+        var created = await store.CreateAsync(NewItem(owner, Id(idBase), Id(idBase + 1), createdAt, maxAttempts));
+        var current = created.Item;
+        for (var retry = 0; retry < retriesBeforeFinalAttempt; retry++)
+        {
+            var generation = Id(idBase + 10 + retry);
+            var claimedAt = createdAt.AddSeconds(retry + 1);
+            var claimed = await store.TryClaimAsync(current.WorkItemId, generation, claimedAt, claimedAt.AddMinutes(1));
+            Assert.NotNull(claimed);
+            current = await store.FailAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                generation,
+                "model-unavailable",
+                "Model timed out.",
+                true,
+                claimedAt.AddMilliseconds(100),
+                claimedAt.AddMilliseconds(200));
+            Assert.Equal(WorkItemStatus.WaitingToRetry, current.Status);
+        }
+
+        var finalGeneration = Id(idBase + 30);
+        var finalAt = createdAt.AddSeconds(retriesBeforeFinalAttempt + 1);
+        var finalClaim = await store.TryClaimAsync(current.WorkItemId, finalGeneration, finalAt, finalAt.AddMinutes(1));
+        Assert.NotNull(finalClaim);
+        Assert.Equal(maxAttempts, finalClaim.AttemptCount);
+        var waiting = await store.BeginApprovalAsync(
+            finalClaim.WorkItemId,
+            finalClaim.Revision,
+            finalGeneration,
+            Id(idBase + 31),
+            "demo.sensitive_action",
+            "{}",
+            ActionHash,
+            "Preview",
+            finalAt.AddMinutes(10),
+            finalAt.AddMilliseconds(100));
+        var decidedAt = decision == WorkApprovalDecision.Expired ? finalAt.AddMinutes(10) : finalAt.AddMilliseconds(200);
+        var decided = decision == WorkApprovalDecision.Expired
+            ? await store.ExpireApprovalAsync(waiting.WorkItemId, waiting.Revision, decidedAt)
+            : await store.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                ActionHash,
+                decision,
+                decidedAt);
+        Assert.Equal(WorkItemStatus.Queued, decided.Status);
+        Assert.Contains(decided.WorkItemId, (await store.ListRunnableAsync(decidedAt, 20)).Select(item => item.WorkItemId));
+        var resumed = await store.TryClaimAsync(decided.WorkItemId, Id(idBase + 32), decidedAt, decidedAt.AddMinutes(1));
+        Assert.NotNull(resumed);
+        Assert.Equal(WorkItemStatus.Running, resumed.Status);
+        Assert.Equal(maxAttempts, resumed.AttemptCount);
+        Assert.DoesNotContain(resumed.WorkItemId, (await store.ListRunnableAsync(decidedAt, 20)).Select(item => item.WorkItemId));
+    }
+
+    private static async Task<WorkItem> RejectedDispatchItemAsync(
+        IWorkItemStore store,
+        WorkOwner owner,
+        int idBase,
+        WorkApprovalDecision decision)
+    {
+        var createdAt = Now.AddHours(1).AddMinutes(idBase);
+        var created = await store.CreateAsync(NewItem(owner, Id(idBase), Id(idBase + 1), createdAt));
+        var generation = Id(idBase + 2);
+        var claimed = await store.TryClaimAsync(created.Item.WorkItemId, generation, createdAt.AddSeconds(1), createdAt.AddMinutes(1));
+        Assert.NotNull(claimed);
+        var prepared = await store.MarkSideEffectAsync(
+            claimed.WorkItemId,
+            claimed.Revision,
+            generation,
+            WorkSideEffectDisposition.Prepared,
+            ActionHash,
+            createdAt.AddSeconds(2));
+        var waiting = await store.BeginApprovalAsync(
+            prepared.WorkItemId,
+            prepared.Revision,
+            generation,
+            Id(idBase + 3),
+            "demo.sensitive_action",
+            "{}",
+            ActionHash,
+            "Preview",
+            createdAt.AddMinutes(10),
+            createdAt.AddSeconds(3));
+        var decidedAt = decision == WorkApprovalDecision.Expired ? createdAt.AddMinutes(10) : createdAt.AddSeconds(4);
+        var decided = decision == WorkApprovalDecision.Expired
+            ? await store.ExpireApprovalAsync(waiting.WorkItemId, waiting.Revision, decidedAt)
+            : await store.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                ActionHash,
+                decision,
+                decidedAt);
+        Assert.Equal(WorkSideEffectDisposition.None, decided.SideEffect.Disposition);
+        var resumed = await store.TryClaimAsync(decided.WorkItemId, Id(idBase + 4), decidedAt, decidedAt.AddMinutes(1));
+        Assert.NotNull(resumed);
+        return resumed;
     }
 
     private static WorkItem NewItem(

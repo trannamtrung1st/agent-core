@@ -209,6 +209,96 @@ public sealed class WorkItemContractTests
     }
 
     [Fact]
+    public void Approval_resume_keeps_the_attempt_that_is_already_at_the_budget()
+    {
+        foreach (var decision in new[] { WorkApprovalDecision.Approved, WorkApprovalDecision.Rejected })
+        {
+            var waiting = NewItem(maxAttempts: 1, id: Guid.NewGuid(), sourceId: Guid.NewGuid())
+                .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+                .BeginApproval(2, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(1));
+            Assert.Equal(1, waiting.AttemptCount);
+            var decided = waiting.DecideApproval(ApprovalId, 3, 1, ActionHash, decision, Now.AddSeconds(2));
+            var resumed = decided.TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(2));
+            Assert.Equal(WorkItemStatus.Running, resumed.Status);
+            Assert.Equal(1, resumed.AttemptCount);
+            Assert.Equal(GenerationB, resumed.Claim!.Generation);
+        }
+
+        var expiredWait = NewItem(maxAttempts: 1, id: Guid.NewGuid(), sourceId: Guid.NewGuid())
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .BeginApproval(2, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(1));
+        var expired = expiredWait.ExpireApproval(3, Now.AddMinutes(10));
+        var resumedAfterExpiry = expired.TakeClaim(GenerationB, Now.AddMinutes(10), Now.AddMinutes(11));
+        Assert.Equal(WorkItemStatus.Running, resumedAfterExpiry.Status);
+        Assert.Equal(1, resumedAfterExpiry.AttemptCount);
+
+        var retry = NewItem(maxAttempts: 2, id: Guid.NewGuid(), sourceId: Guid.NewGuid())
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .Fail(2, GenerationA, "model-unavailable", "Model timed out.", true, Now.AddSeconds(1), Now.AddSeconds(2));
+        var finalAttempt = retry.TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(2));
+        Assert.Equal(2, finalAttempt.AttemptCount);
+        var finalWait = finalAttempt.BeginApproval(
+            finalAttempt.Revision,
+            GenerationB,
+            ApprovalId,
+            "demo.sensitive_action",
+            "{}",
+            ActionHash,
+            "Preview",
+            Now.AddMinutes(12),
+            Now.AddSeconds(3));
+        var finalDecision = finalWait.DecideApproval(ApprovalId, finalWait.Revision, 1, ActionHash, WorkApprovalDecision.Approved, Now.AddSeconds(4));
+        var resumedFinal = finalDecision.TakeClaim(GenerationA, Now.AddSeconds(4), Now.AddMinutes(3));
+        Assert.Equal(2, resumedFinal.AttemptCount);
+        Assert.Equal(WorkItemStatus.Running, resumedFinal.Status);
+    }
+
+    [Fact]
+    public void Side_effect_dispatch_requires_the_same_approved_action()
+    {
+        var prepared = NewItem()
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1));
+        var substituted = Assert.Throws<WorkItemTransitionException>(() =>
+            prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, OtherHash, Now.AddSeconds(2)));
+        Assert.Equal(WorkTransitionFailure.Rejected, substituted.Failure);
+        Assert.Equal(ActionHash, prepared.SideEffect.ActionHash);
+
+        var rejected = prepared
+            .BeginApproval(3, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(2))
+            .DecideApproval(ApprovalId, 4, 1, ActionHash, WorkApprovalDecision.Rejected, Now.AddSeconds(3));
+        Assert.Equal(WorkSideEffectDisposition.None, rejected.SideEffect.Disposition);
+        var rejectedRun = rejected.TakeClaim(GenerationB, Now.AddSeconds(3), Now.AddMinutes(2));
+        Assert.Equal(1, rejectedRun.AttemptCount);
+        var rejectedDispatch = Assert.Throws<WorkItemTransitionException>(() =>
+            rejectedRun.MarkSideEffect(rejectedRun.Revision, GenerationB, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(4)));
+        Assert.Equal(WorkTransitionFailure.Rejected, rejectedDispatch.Failure);
+
+        var replacementId = Guid.Parse("019944af-0008-7000-8000-0000000000f2");
+        var replaced = rejectedRun
+            .BeginApproval(rejectedRun.Revision, GenerationB, replacementId, "demo.sensitive_action", "{}", OtherHash, "Send the other note", Now.AddMinutes(11), Now.AddSeconds(4))
+            .DecideApproval(replacementId, rejectedRun.Revision + 1, 1, OtherHash, WorkApprovalDecision.Approved, Now.AddSeconds(5));
+        var replacedRun = replaced.TakeClaim(GenerationA, Now.AddSeconds(5), Now.AddMinutes(3));
+        var dispatched = replacedRun
+            .MarkSideEffect(replacedRun.Revision, GenerationA, WorkSideEffectDisposition.Prepared, OtherHash, Now.AddSeconds(6))
+            .MarkSideEffect(replacedRun.Revision + 1, GenerationA, WorkSideEffectDisposition.InFlight, OtherHash, Now.AddSeconds(7));
+        Assert.Equal(WorkSideEffectDisposition.InFlight, dispatched.SideEffect.Disposition);
+        Assert.Equal(OtherHash, dispatched.SideEffect.ActionHash);
+        Assert.Equal(1, dispatched.AttemptCount);
+
+        var expired = NewItem(id: Guid.Parse("019944af-0008-7000-8000-0000000000c4"), sourceId: Guid.Parse("019944af-0008-7000-8000-0000000000d4"))
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1))
+            .BeginApproval(3, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(2))
+            .ExpireApproval(4, Now.AddMinutes(10));
+        Assert.Equal(WorkSideEffectDisposition.None, expired.SideEffect.Disposition);
+        var expiredRun = expired.TakeClaim(GenerationB, Now.AddMinutes(10), Now.AddMinutes(11));
+        var expiredDispatch = Assert.Throws<WorkItemTransitionException>(() =>
+            expiredRun.MarkSideEffect(expiredRun.Revision, GenerationB, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddMinutes(10).AddSeconds(1)));
+        Assert.Equal(WorkTransitionFailure.Rejected, expiredDispatch.Failure);
+    }
+
+    [Fact]
     public void Safe_retry_stops_at_the_attempt_budget()
     {
         var claimed = NewItem(maxAttempts: 2).TakeClaim(GenerationA, Now, Now.AddMinutes(1));

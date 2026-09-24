@@ -272,8 +272,9 @@ public sealed class WorkItem
 
     public WorkItem TakeClaim(Guid generation, DateTimeOffset claimedAtUtc, DateTimeOffset leaseExpiresAtUtc)
     {
+        var resumeSameAttempt = IsApprovalResume;
         if (CancellationRequested
-            || AttemptCount >= MaxAttempts
+            || (!resumeSameAttempt && AttemptCount >= MaxAttempts)
             || Status is not (WorkItemStatus.Queued or WorkItemStatus.WaitingToRetry)
             || (Status == WorkItemStatus.WaitingToRetry && NextRetryAtUtc > claimedAtUtc))
         {
@@ -284,7 +285,7 @@ public sealed class WorkItem
         return Copy(
             WorkItemStatus.Running,
             Revision + 1,
-            AttemptCount + 1,
+            resumeSameAttempt ? AttemptCount : AttemptCount + 1,
             nextRetryAtUtc: null,
             claim,
             CancellationRequested,
@@ -666,7 +667,7 @@ public sealed class WorkItem
             Checkpoint,
             Result,
             Failure,
-            SideEffect,
+            SideEffectForDecision(decision, approval.ActionHash),
             approval.WithDecision(decision, decidedAtUtc, approval.Revision + 1),
             decidedAtUtc);
     }
@@ -702,7 +703,7 @@ public sealed class WorkItem
             Checkpoint,
             Result,
             Failure,
-            SideEffect,
+            SideEffectForDecision(WorkApprovalDecision.Expired, Approval.ActionHash),
             Approval.WithDecision(WorkApprovalDecision.Expired, expiredAtUtc, Approval.Revision + 1),
             expiredAtUtc);
     }
@@ -720,6 +721,17 @@ public sealed class WorkItem
         }
 
         RequireOperational(expectedRevision, generation);
+        if (SideEffect.ActionHash is not null
+            && !string.Equals(SideEffect.ActionHash, actionHash, StringComparison.Ordinal))
+        {
+            throw new WorkItemTransitionException(WorkTransitionFailure.Rejected, "Side-effect action does not match.");
+        }
+
+        if (disposition is WorkSideEffectDisposition.Prepared or WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Succeeded)
+        {
+            RequireApprovedDispatch(actionHash);
+        }
+
         if (!CanTransitionSideEffect(SideEffect.Disposition, disposition))
         {
             throw new WorkItemTransitionException(WorkTransitionFailure.Illegal, "Side-effect transition is not allowed.");
@@ -769,6 +781,9 @@ public sealed class WorkItem
         var approval = Approval is { Decision: WorkApprovalDecision.Pending }
             ? Approval.WithDecision(WorkApprovalDecision.Cancelled, cancelledAtUtc, Approval.Revision + 1)
             : Approval;
+        var sideEffect = approval != Approval
+            ? SideEffectForDecision(WorkApprovalDecision.Cancelled, Approval?.ActionHash)
+            : SideEffect;
         return Copy(
             WorkItemStatus.Cancelled,
             Revision + 1,
@@ -782,7 +797,7 @@ public sealed class WorkItem
             Checkpoint,
             Result,
             Failure,
-            SideEffect,
+            sideEffect,
             approval,
             cancelledAtUtc);
     }
@@ -855,6 +870,52 @@ public sealed class WorkItem
         }
 
         return Approval;
+    }
+
+    private bool IsApprovalResume =>
+        Status == WorkItemStatus.Queued
+        && Approval is
+        {
+            Decision: WorkApprovalDecision.Approved or WorkApprovalDecision.Rejected or WorkApprovalDecision.Expired
+        };
+
+    private WorkSideEffect SideEffectForDecision(WorkApprovalDecision decision, string? actionHash)
+    {
+        if (SideEffect.Disposition != WorkSideEffectDisposition.Prepared)
+        {
+            return SideEffect;
+        }
+
+        if (decision == WorkApprovalDecision.Approved
+            && string.Equals(SideEffect.ActionHash, actionHash, StringComparison.Ordinal))
+        {
+            return SideEffect;
+        }
+
+        if (decision == WorkApprovalDecision.Approved)
+        {
+            throw new WorkItemTransitionException(
+                WorkTransitionFailure.ApprovalMismatch,
+                "Prepared action does not match the approval.");
+        }
+
+        return WorkSideEffect.None;
+    }
+
+    private void RequireApprovedDispatch(string actionHash)
+    {
+        if (Approval is null)
+        {
+            return;
+        }
+
+        if (Approval.Decision != WorkApprovalDecision.Approved
+            || !string.Equals(Approval.ActionHash, actionHash, StringComparison.Ordinal))
+        {
+            throw new WorkItemTransitionException(
+                WorkTransitionFailure.Rejected,
+                "Side effect requires the approved action.");
+        }
     }
 
     private static bool CanTransitionSideEffect(WorkSideEffectDisposition from, WorkSideEffectDisposition to) =>
