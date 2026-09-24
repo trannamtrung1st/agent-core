@@ -414,10 +414,24 @@ public static class TriggerScheduleCommands
 
         if (hasSchedule)
         {
-            var (schedule, next) = current.Schedule is OneShotSchedule || HasOneShotFields(arguments)
-                ? ResolveOneShot(arguments, context, policy)
-                : (ResolveRecurring(arguments, context, policy), (DateTimeOffset?)null);
-            if (schedule is not OneShotSchedule)
+            TriggerSchedule schedule;
+            DateTimeOffset? next;
+            if (current.Schedule is FixedIntervalSchedule fixedCurrent && !IsExplicitCalendarKindChange(arguments))
+            {
+                (schedule, next) = ApplyFixedIntervalUpdate(fixedCurrent, arguments, context, policy);
+            }
+            else if (current.Schedule is OneShotSchedule || HasOneShotFields(arguments))
+            {
+                (schedule, next) = ResolveOneShot(arguments, context, policy);
+            }
+            else
+            {
+                schedule = ResolveRecurring(arguments, context, policy);
+                next = TriggerScheduleCalculator.InitialNext(schedule, context.UtcNow)
+                    ?? throw new ArgumentException("No future occurrence matches this schedule.");
+            }
+
+            if (schedule is not OneShotSchedule && next is null)
             {
                 next = TriggerScheduleCalculator.InitialNext(schedule, context.UtcNow)
                     ?? throw new ArgumentException("No future occurrence matches this schedule.");
@@ -874,9 +888,87 @@ public static class TriggerScheduleCommands
 
     private static bool HasScheduleFields(JsonElement arguments) =>
         HasOneShotFields(arguments)
-        || arguments.TryGetProperty("kind", out _)
+        || HasFixedIntervalScheduleFields(arguments)
+        || HasCalendarRecurringFields(arguments);
+
+    private static bool HasFixedIntervalScheduleFields(JsonElement arguments) =>
+        arguments.TryGetProperty("intervalSeconds", out _)
+        || arguments.TryGetProperty("endAtUtc", out _)
+        || IsFixedIntervalKind(arguments);
+
+    private static bool HasCalendarRecurringFields(JsonElement arguments) =>
+        arguments.TryGetProperty("kind", out _)
         || arguments.TryGetProperty("localTime", out _)
-        || arguments.TryGetProperty("weekdays", out _);
+        || arguments.TryGetProperty("weekdays", out _)
+        || arguments.TryGetProperty("interval", out _)
+        || arguments.TryGetProperty("startDate", out _)
+        || arguments.TryGetProperty("endDate", out _)
+        || arguments.TryGetProperty("maxOccurrences", out _);
+
+    private static bool IsFixedIntervalKind(JsonElement arguments) =>
+        TryString(arguments, "kind", out var kind)
+        && (kind.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("fixedInterval", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsExplicitCalendarKindChange(JsonElement arguments) =>
+        TryString(arguments, "kind", out var kind)
+        && !kind.Equals("fixed_interval", StringComparison.OrdinalIgnoreCase)
+        && !kind.Equals("fixedInterval", StringComparison.OrdinalIgnoreCase);
+
+    private static (TriggerSchedule Schedule, DateTimeOffset? Next) ApplyFixedIntervalUpdate(
+        FixedIntervalSchedule current,
+        JsonElement arguments,
+        TriggerCommandContext context,
+        TriggerPolicy policy)
+    {
+        if (!policy.AllowFixedInterval)
+        {
+            throw new TriggerScheduleCommandException(
+                "unsupported_recurrence",
+                "Fixed-interval recurrence is not enabled for this agent.");
+        }
+
+        var intervalSeconds = current.IntervalSeconds;
+        if (arguments.TryGetProperty("intervalSeconds", out var secondsElement)
+            && secondsElement.ValueKind == JsonValueKind.Number
+            && secondsElement.TryGetInt32(out var parsedSeconds))
+        {
+            intervalSeconds = parsedSeconds;
+        }
+        else
+        {
+            var fromText = ScheduleIntervalLanguage.TryParseIntervalSeconds(context.CurrentUserText);
+            if (fromText is int textSeconds)
+            {
+                intervalSeconds = textSeconds;
+            }
+        }
+
+        if (intervalSeconds < policy.MinFixedIntervalSeconds)
+        {
+            throw new TriggerScheduleCommandException(
+                "recurrence_below_minimum",
+                $"The minimum supported fixed interval is {policy.MinFixedIntervalSeconds} seconds.");
+        }
+
+        DateTimeOffset? endAt = current.EndAtUtc;
+        if (TryString(arguments, "endAtUtc", out var endText)
+            && DateTimeOffset.TryParse(endText, out var parsedEnd))
+        {
+            endAt = TriggerScheduleCalculator.Truncate(parsedEnd.ToUniversalTime());
+        }
+
+        int? maxOccurrences = current.MaxOccurrences;
+        if (arguments.TryGetProperty("maxOccurrences", out var capElement) && capElement.ValueKind != JsonValueKind.Null)
+        {
+            maxOccurrences = capElement.GetInt32();
+        }
+
+        var updated = new FixedIntervalSchedule(intervalSeconds, current.AnchorAtUtc, endAt, maxOccurrences);
+        var next = TriggerScheduleCalculator.InitialNext(updated, context.UtcNow)
+            ?? throw new ArgumentException("No future occurrence matches this schedule.");
+        return (updated, next);
+    }
 
     private static bool HasOneShotFields(JsonElement arguments) =>
         arguments.TryGetProperty("relativeDayOffset", out _)

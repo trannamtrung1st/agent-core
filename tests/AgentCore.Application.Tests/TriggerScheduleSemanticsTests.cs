@@ -44,7 +44,7 @@ public sealed class TriggerScheduleSemanticsTests
     [Fact]
     public async Task Recurring_below_minimum_returns_recurrence_below_minimum_with_draft()
     {
-        var definition = await LoadAsync(9);
+        var definition = await LoadAsync(10);
         var store = new InMemoryTriggerStore();
         var registrations = new TriggerRegistrationService(store, Ids(), new FakeTimeProvider(Now));
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
@@ -78,7 +78,7 @@ public sealed class TriggerScheduleSemanticsTests
     [Fact]
     public async Task Every_minute_correction_uses_draft_intent_and_creates_fixed_interval()
     {
-        var definition = await LoadAsync(9);
+        var definition = await LoadAsync(10);
         var store = new InMemoryTriggerStore();
         var registrations = new TriggerRegistrationService(store, Ids(), new FakeTimeProvider(Now));
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
@@ -127,6 +127,130 @@ public sealed class TriggerScheduleSemanticsTests
             scheduleDraft: draft);
         Assert.Equal(TriggerCommandAuthorizationDecision.Allow, decision);
     }
+
+    [Fact]
+    public async Task Fixed_interval_update_changes_interval_max_occurrences_and_cancels()
+    {
+        var definition = await LoadAsync(10);
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(), new FakeTimeProvider(Now));
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var createContext = AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create);
+        using var createArgs = JsonDocument.Parse(
+            """{"intent":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
+        var createdJson = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            createArgs.RootElement,
+            createContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", createdJson.Text, StringComparison.Ordinal);
+        using var createdDoc = JsonDocument.Parse(createdJson.Text);
+        var registrationId = createdDoc.RootElement.GetProperty("registrationId").GetString();
+        var revision = createdDoc.RootElement.GetProperty("revision").GetInt64();
+        var schedule = Assert.IsType<FixedIntervalSchedule>(
+            (await store.ListAsync(owner, null)).Single().Schedule);
+        Assert.Equal(60, schedule.IntervalSeconds);
+
+        var registration = (await store.ListAsync(owner, null)).Single();
+        var updateContext = AuthorizedContext(
+            owner,
+            "make that every 2 minutes",
+            TriggerCommandAction.Update,
+            ScheduleConversationContext.FromRegistration(registration, TriggerCommandAction.Create));
+        using var updateArgs = JsonDocument.Parse(
+            $$"""{"registrationId":"{{registrationId}}","expectedRevision":{{revision}},"intervalSeconds":120}""");
+        var updatedJson = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerUpdate,
+            updateArgs.RootElement,
+            updateContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", updatedJson.Text, StringComparison.Ordinal);
+        schedule = Assert.IsType<FixedIntervalSchedule>((await store.ListAsync(owner, null)).Single().Schedule);
+        Assert.Equal(120, schedule.IntervalSeconds);
+
+        using var updatedDoc = JsonDocument.Parse(updatedJson.Text);
+        revision = updatedDoc.RootElement.GetProperty("revision").GetInt64();
+        registration = (await store.ListAsync(owner, null)).Single();
+        var capContext = AuthorizedContext(
+            owner,
+            "stop after 10 occurrences",
+            TriggerCommandAction.Update,
+            ScheduleConversationContext.FromRegistration(registration, TriggerCommandAction.Update));
+        using var capArgs = JsonDocument.Parse(
+            $$"""{"registrationId":"{{registrationId}}","expectedRevision":{{revision}},"maxOccurrences":10}""");
+        var cappedJson = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerUpdate,
+            capArgs.RootElement,
+            capContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", cappedJson.Text, StringComparison.Ordinal);
+        schedule = Assert.IsType<FixedIntervalSchedule>((await store.ListAsync(owner, null)).Single().Schedule);
+        Assert.Equal(10, schedule.MaxOccurrences);
+
+        using var cappedDoc = JsonDocument.Parse(cappedJson.Text);
+        revision = cappedDoc.RootElement.GetProperty("revision").GetInt64();
+        registration = (await store.ListAsync(owner, null)).Single();
+        var cancelContext = AuthorizedContext(
+            owner,
+            "cancel that",
+            TriggerCommandAction.Cancel,
+            ScheduleConversationContext.FromRegistration(registration, TriggerCommandAction.Update));
+        using var cancelArgs = JsonDocument.Parse(
+            $$"""{"registrationId":"{{registrationId}}","expectedRevision":{{revision}}}""");
+        var cancelledJson = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerCancel,
+            cancelArgs.RootElement,
+            cancelContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", cancelledJson.Text, StringComparison.Ordinal);
+        Assert.Equal(TriggerRegistrationStatus.Cancelled, (await store.ListAsync(owner, null)).Single().Status);
+    }
+
+    [Fact]
+    public async Task General_assistant_v10_enables_fixed_interval_without_mutating_v9()
+    {
+        var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+        var v9 = await store.GetAsync("general-assistant", 9);
+        var v10 = await store.GetAsync("general-assistant", 10);
+        Assert.NotNull(v9);
+        Assert.NotNull(v10);
+        Assert.NotNull(v9!.TriggerPolicy);
+        Assert.NotNull(v10!.TriggerPolicy);
+        Assert.False(v9.TriggerPolicy.AllowFixedInterval);
+        Assert.True(v10.TriggerPolicy.AllowFixedInterval);
+        Assert.Equal(60, v10.TriggerPolicy.MinFixedIntervalSeconds);
+    }
+
+    private static TriggerCommandContext AuthorizedContext(
+        TriggerOwner owner,
+        string text,
+        TriggerCommandAction action,
+        ScheduleConversationContext? scheduleContext = null) =>
+        new(
+            owner,
+            Guid.NewGuid(),
+            "UTC",
+            text,
+            "en",
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            action,
+            false,
+            null,
+            Guid.NewGuid(),
+            Now,
+            scheduleContext);
 
     private static async Task<AgentDefinition> LoadAsync(int version)
     {

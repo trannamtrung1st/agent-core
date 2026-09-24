@@ -2863,10 +2863,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var authorizer = _tools.TriggerCommandAuthorizer;
         var language = _snapshot.Definition.ConversationPolicy.Language;
-        if (trigger.Kind == TriggerKind.UserTurn
-            && !TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(trigger.Text, language, _scheduleConversationContext))
+        if (trigger.Kind == TriggerKind.UserTurn)
         {
-            _scheduleDraftContext = null;
+            RefreshScheduleDraftForUserTurn(trigger.Text, language);
         }
         var confirming = TriggerAuthorization.IsConfirmationTurn(
             trigger.Text,

@@ -258,7 +258,7 @@ public sealed class ModelTriggerCommandAuthorizer(
         var request = new ModelRequest(
             Guid.Empty,
             [
-                new ModelMessage(ModelRole.System, BuildSystemPrompt(requestedAction, conversationLanguage, scheduleContext)),
+                new ModelMessage(ModelRole.System, BuildSystemPrompt(requestedAction, conversationLanguage, scheduleContext, scheduleDraft)),
                 new ModelMessage(ModelRole.User, text)
             ],
             MaxOutputTokens: 64,
@@ -279,7 +279,8 @@ public sealed class ModelTriggerCommandAuthorizer(
     private static string BuildSystemPrompt(
         TriggerCommandAction action,
         string? conversationLanguage,
-        ScheduleConversationContext? scheduleContext)
+        ScheduleConversationContext? scheduleContext,
+        ScheduleDraftContext? scheduleDraft = null)
     {
         var actionName = action switch
         {
@@ -299,6 +300,10 @@ public sealed class ModelTriggerCommandAuthorizer(
             ? string.Join('\n', scheduleContext.ToPromptLines())
             : "Trusted schedule referent: (none)";
 
+        var draft = scheduleDraft is { IsActive: true }
+            ? string.Join('\n', scheduleDraft.ToPromptLines())
+            : "Schedule draft (clarification only): (none)";
+
         const string jsonHint =
             "Reply with JSON only: {\"decision\":\"allow\"} or {\"decision\":\"deny\"} or {\"decision\":\"ambiguous\"}.";
         return $"""
@@ -306,6 +311,8 @@ public sealed class ModelTriggerCommandAuthorizer(
             The trusted schedule referent may only resolve references such as "another", "that", "it", or "same".
             It does not independently grant authority. The current user message must itself request or continue the action.
             {referent}
+            {draft}
+            The schedule draft may only resolve omitted schedule details from a prior failed attempt; it does not independently grant authority.
             {languageHint}
             {jsonHint}
             Use allow when the current message explicitly continues or requests the proposed action, including elliptical continuations when a referent exists.

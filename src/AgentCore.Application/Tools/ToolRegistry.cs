@@ -131,7 +131,7 @@ public static class ToolRegistry
             [ToolCatalog.TriggerUpdate] = Descriptor(
                 ToolCatalog.TriggerUpdate,
                 "Update a durable schedule owned by the current user. Requires authorization from the current user turn and expectedRevision. Scheduling does not approve any future tool. Do not send a property named revision.",
-                """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"},"intent":{"type":"string"},"kind":{"type":"string"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
+                """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"},"intent":{"type":"string"},"kind":{"type":"string"},"intervalSeconds":{"type":"integer"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"endAtUtc":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
                 ToolEffect.Write),
             [ToolCatalog.TriggerCancel] = Descriptor(
                 ToolCatalog.TriggerCancel,

@@ -23,7 +23,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(9, latest!.Version);
+        Assert.Equal(10, latest!.Version);
         Assert.NotNull(latest.TriggerPolicy);
         Assert.True(latest.TriggerPolicy!.Enabled);
         Assert.True(latest.TriggerPolicy.AllowIndefiniteRecurrence);

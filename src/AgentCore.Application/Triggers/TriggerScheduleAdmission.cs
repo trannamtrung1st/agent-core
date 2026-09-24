@@ -290,6 +290,11 @@ public static class TriggerScheduleAdmission
             return Finish(ScheduleAdmissionKind.Complete, registration, TriggerRegistrationStatus.Completed);
         }
 
+        if (registration.Schedule is FixedIntervalSchedule fixedInterval)
+        {
+            return DecideFixedInterval(registration, fixedInterval, storedNext, asOf);
+        }
+
         var anchorWeek = AnchorWeek(registration, storedNext);
         var latest = storedNext;
         DateTimeOffset? previous = null;
@@ -394,6 +399,49 @@ public static class TriggerScheduleAdmission
         bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
         bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
         return new Guid(bytes);
+    }
+
+    private static ScheduleAdmission DecideFixedInterval(
+        TriggerRegistration registration,
+        FixedIntervalSchedule schedule,
+        DateTimeOffset storedNext,
+        DateTimeOffset asOf)
+    {
+        var elapsedSeconds = (asOf - storedNext).TotalSeconds;
+        var missed = elapsedSeconds < schedule.IntervalSeconds
+            ? 0
+            : (long)Math.Floor(elapsedSeconds / schedule.IntervalSeconds);
+        var latest = storedNext.AddSeconds(missed * schedule.IntervalSeconds);
+        var skipped = missed > 0 ? (int)Math.Min(missed - 1, int.MaxValue) : 0;
+        DateTimeOffset? nextFuture = latest.AddSeconds(schedule.IntervalSeconds);
+        if (schedule.EndAtUtc is DateTimeOffset end && nextFuture > TriggerScheduleCalculator.Truncate(end))
+        {
+            nextFuture = null;
+        }
+
+        if (nextFuture is not null && IsAfterEnd(schedule, nextFuture.Value))
+        {
+            nextFuture = null;
+        }
+
+        var occurrenceCount = registration.OccurrenceCount + 1;
+        var status = TriggerRegistrationStatus.Active;
+        DateTimeOffset? next = nextFuture;
+        if (next is null || (OccurrenceCap(schedule) is int limit && occurrenceCount >= limit))
+        {
+            next = null;
+            status = TriggerRegistrationStatus.Completed;
+        }
+
+        return new ScheduleAdmission(
+            ScheduleAdmissionKind.Admit,
+            latest,
+            next,
+            skipped,
+            skipped > 0 ? storedNext : null,
+            skipped > 0 ? latest.AddSeconds(-schedule.IntervalSeconds) : null,
+            status,
+            occurrenceCount);
     }
 
     private static ScheduleAdmission Finish(

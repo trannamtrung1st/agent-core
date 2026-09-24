@@ -206,6 +206,24 @@ public sealed class TriggerScheduleCalculatorTests
         Assert.Throws<TriggerTimeZoneUnavailableException>(() => TriggerScheduleAdmission.Decide(registration, Created.AddHours(2)));
     }
 
+    [Fact]
+    public void Fixed_interval_coalesces_more_than_max_iterative_slots_in_one_admission()
+    {
+        const int intervalSeconds = 60;
+        const int missedSlots = 5001;
+        var schedule = new FixedIntervalSchedule(intervalSeconds, Created, null, null);
+        var storedNext = new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
+        var asOf = storedNext.AddSeconds(missedSlots * intervalSeconds);
+        var registration = Sample(schedule, storedNext, null);
+
+        var admission = TriggerScheduleAdmission.Decide(registration, asOf);
+        Assert.Equal(ScheduleAdmissionKind.Admit, admission.Kind);
+        Assert.Equal(storedNext.AddSeconds(missedSlots * intervalSeconds), admission.ScheduledAtUtc);
+        Assert.Equal(missedSlots - 1, admission.SkippedCount);
+        Assert.NotNull(admission.NextAtUtc);
+        Assert.True(admission.NextAtUtc > asOf);
+    }
+
     private static (DateOnly Before, DateOnly After) MondayPairWithOffsetChange(string timeZoneId)
     {
         for (var day = new DateOnly(2026, 1, 5); day < new DateOnly(2026, 12, 1); day = day.AddDays(1))

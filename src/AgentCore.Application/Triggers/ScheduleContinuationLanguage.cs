@@ -9,7 +9,10 @@ public static partial class ScheduleContinuationLanguage
 
     public static bool MatchesContinuationUpdate(string text, ScheduleConversationContext? context) =>
         context is { IsReferentAvailable: true }
-        && (ReferentUpdate().IsMatch(text) || HeuristicTriggerCommandAuthorizer.MatchesUpdate(text, null));
+        && (ReferentUpdate().IsMatch(text)
+            || ReferentMakeThat().IsMatch(text)
+            || ReferentStopAfter().IsMatch(text)
+            || HeuristicTriggerCommandAuthorizer.MatchesUpdate(text, null));
 
     public static bool MatchesContinuationCancel(string text, ScheduleConversationContext? context) =>
         context is { IsReferentAvailable: true }
@@ -38,4 +41,14 @@ public static partial class ScheduleContinuationLanguage
         @"\b(cancel|delete|remove|drop|clear|stop)\b.{0,20}\b(that|it|the one|this one)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ReferentCancel();
+
+    [GeneratedRegex(
+        @"\bmake\b.{0,15}\bthat\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ReferentMakeThat();
+
+    [GeneratedRegex(
+        @"\bstop\b.{0,20}\bafter\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ReferentStopAfter();
 }
