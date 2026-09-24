@@ -107,7 +107,7 @@ public sealed class DurableReminderExecutor(
                 asOfUtc.AddMinutes(1),
                 asOfUtc,
                 linked.Token).ConfigureAwait(false);
-            if (!DurableTurnCheckpoint.TryRead(running.Checkpoint, out _))
+            if (!DurableToolCallCheckpoint.TryRead(running.Checkpoint, out _))
             {
                 running = await work.CheckpointAsync(
                     running.WorkItemId,

@@ -61,6 +61,10 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         @"\b(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|schedule\b.{0,80}\b(at|for|in)\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b|\b(in|after)\s+\d+\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)\b.{0,40}\b(to me|me)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex RecurringIntervalImperative = new(
+        @"\bevery\s+(\d+\s+)?(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks)\b\s*(,)?\s*\b(update|check|run|write|overwrite|refresh|sync|set|save|send|post|fetch|ping|execute|perform|create|modify|edit|append|replace|delete|remove)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly Regex AgentDirectedCreateVi = new(
         @"(nhắc tôi|báo tôi|hẹn tôi|đặt lịch|lên lịch).{0,40}(phút|giờ|ngày|mai|thứ)|\d+\s*phút\s*nữa.{0,30}(chào|nhắc|báo)\s*tôi",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -179,6 +183,11 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         }
 
         if (ScheduleContinuationLanguage.MatchesContinuationCreate(text, scheduleContext))
+        {
+            return true;
+        }
+
+        if (RecurringIntervalImperative.IsMatch(text))
         {
             return true;
         }

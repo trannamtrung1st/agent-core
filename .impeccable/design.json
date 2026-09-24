@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-21T02:57:00.000Z",
+  "generatedAt": "2026-09-24T16:32:00.000Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -189,53 +189,58 @@
       "css": ".ds-session-row { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; background: transparent; color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: 400 14px/1.4 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-session-row:hover, .ds-session-row:focus-within { background: var(--ac-color-fill, rgba(255, 255, 255, 0.08)); } .ds-session-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 8px; padding: 0; border: 0; background: transparent; color: inherit; text-align: start; font: inherit; cursor: pointer; } .ds-session-open time { flex: 0 0 auto; font-size: 12px; color: var(--ac-color-text-secondary, rgba(255, 255, 255, 0.65)); } .ds-session-open:hover, .ds-session-open:focus-visible, .ds-overflow:hover, .ds-overflow:focus-visible { background: transparent; border: 0; outline: none; box-shadow: none; } .ds-overflow { width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }"
     },
     {
-      "name": "New chat",
-      "kind": "button",
-      "refersTo": "antd-control",
-      "description": "Text control aligned to the Agent Core left edge; fill hover, no divider rule.",
-      "html": "<button class=\"ds-new-chat\" type=\"button\"><span class=\"ds-plus\">+</span> New chat</button>",
-      "css": ".ds-new-chat { display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: auto; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ac-color-text, rgba(255, 255, 255, 0.88)); font: 500 14px/1.4 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; cursor: pointer; } .ds-plus { width: 16px; text-align: center; } .ds-new-chat:hover, .ds-new-chat:focus-visible { background: var(--ac-color-fill, rgba(255, 255, 255, 0.08)); border: 0; box-shadow: none; outline: none; }"
+      "name": "Operational drawer",
+      "kind": "card",
+      "refersTo": "operational-drawer-wide",
+      "description": "Shared Background Work and Schedules language: two-line title, open List row, semantic filled icon-and-text status, elevated 8px detail inset, readable zoned time, and trailing actions separated by row gap only. Wide is 400px; narrow is 320px with 40px action targets.",
+      "html": "<aside class=\"ds-operational-drawer\" aria-labelledby=\"ds-operational-title\"><header class=\"ds-operational-header\"><strong id=\"ds-operational-title\">Schedules</strong><span>Upcoming and past reminders</span></header><ul class=\"ds-operational-list\"><li class=\"ds-operational-row\"><div class=\"ds-operational-top\"><strong>Send the daily briefing</strong><span class=\"ds-operational-status\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>Active</span></div><div class=\"ds-operational-detail\"><span class=\"ds-operational-detail-label\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18\"/></svg>Schedule</span><p>Every weekday at 9:30 AM</p></div><div class=\"ds-operational-meta\"><span class=\"ds-operational-zone\">Asia/Bangkok</span><span>Next run <time datetime=\"2026-09-25T02:30:00Z\">Sep 25, 2026, 9:30 AM</time></span></div><div class=\"ds-operational-actions\"><button type=\"button\">Cancel schedule</button></div></li></ul></aside>",
+      "css": ".ds-operational-drawer { width: 400px; max-width: 100%; padding: 16px; background: var(--ac-color-container, #141414); color: var(--ac-color-text, rgba(255,255,255,.88)); font: 400 14px/1.57 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-operational-header { display: flex; flex-direction: column; padding-bottom: 12px; border-bottom: 1px solid var(--ac-color-border, #303030); } .ds-operational-header strong { font-weight: 600; line-height: 1.4; } .ds-operational-header span { color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); font-size: 12px; } .ds-operational-list { margin: 0; padding: 0; list-style: none; } .ds-operational-row { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 16px; border-bottom: 1px solid var(--ac-color-border, #303030); } .ds-operational-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-operational-top > strong { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; } .ds-operational-status, .ds-operational-zone { display: inline-flex; flex: 0 0 auto; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 12px; } .ds-operational-status { gap: 6px; background: #112a45; color: #69b1ff; font-weight: 500; } .ds-operational-status svg, .ds-operational-detail-label svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; } .ds-operational-detail { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--ac-color-border, #303030); border-radius: 8px; background: var(--ac-color-elevated, #1f1f1f); } .ds-operational-detail-label { display: inline-flex; align-items: center; gap: 8px; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); font-size: 12px; font-weight: 600; } .ds-operational-detail p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; } .ds-operational-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--ac-color-text-secondary, rgba(255,255,255,.65)); } .ds-operational-zone { border: 1px solid var(--ac-color-border, #303030); color: var(--ac-color-text, rgba(255,255,255,.88)); } .ds-operational-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; } .ds-operational-actions button { min-height: 32px; padding: 4px 12px; border: 1px solid #ff4d4f; border-radius: 6px; background: transparent; color: #ff7875; font: inherit; cursor: pointer; } .ds-operational-actions button:hover { color: #ff9c9c; border-color: #ff7875; } .ds-operational-actions button:focus-visible { outline: 2px solid var(--ac-color-primary, #1677ff); outline-offset: 2px; } @media (max-width: 400px) { .ds-operational-drawer { width: 320px; } .ds-operational-actions button { min-height: 40px; } }"
     }
   ],
   "narrative": {
     "northStar": "Ant Design operate UI",
-    "overview": "Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system; Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone.\n\nThe shipped appearance is Ant Design darkAlgorithm: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from :root custom properties; it does not invert a former light palette or invent a second token catalog.",
+    "overview": "Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system; Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone.\n\nThe shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from `:root` custom properties; it does not invert a former light palette or invent a second token catalog.",
     "keyCharacteristics": [
-      "Ant Design v6 imported directly in product components; app.css only sizes the shell, overflow, product layout, previews, and accessibility.",
-      "Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling gap. Text-control inner padding is {spacing.controlInner} (8px, Ant Design paddingXS, same as a session-row body).",
+      "Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.",
+      "Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).",
       "Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, and overflow.",
       "Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.",
-      "Assistant display Markdown stays primary for reading; persisted public speech text is a quieter Spoken inset first on the same turn when it differs (the TTS projection)."
+      "Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).",
+      "Background Work and Schedules share an operational drawer language: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed."
     ],
     "rules": [
-      { "name": "Role Surfaces Rule", "body": "Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.", "section": "colors" },
-      { "name": "One Face Rule", "body": "Do not self-host a display face or costume monospace except for code in Markdown.", "section": "typography" },
-      { "name": "Docs Win Rule", "body": "This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. /docs does.", "section": "layout" },
-      { "name": "Compact Rhythm Rule", "body": "Shells, docks, and sibling gap use compact/default/section (8/12/16px). Do not invent extra --ac-space-* steps or 2px CSS gaps.", "section": "layout" },
-      { "name": "Additive Inset Rule", "body": "A padded shell owns the outer inset. Nested text controls keep their own inner padding ({spacing.controlInner} = 8px, Ant Design paddingXS via theme.useToken(), same as .session-row-body). Align labels by giving equivalent children the same inner padding. Example: composer {spacing.compact} (8px) + field/button {spacing.controlInner} (8px) so Message and Model text share one edge, while hover fill still has 8px around the glyph. Apply the same stack to the Model Dropdown overlay (shell 8px + 8px on title, catalog rows, and reasoning footer). Icon-only 32×32 toolbar hits stay padding 0.", "section": "layout" },
-      { "name": "Flat-By-Default Rule", "body": "Surfaces are flat at rest. Do not add card shadows inside transcript turns.", "section": "elevation" }
+      { "name": "The Role Surfaces Rule", "body": "Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.", "section": "colors" },
+      { "name": "The One Face Rule", "body": "Do not self-host a display face or costume monospace except for code in Markdown.", "section": "typography" },
+      { "name": "The Docs Win Rule", "body": "This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.", "section": "layout" },
+      { "name": "The Compact Rhythm Rule", "body": "Shells, docks, and sibling `gap` use compact/default/section (8 / 12 / 16px). Do not invent extra `--ac-space-*` steps or 2px CSS gaps.", "section": "layout" },
+      { "name": "The Additive Inset Rule", "body": "A padded shell owns the outer inset. Nested text controls keep their own inner padding (`{spacing.controlInner}` = 8px, Ant Design `paddingXS` via `theme.useToken()`, same as `.session-row-body`). Align labels by giving equivalent children the same inner padding. Example: composer `{spacing.compact}` (8px) + field/button `{spacing.controlInner}` (8px) so Message and Model text share one edge, while hover fill still has 8px around the glyph. Apply the same stack to the Model Dropdown overlay (shell 8px + 8px on title, catalog rows, and reasoning footer). Icon-only 32×32 toolbar hits stay padding 0.", "section": "layout" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. Do not add card shadows inside transcript turns.", "section": "elevation" }
     ],
     "dos": [
-      "Do import antd in feature files; ConfigProvider uses darkAlgorithm. Keep Sider theme=\"light\" so chat surfaces stay black.",
-      "Do use compact/default/section (8/12/16px) for shells and sibling gap; use Ant Design paddingXS (8px, {spacing.controlInner}) via theme.useToken() for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.",
-      "Do put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.",
-      "Do show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.",
-      "Do keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.",
-      "Do compose Model/catalog rows with Ant Design Button type=\"text\" and Flex; keep app.css for shell chrome, overflow, and ring suppression only.",
-      "Do render Spoken only for assistant public speechText that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.",
-      "Do honor prefers-reduced-motion; keep labeled errors, visible focus, and testids connection and profile.",
-      "Do keep the labeled composer available while voice is live until /docs and tests change together.",
-      "Do keep ended history on the same reading column with a quiet ended note, not a disabled input."
+      "**Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme=\"light\"` so chat surfaces stay black.",
+      "**Do** use compact/default/section (8/12/16px) for shells and sibling `gap`; use Ant Design `paddingXS` (8px, `{spacing.controlInner}`) via `theme.useToken()` for text-control inner padding so it matches session-row inset; align Spoken and composer toolbar to that rhythm.",
+      "**Do** put Model in the composer when the composer is shown (Reasoning level inside the Model button when supported); keep Identity/Speech locale in the new-chat intro; keep Speech locale in the live header.",
+      "**Do** show enabled model capabilities as compact tooltip-backed icons in catalog rows; preserve the Default tag and selected-row check as separate signals.",
+      "**Do** keep queued drafts above the composer in a compact local work list, with truncation, bounded expansion, and trailing Steer/Remove actions.",
+      "**Do** compose Model/catalog rows with Ant Design `Button type=\"text\"` and `Flex`; keep `app.css` for shell chrome, overflow, and ring suppression only.",
+      "**Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.",
+      "**Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.",
+      "**Do** keep the labeled composer available while voice is live until `/docs` and tests change together.",
+      "**Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.",
+      "**Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing separated actions only where the row exposes actions.",
+      "**Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time."
     ],
     "donts": [
-      "Don't reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.",
-      "Don't add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.",
-      "Don't use Layout.Sider theme=\"dark\" (navy admin sider).",
-      "Don't treat this file as behavioral authority over /docs.",
-      "Don't use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.",
-      "Don't render queued drafts as transcript turns or move pending attachments into a separate dock.",
-      "Don't zero a text control's padding, use negative margin, or stack extra child padding to fake alignment with a sibling.",
-      "Don't show Spoken as another conversational turn or from internal generated tails."
+      "**Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.",
+      "**Don't** add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.",
+      "**Don't** use Layout.Sider `theme=\"dark\"` (navy admin sider).",
+      "**Don't** treat this file as behavioral authority over `/docs`.",
+      "**Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.",
+      "**Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.",
+      "**Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.",
+      "**Don't** show Spoken as another conversational turn or from internal generated tails.",
+      "**Don't** wrap every operational List row in a card or generalize drawer actions to rows that do not expose an operation.",
+      "**Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates."
     ]
   }
 }

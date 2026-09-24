@@ -96,7 +96,8 @@ describe("BackgroundWorkDrawer", () => {
 
   it("shows an empty list", async () => {
     renderDrawer(async () => []);
-    expect(await screen.findByText("No background work")).toBeInTheDocument();
+    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
+    expect(screen.getByText("Tasks outside this conversation")).toBeInTheDocument();
   });
 
   it("shows a load error", async () => {
@@ -173,12 +174,12 @@ describe("BackgroundWorkDrawer", () => {
 
   it("uses the wide and narrow drawer widths", async () => {
     const wide = renderDrawer(async () => [], { wide: true });
-    expect(await screen.findByText("No background work")).toBeInTheDocument();
+    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
     expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "400px" });
     wide.unmount();
 
     renderDrawer(async () => [], { wide: false });
-    expect(await screen.findByText("No background work")).toBeInTheDocument();
+    expect(await screen.findByText("No background work yet")).toBeInTheDocument();
     expect(document.querySelector(".ant-drawer-content-wrapper")).toHaveStyle({ width: "320px" });
   });
 

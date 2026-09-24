@@ -448,6 +448,131 @@ body,
   min-width: 0;
 }
 
+.background-work-subtitle,
+.schedule-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.background-work-loading,
+.schedule-loading {
+  padding-block: calc(var(--ac-space-section) * 2);
+}
+
+.background-work-list .ant-list-items,
+.schedule-list .ant-list-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.background-work-item.ant-list-item,
+.schedule-item.ant-list-item {
+  padding-block: var(--ac-space-section);
+}
+
+.background-work-item:first-child,
+.schedule-item:first-child {
+  padding-block-start: var(--ac-space-compact);
+}
+
+.background-work-item-content,
+.schedule-item-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.background-work-origin,
+.schedule-intent {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.background-work-status.ant-tag,
+.schedule-status.ant-tag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 0;
+  padding-inline: var(--ac-space-compact);
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.background-work-progress,
+.background-work-effect .ant-typography,
+.background-work-detail-body {
+  overflow-wrap: anywhere;
+}
+
+.background-work-effect {
+  color: var(--ac-color-text-tertiary);
+}
+
+.background-work-effect > .anticon {
+  flex: 0 0 auto;
+  margin-block-start: 4px;
+}
+
+.background-work-alert.ant-alert,
+.schedule-alert.ant-alert {
+  padding: var(--ac-space-compact) var(--ac-space-default);
+}
+
+.background-work-detail,
+.schedule-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-compact);
+  min-width: 0;
+  padding: var(--ac-space-default);
+  border: 1px solid var(--ac-color-border);
+  border-radius: 8px;
+  background: var(--ac-color-elevated);
+}
+
+.background-work-detail-heading,
+.schedule-detail-heading {
+  color: var(--ant-color-success);
+}
+
+.background-work-detail-label,
+.schedule-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.background-work-detail-body.ant-typography,
+.schedule-detail-body.ant-typography {
+  margin: 0;
+  color: var(--ac-color-text);
+  white-space: pre-wrap;
+}
+
+.background-work-empty.ant-empty,
+.schedule-empty.ant-empty {
+  margin-block: calc(var(--ac-space-section) * 2);
+}
+
+.schedule-detail-heading {
+  color: var(--ac-color-text-tertiary);
+}
+
+.schedule-timezone.ant-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 0;
+  padding-inline: var(--ac-space-compact);
+  border-radius: 12px;
+}
+
+.schedule-next {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .markdown-message {
   display: flex;
   flex-direction: column;
@@ -1149,6 +1274,11 @@ body,
 
   .pending-send-queue-toggle {
     min-height: 44px;
+  }
+
+  .background-work-actions .ant-btn,
+  .schedule-actions .ant-btn {
+    min-height: 40px;
   }
 }
 

@@ -32,7 +32,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         IIdGenerator ids,
         CancellationToken cancellationToken)
     {
-        var resumed = DurableTurnCheckpoint.TryRead(running.Checkpoint, out var savedMessages);
+        var resumed = DurableToolCallCheckpoint.TryRead(running.Checkpoint, out var savedMessages);
         var messages = resumed ? savedMessages!.ToList() : request.Messages.ToList();
         var steps = resumed ? running.Checkpoint!.StepCount : 0;
         var outputBytes = resumed ? running.Checkpoint!.OutputBytes : 0;
@@ -52,7 +52,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             remaining,
             Timeout.InfiniteTimeSpan);
         var admission = new ToolExecutionAdmission(Detached: true, triggerKind);
-        if (UnansweredCall(messages) is ModelToolCall pendingCall)
+        foreach (var pendingCall in DurableToolCallCheckpoint.PendingCalls(messages))
         {
             var pendingOutcome = await ExecuteCallAsync(pendingCall, countStep: false).ConfigureAwait(false);
             if (pendingOutcome is not null)
@@ -379,7 +379,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             checkpoint(
                 running,
                 new WorkCheckpoint(
-                    DurableTurnCheckpoint.Write(messages),
+                    DurableToolCallCheckpoint.Write(messages),
                     steps,
                     outputBytes,
                     (int)Math.Max(remaining.TotalMilliseconds, 0)),
@@ -413,16 +413,6 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             message.Role == ModelRole.Tool
             && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
 
-    private static ModelToolCall? UnansweredCall(IReadOnlyList<ModelMessage> messages)
-    {
-        if (messages.Count == 0 || messages[^1].Role != ModelRole.Assistant)
-        {
-            return null;
-        }
-
-        return messages[^1].ToolCalls?.FirstOrDefault();
-    }
-
     private static bool TryArguments(ModelToolCall call, out JsonElement args)
     {
         try
@@ -448,65 +438,4 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
 
         return remaining > int.MaxValue ? int.MaxValue : (int)remaining;
     }
-}
-
-internal static class DurableTurnCheckpoint
-{
-    private const string Phase = "model-turn";
-
-    public static string Write(IReadOnlyList<ModelMessage> messages) =>
-        JsonSerializer.Serialize(new Document(Phase, messages.Select(MessageDto.From).ToArray()));
-
-    public static bool TryRead(WorkCheckpoint? checkpoint, out IReadOnlyList<ModelMessage>? messages)
-    {
-        messages = null;
-        if (checkpoint is null || !checkpoint.PayloadJson.Contains(Phase, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        try
-        {
-            var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson);
-            if (document is null || !string.Equals(document.Phase, Phase, StringComparison.Ordinal) || document.Messages is null)
-            {
-                return false;
-            }
-
-            messages = document.Messages.Select(message => message.ToMessage()).ToArray();
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private sealed record Document(string Phase, MessageDto[] Messages);
-
-    private sealed record MessageDto(
-        string Role,
-        string Text,
-        string? ToolCallId,
-        string? Name,
-        ToolCallDto[]? ToolCalls)
-    {
-        public static MessageDto From(ModelMessage message) =>
-            new(
-                message.Role.ToString(),
-                message.Text,
-                message.ToolCallId,
-                message.Name,
-                message.ToolCalls?.Select(call => new ToolCallDto(call.Id, call.Name, call.ArgumentsJson)).ToArray());
-
-        public ModelMessage ToMessage() =>
-            new(
-                Enum.Parse<ModelRole>(Role),
-                Text,
-                ToolCallId: ToolCallId,
-                Name: Name,
-                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.ArgumentsJson)).ToArray());
-    }
-
-    private sealed record ToolCallDto(string Id, string Name, string ArgumentsJson);
 }

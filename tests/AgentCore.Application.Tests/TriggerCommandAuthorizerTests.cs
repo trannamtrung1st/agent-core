@@ -12,6 +12,10 @@ public sealed class TriggerCommandAuthorizerTests
     [InlineData("set a reminder tomorrow at 9", TriggerCommandAction.Create)]
     [InlineData("ping me in five minutes", TriggerCommandAction.Create)]
     [InlineData("every Friday remind me to submit the report", TriggerCommandAction.Create)]
+    [InlineData("every minute, update a file called now.txt with current time", TriggerCommandAction.Create)]
+    [InlineData("every minute update now.txt with the current time", TriggerCommandAction.Create)]
+    [InlineData("every 5 minutes check the oven", TriggerCommandAction.Create)]
+    [InlineData("every hour run the backup", TriggerCommandAction.Create)]
     [InlineData("1 phút nữa chào tôi", TriggerCommandAction.Create)]
     public async Task Allows_explicit_create_requests(string text, TriggerCommandAction action)
     {

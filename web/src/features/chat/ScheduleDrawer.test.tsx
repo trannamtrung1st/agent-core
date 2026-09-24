@@ -34,7 +34,8 @@ function renderDrawer(load: (sessionId: string) => Promise<SessionTrigger[]>, ca
 describe("ScheduleDrawer", () => {
   it("shows an empty list", async () => {
     renderDrawer(async () => []);
-    expect(await screen.findByText("No schedules")).toBeInTheDocument();
+    expect(await screen.findByText("No schedules yet")).toBeInTheDocument();
+    expect(screen.getByText("Upcoming and past reminders")).toBeInTheDocument();
   });
 
   it("shows intent, schedule, timezone, and status", async () => {
@@ -43,7 +44,8 @@ describe("ScheduleDrawer", () => {
     expect(screen.getByText(active.schedule)).toBeInTheDocument();
     expect(screen.getByText("UTC")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getByText("Next")).toBeInTheDocument();
+    expect(screen.getByText(/Next run/)).toBeInTheDocument();
+    expect(screen.queryByText(active.nextOccurrenceAt!)).not.toBeInTheDocument();
   });
 
   it("shows a load error", async () => {

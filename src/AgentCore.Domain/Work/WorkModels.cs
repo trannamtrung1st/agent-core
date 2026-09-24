@@ -330,13 +330,18 @@ public sealed class WorkSideEffect
             }
 
             WorkTime.RequireUtc(updatedAtUtc.Value, "Side effect");
+            actionHash = WorkText.RequireActionHash(actionHash);
             if (string.IsNullOrWhiteSpace(toolCallId))
             {
-                throw new ArgumentException("Side-effect tool call identity is required.");
+                if (disposition is not (WorkSideEffectDisposition.Prepared or WorkSideEffectDisposition.Indeterminate))
+                {
+                    throw new ArgumentException("Side-effect tool call identity is required.");
+                }
             }
-
-            toolCallId = toolCallId.Trim();
-            actionHash = WorkText.RequireActionHash(actionHash);
+            else
+            {
+                toolCallId = toolCallId.Trim();
+            }
         }
 
         Disposition = disposition;

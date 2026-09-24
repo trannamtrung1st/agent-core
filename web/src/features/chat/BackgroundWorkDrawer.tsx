@@ -1,15 +1,26 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Drawer, Flex, List, Popconfirm, Spin, Tag, Typography, theme } from "antd";
+import type { ReactNode } from "react";
+import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
+  ExclamationCircleOutlined,
+  InfoCircleOutlined,
+  LoadingOutlined,
+  RedoOutlined,
+  StopOutlined
+} from "@ant-design/icons";
+import { Alert, Button, Drawer, Empty, Flex, List, Popconfirm, Spin, Tag, Typography, theme } from "antd";
 import type { WorkItem, WorkItemResult } from "../../services/api";
 
-const statusLabel: Record<string, string> = {
-  queued: "Queued",
-  running: "Running",
-  needsApproval: "Needs approval",
-  retrying: "Retrying",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled"
+const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
+  queued: { label: "Queued", icon: <ClockCircleOutlined /> },
+  running: { label: "Running", color: "processing", icon: <LoadingOutlined /> },
+  needsApproval: { label: "Needs approval", color: "warning", icon: <ExclamationCircleOutlined /> },
+  retrying: { label: "Retrying", color: "gold", icon: <RedoOutlined /> },
+  completed: { label: "Completed", color: "success", icon: <CheckCircleOutlined /> },
+  failed: { label: "Failed", color: "error", icon: <CloseCircleOutlined /> },
+  cancelled: { label: "Cancelled", icon: <StopOutlined /> }
 };
 
 export function BackgroundWorkDrawer({
@@ -166,88 +177,168 @@ export function BackgroundWorkDrawer({
     }
   }
 
+  function renderItem(item: WorkItem) {
+    const status = statusPresentation[item.status] ?? {
+      label: item.status,
+      icon: <InfoCircleOutlined />
+    };
+    const busy = busyId === item.workItemId;
+
+    return (
+      <List.Item className="background-work-item">
+        <Flex vertical gap={token.paddingSM} className="background-work-item-content">
+          <Flex align="flex-start" justify="space-between" gap={token.paddingSM}>
+            <Typography.Text strong className="background-work-origin">
+              {item.origin}
+            </Typography.Text>
+            <Tag
+              variant="filled"
+              color={status.color}
+              icon={status.icon}
+              className="background-work-status"
+            >
+              {status.label}
+            </Tag>
+          </Flex>
+
+          {item.progress ? (
+            <Typography.Text type="secondary" className="background-work-progress">
+              {item.progress}
+            </Typography.Text>
+          ) : null}
+
+          {item.knownEffect ? (
+            <Flex align="flex-start" gap={token.paddingXS} className="background-work-effect">
+              <InfoCircleOutlined aria-hidden />
+              <Typography.Text type="secondary">{item.knownEffect}</Typography.Text>
+            </Flex>
+          ) : null}
+
+          {item.status === "failed" ? (
+            <Alert
+              type="error"
+              showIcon
+              title="Work failed"
+              description={item.failureSummary ?? "This work failed."}
+              className="background-work-alert"
+            />
+          ) : null}
+
+          {item.needsApproval && item.approvalPreview ? (
+            <div className="background-work-detail">
+              <Typography.Text type="secondary" className="background-work-detail-label">
+                Approval required
+              </Typography.Text>
+              <Typography.Paragraph className="background-work-detail-body">
+                {item.approvalPreview}
+              </Typography.Paragraph>
+            </div>
+          ) : null}
+
+          {results[item.workItemId] ? (
+            <div className="background-work-detail background-work-result">
+              <Flex align="center" gap={token.paddingXS} className="background-work-detail-heading">
+                <CheckCircleOutlined aria-hidden />
+                <Typography.Text type="secondary" className="background-work-detail-label">
+                  Result
+                </Typography.Text>
+              </Flex>
+              <Typography.Paragraph className="background-work-detail-body">
+                {results[item.workItemId]}
+              </Typography.Paragraph>
+            </div>
+          ) : null}
+
+          {item.needsApproval || item.cancellationAvailable ? (
+            <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="background-work-actions">
+              {item.needsApproval && item.approvalId && item.actionHash ? (
+                <>
+                  <Popconfirm
+                    title="Approve this action?"
+                    description="The action will continue immediately."
+                    okText="Approve action"
+                    cancelText="Keep waiting"
+                    okButtonProps={{ loading: busy }}
+                    onConfirm={() => confirmDecision(item, "approve")}
+                  >
+                    <Button type="primary" disabled={busy} aria-label={`Approve ${item.origin}`}>
+                      Approve
+                    </Button>
+                  </Popconfirm>
+                  <Popconfirm
+                    title="Reject this action?"
+                    description="The background work will continue without this action."
+                    okText="Reject action"
+                    cancelText="Keep waiting"
+                    okButtonProps={{ danger: true, loading: busy }}
+                    onConfirm={() => confirmDecision(item, "reject")}
+                  >
+                    <Button disabled={busy} aria-label={`Reject ${item.origin}`}>
+                      Reject
+                    </Button>
+                  </Popconfirm>
+                </>
+              ) : null}
+              {item.cancellationAvailable ? (
+                <Popconfirm
+                  title="Cancel this work?"
+                  description="Any external action that already completed cannot be undone."
+                  okText="Cancel work"
+                  cancelText="Keep"
+                  okButtonProps={{ danger: true, loading: busy }}
+                  onConfirm={() => confirmCancel(item)}
+                >
+                  <Button danger disabled={busy} aria-label={`Cancel ${item.origin}`}>
+                    Cancel
+                  </Button>
+                </Popconfirm>
+              ) : null}
+            </Flex>
+          ) : null}
+        </Flex>
+      </List.Item>
+    );
+  }
+
   return (
     <Drawer
-      title={<span id="background-work-drawer-title">Background work</span>}
+      title={
+        <Flex vertical gap={0}>
+          <Typography.Text strong id="background-work-drawer-title">
+            Background work
+          </Typography.Text>
+          <Typography.Text type="secondary" className="background-work-subtitle">
+            Tasks outside this conversation
+          </Typography.Text>
+        </Flex>
+      }
       aria-labelledby="background-work-drawer-title"
       placement="right"
       size={wide ? 400 : 320}
       open={open}
       onClose={onClose}
+      className="background-work-drawer"
     >
       <Flex vertical gap={token.paddingSM}>
         {error ? <Alert type="error" showIcon title={error} /> : null}
         {loading ? (
-          <Flex justify="center">
+          <Flex justify="center" className="background-work-loading">
             <Spin aria-label="Loading background work" />
           </Flex>
         ) : (
           <List
             dataSource={items}
-            locale={{ emptyText: "No background work" }}
-            renderItem={(item) => (
-              <List.Item>
-                <Flex vertical gap={token.paddingXS} style={{ minWidth: 0, width: "100%" }}>
-                  <Typography.Text style={{ overflowWrap: "anywhere" }}>{item.origin}</Typography.Text>
-                  <Tag>{statusLabel[item.status] ?? item.status}</Tag>
-                  {item.progress ? <Typography.Text type="secondary">{item.progress}</Typography.Text> : null}
-                  {item.knownEffect ? <Typography.Text type="secondary">{item.knownEffect}</Typography.Text> : null}
-                  {item.status === "failed" ? (
-                    <Typography.Text type="danger">{item.failureSummary ?? "This work failed."}</Typography.Text>
-                  ) : null}
-                  {item.needsApproval && item.approvalPreview ? (
-                    <Typography.Text style={{ overflowWrap: "anywhere" }}>{item.approvalPreview}</Typography.Text>
-                  ) : null}
-                  {results[item.workItemId] ? (
-                    <Flex vertical gap={token.paddingXS}>
-                      <Typography.Text type="secondary">Result</Typography.Text>
-                      <Typography.Text style={{ overflowWrap: "anywhere" }}>{results[item.workItemId]}</Typography.Text>
-                    </Flex>
-                  ) : null}
-                  <Flex gap={token.paddingXS} wrap="wrap">
-                    {item.needsApproval && item.approvalId && item.actionHash ? (
-                      <>
-                        <Popconfirm
-                          title="Approve this action?"
-                          okText="Approve action"
-                          cancelText="Keep waiting"
-                          okButtonProps={{ loading: busyId === item.workItemId }}
-                          onConfirm={() => confirmDecision(item, "approve")}
-                        >
-                          <Button type="primary" size="small" aria-label={`Approve ${item.origin}`}>
-                            Approve
-                          </Button>
-                        </Popconfirm>
-                        <Popconfirm
-                          title="Reject this action?"
-                          okText="Reject action"
-                          cancelText="Keep waiting"
-                          okButtonProps={{ danger: true, loading: busyId === item.workItemId }}
-                          onConfirm={() => confirmDecision(item, "reject")}
-                        >
-                          <Button size="small" aria-label={`Reject ${item.origin}`}>
-                            Reject
-                          </Button>
-                        </Popconfirm>
-                      </>
-                    ) : null}
-                    {item.cancellationAvailable ? (
-                      <Popconfirm
-                        title="Cancel this work?"
-                        okText="Cancel work"
-                        cancelText="Keep"
-                        okButtonProps={{ danger: true, loading: busyId === item.workItemId }}
-                        onConfirm={() => confirmCancel(item)}
-                      >
-                        <Button size="small" danger aria-label={`Cancel ${item.origin}`}>
-                          Cancel
-                        </Button>
-                      </Popconfirm>
-                    ) : null}
-                  </Flex>
-                </Flex>
-              </List.Item>
-            )}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="No background work yet"
+                  className="background-work-empty"
+                />
+              )
+            }}
+            renderItem={renderItem}
+            className="background-work-list"
           />
         )}
       </Flex>

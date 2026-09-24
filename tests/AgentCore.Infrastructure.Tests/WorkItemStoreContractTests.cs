@@ -1,6 +1,7 @@
 using System.Data;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Work;
 using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -316,6 +317,129 @@ public sealed class WorkItemStoreContractTests
             Assert.Equal("Conflict", expiredDispatch.Code);
             Assert.Equal(WorkSideEffectDisposition.None, (await store.GetAsync(owner, expired.WorkItemId))!.SideEffect.Disposition);
         });
+    }
+
+    [Fact]
+    public async Task Legacy_side_effect_rows_without_tool_call_id_survive_sqlite_reopen()
+    {
+        var path = TempDatabase();
+        var factory = Factory(path);
+        try
+        {
+            await new SqliteMemoryStore(factory, new FakeTimeProvider(Now)).EnsureCreatedAsync();
+            var store = new SqliteWorkItemStore(factory);
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var workItemId = Id(200);
+            var sourceId = Id(201);
+            var generation = Id(202);
+            var approvalId = Id(203);
+            var created = await store.CreateAsync(NewItem(owner, workItemId, sourceId, Now));
+            var claimed = await store.TryClaimAsync(created.Item.WorkItemId, generation, Now.AddSeconds(1), Now.AddMinutes(1));
+            Assert.NotNull(claimed);
+            var checkpoint = new WorkCheckpoint(
+                DurableToolCallCheckpoint.Write(
+                [
+                    new ModelMessage(
+                        ModelRole.Assistant,
+                        string.Empty,
+                        ToolCalls:
+                        [
+                            new ModelToolCall("h1", "http.request", """{"method":"POST","url":"https://example.com/items","body":"FIRST"}"""),
+                            new ModelToolCall("h2", "http.request", """{"method":"POST","url":"https://example.com/items/2","body":"SECOND"}""")
+                        ])
+                ]),
+                1,
+                32,
+                1000);
+            var checkpointed = await store.CheckpointAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                generation,
+                checkpoint,
+                "Waiting",
+                Now.AddSeconds(2));
+            var prepared = await store.MarkSideEffectAsync(
+                checkpointed.WorkItemId,
+                checkpointed.Revision,
+                generation,
+                WorkSideEffectDisposition.Prepared,
+                "h1",
+                ActionHash,
+                Now.AddSeconds(3));
+            var waiting = await store.BeginApprovalAsync(
+                prepared.WorkItemId,
+                prepared.Revision,
+                generation,
+                approvalId,
+                "http.request",
+                """{"body":"FIRST"}""",
+                ActionHash,
+                "POST https://example.com/items",
+                Now.AddMinutes(10),
+                Now.AddSeconds(4));
+
+            await using (var db = await factory.CreateDbContextAsync())
+            {
+                var connection = db.Database.GetDbConnection();
+                if (connection.State != ConnectionState.Open)
+                {
+                    await connection.OpenAsync();
+                }
+
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    UPDATE WorkItems
+                    SET SideEffectToolCallId = NULL,
+                        CheckpointJson = 'SECRET_CHECKPOINT'
+                    WHERE WorkItemId = $id;
+                    """;
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = "$id";
+                parameter.Value = workItemId.ToString("D");
+                command.Parameters.Add(parameter);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var legacyPending = await store.GetAsync(owner, waiting.WorkItemId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, legacyPending!.Status);
+            Assert.Equal(WorkSideEffectDisposition.Prepared, legacyPending.SideEffect.Disposition);
+            Assert.Null(legacyPending.SideEffect.ToolCallId);
+
+            await using (var commandConnection = new SqliteConnection($"Data Source={path}"))
+            {
+                await commandConnection.OpenAsync();
+                await using var inFlight = commandConnection.CreateCommand();
+                inFlight.CommandText =
+                    """
+                    UPDATE WorkItems
+                    SET Status = 1,
+                        SideEffectDisposition = 2,
+                        SideEffectToolCallId = NULL,
+                        CurrentApprovalId = NULL,
+                        ClaimGeneration = $generation,
+                        ClaimedAtUtc = $claimedAt,
+                        ClaimLeaseExpiresAtUtc = $leaseExpiresAt,
+                        CheckpointJson = $checkpoint
+                    WHERE WorkItemId = $id;
+                    """;
+                inFlight.Parameters.AddWithValue("$id", workItemId.ToString("D"));
+                inFlight.Parameters.AddWithValue("$generation", generation.ToString("D"));
+                inFlight.Parameters.AddWithValue("$claimedAt", Now.AddSeconds(1).ToUnixTimeMilliseconds());
+                inFlight.Parameters.AddWithValue("$leaseExpiresAt", Now.AddMinutes(1).ToUnixTimeMilliseconds());
+                inFlight.Parameters.AddWithValue("$checkpoint", checkpoint.PayloadJson);
+                await inFlight.ExecuteNonQueryAsync();
+            }
+
+            var legacyUncertain = await store.GetAsync(owner, workItemId);
+            Assert.Equal(WorkItemStatus.Running, legacyUncertain!.Status);
+            Assert.Equal(WorkSideEffectDisposition.Indeterminate, legacyUncertain.SideEffect.Disposition);
+            Assert.Null(legacyUncertain.SideEffect.ToolCallId);
+        }
+        finally
+        {
+            Release(path);
+        }
     }
 
     [Fact]

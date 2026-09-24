@@ -844,6 +844,97 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Partial_tool_batch_resumes_remaining_calls_before_calling_model_again()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "order shipped");
+            var accepted = await AcceptObservedAsync(harness, occurrence);
+            var generation = Guid.NewGuid();
+            var claimed = await harness.Work.TryClaimAsync(accepted.WorkItemId, generation, Now, Now.AddMinutes(1));
+            Assert.NotNull(claimed);
+            var messages = new List<ModelMessage>
+            {
+                new(
+                    ModelRole.Assistant,
+                    string.Empty,
+                    ToolCalls:
+                    [
+                        new ModelToolCall(
+                            "k1",
+                            ToolCatalog.KnowledgeRetrieve,
+                            """{"identity":"support-order-policy"}"""),
+                        new ModelToolCall(
+                            "k2",
+                            ToolCatalog.KnowledgeRetrieve,
+                            """{"identity":"support-order-policy"}""")
+                    ]),
+                new(ModelRole.Tool, """{"content":"POLICY_SENTINEL"}""", ToolCallId: "k1", Name: ToolCatalog.KnowledgeRetrieve)
+            };
+            var checkpointed = await harness.Work.CheckpointAsync(
+                claimed.WorkItemId,
+                claimed.Revision,
+                generation,
+                new WorkCheckpoint(
+                    DurableToolCallCheckpoint.Write(messages),
+                    1,
+                    32,
+                    (int)ToolLimits.Overall.TotalMilliseconds),
+                "Resuming tool batch",
+                Now);
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
+            Assert.Equal(1, harness.Knowledge.Calls);
+            Assert.Equal(1, harness.Model.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+        }, () => new DualKnowledgeBatchModel());
+    }
+
+    [Fact]
+    public async Task Dual_sensitive_tool_batch_waits_for_each_approval_in_order()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(2, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal(2, harness.Model.Calls);
+        }, () => new DualHttpApprovalBatchModel());
+    }
+
+    [Fact]
     public async Task Sequential_nonreplayable_writes_execute_after_each_tool_result_checkpoint()
     {
         await ForEachAsync(async harness =>
@@ -1439,6 +1530,72 @@ public sealed class DurableReminderTests
         }
     }
 
+    private sealed class DualKnowledgeBatchModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var toolResults = request.Messages.Count(message => message.Role == ModelRole.Tool);
+            if (toolResults == 0)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "k1",
+                    ToolCatalog.KnowledgeRetrieve,
+                    """{"identity":"support-order-policy"}"""));
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "k2",
+                    ToolCatalog.KnowledgeRetrieve,
+                    """{"identity":"support-order-policy"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Policy applied.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class DualHttpApprovalBatchModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var httpResults = request.Messages.Count(message =>
+                message.Role == ModelRole.Tool && string.Equals(message.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal));
+            if (httpResults == 0)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "h1",
+                    ToolCatalog.HttpRequest,
+                    """{"method":"POST","url":"https://example.com/items/1","body":"FIRST"}"""));
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "h2",
+                    ToolCatalog.HttpRequest,
+                    """{"method":"POST","url":"https://example.com/items/2","body":"SECOND"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (httpResults == 2)
+            {
+                yield return new ModelTextDelta("Done.");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            throw new InvalidOperationException("Model was invoked before every tool call in the batch completed.");
+        }
+    }
+
     private sealed class TwoHttpApprovalModel : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
@@ -1527,11 +1684,13 @@ public sealed class DurableReminderTests
 
     private sealed class RecordingKnowledgeCatalog : IApprovedKnowledgeCatalog
     {
-        public int Calls { get; private set; }
+        private int calls;
+
+        public int Calls => calls;
 
         public ValueTask<string?> ReadContentAsync(string identity, CancellationToken cancellationToken = default)
         {
-            Calls++;
+            Interlocked.Increment(ref calls);
             return ValueTask.FromResult<string?>("POLICY_SENTINEL");
         }
     }

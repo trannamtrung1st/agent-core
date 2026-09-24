@@ -1,4 +1,5 @@
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Work;
 using AgentCore.Domain.Work;
 
 namespace AgentCore.Infrastructure.Persistence;
@@ -113,13 +114,36 @@ internal static class WorkStoreMapping
         var failure = row.FailureCode is null
             ? null
             : new WorkFailure(row.FailureCode, row.FailureSummary ?? "", FromUnix(row.FailureAtUtc));
-        var sideEffect = (WorkSideEffectDisposition)row.SideEffectDisposition == WorkSideEffectDisposition.None
-            ? WorkSideEffect.None
-            : new WorkSideEffect(
-                (WorkSideEffectDisposition)row.SideEffectDisposition,
-                row.SideEffectToolCallId,
+        var sideEffectDisposition = (WorkSideEffectDisposition)row.SideEffectDisposition;
+        WorkSideEffect sideEffect;
+        if (sideEffectDisposition == WorkSideEffectDisposition.None)
+        {
+            sideEffect = WorkSideEffect.None;
+        }
+        else
+        {
+            var approvalModel = approval is null ? null : ToApproval(approval);
+            var toolCallId = row.SideEffectToolCallId;
+            if (string.IsNullOrWhiteSpace(toolCallId))
+            {
+                toolCallId = DurableToolCallCheckpoint.TryResolveLegacyToolCallId(
+                    checkpoint,
+                    sideEffectDisposition,
+                    row.SideEffectActionHash,
+                    approvalModel);
+                if (string.IsNullOrWhiteSpace(toolCallId)
+                    && sideEffectDisposition is WorkSideEffectDisposition.InFlight or WorkSideEffectDisposition.Succeeded)
+                {
+                    sideEffectDisposition = WorkSideEffectDisposition.Indeterminate;
+                }
+            }
+
+            sideEffect = new WorkSideEffect(
+                sideEffectDisposition,
+                toolCallId,
                 row.SideEffectActionHash,
                 FromUnix(row.SideEffectUpdatedAtUtc));
+        }
         return new WorkItem(
             Guid.Parse(row.WorkItemId),
             new WorkOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),

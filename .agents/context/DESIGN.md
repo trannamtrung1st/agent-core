@@ -82,6 +82,24 @@ components:
     backgroundColor: "transparent"
     textColor: "{colors.textSecondary}"
     padding: "8px 0 0"
+  operational-drawer-wide:
+    backgroundColor: "{colors.container}"
+    textColor: "{colors.text}"
+    width: "400px"
+  operational-drawer-narrow:
+    backgroundColor: "{colors.container}"
+    textColor: "{colors.text}"
+    width: "320px"
+  operational-status-chip:
+    textColor: "{colors.text}"
+    rounded: "{rounded.chip}"
+    padding: "0 8px"
+    height: "24px"
+  operational-detail-inset:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.surface}"
+    padding: "{spacing.default}"
 ---
 
 # Design System: Agent Core
@@ -103,6 +121,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 - Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, and overflow.
 - Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
+- Background Work and Schedules share an operational drawer language: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated detail insets, and trailing actions where needed.
 
 ## Colors
 
@@ -150,6 +169,7 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 - After a user send, leave about half the pane for the incoming reply; shrink as the reply grows. Historical turns stay compact.
 - New chat empty: Identity + Speech locale in the intro stack (max 22rem). Model/Reasoning are not duplicated there.
 - Paused: Resume replaces the composer. Ended: quiet ended note only. Model selection lives only in the composer, so neither paused nor ended shows a header Model control.
+- Operational drawers are 400px wide when the host reports the wide layout and 320px otherwise. Their Ant Design List rows stay open rather than becoming nested cards; row and inset relationships use the same 8/12/16px rhythm. On narrow layouts, drawer action buttons have a 40px minimum height.
 
 **The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
 
@@ -163,6 +183,8 @@ Audit: Message placeholder left edge equals the Model name left edge; Model hove
 
 Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow is shared by the composer and its Model overlay.
 
+Operational drawer details use the elevated tone, a border, and an 8px radius to distinguish approval previews, results, or schedule expressions without adding another shadow.
+
 ### Shadow Vocabulary
 - **Composer lift** (`box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45)`): sticky message well and its anchored Model overlay.
 
@@ -173,7 +195,7 @@ Mostly flat tonal layering (layout → container → elevated → bubble/fill). 
 - **Inline** (4px): inline Markdown code and compact focus outlines.
 - **Control** (6px): AntD buttons, Selects, 32px composer icon/send hits, status tags.
 - **Surface** (8px): session rows, code blocks, and image previews.
-- **Chip** (12px): attachment/file chips and queued-send container.
+- **Chip** (12px): attachment/file chips, queued-send container, and 24px operational status/time-zone chips.
 - **Composer** (16px): message well and Model overlay.
 - **Bubble** (18px): user turns only. Assistant content is unbubbled Markdown.
 
@@ -189,6 +211,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 
 ### Chips
 - Interrupted/failed: solid Ant Design Tag, not a full-width banner. Default tag marks the catalog default model in the Model menu.
+- Operational state: filled Ant Design Tag with an icon and text, 24px minimum height, 8px inline padding, and 12px radius. Semantic color reinforces the label; it never replaces the icon and text.
 
 ### Cards / Containers
 - Composer shell: elevated fill, 16px radius, compact 8px padding, 8px inner gap, 1px border, composer shadow.
@@ -204,6 +227,13 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 ### Navigation
 - Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
 - Header: agent name + 12px timestamp; Speech locale; conversation overflow (End). No Model in the live header.
+
+### Operational drawers
+- Background Work and Schedules use a two-line title: a strong title above a 12px secondary subtitle.
+- Use open Ant Design List rows with 16px block padding and an 8px first-row top inset. The primary row heading and filled status chip share the top line and tolerate wrapped content.
+- Detail insets use the elevated surface, a 1px border, 8px radius, 12px padding, and an 8px internal gap. Use them for implemented detail types such as approval previews, completed results, and schedule expressions; do not force every row field into an inset.
+- Schedule metadata keeps the time-zone identifier in a compact chip and renders the next occurrence with `Intl.DateTimeFormat` using the viewer locale and the schedule time zone. Fall back to a readable local string when the named zone cannot be formatted.
+- When a row has actions, rely on the row stack gap before trailing controls; align them to the trailing edge and allow wrapping. Current narrow-layout drawer actions use a 40px minimum target height.
 
 ### Conversation turns
 - User: right-aligned bubble (`8px 12px`, 18px radius).
@@ -228,6 +258,8 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
 - **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
+- **Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
+- **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
 
 ### Don't:
 - **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.
@@ -238,3 +270,5 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.
 - **Don't** zero a text control’s padding, use negative margin, or stack extra child padding to fake alignment with a sibling.
 - **Don't** show Spoken as another conversational turn or from internal generated tails.
+- **Don't** wrap every operational List row in a card or generalize drawer actions to rows that do not expose an operation.
+- **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.

@@ -358,6 +358,12 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             "Ask the user to restate missing schedule details explicitly. Only ask for yes/no confirmation when the schedule tool returned confirmation_required and a pending proposal exists.");
         lines.Add(
             "If a schedule tool returned authorization_ambiguous or authorization_denied, do not retry with different time argument shapes.");
+        lines.Add(
+            "Durable recurring schedules deliver reminder text when they fire; they do not run workspace, email, HTTP, or other tools in the background.");
+        lines.Add(
+            "When the user asks to perform an action on a cadence (for example overwrite a file every minute), explain that you can schedule a recurring reminder about it, not perform the action each time. Do not run a one-off workspace or tool action and imply recurring automation will keep doing it.");
+        lines.Add(
+            "If schedule authorization is temporarily unavailable, ask the user to restate the schedule plainly (for example every minute remind me to …) and separate any immediate file or workspace work from the scheduling request.");
         foreach (var line in context.ScheduleConversation?.ToPromptLines() ?? [])
         {
             lines.Add(line);
