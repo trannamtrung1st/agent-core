@@ -242,6 +242,55 @@ public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> co
         return rows.Count;
     }
 
+    public async ValueTask<int> ExpireDueApprovalsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var asOf = asOfUtc.ToUnixTimeMilliseconds();
+        var waiting = (int)WorkItemStatus.WaitingForApproval;
+        var rows = await db.WorkItems
+            .Where(item => item.Status == waiting)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var expired = 0;
+        foreach (var row in rows)
+        {
+            var approval = await LoadApprovalAsync(db, row, cancellationToken).ConfigureAwait(false);
+            var current = WorkStoreMapping.ToWorkItem(row, approval);
+            if (current.Approval is not { Decision: WorkApprovalDecision.Pending }
+                || current.Approval.ExpiresAtUtc > asOfUtc)
+            {
+                continue;
+            }
+
+            WorkItem updated;
+            try
+            {
+                updated = current.ExpireApproval(current.Revision, asOfUtc);
+            }
+            catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
+            {
+                throw WorkStoreMapping.Map(exception);
+            }
+
+            WorkStoreMapping.Apply(row, updated);
+            await UpsertApprovalAsync(db, updated, cancellationToken).ConfigureAwait(false);
+            expired++;
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw AgentCoreErrors.Conflict("Work item revision is stale.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return expired;
+    }
+
     public ValueTask<WorkItem> BeginApprovalAsync(
         Guid workItemId,
         long expectedRevision,

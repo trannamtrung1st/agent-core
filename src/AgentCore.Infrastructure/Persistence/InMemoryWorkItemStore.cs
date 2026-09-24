@@ -226,6 +226,31 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         }
     }
 
+    public ValueTask<int> ExpireDueApprovalsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            var due = _state.WorkItems.Values
+                .Where(item => item.Status == WorkItemStatus.WaitingForApproval
+                    && item.Approval is { Decision: WorkApprovalDecision.Pending }
+                    && item.Approval.ExpiresAtUtc <= asOfUtc)
+                .ToArray();
+            foreach (var item in due)
+            {
+                try
+                {
+                    _state.WorkItems[item.WorkItemId] = item.ExpireApproval(item.Revision, asOfUtc);
+                }
+                catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
+                {
+                    throw WorkStoreMapping.Map(exception);
+                }
+            }
+
+            return ValueTask.FromResult(due.Length);
+        }
+    }
+
     public ValueTask<WorkItem> BeginApprovalAsync(
         Guid workItemId,
         long expectedRevision,

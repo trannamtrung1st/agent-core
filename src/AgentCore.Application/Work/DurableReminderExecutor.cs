@@ -21,6 +21,7 @@ public sealed class DurableReminderExecutor(
     public async ValueTask<int> ExecuteDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default)
     {
         await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
+        await work.ExpireDueApprovalsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         var due = await work.ListRunnableAsync(asOfUtc, limit, cancellationToken).ConfigureAwait(false);
         var ran = 0;
         foreach (var item in due)
@@ -232,6 +233,10 @@ public sealed class DurableReminderExecutor(
                 null,
                 asOfUtc,
                 token),
+            work,
+            generation,
+            asOfUtc,
+            ids,
             cancellationToken).ConfigureAwait(false);
         if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
         {
@@ -259,6 +264,8 @@ public sealed class DurableReminderExecutor(
                     true,
                     asOfUtc.Add(RetryDelay(retry.Running.AttemptCount)),
                     CancellationToken.None).ConfigureAwait(false);
+                break;
+            case DurableOccurrenceSuspended:
                 break;
             case DurableOccurrenceFailed failed:
                 await FailAsync(

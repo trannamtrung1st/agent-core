@@ -383,6 +383,156 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Approval_waits_without_a_claim_and_resumes_the_same_work_item()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            var created = await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            Assert.Null(waiting.Claim);
+            Assert.Equal(created.WorkItemId, waiting.WorkItemId);
+            Assert.Contains("POST https://example.com/items", waiting.Approval!.Preview, StringComparison.Ordinal);
+            Assert.DoesNotContain("SECRET_BODY", waiting.ToPublicSummary().ApprovalPreview, StringComparison.Ordinal);
+            Assert.Contains("SECRET_BODY", waiting.Approval.PreparedActionJson, StringComparison.Ordinal);
+            var budget = waiting.Checkpoint!.RemainingOverallBudgetMs;
+            var reopened = await harness.Reopen();
+            var stored = await reopened.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, stored!.Status);
+            Assert.Null(stored.Claim);
+            Assert.Equal(waiting.Approval.ApprovalId, stored.Approval!.ApprovalId);
+            Assert.Equal(waiting.Approval.Preview, stored.Approval.Preview);
+
+            var wrongHash = await Assert.ThrowsAsync<AgentCoreException>(() => harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                new string('f', 64),
+                WorkApprovalDecision.Approved,
+                Now).AsTask());
+            Assert.Equal("Conflict", wrongHash.Code);
+            var stale = await Assert.ThrowsAsync<AgentCoreException>(() => harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision - 1,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now).AsTask());
+            Assert.Equal("Conflict", stale.Code);
+            var approved = await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            var again = await harness.Work.DecideApprovalAsync(
+                owner,
+                approved.WorkItemId,
+                waiting.Approval.ApprovalId,
+                approved.Revision,
+                approved.Approval!.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(approved.WorkItemId, again.WorkItemId);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal(created.WorkItemId, completed.WorkItemId);
+            Assert.Equal("Sent.", completed.Result!.Text);
+            Assert.Equal(1, completed.AttemptCount);
+            Assert.Equal(budget, completed.Checkpoint!.RemainingOverallBudgetMs);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now.AddMinutes(1), 10));
+            Assert.Equal(1, harness.Http.Calls);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
+    public async Task Expired_approval_is_not_dispatched_and_late_approval_is_rejected()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            var created = await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Null(waiting!.Claim);
+            var budget = waiting.Checkpoint!.RemainingOverallBudgetMs;
+            var due = waiting.Approval!.ExpiresAtUtc;
+            harness.Time.SetUtcNow(due);
+            var late = await Assert.ThrowsAsync<AgentCoreException>(() => harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                due).AsTask());
+            Assert.Equal("Conflict", late.Code);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(due, 10));
+            Assert.Equal(0, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal(created.WorkItemId, completed.WorkItemId);
+            Assert.Equal("Stopped.", completed.Result!.Text);
+            Assert.Equal(budget, completed.Checkpoint!.RemainingOverallBudgetMs);
+            var reopened = await harness.Reopen();
+            Assert.Equal("Stopped.", (await reopened.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId))!.Result!.Text);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
+    public async Task Inflight_http_is_not_retried_after_a_lost_acknowledgement()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            harness.Http.Hold = true;
+            using var shutdown = new CancellationTokenSource();
+            var run = harness.Executor.ExecuteDueAsync(Now, 10, shutdown.Token).AsTask();
+            await harness.Http.Started.Task;
+            shutdown.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+            Assert.Equal(1, harness.Http.Calls);
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(later, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("side-effect-indeterminate", failed.Failure!.Code);
+            var reopened = await harness.Reopen();
+            Assert.Equal("side-effect-indeterminate", (await reopened.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId))!.Failure!.Code);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
     public async Task Expired_inflight_effect_is_not_run_again()
     {
         await ForEachAsync(async harness =>
@@ -614,6 +764,7 @@ public sealed class DurableReminderTests
             new StaticLanguageModelResolver(recording),
             time);
         var knowledge = new RecordingKnowledgeCatalog();
+        var http = new GatedHttpClient();
         var executor = new DurableReminderExecutor(
             work,
             factory,
@@ -621,8 +772,8 @@ public sealed class DurableReminderTests
             new GuidGenerator(),
             time,
             new WorkCancellationRegistry(),
-            new SessionToolExecutor(new RoleKnowledgeService(knowledge, time)));
-        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, time, knowledge, () => reopen(triggers, work, handoff));
+            new SessionToolExecutor(new RoleKnowledgeService(knowledge, time), httpRequestClient: http));
+        return new Harness(triggers, work, handoff, factory, executor, recording, memories, sessions, catalog, definition, time, knowledge, http, () => reopen(triggers, work, handoff));
     }
 
     private static async Task<AgentDefinition> LoadDefinitionAsync()
@@ -661,6 +812,7 @@ public sealed class DurableReminderTests
         AgentDefinition definition,
         FakeTimeProvider time,
         RecordingKnowledgeCatalog knowledge,
+        GatedHttpClient http,
         Func<Task<StoreSet>> reopen)
     {
         public ITriggerStore Triggers { get; } = triggers;
@@ -675,6 +827,7 @@ public sealed class DurableReminderTests
         public AgentDefinition Definition { get; } = definition;
         public FakeTimeProvider Time { get; } = time;
         public RecordingKnowledgeCatalog Knowledge { get; } = knowledge;
+        public GatedHttpClient Http { get; } = http;
         public Func<Task<StoreSet>> Reopen { get; } = reopen;
     }
 
@@ -808,6 +961,55 @@ public sealed class DurableReminderTests
 
             yield return new ModelTextDelta("Policy applied.");
             yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class ApprovalHttpModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tool = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
+            if (tool is null)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "h1",
+                    ToolCatalog.HttpRequest,
+                    """{"method":"POST","url":"https://example.com/items","body":"SECRET_BODY"}"""));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta(tool.Text.Contains("not approved", StringComparison.Ordinal) ? "Stopped." : "Sent.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class GatedHttpClient : IHttpRequestClient
+    {
+        private int calls;
+
+        public bool Hold { get; set; }
+
+        public int Calls => calls;
+
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask<HttpToolResponse> SendAsync(HttpToolRequest request, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref calls);
+            if (Hold)
+            {
+                Started.TrySetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            }
+
+            return new HttpToolResponse(200, request.Url.AbsoluteUri, "text/plain", "ok", false, true, null, null, null);
         }
     }
 

@@ -83,6 +83,8 @@ public interface IWorkItemStore
 
     ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default);
 
+    ValueTask<int> ExpireDueApprovalsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default);
+
     ValueTask<WorkItem> BeginApprovalAsync(
         Guid workItemId,
         long expectedRevision,
