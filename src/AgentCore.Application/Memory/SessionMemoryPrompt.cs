@@ -81,6 +81,53 @@ public static class SessionMemoryPrompt
         return projected;
     }
 
+    public static async ValueTask<IReadOnlyList<StructuredMemoryItem>> LoadOwnerAsync(
+        IStructuredMemoryService? memories,
+        Guid agentInstanceId,
+        AgentDefinition definition,
+        UserProfile? profile,
+        CancellationToken cancellationToken = default)
+    {
+        var identityEnabled = definition.MemoryPolicy?.IdentityUserRetrieval == true
+            && agentInstanceId != Guid.Empty
+            && profile is not null
+            && profile.ProfileId != Guid.Empty;
+        var userEnabled = definition.MemoryPolicy?.UserRetrieval == true
+            && profile is not null
+            && profile.ProfileId != Guid.Empty;
+        if (memories is null || (!identityEnabled && !userEnabled))
+        {
+            return [];
+        }
+
+        var admission = CreateAdmissionContext("owner", definition, profile, []);
+        IReadOnlyList<StructuredMemoryItem> identityItems = [];
+        IReadOnlyList<StructuredMemoryItem> userItems = [];
+        if (identityEnabled)
+        {
+            identityItems = await memories.SearchIdentityUserAsync(
+                new TrustedIdentityUserOwner(agentInstanceId, profile!.ProfileId),
+                new MemorySearchQuery(null, null),
+                retrievalAllowed: true,
+                admission,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (userEnabled)
+        {
+            userItems = await memories.SearchUserAsync(
+                new TrustedUserOwner(profile!.ProfileId),
+                new MemorySearchQuery(null, null),
+                retrievalAllowed: true,
+                admission,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var projected = ProjectLayered([], identityItems, userItems, admission, false, identityEnabled, userEnabled);
+        RuntimeTelemetry.RecordMemoryRetrieval(projected.Count == 0 ? "empty" : "included");
+        return projected;
+    }
+
     private const int CrossSessionScopeMaxItems = 3;
 
     public static IReadOnlyList<StructuredMemoryItem> Project(

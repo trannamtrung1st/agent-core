@@ -9,6 +9,7 @@ using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
+using AgentCore.Application.Work;
 using AgentCore.Infrastructure.Attachments;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
@@ -81,6 +82,8 @@ public static class InfrastructureServiceCollectionExtensions
             new DefaultAgentBrain(
                 provider.GetRequiredService<PromptContextBuilder>(),
                 provider.GetRequiredService<IInitiativeEvaluator>()));
+        services.TryAddSingleton<DurableWorkContextFactory>();
+        services.TryAddSingleton<DurableReminderExecutor>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
