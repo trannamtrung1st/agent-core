@@ -38,6 +38,23 @@ public static class DurableToolCallCheckpoint
         return pending;
     }
 
+    public static int ReservedToolSteps(IReadOnlyList<ModelMessage> messages)
+    {
+        var reserved = 0;
+        foreach (var message in messages)
+        {
+            if (message.Role == ModelRole.Assistant && message.ToolCalls is { Count: > 0 } toolCalls)
+            {
+                reserved += toolCalls.Count;
+            }
+        }
+
+        return reserved;
+    }
+
+    public static int NormalizeResumedStepCount(int checkpointStepCount, IReadOnlyList<ModelMessage> messages) =>
+        Math.Max(checkpointStepCount, ReservedToolSteps(messages));
+
     public static string? TryResolveLegacyToolCallId(
         WorkCheckpoint? checkpoint,
         WorkSideEffectDisposition disposition,

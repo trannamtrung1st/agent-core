@@ -844,6 +844,106 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Legacy_undercounted_checkpoint_normalizes_step_budget_on_resume()
+    {
+        var definition = await LoadDefinitionAsync();
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-legacy-steps-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>()
+            .UseSqlite($"Data Source={path}")
+            .AddInterceptors(new SqlitePragmaInterceptor(5_000))
+            .Options;
+        var contexts = new TestFactory(options);
+        try
+        {
+            await new SqliteMemoryStore(contexts, new FakeTimeProvider(Now)).EnsureCreatedAsync();
+            var harness = await ComposeAsync(
+                definition,
+                new SqliteTriggerStore(contexts),
+                new SqliteWorkItemStore(contexts),
+                new SqliteDurableWorkHandoff(contexts),
+                (_, _, _) => Task.FromResult(new StoreSet(
+                    new SqliteTriggerStore(contexts),
+                    new SqliteWorkItemStore(contexts),
+                    new SqliteDurableWorkHandoff(contexts))),
+                static () => new MaxBatchHttpApprovalModel());
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var item = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, item!.Status);
+            Assert.Equal(ToolLimits.MaxSteps, item.Checkpoint!.StepCount);
+
+            await using (var db = await contexts.CreateDbContextAsync())
+            {
+                var connection = db.Database.GetDbConnection();
+                if (connection.State != System.Data.ConnectionState.Open)
+                {
+                    await connection.OpenAsync();
+                }
+
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    UPDATE WorkItems
+                    SET CheckpointStepCount = 1
+                    WHERE WorkItemId = $id;
+                    """;
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = "$id";
+                parameter.Value = item.WorkItemId.ToString("D");
+                command.Parameters.Add(parameter);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            item = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(1, item!.Checkpoint!.StepCount);
+
+            var at = Now.AddMinutes(1);
+            while (item!.Status == WorkItemStatus.WaitingForApproval)
+            {
+                at = at.AddSeconds(1);
+                harness.Time.SetUtcNow(at);
+                await harness.Work.DecideApprovalAsync(
+                    owner,
+                    item.WorkItemId,
+                    item.Approval!.ApprovalId,
+                    item.Revision,
+                    item.Approval.Revision,
+                    item.Approval.ActionHash,
+                    WorkApprovalDecision.Approved,
+                    at);
+                at = at.AddSeconds(1);
+                harness.Time.SetUtcNow(at);
+                Assert.Equal(1, await harness.Executor.ExecuteDueAsync(at, 10));
+                item = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+                if (item!.Status != WorkItemStatus.WaitingForApproval)
+                {
+                    Assert.Equal(ToolLimits.MaxSteps, item.Checkpoint!.StepCount);
+                }
+            }
+
+            Assert.Equal(ToolLimits.MaxSteps, harness.Http.Calls);
+            if (item!.Status == WorkItemStatus.Running)
+            {
+                at = at.AddSeconds(1);
+                harness.Time.SetUtcNow(at);
+                Assert.Equal(1, await harness.Executor.ExecuteDueAsync(at, 10));
+                item = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            }
+
+            Assert.Equal(WorkItemStatus.Failed, item!.Status);
+            Assert.Equal("tool-step-limit", item.Failure!.Code);
+        }
+        finally
+        {
+            using var connection = new SqliteConnection($"Data Source={path}");
+            SqliteConnection.ClearPool(connection);
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Full_tool_batch_reserves_step_budget_before_first_call_executes()
     {
         await ForEachAsync(async harness =>
@@ -1670,6 +1770,20 @@ public sealed class DurableReminderTests
                         $"h{index}",
                         ToolCatalog.HttpRequest,
                         $$"""{"method":"POST","url":"https://example.com/items/{{index}}","body":"PAYLOAD"}"""));
+                }
+
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (httpResults == ToolLimits.MaxSteps)
+            {
+                for (var index = 1; index <= ToolLimits.MaxSteps; index++)
+                {
+                    yield return new ModelToolCallEvent(new ModelToolCall(
+                        $"x{index}",
+                        ToolCatalog.HttpRequest,
+                        $$"""{"method":"POST","url":"https://example.com/extra/{{index}}","body":"EXTRA"}"""));
                 }
 
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);

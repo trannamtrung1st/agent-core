@@ -52,6 +52,21 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
             remaining,
             Timeout.InfiniteTimeSpan);
         var admission = new ToolExecutionAdmission(Detached: true, triggerKind);
+        if (resumed)
+        {
+            var normalizedSteps = DurableToolCallCheckpoint.NormalizeResumedStepCount(steps, messages);
+            if (normalizedSteps > ToolLimits.MaxSteps)
+            {
+                return new DurableOccurrenceFailed(running, "tool-step-limit", "Tool step limit reached.");
+            }
+
+            if (normalizedSteps != steps)
+            {
+                steps = normalizedSteps;
+                running = await SaveCheckpointAsync().ConfigureAwait(false);
+            }
+        }
+
         foreach (var pendingCall in DurableToolCallCheckpoint.PendingCalls(messages))
         {
             var pendingOutcome = await ExecuteCallAsync(pendingCall, countStep: false).ConfigureAwait(false);

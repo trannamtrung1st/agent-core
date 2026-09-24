@@ -23,6 +23,35 @@ public sealed class DurableToolCallCheckpointTests
     }
 
     [Fact]
+    public void ReservedToolSteps_sums_assistant_tool_call_batches()
+    {
+        var messages = new List<ModelMessage>
+        {
+            new(ModelRole.Assistant, string.Empty, ToolCalls: [Call("a"), Call("b")]),
+            new(ModelRole.Tool, "{}", ToolCallId: "a", Name: "http.request"),
+            new(ModelRole.Assistant, string.Empty, ToolCalls: [Call("c")]),
+        };
+
+        Assert.Equal(3, DurableToolCallCheckpoint.ReservedToolSteps(messages));
+    }
+
+    [Fact]
+    public void NormalizeResumedStepCount_raises_legacy_undercount_to_assistant_batch_size()
+    {
+        var messages = new List<ModelMessage>
+        {
+            new(
+                ModelRole.Assistant,
+                string.Empty,
+                ToolCalls: Enumerable.Range(1, 12)
+                    .Select(index => Call($"h{index}"))
+                    .ToArray()),
+        };
+
+        Assert.Equal(12, DurableToolCallCheckpoint.NormalizeResumedStepCount(1, messages));
+    }
+
+    [Fact]
     public void PendingCalls_returns_every_call_when_assistant_batch_is_unanswered()
     {
         var messages = new List<ModelMessage>
