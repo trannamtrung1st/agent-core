@@ -988,7 +988,7 @@ public static class TriggerScheduleCommands
         {
             throw new TriggerScheduleCommandException(
                 "schedule_validation_failed",
-                "endAtUtc must be a valid UTC timestamp.");
+                "endAtUtc must be a valid ISO-8601 timestamp (normalized to UTC).");
         }
 
         var text = element.GetString();
@@ -996,7 +996,7 @@ public static class TriggerScheduleCommands
         {
             throw new TriggerScheduleCommandException(
                 "schedule_validation_failed",
-                "endAtUtc must be a valid UTC timestamp.");
+                "endAtUtc must be a valid ISO-8601 timestamp (normalized to UTC).");
         }
 
         return TriggerScheduleCalculator.Truncate(parsed.ToUniversalTime());

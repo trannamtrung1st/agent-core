@@ -46,6 +46,25 @@ public sealed class ScheduleDraftAdmissionTests
     }
 
     [Fact]
+    public void Complete_new_recurring_request_does_not_retain_failed_draft()
+    {
+        var draft = ScheduleDraftContext.ForFixedIntervalRejection(
+            "Say hello to me",
+            30,
+            "recurrence_below_minimum",
+            Now);
+        var eligible = true;
+        var retained = ScheduleDraftAdmission.PrepareDraftForUserTurn(
+            draft,
+            ref eligible,
+            "every minute remind me to check the oven",
+            "en",
+            null);
+        Assert.Null(retained);
+        Assert.False(eligible);
+    }
+
+    [Fact]
     public void Second_schedule_turn_after_correction_window_does_not_inherit_draft()
     {
         var draft = ScheduleDraftContext.ForFixedIntervalRejection(

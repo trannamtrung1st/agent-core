@@ -241,6 +241,98 @@ public sealed class TriggerScheduleSemanticsTests
     }
 
     [Fact]
+    public async Task Complete_new_request_after_rejection_does_not_merge_stale_draft_intent()
+    {
+        var definition = await LoadAsync(10);
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(), new FakeTimeProvider(Now));
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var rejectedContext = AuthorizedContext(owner, "every 30s say hello to me", TriggerCommandAction.Create);
+        using var rejectedArgs = JsonDocument.Parse(
+            """{"intent":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+        var rejected = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            rejectedArgs.RootElement,
+            rejectedContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.Contains("\"scheduleDraft\"", rejected.Text, StringComparison.Ordinal);
+
+        var draft = ScheduleDraftContext.ForFixedIntervalRejection(
+            "Say hello to me",
+            30,
+            "recurrence_below_minimum",
+            Now);
+        var eligible = true;
+        Assert.Null(ScheduleDraftAdmission.PrepareDraftForUserTurn(
+            draft,
+            ref eligible,
+            "every minute remind me to check the oven",
+            "en",
+            null));
+
+        using var intervalOnlyArgs = JsonDocument.Parse("""{"kind":"fixed_interval","intervalSeconds":60}""");
+        var staleDraftContext = new TriggerCommandContext(
+            owner,
+            Guid.NewGuid(),
+            "UTC",
+            "every minute remind me to check the oven",
+            "en",
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            TriggerCommandAction.Create,
+            false,
+            null,
+            Guid.NewGuid(),
+            Now,
+            ScheduleDraft: draft);
+        var inherited = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            intervalOnlyArgs.RootElement,
+            staleDraftContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", inherited.Text, StringComparison.Ordinal);
+        Assert.Equal("Say hello to me", (await store.ListAsync(owner, null)).Single().Intent);
+
+        await registrations.CancelAsync(
+            owner,
+            (await store.ListAsync(owner, null)).Single().RegistrationId,
+            (await store.ListAsync(owner, null)).Single().Revision,
+            CancellationToken.None);
+
+        var clearedContext = AuthorizedContext(
+            owner,
+            "every minute remind me to check the oven",
+            TriggerCommandAction.Create);
+        var withoutDraft = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            intervalOnlyArgs.RootElement,
+            clearedContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.Contains("\"error\":\"schedule_validation_failed\"", withoutDraft.Text, StringComparison.Ordinal);
+
+        using var explicitIntentArgs = JsonDocument.Parse(
+            """{"intent":"check the oven","kind":"fixed_interval","intervalSeconds":60}""");
+        var created = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            explicitIntentArgs.RootElement,
+            clearedContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", created.Text, StringComparison.Ordinal);
+        Assert.Equal("check the oven", (await store.ListAsync(owner, null)).Single(r => r.Status == TriggerRegistrationStatus.Active).Intent);
+    }
+
+    [Fact]
     public async Task Every_minute_after_unrelated_turn_does_not_merge_stale_draft_intent()
     {
         var definition = await LoadAsync(10);

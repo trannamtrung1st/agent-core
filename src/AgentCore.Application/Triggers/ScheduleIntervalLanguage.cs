@@ -50,6 +50,55 @@ public static partial class ScheduleIntervalLanguage
         || text.Contains("every minute", StringComparison.OrdinalIgnoreCase)
         || text.Contains("every hour", StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsIntervalOnlyCorrection(string text, string? conversationLanguage = null)
+    {
+        if (!LooksLikeIntervalCorrection(text))
+        {
+            return false;
+        }
+
+        return !CarriesIndependentScheduleIntent(text, conversationLanguage);
+    }
+
+    public static bool CarriesIndependentScheduleIntent(string text, string? conversationLanguage = null)
+    {
+        var remainder = StripIntervalPhrases(HeuristicTriggerCommandAuthorizer.NormalizeTurn(text));
+        if (string.IsNullOrWhiteSpace(remainder))
+        {
+            return false;
+        }
+
+        if (HeuristicTriggerCommandAuthorizer.MatchesCreate(remainder, conversationLanguage, scheduleContext: null, scheduleDraft: null))
+        {
+            return true;
+        }
+
+        return IndependentScheduleIntent().IsMatch(remainder);
+    }
+
+    public static string StripIntervalPhrases(string text)
+    {
+        var stripped = text;
+        stripped = EveryMinutePhrase().Replace(stripped, " ");
+        stripped = EveryHourPhrase().Replace(stripped, " ");
+        stripped = EveryInterval().Replace(stripped, " ");
+        return CollapseWhitespace().Replace(stripped, " ").Trim();
+    }
+
     [GeneratedRegex(@"\bevery\s+(?<value>\d+)\s*(?<unit>s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EveryInterval();
+
+    [GeneratedRegex(@"\bevery\s+1\s*m(in|inute|inutes)?\b|\bevery\s+minute\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex EveryMinutePhrase();
+
+    [GeneratedRegex(@"\bevery\s+1\s*h(our|ours)?\b|\bevery\s+hour\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex EveryHourPhrase();
+
+    [GeneratedRegex(
+        @"\b(remind|notify|ping|alert|nudge|wake|say|tell|send|message|check)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex IndependentScheduleIntent();
+
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
+    private static partial Regex CollapseWhitespace();
 }

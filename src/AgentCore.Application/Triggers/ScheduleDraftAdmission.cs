@@ -22,7 +22,7 @@ public static class ScheduleDraftAdmission
         eligibleForNextUserTurn = false;
 
         var turn = text ?? string.Empty;
-        if (ScheduleIntervalLanguage.LooksLikeIntervalCorrection(turn))
+        if (ScheduleIntervalLanguage.IsIntervalOnlyCorrection(turn, language))
         {
             return draft;
         }
