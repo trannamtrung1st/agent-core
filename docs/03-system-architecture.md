@@ -104,7 +104,11 @@ Observed A–H behavior; Phase I WorkItems are not-applicable until the future t
 
 ## P5 durable triggers (observed)
 
-Durable schedules and one allowlisted application event are not Session Runtime timers and are not learned memory. `ITriggerStore` owns registrations and occurrences, with no foreign key to sessions or memory. A hosted scheduler outside the runtime scans due rows with `TimeProvider`. An admitted occurrence routes to one compatible live runtime, or remains `AwaitingDurableWork` when no single compatible runtime can take it. That handoff is the P6 seam. P5 does not create a `WorkItem` or keep a runtime alive to wait for a future fire. Occurrence text enters the prompt as untrusted user-role data, not as a system instruction. The existing live-only environment ingress stays separate. See [P5 closure report](reports/p5-freeze-candidate.md).
+Durable schedules and one allowlisted application event are not Session Runtime timers and are not learned memory. `ITriggerStore` owns registrations and occurrences, with no foreign key to sessions or memory. A hosted scheduler outside the runtime scans due rows with `TimeProvider`. An admitted occurrence routes to one compatible live runtime, or remains `AwaitingDurableWork` when no single compatible runtime can take it. P5 does not create a `WorkItem` or keep a runtime alive to wait for a future fire. Occurrence text enters the prompt as untrusted user-role data, not as a system instruction. The existing live-only environment ingress stays separate. See [P5 closure report](reports/p5-freeze-candidate.md).
+
+## P6 durable work (observed)
+
+The same scheduler pass accepts each `AwaitingDurableWork` occurrence as one `WorkItem` and runs due work. P5 still admits schedules and chooses live versus durable. The owner is Agent Instance plus trusted profile. The source session is provenance only. A scheduled reminder is tool-free. An application event uses the same tool limits as a live turn and a narrower offer: session-scoped tools and trigger writes are not available. Sensitive tools suspend without a claim until Background Work approves the exact action hash. Results stay out of chat history. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` still do not continue after `RequestDeactivate`. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
 ## P3 tools and integrations (observed)
 

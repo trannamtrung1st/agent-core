@@ -41,6 +41,38 @@ if updated != 1:
 `, [sessionId]);
 }
 
+async function releaseOtherLiveRuntimes(
+  page: import("@playwright/test").Page,
+  sessionId: string
+): Promise<void> {
+  await page.evaluate(async (currentId) => {
+    const token = window.localStorage.getItem("agent-core.owner-capability") ?? "";
+    const headers = {
+      "content-type": "application/json",
+      "X-AgentCore-Owner-Capability": token
+    };
+    const listed = await fetch("/api/v2/sessions?limit=50", { headers });
+    if (!listed.ok) {
+      throw new Error(`catalog ${listed.status}`);
+    }
+
+    const body = (await listed.json()) as { items: { sessionId: string; status: string }[] };
+    for (const item of body.items) {
+      if (item.sessionId === currentId || item.status !== "attached") {
+        continue;
+      }
+
+      const deactivated = await fetch(`/api/v2/sessions/${item.sessionId}/deactivate`, {
+        method: "POST",
+        headers
+      });
+      if (!deactivated.ok) {
+        throw new Error(`deactivate ${item.sessionId} ${deactivated.status}`);
+      }
+    }
+  }, sessionId);
+}
+
 function seedRetry(sessionId: string): void {
   sqlite(`
 import json, sqlite3, sys, time, uuid
@@ -136,6 +168,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
 
   const sessionId = latestSessionId();
+  await releaseOtherLiveRuntimes(page, sessionId);
   makeReminderDue(sessionId);
   await page.getByRole("button", { name: "Background work" }).click();
   const drawer = page.getByRole("dialog", { name: "Background work" });

@@ -153,6 +153,10 @@ That perception is the actual MVP objective.
 
 On Riley (`general-assistant` v8–v10) with a trusted profile timezone when wall-clock scheduling is used, “remind me tomorrow” persists one owner-scoped one-shot schedule without an approval dialog. Relative delays such as “after 1 minute” do not require a profile timezone. Learned cross-session memory is enabled on `general-assistant` v9+ (not v8); explicit “remember …” requests persist for the same Agent Instance and trusted profile across new sessions. Sub-minute fixed-interval recurrence (“every minute”, not “every 30s”) is enabled on `general-assistant` v10 (not v8–v9). The chat header **Schedules** drawer lists intent, schedule, timezone, status, and next occurrence, and cancels the active row after confirmation. A second session for the same instance and profile sees the same row. Customer support does not offer user scheduling. There is no calendar and no admin trigger console.
 
+## P6 background work (observed)
+
+Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. An approval-demo application event can wait in that drawer across an API restart and then run the exact approved action once. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 is not frozen until the exact-SHA hosted gate. Do not start P7.
+
 ## Post-MVP planned until verified
 
 Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.

@@ -17,6 +17,14 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | GET /health | No body | 200 health below | 503 if store/definition startup failed |
 | GET /api/v2/sessions/{sessionId}/triggers | Owner capability | 200 safe schedule list for the session's Agent Instance and trusted profile | 401 missing/invalid capability; 404 session |
 | POST /api/v2/sessions/{sessionId}/triggers/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe schedule | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
+| GET /api/v2/sessions/{sessionId}/work-items | Optional `limit` (default 50, minimum 1) | 200 newest-first safe list for the session's Agent Instance and trusted profile | 401 capability; 404 session |
+| GET /api/v2/sessions/{sessionId}/work-items/{workItemId} | No body | 200 safe detail | 401 capability; 404 session, other owner, or unknown id |
+| GET /api/v2/sessions/{sessionId}/work-items/{workItemId}/result | No body | 200 semantic result | 401 capability; 404 when no result exists, including not-yet-complete and other owner |
+| POST /api/v2/sessions/{sessionId}/work-items/{workItemId}/cancel | `{ "expectedRevision": n }` | 200 cancelled, or the same cancelled item | 400 terminal work; 401 capability; 404 other owner; 409 stale revision |
+| POST /api/v2/sessions/{sessionId}/work-items/{workItemId}/approvals/{approvalId}/approve | `{ "expectedRevision", "expectedApprovalRevision", "actionHash" }` | 200 queued resume of the same item | 401 capability; 404 other owner; 409 stale revision or altered hash |
+| POST /api/v2/sessions/{sessionId}/work-items/{workItemId}/approvals/{approvalId}/reject | same body | 200 queued resume without dispatch | 401 capability; 404 other owner; 409 stale revision or altered hash |
+
+Work-item JSON uses status tokens `queued`, `running`, `needsApproval`, `retrying`, `completed`, `failed`, and `cancelled`. List and detail include origin, progress, failure summary, and, while approval is pending, `approvalId`, `approvalRevision`, `actionHash`, and `approvalPreview`. They omit evidence JSON, checkpoint payload, prepared action JSON, and result text. The result route returns only `workItemId`, `text`, and `completedAt`. No new SignalR message carries durable work. A paused or ended session can still list and decide its owner's work.
 
 Agent list (GET detail returns one item with the same fields):
 

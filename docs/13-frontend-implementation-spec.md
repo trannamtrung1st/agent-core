@@ -109,6 +109,10 @@ When the server emits `agent.approval.requested` on the live hub stream, the cli
 
 While a session is open, the chat header shows a compact **Schedules** action. It opens a right-hand Ant Design Drawer for that session's owner scope: intent, schedule summary, timezone, status, next occurrence, and a confirmed cancel. The drawer loads on open, after a response returns to idle while it is open, and after cancellation. Empty, loading, and error states stay inside the drawer. The conversation column and session rail stay in place. Narrow layout hides the chat rail and keeps the drawer. Ant Design v6 `List` is used directly. No second UI kit and no calendar.
 
+## Background Work drawer (observed)
+
+The header **Background work** action is available whenever a session exists, including paused and ended. It opens a drawer on the same spacing as Schedules and lists that owner's durable work: human status, origin, progress, failure summary, and the bounded approval preview. Approve, reject, and cancel confirm before sending the current revision and, for a decision, the approval revision and action hash. A completed result is loaded from the result route into the drawer only. It is not added to the transcript. The list polls every 5 seconds only while the drawer is open, and a newer response replaces an older in-flight response. Ant Design v6 `List` is used directly.
+
 ## Post-MVP planned until verified
 
 Workspace physical provisioning and generated artifacts are observed. Typed tools and `sandbox.run` are observed on the runtime; shipped Support/Compliance allowlists still omit process/shell and sandbox. The identity picker starts Support and Compliance as separate durable catalog rows. No extra sandbox chrome is required in the composer. Phase I adds no WorkItem UI.

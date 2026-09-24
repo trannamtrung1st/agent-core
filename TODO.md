@@ -13,7 +13,7 @@ workflow 35954811544 — green
 
 P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
-**Current active phase:** P6 — durable background work and triggered execution.
+**Current active phase:** P6 — durable background work is observed and not frozen. Do not start P7.
 
 P4 implementation freeze:
 
@@ -772,7 +772,7 @@ Prerequisites:
 
 ## WorkItem / durable run
 
-- [ ] Introduce durable `WorkItem` when a real accepted workflow requires it.
+- [x] Introduce durable `WorkItem` when a real accepted workflow requires it. Observed for P5 `AwaitingDurableWork` occurrences. Phase I (Support/Compliance/`sandbox.run` after deactivation) remains not applicable.
 
 Requirements:
 
@@ -786,27 +786,27 @@ Requirements:
 - bounded retries where appropriate;
 - explicit terminal states.
 
-- [ ] Create at most one logical triggered execution per accepted occurrence/dedupe key.
+- [x] Create at most one logical triggered execution per accepted occurrence/dedupe key.
 
-- [ ] Allow work to continue after session deactivation only when explicitly intended.
+- [x] Allow work to continue after session deactivation only when explicitly intended.
 
-- [ ] Allow paused/reopened sessions to reconnect to existing work without replaying the original user turn.
+- [x] Allow paused/reopened sessions to reconnect to existing work without replaying the original user turn.
 
-- [ ] Build scheduled-task execution on P5 occurrences rather than embedding scheduling inside WorkItem itself.
+- [x] Build scheduled-task execution on P5 occurrences rather than embedding scheduling inside WorkItem itself.
 
 - [ ] Add background research and long-running sandbox jobs only when concrete workflows require them.
 
 ## Triggered/headless agent execution
 
-- [ ] Define a bounded execution context for an Agent Instance + user without requiring an attached browser session.
+- [x] Define a bounded execution context for an Agent Instance + user without requiring an attached browser session.
 
-- [ ] Reuse normal definition, persona, trusted profile, and authorized memory composition.
+- [x] Reuse normal definition, persona, trusted profile, and authorized memory composition.
 
-- [ ] Represent the TriggerOccurrence as the current event rather than fabricating a new user message.
+- [x] Represent the TriggerOccurrence as the current event rather than fabricating a new user message.
 
-- [ ] Keep model/tool permissions identical to or stricter than normal interactive execution unless an explicit policy says otherwise.
+- [x] Keep model/tool permissions identical to or stricter than normal interactive execution unless an explicit policy says otherwise.
 
-- [ ] Decide result delivery independently from execution ownership.
+- [x] Decide result delivery independently from execution ownership. Observed delivery is the Background Work result route, not a chat turn.
 
   Possible delivery targets include:
 
@@ -820,11 +820,11 @@ Requirements:
 
 Current P3 approval is live-session oriented. Do not solve detached approval by bypassing it.
 
-- [ ] If triggered/background work reaches an operation that requires approval and no live approval surface exists, persist an `AwaitingApproval`-style work state and surface it to the user.
+- [x] If triggered/background work reaches an operation that requires approval and no live approval surface exists, persist an `AwaitingApproval`-style work state and surface it to the user.
 
-- [ ] Resume the same idempotent work after approval rather than starting a duplicate run.
+- [x] Resume the same idempotent work after approval rather than starting a duplicate run.
 
-- [ ] Do not auto-approve a sensitive action merely because the user previously created the trigger.
+- [x] Do not auto-approve a sensitive action merely because the user previously created the trigger.
 
 - [ ] Standing/delegated future-action authorization remains deferred until a concrete workflow justifies a carefully scoped design.
 
@@ -832,13 +832,13 @@ Current P3 approval is live-session oriented. Do not solve detached approval by 
 
 - [ ] Reuse P2 progress semantics for live-attached work where appropriate.
 
-- [ ] Persist durable WorkItem progress/checkpoints separately from ordinary assistant chat history.
+- [x] Persist durable WorkItem progress/checkpoints separately from ordinary assistant chat history.
 
-- [ ] Persist final result linkage separately from transient progress.
+- [x] Persist final result linkage separately from transient progress.
 
 ## Session UX
 
-- [ ] Revisit pause/deactivation UX after durable work exists.
+- [x] Revisit pause/deactivation UX after durable work exists. Background Work stays available on paused and ended sessions.
 
 Distinguish:
 
@@ -854,7 +854,7 @@ Distinguish:
 
 ### P6 stop condition
 
-A due P5 occurrence can cause one durable, policy-bounded agent run even when no Session Runtime is attached, and the resulting work can be inspected, cancelled, approved when required, and delivered without replaying the initiating user turn.
+Observed: a due P5 occurrence can cause one durable, policy-bounded agent run even when no Session Runtime is attached, and the resulting work can be inspected, cancelled, approved when required, and delivered without replaying the initiating user turn. Freeze waits on the exact-SHA hosted gate and independent review.
 
 ---
 
@@ -1201,12 +1201,12 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
 - [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
-- [ ] Durable triggered/background execution — P6 (active phase).
+- [x] Durable triggered/background execution — P6 observed, not frozen.
 
 ---
 
 # Next implementation item
 
-**P6 — durable background work and triggered execution.** P5 is frozen on `4bbc0c1`; see `docs/reports/p5-freeze-candidate.md`.
+**P6 — durable background work and triggered execution** is observed and not frozen. P5 is frozen on `4bbc0c1`; see `docs/reports/p5-freeze-candidate.md`. P6 evidence is `docs/reports/p6-freeze-candidate.md`.
 
-P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
+P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools. Do not start P7.
