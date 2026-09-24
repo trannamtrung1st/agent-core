@@ -19,6 +19,8 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         _state = state;
     }
 
+    internal bool CrashOnNextClearSideEffect { get; set; }
+
     public ValueTask<WorkItemCreateResult> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -311,8 +313,16 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         long expectedRevision,
         Guid generation,
         DateTimeOffset clearedAtUtc,
-        CancellationToken cancellationToken = default) =>
-        Mutate(workItemId, item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc));
+        CancellationToken cancellationToken = default)
+    {
+        if (CrashOnNextClearSideEffect)
+        {
+            CrashOnNextClearSideEffect = false;
+            throw new InvalidOperationException("Simulated crash before side-effect clear.");
+        }
+
+        return Mutate(workItemId, item => item.ClearSideEffect(expectedRevision, generation, clearedAtUtc));
+    }
 
     private ValueTask<WorkItem> Mutate(Guid workItemId, Func<WorkItem, WorkItem> change, WorkOwner? owner = null)
     {

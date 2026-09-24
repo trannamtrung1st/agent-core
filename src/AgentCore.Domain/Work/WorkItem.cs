@@ -143,7 +143,9 @@ public sealed class WorkItem
             throw new ArgumentException("An uncertain side effect cannot return to a runnable state.");
         }
 
-        if (knownEffectSummary is not null && !cancellationRequested)
+        if (knownEffectSummary is not null
+            && !cancellationRequested
+            && !WorkKnownEffects.IsHistoricalCompletedEffect(knownEffectSummary))
         {
             throw new ArgumentException("A known effect belongs to a cancellation.");
         }
@@ -771,6 +773,9 @@ public sealed class WorkItem
         }
 
         var approval = Approval is { Decision: WorkApprovalDecision.Approved } ? null : Approval;
+        var knownEffect = SideEffect.Disposition == WorkSideEffectDisposition.Succeeded
+            ? WorkKnownEffects.PreserveCompletedExternalEffect(KnownEffectSummary)
+            : KnownEffectSummary;
         return Copy(
             Status,
             Revision + 1,
@@ -779,7 +784,7 @@ public sealed class WorkItem
             Claim,
             CancellationRequested,
             CancellationRequestedAtUtc,
-            KnownEffectSummary,
+            knownEffect,
             Progress,
             Checkpoint,
             Result,

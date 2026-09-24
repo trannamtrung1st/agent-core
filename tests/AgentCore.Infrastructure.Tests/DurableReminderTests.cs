@@ -573,6 +573,165 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Succeeded_fence_without_checkpointed_tool_result_fails_as_tool_result_lost()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            var actionHash = waiting!.Approval!.ActionHash;
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                actionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            var generation = Guid.NewGuid();
+            var claimed = await harness.Work.TryClaimAsync(waiting.WorkItemId, generation, Now, Now.AddMinutes(1));
+            claimed = await harness.Work.MarkSideEffectAsync(
+                waiting.WorkItemId,
+                claimed!.Revision,
+                generation,
+                WorkSideEffectDisposition.Prepared,
+                actionHash,
+                Now);
+            claimed = await harness.Work.MarkSideEffectAsync(
+                waiting.WorkItemId,
+                claimed.Revision,
+                generation,
+                WorkSideEffectDisposition.InFlight,
+                actionHash,
+                Now);
+            await harness.Work.MarkSideEffectAsync(
+                waiting.WorkItemId,
+                claimed.Revision,
+                generation,
+                WorkSideEffectDisposition.Succeeded,
+                actionHash,
+                Now);
+            var later = Now.AddMinutes(2);
+            harness.Time.SetUtcNow(later);
+            await harness.Work.RecoverExpiredClaimsAsync(later);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("tool-result-lost", failed.Failure!.Code);
+            Assert.Equal(0, harness.Http.Calls);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
+    public async Task Stale_succeeded_fence_clears_when_checkpoint_already_has_the_tool_result()
+    {
+        await ForEachInMemoryOnly(async (harness, work) =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            var firstHash = waiting!.Approval!.ActionHash;
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                firstHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            work.CrashOnNextClearSideEffect = true;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Executor.ExecuteDueAsync(Now, 10).AsTask());
+            Assert.Equal(1, harness.Http.Calls);
+            var later = Now.AddMinutes(2);
+            harness.Time.SetUtcNow(later);
+            await harness.Work.RecoverExpiredClaimsAsync(later);
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
+            harness.Time.SetUtcNow(waiting.NextRetryAtUtc!.Value);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(waiting.NextRetryAtUtc!.Value, 10));
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            var secondHash = waiting.Approval!.ActionHash;
+            var resumeAt = harness.Time.GetUtcNow();
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                secondHash,
+                WorkApprovalDecision.Approved,
+                resumeAt);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(resumeAt, 10));
+            Assert.Equal(2, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+        }, () => new TwoHttpApprovalModel());
+    }
+
+    [Fact]
+    public async Task Cancellation_after_fence_clear_reports_completed_external_action()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkKnownEffects.ExternalActionCompletedBeforeCancellation, waiting!.KnownEffectSummary);
+            var cancelled = await harness.Executor.RequestCancellationAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Revision,
+                null,
+                Now);
+            Assert.Equal(WorkItemStatus.Cancelled, cancelled.Status);
+            Assert.Equal(WorkKnownEffects.ExternalActionCompletedBeforeCancellation, cancelled.KnownEffectSummary);
+        }, () => new TwoHttpApprovalModel());
+    }
+
+    [Fact]
+    public async Task Scheduled_reminder_model_timeout_moves_to_waiting_to_retry()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            await AcceptScheduledAsync(harness, scheduled, 3);
+            var gate = (TimeoutReminderModel)harness.Model.Inner;
+            var execute = harness.Executor.ExecuteDueAsync(Now, 10).AsTask();
+            await gate.Started.Task;
+            harness.Time.Advance(ToolLimits.Overall.Add(TimeSpan.FromSeconds(1)));
+            Assert.Equal(1, await execute);
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
+            Assert.Null(waiting.Failure);
+            Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
+            Assert.Null(waiting.Claim);
+        }, () => new TimeoutReminderModel());
+    }
+
+    [Fact]
     public async Task Sequential_nonreplayable_writes_execute_after_each_tool_result_checkpoint()
     {
         await ForEachAsync(async harness =>
@@ -780,6 +939,24 @@ public sealed class DurableReminderTests
 
     private static Task ForEachAsync(Func<Harness, Task> exercise) =>
         ForEachAsync(exercise, null);
+
+    private static async Task ForEachInMemoryOnly(
+        Func<Harness, InMemoryWorkItemStore, Task> exercise,
+        Func<ILanguageModel>? modelFactory)
+    {
+        var definition = await LoadDefinitionAsync();
+        var state = new InMemoryDurableState();
+        var work = new InMemoryWorkItemStore(state);
+        await exercise(
+            await ComposeAsync(
+                definition,
+                new InMemoryTriggerStore(state),
+                work,
+                new InMemoryDurableWorkHandoff(state),
+                static (triggers, workStore, handoff) => Task.FromResult(new StoreSet(triggers, workStore, handoff)),
+                modelFactory),
+            work);
+    }
 
     private static async Task ForEachAsync(Func<Harness, Task> exercise, Func<ILanguageModel>? modelFactory)
     {
@@ -1095,6 +1272,22 @@ public sealed class DurableReminderTests
 
             yield return new ModelTextDelta("Policy applied.");
             yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class TimeoutReminderModel : ILanguageModel
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: false);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            yield break;
         }
     }
 

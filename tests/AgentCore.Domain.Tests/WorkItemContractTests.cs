@@ -299,6 +299,19 @@ public sealed class WorkItemContractTests
     }
 
     [Fact]
+    public void Clearing_a_succeeded_side_effect_preserves_completed_external_effect_summary()
+    {
+        var claimed = NewItem()
+            .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1))
+            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(2))
+            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddSeconds(3));
+        var cleared = claimed.ClearSideEffect(5, GenerationA, Now.AddSeconds(4));
+        Assert.Equal(WorkSideEffectDisposition.None, cleared.SideEffect.Disposition);
+        Assert.Equal(WorkKnownEffects.ExternalActionCompletedBeforeCancellation, cleared.KnownEffectSummary);
+    }
+
+    [Fact]
     public void Cleared_side_effect_allows_a_second_dispatch_hash_in_the_same_run()
     {
         var claimed = NewItem()

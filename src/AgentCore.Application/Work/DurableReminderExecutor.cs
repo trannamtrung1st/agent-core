@@ -152,40 +152,56 @@ public sealed class DurableReminderExecutor(
                 modelCts,
                 ToolLimits.Overall,
                 Timeout.InfiniteTimeSpan);
-            await foreach (var update in context.LanguageModel.GenerateAsync(speak.Request, modelCts.Token).ConfigureAwait(false))
+            try
             {
-                switch (update)
+                await foreach (var update in context.LanguageModel.GenerateAsync(speak.Request, modelCts.Token).ConfigureAwait(false))
                 {
-                    case ModelTextDelta delta:
-                        text.Append(delta.Text);
-                        break;
-                    case ModelDisplayDelta display:
-                        text.Append(display.Text);
-                        break;
-                    case ModelReasoningDelta:
-                        break;
-                    case ModelCompleted:
-                        break;
-                    case ModelToolCallEvent:
-                        await FailAsync(running, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, CancellationToken.None)
-                            .ConfigureAwait(false);
-                        return true;
-                    case ModelFailed:
-                        await FailAsync(
-                            running,
-                            generation,
-                            asOfUtc,
-                            "model-unavailable",
-                            "The model did not complete the reminder.",
-                            true,
-                            asOfUtc.Add(RetryDelay(running.AttemptCount)),
-                            CancellationToken.None).ConfigureAwait(false);
-                        return true;
-                    default:
-                        await FailAsync(running, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, CancellationToken.None)
-                            .ConfigureAwait(false);
-                        return true;
+                    switch (update)
+                    {
+                        case ModelTextDelta delta:
+                            text.Append(delta.Text);
+                            break;
+                        case ModelDisplayDelta display:
+                            text.Append(display.Text);
+                            break;
+                        case ModelReasoningDelta:
+                            break;
+                        case ModelCompleted:
+                            break;
+                        case ModelToolCallEvent:
+                            await FailAsync(running, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, CancellationToken.None)
+                                .ConfigureAwait(false);
+                            return true;
+                        case ModelFailed:
+                            await FailAsync(
+                                running,
+                                generation,
+                                asOfUtc,
+                                "model-unavailable",
+                                "The model did not complete the reminder.",
+                                true,
+                                asOfUtc.Add(RetryDelay(running.AttemptCount)),
+                                CancellationToken.None).ConfigureAwait(false);
+                            return true;
+                        default:
+                            await FailAsync(running, generation, asOfUtc, "unexpected-model-event", "Scheduled reminder received an unsupported model event.", false, null, CancellationToken.None)
+                                .ConfigureAwait(false);
+                            return true;
+                    }
                 }
+            }
+            catch (OperationCanceledException) when (!linked.Token.IsCancellationRequested)
+            {
+                await FailAsync(
+                    running,
+                    generation,
+                    asOfUtc,
+                    "model-timeout",
+                    "The model did not finish within the reminder budget.",
+                    true,
+                    asOfUtc.Add(RetryDelay(running.AttemptCount)),
+                    CancellationToken.None).ConfigureAwait(false);
+                return true;
             }
 
             if (await TryCommitCancellationAsync(item.Provenance.SourceOccurrenceId, generation).ConfigureAwait(false))
