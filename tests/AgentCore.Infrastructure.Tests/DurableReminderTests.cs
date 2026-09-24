@@ -599,6 +599,7 @@ public sealed class DurableReminderTests
                 claimed!.Revision,
                 generation,
                 WorkSideEffectDisposition.Prepared,
+                "h1",
                 actionHash,
                 Now);
             claimed = await harness.Work.MarkSideEffectAsync(
@@ -606,6 +607,7 @@ public sealed class DurableReminderTests
                 claimed.Revision,
                 generation,
                 WorkSideEffectDisposition.InFlight,
+                "h1",
                 actionHash,
                 Now);
             await harness.Work.MarkSideEffectAsync(
@@ -613,6 +615,7 @@ public sealed class DurableReminderTests
                 claimed.Revision,
                 generation,
                 WorkSideEffectDisposition.Succeeded,
+                "h1",
                 actionHash,
                 Now);
             var later = Now.AddMinutes(2);
@@ -698,7 +701,7 @@ public sealed class DurableReminderTests
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
             Assert.Equal(1, harness.Http.Calls);
             waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
-            Assert.Equal(WorkKnownEffects.ExternalActionCompletedBeforeCancellation, waiting!.KnownEffectSummary);
+            Assert.Equal(WorkKnownEffects.ExternalActionCompleted, waiting!.KnownEffectSummary);
             var cancelled = await harness.Executor.RequestCancellationAsync(
                 owner,
                 waiting.WorkItemId,
@@ -721,14 +724,123 @@ public sealed class DurableReminderTests
             var gate = (TimeoutReminderModel)harness.Model.Inner;
             var execute = harness.Executor.ExecuteDueAsync(Now, 10).AsTask();
             await gate.Started.Task;
+            var timedOutAt = Now.Add(ToolLimits.Overall).Add(TimeSpan.FromSeconds(1));
             harness.Time.Advance(ToolLimits.Overall.Add(TimeSpan.FromSeconds(1)));
             Assert.Equal(1, await execute);
             var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
             Assert.Null(waiting.Failure);
-            Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
+            Assert.Equal(timedOutAt.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
             Assert.Null(waiting.Claim);
         }, () => new TimeoutReminderModel());
+    }
+
+    [Fact]
+    public async Task Identical_nonreplayable_actions_execute_twice_with_distinct_tool_call_ids()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            var firstHash = waiting!.Approval!.ActionHash;
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(2, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+        }, () => new DuplicateHttpApprovalModel());
+    }
+
+    [Fact]
+    public async Task Identical_action_loses_second_result_when_succeeded_fence_survives_without_tool_result()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting!.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            var sharedHash = waiting!.Approval!.ActionHash;
+            await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                sharedHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            var generation = Guid.NewGuid();
+            var claimed = await harness.Work.TryClaimAsync(waiting.WorkItemId, generation, Now, Now.AddMinutes(1));
+            claimed = await harness.Work.MarkSideEffectAsync(
+                waiting.WorkItemId,
+                claimed!.Revision,
+                generation,
+                WorkSideEffectDisposition.Prepared,
+                "h2",
+                sharedHash,
+                Now);
+            claimed = await harness.Work.MarkSideEffectAsync(
+                waiting.WorkItemId,
+                claimed.Revision,
+                generation,
+                WorkSideEffectDisposition.InFlight,
+                "h2",
+                sharedHash,
+                Now);
+            await harness.Work.MarkSideEffectAsync(
+                waiting.WorkItemId,
+                claimed.Revision,
+                generation,
+                WorkSideEffectDisposition.Succeeded,
+                "h2",
+                sharedHash,
+                Now);
+            var later = Now.AddMinutes(2);
+            harness.Time.SetUtcNow(later);
+            await harness.Work.RecoverExpiredClaimsAsync(later);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(later, 10));
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("tool-result-lost", failed.Failure!.Code);
+            Assert.Equal(1, harness.Http.Calls);
+        }, () => new DuplicateHttpApprovalModel());
     }
 
     [Fact]
@@ -817,6 +929,7 @@ public sealed class DurableReminderTests
                 claimed!.Revision,
                 generation,
                 WorkSideEffectDisposition.Prepared,
+                "scheduled-tool",
                 ActionHash,
                 Now);
             await harness.Work.MarkSideEffectAsync(
@@ -824,6 +937,7 @@ public sealed class DurableReminderTests
                 prepared.Revision,
                 generation,
                 WorkSideEffectDisposition.InFlight,
+                "scheduled-tool",
                 ActionHash,
                 Now);
             var later = Now.AddMinutes(1);
@@ -1288,6 +1402,40 @@ public sealed class DurableReminderTests
             Started.TrySetResult();
             await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             yield break;
+        }
+    }
+
+    private sealed class DuplicateHttpApprovalModel : ILanguageModel
+    {
+        private const string SameRequest =
+            """{"method":"POST","url":"https://example.com/items","body":"SAME_PAYLOAD"}""";
+
+        public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var httpResults = request.Messages.Count(message =>
+                message.Role == ModelRole.Tool && string.Equals(message.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal));
+            if (httpResults == 0)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("h1", ToolCatalog.HttpRequest, SameRequest));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (httpResults == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("h2", ToolCatalog.HttpRequest, SameRequest));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelTextDelta("Done.");
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            await Task.CompletedTask;
         }
     }
 

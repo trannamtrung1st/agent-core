@@ -14,6 +14,8 @@ public sealed class WorkItemContractTests
     private static readonly DateTimeOffset Now = new(2026, 9, 24, 1, 0, 0, TimeSpan.Zero);
     private const string ActionHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string OtherHash = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+    private const string ToolCallId = "tool-call-a";
+    private const string OtherToolCallId = "tool-call-b";
 
     [Fact]
     public void Owner_requires_instance_and_profile()
@@ -150,15 +152,15 @@ public sealed class WorkItemContractTests
     public void Indeterminate_side_effect_does_not_return_to_a_runnable_state()
     {
         var claimed = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
-        var prepared = claimed.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1));
-        var inFlight = prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(2));
+        var prepared = claimed.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1));
+        var inFlight = prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(2));
         var recovered = inFlight.RecoverExpiredClaim(Now.AddMinutes(1));
         Assert.Equal(WorkItemStatus.Failed, recovered.Status);
         Assert.Equal(WorkSideEffectDisposition.Indeterminate, recovered.SideEffect.Disposition);
         Assert.Equal("side-effect-indeterminate", recovered.Failure!.Code);
         Assert.Throws<WorkItemTransitionException>(() => recovered.TakeClaim(GenerationB, Now.AddMinutes(2), Now.AddMinutes(3)));
         var replay = Assert.Throws<WorkItemTransitionException>(() =>
-            recovered.MarkSideEffect(recovered.Revision, GenerationA, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddMinutes(2)));
+            recovered.MarkSideEffect(recovered.Revision, GenerationA, WorkSideEffectDisposition.Succeeded, ToolCallId, ActionHash, Now.AddMinutes(2)));
         Assert.Equal(WorkTransitionFailure.Terminal, replay.Failure);
     }
 
@@ -258,9 +260,9 @@ public sealed class WorkItemContractTests
     {
         var prepared = NewItem()
             .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1));
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1));
         var substituted = Assert.Throws<WorkItemTransitionException>(() =>
-            prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, OtherHash, Now.AddSeconds(2)));
+            prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, OtherToolCallId, OtherHash, Now.AddSeconds(2)));
         Assert.Equal(WorkTransitionFailure.Rejected, substituted.Failure);
         Assert.Equal(ActionHash, prepared.SideEffect.ActionHash);
 
@@ -271,7 +273,7 @@ public sealed class WorkItemContractTests
         var rejectedRun = rejected.TakeClaim(GenerationB, Now.AddSeconds(3), Now.AddMinutes(2));
         Assert.Equal(1, rejectedRun.AttemptCount);
         var rejectedDispatch = Assert.Throws<WorkItemTransitionException>(() =>
-            rejectedRun.MarkSideEffect(rejectedRun.Revision, GenerationB, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(4)));
+            rejectedRun.MarkSideEffect(rejectedRun.Revision, GenerationB, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(4)));
         Assert.Equal(WorkTransitionFailure.Rejected, rejectedDispatch.Failure);
 
         var replacementId = Guid.Parse("019944af-0008-7000-8000-0000000000f2");
@@ -280,21 +282,21 @@ public sealed class WorkItemContractTests
             .DecideApproval(replacementId, rejectedRun.Revision + 1, 1, OtherHash, WorkApprovalDecision.Approved, Now.AddSeconds(5));
         var replacedRun = replaced.TakeClaim(GenerationA, Now.AddSeconds(5), Now.AddMinutes(3));
         var dispatched = replacedRun
-            .MarkSideEffect(replacedRun.Revision, GenerationA, WorkSideEffectDisposition.Prepared, OtherHash, Now.AddSeconds(6))
-            .MarkSideEffect(replacedRun.Revision + 1, GenerationA, WorkSideEffectDisposition.InFlight, OtherHash, Now.AddSeconds(7));
+            .MarkSideEffect(replacedRun.Revision, GenerationA, WorkSideEffectDisposition.Prepared, OtherToolCallId, OtherHash, Now.AddSeconds(6))
+            .MarkSideEffect(replacedRun.Revision + 1, GenerationA, WorkSideEffectDisposition.InFlight, OtherToolCallId, OtherHash, Now.AddSeconds(7));
         Assert.Equal(WorkSideEffectDisposition.InFlight, dispatched.SideEffect.Disposition);
         Assert.Equal(OtherHash, dispatched.SideEffect.ActionHash);
         Assert.Equal(1, dispatched.AttemptCount);
 
         var expired = NewItem(id: Guid.Parse("019944af-0008-7000-8000-0000000000c4"), sourceId: Guid.Parse("019944af-0008-7000-8000-0000000000d4"))
             .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1))
             .BeginApproval(3, GenerationA, ApprovalId, "demo.sensitive_action", "{}", ActionHash, "Preview", Now.AddMinutes(10), Now.AddSeconds(2))
             .ExpireApproval(4, Now.AddMinutes(10));
         Assert.Equal(WorkSideEffectDisposition.None, expired.SideEffect.Disposition);
         var expiredRun = expired.TakeClaim(GenerationB, Now.AddMinutes(10), Now.AddMinutes(11));
         var expiredDispatch = Assert.Throws<WorkItemTransitionException>(() =>
-            expiredRun.MarkSideEffect(expiredRun.Revision, GenerationB, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddMinutes(10).AddSeconds(1)));
+            expiredRun.MarkSideEffect(expiredRun.Revision, GenerationB, WorkSideEffectDisposition.Succeeded, ToolCallId, ActionHash, Now.AddMinutes(10).AddSeconds(1)));
         Assert.Equal(WorkTransitionFailure.Rejected, expiredDispatch.Failure);
     }
 
@@ -303,12 +305,12 @@ public sealed class WorkItemContractTests
     {
         var claimed = NewItem()
             .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1))
-            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(2))
-            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddSeconds(3));
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1))
+            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(2))
+            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ToolCallId, ActionHash, Now.AddSeconds(3));
         var cleared = claimed.ClearSideEffect(5, GenerationA, Now.AddSeconds(4));
         Assert.Equal(WorkSideEffectDisposition.None, cleared.SideEffect.Disposition);
-        Assert.Equal(WorkKnownEffects.ExternalActionCompletedBeforeCancellation, cleared.KnownEffectSummary);
+        Assert.Equal(WorkKnownEffects.ExternalActionCompleted, cleared.KnownEffectSummary);
     }
 
     [Fact]
@@ -316,14 +318,14 @@ public sealed class WorkItemContractTests
     {
         var claimed = NewItem()
             .TakeClaim(GenerationA, Now, Now.AddMinutes(1))
-            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ActionHash, Now.AddSeconds(1))
-            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ActionHash, Now.AddSeconds(2))
-            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ActionHash, Now.AddSeconds(3))
+            .MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1))
+            .MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(2))
+            .MarkSideEffect(4, GenerationA, WorkSideEffectDisposition.Succeeded, ToolCallId, ActionHash, Now.AddSeconds(3))
             .ClearSideEffect(5, GenerationA, Now.AddSeconds(4));
         Assert.Equal(WorkSideEffectDisposition.None, claimed.SideEffect.Disposition);
         var next = claimed
-            .MarkSideEffect(6, GenerationA, WorkSideEffectDisposition.Prepared, OtherHash, Now.AddSeconds(5))
-            .MarkSideEffect(7, GenerationA, WorkSideEffectDisposition.InFlight, OtherHash, Now.AddSeconds(6));
+            .MarkSideEffect(6, GenerationA, WorkSideEffectDisposition.Prepared, OtherToolCallId, OtherHash, Now.AddSeconds(5))
+            .MarkSideEffect(7, GenerationA, WorkSideEffectDisposition.InFlight, OtherToolCallId, OtherHash, Now.AddSeconds(6));
         Assert.Equal(OtherHash, next.SideEffect.ActionHash);
         Assert.Equal(WorkSideEffectDisposition.InFlight, next.SideEffect.Disposition);
     }

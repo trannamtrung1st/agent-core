@@ -148,9 +148,8 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
 
             if (running.SideEffect.Disposition == WorkSideEffectDisposition.Succeeded)
             {
-                var fencedHash = running.SideEffect.ActionHash;
-                if (fencedHash is null
-                    || !await IsFencedSideEffectRecordedAsync(messages, fencedHash, cancellationToken).ConfigureAwait(false))
+                var fencedToolCallId = running.SideEffect.ToolCallId;
+                if (fencedToolCallId is null || !HasToolResult(messages, fencedToolCallId))
                 {
                     return new DurableOccurrenceFailed(
                         running,
@@ -213,6 +212,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                         running.Revision,
                         generation,
                         WorkSideEffectDisposition.Prepared,
+                        call.Id,
                         hash,
                         asOfUtc,
                         cancellationToken).ConfigureAwait(false);
@@ -223,6 +223,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     running.Revision,
                     generation,
                     WorkSideEffectDisposition.InFlight,
+                    call.Id,
                     hash,
                     asOfUtc,
                     cancellationToken).ConfigureAwait(false);
@@ -266,6 +267,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                         running.Revision,
                         generation,
                         WorkSideEffectDisposition.Indeterminate,
+                        call.Id,
                         hash,
                         asOfUtc,
                         CancellationToken.None).ConfigureAwait(false);
@@ -283,6 +285,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                     running.Revision,
                     generation,
                     WorkSideEffectDisposition.Succeeded,
+                    call.Id,
                     hash,
                     asOfUtc,
                     cancellationToken).ConfigureAwait(false);
@@ -315,6 +318,7 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
                 running.Revision,
                 generation,
                 WorkSideEffectDisposition.Prepared,
+                call.Id,
                 actionHash,
                 asOfUtc,
                 cancellationToken).ConfigureAwait(false);
@@ -404,44 +408,10 @@ public sealed class DurableOccurrenceExecution(SessionToolExecutor tools, TimePr
         && string.Equals(approval.ToolName, call.Name, StringComparison.Ordinal)
         && string.Equals(approval.ActionHash, hash, StringComparison.Ordinal);
 
-    private async ValueTask<bool> IsFencedSideEffectRecordedAsync(
-        IReadOnlyList<ModelMessage> messages,
-        string actionHash,
-        CancellationToken cancellationToken)
-    {
-        var answeredIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var message in messages)
-        {
-            if (message.Role == ModelRole.Tool && message.ToolCallId is not null)
-            {
-                answeredIds.Add(message.ToolCallId);
-            }
-        }
-
-        foreach (var message in messages)
-        {
-            if (message.Role != ModelRole.Assistant || message.ToolCalls is null)
-            {
-                continue;
-            }
-
-            foreach (var toolCall in message.ToolCalls)
-            {
-                if (!TryArguments(toolCall, out var args))
-                {
-                    continue;
-                }
-
-                var hash = await ResolveActionHashAsync(toolCall, args, cancellationToken).ConfigureAwait(false);
-                if (string.Equals(hash, actionHash, StringComparison.Ordinal) && answeredIds.Contains(toolCall.Id))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
+    private static bool HasToolResult(IReadOnlyList<ModelMessage> messages, string toolCallId) =>
+        messages.Any(message =>
+            message.Role == ModelRole.Tool
+            && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
 
     private static ModelToolCall? UnansweredCall(IReadOnlyList<ModelMessage> messages)
     {

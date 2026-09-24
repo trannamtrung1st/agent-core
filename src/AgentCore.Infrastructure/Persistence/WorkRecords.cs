@@ -54,6 +54,8 @@ public sealed class WorkItemRecord
 
     public int SideEffectDisposition { get; set; }
 
+    public string? SideEffectToolCallId { get; set; }
+
     public string? SideEffectActionHash { get; set; }
 
     public long? SideEffectUpdatedAtUtc { get; set; }

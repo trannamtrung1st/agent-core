@@ -40,6 +40,7 @@ internal static class WorkStoreMapping
         row.FailureSummary = item.Failure?.Summary;
         row.FailureAtUtc = item.Failure is null ? null : item.Failure.FailedAtUtc.ToUnixTimeMilliseconds();
         row.SideEffectDisposition = (int)item.SideEffect.Disposition;
+        row.SideEffectToolCallId = item.SideEffect.ToolCallId;
         row.SideEffectActionHash = item.SideEffect.ActionHash;
         row.SideEffectUpdatedAtUtc = Unix(item.SideEffect.UpdatedAtUtc);
         row.CurrentApprovalId = item.Approval is null ? null : Id(item.Approval.ApprovalId);
@@ -116,6 +117,7 @@ internal static class WorkStoreMapping
             ? WorkSideEffect.None
             : new WorkSideEffect(
                 (WorkSideEffectDisposition)row.SideEffectDisposition,
+                row.SideEffectToolCallId,
                 row.SideEffectActionHash,
                 FromUnix(row.SideEffectUpdatedAtUtc));
         return new WorkItem(

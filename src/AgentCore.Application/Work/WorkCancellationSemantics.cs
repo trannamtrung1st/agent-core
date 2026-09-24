@@ -29,6 +29,18 @@ public static class WorkCancellationSemantics
         };
     }
 
-    public static string? MergeKnownEffectSummary(WorkItem item, string? requested) =>
-        requested ?? InferKnownEffectSummary(item);
+    public static string? MergeKnownEffectSummary(WorkItem item, string? requested)
+    {
+        if (requested is not null)
+        {
+            return requested;
+        }
+
+        if (WorkKnownEffects.IsHistoricalCompletedEffect(item.KnownEffectSummary))
+        {
+            return WorkKnownEffects.ExternalActionCompletedBeforeCancellation;
+        }
+
+        return InferKnownEffectSummary(item);
+    }
 }

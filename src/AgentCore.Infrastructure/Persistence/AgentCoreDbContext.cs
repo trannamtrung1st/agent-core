@@ -300,6 +300,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.KnownEffectSummary).HasMaxLength(WorkLimits.MaxKnownEffectCharacters);
             entity.Property(row => row.ResultText).HasMaxLength(WorkLimits.MaxResultCharacters);
             entity.Property(row => row.CheckpointJson).HasMaxLength(WorkLimits.MaxCheckpointBytes);
+            entity.Property(row => row.SideEffectToolCallId).HasMaxLength(128);
             entity.Property(row => row.SideEffectActionHash).HasMaxLength(WorkLimits.ActionHashCharacters);
             entity.HasIndex(row => row.SourceOccurrenceId).IsUnique();
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.CreatedAtUtc });

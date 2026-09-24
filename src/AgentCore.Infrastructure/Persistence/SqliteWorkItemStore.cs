@@ -345,12 +345,13 @@ public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> co
         long expectedRevision,
         Guid generation,
         WorkSideEffectDisposition disposition,
+        string toolCallId,
         string actionHash,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default) =>
         Required(MutateAsync(
             workItemId,
-            item => item.MarkSideEffect(expectedRevision, generation, disposition, actionHash, updatedAtUtc),
+            item => item.MarkSideEffect(expectedRevision, generation, disposition, toolCallId, actionHash, updatedAtUtc),
             cancellationToken));
 
     public ValueTask<WorkItem> ClearSideEffectAsync(

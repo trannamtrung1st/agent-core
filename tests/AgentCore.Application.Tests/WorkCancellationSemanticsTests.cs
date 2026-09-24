@@ -24,14 +24,15 @@ public sealed class WorkCancellationSemanticsTests
             "Riley");
         var generation = Guid.NewGuid();
         var hash = new string('a', 64);
+        const string toolCallId = "tool-call";
         var uncertain = WorkItem.Create(Guid.NewGuid(), owner, provenance, new WorkModelPin("a", "b", "c", "medium"), 3, DateTimeOffset.UtcNow)
             .TakeClaim(generation, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(1))
-            .MarkSideEffect(2, generation, WorkSideEffectDisposition.Prepared, hash, DateTimeOffset.UtcNow)
-            .MarkSideEffect(3, generation, WorkSideEffectDisposition.InFlight, hash, DateTimeOffset.UtcNow);
+            .MarkSideEffect(2, generation, WorkSideEffectDisposition.Prepared, toolCallId, hash, DateTimeOffset.UtcNow)
+            .MarkSideEffect(3, generation, WorkSideEffectDisposition.InFlight, toolCallId, hash, DateTimeOffset.UtcNow);
         Assert.Equal(WorkCancellationSemantics.UncertainExternalEffect, WorkCancellationSemantics.InferKnownEffectSummary(uncertain));
 
         var completed = uncertain
-            .MarkSideEffect(4, generation, WorkSideEffectDisposition.Succeeded, hash, DateTimeOffset.UtcNow);
+            .MarkSideEffect(4, generation, WorkSideEffectDisposition.Succeeded, toolCallId, hash, DateTimeOffset.UtcNow);
         Assert.Equal(WorkCancellationSemantics.CompletedExternalEffect, WorkCancellationSemantics.InferKnownEffectSummary(completed));
     }
 }

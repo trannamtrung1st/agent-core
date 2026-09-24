@@ -18,6 +18,8 @@ public sealed class WorkItemStoreContractTests
     private static readonly DateTimeOffset Now = new(2026, 9, 24, 2, 0, 0, TimeSpan.Zero);
     private const string ActionHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string OtherHash = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+    private const string ToolCallId = "tool-call-a";
+    private const string OtherToolCallId = "tool-call-b";
 
     [Fact]
     public async Task Create_is_owner_scoped_and_idempotent_for_one_source_occurrence()
@@ -274,6 +276,7 @@ public sealed class WorkItemStoreContractTests
                 substitutedClaim.Revision,
                 substitutedGeneration,
                 WorkSideEffectDisposition.Prepared,
+                ToolCallId,
                 ActionHash,
                 Now.AddSeconds(2));
             var swapped = await Assert.ThrowsAsync<AgentCoreException>(() => store.MarkSideEffectAsync(
@@ -281,6 +284,7 @@ public sealed class WorkItemStoreContractTests
                 prepared.Revision,
                 substitutedGeneration,
                 WorkSideEffectDisposition.InFlight,
+                OtherToolCallId,
                 OtherHash,
                 Now.AddSeconds(3)).AsTask());
             Assert.Equal("Conflict", swapped.Code);
@@ -294,6 +298,7 @@ public sealed class WorkItemStoreContractTests
                 rejected.Revision,
                 rejected.Claim!.Generation,
                 WorkSideEffectDisposition.InFlight,
+                ToolCallId,
                 ActionHash,
                 rejected.UpdatedAtUtc.AddSeconds(1)).AsTask());
             Assert.Equal("Conflict", rejectedDispatch.Code);
@@ -305,6 +310,7 @@ public sealed class WorkItemStoreContractTests
                 expired.Revision,
                 expired.Claim!.Generation,
                 WorkSideEffectDisposition.Succeeded,
+                ToolCallId,
                 ActionHash,
                 expired.UpdatedAtUtc.AddSeconds(1)).AsTask());
             Assert.Equal("Conflict", expiredDispatch.Code);
@@ -327,6 +333,7 @@ public sealed class WorkItemStoreContractTests
                 claimed.Revision,
                 generation,
                 WorkSideEffectDisposition.Prepared,
+                ToolCallId,
                 ActionHash,
                 Now.AddSeconds(1));
             var inFlight = await store.MarkSideEffectAsync(
@@ -334,6 +341,7 @@ public sealed class WorkItemStoreContractTests
                 prepared.Revision,
                 generation,
                 WorkSideEffectDisposition.InFlight,
+                ToolCallId,
                 ActionHash,
                 Now.AddSeconds(2));
             Assert.Equal(1, await store.RecoverExpiredClaimsAsync(Now.AddMinutes(1)));
@@ -524,6 +532,7 @@ public sealed class WorkItemStoreContractTests
             claimed.Revision,
             generation,
             WorkSideEffectDisposition.Prepared,
+            ToolCallId,
             ActionHash,
             createdAt.AddSeconds(2));
         var waiting = await store.BeginApprovalAsync(

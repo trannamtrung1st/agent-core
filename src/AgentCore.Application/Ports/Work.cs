@@ -120,6 +120,7 @@ public interface IWorkItemStore
         long expectedRevision,
         Guid generation,
         WorkSideEffectDisposition disposition,
+        string toolCallId,
         string actionHash,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default);

@@ -714,15 +714,24 @@ public sealed class WorkItem
         long expectedRevision,
         Guid generation,
         WorkSideEffectDisposition disposition,
+        string toolCallId,
         string actionHash,
         DateTimeOffset updatedAtUtc)
     {
-        if (SideEffect.Disposition == disposition && string.Equals(SideEffect.ActionHash, actionHash, StringComparison.Ordinal))
+        if (SideEffect.Disposition == disposition
+            && string.Equals(SideEffect.ToolCallId, toolCallId, StringComparison.Ordinal)
+            && string.Equals(SideEffect.ActionHash, actionHash, StringComparison.Ordinal))
         {
             return this;
         }
 
         RequireOperational(expectedRevision, generation);
+        if (SideEffect.ToolCallId is not null
+            && !string.Equals(SideEffect.ToolCallId, toolCallId, StringComparison.Ordinal))
+        {
+            throw new WorkItemTransitionException(WorkTransitionFailure.Rejected, "Side-effect operation does not match.");
+        }
+
         if (SideEffect.ActionHash is not null
             && !string.Equals(SideEffect.ActionHash, actionHash, StringComparison.Ordinal))
         {
@@ -752,7 +761,7 @@ public sealed class WorkItem
             Checkpoint,
             Result,
             Failure,
-            new WorkSideEffect(disposition, actionHash, updatedAtUtc),
+            new WorkSideEffect(disposition, toolCallId, actionHash, updatedAtUtc),
             Approval,
             updatedAtUtc);
     }
@@ -866,7 +875,11 @@ public sealed class WorkItem
             return SideEffect;
         }
 
-        return new WorkSideEffect(WorkSideEffectDisposition.Indeterminate, SideEffect.ActionHash, updatedAtUtc);
+        return new WorkSideEffect(
+            WorkSideEffectDisposition.Indeterminate,
+            SideEffect.ToolCallId,
+            SideEffect.ActionHash,
+            updatedAtUtc);
     }
 
     private void RequireOperational(long expectedRevision, Guid generation)

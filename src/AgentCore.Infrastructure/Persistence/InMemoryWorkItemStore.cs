@@ -303,10 +303,11 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         long expectedRevision,
         Guid generation,
         WorkSideEffectDisposition disposition,
+        string toolCallId,
         string actionHash,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default) =>
-        Mutate(workItemId, item => item.MarkSideEffect(expectedRevision, generation, disposition, actionHash, updatedAtUtc));
+        Mutate(workItemId, item => item.MarkSideEffect(expectedRevision, generation, disposition, toolCallId, actionHash, updatedAtUtc));
 
     public ValueTask<WorkItem> ClearSideEffectAsync(
         Guid workItemId,

@@ -302,9 +302,13 @@ public sealed class WorkFailure
 
 public sealed class WorkSideEffect
 {
-    public static WorkSideEffect None { get; } = new(WorkSideEffectDisposition.None, null, null);
+    public static WorkSideEffect None { get; } = new(WorkSideEffectDisposition.None, null, null, null);
 
-    public WorkSideEffect(WorkSideEffectDisposition disposition, string? actionHash, DateTimeOffset? updatedAtUtc)
+    public WorkSideEffect(
+        WorkSideEffectDisposition disposition,
+        string? toolCallId,
+        string? actionHash,
+        DateTimeOffset? updatedAtUtc)
     {
         if (!Enum.IsDefined(disposition))
         {
@@ -313,7 +317,7 @@ public sealed class WorkSideEffect
 
         if (disposition == WorkSideEffectDisposition.None)
         {
-            if (actionHash is not null || updatedAtUtc is not null)
+            if (toolCallId is not null || actionHash is not null || updatedAtUtc is not null)
             {
                 throw new ArgumentException("An empty side effect cannot carry an action.");
             }
@@ -326,15 +330,24 @@ public sealed class WorkSideEffect
             }
 
             WorkTime.RequireUtc(updatedAtUtc.Value, "Side effect");
+            if (string.IsNullOrWhiteSpace(toolCallId))
+            {
+                throw new ArgumentException("Side-effect tool call identity is required.");
+            }
+
+            toolCallId = toolCallId.Trim();
             actionHash = WorkText.RequireActionHash(actionHash);
         }
 
         Disposition = disposition;
+        ToolCallId = toolCallId;
         ActionHash = actionHash;
         UpdatedAtUtc = updatedAtUtc;
     }
 
     public WorkSideEffectDisposition Disposition { get; }
+
+    public string? ToolCallId { get; }
 
     public string? ActionHash { get; }
 

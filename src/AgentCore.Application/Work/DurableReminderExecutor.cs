@@ -192,14 +192,15 @@ public sealed class DurableReminderExecutor(
             }
             catch (OperationCanceledException) when (!linked.Token.IsCancellationRequested)
             {
+                var failedAtUtc = time.GetUtcNow();
                 await FailAsync(
                     running,
                     generation,
-                    asOfUtc,
+                    failedAtUtc,
                     "model-timeout",
                     "The model did not finish within the reminder budget.",
                     true,
-                    asOfUtc.Add(RetryDelay(running.AttemptCount)),
+                    failedAtUtc.Add(RetryDelay(running.AttemptCount)),
                     CancellationToken.None).ConfigureAwait(false);
                 return true;
             }
