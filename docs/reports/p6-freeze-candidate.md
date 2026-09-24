@@ -1,18 +1,19 @@
 # P6 — Durable background work and triggered execution
 
-**P6 is not frozen.** This report is the freeze candidate. Independent review of proposal §§20/22 has not accepted it, and hosted `.github/workflows/synthetic.yml` has not run on the candidate SHA. Do not start P7. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
+**P6 is not frozen.** Independent review has not accepted this candidate. The implementation freeze SHA is `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 is green on that exact SHA: Synthetic offline gates and Synthetic Compose smoke both succeeded. The commit that records this workflow id is a documentation-only descendant and is not the implementation freeze SHA. Do not start P7. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
 | Behavior through | `7a22b25166f4c95bdabf4cf8052fe617137bfccb` (`7a22b25`) |
-| Candidate commit | the W10 commit that adds this report and the Playwright isolation fix |
-| Hosted workflow | **not run** — `gh auth status` reports no GitHub login, so the candidate SHA was not pushed |
+| Implementation freeze SHA | `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (`6900bc1`) |
+| Hosted workflow | [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 — **success** on `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Synthetic offline gates success. Synthetic Compose smoke success |
+| Earlier hosted runs | [`35988225906`](https://github.com/trannamtrung1st/agent-core/actions/runs/35988225906) on `babeca669a9dfb7044d7d9886194eb925d6b8f93` failed and is not freeze evidence. Attempt 1 of `35990145456` failed Playwright progress on the same SHA and is not the green evidence |
 | P5 baseline preserved | `4bbc0c17bc54746f87fd211174690659869e3e45`, workflow `35954811544` |
 | Pre-P6 HEAD | `a92af7b6a3542472177d9c8894d35705e49b7774`, workflow `35957193903` |
 
-A later documentation-only descendant may record a workflow id. That descendant is not the implementation freeze SHA. Parent or descendant CI is not substitute evidence.
+The commit that adds this workflow id is documentation only. It is not the implementation freeze SHA. Parent or descendant CI is not substitute evidence.
 
 ## What shipped
 
@@ -38,10 +39,10 @@ A later documentation-only descendant may record a workflow id. That descendant 
 | AC-P6-22 | Domain, Application, Infrastructure, and API suites below; Playwright 50 passed |
 | AC-P6-23 | SQLite reopen journeys; Compose volume recreation |
 | AC-P6-24 | Manual A below |
-| AC-P6-25 | This report. Hosted exact-SHA gate is still open |
+| AC-P6-25 | This report. Hosted workflow `35990145456` attempt 2 is green on implementation SHA `6900bc1` |
 | RULE-01..18 | Covered by the batches above. Review 0014 passed W09 at `7a22b25` |
 | RULE-19 | P4 and P5 freeze reports were not rewritten as P6 evidence. Phase I stays not-applicable |
-| RULE-20 | Freeze is not claimed. The hosted gap is explicit |
+| RULE-20 | Freeze is not claimed. Review has not accepted the candidate. The hosted gate is green on `6900bc1` |
 
 ## Manual evidence
 
@@ -92,6 +93,5 @@ Earlier Playwright attempts on a dirty `synthetic.db` failed the empty Backgroun
 
 ## Unverified
 
-- Exact-SHA hosted Synthetic job and Compose job. `gh auth status` reports no GitHub login, so this candidate was not pushed and has no workflow id. Local gate results are not that evidence.
 - Manual A does not show an intent paraphrase. The scripted completion text is `Hello from synthetic.`
-- P6 freeze, and any P7 work.
+- P6 freeze, until independent review accepts this candidate. P7 has not started.
