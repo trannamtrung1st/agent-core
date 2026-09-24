@@ -13,7 +13,16 @@ workflow 35954811544 — green
 
 P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
-**Current active phase:** P6 — durable background work is observed and not frozen. Do not start P7.
+P6 implementation freeze:
+
+```text
+6900bc1d0f0331f8696fc59acdfe7be49d50ebf2
+workflow 35990145456 attempt 2 — green
+```
+
+P6 is closed/frozen. Evidence: `docs/reports/p6-freeze-candidate.md`. Whole-task review accepted the candidate, including the scripted Manual A result `Hello from synthetic.` and Manual C's equivalent.
+
+**Current active phase:** P7 — next, not started. Do not implement P7.
 
 P4 implementation freeze:
 
@@ -30,12 +39,11 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P5 are closed/frozen.**
-2. **P6 — durable background work and triggered execution** is the active phase.
-3. **P7 — agent harness / admin lifecycle.**
-4. **P8 — harness/platform extensibility.**
-5. **P9 — sandbox evolution when requirements justify it.**
-6. **P10 — multi-user/product infrastructure when requirements justify it.**
+1. **P0–P6 are closed/frozen.**
+2. **P7 — agent harness / admin lifecycle** is the next phase and has not started. Do not implement P7.
+3. **P8 — harness/platform extensibility.**
+4. **P9 — sandbox evolution when requirements justify it.**
+5. **P10 — multi-user/product infrastructure when requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
@@ -1157,7 +1165,8 @@ P2 freeze:  47d6ff6
 P3 freeze:  4dbb920
 P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
-active phase: P6
+P6 freeze:  6900bc1 / workflow 35990145456 attempt 2 green
+next phase: P7 — not started
 ```
 
 - [ ] Keep TODO focused on current/future work.
@@ -1201,12 +1210,14 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
 - [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
-- [x] Durable triggered/background execution — P6 observed, not frozen.
+- [x] Durable triggered/background execution — P6 closed/frozen on `6900bc1` (workflow `35990145456` attempt 2).
 
 ---
 
 # Next implementation item
 
-**P6 — durable background work and triggered execution** is observed and not frozen. P5 is frozen on `4bbc0c1`; see `docs/reports/p5-freeze-candidate.md`. P6 evidence is `docs/reports/p6-freeze-candidate.md`.
+**P6 — durable background work and triggered execution** is closed/frozen on `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Hosted workflow `35990145456` attempt 2 is green. Whole-task review accepted the candidate, including the scripted Manual A result and Manual C's equivalent. Evidence: `docs/reports/p6-freeze-candidate.md`. P5 remains frozen on `4bbc0c1`.
 
-P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools. Do not start P7.
+P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
+
+**P7** is the next phase and has not started. Do not implement P7.

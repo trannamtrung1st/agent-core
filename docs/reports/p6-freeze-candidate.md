@@ -1,6 +1,6 @@
 # P6 — Durable background work and triggered execution
 
-**P6 is not frozen.** Independent review has not accepted this candidate. The implementation freeze SHA is `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 is green on that exact SHA: Synthetic offline gates and Synthetic Compose smoke both succeeded. The commit that records this workflow id is a documentation-only descendant and is not the implementation freeze SHA. Do not start P7. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
+**P6 is closed/frozen** on implementation SHA `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 is green on that exact SHA: Synthetic offline gates and Synthetic Compose smoke both succeeded. Whole-task review 0018 accepted this candidate, including the scripted Manual A result `Hello from synthetic.` and Manual C's equivalent. The commit that records this freeze is a documentation-only descendant and is not the implementation freeze SHA. **P7** is the next phase and is not implemented. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
 
 ## Candidate
 
@@ -42,7 +42,7 @@ The commit that adds this workflow id is documentation only. It is not the imple
 | AC-P6-25 | This report. Hosted workflow `35990145456` attempt 2 is green on implementation SHA `6900bc1` |
 | RULE-01..18 | Covered by the batches above. Review 0014 passed W09 at `7a22b25` |
 | RULE-19 | P4 and P5 freeze reports were not rewritten as P6 evidence. Phase I stays not-applicable |
-| RULE-20 | Freeze is not claimed. Review has not accepted the candidate. The hosted gate is green on `6900bc1` |
+| RULE-20 | P6 is closed/frozen on `6900bc1`. Whole-task review 0018 accepted the candidate. P7 is next and is not implemented |
 
 ## Manual evidence
 
@@ -55,7 +55,7 @@ Profile **Synthetic**. Runtime behavior is `7a22b25`. Disposable host: API `http
 - Registration `01a0d2d5-8803-769e-8f53-e6e1ce24aa57`, intent `check the oven`, created `2026-09-24T09:53:24.483Z`.
 - Occurrence `f605d127-3a4e-e453-bc88-5de6afc8c141` observed `2026-09-24T09:54:24.633Z`, disposition `AcceptedDurable` (6), linked to one WorkItem.
 - WorkItem `01a0d2d6-733b-726f-8e44-d7535141bc84`, status Completed, attempt 1, result completed `2026-09-24T09:54:25.746Z`.
-- Result text: `Hello from synthetic.` The scripted model does not restate “check the oven”.
+- Result text: `Hello from synthetic.` The scripted model does not restate “check the oven”. Whole-task review 0018 accepts this scripted result.
 - Chat stayed four rows: the non-schedule hello, and `Scheduled Call John.` No second work item. Background Work showed the same completed result after reload.
 
 ### Manual B — approval across API restart — pass
@@ -72,7 +72,7 @@ Profile **Synthetic**. Runtime behavior is `7a22b25`. Disposable host: API `http
 - WorkItem `cbbad6f6-9c0e-4bf1-b0dc-1e8d82c58876` was seeded `WaitingToRetry` with a future retry time, then cancelled in Background Work at `2026-09-24T09:57:46.152Z`.
 - After the same API restart, the drawer still showed Cancelled. No completion text was stored.
 - The stale-worker fence is `DurableWorkJourneyTests`: an expired claim with cancellation requested becomes Cancelled, and a stale `CompleteAsync` is `Conflict`. That race was not repeated by hand.
-- Review 0015 accepts this equivalent: the Background Work cancel survived restart, and the stale-generation fence stays `DurableWorkJourneyTests`.
+- Review 0015 accepts this equivalent: the Background Work cancel survived restart, and the stale-generation fence stays `DurableWorkJourneyTests`. Whole-task review 0018 accepts the same equivalent.
 
 ## Local gate
 
@@ -93,5 +93,5 @@ Earlier Playwright attempts on a dirty `synthetic.db` failed the empty Backgroun
 
 ## Unverified
 
-- Manual A does not show an intent paraphrase. The scripted completion text is `Hello from synthetic.`
-- P6 freeze, until independent review accepts this candidate. P7 has not started.
+- P7 is the next phase and is not implemented.
+- Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
