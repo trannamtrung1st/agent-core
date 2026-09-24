@@ -100,6 +100,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -112,6 +114,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IStructuredMemoryStore, InMemoryStructuredMemoryStore>();
             services.TryAddSingleton<IAgentInstanceStore, InMemoryAgentInstanceStore>();
             services.TryAddSingleton<ITriggerStore, InMemoryTriggerStore>();
+            services.TryAddSingleton<IWorkItemStore, InMemoryWorkItemStore>();
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
