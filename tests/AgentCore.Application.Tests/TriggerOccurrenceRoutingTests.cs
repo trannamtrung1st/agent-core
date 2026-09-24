@@ -783,6 +783,9 @@ public sealed class TriggerOccurrenceRoutingTests
         public ValueTask<TriggerRegistration?> SuspendPolicyAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
             inner.SuspendPolicyAsync(owner, registrationId, expectedRevision, reason, suspendedAt, cancellationToken);
 
+        public ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, DateTimeOffset reactivatedAt, CancellationToken cancellationToken = default) =>
+            inner.TryReactivatePolicySuspensionAsync(owner, registrationId, expectedRevision, reactivatedAt, cancellationToken);
+
         public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(Guid occurrenceId, Guid claimId, DateTimeOffset leaseExpiresAtUtc, DateTimeOffset claimedAt, CancellationToken cancellationToken = default) =>
             inner.TryClaimOccurrenceAsync(occurrenceId, claimId, leaseExpiresAtUtc, claimedAt, cancellationToken);
 
@@ -907,6 +910,9 @@ public sealed class TriggerOccurrenceRoutingTests
 
         public ValueTask<TriggerRegistration?> SuspendPolicyAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, string reason, DateTimeOffset suspendedAt, CancellationToken cancellationToken = default) =>
             inner.SuspendPolicyAsync(owner, registrationId, expectedRevision, reason, suspendedAt, cancellationToken);
+
+        public ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(TriggerOwner owner, Guid registrationId, long expectedRevision, DateTimeOffset reactivatedAt, CancellationToken cancellationToken = default) =>
+            inner.TryReactivatePolicySuspensionAsync(owner, registrationId, expectedRevision, reactivatedAt, cancellationToken);
 
         public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(Guid occurrenceId, Guid claimId, DateTimeOffset leaseExpiresAtUtc, DateTimeOffset claimedAt, CancellationToken cancellationToken = default) =>
             inner.TryClaimOccurrenceAsync(occurrenceId, claimId, leaseExpiresAtUtc, claimedAt, cancellationToken);

@@ -112,7 +112,11 @@ public sealed class TriggerAdmissionGuard(
             return new TriggerAdmissionDecision(TriggerAdmissionDecisionKind.Suspend, "Owner profile is unavailable.");
         }
 
-        var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, cancellationToken)
+        var definition = await TriggerDurableSchedulingPolicy.ResolveEffectiveDefinitionAsync(
+                new TriggerOwner(owner.AgentInstanceId, owner.ProfileId),
+                instances,
+                definitions,
+                cancellationToken)
             .ConfigureAwait(false);
         if (definition is null || !OccurrenceCompatibility.Allows(definition, sourceKind))
         {

@@ -1,0 +1,236 @@
+using System.Text.Json;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Identity;
+using AgentCore.Application.Testing;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Triggers;
+using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.Synthetic;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+
+namespace AgentCore.Application.Tests;
+
+public sealed class TriggerDurablePolicyTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 9, 23, 8, 0, 0, TimeSpan.Zero);
+    private static readonly Guid ProfileId = Guid.Parse("019944af-00d1-7000-8000-0000000000b1");
+
+    [Fact]
+    public async Task Schedule_create_uses_durable_active_version_not_session_definition()
+    {
+        var definitions = Definitions();
+        var instances = new InMemoryAgentInstanceStore();
+        var memory = new InMemoryMemoryStore();
+        var v7 = (await definitions.GetAsync("general-assistant", 7))!;
+        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
+        var instanceId = AgentInstance.CompatibilityFor("general-assistant");
+        await instances.InsertAsync(new AgentInstance(
+            instanceId,
+            v7.Id,
+            7,
+            v7.Identity,
+            AgentInstanceLifecycle.Active,
+            Now,
+            Now,
+            Compatibility: true));
+        await memory.SaveProfileAsync(
+            new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
+            {
+                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now)
+            }, Now),
+            0);
+
+        var store = new InMemoryTriggerStore();
+        var time = new FakeTimeProvider(Now);
+        var registrations = new TriggerRegistrationService(store, Ids(4), time);
+        var owner = new TriggerOwner(instanceId, ProfileId);
+        var context = new TriggerCommandContext(
+            owner,
+            Guid.Parse("019944af-00d1-7000-8000-0000000000c1"),
+            "UTC",
+            "remind me tomorrow at 9",
+            "en",
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            TriggerCommandAction.Create,
+            false,
+            null,
+            Guid.Parse("019944af-00d1-7000-8000-0000000000d1"),
+            Now);
+
+        using var args = JsonDocument.Parse("""{"intent":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        var denied = await TriggerScheduleCommands.ExecuteAsync(
+            v9,
+            registrations,
+            ToolCatalog.TriggerScheduleOnce,
+            args.RootElement,
+            context,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer(),
+            instances,
+            definitions);
+        Assert.Contains("\"error\":\"policy\"", denied.Text, StringComparison.Ordinal);
+        Assert.Empty(await store.ListAsync(owner, null));
+    }
+
+    [Fact]
+    public async Task Compatibility_instance_forward_upgrades_and_due_schedule_is_admitted()
+    {
+        var definitions = Definitions();
+        var instances = new InMemoryAgentInstanceStore();
+        var memory = new InMemoryMemoryStore();
+        var clock = new FakeTimeProvider(Now);
+        var instanceService = new AgentInstanceService(instances, definitions, memory, Ids(8), clock);
+        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
+        await instances.InsertAsync(new AgentInstance(
+            AgentInstance.CompatibilityFor("general-assistant"),
+            "general-assistant",
+            7,
+            v9.Identity,
+            AgentInstanceLifecycle.Active,
+            Now,
+            Now,
+            Compatibility: true));
+        await memory.SaveProfileAsync(
+            new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
+            {
+                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now)
+            }, Now),
+            0);
+
+        var resolved = await instanceService.ResolveCompatibilityAsync(v9);
+        Assert.Equal(9, resolved.ActiveVersion);
+
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(4, "019944af-00d2-7000-8000-"), clock);
+        var owner = new TriggerOwner(resolved.InstanceId, ProfileId);
+        var due = Now.AddMinutes(1);
+        var tools = new SessionToolExecutor(
+            triggerRegistrations: registrations,
+            agentInstances: instances,
+            agentDefinitions: definitions);
+        var snapshot = new SessionSnapshot(
+            1,
+            Guid.Parse("019944af-00d2-7000-8000-000000000001"),
+            1,
+            v9,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            ProfileId,
+            Now,
+            Now,
+            AgentInstanceId: resolved.InstanceId);
+        await memory.SaveAsync(snapshot, 0);
+        var runtime = new SessionRuntime(
+            snapshot,
+            new ScriptedLanguageModel(),
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            memory,
+            new CapturingSessionOutput(),
+            Ids(16, "019944af-00d3-7000-8000-"),
+            clock,
+            NullLogger<SessionRuntime>.Instance,
+            tools: tools);
+        await runtime.AttachAsync();
+
+        Assert.True(await runtime.SubmitUserTextAsync("say hello to me in 1 minute"));
+        await runtime.WaitUntilIdleAsync();
+        var created = Assert.Single(await store.ListAsync(owner, null));
+        Assert.Equal(TriggerRegistrationStatus.Active, created.Status);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var guard = new TriggerAdmissionGuard(instances, definitions, memory);
+        var scheduler = new TriggerScheduler(store, NullLogger<TriggerScheduler>.Instance, guard);
+        var pass = await scheduler.RunOnceAsync(clock.GetUtcNow());
+        Assert.Equal(1, pass.Admitted);
+        Assert.Equal(TriggerRegistrationStatus.Completed, (await store.GetAsync(owner, created.RegistrationId))!.Status);
+    }
+
+    [Fact]
+    public async Task Policy_recovery_reactivates_suspended_registration_when_eligible()
+    {
+        var definitions = Definitions();
+        var instances = new InMemoryAgentInstanceStore();
+        var memory = new InMemoryMemoryStore();
+        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
+        var instanceId = AgentInstance.CompatibilityFor("general-assistant");
+        await instances.InsertAsync(new AgentInstance(
+            instanceId,
+            v9.Id,
+            9,
+            v9.Identity,
+            AgentInstanceLifecycle.Active,
+            Now,
+            Now,
+            Compatibility: true));
+        await memory.SaveProfileAsync(
+            new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
+            {
+                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now)
+            }, Now),
+            0);
+
+        var store = new InMemoryTriggerStore();
+        var owner = new TriggerOwner(instanceId, ProfileId);
+        var due = Now.AddMinutes(5);
+        var registration = new TriggerRegistration(
+            Guid.Parse("019944af-00d2-7000-8000-000000000002"),
+            owner,
+            TriggerRegistrationStatus.SuspendedPolicy,
+            "Hello",
+            new OneShotSchedule(due, "UTC", null, null),
+            due,
+            null,
+            0,
+            1,
+            1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
+            "Scheduling is disabled for this agent.");
+        await store.CreateAsync(registration);
+
+        var guard = new TriggerAdmissionGuard(instances, definitions, memory);
+        var recovery = new TriggerPolicyRecoveryService(store, guard);
+        Assert.Equal(1, await recovery.ReactivateSuspendedForOwnerAsync(owner, Now));
+        var reactivated = (await store.GetAsync(owner, registration.RegistrationId))!;
+        Assert.Equal(TriggerRegistrationStatus.Active, reactivated.Status);
+        Assert.Null(reactivated.SuspensionReason);
+        Assert.Equal(due, reactivated.NextOccurrenceAtUtc);
+    }
+
+    private static FileAgentDefinitionStore Definitions() =>
+        new(FindAgents(), SyntheticProviderAliases.Default);
+
+    private static string FindAgents()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var agents = Path.Combine(dir.FullName, "agents");
+            if (Directory.Exists(agents))
+            {
+                return agents;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("agents/");
+    }
+
+    private static DeterministicIdGenerator Ids(int count, string prefix = "019944af-00d1-7000-8000-") =>
+        new(
+            Enumerable.Range(1, count).Select(index => Guid.Parse($"{prefix}{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf15")]);
+}

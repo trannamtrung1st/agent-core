@@ -1,4 +1,5 @@
 using AgentCore.Application.Memory;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Ports;
@@ -47,7 +48,8 @@ public sealed record AgentContext(
     long LastEntrySequence = 0,
     IReadOnlyList<Domain.Memory.StructuredMemoryItem>? LearnedMemories = null,
     AgentIdentity? Persona = null,
-    ExplicitUserMemoryCaptureOutcome ExplicitMemoryCapture = ExplicitUserMemoryCaptureOutcome.None)
+    ExplicitUserMemoryCaptureOutcome ExplicitMemoryCapture = ExplicitUserMemoryCaptureOutcome.None,
+    ScheduleConversationContext? ScheduleConversation = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

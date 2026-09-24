@@ -16,23 +16,25 @@ public sealed class ModelTriggerCommandAuthorizerTests
             new StubLanguageModel(modelText),
             new HeuristicTriggerCommandAuthorizer());
         var decision = await authorizer.AuthorizeCurrentTurnAsync(
-            "remind me tomorrow at 9",
+            expected == TriggerCommandAuthorizationDecision.Allow
+                ? "remind me tomorrow at 9"
+                : "another at 8:52",
             "en",
             TriggerCommandAction.Create);
         Assert.Equal(expected, decision);
     }
 
     [Fact]
-    public async Task Malformed_json_is_ambiguous_fail_closed()
+    public async Task Malformed_json_denies_without_claiming_user_ambiguity()
     {
         var authorizer = new ModelTriggerCommandAuthorizer(
             new StubLanguageModel("not json"),
             new HeuristicTriggerCommandAuthorizer());
         var decision = await authorizer.AuthorizeCurrentTurnAsync(
-            "remind me tomorrow at 9",
+            "another at 8:52",
             "en",
             TriggerCommandAction.Create);
-        Assert.Equal(TriggerCommandAuthorizationDecision.Ambiguous, decision);
+        Assert.Equal(TriggerCommandAuthorizationDecision.Deny, decision);
     }
 
     [Fact]
@@ -42,7 +44,7 @@ public sealed class ModelTriggerCommandAuthorizerTests
             new FailingLanguageModel(),
             new HeuristicTriggerCommandAuthorizer());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            authorizer.AuthorizeCurrentTurnAsync("remind me", "en", TriggerCommandAction.Create).AsTask());
+            authorizer.AuthorizeCurrentTurnAsync("another at 8:52", "en", TriggerCommandAction.Create).AsTask());
     }
 
     [Fact]
@@ -54,7 +56,7 @@ public sealed class ModelTriggerCommandAuthorizerTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            authorizer.AuthorizeCurrentTurnAsync("remind me", "en", TriggerCommandAction.Create, cts.Token).AsTask());
+            authorizer.AuthorizeCurrentTurnAsync("remind me", "en", TriggerCommandAction.Create, null, cts.Token).AsTask());
     }
 
     private sealed class StubLanguageModel(string text) : ILanguageModel

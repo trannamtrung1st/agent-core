@@ -193,6 +193,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ITriggerRegistrationService, TriggerRegistrationService>();
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
+        services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService, AgentInstanceService>();
@@ -214,7 +215,9 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IHttpRequestClient>(),
             provider.GetRequiredService<IToolConfigurationGate>(),
             provider.GetRequiredService<ITriggerRegistrationService>(),
-            provider.GetRequiredService<ITriggerCommandAuthorizer>()));
+            provider.GetRequiredService<ITriggerCommandAuthorizer>(),
+            provider.GetRequiredService<IAgentInstanceStore>(),
+            provider.GetRequiredService<IAgentDefinitionStore>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

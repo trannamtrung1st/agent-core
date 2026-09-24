@@ -3,6 +3,7 @@ using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
+using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 
 namespace AgentCore.Infrastructure.Providers.Synthetic;
@@ -30,6 +31,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly TaskCompletionSource? _compactionStarted;
     private string? _scheduleRegistrationId;
     private long _scheduleRevision;
+    private string? _scheduleIntent;
+    private string? _scheduleTimeZone;
     private static readonly ITriggerCommandAuthorizer ScheduleAuthorizer = new HeuristicTriggerCommandAuthorizer();
 
     public ScriptedLanguageModel(
@@ -169,8 +172,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     {
         cancellationToken.ThrowIfCancellationRequested();
         var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+        var scheduleToolRounds = ToolRoundsSinceLastUser(request.Messages);
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         var lastTool = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool)?.Text ?? string.Empty;
+        var scheduleLastTool = LastToolTextSinceLastUser(request.Messages);
         var lastToolMessage = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
         if (lastToolMessage?.Parts?.OfType<ModelImageContent>().Any() == true)
         {
@@ -202,7 +207,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
-        if (TryScriptSchedule(request, toolRounds, lastUser, lastTool, out var scheduleEvent))
+        if (TryScriptSchedule(request, scheduleToolRounds, lastUser, scheduleLastTool, out var scheduleEvent))
         {
             if (scheduleEvent is null)
             {
@@ -462,6 +467,27 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
+        if ((lastUser.Contains("viet nam", StringComparison.OrdinalIgnoreCase)
+                || lastUser.Contains("vietnam", StringComparison.OrdinalIgnoreCase))
+            && lastUser.Contains("8:49", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleOnce,
+                """{"intent":"Hello","localDate":"2026-09-24","localTime":"08:49","timeZone":"viet nam time"}""");
+            return true;
+        }
+
+        if (lastUser.Contains("another", StringComparison.OrdinalIgnoreCase)
+            && lastUser.Contains("8:52", StringComparison.OrdinalIgnoreCase))
+        {
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerScheduleOnce,
+                """{"intent":"Hello","localDate":"2026-09-24","localTime":"08:52","timeZone":"viet nam time"}""");
+            return true;
+        }
+
         if (ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerScheduleOnce, """{"intent":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
@@ -476,7 +502,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
-        if (lastUser.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
+        if (lastUser.Contains("move that", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("reschedule", StringComparison.OrdinalIgnoreCase))
         {
             if (_scheduleRegistrationId is null)
@@ -491,7 +518,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
-        if (lastUser.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase))
+        if (lastUser.Contains("cancel that", StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase))
         {
             if (_scheduleRegistrationId is null)
             {
@@ -505,10 +533,28 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return false;
     }
 
-    private static bool IsScheduleTurn(string lastUser) =>
+    private bool IsScheduleTurn(string lastUser) =>
         lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-        || TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(lastUser, null)
+        || TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(lastUser, null, SyntheticScheduleContext())
         || ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null);
+
+    private ScheduleConversationContext? SyntheticScheduleContext()
+    {
+        if (_scheduleRegistrationId is null || !Guid.TryParse(_scheduleRegistrationId, out var registrationId))
+        {
+            return null;
+        }
+
+        return new ScheduleConversationContext(
+            registrationId,
+            _scheduleRevision,
+            TriggerCommandAction.Create,
+            _scheduleIntent ?? "Call John",
+            _scheduleTimeZone ?? "UTC",
+            TriggerScheduleKind.OneShot,
+            TriggerRegistrationStatus.Active,
+            null);
+    }
 
     private void RememberSchedule(string lastTool)
     {
@@ -533,19 +579,52 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
             _scheduleRegistrationId = id.GetString();
             _scheduleRevision = revision.GetInt64();
+            if (root.TryGetProperty("intent", out var intentElement))
+            {
+                _scheduleIntent = intentElement.GetString();
+            }
+
+            if (root.TryGetProperty("timeZone", out var zoneElement))
+            {
+                _scheduleTimeZone = zoneElement.GetString();
+            }
         }
         catch (JsonException)
         {
         }
     }
 
-    private string ScheduleRememberedArgs(bool includeTime, string localTime) =>
-        includeTime
-            ? $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}"""
-            : $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}}}""";
+    private string ScheduleRememberedArgs(bool includeTime, string localTime)
+    {
+        var intent = _scheduleIntent ?? "Call John";
+        if (!includeTime)
+        {
+            return $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}}}""";
+        }
 
-    private static string ClockFromMove(string text) =>
-        text.Contains("to 11", StringComparison.OrdinalIgnoreCase) ? "11:00" : "10:00";
+        if (string.Equals(intent, "Call John", StringComparison.Ordinal))
+        {
+            return $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}""";
+        }
+
+        var zone = string.IsNullOrWhiteSpace(_scheduleTimeZone) ? "viet nam time" : _scheduleTimeZone;
+        return $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}},"intent":"{{intent}}","localDate":"2026-09-24","localTime":"{{localTime}}","timeZone":"{{zone}}"}""";
+    }
+
+    private static string ClockFromMove(string text)
+    {
+        if (text.Contains("8:53", StringComparison.OrdinalIgnoreCase))
+        {
+            return "08:53";
+        }
+
+        if (text.Contains("8:52", StringComparison.OrdinalIgnoreCase))
+        {
+            return "08:52";
+        }
+
+        return text.Contains("to 11", StringComparison.OrdinalIgnoreCase) ? "11:00" : "10:00";
+    }
 
     private static ModelToolCallEvent ScheduleCall(int toolRounds, string name, string arguments) =>
         new(new ModelToolCall($"call-schedule-{toolRounds + 1}", name, arguments));
@@ -573,7 +652,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return "I need you to confirm before I save that.";
         }
 
-        if (lastTool.Contains("current_turn_not_authorized", StringComparison.Ordinal))
+        if (lastTool.Contains("authorization_denied", StringComparison.Ordinal)
+            || lastTool.Contains("authorization_ambiguous", StringComparison.Ordinal))
         {
             return "I did not understand that schedule request.";
         }
@@ -607,7 +687,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             : "Scheduled Call John.";
     }
 
-    private static bool ShouldScriptTools(ModelRequest request)
+    private bool ShouldScriptTools(ModelRequest request)
     {
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         return lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
@@ -657,6 +737,42 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private static bool Offers(ModelRequest request, string name) =>
         request.Tools?.Any(tool => string.Equals(tool.Name, name, StringComparison.Ordinal)) == true;
+
+    private static int ToolRoundsSinceLastUser(IReadOnlyList<ModelMessage> messages)
+    {
+        var count = 0;
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            switch (messages[index].Role)
+            {
+                case ModelRole.Tool:
+                    count++;
+                    break;
+                case ModelRole.User:
+                    return count;
+            }
+        }
+
+        return count;
+    }
+
+    private static string LastToolTextSinceLastUser(IReadOnlyList<ModelMessage> messages)
+    {
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            if (messages[index].Role == ModelRole.User)
+            {
+                return string.Empty;
+            }
+
+            if (messages[index].Role == ModelRole.Tool)
+            {
+                return messages[index].Text ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
 
     private static bool TryScriptEmailHarness(
         ModelRequest request,

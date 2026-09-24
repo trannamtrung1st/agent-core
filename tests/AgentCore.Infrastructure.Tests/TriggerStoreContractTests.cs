@@ -123,6 +123,25 @@ public sealed class TriggerStoreContractTests
     }
 
     [Fact]
+    public async Task ListAsync_returns_newest_created_first()
+    {
+        await ForEachStore(async store =>
+        {
+            var time = Clock();
+            var service = Service(store, time);
+            var owner = new TriggerOwner(InstanceA, ProfileA);
+            var a = await service.CreateAsync(Draft(owner, "A", OneShot()));
+            time.Advance(TimeSpan.FromSeconds(1));
+            var b = await service.CreateAsync(Draft(owner, "B", OneShot()));
+            time.Advance(TimeSpan.FromSeconds(1));
+            var c = await service.CreateAsync(Draft(owner, "C", OneShot()));
+
+            var listed = await service.ListAsync(owner, null);
+            Assert.Equal([c.RegistrationId, b.RegistrationId, a.RegistrationId], listed.Select(row => row.RegistrationId).ToArray());
+        });
+    }
+
+    [Fact]
     public async Task Occurrence_admission_dedupes_and_hides_other_owners()
     {
         await ForEachStore(async store =>

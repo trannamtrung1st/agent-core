@@ -77,6 +77,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private UserProfile? _profile;
     private PendingTriggerProposal? _pendingTriggerProposal;
+    private ScheduleConversationContext? _scheduleConversationContext;
     private SessionSnapshot _snapshot;
     private Guid _epoch;
     private Guid? _activeResponseId;
@@ -2131,7 +2132,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LastEntrySequence: _snapshot.DurableLastEntrySequence,
                     LearnedMemories: learned,
                     Persona: _snapshot.PinnedPersona,
-                    ExplicitMemoryCapture: _explicitMemoryCaptureOutcome);
+                    ExplicitMemoryCapture: _explicitMemoryCaptureOutcome,
+                    ScheduleConversation: _scheduleConversationContext);
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
@@ -2473,6 +2475,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     {
                                         _pendingTriggerProposal = executionResult.TriggerProposal;
                                     }
+
+                                    ApplyScheduleConversationFromTool(call.Name, executionResult.Text);
                                 }
                             }
                         }
@@ -2876,7 +2880,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             trigger.Text,
             _pendingTriggerProposal,
             authorizer,
-            language);
+            language,
+            _scheduleConversationContext);
         return new TriggerCommandContext(
             owner,
             SessionId,
@@ -2888,7 +2893,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             confirming,
             _pendingTriggerProposal,
             trigger.EventId,
-            _time.GetUtcNow());
+            _time.GetUtcNow(),
+            _scheduleConversationContext);
     }
 
     private async Task SupersedeAsync(

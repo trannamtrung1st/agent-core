@@ -7,7 +7,7 @@ const statusLabel: Record<string, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
   expired: "Expired",
-  suspendedPolicy: "Paused"
+  suspendedPolicy: "Suspended"
 };
 
 export function ScheduleDrawer({
@@ -123,6 +123,9 @@ export function ScheduleDrawer({
                     <Tag>{item.timeZone}</Tag>
                     <Tag>{statusLabel[item.status] ?? item.status}</Tag>
                   </Flex>
+                  {item.status === "suspendedPolicy" && item.suspensionReason ? (
+                    <Typography.Text type="secondary">{item.suspensionReason}</Typography.Text>
+                  ) : null}
                   {item.nextOccurrenceAt ? (
                     <Typography.Text type="secondary">
                       Next <time dateTime={item.nextOccurrenceAt}>{item.nextOccurrenceAt}</time>

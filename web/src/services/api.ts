@@ -68,6 +68,7 @@ export type SessionTrigger = {
   schedule: string;
   nextOccurrenceAt: string | null;
   revision: number;
+  suspensionReason?: string | null;
 };
 
 export type HistoryPage = {

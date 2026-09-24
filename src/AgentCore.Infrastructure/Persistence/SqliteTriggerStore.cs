@@ -55,8 +55,8 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
         }
 
         var rows = await query
-            .OrderBy(row => row.CreatedAtUtc)
-            .ThenBy(row => row.RegistrationId)
+            .OrderByDescending(row => row.CreatedAtUtc)
+            .ThenByDescending(row => row.RegistrationId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return rows.Select(TriggerStoreMapping.ToRegistration).ToArray();
@@ -512,18 +512,60 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
 
         var suspended = TriggerStoreMapping.ToRegistration(row).WithScheduleAdvance(
             TriggerRegistrationStatus.SuspendedPolicy,
-            null,
+            row.NextOccurrenceAtUtc is long nextMs
+                ? DateTimeOffset.FromUnixTimeMilliseconds(nextMs)
+                : null,
             row.OccurrenceCount,
             row.Revision + 1,
             suspendedAt,
             reason);
         row.Status = (int)TriggerRegistrationStatus.SuspendedPolicy;
-        row.NextOccurrenceAtUtc = null;
         row.Revision = suspended.Revision;
+        row.NextOccurrenceAtUtc = ToUnix(suspended.NextOccurrenceAtUtc);
         row.UpdatedAtUtc = suspended.Provenance.UpdatedAt.ToUnixTimeMilliseconds();
         row.SuspensionReason = suspended.SuspensionReason;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return suspended;
+    }
+
+    public async ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        DateTimeOffset reactivatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await TrackRowAsync(db, owner, registrationId, cancellationToken).ConfigureAwait(false);
+        if (row is null
+            || row.Status != (int)TriggerRegistrationStatus.SuspendedPolicy
+            || row.Revision != expectedRevision)
+        {
+            return null;
+        }
+
+        var current = TriggerStoreMapping.ToRegistration(row);
+        DateTimeOffset? next = current.NextOccurrenceAtUtc;
+        if (next is null && current.Schedule is OneShotSchedule oneShot)
+        {
+            next = oneShot.AtUtc;
+        }
+
+        next ??= TriggerScheduleCalculator.InitialNext(current.Schedule, reactivatedAt);
+        var reactivated = current.WithScheduleAdvance(
+            TriggerRegistrationStatus.Active,
+            next,
+            current.OccurrenceCount,
+            current.Revision + 1,
+            reactivatedAt,
+            null);
+        row.Status = (int)TriggerRegistrationStatus.Active;
+        row.Revision = reactivated.Revision;
+        row.NextOccurrenceAtUtc = ToUnix(reactivated.NextOccurrenceAtUtc);
+        row.UpdatedAtUtc = reactivated.Provenance.UpdatedAt.ToUnixTimeMilliseconds();
+        row.SuspensionReason = null;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return reactivated;
     }
 
     public ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(

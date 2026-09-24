@@ -173,6 +173,13 @@ public interface ITriggerStore
         DateTimeOffset suspendedAt,
         CancellationToken cancellationToken = default);
 
+    ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        DateTimeOffset reactivatedAt,
+        CancellationToken cancellationToken = default);
+
     ValueTask<TriggerOccurrence?> TryClaimOccurrenceAsync(
         Guid occurrenceId,
         Guid claimId,

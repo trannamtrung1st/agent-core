@@ -296,6 +296,13 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             "Use trigger.schedule_once relativeDelaySeconds for in/after N minutes or hours without doing clock arithmetic.");
         lines.Add(
             "Ask the user to restate missing schedule details explicitly. Only ask for yes/no confirmation when the schedule tool returned confirmation_required and a pending proposal exists.");
+        lines.Add(
+            "If a schedule tool returned authorization_ambiguous or authorization_denied, do not retry with different time argument shapes.");
+        foreach (var line in context.ScheduleConversation?.ToPromptLines() ?? [])
+        {
+            lines.Add(line);
+        }
+
         return string.Join('\n', lines);
     }
 

@@ -24,8 +24,12 @@ public sealed partial class SessionToolExecutor(
     IHttpRequestClient? httpRequestClient = null,
     IToolConfigurationGate? configurationGate = null,
     ITriggerRegistrationService? triggerRegistrations = null,
-    ITriggerCommandAuthorizer? triggerAuthorizer = null)
+    ITriggerCommandAuthorizer? triggerAuthorizer = null,
+    IAgentInstanceStore? agentInstances = null,
+    IAgentDefinitionStore? agentDefinitions = null)
 {
+    private readonly IAgentInstanceStore? _agentInstances = agentInstances;
+    private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;
 
@@ -160,7 +164,9 @@ public sealed partial class SessionToolExecutor(
                         args,
                         triggerCommand,
                         cancellationToken,
-                        _triggerAuthorizer).ConfigureAwait(false),
+                        _triggerAuthorizer,
+                        _agentInstances,
+                        _agentDefinitions).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
         }

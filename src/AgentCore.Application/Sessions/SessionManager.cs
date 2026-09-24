@@ -6,8 +6,10 @@ using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Sessions;
 
@@ -26,6 +28,7 @@ public sealed class SessionManager
     private readonly ILocalUserProfileService _localProfiles;
     private readonly IStructuredMemoryStore? _structuredMemory;
     private readonly IAgentInstanceService? _instances;
+    private readonly ITriggerPolicyRecoveryService? _triggerPolicyRecovery;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -40,7 +43,8 @@ public sealed class SessionManager
         IModelCatalog? models = null,
         ILocalUserProfileService? localProfiles = null,
         IStructuredMemoryStore? structuredMemory = null,
-        IAgentInstanceService? instances = null)
+        IAgentInstanceService? instances = null,
+        ITriggerPolicyRecoveryService? triggerPolicyRecovery = null)
     {
         _definitions = definitions;
         _store = store;
@@ -55,6 +59,7 @@ public sealed class SessionManager
         _localProfiles = localProfiles ?? new LocalUserProfileService(store, time);
         _structuredMemory = structuredMemory;
         _instances = instances;
+        _triggerPolicyRecovery = triggerPolicyRecovery;
     }
 
     public async Task<SessionSnapshot> CreateAsync(
@@ -211,6 +216,14 @@ public sealed class SessionManager
         }
 
         await _store.SaveAsync(snapshot, expectedRevision: 0, cancellationToken).ConfigureAwait(false);
+        if (_triggerPolicyRecovery is not null && instanceId is Guid instance && profile.ProfileId is Guid profileId)
+        {
+            await _triggerPolicyRecovery.ReactivateSuspendedForOwnerAsync(
+                new TriggerOwner(instance, profileId),
+                now,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         return snapshot;
     }
 

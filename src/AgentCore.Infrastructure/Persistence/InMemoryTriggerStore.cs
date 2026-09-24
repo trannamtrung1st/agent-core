@@ -51,8 +51,8 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         {
             var items = _registrations.Values
                 .Where(item => item.Owner.Equals(owner) && (status is null || item.Status == status))
-                .OrderBy(item => item.Provenance.CreatedAt)
-                .ThenBy(item => item.RegistrationId)
+                .OrderByDescending(item => item.Provenance.CreatedAt)
+                .ThenByDescending(item => item.RegistrationId)
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
         }
@@ -272,13 +272,49 @@ public sealed class InMemoryTriggerStore : ITriggerStore
 
             var suspended = current.WithScheduleAdvance(
                 TriggerRegistrationStatus.SuspendedPolicy,
-                null,
+                current.NextOccurrenceAtUtc,
                 current.OccurrenceCount,
                 current.Revision + 1,
                 suspendedAt,
                 reason);
             _registrations[registrationId] = suspended;
             return ValueTask.FromResult<TriggerRegistration?>(suspended);
+        }
+    }
+
+    public ValueTask<TriggerRegistration?> TryReactivatePolicySuspensionAsync(
+        TriggerOwner owner,
+        Guid registrationId,
+        long expectedRevision,
+        DateTimeOffset reactivatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var current = Find(owner, registrationId);
+            if (current is null
+                || current.Status != TriggerRegistrationStatus.SuspendedPolicy
+                || current.Revision != expectedRevision)
+            {
+                return ValueTask.FromResult<TriggerRegistration?>(null);
+            }
+
+            DateTimeOffset? next = current.NextOccurrenceAtUtc;
+            if (next is null && current.Schedule is OneShotSchedule oneShot)
+            {
+                next = oneShot.AtUtc;
+            }
+
+            next ??= TriggerScheduleCalculator.InitialNext(current.Schedule, reactivatedAt);
+            var reactivated = current.WithScheduleAdvance(
+                TriggerRegistrationStatus.Active,
+                next,
+                current.OccurrenceCount,
+                current.Revision + 1,
+                reactivatedAt,
+                null);
+            _registrations[registrationId] = reactivated;
+            return ValueTask.FromResult<TriggerRegistration?>(reactivated);
         }
     }
 

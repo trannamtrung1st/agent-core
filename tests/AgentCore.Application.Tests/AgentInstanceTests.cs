@@ -87,11 +87,11 @@ public sealed class AgentInstanceTests
         var newer = await manager.CreateAsync("examiner", 2, SessionMode.Text);
         Assert.Equal(2, newer.Definition.Version);
         Assert.Equal("v2 tone", newer.PinnedPersona!.Tone);
-        var unchanged = await service.RequireAsync(compatibility.InstanceId);
-        Assert.Equal(1, unchanged.ActiveVersion);
-        Assert.Equal(compatibility.Persona, unchanged.Persona);
+        var upgradedCompatibility = await service.RequireAsync(compatibility.InstanceId);
+        Assert.Equal(2, upgradedCompatibility.ActiveVersion);
+        Assert.Equal(compatibility.Persona, upgradedCompatibility.Persona);
         var fromInstance = await manager.CreateForInstanceAsync(compatibility.InstanceId, SessionMode.Text);
-        Assert.Equal(1, fromInstance.Definition.Version);
+        Assert.Equal(2, fromInstance.Definition.Version);
         Assert.Equal(compatibility.Persona, fromInstance.PinnedPersona);
     }
 

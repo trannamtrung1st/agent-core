@@ -48,7 +48,8 @@ public sealed record TriggerCommandContext(
     bool ExecutePendingProposal,
     PendingTriggerProposal? PendingProposal,
     Guid? SourceEventId,
-    DateTimeOffset UtcNow);
+    DateTimeOffset UtcNow,
+    ScheduleConversationContext? ScheduleContext = null);
 
 public static class TriggerAuthorization
 {
@@ -57,7 +58,8 @@ public static class TriggerAuthorization
         string? currentUserText,
         PendingTriggerProposal? pendingProposal,
         ITriggerCommandAuthorizer authorizer,
-        string? conversationLanguage)
+        string? conversationLanguage,
+        ScheduleConversationContext? scheduleContext = null)
     {
         if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent)
         {
@@ -74,7 +76,7 @@ public static class TriggerAuthorization
             return new(TriggerAuthorizationClassification.Initiative, TriggerCommandAction.None);
         }
 
-        if (TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(currentUserText, conversationLanguage))
+        if (TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(currentUserText, conversationLanguage, scheduleContext))
         {
             return new(TriggerAuthorizationClassification.CurrentUserTurn, TriggerCommandAction.None);
         }
@@ -100,7 +102,7 @@ public static class TriggerAuthorization
         string? text,
         ITriggerCommandAuthorizer authorizer,
         string? conversationLanguage) =>
-        TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(text, conversationLanguage);
+        TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(text, conversationLanguage, scheduleContext: null);
 
     public static TriggerCommandAction ActionForTool(string toolName) => toolName switch
     {
@@ -124,7 +126,9 @@ public static class TriggerScheduleCommands
         JsonElement arguments,
         TriggerCommandContext? command,
         CancellationToken cancellationToken,
-        ITriggerCommandAuthorizer? authorizer = null)
+        ITriggerCommandAuthorizer? authorizer = null,
+        IAgentInstanceStore? instances = null,
+        IAgentDefinitionStore? definitions = null)
     {
         authorizer ??= DefaultAuthorizer;
         if (registrations is null)
@@ -182,19 +186,19 @@ public static class TriggerScheduleCommands
                 && context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                     or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "ambiguous_schedule_request");
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "authorization_ambiguous");
                 return Result(
-                    "ambiguous_schedule_request",
-                    "The schedule request is ambiguous. Ask the user to clarify the exact action and time.",
+                    "authorization_ambiguous",
+                    "The current message does not clearly authorize this schedule action. Ask what the user wants; do not retry different time argument shapes.",
                     clearProposal: false);
             }
 
             if (context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                 or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
-                RuntimeTelemetry.RecordTriggerRegistration(operation, "current_turn_not_authorized");
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "authorization_denied");
                 return Result(
-                    "current_turn_not_authorized",
+                    "authorization_denied",
                     "The current user message does not authorize this schedule action. Clarify the request or use the correct schedule command.",
                     clearProposal: false);
             }
@@ -211,20 +215,40 @@ public static class TriggerScheduleCommands
             return Result("validation", "Schedule owner is required.", clearProposal: true);
         }
 
+        var policyDefinition = definition;
+        if (instances is not null && definitions is not null)
+        {
+            policyDefinition = await TriggerDurableSchedulingPolicy.ResolveEffectiveDefinitionAsync(
+                    owner,
+                    instances,
+                    definitions,
+                    cancellationToken)
+                .ConfigureAwait(false)
+                ?? definition;
+            if (!TriggerDurableSchedulingPolicy.AllowsUserScheduling(policyDefinition))
+            {
+                RuntimeTelemetry.RecordTriggerRegistration(operation, "policy");
+                return Result(
+                    "policy",
+                    "Scheduling is disabled for this agent.",
+                    clearProposal: false);
+            }
+        }
+
         try
         {
             var json = effectiveName switch
             {
                 ToolCatalog.TriggerScheduleOnce => await CreateOnceAsync(
-                    definition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerScheduleRecurring => await CreateRecurringAsync(
-                    definition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerList => await ListAsync(
-                    definition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerUpdate => await UpdateAsync(
-                    definition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.TriggerCancel => await CancelAsync(
-                    definition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                    policyDefinition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 _ => Error("forbidden", "Tool is not permitted for this role.")
             };
             return new ToolExecutionResult(json, ReplaceTriggerProposal: true, TriggerProposal: null);
@@ -704,7 +728,8 @@ public static class TriggerScheduleCommands
         scheduleKind = registration.Schedule.Kind.ToString(),
         timeZone = TimeZoneOf(registration.Schedule),
         nextOccurrenceAtUtc = registration.NextOccurrenceAtUtc,
-        occurrenceCount = registration.OccurrenceCount
+        occurrenceCount = registration.OccurrenceCount,
+        suspensionReason = registration.SuspensionReason
     };
 
     private static string TimeZoneOf(TriggerSchedule schedule) => schedule switch
@@ -748,6 +773,7 @@ public static class TriggerScheduleCommands
                 context.CurrentUserText,
                 context.ConversationLanguage,
                 required,
+                context.ScheduleContext,
                 cancellationToken).ConfigureAwait(false);
         }
 

@@ -232,7 +232,8 @@ public sealed record TriggerScheduleResponse(
     string TimeZone,
     string Schedule,
     string? NextOccurrenceAt,
-    long Revision);
+    long Revision,
+    string? SuspensionReason = null);
 
 public sealed record TriggerScheduleListResponse(IReadOnlyList<TriggerScheduleResponse> Items);
 

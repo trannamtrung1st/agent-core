@@ -40,6 +40,18 @@ public sealed class AgentInstanceService(
         var existing = await instances.FindCompatibilityAsync(definition.Id, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
+            if (definition.Version > existing.ActiveVersion)
+            {
+                var updatedAt = time.GetUtcNow();
+                await instances.UpdateActiveVersionAsync(
+                        existing.InstanceId,
+                        definition.Version,
+                        updatedAt,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return existing with { ActiveVersion = definition.Version, UpdatedAt = updatedAt };
+            }
+
             return existing;
         }
 

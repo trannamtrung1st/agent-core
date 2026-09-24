@@ -115,7 +115,7 @@ public sealed class TriggerScheduleRuntimeTests
                 new ModelToolCall("mistaken", name, """{"intent":"Nope","relativeDayOffset":1,"localTime":"09:00","registrationId":"019944af-00b6-7000-8000-000000000001","expectedRevision":1}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: list);
-            Assert.Contains("current_turn_not_authorized", rejected.Text, StringComparison.Ordinal);
+            Assert.Contains("authorization_denied", rejected.Text, StringComparison.Ordinal);
         }
 
         var listed = await tools.ExecuteAsync(
@@ -238,7 +238,7 @@ public sealed class TriggerScheduleRuntimeTests
                 triggerCommand: Context(owner, classification, false, null, currentUserText: "thanks"));
             Assert.Contains(
                 classification == TriggerAuthorizationClassification.UnrelatedUserTurn
-                    ? "current_turn_not_authorized"
+                    ? "authorization_denied"
                     : "forbidden",
                 rejected.Text,
                 StringComparison.Ordinal);
@@ -499,6 +499,19 @@ public sealed class TriggerScheduleRuntimeTests
     }
 
     [Fact]
+    public async Task Hello_at_849_vietnam_wall_clock_creates_registration()
+    {
+        var harness = await StartHarnessForContinuationAsync();
+        await using var runtime = harness.Runtime;
+        var owner = new TriggerOwner(InstanceId, ProfileId);
+
+        Assert.True(await runtime.SubmitUserTextAsync("schedule Hello at 8:49 Vietnam time"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Single(await harness.Store.ListAsync(owner, null));
+    }
+
+    [Fact]
     public async Task Vietnam_wall_clock_schedule_is_authorized_without_clarification()
     {
         var harness = await StartAsync(
@@ -654,7 +667,12 @@ public sealed class TriggerScheduleRuntimeTests
         throw new DirectoryNotFoundException("agents/");
     }
 
-    private sealed record Harness(SessionRuntime Runtime, InMemoryTriggerStore Store);
+    internal sealed record Harness(SessionRuntime Runtime, InMemoryTriggerStore Store);
+
+    internal static Task<Harness> StartHarnessForContinuationAsync() =>
+        StartAsync(
+            time: new FakeTimeProvider(VietnamWallClockNow),
+            applyProfileTimeZone: false);
 
     private sealed class HoldBeforeEnvironmentScheduleModel(
         TaskCompletionSource started,

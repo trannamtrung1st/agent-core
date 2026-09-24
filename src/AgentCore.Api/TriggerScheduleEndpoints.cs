@@ -89,7 +89,8 @@ public static class TriggerScheduleEndpoints
             zone,
             summary,
             registration.NextOccurrenceAtUtc is DateTimeOffset next ? HttpMapping.Format(next) : null,
-            registration.Revision);
+            registration.Revision,
+            registration.SuspensionReason);
     }
 
     private static string ToStatus(TriggerRegistrationStatus status) => status switch
