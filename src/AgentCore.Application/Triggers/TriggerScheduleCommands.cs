@@ -619,11 +619,7 @@ public static class TriggerScheduleCommands
                     "Fixed interval is longer than the supported maximum.");
             }
 
-            DateTimeOffset? endAt = null;
-            if (TryString(arguments, "endAtUtc", out var endText) && DateTimeOffset.TryParse(endText, out var parsedEnd))
-            {
-                endAt = TriggerScheduleCalculator.Truncate(parsedEnd.ToUniversalTime());
-            }
+            var endAt = ResolveOptionalEndAtUtc(arguments);
 
             if (cap is null && endAt is null && !policy.AllowIndefiniteRecurrence)
             {
@@ -951,12 +947,7 @@ public static class TriggerScheduleCommands
                 $"The minimum supported fixed interval is {policy.MinFixedIntervalSeconds} seconds.");
         }
 
-        DateTimeOffset? endAt = current.EndAtUtc;
-        if (TryString(arguments, "endAtUtc", out var endText)
-            && DateTimeOffset.TryParse(endText, out var parsedEnd))
-        {
-            endAt = TriggerScheduleCalculator.Truncate(parsedEnd.ToUniversalTime());
-        }
+        var endAt = ResolveOptionalEndAtUtc(arguments, current.EndAtUtc);
 
         int? maxOccurrences = current.MaxOccurrences;
         if (arguments.TryGetProperty("maxOccurrences", out var capElement) && capElement.ValueKind != JsonValueKind.Null)
@@ -980,6 +971,36 @@ public static class TriggerScheduleCommands
         TryString(arguments, name, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value.Trim()
             : throw new ArgumentException($"{name} is required.");
+
+    private static DateTimeOffset? ResolveOptionalEndAtUtc(JsonElement arguments, DateTimeOffset? current = null)
+    {
+        if (!arguments.TryGetProperty("endAtUtc", out var element))
+        {
+            return current;
+        }
+
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.String)
+        {
+            throw new TriggerScheduleCommandException(
+                "schedule_validation_failed",
+                "endAtUtc must be a valid UTC timestamp.");
+        }
+
+        var text = element.GetString();
+        if (string.IsNullOrWhiteSpace(text) || !DateTimeOffset.TryParse(text, out var parsed))
+        {
+            throw new TriggerScheduleCommandException(
+                "schedule_validation_failed",
+                "endAtUtc must be a valid UTC timestamp.");
+        }
+
+        return TriggerScheduleCalculator.Truncate(parsed.ToUniversalTime());
+    }
 
     private static bool TryString(JsonElement arguments, string name, out string value)
     {

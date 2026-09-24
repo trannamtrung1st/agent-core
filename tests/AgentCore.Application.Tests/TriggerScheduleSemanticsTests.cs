@@ -219,6 +219,77 @@ public sealed class TriggerScheduleSemanticsTests
     }
 
     [Fact]
+    public async Task Invalid_endAtUtc_returns_schedule_validation_failed()
+    {
+        var definition = await LoadAsync(10);
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(), new FakeTimeProvider(Now));
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var context = AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create);
+        using var args = JsonDocument.Parse(
+            """{"intent":"Say hello","kind":"fixed_interval","intervalSeconds":60,"endAtUtc":"not-a-date"}""");
+        var result = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            args.RootElement,
+            context,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.Contains("\"error\":\"schedule_validation_failed\"", result.Text, StringComparison.Ordinal);
+        Assert.Empty(await store.ListAsync(owner, null));
+    }
+
+    [Fact]
+    public async Task Every_minute_after_unrelated_turn_does_not_merge_stale_draft_intent()
+    {
+        var definition = await LoadAsync(10);
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(), new FakeTimeProvider(Now));
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var rejectedContext = AuthorizedContext(owner, "every 30s say hello to me", TriggerCommandAction.Create);
+        using var rejectedArgs = JsonDocument.Parse(
+            """{"intent":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+        var rejected = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            rejectedArgs.RootElement,
+            rejectedContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.Contains("\"scheduleDraft\"", rejected.Text, StringComparison.Ordinal);
+
+        var draft = ScheduleDraftContext.ForFixedIntervalRejection(
+            "Say hello to me",
+            30,
+            "recurrence_below_minimum",
+            Now);
+        var eligible = true;
+        Assert.Null(ScheduleDraftAdmission.PrepareDraftForUserTurn(
+            draft,
+            ref eligible,
+            "what is 2 + 2?",
+            "en",
+            null));
+
+        var createContext = AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create);
+        using var createArgs = JsonDocument.Parse(
+            """{"intent":"Ping","kind":"fixed_interval","intervalSeconds":60}""");
+        var result = await TriggerScheduleCommands.ExecuteAsync(
+            definition,
+            registrations,
+            ToolCatalog.TriggerScheduleRecurring,
+            createArgs.RootElement,
+            createContext,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer());
+        Assert.DoesNotContain("\"error\"", result.Text, StringComparison.Ordinal);
+        var created = Assert.Single(await store.ListAsync(owner, null));
+        Assert.Equal("Ping", created.Intent);
+    }
+
+    [Fact]
     public async Task General_assistant_v10_enables_fixed_interval_without_mutating_v9()
     {
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);

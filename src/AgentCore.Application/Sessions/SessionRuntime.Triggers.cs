@@ -16,10 +16,12 @@ public sealed partial class SessionRuntime
         if (resultText.Contains("\"error\"", StringComparison.Ordinal))
         {
             _scheduleDraftContext = ScheduleDraftContext.TryFromToolError(resultText);
+            _scheduleDraftEligibleForNextUserTurn = _scheduleDraftContext is not null;
             return;
         }
 
         _scheduleDraftContext = null;
+        _scheduleDraftEligibleForNextUserTurn = false;
         var refreshed = ScheduleConversationContext.TryFromRegistrationJson(resultText, action);
         if (refreshed is not null)
         {
@@ -29,22 +31,11 @@ public sealed partial class SessionRuntime
 
     private void RefreshScheduleDraftForUserTurn(string? text, string? language)
     {
-        if (_scheduleDraftContext is null)
-        {
-            return;
-        }
-
-        if (!TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(text, language, _scheduleConversationContext))
-        {
-            _scheduleDraftContext = null;
-            return;
-        }
-
-        var turn = text ?? string.Empty;
-        if (HeuristicTriggerCommandAuthorizer.MatchesCreate(turn, language, _scheduleConversationContext, scheduleDraft: null)
-            && !ScheduleIntervalLanguage.LooksLikeIntervalCorrection(turn))
-        {
-            _scheduleDraftContext = null;
-        }
+        _scheduleDraftContext = ScheduleDraftAdmission.PrepareDraftForUserTurn(
+            _scheduleDraftContext,
+            ref _scheduleDraftEligibleForNextUserTurn,
+            text,
+            language,
+            _scheduleConversationContext);
     }
 }

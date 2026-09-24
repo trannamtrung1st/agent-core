@@ -207,6 +207,23 @@ public sealed class TriggerScheduleCalculatorTests
     }
 
     [Fact]
+    public void Fixed_interval_one_missed_interval_sets_skipped_count_to_one()
+    {
+        const int intervalSeconds = 60;
+        var schedule = new FixedIntervalSchedule(intervalSeconds, Created, null, null);
+        var storedNext = new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero);
+        var asOf = storedNext.AddSeconds(intervalSeconds);
+        var registration = Sample(schedule, storedNext, null);
+
+        var admission = TriggerScheduleAdmission.Decide(registration, asOf);
+        Assert.Equal(ScheduleAdmissionKind.Admit, admission.Kind);
+        Assert.Equal(asOf, admission.ScheduledAtUtc);
+        Assert.Equal(1, admission.SkippedCount);
+        Assert.Equal(storedNext, admission.SkippedFromUtc);
+        Assert.Equal(storedNext, admission.SkippedToUtc);
+    }
+
+    [Fact]
     public void Fixed_interval_coalesces_more_than_max_iterative_slots_in_one_admission()
     {
         const int intervalSeconds = 60;
@@ -219,9 +236,26 @@ public sealed class TriggerScheduleCalculatorTests
         var admission = TriggerScheduleAdmission.Decide(registration, asOf);
         Assert.Equal(ScheduleAdmissionKind.Admit, admission.Kind);
         Assert.Equal(storedNext.AddSeconds(missedSlots * intervalSeconds), admission.ScheduledAtUtc);
-        Assert.Equal(missedSlots - 1, admission.SkippedCount);
+        Assert.Equal(missedSlots, admission.SkippedCount);
         Assert.NotNull(admission.NextAtUtc);
         Assert.True(admission.NextAtUtc > asOf);
+    }
+
+    [Fact]
+    public void Fixed_interval_long_outage_past_end_admits_last_slot_at_end_not_after()
+    {
+        const int intervalSeconds = 60;
+        var storedNext = new DateTimeOffset(2026, 9, 1, 10, 1, 0, TimeSpan.Zero);
+        var endAt = new DateTimeOffset(2026, 9, 1, 10, 5, 0, TimeSpan.Zero);
+        var schedule = new FixedIntervalSchedule(intervalSeconds, Created, endAt, null);
+        var asOf = new DateTimeOffset(2026, 9, 1, 11, 0, 0, TimeSpan.Zero);
+        var registration = Sample(schedule, storedNext, null);
+
+        var admission = TriggerScheduleAdmission.Decide(registration, asOf);
+        Assert.Equal(ScheduleAdmissionKind.Admit, admission.Kind);
+        Assert.Equal(endAt, admission.ScheduledAtUtc);
+        Assert.Equal(TriggerRegistrationStatus.Completed, admission.Status);
+        Assert.Null(admission.NextAtUtc);
     }
 
     private static (DateOnly Before, DateOnly After) MondayPairWithOffsetChange(string timeZoneId)

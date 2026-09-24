@@ -407,14 +407,43 @@ public static class TriggerScheduleAdmission
         DateTimeOffset storedNext,
         DateTimeOffset asOf)
     {
-        var elapsedSeconds = (asOf - storedNext).TotalSeconds;
-        var missed = elapsedSeconds < schedule.IntervalSeconds
+        var interval = schedule.IntervalSeconds;
+        var effectiveAsOf = asOf;
+        if (schedule.EndAtUtc is DateTimeOffset endBound)
+        {
+            var end = TriggerScheduleCalculator.Truncate(endBound);
+            if (storedNext > end)
+            {
+                return Finish(ScheduleAdmissionKind.Complete, registration, TriggerRegistrationStatus.Completed);
+            }
+
+            if (asOf > end)
+            {
+                effectiveAsOf = end;
+            }
+        }
+
+        var elapsedSeconds = (effectiveAsOf - storedNext).TotalSeconds;
+        var missed = elapsedSeconds < interval
             ? 0
-            : (long)Math.Floor(elapsedSeconds / schedule.IntervalSeconds);
-        var latest = storedNext.AddSeconds(missed * schedule.IntervalSeconds);
-        var skipped = missed > 0 ? (int)Math.Min(missed - 1, int.MaxValue) : 0;
-        DateTimeOffset? nextFuture = latest.AddSeconds(schedule.IntervalSeconds);
-        if (schedule.EndAtUtc is DateTimeOffset end && nextFuture > TriggerScheduleCalculator.Truncate(end))
+            : (long)Math.Floor(elapsedSeconds / interval);
+        var latest = storedNext.AddSeconds(missed * interval);
+        if (schedule.EndAtUtc is DateTimeOffset cappedEnd)
+        {
+            var end = TriggerScheduleCalculator.Truncate(cappedEnd);
+            if (latest > end)
+            {
+                var boundedElapsed = (end - storedNext).TotalSeconds;
+                missed = boundedElapsed < interval
+                    ? 0
+                    : (long)Math.Floor(boundedElapsed / interval);
+                latest = storedNext.AddSeconds(missed * interval);
+            }
+        }
+
+        var skipped = missed > int.MaxValue ? int.MaxValue : (int)missed;
+        DateTimeOffset? nextFuture = latest.AddSeconds(interval);
+        if (schedule.EndAtUtc is DateTimeOffset endAt && nextFuture > TriggerScheduleCalculator.Truncate(endAt))
         {
             nextFuture = null;
         }
@@ -439,7 +468,7 @@ public static class TriggerScheduleAdmission
             next,
             skipped,
             skipped > 0 ? storedNext : null,
-            skipped > 0 ? latest.AddSeconds(-schedule.IntervalSeconds) : null,
+            skipped > 0 ? latest.AddSeconds(-interval) : null,
             status,
             occurrenceCount);
     }

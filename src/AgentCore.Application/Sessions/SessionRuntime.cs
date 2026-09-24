@@ -79,6 +79,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private PendingTriggerProposal? _pendingTriggerProposal;
     private ScheduleConversationContext? _scheduleConversationContext;
     private ScheduleDraftContext? _scheduleDraftContext;
+    private bool _scheduleDraftEligibleForNextUserTurn;
     private SessionSnapshot _snapshot;
     private Guid _epoch;
     private Guid? _activeResponseId;
@@ -2073,6 +2074,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         int turn,
         IReadOnlyList<AttachmentProcessResult>? attachments = null)
     {
+        if (trigger.Kind == TriggerKind.UserTurn)
+        {
+            RefreshScheduleDraftForUserTurn(trigger.Text, _snapshot.Definition.ConversationPolicy.Language);
+        }
+
         var proactive = trigger.Kind != TriggerKind.UserTurn;
         if (_deactivated || (proactive && _activeResponseId is not null))
         {
@@ -2863,10 +2869,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var authorizer = _tools.TriggerCommandAuthorizer;
         var language = _snapshot.Definition.ConversationPolicy.Language;
-        if (trigger.Kind == TriggerKind.UserTurn)
-        {
-            RefreshScheduleDraftForUserTurn(trigger.Text, language);
-        }
         var confirming = TriggerAuthorization.IsConfirmationTurn(
             trigger.Text,
             _pendingTriggerProposal is not null,
