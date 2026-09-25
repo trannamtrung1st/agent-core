@@ -47,7 +47,7 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 
 ## P6 durable background work
 
-**P6 post-freeze repair** is in progress after review of implementation SHA `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2). **P7** is not started. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
+**P6** is **closed/frozen** on `2067a44a1534623dafc7803d14b8833ee1ba7890` (hosted workflow [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141); Manual A pass). **P7** is not started. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 

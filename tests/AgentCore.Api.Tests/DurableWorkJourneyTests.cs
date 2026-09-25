@@ -57,7 +57,7 @@ public sealed class DurableWorkJourneyTests
                 var result = await client.GetFromJsonAsync<WorkItemResultResponse>(
                     $"/api/v2/sessions/{sessionId}/work-items/{item.WorkItemId}/result");
                 resultText = result!.Text;
-                Assert.Equal("Hello from synthetic.", resultText);
+                Assert.Equal("Reminder: Call John.", resultText);
                 var history = await host.Services.GetRequiredService<IMemoryStore>()
                     .ReadHistoryAsync(Guid.Parse(sessionId), 0, 50);
                 Assert.DoesNotContain(history, entry => entry.Text.Contains(resultText, StringComparison.Ordinal));
@@ -344,7 +344,7 @@ public sealed class DurableWorkJourneyTests
             Assert.NotNull(completed);
             var result = await client.GetFromJsonAsync<WorkItemResultResponse>(
                 $"/api/v2/sessions/{session.SessionId}/work-items/{completed!.WorkItemId}/result");
-            Assert.Equal("Hello from synthetic.", result!.Text);
+            Assert.Equal("Reminder: Call John.", result!.Text);
         }
         finally
         {

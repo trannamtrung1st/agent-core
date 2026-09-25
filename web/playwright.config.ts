@@ -49,7 +49,11 @@ export default defineConfig({
     }
   },
   projects: [
-    { name: "synthetic", testIgnore: /browser-stt\.spec\.ts|browser-browser\.spec\.ts/ },
+    {
+      name: "synthetic",
+      testIgnore: /browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts/
+    },
+    { name: "faithful-manual", testMatch: /manual-a-faithful-wall-clock\.spec\.ts/ },
     { name: "browser-stt", testMatch: /browser-stt\.spec\.ts/, use: { baseURL: browserSttWebUrl } },
     { name: "browser-browser", testMatch: /browser-browser\.spec\.ts/, use: { baseURL: browserBrowserWebUrl } }
   ],

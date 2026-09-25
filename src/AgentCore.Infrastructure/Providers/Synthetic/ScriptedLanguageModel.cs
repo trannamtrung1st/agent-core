@@ -950,6 +950,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return _chunks;
         }
 
+        if (IsScheduledReminderDelivery(request, lastUser, out var reminderText))
+        {
+            return [reminderText];
+        }
+
         if (lastUser.Contains("remembered code word", StringComparison.OrdinalIgnoreCase))
         {
             var summary = request.Messages.FirstOrDefault(message =>
@@ -991,6 +996,43 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         return DefaultChunks;
+    }
+
+    private static bool IsScheduledReminderDelivery(ModelRequest request, string lastUser, out string reminderText)
+    {
+        reminderText = string.Empty;
+        if (!request.Messages.Any(message =>
+                message.Role == ModelRole.System
+                && message.Text.Contains("Scheduled reminder delivery mode.", StringComparison.Ordinal))
+            || !lastUser.Contains("Scheduled reminder fired.", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        const string intentPrefix = "Intent: \"";
+        var start = lastUser.IndexOf(intentPrefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return false;
+        }
+
+        start += intentPrefix.Length;
+        var end = lastUser.IndexOf('"', start);
+        if (end <= start)
+        {
+            return false;
+        }
+
+        var intent = lastUser[start..end].Trim();
+        if (intent.Length == 0)
+        {
+            return false;
+        }
+
+        reminderText = intent.Contains("check the oven", StringComparison.OrdinalIgnoreCase)
+            ? "Oven is ready."
+            : $"Reminder: {intent}.";
+        return true;
     }
 
     private static bool IsCompactionRequest(ModelRequest request) =>

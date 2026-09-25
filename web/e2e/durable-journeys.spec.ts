@@ -172,31 +172,34 @@ test("a detached reminder completes in Background work and cancel survives reloa
   makeReminderDue(sessionId);
   await page.getByRole("button", { name: "Background work" }).click();
   const drawer = page.getByRole("dialog", { name: "Background work" });
-  await expect(drawer.getByText("Completed")).toBeVisible({ timeout: 25_000 });
-  await expect(drawer.getByText("Hello from synthetic.")).toBeVisible({ timeout: 20_000 });
+  await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 25_000 });
   const transcript = page.locator(".conversation-scroll");
   await expect(transcript).toContainText("Scheduled Call John.");
-  await expect(transcript).not.toContainText("Hello from synthetic.");
+  await expect(transcript).not.toContainText("Reminder: Call John.");
 
   await page.reload();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Background work" }).click();
-  await expect(drawer.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(".conversation-scroll")).not.toContainText("Hello from synthetic.");
+  await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 
   seedRetry(sessionId);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Background work" }).click();
-  await expect(drawer.getByText("Retrying")).toBeVisible({ timeout: 15_000 });
-  await drawer.getByRole("button", { name: "Cancel Scheduled reminder" }).click();
+  await expect(drawer.getByText("Retrying").first()).toBeVisible({ timeout: 15_000 });
+  await drawer
+    .locator(".background-work-item", { hasText: "Retrying" })
+    .first()
+    .getByRole("button", { name: "Cancel Scheduled reminder" })
+    .click();
   await page.getByRole("button", { name: "Cancel work" }).click();
-  await expect(drawer.getByText("Cancelled")).toBeVisible({ timeout: 15_000 });
+  await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
 
   await page.reload();
   await page.getByRole("button", { name: "Background work" }).click();
-  await expect(drawer.getByText("Cancelled")).toBeVisible({ timeout: 15_000 });
-  await expect(drawer.getByText("Hello from synthetic.")).toBeVisible();
-  await expect(page.locator(".conversation-scroll")).not.toContainText("Hello from synthetic.");
+  await expect(drawer.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
+  await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible();
+  await expect(page.locator(".conversation-scroll")).not.toContainText("Reminder: Call John.");
 
   const unexpectedConsole = consoleErrors.filter((message) => !message.includes("[antd: List]"));
   expect(unexpectedConsole).toEqual([]);

@@ -1,19 +1,33 @@
 # P6 — Durable background work and triggered execution
 
-**Post-freeze repair (in progress).** Review after `6900bc1` reopened scheduler/worker separation, replay-safety fencing, shared detached approval preparation, and cancellation effect uncertainty before a new freeze SHA. Follow-on repair commits (`2020724` and descendants) add legacy `SideEffectToolCallId` load/migration, multi-tool checkpoint resume, conservative legacy `Succeeded` binding by action hash only, durable assistant-batch step reservation before tool execution, and schedule-vs-automation prompt/tool boundaries (reminder delivery only). **A new P6 freeze SHA is not established until** exact-SHA Synthetic offline gates, Compose smoke, and faithful wall-clock manual evidence pass on that SHA. The prior **closed/frozen** evidence on implementation SHA `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` remains the last fully gated baseline until that re-freeze completes. Hosted workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 is green on `6900bc1`: Synthetic offline gates and Synthetic Compose smoke both succeeded. Whole-task review 0018 accepted that candidate, including the scripted Manual A result `Hello from synthetic.` and Manual C's equivalent. **P7** is the next phase and is not implemented. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
+**P6 closed/frozen.** Durable repair ends at [`2067a44`](https://github.com/trannamtrung1st/agent-core/commit/2067a44a1534623dafc7803d14b8833ee1ba7890) (`2067a44`). Hosted workflow [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) is green on that SHA. **Faithful Manual A** passed on 2026-09-25 (wall-clock detached reminder; intent-faithful result `Oven is ready.`). A small Synthetic reminder-delivery alignment and this report land in the closure commit; record that SHA in the table below when pushed.
+
+The prior freeze on `6900bc1` is superseded for implementation behavior but remains historical evidence (including scripted Manual A/C on Synthetic). **P7** is the next phase and is not implemented. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
+
+### Repair sequence (post-`6900bc1`)
+
+| Commit | Focus |
+| --- | --- |
+| `458b58b` | Scheduler/worker boundary + replay safety |
+| `d5ca8bf` | Independent intake + operation fence lifecycle |
+| `013f707` | Crash/result recovery + cancellation evidence |
+| `0291b5b` | Durable `ToolCallId` operation identity |
+| `2020724` | Legacy SQLite load, multi-tool resume, schedule vs automation UX |
+| `165237d` | Conservative legacy `Succeeded` + batch step reservation |
+| `2067a44` | Cross-version resumed `StepCount` normalization |
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
-| Behavior through | `7a22b25166f4c95bdabf4cf8052fe617137bfccb` (`7a22b25`) |
-| Implementation freeze SHA | `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (`6900bc1`) |
-| Hosted workflow | [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 — **success** on `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Synthetic offline gates success. Synthetic Compose smoke success |
-| Earlier hosted runs | [`35988225906`](https://github.com/trannamtrung1st/agent-core/actions/runs/35988225906) on `babeca669a9dfb7044d7d9886194eb925d6b8f93` failed and is not freeze evidence. Attempt 1 of `35990145456` failed Playwright progress on the same SHA and is not the green evidence |
+| Implementation freeze SHA | `2067a44a1534623dafc7803d14b8833ee1ba7890` (`2067a44`) |
+| Hosted workflow (exact SHA) | [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) — **success**. Synthetic offline gates success. Synthetic Compose smoke success |
+| Prior implementation freeze (superseded) | `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (`6900bc1`), workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 |
 | P5 baseline preserved | `4bbc0c17bc54746f87fd211174690659869e3e45`, workflow `35954811544` |
-| Pre-P6 HEAD | `a92af7b6a3542472177d9c8894d35705e49b7774`, workflow `35957193903` |
+| Faithful Manual A | **pass** (2026-09-25, Synthetic, disposable SQLite `/tmp/agent-core-manual-p6-faithful.db`) |
+| Closure commit SHA | `c4dc13d8dee9c8429eaf4575c822e8a0fbeaae16` (`c4dc13d`) — docs, Synthetic reminder delivery, Manual A Playwright |
 
-The commit that adds this workflow id is documentation only. It is not the implementation freeze SHA. Parent or descendant CI is not substitute evidence.
+The commit that records the final freeze SHA is documentation only. It is not the implementation freeze SHA. Parent or descendant CI is not substitute evidence.
 
 ## What shipped
 
@@ -38,17 +52,29 @@ The commit that adds this workflow id is documentation only. It is not the imple
 | AC-P6-18..21 | W07 owner-scoped HTTP; W08 Background Work drawer; result route only |
 | AC-P6-22 | Domain, Application, Infrastructure, and API suites below; Playwright 50 passed |
 | AC-P6-23 | SQLite reopen journeys; Compose volume recreation |
-| AC-P6-24 | Manual A below |
-| AC-P6-25 | This report. Hosted workflow `35990145456` attempt 2 is green on implementation SHA `6900bc1` |
+| AC-P6-24 | Faithful Manual A below — **pass**. Historical scripted Manual A on `6900bc1` retained for comparison |
+| AC-P6-25 | This report. Hosted workflow `36031813141` is green on candidate SHA `2067a44` |
 | RULE-01..18 | Covered by the batches above. Review 0014 passed W09 at `7a22b25` |
 | RULE-19 | P4 and P5 freeze reports were not rewritten as P6 evidence. Phase I stays not-applicable |
-| RULE-20 | P6 is closed/frozen on `6900bc1`. Whole-task review 0018 accepted the candidate. P7 is next and is not implemented |
+| RULE-20 | P6 is closed/frozen on `2067a44` plus closure commit (Manual A evidence). P7 is next and is not implemented |
 
 ## Manual evidence
 
-Profile **Synthetic**. Runtime behavior is `7a22b25`. Disposable host: API `http://127.0.0.1:5098`, SQLite `/tmp/agent-core-manual-p6.db`, UI `http://127.0.0.1:5190`.
+### Manual A (faithful, detached wall-clock) — pass
 
-### Manual A — wall-clock one-shot — pass, with a scripted-result limit
+Profile **Synthetic**. Disposable host: API `http://127.0.0.1:5098`, SQLite `/tmp/agent-core-manual-p6-faithful.db`, UI `http://127.0.0.1:5190`. Tree at `2067a44` plus Synthetic reminder-delivery scripting (`ScriptedLanguageModel` reads `Scheduled reminder delivery mode` + stored intent).
+
+- User text: `check the oven in 1 minute for me` → schedule intent `check the oven`.
+- Session ended before the due instant (`This conversation has ended.`).
+- After ~75s wall clock: one occurrence `AcceptedDurable` (disposition 6), one WorkItem completed.
+- Occurrence `e2b62c55-b74c-7f56-97f0-e801bb7d24d5` → WorkItem `01a0d620-ca48-7424-92db-bd7a576382eb`.
+- Result text: `Oven is ready.` (intent-faithful; not `Hello from synthetic.`).
+- Background Work showed the same result after reload; transcript did not gain a new assistant turn with that result.
+- Automated replay (opt-in, ~75s wall clock): `CI=1 PLAYWRIGHT_SQLITE_PATH=/tmp/agent-core-manual-p6-faithful.db PLAYWRIGHT_API_PORT=5098 PLAYWRIGHT_WEB_PORT=5190 pnpm exec playwright test --project=faithful-manual` (excluded from default Synthetic CI suite).
+
+### Manual A (historical, `6900bc1`) — wall-clock one-shot — pass, with a scripted-result limit
+
+Profile **Synthetic**. Runtime behavior is `7a22b25`. Disposable host: API `http://127.0.0.1:5098`, SQLite `/tmp/agent-core-manual-p6.db`, UI `http://127.0.0.1:5190`.
 
 - Session `060bcede-7e43-4238-a30d-7645dd05b833`, Riley, `general-assistant` v10. The chat was ended before the due instant.
 - “check the oven in one minute” did not create a schedule. “check the oven in 1 minute for me” did.

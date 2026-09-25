@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on **2026-09-24**.
+Reviewed against `main` on **2026-09-25**.
 
 P5 implementation freeze:
 
@@ -16,13 +16,16 @@ P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
 P6 implementation freeze:
 
 ```text
-6900bc1d0f0331f8696fc59acdfe7be49d50ebf2
-workflow 35990145456 attempt 2 — green
+2067a44a1534623dafc7803d14b8833ee1ba7890
+workflow 36031813141 — green (exact SHA)
+
+Manual A:
+faithful wall-clock detached reminder — pass (2026-09-25)
 ```
 
-P6 post-freeze repair in progress (scheduler/worker split, replay safety, detached approval prep, cancellation uncertainty, legacy SQLite side-effect load, multi-tool resume/step budget, schedule-vs-automation UX). Implementation track `2020724`+ (Compose smoke green); **re-freeze SHA pending** exact-SHA offline gate + faithful wall-clock manual. Last fully gated SHA `6900bc1`; evidence: `docs/reports/p6-freeze-candidate.md`.
+P6 is **closed/frozen** at `2067a44` after post-freeze repair and faithful Manual A. Do not reopen P6 unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** P6 post-freeze repair (intake/worker separation, per-operation side effects, shared approval prep, cancellation semantics, regression tests, re-freeze gate). **P7** is next and must not start until P6 is re-frozen.
+**Current active phase:** **P7 — agent harness / admin lifecycle** (not started).
 
 P4 implementation freeze:
 
@@ -39,8 +42,8 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P6 are closed/frozen.**
-2. **P7 — agent harness / admin lifecycle** is the next phase and has not started. Do not implement P7.
+1. **P0–P6 are closed/frozen** (`2067a44`, workflow `36031813141`, Manual A pass).
+2. **P7 — agent harness / admin lifecycle** is the next phase and has not started. Do not implement P7 without an explicit milestone request.
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -1165,7 +1168,8 @@ P2 freeze:  47d6ff6
 P3 freeze:  4dbb920
 P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
-P6 freeze:  6900bc1 / workflow 35990145456 attempt 2 green
+P6 freeze: 2067a44 / workflow 36031813141 green / Manual A pass
+prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
 next phase: P7 — not started
 ```
 
@@ -1210,13 +1214,13 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
 - [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
-- [x] Durable triggered/background execution — P6 closed/frozen on `6900bc1` (workflow `35990145456` attempt 2).
+- [x] Durable triggered/background execution — P6 closed/frozen on `2067a44` (workflow `36031813141` green; Manual A pass).
 
 ---
 
 # Next implementation item
 
-**P6 — durable background work and triggered execution** is closed/frozen on `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2`. Hosted workflow `35990145456` attempt 2 is green. Whole-task review accepted the candidate, including the scripted Manual A result and Manual C's equivalent. Evidence: `docs/reports/p6-freeze-candidate.md`. P5 remains frozen on `4bbc0c1`.
+**P6 — durable background work and triggered execution** is closed/frozen on `2067a44a1534623dafc7803d14b8833ee1ba7890`. Hosted workflow `36031813141` is green; faithful Manual A passed 2026-09-25. Evidence: `docs/reports/p6-freeze-candidate.md`. P5 remains frozen on `4bbc0c1`.
 
 P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
 
