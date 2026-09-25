@@ -15,7 +15,15 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | GET /api/v1/sessions/{sessionId}/messages | `limit` 1..100; optional `after` or `before` (not both) | 200 history page | 400 invalid cursor; 404 unknown |
 | DELETE /api/v1/sessions/{sessionId} | No body | 204 after terminal save; repeated known end also 204 | 404 unknown; 503 durable save failed |
 | GET /health | No body | 200 health below | 503 if store/definition startup failed |
-| GET /api/v2/admin/definitions | Owner capability; trusted local caller | 200 built-in definition inventory (id, version, source, status, displayName) | 401 capability; 403 non-local |
+| GET /api/v2/admin/definitions | Owner capability; trusted local caller | 200 composite catalog inventory (`builtIn` or `durable` source; `published` or `deprecated` status; displayName) | 401 capability; 403 non-local |
+| GET /api/v2/admin/definition-drafts | Owner capability; trusted local caller | 200 draft summaries | 401 capability; 403 non-local |
+| GET /api/v2/admin/definition-drafts/{draftId} | Owner capability; trusted local caller | 200 draft with candidate JSON | 401 capability; 403 non-local; 404 |
+| POST /api/v2/admin/definition-drafts | Owner capability; trusted local caller; `{ definitionId, candidate }` | 201 draft | 400 validation; 401 capability; 403 non-local |
+| POST /api/v2/admin/definition-drafts/fork | Owner capability; trusted local caller; `{ definitionId, sourceVersion, sourceKind }` (`ForkBuiltIn` / `ForkDurable`) | 201 draft | 400 validation; 401 capability; 403 non-local; 404 |
+| PUT /api/v2/admin/definition-drafts/{draftId} | Owner capability; trusted local caller; `{ expectedRevision, candidate }` | 200 draft | 400 validation; 401 capability; 403 non-local; 404; 409 stale revision |
+| POST /api/v2/admin/definition-drafts/{draftId}/publish | Owner capability; trusted local caller; `{ expectedRevision }` | 200 publication summary (`metadataRevision` included) | 400 validation; 401 capability; 403 non-local; 404; 409 stale revision |
+| GET /api/v2/admin/definitions/{definitionId}/publications | Owner capability; trusted local caller | 200 durable publication summaries | 401 capability; 403 non-local |
+| POST /api/v2/admin/definitions/{definitionId}/publications/{version}/deprecate | Owner capability; trusted local caller; `{ expectedMetadataRevision }` | 200 publication summary | 400 built-in; 401 capability; 403 non-local; 404; 409 stale metadata |
 | GET /api/v2/admin/instances | Owner capability; trusted local caller | 200 instance inventory (id, definition, version, lifecycle, compatibility, persona name, timestamps) | 401 capability; 403 non-local |
 | GET /api/v2/admin/instances/{instanceId}/effective-config | Owner capability; trusted local caller | 200 allowlisted effective configuration: resolved catalog model, offered tools, harness refs, workspace template id, policies, and durable-work eligibility (no secrets) | 401 capability; 403 non-local; 404 unknown instance or missing exact definition version |
 | GET /api/v2/sessions/{sessionId}/triggers | Owner capability | 200 safe schedule list for the session's Agent Instance and trusted profile | 401 missing/invalid capability; 404 session |

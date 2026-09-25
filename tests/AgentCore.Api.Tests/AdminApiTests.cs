@@ -142,6 +142,29 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_create_returns_created_status()
+    {
+        var client = OwnerClient();
+        var candidate = SampleDraftCandidate("p7b-create-status");
+        var response = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                "p7b-create-status",
+                JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_fork_returns_created_status()
+    {
+        var client = OwnerClient();
+        var response = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_create_rejects_invalid_candidate_with_validation_status()
     {
         var client = OwnerClient();

@@ -263,7 +263,27 @@ public interface ISessionOutput
 }
 ```
 
-**Observed P7A Admin read services:** Application `AdminReadService` (with `AdminEffectiveConfigurationResolver`) serves owner-protected inventory and effective-configuration reads. It lists built-in definitions through `IAgentDefinitionStore`, lists instances through `IAgentInstanceStore.ListAsync`, and resolves effective model selection via `SessionModelBinder`/`IModelCatalog`, offered tools via `ToolCatalog`/`IToolConfigurationGate`, and durable-work eligibility via `OccurrenceCompatibility` on the exact pinned `(definitionId, activeVersion)` and current persona. HTTP mapping lives in Api `AdminEndpoints` with allowlisted DTOs in Contracts; domain/persistence records and provider configuration never cross the wire. User-mode session APIs remain read-only for definition/persona mutation.
+**Observed P7A Admin read services:** Application `AdminReadService` (with `AdminEffectiveConfigurationResolver`) serves owner-protected inventory and effective-configuration reads. It lists built-in definitions through `IBuiltInAgentDefinitionStore`, lists durable publications through `IAgentDefinitionAdminStore`, and merges composite catalog rows for Admin inventory. It lists instances through `IAgentInstanceStore.ListAsync`, and resolves effective model selection via `SessionModelBinder`/`IModelCatalog`, offered tools via `ToolCatalog`/`IToolConfigurationGate`, and durable-work eligibility via `OccurrenceCompatibility` on the exact pinned `(definitionId, activeVersion)` and current persona. HTTP mapping lives in Api `AdminEndpoints` with allowlisted DTOs in Contracts; domain/persistence records and provider configuration never cross the wire. User-mode session APIs remain read-only for definition/persona mutation.
+
+## P7B definition lifecycle (observed)
+
+Application ports:
+
+```csharp
+public interface IAgentDefinitionAdminStore
+{
+    ValueTask<AgentDefinitionDraft> CreateDraftAsync(AgentDefinitionDraftCreate create, CancellationToken cancellationToken = default);
+    ValueTask<AgentDefinitionDraft> UpdateDraftAsync(AgentDefinitionDraftUpdate update, CancellationToken cancellationToken = default);
+    ValueTask<AgentDefinitionPublication> PublishDraftAsync(AgentDefinitionDraftPublish publish, CancellationToken cancellationToken = default);
+    ValueTask<AgentDefinitionPublication> DeprecatePublicationAsync(AgentDefinitionPublicationDeprecate deprecate, CancellationToken cancellationToken = default);
+    ValueTask<AgentDefinitionDraft?> GetDraftAsync(Guid draftId, CancellationToken cancellationToken = default);
+    ValueTask<AgentDefinitionPublication?> GetPublicationAsync(string definitionId, int version, CancellationToken cancellationToken = default);
+    ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(CancellationToken cancellationToken = default);
+    ValueTask<IReadOnlyList<AgentDefinitionPublicationSummary>> ListPublicationsAsync(string? definitionId = null, CancellationToken cancellationToken = default);
+}
+```
+
+`IBuiltInAgentDefinitionStore` remains read-only file definitions. Runtime `IAgentDefinitionStore` is implemented by Infrastructure `CompositeAgentDefinitionStore` over built-ins and durable publications. `AgentDefinitionLifecycleService` validates candidates (structure, aliases, publish-time model/tool gates, secret scanning) before store mutations. Published payload is immutable; deprecation updates metadata only. Provider DTOs and raw store rows do not cross into Domain beyond normalized definition records.
 
 SessionSnapshot/UserProfile fields and atomic save semantics are specified in [Persistence](15-persistence-and-configuration.md); SessionOutput is the application output family in [Event Model](07-event-model.md). Save with expectedRevision=0 inserts; subsequent saves compare stored revision and write expectedRevision+1. Conflict is an application persistence conflict, not last-write-wins. `RecoverCrashedSessionsAsync` runs at process startup for SQLite: Attached becomes Paused, Ending becomes Ended, Streaming entries become Interrupted, and PendingMode is cleared. There is no generic repository interface. Definition lookup returns null for missing versions, throws a normalized validation failure for malformed data, and pins a version for the full session.
 

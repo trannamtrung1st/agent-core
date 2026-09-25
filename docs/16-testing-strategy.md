@@ -45,6 +45,8 @@ Use this mode for CI, frontend development, deterministic conversation scenarios
 
 **P7A Admin (observed):** `AdminApiTests` cover owner/trusted-local denial and secret-sentinel absence; `AdminReadServiceTests` cover exact-version resolution and ineligible trigger sources; Vitest covers Admin inventory/error/retry/unauthorized states and effective-config rendering; Playwright `e2e/admin-shell.spec.ts` asserts hub teardown while Admin is open, effective-config fields, return-to-same-chat reconnect, a second Synthetic turn, and narrow-width layout.
 
+**P7B definition lifecycle (observed):** `AgentDefinitionAdminStoreContractTests` (InMemory + SQLite) cover draft edit/publish/deprecate, immutability, concurrency, reopen, composite default selection, and built-in overlay. `AdminApiTests` cover draft lifecycle HTTP, validation, deprecate, durable inventory source, and 201 create/fork status codes. `DefinitionLifecycleSessionSnapshotTests` prove stored session snapshots stay pinned after later publish/deprecate. `DefinitionLifecycleMigrationTests` upgrade from the pre-P7B migration tip (`20260924155535_WorkSideEffectToolCallId`), preserve representative session data, and exercise the lifecycle store after upgrade. Vitest covers Admin draft save-before-publish. Playwright definition fork/publish journey remains a W02 slice-gate item alongside `admin-shell` and text-conversation regression.
+
 ## Deterministic scenario matrix
 
 | Scenario | Stimulus | Required assertion |

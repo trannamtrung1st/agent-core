@@ -52,5 +52,5 @@ Pending exact candidate SHA after W01 batch approval.
 
 ## Gaps / limitations
 
-- Managed/durable definition sources appear in P7B; inventory currently lists built-in file definitions only.
+- P7B adds durable definition inventory rows (`source: durable`); P7A scope was built-in-only read APIs.
 - Hosted workflow green on the exact candidate SHA not yet recorded in this report.

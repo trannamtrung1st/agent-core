@@ -80,7 +80,7 @@ internal static class AdminEndpoints
                 var candidate = AdminDefinitionJson.ReadCandidate(request.Candidate);
                 var draft = await lifecycle.CreateDraftAsync(request.DefinitionId, candidate, cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToDraft(draft));
+                return Results.Json(AdminHttpMapping.ToDraft(draft), statusCode: StatusCodes.Status201Created);
             }
             catch (AgentCoreException ex)
             {
@@ -106,7 +106,7 @@ internal static class AdminEndpoints
                         sourceKind,
                         cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToDraft(draft));
+                return Results.Json(AdminHttpMapping.ToDraft(draft), statusCode: StatusCodes.Status201Created);
             }
             catch (AgentCoreException ex)
             {
