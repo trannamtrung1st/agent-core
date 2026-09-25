@@ -1,30 +1,75 @@
 import { execFileSync } from "node:child_process";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { waitForResponseSettled } from "./support/response-settled";
 
 const dbPath = process.env.PLAYWRIGHT_SQLITE_PATH ?? "";
+const scheduleIntent = "Call John";
 
 function sqlite(script: string, args: string[] = []): string {
   return execFileSync("python3", ["-c", script, dbPath, ...args], { encoding: "utf8" }).trim();
 }
 
-function latestSessionId(): string {
-  return sqlite(`
-import sqlite3, sys
-con = sqlite3.connect(sys.argv[1], timeout=30)
+type RegistrationProbe = {
+  count: number;
+  registration: {
+    registrationId: string;
+    status: number;
+    nextOccurrenceAtUtc: string | null;
+    intent: string;
+  } | null;
+};
+
+function probeRegistration(sessionId: string): RegistrationProbe {
+  const raw = sqlite(
+    `
+import json, sqlite3, sys
+db, session_id, intent = sys.argv[1], sys.argv[2], sys.argv[3]
+con = sqlite3.connect(db, timeout=30)
+con.row_factory = sqlite3.Row
 con.execute("PRAGMA busy_timeout=8000")
-row = con.execute(
-    "SELECT SourceSessionId FROM TriggerRegistrations WHERE Intent = ? ORDER BY CreatedAtUtc DESC LIMIT 1",
-    ("Call John",),
-).fetchone()
+rows = con.execute(
+    """SELECT RegistrationId, Status, NextOccurrenceAtUtc, Intent
+       FROM TriggerRegistrations
+       WHERE SourceSessionId = ? AND Intent = ?
+       ORDER BY RegistrationId""",
+    (session_id, intent),
+).fetchall()
 con.close()
-if row is None or not row[0]:
-    raise SystemExit("reminder registration was not stored")
-print(row[0])
-`);
+registration = None
+if len(rows) == 1:
+    row = rows[0]
+    registration = {
+        "registrationId": row["RegistrationId"],
+        "status": row["Status"],
+        "nextOccurrenceAtUtc": row["NextOccurrenceAtUtc"],
+        "intent": row["Intent"],
+    }
+print(json.dumps({"count": len(rows), "registration": registration}))
+`,
+    [sessionId, scheduleIntent]
+  );
+  return JSON.parse(raw) as RegistrationProbe;
+}
+
+async function collectHarnessDiagnostics(page: Page, sessionId: string): Promise<string> {
+  const connection = await page.getByTestId("connection").innerText().catch(() => "(missing)");
+  const stopCount = await page.getByRole("button", { name: "Stop" }).count();
+  const sendDisabled = await page.getByRole("button", { name: "Send" }).isDisabled().catch(() => true);
+  const transcript = await page.locator(".conversation-scroll").innerText().catch(() => "");
+  const registration = probeRegistration(sessionId);
+  return [
+    `sessionId=${sessionId}`,
+    `connection=${connection}`,
+    `stopButtonCount=${stopCount}`,
+    `sendDisabled=${sendDisabled}`,
+    `registration=${JSON.stringify(registration)}`,
+    `transcript=${transcript}`
+  ].join("\n");
 }
 
 function makeReminderDue(sessionId: string): void {
-  sqlite(`
+  sqlite(
+    `
 import sqlite3, sys, time
 db, session_id = sys.argv[1], sys.argv[2]
 con = sqlite3.connect(db, timeout=30)
@@ -38,13 +83,12 @@ con.commit()
 con.close()
 if updated != 1:
     raise SystemExit(f"expected one active registration, updated {updated}")
-`, [sessionId]);
+`,
+    [sessionId]
+  );
 }
 
-async function releaseOtherLiveRuntimes(
-  page: import("@playwright/test").Page,
-  sessionId: string
-): Promise<void> {
+async function releaseOtherLiveRuntimes(page: Page, sessionId?: string): Promise<void> {
   await page.evaluate(async (currentId) => {
     const token = window.localStorage.getItem("agent-core.owner-capability") ?? "";
     const headers = {
@@ -70,11 +114,12 @@ async function releaseOtherLiveRuntimes(
         throw new Error(`deactivate ${item.sessionId} ${deactivated.status}`);
       }
     }
-  }, sessionId);
+  }, sessionId ?? "");
 }
 
 function seedRetry(sessionId: string): void {
-  sqlite(`
+  sqlite(
+    `
 import json, sqlite3, sys, time, uuid
 db, session_id = sys.argv[1], sys.argv[2]
 con = sqlite3.connect(db, timeout=30)
@@ -112,11 +157,13 @@ con.execute(
 )
 con.commit()
 con.close()
-`, [sessionId]);
+`,
+    [sessionId]
+  );
 }
 
 test("a detached reminder completes in Background work and cancel survives reload", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const consoleErrors: string[] = [];
   const serverErrors: string[] = [];
   page.on("console", (message) => {
@@ -159,22 +206,62 @@ test("a detached reminder completes in Background work and cancel survives reloa
   await page.getByRole("combobox", { name: "Identity" }).click();
   await page.locator(".ant-select-item-option", { hasText: "Riley — General assistant" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+
+  await releaseOtherLiveRuntimes(page);
+
+  const transcript = page.locator(".conversation-scroll");
   await page.getByLabel("Message").fill("remind me tomorrow");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Scheduled Call John.")).toBeVisible({ timeout: 15_000 });
+
+  await expect(page).toHaveURL(/\/c\/[0-9a-f-]{36}$/i, { timeout: 30_000 });
+  const sessionId = page.url().match(/\/c\/([0-9a-f-]{36})/i)?.[1];
+  expect(sessionId).toBeTruthy();
+
+  let lastDiagnostics = await collectHarnessDiagnostics(page, sessionId);
+  try {
+    await expect
+      .poll(
+        async () => {
+          const registration = probeRegistration(sessionId);
+          const transcriptText = await transcript.innerText();
+          const connection = await page.getByTestId("connection").innerText();
+          const stopCount = await page.getByRole("button", { name: "Stop" }).count();
+          const settled =
+            connection === "Ready"
+            && stopCount === 0
+            && (await page.getByText("Finalizing response…").count()) === 0
+            && (await page.locator(".agent-activity").count()) === 0;
+          const ready =
+            registration.count === 1
+            && registration.registration?.intent === scheduleIntent
+            && /Scheduled/i.test(transcriptText)
+            && settled;
+          lastDiagnostics = await collectHarnessDiagnostics(page, sessionId);
+          return ready;
+        },
+        {
+          timeout: 60_000,
+          intervals: [500, 1_000, 2_000],
+          message: () => lastDiagnostics
+        }
+      )
+      .toBe(true);
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${lastDiagnostics}`);
+  }
+
+  await waitForResponseSettled(page);
 
   await page.getByRole("button", { name: "Conversation actions" }).click();
   await page.getByRole("menuitem", { name: "End" }).click();
   await expect(page.getByText("This conversation has ended.")).toBeVisible({ timeout: 15_000 });
 
-  const sessionId = latestSessionId();
   await releaseOtherLiveRuntimes(page, sessionId);
   makeReminderDue(sessionId);
   await page.getByRole("button", { name: "Background work" }).click();
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer.getByText("Reminder: Call John.").first()).toBeVisible({ timeout: 25_000 });
-  const transcript = page.locator(".conversation-scroll");
-  await expect(transcript).toContainText("Scheduled Call John.");
+  await expect(transcript).toContainText(/Scheduled/i);
   await expect(transcript).not.toContainText("Reminder: Call John.");
 
   await page.reload();

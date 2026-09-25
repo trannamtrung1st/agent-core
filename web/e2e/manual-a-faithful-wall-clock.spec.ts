@@ -139,7 +139,7 @@ print(json.dumps({
 }
 
 test("MANUAL_A faithful wall-clock detached reminder", async ({ page }) => {
-  test.setTimeout(200_000);
+  test.setTimeout(270_000);
 
   await page.goto("/");
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));

@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
@@ -29,11 +32,19 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly CompactionFixture _compactionFixture;
     private readonly TaskCompletionSource? _compactionRelease;
     private readonly TaskCompletionSource? _compactionStarted;
-    private string? _scheduleRegistrationId;
-    private long _scheduleRevision;
-    private string? _scheduleIntent;
-    private string? _scheduleTimeZone;
+    private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
     private static readonly ITriggerCommandAuthorizer ScheduleAuthorizer = new HeuristicTriggerCommandAuthorizer();
+
+    private sealed class ScheduleScratch
+    {
+        public string? RegistrationId { get; set; }
+
+        public long Revision { get; set; }
+
+        public string? Intent { get; set; }
+
+        public string? TimeZone { get; set; }
+    }
 
     public ScriptedLanguageModel(
         IReadOnlyList<string>? chunks = null,
@@ -392,7 +403,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return false;
         }
 
-        var scheduleTurn = IsScheduleTurn(lastUser);
+        var scheduleTurn = IsScheduleTurn(request, lastUser);
         if (!scheduleTurn)
         {
             return false;
@@ -400,7 +411,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         if (toolRounds > 0)
         {
-            RememberSchedule(lastTool);
+            RememberSchedule(request, lastTool);
             if (lastTool.Contains("\"error\"", StringComparison.Ordinal))
             {
                 return true;
@@ -537,7 +548,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains("move that reminder", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("reschedule", StringComparison.OrdinalIgnoreCase))
         {
-            if (_scheduleRegistrationId is null)
+            if (!TryGetScheduleScratch(request, out var moveScratch))
             {
                 return false;
             }
@@ -545,101 +556,177 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.TriggerUpdate,
-                ScheduleRememberedArgs(includeTime: true, ClockFromMove(lastUser)));
+                ScheduleRememberedArgs(moveScratch, includeTime: true, ClockFromMove(lastUser)));
             return true;
         }
 
         if (lastUser.Contains("cancel that", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("cancel that reminder", StringComparison.OrdinalIgnoreCase))
         {
-            if (_scheduleRegistrationId is null)
+            if (!TryGetScheduleScratch(request, out var cancelScratch))
             {
                 return false;
             }
 
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.TriggerCancel, ScheduleRememberedArgs(includeTime: false, "10:00"));
+            toolEvent = ScheduleCall(
+                toolRounds,
+                ToolCatalog.TriggerCancel,
+                ScheduleRememberedArgs(cancelScratch, includeTime: false, "10:00"));
             return true;
         }
 
         return false;
     }
 
-    private bool IsScheduleTurn(string lastUser) =>
+    private bool IsScheduleTurn(ModelRequest request, string lastUser) =>
         lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-        || TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(lastUser, null, SyntheticScheduleContext())
+        || TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(lastUser, null, SyntheticScheduleContext(request))
         || ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null);
 
-    private ScheduleConversationContext? SyntheticScheduleContext()
+    private ScheduleConversationContext? SyntheticScheduleContext(ModelRequest request)
     {
-        if (_scheduleRegistrationId is null || !Guid.TryParse(_scheduleRegistrationId, out var registrationId))
+        if (!TryGetScheduleScratch(request, out var scratch)
+            || scratch.RegistrationId is null
+            || !Guid.TryParse(scratch.RegistrationId, out var registrationId))
         {
             return null;
         }
 
         return new ScheduleConversationContext(
             registrationId,
-            _scheduleRevision,
+            scratch.Revision,
             TriggerCommandAction.Create,
-            _scheduleIntent ?? "Call John",
-            _scheduleTimeZone ?? "UTC",
+            scratch.Intent ?? "Call John",
+            scratch.TimeZone ?? "UTC",
             TriggerScheduleKind.OneShot,
             TriggerRegistrationStatus.Active,
             null);
     }
 
-    private void RememberSchedule(string lastTool)
+    private bool TryGetScheduleScratch(ModelRequest request, out ScheduleScratch scratch)
     {
-        if (string.IsNullOrWhiteSpace(lastTool))
+        scratch = null!;
+        if (!TryResolveScheduleKey(request.Messages, out var key)
+            || !_scheduleScratchByKey.TryGetValue(key, out var stored))
+        {
+            return false;
+        }
+
+        scratch = stored;
+        return !string.IsNullOrWhiteSpace(scratch.RegistrationId);
+    }
+
+    private void RememberSchedule(ModelRequest request, string lastTool)
+    {
+        var remembered = ScheduleConversationContext.TryFromRegistrationJson(lastTool, TriggerCommandAction.Create);
+        if (remembered is null)
         {
             return;
         }
 
-        try
+        var scratch = new ScheduleScratch
         {
-            using var document = JsonDocument.Parse(lastTool);
-            var root = document.RootElement;
-            if (root.TryGetProperty("registrations", out var rows) && rows.GetArrayLength() > 0)
-            {
-                root = rows[0];
-            }
-
-            if (!root.TryGetProperty("registrationId", out var id) || !root.TryGetProperty("revision", out var revision))
-            {
-                return;
-            }
-
-            _scheduleRegistrationId = id.GetString();
-            _scheduleRevision = revision.GetInt64();
-            if (root.TryGetProperty("intent", out var intentElement))
-            {
-                _scheduleIntent = intentElement.GetString();
-            }
-
-            if (root.TryGetProperty("timeZone", out var zoneElement))
-            {
-                _scheduleTimeZone = zoneElement.GetString();
-            }
-        }
-        catch (JsonException)
+            RegistrationId = remembered.RegistrationId.ToString("D"),
+            Revision = remembered.Revision,
+            Intent = remembered.Intent,
+            TimeZone = remembered.TimeZoneId
+        };
+        _scheduleScratchByKey[remembered.RegistrationId] = scratch;
+        if (TryResolveScheduleKey(request.Messages, out var conversationKey)
+            && conversationKey != remembered.RegistrationId)
         {
+            _scheduleScratchByKey[conversationKey] = scratch;
         }
     }
 
-    private string ScheduleRememberedArgs(bool includeTime, string localTime)
+    private static bool TryResolveScheduleKey(IReadOnlyList<ModelMessage> messages, out Guid key)
     {
-        var intent = _scheduleIntent ?? "Call John";
+        if (TryParseReferentRegistrationId(messages, out key))
+        {
+            return true;
+        }
+
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var message = messages[index];
+            if (message.Role != ModelRole.Tool)
+            {
+                continue;
+            }
+
+            var remembered = ScheduleConversationContext.TryFromRegistrationJson(
+                message.Text,
+                TriggerCommandAction.Create);
+            if (remembered is not null && remembered.RegistrationId != Guid.Empty)
+            {
+                key = remembered.RegistrationId;
+                return true;
+            }
+        }
+
+        key = ConversationFingerprintKey(messages);
+        return key != Guid.Empty;
+    }
+
+    private static bool TryParseReferentRegistrationId(IReadOnlyList<ModelMessage> messages, out Guid registrationId)
+    {
+        registrationId = Guid.Empty;
+        foreach (var message in messages)
+        {
+            if (message.Role != ModelRole.System)
+            {
+                continue;
+            }
+
+            foreach (var line in message.Text.Split('\n'))
+            {
+                const string prefix = "registrationId=";
+                if (!line.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (Guid.TryParse(line[prefix.Length..], out registrationId) && registrationId != Guid.Empty)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static Guid ConversationFingerprintKey(IReadOnlyList<ModelMessage> messages)
+    {
+        var builder = new StringBuilder();
+        foreach (var message in messages)
+        {
+            builder.Append((int)message.Role).Append(':').Append(message.Text).Append('\n');
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        Span<byte> guidBytes = stackalloc byte[16];
+        hash.AsSpan(0, 16).CopyTo(guidBytes);
+        guidBytes[6] = (byte)((guidBytes[6] & 0x0F) | 0x50);
+        guidBytes[8] = (byte)((guidBytes[8] & 0x3F) | 0x80);
+        return new Guid(guidBytes);
+    }
+
+    private static string ScheduleRememberedArgs(ScheduleScratch scratch, bool includeTime, string localTime)
+    {
+        var intent = scratch.Intent ?? "Call John";
         if (!includeTime)
         {
-            return $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}}}""";
+            return $$"""{"registrationId":"{{scratch.RegistrationId}}","expectedRevision":{{scratch.Revision}}}""";
         }
 
         if (string.Equals(intent, "Call John", StringComparison.Ordinal))
         {
-            return $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}""";
+            return $$"""{"registrationId":"{{scratch.RegistrationId}}","expectedRevision":{{scratch.Revision}},"intent":"Call John","relativeDayOffset":1,"localTime":"{{localTime}}"}""";
         }
 
-        var zone = string.IsNullOrWhiteSpace(_scheduleTimeZone) ? "viet nam time" : _scheduleTimeZone;
-        return $$"""{"registrationId":"{{_scheduleRegistrationId}}","expectedRevision":{{_scheduleRevision}},"intent":"{{intent}}","localDate":"2026-09-24","localTime":"{{localTime}}","timeZone":"{{zone}}"}""";
+        var zone = string.IsNullOrWhiteSpace(scratch.TimeZone) ? "viet nam time" : scratch.TimeZone;
+        return $$"""{"registrationId":"{{scratch.RegistrationId}}","expectedRevision":{{scratch.Revision}},"intent":"{{intent}}","localDate":"2026-09-24","localTime":"{{localTime}}","timeZone":"{{zone}}"}""";
     }
 
     private static string ClockFromMove(string text)
@@ -728,7 +815,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
-            || IsScheduleTurn(lastUser)
+            || IsScheduleTurn(request, lastUser)
             || request.Messages.Any(message => message.Role == ModelRole.Tool);
     }
 
