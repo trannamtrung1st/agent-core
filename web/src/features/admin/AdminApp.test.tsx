@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OwnerCapabilityError } from "../../services/api";
-import { AdminApp, EffectiveConfigView } from "./AdminApp";
-import type { AdminEffectiveConfiguration } from "../../services/adminApi";
+import { AdminApp, EffectiveConfigView, PublicationResourcesSummary } from "./AdminApp";
+import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
 
 const sampleEffective: AdminEffectiveConfiguration = {
   definitionSource: "builtIn",
@@ -70,7 +70,12 @@ vi.mock("../../services/adminApi", () => ({
   getAdminDefinitionDraft: vi.fn(),
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
-  forkAdminDefinitionDraft: vi.fn()
+  forkAdminDefinitionDraft: vi.fn(),
+  listAdminDraftResources: vi.fn(),
+  listAdminPublicationResources: vi.fn(),
+  uploadAdminDraftResourceContent: vi.fn(),
+  upsertAdminDraftResource: vi.fn(),
+  removeAdminDraftResource: vi.fn()
 }));
 
 import * as antd from "antd";
@@ -80,7 +85,10 @@ import {
   listAdminDefinitionDrafts,
   listAdminDefinitionPublications,
   listAdminDefinitions,
+  listAdminDraftResources,
+  listAdminPublicationResources,
   listAdminInstances,
+  removeAdminDraftResource,
   publishAdminDefinitionDraft,
   updateAdminDefinitionDraft
 } from "../../services/adminApi";
@@ -192,6 +200,7 @@ describe("AdminApp", () => {
       }
     ]);
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([]);
     vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
       draftId,
       definitionId: "examiner",
@@ -251,6 +260,220 @@ describe("AdminApp", () => {
       );
     });
     expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
+  });
+
+  it("preserves unsaved instructions after a resource mutation", async () => {
+    const draftId = "019944af-00d1-7000-8000-000000000087";
+    const resourceId = "019944af-00d1-7000-8000-0000000000ab";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "examiner",
+        revision: 1,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([
+      {
+        resourceId,
+        logicalPath: "knowledge/policy.md",
+        kind: "Knowledge",
+        mediaType: "text/plain",
+        contentSha256: "abc123def456",
+        byteLength: 12,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(getAdminDefinitionDraft)
+      .mockResolvedValueOnce({
+        draftId,
+        definitionId: "examiner",
+        revision: 1,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        candidate: { systemInstructions: "Stored body", definitionId: "examiner" }
+      })
+      .mockResolvedValue({
+        draftId,
+        definitionId: "examiner",
+        revision: 2,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-02T00:00:00Z",
+        candidate: { systemInstructions: "Stored body", definitionId: "examiner" }
+      });
+    vi.mocked(removeAdminDraftResource).mockResolvedValue(undefined);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText("System instructions"), {
+      target: { value: "Unsaved instruction edit" }
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await waitFor(() => {
+      expect(removeAdminDraftResource).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Instructions" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("System instructions")).toHaveValue("Unsaved instruction edit");
+    });
+  });
+
+  it("ignores stale publication resource responses after definition changes", async () => {
+    let resolveFirst: ((value: AdminDefinitionPublicationResource[]) => void) | undefined;
+    const firstPending = new Promise<AdminDefinitionPublicationResource[]>((resolve) => {
+      resolveFirst = resolve;
+    });
+    vi.mocked(listAdminPublicationResources).mockImplementation((definitionId) => {
+      if (definitionId === "examiner") {
+        return firstPending;
+      }
+
+      return Promise.resolve([
+        {
+          resourceId: "019944af-00d1-7000-8000-0000000000dd",
+          logicalPath: "other/policy.md",
+          kind: "Knowledge",
+          mediaType: "text/plain",
+          contentSha256: "fedcba987654",
+          byteLength: 8
+        }
+      ]);
+    });
+
+    const { rerender } = render(<PublicationResourcesSummary definitionId="examiner" version={1} />);
+    rerender(<PublicationResourcesSummary definitionId="customer-support" version={1} />);
+    await waitFor(() => {
+      expect(screen.getByText(/other\/policy\.md/)).toBeInTheDocument();
+    });
+    resolveFirst?.([
+      {
+        resourceId: "019944af-00d1-7000-8000-0000000000ee",
+        logicalPath: "stale/policy.md",
+        kind: "Knowledge",
+        mediaType: "text/plain",
+        contentSha256: "abc123def456",
+        byteLength: 12
+      }
+    ]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByText(/stale\/policy\.md/)).not.toBeInTheDocument();
+    expect(screen.getByText(/other\/policy\.md/)).toBeInTheDocument();
+  });
+
+  it("shows publication resource load failures with retry", async () => {
+    vi.mocked(listAdminPublicationResources)
+      .mockRejectedValueOnce(new Error("Admin publication resources failed (503)"))
+      .mockResolvedValueOnce([
+        {
+          resourceId: "019944af-00d1-7000-8000-0000000000cc",
+          logicalPath: "knowledge/policy.md",
+          kind: "Knowledge",
+          mediaType: "text/plain",
+          contentSha256: "abc123def4567890",
+          byteLength: 12
+        }
+      ]);
+
+    render(<PublicationResourcesSummary definitionId="examiner" version={2} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Admin publication resources failed \(503\)/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(screen.getByText(/knowledge\/policy\.md/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows draft resources tab when a draft is open", async () => {
+    const draftId = "019944af-00d1-7000-8000-000000000088";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "examiner",
+        revision: 1,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([
+      {
+        resourceId: "019944af-00d1-7000-8000-0000000000aa",
+        logicalPath: "knowledge/policy.md",
+        kind: "Knowledge",
+        mediaType: "text/plain",
+        contentSha256: "abc123def456",
+        byteLength: 12,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 1,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Resources" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
+    await waitFor(() => {
+      expect(screen.getByText(/knowledge\/policy\.md/)).toBeInTheDocument();
+    });
   });
 
   it("shows instance identity from effective config when inventory is unavailable", async () => {

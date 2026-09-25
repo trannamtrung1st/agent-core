@@ -68,6 +68,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             }
 
             ApplyTemplate(definition, physical);
+            await ApplyPublicationTemplateResourcesAsync(definition, physical, cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(marker, RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId ?? "", cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -716,6 +717,74 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         var root = SessionWorkspaceDir(sessionId);
         var relative = Path.GetRelativePath(root, physical).Replace('\\', '/');
         return relative is "." ? "/workspace" : "/workspace/" + relative;
+    }
+
+    private async ValueTask ApplyPublicationTemplateResourcesAsync(
+        AgentDefinition definition,
+        string physical,
+        CancellationToken cancellationToken)
+    {
+        if (_publicationResources is null)
+        {
+            return;
+        }
+
+        var templateId = RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId;
+        if (string.IsNullOrWhiteSpace(templateId))
+        {
+            return;
+        }
+
+        var items = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
+            .ConfigureAwait(false);
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var templatePrefix = templateId + "/";
+        var working = Path.Combine(physical, "workspace", "working");
+        foreach (var item in items)
+        {
+            if (item.Kind != AgentDefinitionResourceKind.Template)
+            {
+                continue;
+            }
+
+            var relative = DefinitionPublicationResourceReader.NormalizeLogicalPath(item.LogicalPath);
+            if (!relative.StartsWith(templatePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var workingRelative = relative[templatePrefix.Length..];
+            if (string.IsNullOrEmpty(workingRelative)
+                || WorkspaceLogicalPath.HasParentSegment(workingRelative)
+                || workingRelative.StartsWith("knowledge/", StringComparison.OrdinalIgnoreCase)
+                || workingRelative.StartsWith("harness/", StringComparison.OrdinalIgnoreCase)
+                || IsForbiddenPersist("/workspace/working/" + workingRelative))
+            {
+                continue;
+            }
+
+            var dest = Path.GetFullPath(Path.Combine(working, workingRelative.Replace('/', Path.DirectorySeparatorChar)));
+            if (!IsUnder(working, dest))
+            {
+                continue;
+            }
+
+            var bytes = await _publicationResources.ReadContentAsync(item, cancellationToken).ConfigureAwait(false);
+            if (bytes is null || bytes.Length == 0)
+            {
+                continue;
+            }
+
+            var destParent = Path.GetDirectoryName(dest)!;
+            DenyEscapingLinks(dest, physical);
+            DenyEscapingLinks(destParent, physical);
+            Directory.CreateDirectory(destParent);
+            await File.WriteAllBytesAsync(dest, bytes, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private void ApplyTemplate(AgentDefinition definition, string physical)

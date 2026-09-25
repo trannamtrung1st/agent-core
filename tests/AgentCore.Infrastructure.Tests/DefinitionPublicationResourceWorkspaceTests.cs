@@ -70,7 +70,184 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
         Assert.Equal("pinned-bytes", System.Text.Encoding.UTF8.GetString(read.Bytes));
     }
 
-    private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
+    [Fact]
+    public async Task Template_publication_resource_seeds_workspace_working_once()
+    {
+        using var dir = new TempDir();
+        var now = DateTimeOffset.Parse("2026-01-05T00:00:00Z");
+        var content = new InMemoryDefinitionResourceContentStore();
+        var admin = new InMemoryAgentDefinitionAdminStore(new SystemIdGenerator(TimeProvider.System));
+        var resources = new InMemoryAgentDefinitionResourceAdminStore(
+            admin,
+            content,
+            new SystemIdGenerator(TimeProvider.System));
+        admin.ResourceStore = resources;
+        var reader = new DefinitionPublicationResourceReader(resources);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+
+        const string templateId = "seed-pack";
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate(
+                "resource-agent",
+                SampleCandidate("resource-agent", templateId),
+                DefinitionDraftSourceKind.New,
+                null,
+                now),
+            CancellationToken.None);
+        var bytes = "seed-me"u8.ToArray();
+        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
+        await content.StoreVerifiedAsync(hash, bytes, CancellationToken.None);
+        var otherBytes = "skip-me"u8.ToArray();
+        var otherHash = DefinitionResourceContentHasher.ComputeSha256Hex(otherBytes);
+        await content.StoreVerifiedAsync(otherHash, otherBytes, CancellationToken.None);
+        await resources.UpsertDraftResourceAsync(
+            new AgentDefinitionDraftResourceUpsert(
+                draft.DraftId,
+                draft.Revision,
+                null,
+                $"{templateId}/welcome.txt",
+                AgentDefinitionResourceKind.Template,
+                "text/plain",
+                hash,
+                bytes.Length,
+                now.AddMinutes(1)),
+            CancellationToken.None);
+        var draftAfterFirst = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+        await resources.UpsertDraftResourceAsync(
+            new AgentDefinitionDraftResourceUpsert(
+                draftAfterFirst!.DraftId,
+                draftAfterFirst.Revision,
+                null,
+                "other-pack/extra.txt",
+                AgentDefinitionResourceKind.Template,
+                "text/plain",
+                otherHash,
+                otherBytes.Length,
+                now.AddMinutes(2)),
+            CancellationToken.None);
+        var draftAfterResource = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+        var published = await admin.PublishDraftAsync(
+            new AgentDefinitionDraftPublish(
+                draftAfterResource!.DraftId,
+                draftAfterResource.Revision,
+                [],
+                now.AddMinutes(3)),
+            CancellationToken.None);
+        var session = Guid.CreateVersion7();
+        await workspace.EnsureAsync(session, published.Payload);
+        var seeded = await workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt");
+        Assert.Equal("seed-me", System.Text.Encoding.UTF8.GetString(seeded.Bytes));
+        var skipped = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            workspace.ReadAsync(session, published.Payload, "/workspace/working/extra.txt").AsTask());
+        Assert.Equal("NotFound", skipped.Code);
+    }
+
+    [Fact]
+    public async Task Publication_template_overwrites_builtin_template_at_same_path()
+    {
+        using var dir = new TempDir();
+        const string templateId = "seed-pack";
+        var builtinDir = Path.Combine(dir.TemplateRoot, templateId);
+        Directory.CreateDirectory(builtinDir);
+        await File.WriteAllTextAsync(Path.Combine(builtinDir, "welcome.txt"), "builtin");
+
+        var now = DateTimeOffset.Parse("2026-01-05T00:00:00Z");
+        var content = new InMemoryDefinitionResourceContentStore();
+        var admin = new InMemoryAgentDefinitionAdminStore(new SystemIdGenerator(TimeProvider.System));
+        var resources = new InMemoryAgentDefinitionResourceAdminStore(
+            admin,
+            content,
+            new SystemIdGenerator(TimeProvider.System));
+        admin.ResourceStore = resources;
+        var reader = new DefinitionPublicationResourceReader(resources);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate(
+                "resource-agent",
+                SampleCandidate("resource-agent", templateId),
+                DefinitionDraftSourceKind.New,
+                null,
+                now),
+            CancellationToken.None);
+        var bytes = "durable"u8.ToArray();
+        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
+        await content.StoreVerifiedAsync(hash, bytes, CancellationToken.None);
+        await resources.UpsertDraftResourceAsync(
+            new AgentDefinitionDraftResourceUpsert(
+                draft.DraftId,
+                draft.Revision,
+                null,
+                $"{templateId}/welcome.txt",
+                AgentDefinitionResourceKind.Template,
+                "text/plain",
+                hash,
+                bytes.Length,
+                now.AddMinutes(1)),
+            CancellationToken.None);
+        var draftAfterResource = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+        var published = await admin.PublishDraftAsync(
+            new AgentDefinitionDraftPublish(
+                draftAfterResource!.DraftId,
+                draftAfterResource.Revision,
+                [],
+                now.AddMinutes(2)),
+            CancellationToken.None);
+        var session = Guid.CreateVersion7();
+        await workspace.EnsureAsync(session, published.Payload);
+        var seeded = await workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt");
+        Assert.Equal("durable", System.Text.Encoding.UTF8.GetString(seeded.Bytes));
+    }
+
+    [Fact]
+    public async Task Template_publication_resource_without_workspace_policy_does_not_seed()
+    {
+        using var dir = new TempDir();
+        var now = DateTimeOffset.Parse("2026-01-05T00:00:00Z");
+        var content = new InMemoryDefinitionResourceContentStore();
+        var admin = new InMemoryAgentDefinitionAdminStore(new SystemIdGenerator(TimeProvider.System));
+        var resources = new InMemoryAgentDefinitionResourceAdminStore(
+            admin,
+            content,
+            new SystemIdGenerator(TimeProvider.System));
+        admin.ResourceStore = resources;
+        var reader = new DefinitionPublicationResourceReader(resources);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate("resource-agent", SampleCandidate("resource-agent"), DefinitionDraftSourceKind.New, null, now),
+            CancellationToken.None);
+        var bytes = "seed-me"u8.ToArray();
+        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
+        await content.StoreVerifiedAsync(hash, bytes, CancellationToken.None);
+        await resources.UpsertDraftResourceAsync(
+            new AgentDefinitionDraftResourceUpsert(
+                draft.DraftId,
+                draft.Revision,
+                null,
+                "seed-pack/welcome.txt",
+                AgentDefinitionResourceKind.Template,
+                "text/plain",
+                hash,
+                bytes.Length,
+                now.AddMinutes(1)),
+            CancellationToken.None);
+        var draftAfterResource = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+        var published = await admin.PublishDraftAsync(
+            new AgentDefinitionDraftPublish(
+                draftAfterResource!.DraftId,
+                draftAfterResource.Revision,
+                [],
+                now.AddMinutes(2)),
+            CancellationToken.None);
+        var session = Guid.CreateVersion7();
+        await workspace.EnsureAsync(session, published.Payload);
+        var missing = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt").AsTask());
+        Assert.Equal("NotFound", missing.Code);
+    }
+
+    private static AgentDefinitionCandidate SampleCandidate(string definitionId, string? workspaceTemplateId = null) =>
         new(
             1,
             definitionId,
@@ -82,7 +259,8 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new InitiativePolicy(false, 30_000, 60_000, 1, []),
             new VoiceConfiguration(false, "alloy", 1.0),
             new ProviderPreferences("primary-llm", null, null),
-            new Dictionary<string, string>());
+            new Dictionary<string, string>(),
+            workspaceTemplateId is null ? null : new RoleEnvironment(Workspace: new WorkspaceTemplatePolicy(workspaceTemplateId)));
 
     private sealed class TempDir : IDisposable
     {

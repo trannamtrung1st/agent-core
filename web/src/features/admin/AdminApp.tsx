@@ -1,9 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, App, Button, Descriptions, Flex, Input, Layout, List, Result, Spin, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  App,
+  Button,
+  Descriptions,
+  Flex,
+  Input,
+  Layout,
+  List,
+  Result,
+  Select,
+  Spin,
+  Tabs,
+  Tag,
+  Typography
+} from "antd";
 import {
   type AdminDefinitionDraft,
+  type AdminDefinitionDraftResource,
   type AdminDefinitionDraftSummary,
   type AdminDefinitionInventoryItem,
+  type AdminDefinitionPublicationResource,
   type AdminDefinitionPublicationSummary,
   type AdminEffectiveConfiguration,
   type AdminInstanceInventoryItem,
@@ -13,9 +30,14 @@ import {
   listAdminDefinitionDrafts,
   listAdminDefinitionPublications,
   listAdminDefinitions,
+  listAdminDraftResources,
   listAdminInstances,
+  listAdminPublicationResources,
   publishAdminDefinitionDraft,
-  updateAdminDefinitionDraft
+  removeAdminDraftResource,
+  updateAdminDefinitionDraft,
+  uploadAdminDraftResourceContent,
+  upsertAdminDraftResource
 } from "../../services/adminApi";
 import {
   adminDefinitionPath,
@@ -460,35 +482,33 @@ function DefinitionDetail({
             <Typography.Text type="secondary">No drafts yet. Fork a catalog version to start.</Typography.Text>
           ) : null}
           {activeDraft ? (
-            <Flex vertical gap={12} style={{ marginTop: 16 }}>
-              <Typography.Text>
-                Editing draft {activeDraft.draftId} (revision {activeDraft.revision})
-              </Typography.Text>
-              <Input.TextArea
-                aria-label="System instructions"
-                rows={6}
-                value={instructions}
-                onChange={(event) => setInstructions(event.target.value)}
-                disabled={busy}
-              />
-              <Flex gap={8} wrap="wrap">
-                <Button type="primary" onClick={() => void saveDraft()} disabled={busy}>
-                  Save draft
-                </Button>
-                <Button onClick={() => void confirmPublish()} disabled={busy || !activeDraft}>
-                  Publish…
-                </Button>
-              </Flex>
-              {dirty ? (
-                <Typography.Text type="secondary">Unsaved changes — publish will save the visible instructions first.</Typography.Text>
-              ) : null}
-            </Flex>
+            <DraftEditor
+              activeDraft={activeDraft}
+              instructions={instructions}
+              dirty={dirty}
+              busy={busy}
+              onInstructionsChange={setInstructions}
+              onSave={() => void saveDraft()}
+              onPublish={() => void confirmPublish()}
+              onDraftRevisionChange={(draft, options) => {
+                setActiveDraft(draft);
+                if (!options?.preserveInstructions) {
+                  setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+                }
+              }}
+              onError={setLifecycleError}
+            />
           ) : null}
           {publications.length > 0 ? (
             <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }} title="Durable publications">
               {publications.map((item) => (
                 <Descriptions.Item key={item.version} label={`v${item.version}`}>
-                  {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
+                  <Flex vertical gap={8}>
+                    <span>
+                      {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
+                    </span>
+                    <PublicationResourcesSummary definitionId={definitionId} version={item.version} />
+                  </Flex>
                 </Descriptions.Item>
               ))}
             </Descriptions>
@@ -496,6 +516,291 @@ function DefinitionDetail({
         </section>
       ) : null}
     </Flex>
+  );
+}
+
+const RESOURCE_KINDS = ["Knowledge", "Reference", "Template", "StaticAsset", "EvalFixture"] as const;
+
+function DraftEditor({
+  activeDraft,
+  instructions,
+  dirty,
+  busy,
+  onInstructionsChange,
+  onSave,
+  onPublish,
+  onDraftRevisionChange,
+  onError
+}: {
+  activeDraft: AdminDefinitionDraft;
+  instructions: string;
+  dirty: boolean;
+  busy: boolean;
+  onInstructionsChange: (value: string) => void;
+  onSave: () => void;
+  onPublish: () => void;
+  onDraftRevisionChange: (
+    draft: AdminDefinitionDraft,
+    options?: { preserveInstructions?: boolean }
+  ) => void;
+  onError: (message: string | null) => void;
+}) {
+  const { message } = App.useApp();
+  const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [logicalPath, setLogicalPath] = useState("");
+  const [kind, setKind] = useState<(typeof RESOURCE_KINDS)[number]>("Reference");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  const reloadResources = useCallback(async () => {
+    setResourcesLoading(true);
+    onError(null);
+    try {
+      const items = await listAdminDraftResources(activeDraft.draftId);
+      setResources(items);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Failed to load resources.");
+    } finally {
+      setResourcesLoading(false);
+    }
+  }, [activeDraft.draftId, onError]);
+
+  useEffect(() => {
+    void reloadResources();
+  }, [reloadResources, activeDraft.revision]);
+
+  const refreshDraft = async () => {
+    const draft = await getAdminDefinitionDraft(activeDraft.draftId);
+    onDraftRevisionChange(draft, { preserveInstructions: dirty });
+    await reloadResources();
+  };
+
+  const addResource = async () => {
+    if (!pendingFile || !logicalPath.trim()) {
+      message.warning("Choose a file and logical path.");
+      return;
+    }
+    onError(null);
+    try {
+      const stored = await uploadAdminDraftResourceContent(
+        activeDraft.draftId,
+        pendingFile,
+        pendingFile.type || "application/octet-stream"
+      );
+      await upsertAdminDraftResource(
+        activeDraft.draftId,
+        activeDraft.revision,
+        logicalPath.trim(),
+        kind,
+        stored
+      );
+      message.success("Resource bound.");
+      setPendingFile(null);
+      setLogicalPath("");
+      await refreshDraft();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Resource upload failed.";
+      onError(text);
+      message.error(text);
+    }
+  };
+
+  const removeResource = async (resource: AdminDefinitionDraftResource) => {
+    onError(null);
+    try {
+      await removeAdminDraftResource(activeDraft.draftId, resource.resourceId, activeDraft.revision);
+      message.success("Resource removed.");
+      await refreshDraft();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Remove failed.";
+      onError(text);
+      message.error(text);
+    }
+  };
+
+  return (
+    <Flex vertical gap={12} style={{ marginTop: 16 }}>
+      <Typography.Text>
+        Editing draft {activeDraft.draftId} (revision {activeDraft.revision})
+      </Typography.Text>
+      <Tabs
+        items={[
+          {
+            key: "instructions",
+            label: "Instructions",
+            children: (
+              <Flex vertical gap={12}>
+                <Input.TextArea
+                  aria-label="System instructions"
+                  rows={6}
+                  value={instructions}
+                  onChange={(event) => onInstructionsChange(event.target.value)}
+                  disabled={busy}
+                />
+                <Flex gap={8} wrap="wrap">
+                  <Button type="primary" onClick={onSave} disabled={busy}>
+                    Save draft
+                  </Button>
+                  <Button onClick={onPublish} disabled={busy}>
+                    Publish…
+                  </Button>
+                </Flex>
+                {dirty ? (
+                  <Typography.Text type="secondary">
+                    Unsaved changes — publish will save the visible instructions first.
+                  </Typography.Text>
+                ) : null}
+              </Flex>
+            )
+          },
+          {
+            key: "resources",
+            label: "Resources",
+            children: (
+              <Flex vertical gap={12} aria-label="Draft resources">
+                <Flex gap={8} wrap="wrap" align="end">
+                  <Input
+                    aria-label="Resource logical path"
+                    placeholder="knowledge/policy.md"
+                    value={logicalPath}
+                    onChange={(event) => setLogicalPath(event.target.value)}
+                    disabled={busy}
+                    style={{ minWidth: 220, flex: 1 }}
+                  />
+                  <Select
+                    aria-label="Resource kind"
+                    value={kind}
+                    onChange={setKind}
+                    options={RESOURCE_KINDS.map((value) => ({ value, label: value }))}
+                    disabled={busy}
+                    style={{ minWidth: 140 }}
+                  />
+                  <input
+                    aria-label="Resource file"
+                    type="file"
+                    disabled={busy}
+                    onChange={(event) => setPendingFile(event.target.files?.[0] ?? null)}
+                  />
+                  <Button onClick={() => void addResource()} disabled={busy}>
+                    Upload and bind
+                  </Button>
+                </Flex>
+                {resourcesLoading ? <Spin /> : null}
+                {!resourcesLoading && resources.length === 0 ? (
+                  <Typography.Text type="secondary">No draft resources yet.</Typography.Text>
+                ) : null}
+                {!resourcesLoading && resources.length > 0 ? (
+                  <List
+                    dataSource={resources}
+                    renderItem={(item) => (
+                      <List.Item
+                        actions={[
+                          <Button
+                            key="remove"
+                            type="link"
+                            danger
+                            disabled={busy}
+                            onClick={() => void removeResource(item)}
+                          >
+                            Remove
+                          </Button>
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={`${item.logicalPath} · ${item.kind}`}
+                          description={`${item.byteLength} bytes · ${item.contentSha256.slice(0, 12)}…`}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                ) : null}
+              </Flex>
+            )
+          }
+        ]}
+      />
+    </Flex>
+  );
+}
+
+export function PublicationResourcesSummary({
+  definitionId,
+  version
+}: {
+  definitionId: string;
+  version: number;
+}) {
+  const [items, setItems] = useState<AdminDefinitionPublicationResource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const requestGenerationRef = useRef(0);
+
+  const load = useCallback(
+    async (generation: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const resources = await listAdminPublicationResources(definitionId, version);
+        if (generation !== requestGenerationRef.current) {
+          return;
+        }
+
+        setItems(resources);
+      } catch (loadError) {
+        if (generation !== requestGenerationRef.current) {
+          return;
+        }
+
+        setItems([]);
+        setError(loadError instanceof Error ? loadError.message : "Failed to load publication resources.");
+      } finally {
+        if (generation === requestGenerationRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [definitionId, version]
+  );
+
+  const reload = useCallback(() => {
+    const generation = ++requestGenerationRef.current;
+    void load(generation);
+  }, [load]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  if (loading) {
+    return <Typography.Text type="secondary">Loading resources…</Typography.Text>;
+  }
+  if (error) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title={error}
+        action={
+          <Button size="small" onClick={reload}>
+            Retry
+          </Button>
+        }
+      />
+    );
+  }
+  if (items.length === 0) {
+    return <Typography.Text type="secondary">No bound resources.</Typography.Text>;
+  }
+  return (
+    <List
+      size="small"
+      dataSource={items}
+      renderItem={(item) => (
+        <List.Item>
+          {item.logicalPath} · {item.kind} · {item.contentSha256.slice(0, 12)}…
+        </List.Item>
+      )}
+    />
   );
 }
 
