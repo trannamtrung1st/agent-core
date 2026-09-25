@@ -132,6 +132,21 @@ internal static class AdminHttpMapping
                     finding.Severity.ToString()))
                 .ToArray());
 
+    public static AdminDefinitionDraftDiffResponse ToDiff(DefinitionDraftDiffResult result) =>
+        new(
+            result.DraftId.ToString("D"),
+            result.DraftRevision,
+            result.BaselineKind,
+            result.BaselineVersion,
+            result.Sections
+                .Select(section => new AdminDefinitionDiffSectionResponse(
+                    section.SectionId,
+                    section.Label,
+                    section.ChangeKind.ToString(),
+                    section.BeforeSummary,
+                    section.AfterSummary))
+                .ToArray());
+
     public static AdminDefinitionDraftResourceResponse ToDraftResource(AgentDefinitionDraftResource item) =>
         new(
             item.ResourceId.ToString("D"),

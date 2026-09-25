@@ -136,6 +136,20 @@ public sealed record AdminDefinitionDraftValidationResponse(
     bool HasBlockingFindings,
     IReadOnlyList<AdminDefinitionValidationFindingResponse> Findings);
 
+public sealed record AdminDefinitionDraftDiffResponse(
+    string DraftId,
+    long DraftRevision,
+    string BaselineKind,
+    int? BaselineVersion,
+    IReadOnlyList<AdminDefinitionDiffSectionResponse> Sections);
+
+public sealed record AdminDefinitionDiffSectionResponse(
+    string SectionId,
+    string Label,
+    string ChangeKind,
+    string? BeforeSummary,
+    string? AfterSummary);
+
 public sealed record AdminDefinitionValidationFindingResponse(
     string Field,
     string Code,

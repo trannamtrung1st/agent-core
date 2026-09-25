@@ -460,6 +460,79 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_diff_marks_changed_instructions_against_fork_baseline()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with { SystemInstructions = "P7F diff sentinel instructions." };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(1, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var diff = await client.GetFromJsonAsync<AdminDefinitionDraftDiffResponse>(
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/diff");
+        Assert.NotNull(diff);
+        Assert.Equal("ForkBuiltIn", diff!.BaselineKind);
+        Assert.Equal(1, diff.BaselineVersion);
+        var instructions = Assert.Single(diff.Sections, section => section.SectionId == "instructions");
+        Assert.Equal("Modified", instructions.ChangeKind);
+        Assert.Contains("P7F diff sentinel", instructions.AfterSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_diff_new_draft_lists_candidate_sections_as_added()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                "p7f-new-diff",
+                JsonSerializer.SerializeToElement(SampleDraftCandidate("p7f-new-diff"), JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var diff = await client.GetFromJsonAsync<AdminDefinitionDraftDiffResponse>(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/diff");
+        Assert.NotNull(diff);
+        Assert.Equal("New", diff!.BaselineKind);
+        var instructions = Assert.Single(diff.Sections, section => section.SectionId == "instructions");
+        Assert.Equal("Added", instructions.ChangeKind);
+        Assert.Contains("You are a demo agent.", instructions.AfterSummary, StringComparison.Ordinal);
+        Assert.Null(instructions.BeforeSummary);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_diff_marks_identity_description_change_against_fork_baseline()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with
+        {
+            Identity = candidate.Identity with { Description = "P7F identity description sentinel." }
+        };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var diff = await client.GetFromJsonAsync<AdminDefinitionDraftDiffResponse>(
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/diff");
+        var identity = Assert.Single(diff!.Sections, section => section.SectionId == "identity");
+        Assert.Equal("Modified", identity.ChangeKind);
+        Assert.Contains("P7F identity description sentinel", identity.AfterSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_validate_returns_no_blocking_findings_for_publishable_fork()
     {
         var client = OwnerClient();

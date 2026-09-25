@@ -510,6 +510,22 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/definition-drafts/{draftId:guid}/diff", async (
+            Guid draftId,
+            AgentDefinitionDraftDiffService diff,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await diff.GetDraftDiffAsync(draftId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToDiff(result));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/definition-drafts/{draftId:guid}/publish", async (
             Guid draftId,
             AdminPublishDefinitionDraftRequest request,
