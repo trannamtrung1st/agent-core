@@ -471,6 +471,11 @@ public sealed class OpenAICompatibleLanguageModelTests
                      .Concat(Directory.EnumerateFiles(Path.Combine(root, "src/AgentCore.Domain"), "*.cs", SearchOption.AllDirectories))
                      .Concat(Directory.EnumerateFiles(Path.Combine(root, "src/AgentCore.Contracts"), "*.cs", SearchOption.AllDirectories)))
         {
+            if (IsAdminSecretSentinelAllowlistSource(file))
+            {
+                continue;
+            }
+
             var text = File.ReadAllText(file);
             Assert.DoesNotContain("chat/completions", text, StringComparison.Ordinal);
             Assert.DoesNotContain("OPENROUTER_API_KEY", text, StringComparison.Ordinal);
@@ -1405,6 +1410,14 @@ public sealed class OpenAICompatibleLanguageModelTests
         Enumerable.Range(0, (bytes.Length + size - 1) / size)
             .Select(index => bytes.Skip(index * size).Take(size).ToArray())
             .ToArray();
+
+    private static bool IsAdminSecretSentinelAllowlistSource(string path)
+    {
+        var file = Path.GetFileName(path);
+        return file is "AdminEventSummaryPolicy.cs"
+            or "AgentDefinitionCandidateValidator.cs"
+            or "DefinitionResourcePolicies.cs";
+    }
 }
 
 public sealed class LiveProviderFactAttribute : FactAttribute

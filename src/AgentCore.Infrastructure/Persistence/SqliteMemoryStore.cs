@@ -28,6 +28,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await StampLegacyEnsureCreatedAsync(db, cancellationToken).ConfigureAwait(false);
+        await RepairEnsureCreatedP7SchemaGapsAsync(db, cancellationToken).ConfigureAwait(false);
+        await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -312,6 +314,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                     """,
                     cancellationToken).ConfigureAwait(false);
             }
+
+            await StampP7MigrationsWhenSchemaCompleteAsync(db, cancellationToken).ConfigureAwait(false);
 
             return;
         }
@@ -1150,6 +1154,612 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
     private static DateTimeOffset FromUnix(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+
+    private static async Task StampP7MigrationsWhenSchemaCompleteAsync(
+        AgentCoreDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await HasP7DefinitionLifecycleSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925071140_P7DefinitionLifecycle', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await HasP7DefinitionResourcesSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925084907_P7DefinitionResources', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await HasP7ManagedAgentInstanceSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925101355_P7ManagedAgentInstance', '10.0.12');
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925101918_P7ManagedAgentInstanceRevisionToken', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await HasP7PinnedPersonaRevisionSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925103832_P7PinnedPersonaRevision', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await HasP7DefinitionDraftEvaluationSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925150254_P7DefinitionDraftEvaluation', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await HasP7AdminEventsSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260925161000_P7AdminEvents', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task RepairEnsureCreatedP7SchemaGapsAsync(
+        AgentCoreDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!await HasEnsureCreatedCurrentSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (await TableExistsAsync(connection, "AgentDefinitionDrafts", cancellationToken).ConfigureAwait(false))
+        {
+            if (!await TableExistsAsync(connection, "AgentDefinitionPublications", cancellationToken).ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync(CreateAgentDefinitionPublicationsTableSql, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else if (!await ColumnsMatchAsync(
+                connection,
+                "AgentDefinitionPublications",
+                P7AgentDefinitionPublicationColumns,
+                cancellationToken).ConfigureAwait(false))
+            {
+                await RepairP7TableShapeAsync(
+                    db,
+                    connection,
+                    "AgentDefinitionPublications",
+                    P7AgentDefinitionPublicationColumns,
+                    CreateAgentDefinitionPublicationsTableSql,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await RepairP7TableShapeWhenColumnsMismatchAsync(
+            db,
+            connection,
+            "AgentDefinitionDrafts",
+            P7AgentDefinitionDraftColumns,
+            CreateAgentDefinitionDraftsTableSql,
+            cancellationToken).ConfigureAwait(false);
+        await RepairP7TableShapeWhenColumnsMismatchAsync(
+            db,
+            connection,
+            "AgentDefinitionDraftResources",
+            P7AgentDefinitionDraftResourceColumns,
+            CreateAgentDefinitionDraftResourcesTableSql,
+            cancellationToken).ConfigureAwait(false);
+        await RepairP7TableShapeWhenColumnsMismatchAsync(
+            db,
+            connection,
+            "AgentDefinitionPublicationResources",
+            P7AgentDefinitionPublicationResourceColumns,
+            CreateAgentDefinitionPublicationResourcesTableSql,
+            cancellationToken).ConfigureAwait(false);
+        await RepairP7TableShapeWhenColumnsMismatchAsync(
+            db,
+            connection,
+            "AgentDefinitionDraftEvaluationResults",
+            P7AgentDefinitionDraftEvaluationResultColumns,
+            CreateAgentDefinitionDraftEvaluationResultsTableSql,
+            cancellationToken).ConfigureAwait(false);
+        await RepairP7TableShapeWhenColumnsMismatchAsync(
+            db,
+            connection,
+            "AgentDefinitionDraftEvaluationScenarios",
+            P7AgentDefinitionDraftEvaluationScenarioColumns,
+            CreateAgentDefinitionDraftEvaluationScenariosTableSql,
+            cancellationToken).ConfigureAwait(false);
+        await RepairP7TableShapeWhenColumnsMismatchAsync(
+            db,
+            connection,
+            "AdminEvents",
+            P7AdminEventColumns,
+            CreateAdminEventsTableSql,
+            cancellationToken).ConfigureAwait(false);
+
+        if (await TableExistsAsync(connection, "AgentDefinitionDrafts", cancellationToken).ConfigureAwait(false)
+            && !await IndexExistsAsync(connection, "IX_AgentDefinitionDrafts_DefinitionId", cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE INDEX IF NOT EXISTS "IX_AgentDefinitionDrafts_DefinitionId"
+                ON "AgentDefinitionDrafts" ("DefinitionId");
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await TableExistsAsync(connection, "AdminEvents", cancellationToken).ConfigureAwait(false)
+            && !await HasUniqueIndexAsync(
+                connection,
+                "AdminEvents",
+                ["OperationId"],
+                partial: false,
+                partialPredicate: null,
+                cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_AdminEvents_OperationId"
+                ON "AdminEvents" ("OperationId");
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await TableExistsAsync(connection, "AdminEvents", cancellationToken).ConfigureAwait(false)
+            && !await IndexExistsAsync(connection, "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc", cancellationToken)
+                .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                CREATE INDEX IF NOT EXISTS "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc"
+                ON "AdminEvents" ("TargetType", "TargetId", "OccurredAtUtc");
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static readonly ColumnSpec[] P7AgentDefinitionDraftColumns =
+    [
+        new("DraftId", "TEXT", NotNull: true, Pk: true),
+        new("DefinitionId", "TEXT", NotNull: true, Pk: false),
+        new("Revision", "INTEGER", NotNull: true, Pk: false),
+        new("CandidateJson", "TEXT", NotNull: true, Pk: false),
+        new("SourceKind", "INTEGER", NotNull: true, Pk: false),
+        new("SourceVersion", "INTEGER", NotNull: false, Pk: false),
+        new("CreatedAtUtc", "INTEGER", NotNull: true, Pk: false),
+        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7AgentDefinitionPublicationColumns =
+    [
+        new("DefinitionId", "TEXT", NotNull: true, Pk: true),
+        new("Version", "INTEGER", NotNull: true, Pk: true),
+        new("PayloadJson", "TEXT", NotNull: true, Pk: false),
+        new("SourceDraftRevision", "INTEGER", NotNull: true, Pk: false),
+        new("Status", "INTEGER", NotNull: true, Pk: false),
+        new("MetadataRevision", "INTEGER", NotNull: true, Pk: false),
+        new("PublishedAtUtc", "INTEGER", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7AgentDefinitionDraftResourceColumns =
+    [
+        new("ResourceId", "TEXT", NotNull: true, Pk: true),
+        new("DraftId", "TEXT", NotNull: true, Pk: false),
+        new("LogicalPath", "TEXT", NotNull: true, Pk: false),
+        new("Kind", "INTEGER", NotNull: true, Pk: false),
+        new("MediaType", "TEXT", NotNull: true, Pk: false),
+        new("ContentSha256", "TEXT", NotNull: true, Pk: false),
+        new("ByteLength", "INTEGER", NotNull: true, Pk: false),
+        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7AgentDefinitionPublicationResourceColumns =
+    [
+        new("DefinitionId", "TEXT", NotNull: true, Pk: true),
+        new("Version", "INTEGER", NotNull: true, Pk: true),
+        new("ResourceId", "TEXT", NotNull: true, Pk: true),
+        new("LogicalPath", "TEXT", NotNull: true, Pk: false),
+        new("Kind", "INTEGER", NotNull: true, Pk: false),
+        new("MediaType", "TEXT", NotNull: true, Pk: false),
+        new("ContentSha256", "TEXT", NotNull: true, Pk: false),
+        new("ByteLength", "INTEGER", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7AgentDefinitionDraftEvaluationResultColumns =
+    [
+        new("ResultId", "TEXT", NotNull: true, Pk: true),
+        new("DraftId", "TEXT", NotNull: true, Pk: false),
+        new("DraftRevision", "INTEGER", NotNull: true, Pk: false),
+        new("ConfigurationFingerprint", "TEXT", NotNull: true, Pk: false),
+        new("ScenarioId", "TEXT", NotNull: true, Pk: false),
+        new("ScenarioVersion", "INTEGER", NotNull: true, Pk: false),
+        new("RuntimeKind", "TEXT", NotNull: true, Pk: false),
+        new("Passed", "INTEGER", NotNull: true, Pk: false),
+        new("FindingsJson", "TEXT", NotNull: true, Pk: false),
+        new("RecordedAtUtc", "INTEGER", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7AgentDefinitionDraftEvaluationScenarioColumns =
+    [
+        new("DraftId", "TEXT", NotNull: true, Pk: true),
+        new("ScenarioId", "TEXT", NotNull: true, Pk: true),
+        new("ScenarioVersion", "INTEGER", NotNull: true, Pk: false),
+        new("Title", "TEXT", NotNull: true, Pk: false),
+        new("Prompt", "TEXT", NotNull: true, Pk: false),
+        new("RequirementLevel", "INTEGER", NotNull: true, Pk: false),
+        new("CheckType", "INTEGER", NotNull: true, Pk: false),
+        new("ToolName", "TEXT", NotNull: true, Pk: false),
+        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7AdminEventColumns =
+    [
+        new("EventId", "TEXT", NotNull: true, Pk: true),
+        new("OperationId", "TEXT", NotNull: true, Pk: false),
+        new("OccurredAtUtc", "INTEGER", NotNull: true, Pk: false),
+        new("ActorKind", "TEXT", NotNull: true, Pk: false),
+        new("Operation", "TEXT", NotNull: true, Pk: false),
+        new("TargetType", "TEXT", NotNull: true, Pk: false),
+        new("TargetId", "TEXT", NotNull: true, Pk: false),
+        new("Revision", "INTEGER", NotNull: false, Pk: false),
+        new("Version", "INTEGER", NotNull: false, Pk: false),
+        new("SummaryJson", "TEXT", NotNull: true, Pk: false)
+    ];
+
+    private const string CreateAgentDefinitionDraftsTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AgentDefinitionDrafts" (
+            "DraftId" TEXT NOT NULL,
+            "DefinitionId" TEXT NOT NULL,
+            "Revision" INTEGER NOT NULL,
+            "CandidateJson" TEXT NOT NULL,
+            "SourceKind" INTEGER NOT NULL,
+            "SourceVersion" INTEGER NULL,
+            "CreatedAtUtc" INTEGER NOT NULL,
+            "UpdatedAtUtc" INTEGER NOT NULL,
+            CONSTRAINT "PK_AgentDefinitionDrafts" PRIMARY KEY ("DraftId")
+        );
+        """;
+
+    private const string CreateAgentDefinitionPublicationsTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AgentDefinitionPublications" (
+            "DefinitionId" TEXT NOT NULL,
+            "Version" INTEGER NOT NULL,
+            "PayloadJson" TEXT NOT NULL,
+            "SourceDraftRevision" INTEGER NOT NULL,
+            "Status" INTEGER NOT NULL,
+            "MetadataRevision" INTEGER NOT NULL,
+            "PublishedAtUtc" INTEGER NOT NULL,
+            CONSTRAINT "PK_AgentDefinitionPublications" PRIMARY KEY ("DefinitionId", "Version")
+        );
+        """;
+
+    private const string CreateAgentDefinitionDraftResourcesTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AgentDefinitionDraftResources" (
+            "ResourceId" TEXT NOT NULL,
+            "DraftId" TEXT NOT NULL,
+            "LogicalPath" TEXT NOT NULL,
+            "Kind" INTEGER NOT NULL,
+            "MediaType" TEXT NOT NULL,
+            "ContentSha256" TEXT NOT NULL,
+            "ByteLength" INTEGER NOT NULL,
+            "UpdatedAtUtc" INTEGER NOT NULL,
+            CONSTRAINT "PK_AgentDefinitionDraftResources" PRIMARY KEY ("ResourceId")
+        );
+        """;
+
+    private const string CreateAgentDefinitionPublicationResourcesTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AgentDefinitionPublicationResources" (
+            "DefinitionId" TEXT NOT NULL,
+            "Version" INTEGER NOT NULL,
+            "ResourceId" TEXT NOT NULL,
+            "LogicalPath" TEXT NOT NULL,
+            "Kind" INTEGER NOT NULL,
+            "MediaType" TEXT NOT NULL,
+            "ContentSha256" TEXT NOT NULL,
+            "ByteLength" INTEGER NOT NULL,
+            CONSTRAINT "PK_AgentDefinitionPublicationResources" PRIMARY KEY ("DefinitionId", "Version", "ResourceId")
+        );
+        """;
+
+    private const string CreateAgentDefinitionDraftEvaluationResultsTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AgentDefinitionDraftEvaluationResults" (
+            "ResultId" TEXT NOT NULL,
+            "DraftId" TEXT NOT NULL,
+            "DraftRevision" INTEGER NOT NULL,
+            "ConfigurationFingerprint" TEXT NOT NULL,
+            "ScenarioId" TEXT NOT NULL,
+            "ScenarioVersion" INTEGER NOT NULL,
+            "RuntimeKind" TEXT NOT NULL,
+            "Passed" INTEGER NOT NULL,
+            "FindingsJson" TEXT NOT NULL,
+            "RecordedAtUtc" INTEGER NOT NULL,
+            CONSTRAINT "PK_AgentDefinitionDraftEvaluationResults" PRIMARY KEY ("ResultId")
+        );
+        """;
+
+    private const string CreateAgentDefinitionDraftEvaluationScenariosTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AgentDefinitionDraftEvaluationScenarios" (
+            "DraftId" TEXT NOT NULL,
+            "ScenarioId" TEXT NOT NULL,
+            "ScenarioVersion" INTEGER NOT NULL,
+            "Title" TEXT NOT NULL,
+            "Prompt" TEXT NOT NULL,
+            "RequirementLevel" INTEGER NOT NULL,
+            "CheckType" INTEGER NOT NULL,
+            "ToolName" TEXT NOT NULL,
+            "UpdatedAtUtc" INTEGER NOT NULL,
+            CONSTRAINT "PK_AgentDefinitionDraftEvaluationScenarios" PRIMARY KEY ("DraftId", "ScenarioId")
+        );
+        """;
+
+    private const string CreateAdminEventsTableSql =
+        """
+        CREATE TABLE IF NOT EXISTS "AdminEvents" (
+            "EventId" TEXT NOT NULL,
+            "OperationId" TEXT NOT NULL,
+            "OccurredAtUtc" INTEGER NOT NULL,
+            "ActorKind" TEXT NOT NULL,
+            "Operation" TEXT NOT NULL,
+            "TargetType" TEXT NOT NULL,
+            "TargetId" TEXT NOT NULL,
+            "Revision" INTEGER NULL,
+            "Version" INTEGER NULL,
+            "SummaryJson" TEXT NOT NULL,
+            CONSTRAINT "PK_AdminEvents" PRIMARY KEY ("EventId")
+        );
+        """;
+
+    private static async Task RepairP7TableShapeWhenColumnsMismatchAsync(
+        AgentCoreDbContext db,
+        System.Data.Common.DbConnection connection,
+        string table,
+        ColumnSpec[] expected,
+        string createTableSql,
+        CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (await ColumnsMatchAsync(connection, table, expected, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await RepairP7TableShapeAsync(db, connection, table, expected, createTableSql, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task RepairP7TableShapeAsync(
+        AgentCoreDbContext db,
+        System.Data.Common.DbConnection connection,
+        string table,
+        ColumnSpec[] expected,
+        string createTableSql,
+        CancellationToken cancellationToken)
+    {
+        if (!IsKnownP7RepairTable(table))
+        {
+            throw AgentCoreErrors.Persistence("Unknown P7 repair table.");
+        }
+
+        if (await ColumnsMatchAsync(connection, table, expected, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (await TableRowCountAsync(connection, table, cancellationToken).ConfigureAwait(false) != 0)
+        {
+            throw AgentCoreErrors.Persistence(
+                $"P7 table \"{table}\" has a non-empty incompatible schema and cannot be repaired automatically.");
+        }
+
+#pragma warning disable EF1002
+        await db.Database.ExecuteSqlRawAsync($"DROP TABLE IF EXISTS \"{table}\";", cancellationToken)
+            .ConfigureAwait(false);
+#pragma warning restore EF1002
+        await db.Database.ExecuteSqlRawAsync(createTableSql, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsKnownP7RepairTable(string table) =>
+        table is "AgentDefinitionDrafts"
+            or "AgentDefinitionPublications"
+            or "AgentDefinitionDraftResources"
+            or "AgentDefinitionPublicationResources"
+            or "AgentDefinitionDraftEvaluationResults"
+            or "AgentDefinitionDraftEvaluationScenarios"
+            or "AdminEvents";
+
+    private static async Task<long> TableRowCountAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM \"{table}\";";
+        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return Convert.ToInt64(result ?? 0);
+    }
+
+    private static async Task<bool> HasP7TableColumnsAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        ColumnSpec[] expected,
+        CancellationToken cancellationToken) =>
+        await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false)
+        && await ColumnsMatchAsync(connection, table, expected, cancellationToken).ConfigureAwait(false);
+
+    private static async Task<bool> HasP7DefinitionLifecycleSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await HasP7TableColumnsAsync(connection, "AgentDefinitionDrafts", P7AgentDefinitionDraftColumns, cancellationToken)
+            .ConfigureAwait(false)
+        && await HasP7TableColumnsAsync(
+            connection,
+            "AgentDefinitionPublications",
+            P7AgentDefinitionPublicationColumns,
+            cancellationToken).ConfigureAwait(false)
+        && await IndexExistsAsync(connection, "IX_AgentDefinitionDrafts_DefinitionId", cancellationToken).ConfigureAwait(false);
+
+    private static async Task<bool> HasP7DefinitionResourcesSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await HasP7TableColumnsAsync(
+            connection,
+            "AgentDefinitionDraftResources",
+            P7AgentDefinitionDraftResourceColumns,
+            cancellationToken).ConfigureAwait(false)
+        && await HasP7TableColumnsAsync(
+            connection,
+            "AgentDefinitionPublicationResources",
+            P7AgentDefinitionPublicationResourceColumns,
+            cancellationToken).ConfigureAwait(false)
+        && await IndexExistsAsync(connection, "IX_AgentDefinitionDraftResources_DraftId", cancellationToken).ConfigureAwait(false)
+        && await HasUniqueIndexAsync(
+            connection,
+            "AgentDefinitionDraftResources",
+            ["DraftId", "LogicalPath"],
+            partial: false,
+            partialPredicate: null,
+            cancellationToken).ConfigureAwait(false)
+        && await HasUniqueIndexAsync(
+            connection,
+            "AgentDefinitionPublicationResources",
+            ["DefinitionId", "Version", "LogicalPath"],
+            partial: false,
+            partialPredicate: null,
+            cancellationToken).ConfigureAwait(false);
+
+    private static async Task<bool> HasP7ManagedAgentInstanceSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await TableExistsAsync(connection, "AgentInstances", cancellationToken).ConfigureAwait(false)
+        && await ColumnMatchesSqliteSpecAsync(
+            connection,
+            "AgentInstances",
+            "PersonaRevision",
+            "INTEGER",
+            notNull: true,
+            cancellationToken).ConfigureAwait(false)
+        && await ColumnMatchesSqliteSpecAsync(
+            connection,
+            "AgentInstances",
+            "Revision",
+            "INTEGER",
+            notNull: true,
+            cancellationToken).ConfigureAwait(false);
+
+    private static async Task<bool> HasP7PinnedPersonaRevisionSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await TableExistsAsync(connection, "Sessions", cancellationToken).ConfigureAwait(false)
+        && await ColumnMatchesSqliteSpecAsync(
+            connection,
+            "Sessions",
+            "PinnedPersonaRevision",
+            "INTEGER",
+            notNull: false,
+            cancellationToken).ConfigureAwait(false);
+
+    private static async Task<bool> HasP7DefinitionDraftEvaluationSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await HasP7TableColumnsAsync(
+            connection,
+            "AgentDefinitionDraftEvaluationResults",
+            P7AgentDefinitionDraftEvaluationResultColumns,
+            cancellationToken).ConfigureAwait(false)
+        && await HasP7TableColumnsAsync(
+            connection,
+            "AgentDefinitionDraftEvaluationScenarios",
+            P7AgentDefinitionDraftEvaluationScenarioColumns,
+            cancellationToken).ConfigureAwait(false)
+        && await IndexExistsAsync(
+            connection,
+            "IX_AgentDefinitionDraftEvaluationResults_DraftId_ScenarioId_RecordedAtUtc",
+            cancellationToken).ConfigureAwait(false)
+        && await IndexExistsAsync(connection, "IX_AgentDefinitionDraftEvaluationScenarios_DraftId", cancellationToken)
+            .ConfigureAwait(false);
+
+    private static async Task<bool> HasP7AdminEventsSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await HasP7TableColumnsAsync(connection, "AdminEvents", P7AdminEventColumns, cancellationToken)
+            .ConfigureAwait(false)
+        && await HasUniqueIndexAsync(
+            connection,
+            "AdminEvents",
+            ["OperationId"],
+            partial: false,
+            partialPredicate: null,
+            cancellationToken).ConfigureAwait(false)
+        && await IndexExistsAsync(connection, "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc", cancellationToken)
+            .ConfigureAwait(false);
+
+    private static async Task<bool> ColumnMatchesSqliteSpecAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        string column,
+        string type,
+        bool notNull,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{table}\");";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!string.Equals(reader.GetString(1), column, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var actualType = reader.GetString(2);
+            var actualNotNull = reader.GetInt64(3) != 0;
+            return string.Equals(actualType, type, StringComparison.OrdinalIgnoreCase) && actualNotNull == notNull;
+        }
+
+        return false;
+    }
 
     private static async Task<bool> HasCompleteLegacySchemaAsync(
         System.Data.Common.DbConnection connection,

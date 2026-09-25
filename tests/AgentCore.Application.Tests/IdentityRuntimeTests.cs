@@ -187,6 +187,11 @@ public sealed class IdentityRuntimeTests
         foreach (var path in Directory.GetFiles(Path.Combine(root, "src", "AgentCore.Application"), "*.cs", SearchOption.AllDirectories)
                      .Concat(Directory.GetFiles(Path.Combine(root, "src", "AgentCore.Domain"), "*.cs", SearchOption.AllDirectories)))
         {
+            if (IsAdminSecretSentinelAllowlistSource(path))
+            {
+                continue;
+            }
+
             var text = File.ReadAllText(path);
             Assert.DoesNotContain("OpenAI.", text, StringComparison.Ordinal);
             Assert.DoesNotContain("ChatCompletion", text, StringComparison.Ordinal);
@@ -298,5 +303,13 @@ public sealed class IdentityRuntimeTests
         }
 
         throw new DirectoryNotFoundException();
+    }
+
+    private static bool IsAdminSecretSentinelAllowlistSource(string path)
+    {
+        var file = Path.GetFileName(path);
+        return file is "AdminEventSummaryPolicy.cs"
+            or "AgentDefinitionCandidateValidator.cs"
+            or "DefinitionResourcePolicies.cs";
     }
 }

@@ -36,9 +36,17 @@
 | Instance lifecycle history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminInstanceLifecycle` | Pass (6) |
 | Admin events API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_events` | Pass (7) |
 
+## W07 final gate (partial)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass (1596 passed, 8 skipped) |
+
+**Solution gate verification:** `dotnet test AgentCore.sln --nologo` — Pass (1596 passed, 8 skipped) on the W07 regression-fix candidate containing this report; approved baseline `6ec1c675d1a896b3fe95b85d1077f27110577df5` is a git ancestor of that candidate.
+
 ## Remaining (W07)
 
-- Full local regression matrix per frozen P7G §9 and W08 candidate gate (solution-wide `dotnet test`, P3–P6 regression selections, Compose smoke).
+- P3–P6 regression filter selections, `pnpm run test --run` / `pnpm run build`, full Synthetic Playwright, Compose smoke per W08 local candidate gate.
 - Hosted `synthetic` workflow green on the exact final candidate SHA (CI now runs `admin-lifecycle.spec.ts` on an isolated SQLite file; verify on push).
 
 ## W07 browser

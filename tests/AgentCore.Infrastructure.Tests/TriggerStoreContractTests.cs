@@ -300,10 +300,10 @@ public sealed class TriggerStoreContractTests
                 await db.Database.MigrateAsync("20260923110000_UserMemory");
             }
 
+            await new SqliteMemoryStore(factory, time).EnsureCreatedAsync();
             await new SqliteMemoryStore(factory, time).SaveAsync(Snapshot(SourceSessionId), 0);
             await using (var db = await factory.CreateDbContextAsync())
             {
-                await db.Database.MigrateAsync();
                 var tables = await TableNamesAsync(db);
                 Assert.Contains("TriggerRegistrations", tables);
                 Assert.Contains("TriggerOccurrences", tables);

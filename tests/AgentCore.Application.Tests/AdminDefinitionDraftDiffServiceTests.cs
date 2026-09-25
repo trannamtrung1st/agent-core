@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Admin;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
@@ -74,7 +75,7 @@ public sealed class AdminDefinitionDraftDiffServiceTests
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));
         var ids = new SystemIdGenerator(clock);
-        var admin = new InMemoryAgentDefinitionAdminStore(ids);
+        var admin = CreateAdminStore(ids);
         var content = new InMemoryDefinitionResourceContentStore();
         var resourcesStore = new InMemoryAgentDefinitionResourceAdminStore(admin, content, ids);
         var diff = CreateDiffService(admin, resourcesStore, clock);
@@ -108,6 +109,13 @@ public sealed class AdminDefinitionDraftDiffServiceTests
         var initiative = Assert.Single(result.Sections, section => section.SectionId == "initiative");
         Assert.Equal(DefinitionDiffChangeKind.Modified, initiative.ChangeKind);
         Assert.Contains("environmentUpdate", initiative.AfterSummary, StringComparison.Ordinal);
+    }
+
+    private static InMemoryAgentDefinitionAdminStore CreateAdminStore(SystemIdGenerator ids)
+    {
+        var admin = new InMemoryAgentDefinitionAdminStore(ids);
+        admin.EventStore = new InMemoryAdminEventStore(ids);
+        return admin;
     }
 
     private static AgentDefinitionDraftDiffService CreateDiffService(

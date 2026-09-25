@@ -1,6 +1,7 @@
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Admin;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
@@ -130,20 +131,20 @@ public abstract class AdminEventStoreContractTests
     }
 
     [Fact]
-    public async Task Both_stores_accept_empty_summary_for_unimplemented_operations()
+    public async Task Both_stores_accept_instance_lifecycle_summary()
     {
         await ForEachStoreAsync(async store =>
         {
-            var append = new AdminEventAppend(
+            var instanceId = Guid.Parse("019944af-00d1-7000-8000-000000000095");
+            var append = AdminEventFactory.InstanceLifecycleChanged(
                 Guid.NewGuid(),
                 DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
-                AdminEventActorKind.LocalOwner,
-                AdminEventOperationKind.InstanceArchived,
-                "agent.instance",
-                Guid.NewGuid().ToString("D"),
+                "examiner",
+                instanceId,
                 1,
-                null,
-                "{}");
+                AgentInstanceLifecycle.Active,
+                AgentInstanceLifecycle.Archived,
+                2);
             await store.AppendAsync(append, CancellationToken.None);
         });
     }
