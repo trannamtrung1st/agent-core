@@ -26,6 +26,14 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | POST /api/v2/admin/definitions/{definitionId}/publications/{version}/deprecate | Owner capability; trusted local caller; `{ expectedMetadataRevision }` | 200 publication summary | 400 built-in; 401 capability; 403 non-local; 404; 409 stale metadata |
 | GET /api/v2/admin/instances | Owner capability; trusted local caller | 200 instance inventory (id, definition, version, lifecycle, compatibility, persona name, timestamps) | 401 capability; 403 non-local |
 | GET /api/v2/admin/instances/{instanceId}/effective-config | Owner capability; trusted local caller | 200 allowlisted effective configuration: resolved catalog model, offered tools, harness refs, workspace template id, policies, and durable-work eligibility (no secrets) | 401 capability; 403 non-local; 404 unknown instance or missing exact definition version |
+| GET /api/v2/admin/tools | Owner capability; trusted local caller | 200 registered tool names for draft allowlist editing | 401 capability; 403 non-local |
+| POST /api/v2/admin/agent-instances | Owner capability; trusted local caller; `{ definitionId, version }` exact durable publication | 201 managed instance (`compatibility=false`) | 400 validation; 401 capability; 403 non-local; 404 |
+| GET /api/v2/admin/definition-drafts/{draftId}/resources | Owner capability; trusted local caller | 200 draft resource bindings (metadata only) | 401 capability; 403 non-local; 404 |
+| POST /api/v2/admin/definition-drafts/{draftId}/resources/content | Owner capability; trusted local caller; raw body with `Content-Type` and bounded size | 201 stored content hash and byte length | 400 oversize/empty; 401 capability; 403 non-local |
+| PUT /api/v2/admin/definition-drafts/{draftId}/resources | Owner capability; trusted local caller; JSON `{ expectedRevision, resourceId?, logicalPath, kind, mediaType, contentSha256, byteLength }` to bind or replace a draft resource | 200 draft resource row | 400 path/kind/secret; 401 capability; 403 non-local; 404; 409 stale revision |
+| DELETE /api/v2/admin/definition-drafts/{draftId}/resources/{resourceId}?expectedRevision={n} | Owner capability; trusted local caller; `expectedRevision` query parameter | 200 removed draft resource row | 401 capability; 403 non-local; 404; 409 stale revision |
+| GET /api/v2/admin/definition-drafts/{draftId}/resources/{resourceId}/content | Owner capability; trusted local caller | 200 resource bytes | 401 capability; 403 non-local; 404 |
+| GET /api/v2/admin/definitions/{definitionId}/publications/{version}/resources | Owner capability; trusted local caller | 200 immutable publication bindings | 401 capability; 403 non-local; 404 |
 | GET /api/v2/sessions/{sessionId}/triggers | Owner capability | 200 safe schedule list for the session's Agent Instance and trusted profile | 401 missing/invalid capability; 404 session |
 | POST /api/v2/sessions/{sessionId}/triggers/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe schedule | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
 | GET /api/v2/sessions/{sessionId}/work-items | Optional `limit` (default 50, minimum 1) | 200 newest-first safe list for the session's Agent Instance and trusted profile | 401 capability; 404 session |
@@ -243,7 +251,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Phase
 | Method | Meaning |
 | --- | --- |
 | GET /api/v2/sessions | Catalog, `UpdatedAt` descending, stable cursor pagination; includes labeled Ended rows |
-| POST /api/v2/sessions | Create with chosen `agentId`/`agentVersion`; optional catalog-level `model` (`key`, `reasoningEffort`); omit resolves the system default and persists that concrete selection |
+| POST /api/v2/sessions | Create with exactly one of `agentInstanceId` (managed `Compatibility=false` instance; pins active definition version and persona) or legacy `agentId`/`agentVersion`; optional catalog-level `model` (`key`, `reasoningEffort`); omit resolves the system default and persists that concrete selection. v1 create remains `agentId`-only |
 | POST /api/v2/sessions/{id}/rename \| archive \| unarchive | Persist catalog mutation in the runtime revision stream |
 | POST /api/v2/sessions/{id}/reopen | When `paused`, clears pause, bumps `runtimeEpoch`, and refreshes `LastUserActivityAt`; reconciles a detached in-memory runtime when present. No-op on `created` (epoch unchanged). Rejected with `SessionInUse` when status is `attached` or a hub lease is active. Not the same as `session.attach` |
 | POST /api/v2/sessions/{id}/deactivate | Runtime deactivation: cancel live output, persist Paused, increment RuntimeEpoch; not archive and not v1 end; idempotent |

@@ -504,6 +504,29 @@ public abstract class AgentDefinitionResourceAdminStoreContractTests
                         bytes.Length,
                         now),
                     CancellationToken.None));
+            foreach (var forbidden in new[]
+                     {
+                         "memory/session.json",
+                         "triggers/schedule.json",
+                         "workitems/item.json",
+                         "approvals/pending.json",
+                         ".agents/skills/demo.md"
+                     })
+            {
+                await Assert.ThrowsAsync<AgentCoreException>(async () =>
+                    await fixture.Resources.UpsertDraftResourceAsync(
+                        new AgentDefinitionDraftResourceUpsert(
+                            draft.DraftId,
+                            draft.Revision,
+                            null,
+                            forbidden,
+                            AgentDefinitionResourceKind.Reference,
+                            "text/plain",
+                            hash,
+                            bytes.Length,
+                            now),
+                        CancellationToken.None));
+            }
         });
     }
 

@@ -47,7 +47,7 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 
 ## P6 durable background work
 
-**P6** is **frozen** on **`30adaeb`** (workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) green; last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). **P7** (agent harness / admin lifecycle) is next and not started. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
+**P6** is **frozen** on **`30adaeb`** (workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) green; last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). **P7** (agent harness / admin lifecycle) is **active**; P7A–P7B are **approved**; **W03** harness resources gate is **pending** (see [P7C report](reports/p7c-harness-resources-workspace.md)); **W04** managed instance/persona is next. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 

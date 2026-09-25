@@ -143,6 +143,70 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
     }
 
     [Fact]
+    public async Task Workspace_mutation_does_not_write_back_to_publication_resources()
+    {
+        using var dir = new TempDir();
+        var now = DateTimeOffset.Parse("2026-01-05T00:00:00Z");
+        var content = new InMemoryDefinitionResourceContentStore();
+        var admin = new InMemoryAgentDefinitionAdminStore(new SystemIdGenerator(TimeProvider.System));
+        var resources = new InMemoryAgentDefinitionResourceAdminStore(
+            admin,
+            content,
+            new SystemIdGenerator(TimeProvider.System));
+        admin.ResourceStore = resources;
+        var reader = new DefinitionPublicationResourceReader(resources);
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
+
+        const string templateId = "seed-pack";
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate(
+                "resource-agent",
+                SampleCandidate("resource-agent", templateId),
+                DefinitionDraftSourceKind.New,
+                null,
+                now),
+            CancellationToken.None);
+        var bytes = "immutable-seed"u8.ToArray();
+        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
+        await content.StoreVerifiedAsync(hash, bytes, CancellationToken.None);
+        await resources.UpsertDraftResourceAsync(
+            new AgentDefinitionDraftResourceUpsert(
+                draft.DraftId,
+                draft.Revision,
+                null,
+                $"{templateId}/welcome.txt",
+                AgentDefinitionResourceKind.Template,
+                "text/plain",
+                hash,
+                bytes.Length,
+                now.AddMinutes(1)),
+            CancellationToken.None);
+        var draftAfterResource = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+        var published = await admin.PublishDraftAsync(
+            new AgentDefinitionDraftPublish(
+                draftAfterResource!.DraftId,
+                draftAfterResource.Revision,
+                [],
+                now.AddMinutes(2)),
+            CancellationToken.None);
+        var session = Guid.CreateVersion7();
+        await workspace.EnsureAsync(session, published.Payload);
+        await workspace.WriteAsync(session, "/workspace/working/welcome.txt", "user-edited"u8.ToArray());
+        await workspace.WriteAsync(session, "/workspace/working/local-only.txt", "session-owned"u8.ToArray());
+        await workspace.EnsureAsync(session, published.Payload);
+
+        var publicationBindings = await resources.ListPublicationResourcesAsync("resource-agent", published.Version);
+        Assert.Single(publicationBindings);
+        var publicationBytes = await resources.ReadPublicationResourceContentAsync(
+            "resource-agent",
+            published.Version,
+            publicationBindings[0].ResourceId);
+        Assert.Equal(bytes, publicationBytes);
+        var seeded = await workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt");
+        Assert.Equal("user-edited", System.Text.Encoding.UTF8.GetString(seeded.Bytes));
+    }
+
+    [Fact]
     public async Task Publication_template_overwrites_builtin_template_at_same_path()
     {
         using var dir = new TempDir();

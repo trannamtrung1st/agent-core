@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** harness resources in progress — `docs/reports/p7c-harness-resources-workspace.md`, last approved batch `feeb300`).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** harness resources gate pending review — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** next).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 in progress; W04+ remaining).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate pending review; W04+ remaining).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
