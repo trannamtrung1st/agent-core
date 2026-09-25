@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** P7E next).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `59a812a` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** P7F next).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05+ remaining).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05 P7E slice gate approved at `59a812a`; W06+ remaining).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -701,9 +701,9 @@ Learned memory
 
 Do **not** replace learned memory with instructions and do not silently promote learned memory into instruction authority.
 
-- [ ] Expose P4 memory-policy configuration.
+- [x] Expose P4 memory-policy configuration (effective policy via definition + instance Admin; observed W05).
 
-- [ ] Allow authorized inspection of built-in learned memory with safe metadata such as:
+- [x] Allow authorized inspection of built-in learned memory with safe metadata such as:
 
   - scope;
   - owner;
@@ -711,7 +711,7 @@ Do **not** replace learned memory with instructions and do not silently promote 
   - created/updated timestamps;
   - content where policy allows.
 
-- [ ] Add explicit scoped reset/delete operations for learned memory.
+- [x] Add explicit scoped reset/delete operations for learned memory.
 
 At minimum preserve relevant scopes:
 
@@ -721,9 +721,9 @@ IdentityUser
 User-wide (when policy enables it)
 ```
 
-- [ ] Keep identity/persona reset separate from learned-memory reset.
+- [x] Keep identity/persona reset separate from learned-memory reset.
 
-- [ ] Do not initially provide a generic arbitrary editor that rewrites learned memory as if the agent learned something organically.
+- [x] Do not initially provide a generic arbitrary editor that rewrites learned memory as if the agent learned something organically (no Admin learned-memory editor; W05).
 
 If manually curated durable facts become necessary, introduce a separate future concept such as:
 
@@ -737,7 +737,7 @@ with explicit authority/provenance rather than mixing them into learned memory.
 
 ## Trigger / scheduling / background-execution admin
 
-- [ ] Expose P5 trigger-policy configuration:
+- [x] Expose P5 trigger-policy configuration (effective via published definition; observed W05):
 
   - allowed trigger types;
   - whether user-requested scheduling is enabled;
@@ -746,24 +746,24 @@ with explicit authority/provenance rather than mixing them into learned memory.
   - expiry/horizon limits;
   - allowed external/domain event sources.
 
-- [ ] Expose whether P6 triggered/headless execution is permitted for the agent/instance where the existing policy model supports it.
+- [x] Expose whether P6 triggered/headless execution is permitted for the agent/instance where the existing policy model supports it (effective-config eligibility; observed W05).
 
-- [ ] Allow authorized admins/users to inspect and revoke durable trigger registrations.
+- [x] Allow authorized admins/users to inspect and revoke durable trigger registrations.
 
-- [ ] Keep trigger policy/defaults in reusable/effective configuration.
+- [x] Keep trigger policy/defaults in reusable/effective configuration.
 
-- [ ] Keep individual trigger registrations/occurrences in runtime/user state, not the definition workspace or learned memory.
+- [x] Keep individual trigger registrations/occurrences in runtime/user state, not the definition workspace or learned memory.
 
-- [ ] Trigger configuration never grants standing permission for later sensitive external actions.
+- [x] Trigger configuration never grants standing permission for later sensitive external actions.
 
 ### P7E verification
 
-- [ ] Memory policy projection/mutation tests.
-- [ ] Scoped learned-memory reset/delete tests.
-- [ ] Tests proving memory reset does not reset identity or triggers.
-- [ ] Trigger-policy configuration tests.
-- [ ] Trigger inspection/revocation ownership tests.
-- [ ] Tests proving admin configuration cannot bypass P3/P6 approval policy.
+- [x] Memory policy projection/mutation tests (`AdminMemoryServiceTests`, `AdminApiTests`).
+- [x] Scoped learned-memory reset/delete tests (`AdminMemoryServiceTests`).
+- [x] Tests proving memory reset does not reset identity or triggers (`Reset_session_scope_preserves_definition_persona_profile_transcript_and_triggers`).
+- [x] Trigger-policy configuration tests (`TriggerInstancePolicyReconciliationTests`).
+- [x] Trigger inspection/revocation ownership tests (`AdminAutomationServiceTests`, `TriggerStoreContractTests`).
+- [x] Tests proving admin configuration cannot bypass P3/P6 approval policy (`P7E_detached_sensitive_work_waits_for_approval_without_http_side_effect`).
 
 ### P7E stop condition
 

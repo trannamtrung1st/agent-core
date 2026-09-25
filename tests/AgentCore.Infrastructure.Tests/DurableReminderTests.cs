@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
 using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -12,6 +15,7 @@ using AgentCore.Domain.Memory;
 using AgentCore.Domain.Triggers;
 using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Email;
@@ -383,6 +387,86 @@ public sealed class DurableReminderTests
             Assert.Equal("Policy applied.", completed.Result!.Text);
             Assert.Contains("POLICY_SENTINEL", completed.Checkpoint!.PayloadJson, StringComparison.Ordinal);
         }, () => new KnowledgeThenCrashModel());
+    }
+
+    [Fact]
+    public async Task P7E_detached_sensitive_work_waits_for_approval_without_http_side_effect()
+    {
+        await ForEachInMemoryOnly(async (harness, _) =>
+        {
+            var ids = new DeterministicIdGenerator(
+                [Guid.Parse("019944af-000b-7000-8000-0000000000e1")],
+                [Guid.Parse("019944af-000b-7000-8000-0000000000ff")]);
+            var triggerService = new TriggerRegistrationService(harness.Triggers, ids, harness.Time);
+            var admin = new AdminAutomationService(
+                harness.Instances,
+                triggerService,
+                new SessionProfileService(harness.Sessions, ProfileId));
+            Assert.Empty(await admin.ListRegistrationsAsync(InstanceId));
+
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var due = Now.AddHours(1);
+            var registration = await triggerService.CreateAsync(
+                new TriggerRegistrationDraft(
+                    owner,
+                    "order shipped",
+                    new OneShotSchedule(due, "UTC", null, null),
+                    due,
+                    null,
+                    TriggerAuthorizationOrigin.CurrentUserTurn,
+                    SourceSessionId,
+                    null));
+
+            var listed = await admin.ListRegistrationsAsync(InstanceId);
+            var row = Assert.Single(listed);
+            Assert.Equal(registration.RegistrationId, row.RegistrationId);
+            Assert.Equal(TriggerRegistrationStatus.Active, row.Status);
+
+            var guard = new TriggerAdmissionGuard(harness.Instances, harness.Definitions, harness.Sessions);
+            var reconciliation = new TriggerInstancePolicyReconciliationService(harness.Triggers, guard);
+            var instanceService = new AgentInstanceService(
+                harness.Instances,
+                harness.Definitions,
+                harness.Sessions,
+                new GuidGenerator(),
+                harness.Time,
+                reconciliation);
+            var instance = await harness.Instances.FindAsync(InstanceId);
+            Assert.NotNull(instance);
+            var archivedInstance = await instanceService.SetLifecycleAsync(
+                InstanceId,
+                AgentInstanceLifecycle.Archived,
+                instance!.Revision);
+            Assert.Equal(
+                TriggerRegistrationStatus.SuspendedPolicy,
+                (await harness.Triggers.GetAsync(owner, registration.RegistrationId))!.Status);
+            Assert.Equal(
+                TriggerRegistrationStatus.SuspendedPolicy,
+                Assert.Single(await admin.ListRegistrationsAsync(InstanceId)).Status);
+
+            await instanceService.SetLifecycleAsync(
+                archivedInstance.InstanceId,
+                AgentInstanceLifecycle.Active,
+                archivedInstance.Revision);
+            Assert.Equal(
+                TriggerRegistrationStatus.Active,
+                (await harness.Triggers.GetAsync(owner, registration.RegistrationId))!.Status);
+
+            var occurrence = await AwaitDurableAsync(
+                harness.Triggers,
+                owner,
+                Now,
+                "order shipped",
+                registration.RegistrationId);
+            Assert.Equal(registration.RegistrationId, occurrence.RegistrationId);
+            var created = await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+            Assert.Equal(created.WorkItemId, waiting.WorkItemId);
+            Assert.Null(waiting.Claim);
+            Assert.Equal(0, harness.Http.Calls);
+        }, () => new ApprovalHttpModel());
     }
 
     [Fact]
@@ -1302,17 +1386,35 @@ public sealed class DurableReminderTests
     private static WorkModelPin Pin(SessionModelSelection selection) =>
         new(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort);
 
+    private static Task<TriggerOccurrence> AwaitDurableAsync(
+        ITriggerStore store,
+        TriggerOwner owner,
+        DateTimeOffset now,
+        string intent) =>
+        AwaitDurableAsync(store, owner, now, intent, registrationId: null);
+
+    private static Task<TriggerOccurrence> AwaitDurableAsync(
+        ITriggerStore store,
+        TriggerOwner owner,
+        DateTimeOffset now,
+        string intent,
+        Guid registrationId) =>
+        AwaitDurableAsync(store, owner, now, intent, (Guid?)registrationId);
+
     private static async Task<TriggerOccurrence> AwaitDurableAsync(
         ITriggerStore store,
         TriggerOwner owner,
         DateTimeOffset now,
-        string intent)
+        string intent,
+        Guid? registrationId)
     {
-        var evidence = $$"""{"intent":"{{intent}}. {{InstructionSentinel}}","registrationId":"019944af-000b-7000-8000-0000000000e1","scheduledAtUtc":1}""";
+        var evidenceRegistrationId = registrationId
+            ?? Guid.Parse("019944af-000b-7000-8000-0000000000e1");
+        var evidence = $$"""{"intent":"{{intent}}. {{InstructionSentinel}}","registrationId":"{{evidenceRegistrationId:D}}","scheduledAtUtc":1}""";
         var occurrence = new TriggerOccurrence(
             Guid.NewGuid(),
             $"reminder:{Guid.NewGuid():N}",
-            null,
+            registrationId,
             owner,
             TriggerSourceKind.Schedule,
             now,
@@ -1540,6 +1642,22 @@ public sealed class DurableReminderTests
     }
 
     private sealed record StoreSet(ITriggerStore Triggers, IWorkItemStore Work, IDurableWorkHandoff Handoff);
+
+    private sealed class SessionProfileService(InMemoryMemoryStore sessions, Guid profileId) : ILocalUserProfileService
+    {
+        public async ValueTask<UserProfile> GetLocalProfileAsync(CancellationToken cancellationToken = default)
+        {
+            var profile = await sessions.LoadProfileAsync(profileId, cancellationToken).ConfigureAwait(false);
+            return profile ?? throw new InvalidOperationException("Profile was not seeded.");
+        }
+
+        public ValueTask<UserProfile> UpdateLocalProfileAsync(
+            long expectedRevision,
+            IReadOnlyDictionary<string, string?> values,
+            UserProfileValueSource source,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
 
     private sealed class GuidGenerator : IIdGenerator
     {

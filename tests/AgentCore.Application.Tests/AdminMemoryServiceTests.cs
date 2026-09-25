@@ -7,6 +7,8 @@ using AgentCore.Application.Testing;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
+using AgentCore.Domain.Triggers;
+using AgentCore.Application.Triggers;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Extensions.Time.Testing;
@@ -205,6 +207,200 @@ public sealed class AdminMemoryServiceTests
         Assert.Contains(userList.Items, item => item.Content == "USER_KEEP");
         Assert.DoesNotContain(userList.Items, item => item.Content == "USER_DELETE");
         Assert.Single(userList.Items);
+    }
+
+    [Fact]
+    public async Task Reset_session_scope_preserves_definition_persona_profile_transcript_and_triggers()
+    {
+        var clock = new FakeTimeProvider(Now);
+        var sessions = new InMemoryMemoryStore();
+        var structured = new InMemoryStructuredMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var triggers = new InMemoryTriggerStore();
+        var definition = SampleDefinitions.Examiner with
+        {
+            MemoryPolicy = new MemoryPolicy(
+                SessionMemory: true,
+                IdentityUserPromotion: true,
+                IdentityUserRetrieval: true,
+                UserPromotion: true,
+                UserRetrieval: true)
+        };
+        var definitions = new VersionedDefinitions(definition);
+        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00d7-7000-8000-"), clock);
+        var manager = new SessionManager(
+            definitions,
+            sessions,
+            Ids(16, "019944af-00d8-7000-8000-"),
+            clock,
+            new VoiceAvailability { SpeechAdaptersResolved = true },
+            structuredMemory: structured,
+            instances: instanceService);
+        var memoryService = new StructuredMemoryService(structured, Ids(12, "019944af-00d9-7000-8000-"), clock);
+        var admin = new AdminMemoryService(
+            instances,
+            definitions,
+            sessions,
+            structured,
+            memoryService,
+            new FixedLocalProfile(ProfileId, clock));
+
+        await sessions.SaveProfileAsync(
+            new UserProfile(
+                ProfileId,
+                1,
+                new Dictionary<string, UserProfileValue> { ["preferredName"] = new("Transcript Owner", UserProfileValueSource.UserSet, Now) },
+                Now),
+            0);
+        var instance = await instanceService.CreateAsync("examiner", 1);
+        var session = await manager.CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
+        var beforeSnapshot = await sessions.LoadAsync(session.SessionId);
+        Assert.NotNull(beforeSnapshot);
+        var transcriptEntry = new ConversationEntry(
+            Guid.Parse("019944af-00da-7000-8000-000000000002"),
+            1,
+            null,
+            ConversationRole.User,
+            "TRANSCRIPT_SENTINEL",
+            null,
+            EntryStatus.Completed,
+            SessionMode.Text,
+            0,
+            0,
+            Now);
+        var snapshotWithTranscript = beforeSnapshot! with
+        {
+            Entries = [transcriptEntry],
+            LastEntrySequence = 1,
+            Revision = beforeSnapshot.Revision + 1
+        };
+        await sessions.SaveAsync(snapshotWithTranscript, beforeSnapshot.Revision);
+
+        var owner = new TriggerOwner(instance.InstanceId, ProfileId);
+        var registrationId = Guid.Parse("019944af-00da-7000-8000-000000000001");
+        await triggers.CreateAsync(new TriggerRegistration(
+            registrationId,
+            owner,
+            TriggerRegistrationStatus.Active,
+            "Future reminder",
+            new OneShotSchedule(Now.AddHours(1), "UTC", null, null),
+            Now.AddHours(1),
+            null,
+            0,
+            1,
+            1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, session.SessionId, null, Now, Now),
+            null));
+
+        var admission = new MemoryAdmissionContext("test", [], new HashSet<string>(StringComparer.Ordinal));
+        _ = await memoryService.WriteAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "session", "SESSION_RESET_ME", []),
+            admission);
+
+        var snapshotBeforeReset = await sessions.LoadAsync(session.SessionId);
+        Assert.NotNull(snapshotBeforeReset);
+        var instanceBeforeReset = await instances.FindAsync(instance.InstanceId);
+        Assert.NotNull(instanceBeforeReset);
+        var profileBeforeReset = await sessions.LoadProfileAsync(ProfileId);
+        Assert.NotNull(profileBeforeReset);
+        var triggerBeforeReset = (await triggers.GetAsync(owner, registrationId))!;
+
+        var reset = await admin.ResetScopeAsync(instance.InstanceId, AdminLearnedMemoryScope.Session, session.SessionId);
+        Assert.Equal(1, reset.ItemsRemoved);
+
+        var snapshotAfterReset = await sessions.LoadAsync(session.SessionId);
+        Assert.NotNull(snapshotAfterReset);
+        Assert.Equal(snapshotBeforeReset.Definition, snapshotAfterReset!.Definition);
+        Assert.Equal(snapshotBeforeReset.Entries, snapshotAfterReset.Entries);
+        Assert.Equal(snapshotBeforeReset.PinnedPersona, snapshotAfterReset.PinnedPersona);
+        Assert.Equal(snapshotBeforeReset.Mode, snapshotAfterReset.Mode);
+        var instanceAfterReset = await instances.FindAsync(instance.InstanceId);
+        Assert.NotNull(instanceAfterReset);
+        Assert.Equal(instanceBeforeReset.Persona, instanceAfterReset.Persona);
+        Assert.Equal(instanceBeforeReset.DefinitionId, instanceAfterReset.DefinitionId);
+        Assert.Equal(instanceBeforeReset.ActiveVersion, instanceAfterReset.ActiveVersion);
+        Assert.Equal(instanceBeforeReset.Lifecycle, instanceAfterReset.Lifecycle);
+        var profileAfterReset = await sessions.LoadProfileAsync(ProfileId);
+        Assert.Equal(profileBeforeReset, profileAfterReset);
+        Assert.Equal(triggerBeforeReset, await triggers.GetAsync(owner, registrationId));
+        Assert.Empty((await admin.ListAsync(instance.InstanceId, AdminLearnedMemoryScope.Session, session.SessionId)).Items);
+    }
+
+    [Fact]
+    public async Task List_user_returns_empty_when_user_retrieval_disabled()
+    {
+        var clock = new FakeTimeProvider(Now);
+        var sessions = new InMemoryMemoryStore();
+        var structured = new InMemoryStructuredMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var definition = SampleDefinitions.Examiner with
+        {
+            MemoryPolicy = new MemoryPolicy(
+                SessionMemory: true,
+                UserPromotion: true,
+                UserRetrieval: false)
+        };
+        var definitions = new VersionedDefinitions(definition);
+        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00db-7000-8000-"), clock);
+        var manager = new SessionManager(
+            definitions,
+            sessions,
+            Ids(16, "019944af-00e0-7000-8000-"),
+            clock,
+            new VoiceAvailability { SpeechAdaptersResolved = true },
+            structuredMemory: structured,
+            instances: instanceService);
+        var memoryService = new StructuredMemoryService(structured, Ids(12, "019944af-00dc-7000-8000-"), clock);
+        var admin = new AdminMemoryService(
+            instances,
+            definitions,
+            sessions,
+            structured,
+            memoryService,
+            new FixedLocalProfile(ProfileId, clock));
+        var instance = await instanceService.CreateAsync("examiner", 1);
+        var session = await manager.CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
+        var admission = new MemoryAdmissionContext("test", [], new HashSet<string>(StringComparer.Ordinal));
+        var sessionItem = await memoryService.WriteAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "User wide", "USER_STORED_BUT_HIDDEN", []),
+            admission);
+        await memoryService.PromoteSessionToUserAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            sessionItem.MemoryId,
+            new TrustedUserOwner(ProfileId),
+            promotionAllowed: true,
+            admission);
+
+        var list = await admin.ListAsync(instance.InstanceId, AdminLearnedMemoryScope.User, null);
+        Assert.Empty(list.Items);
+    }
+
+    [Fact]
+    public async Task Reset_user_scope_throws_when_user_retrieval_disabled()
+    {
+        var clock = new FakeTimeProvider(Now);
+        var sessions = new InMemoryMemoryStore();
+        var structured = new InMemoryStructuredMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var definition = SampleDefinitions.Examiner with
+        {
+            MemoryPolicy = new MemoryPolicy(SessionMemory: true, UserPromotion: true, UserRetrieval: false)
+        };
+        var definitions = new VersionedDefinitions(definition);
+        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(4, "019944af-00dd-7000-8000-"), clock);
+        var admin = new AdminMemoryService(
+            instances,
+            definitions,
+            sessions,
+            structured,
+            new StructuredMemoryService(structured, Ids(4, "019944af-00de-7000-8000-"), clock),
+            new FixedLocalProfile(ProfileId, clock));
+        var instance = await instanceService.CreateAsync("examiner", 1);
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            admin.ResetScopeAsync(instance.InstanceId, AdminLearnedMemoryScope.User, null).AsTask());
+        Assert.Equal(403, error.StatusCode);
     }
 
     [Fact]
