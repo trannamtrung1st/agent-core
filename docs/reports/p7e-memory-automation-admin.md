@@ -1,6 +1,6 @@
 # P7E — Memory and automation administration
 
-**Status:** approved (W05 slice gate; batch review-0029 PASS, review 0081)
+**Status:** approved (W05 slice gate review 0081 at `59a812a`; review-0030 closure evidence review 0087 at `18ffecf`)
 
 **Baseline:** `10bd0dc5b075a84d475ea7891be69be42e6ba798` (W05 backend); `9d5fdb947122c98c79bc136dcaa8421d6c91cbde` (W05 UI batch)
 

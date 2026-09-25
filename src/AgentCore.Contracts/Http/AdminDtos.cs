@@ -130,6 +130,18 @@ public sealed record AdminUpdateDefinitionDraftRequest(long ExpectedRevision, Js
 
 public sealed record AdminPublishDefinitionDraftRequest(long ExpectedRevision);
 
+public sealed record AdminDefinitionDraftValidationResponse(
+    string DraftId,
+    long DraftRevision,
+    bool HasBlockingFindings,
+    IReadOnlyList<AdminDefinitionValidationFindingResponse> Findings);
+
+public sealed record AdminDefinitionValidationFindingResponse(
+    string Field,
+    string Code,
+    string Message,
+    string Severity);
+
 public sealed record AdminDeprecateDefinitionPublicationRequest(long ExpectedMetadataRevision);
 
 public sealed record AdminDefinitionDraftResourceListResponse(

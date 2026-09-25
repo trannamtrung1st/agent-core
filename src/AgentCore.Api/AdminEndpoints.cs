@@ -494,6 +494,22 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapPost("/definition-drafts/{draftId:guid}/validate", async (
+            Guid draftId,
+            AgentDefinitionDraftValidationService validation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await validation.ValidateDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToValidation(result));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/definition-drafts/{draftId:guid}/publish", async (
             Guid draftId,
             AdminPublishDefinitionDraftRequest request,

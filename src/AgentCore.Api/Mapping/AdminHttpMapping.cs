@@ -119,6 +119,19 @@ internal static class AdminHttpMapping
             publication.MetadataRevision,
             publication.PublishedAt.ToString("o"));
 
+    public static AdminDefinitionDraftValidationResponse ToValidation(DefinitionValidationResult result) =>
+        new(
+            result.DraftId.ToString("D"),
+            result.DraftRevision,
+            result.HasBlockingFindings,
+            result.Findings
+                .Select(finding => new AdminDefinitionValidationFindingResponse(
+                    finding.Field,
+                    finding.Code,
+                    finding.Message,
+                    finding.Severity.ToString()))
+                .ToArray());
+
     public static AdminDefinitionDraftResourceResponse ToDraftResource(AgentDefinitionDraftResource item) =>
         new(
             item.ResourceId.ToString("D"),

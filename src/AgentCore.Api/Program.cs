@@ -58,6 +58,7 @@ builder.Services.AddSingleton<AdminReadService>();
 builder.Services.AddSingleton<AdminMemoryService>();
 builder.Services.AddSingleton<AdminAutomationService>();
 builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
+builder.Services.AddSingleton<AgentDefinitionDraftValidationService>();
 builder.Services.AddSingleton<AgentDefinitionResourceService>();
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
