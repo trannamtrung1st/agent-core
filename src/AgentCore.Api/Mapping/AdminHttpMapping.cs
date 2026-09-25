@@ -106,6 +106,28 @@ internal static class AdminHttpMapping
             publication.MetadataRevision,
             publication.PublishedAt.ToString("o"));
 
+    public static AdminDefinitionDraftResourceResponse ToDraftResource(AgentDefinitionDraftResource item) =>
+        new(
+            item.ResourceId.ToString("D"),
+            item.LogicalPath,
+            item.Kind.ToString(),
+            item.MediaType,
+            item.ContentSha256,
+            item.ByteLength,
+            item.UpdatedAt.ToString("o"));
+
+    public static AdminDefinitionResourceContentStoredResponse ToStoredContent(DefinitionResourceContentStored item) =>
+        new(item.ContentSha256, item.ByteLength, item.MediaType);
+
+    public static AdminDefinitionPublicationResourceResponse ToPublicationResource(AgentDefinitionPublicationResource item) =>
+        new(
+            item.ResourceId.ToString("D"),
+            item.LogicalPath,
+            item.Kind.ToString(),
+            item.MediaType,
+            item.ContentSha256,
+            item.ByteLength);
+
     private static AdminTriggerPolicyResponse ToTriggerPolicy(TriggerPolicy policy) =>
         new(
             policy.Enabled,

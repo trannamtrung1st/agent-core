@@ -127,3 +127,42 @@ public sealed record AdminUpdateDefinitionDraftRequest(long ExpectedRevision, Js
 public sealed record AdminPublishDefinitionDraftRequest(long ExpectedRevision);
 
 public sealed record AdminDeprecateDefinitionPublicationRequest(long ExpectedMetadataRevision);
+
+public sealed record AdminDefinitionDraftResourceListResponse(
+    IReadOnlyList<AdminDefinitionDraftResourceResponse> Items);
+
+public sealed record AdminDefinitionDraftResourceResponse(
+    string ResourceId,
+    string LogicalPath,
+    string Kind,
+    string MediaType,
+    string ContentSha256,
+    long ByteLength,
+    string UpdatedAt);
+
+public sealed record AdminDefinitionResourceContentStoredResponse(
+    string ContentSha256,
+    long ByteLength,
+    string MediaType);
+
+public sealed record AdminUpsertDefinitionDraftResourceRequest(
+    long ExpectedRevision,
+    string? ResourceId,
+    string LogicalPath,
+    string Kind,
+    string MediaType,
+    string ContentSha256,
+    long ByteLength);
+
+public sealed record AdminRemoveDefinitionDraftResourceRequest(long ExpectedRevision);
+
+public sealed record AdminDefinitionPublicationResourceListResponse(
+    IReadOnlyList<AdminDefinitionPublicationResourceResponse> Items);
+
+public sealed record AdminDefinitionPublicationResourceResponse(
+    string ResourceId,
+    string LogicalPath,
+    string Kind,
+    string MediaType,
+    string ContentSha256,
+    long ByteLength);

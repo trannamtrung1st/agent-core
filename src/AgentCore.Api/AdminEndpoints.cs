@@ -4,8 +4,90 @@ using AgentCore.Application.Admin;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AgentCore.Api;
+
+internal static class AdminDefinitionResourceHttp
+{
+    private const int ReadBufferSize = 64 * 1024;
+
+    internal static async ValueTask<byte[]> ReadContentBodyAsync(
+        HttpRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.ContentLength is > AgentResourceLimits.MaxItemBytes)
+        {
+            throw AgentCoreErrors.Validation("Resource content exceeds the per-item size limit.");
+        }
+
+        await using var stream = new MemoryStream();
+        var buffer = new byte[ReadBufferSize];
+        long total = 0;
+        while (true)
+        {
+            var read = await request.Body.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            total += read;
+            if (total > AgentResourceLimits.MaxItemBytes)
+            {
+                throw AgentCoreErrors.Validation("Resource content exceeds the per-item size limit.");
+            }
+
+            stream.Write(buffer, 0, read);
+        }
+
+        if (stream.Length == 0)
+        {
+            throw AgentCoreErrors.Validation("Resource content must not be empty.");
+        }
+
+        return stream.ToArray();
+    }
+
+    internal static AgentDefinitionResourceKind ParseResourceKind(string kind)
+    {
+        if (string.IsNullOrWhiteSpace(kind))
+        {
+            throw AgentCoreErrors.Validation("kind is required.");
+        }
+
+        if (kind.Contains(',', StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.Validation("kind is invalid.");
+        }
+
+        foreach (var name in Enum.GetNames<AgentDefinitionResourceKind>())
+        {
+            if (string.Equals(name, kind, StringComparison.OrdinalIgnoreCase))
+            {
+                return Enum.Parse<AgentDefinitionResourceKind>(name, ignoreCase: false);
+            }
+        }
+
+        throw AgentCoreErrors.Validation("kind is invalid.");
+    }
+
+    internal static Guid? ParseOptionalResourceId(string? resourceId)
+    {
+        if (string.IsNullOrWhiteSpace(resourceId))
+        {
+            return null;
+        }
+
+        if (!Guid.TryParse(resourceId, out var parsed) || parsed == Guid.Empty)
+        {
+            throw AgentCoreErrors.Validation("resourceId is invalid.");
+        }
+
+        return parsed;
+    }
+}
 
 internal static class AdminEndpoints
 {
@@ -183,6 +265,136 @@ internal static class AdminEndpoints
                         cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(AdminHttpMapping.ToPublicationSummary(publication));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapGet("/definition-drafts/{draftId:guid}/resources", async (
+            Guid draftId,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var items = await resources.ListDraftResourcesAsync(draftId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(new AdminDefinitionDraftResourceListResponse(items.Select(AdminHttpMapping.ToDraftResource).ToArray()));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/definition-drafts/{draftId:guid}/resources/content", async (
+            Guid draftId,
+            HttpRequest http,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var bytes = await AdminDefinitionResourceHttp.ReadContentBodyAsync(http, cancellationToken)
+                    .ConfigureAwait(false);
+                var mediaType = string.IsNullOrWhiteSpace(http.ContentType) ? "application/octet-stream" : http.ContentType;
+                var stored = await resources.StoreDraftContentAsync(draftId, mediaType, bytes, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToStoredContent(stored), statusCode: StatusCodes.Status201Created);
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        }).WithMetadata(new RequestSizeLimitAttribute(AgentResourceLimits.MaxItemBytes + (1024 * 1024)));
+
+        group.MapPut("/definition-drafts/{draftId:guid}/resources", async (
+            Guid draftId,
+            AdminUpsertDefinitionDraftResourceRequest request,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var kind = AdminDefinitionResourceHttp.ParseResourceKind(request.Kind);
+                var resourceId = AdminDefinitionResourceHttp.ParseOptionalResourceId(request.ResourceId);
+                var resource = await resources.UpsertDraftResourceAsync(
+                        draftId,
+                        request.ExpectedRevision,
+                        resourceId,
+                        request.LogicalPath,
+                        kind,
+                        request.MediaType,
+                        request.ContentSha256,
+                        request.ByteLength,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToDraftResource(resource));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapDelete("/definition-drafts/{draftId:guid}/resources/{resourceId:guid}", async (
+            Guid draftId,
+            Guid resourceId,
+            long expectedRevision,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var removed = await resources.RemoveDraftResourceAsync(
+                        draftId,
+                        expectedRevision,
+                        resourceId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToDraftResource(removed));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapGet("/definition-drafts/{draftId:guid}/resources/{resourceId:guid}/content", async (
+            Guid draftId,
+            Guid resourceId,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var bytes = await resources.ReadDraftResourceContentAsync(draftId, resourceId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (bytes is null)
+                {
+                    throw AgentCoreErrors.NotFound("Draft resource content was not found.");
+                }
+
+                return Results.Bytes(bytes, "application/octet-stream");
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapGet("/definitions/{definitionId}/publications/{version:int}/resources", async (
+            string definitionId,
+            int version,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var items = await resources.ListPublicationResourcesAsync(definitionId, version, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(new AdminDefinitionPublicationResourceListResponse(items.Select(AdminHttpMapping.ToPublicationResource).ToArray()));
             }
             catch (AgentCoreException ex)
             {

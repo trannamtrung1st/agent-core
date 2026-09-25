@@ -355,6 +355,160 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_resource_upload_bind_and_publish_snapshot()
+    {
+        var client = OwnerClient();
+        const string definitionId = "p7c-resource-api";
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                definitionId,
+                JsonSerializer.SerializeToElement(SampleDraftCandidate(definitionId), JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        Assert.NotNull(draft);
+
+        var contentBytes = "policy text for runtime"u8.ToArray();
+        using var contentRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/resources/content")
+        {
+            Content = new ByteArrayContent(contentBytes)
+        };
+        contentRequest.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        var storedResponse = await client.SendAsync(contentRequest);
+        storedResponse.EnsureSuccessStatusCode();
+        var stored = await storedResponse.Content.ReadFromJsonAsync<AdminDefinitionResourceContentStoredResponse>();
+        Assert.NotNull(stored);
+
+        var bind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                draft.Revision,
+                null,
+                "knowledge/policy.md",
+                "Knowledge",
+                stored!.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        bind.EnsureSuccessStatusCode();
+        var bound = await bind.Content.ReadFromJsonAsync<AdminDefinitionDraftResourceResponse>();
+        Assert.NotNull(bound);
+
+        var list = await client.GetFromJsonAsync<AdminDefinitionDraftResourceListResponse>(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources");
+        Assert.NotNull(list);
+        Assert.Single(list!.Items);
+        Assert.Equal("knowledge/policy.md", list.Items[0].LogicalPath);
+
+        var boundDraft = await client.GetFromJsonAsync<AdminDefinitionDraftResponse>(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}");
+        Assert.NotNull(boundDraft);
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{boundDraft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(boundDraft.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+
+        var publicationResources = await client.GetFromJsonAsync<AdminDefinitionPublicationResourceListResponse>(
+            $"/api/v2/admin/definitions/{definitionId}/publications/{publication!.Version}/resources");
+        Assert.NotNull(publicationResources);
+        Assert.Single(publicationResources!.Items);
+        Assert.Equal(stored.ContentSha256, publicationResources.Items[0].ContentSha256);
+    }
+
+    [Fact]
+    public async Task Admin_resource_content_rejects_oversized_declared_length()
+    {
+        var client = OwnerClient();
+        var draft = await CreateIsolatedDraftAsync(client, "p7c-oversize-declared");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/content")
+        {
+            Content = new ByteArrayContent([0x01])
+        };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        request.Content.Headers.ContentLength = AgentResourceLimits.MaxItemBytes + 1;
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_resource_content_rejects_oversized_chunked_body()
+    {
+        var client = OwnerClient();
+        var draft = await CreateIsolatedDraftAsync(client, "p7c-oversize-chunked");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/content")
+        {
+            Content = new StreamContent(new OversizeResourceStream(AgentResourceLimits.MaxItemBytes + 1))
+        };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        request.Content.Headers.ContentLength = null;
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_resource_bind_rejects_invalid_resource_id_and_kind()
+    {
+        var client = OwnerClient();
+        var draft = await CreateIsolatedDraftAsync(client, "p7c-bind-validation");
+        var stored = await UploadDraftResourceContentAsync(client, draft.DraftId, "ok"u8.ToArray());
+
+        var invalidId = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                draft.Revision,
+                "not-a-guid",
+                "refs/a.txt",
+                "Reference",
+                stored.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidId.StatusCode);
+
+        var invalidKind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                draft.Revision,
+                null,
+                "refs/a.txt",
+                "999",
+                stored.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidKind.StatusCode);
+
+        var numericKind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                draft.Revision,
+                null,
+                "refs/a.txt",
+                "1",
+                stored.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        Assert.Equal(HttpStatusCode.BadRequest, numericKind.StatusCode);
+
+        var combinedKind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                draft.Revision,
+                null,
+                "refs/a.txt",
+                "Knowledge, Reference",
+                stored.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        Assert.Equal(HttpStatusCode.BadRequest, combinedKind.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_definitions_inventory_marks_durable_publication_source()
     {
         var client = OwnerClient();
@@ -428,6 +582,36 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Contains("Admin durable edit.", resolved!.SystemInstructions, StringComparison.Ordinal);
     }
 
+    private static async Task<AdminDefinitionDraftResponse> CreateIsolatedDraftAsync(
+        HttpClient client,
+        string definitionId)
+    {
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                definitionId,
+                JsonSerializer.SerializeToElement(SampleDraftCandidate(definitionId), JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        return (await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>(JsonOptions()))!;
+    }
+
+    private static async Task<AdminDefinitionResourceContentStoredResponse> UploadDraftResourceContentAsync(
+        HttpClient client,
+        string draftId,
+        byte[] bytes)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v2/admin/definition-drafts/{draftId}/resources/content")
+        {
+            Content = new ByteArrayContent(bytes)
+        };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<AdminDefinitionResourceContentStoredResponse>(JsonOptions()))!;
+    }
+
     private static JsonSerializerOptions JsonOptions() =>
         new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
 
@@ -453,6 +637,53 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             token ?? TestOwnerCapability.Token(_factory.Services));
         return client;
     }
+}
+
+internal sealed class OversizeResourceStream(long totalBytes) : Stream
+{
+    private long _remaining = totalBytes;
+
+    public override bool CanRead => true;
+
+    public override bool CanSeek => false;
+
+    public override bool CanWrite => false;
+
+    public override long Length => throw new NotSupportedException();
+
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override void Flush()
+    {
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        if (_remaining <= 0)
+        {
+            return 0;
+        }
+
+        var toRead = (int)Math.Min(count, _remaining);
+        Array.Fill(buffer, (byte)'x', offset, toRead);
+        _remaining -= toRead;
+        return toRead;
+    }
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(Read(buffer, offset, count));
+    }
+
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }
 
 public sealed class AdminSecretSentinelApiFactory : AgentCoreApiFactory
