@@ -212,6 +212,36 @@ public sealed class AgentInstanceTests
     }
 
     [Fact]
+    public async Task Managed_session_pins_persona_revision_across_later_edits()
+    {
+        await ForEachStore(async (sessions, instances, clock) =>
+        {
+            var definitions = new VersionedDefinitions(V1());
+            var service = Service(instances, definitions, sessions, clock, 4);
+            var managed = await service.CreateAsync("examiner", 1);
+            var manager = Manager(definitions, sessions, service, clock, new InMemoryStructuredMemoryStore());
+            var first = await manager.CreateForInstanceAsync(managed.InstanceId, SessionMode.Text);
+            Assert.Equal(1, first.PinnedPersonaRevision);
+            Assert.Equal(managed.Persona, first.PinnedPersona);
+
+            var persona = managed.Persona with { Tone = "edited" };
+            _ = await service.UpdatePersonaAsync(
+                managed.InstanceId,
+                persona,
+                managed.Revision,
+                managed.PersonaRevision);
+
+            var historical = (await sessions.LoadAsync(first.SessionId))!;
+            Assert.Equal(1, historical.PinnedPersonaRevision);
+            Assert.Equal(managed.Persona.Tone, historical.PinnedPersona!.Tone);
+
+            var second = await manager.CreateForInstanceAsync(managed.InstanceId, SessionMode.Text);
+            Assert.Equal(2, second.PinnedPersonaRevision);
+            Assert.Equal("edited", second.PinnedPersona!.Tone);
+        });
+    }
+
+    [Fact]
     public async Task Persona_update_bumps_persona_revision()
     {
         var sessions = new InMemoryMemoryStore();

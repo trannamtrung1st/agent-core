@@ -845,6 +845,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.PinnedPersonaJson = snapshot.PinnedPersona is null
             ? null
             : JsonSerializer.Serialize(snapshot.PinnedPersona, Json);
+        row.PinnedPersonaRevision = snapshot.PinnedPersonaRevision;
         row.Mode = snapshot.Mode.ToString();
         row.PendingMode = snapshot.PendingMode?.ToString();
         row.Status = snapshot.Status.ToString();
@@ -971,7 +972,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             string.IsNullOrEmpty(row.AgentInstanceId) ? null : Guid.Parse(row.AgentInstanceId),
             string.IsNullOrEmpty(row.PinnedPersonaJson)
                 ? null
-                : JsonSerializer.Deserialize<AgentIdentity>(row.PinnedPersonaJson, Json));
+                : JsonSerializer.Deserialize<AgentIdentity>(row.PinnedPersonaJson, Json),
+            row.PinnedPersonaRevision);
     }
 
     private static ConversationEntry ToEntry(EntryRecord row) =>

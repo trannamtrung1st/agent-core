@@ -791,6 +791,16 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.NotNull(view);
         Assert.Equal(definitionId, view!.AgentId);
         Assert.Equal(publication.Version, view.AgentVersion);
+        Assert.Equal(instance.InstanceId, view.AgentInstanceId);
+        Assert.Equal(1, view.PinnedPersonaRevision);
+
+        var legacy = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest("examiner", 1, "text"));
+        legacy.EnsureSuccessStatusCode();
+        var legacyView = await legacy.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.NotNull(legacyView);
+        Assert.Null(legacyView!.PinnedPersonaRevision);
 
         var listed = await client.GetFromJsonAsync<WorkspaceNodeResponse[]>(
             $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");

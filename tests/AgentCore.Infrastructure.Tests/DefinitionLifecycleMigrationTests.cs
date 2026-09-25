@@ -23,13 +23,10 @@ public sealed class DefinitionLifecycleMigrationTests
         var sessionId = Guid.Parse("019944af-00d1-7000-8000-0000000000bb");
         try
         {
-            await using (var db = await factory.CreateDbContextAsync())
-            {
-                await db.Database.MigrateAsync(PreP7BMigrationId);
-            }
-
-            var memory = new SqliteMemoryStore(factory, TimeProvider.System);
-            await memory.SaveAsync(PreP7BSession(sessionId), 0);
+            await MigrationSessionSeed.CopyPersistedSessionAsync(
+                factory,
+                PreP7BSession(sessionId),
+                PreP7BMigrationId);
 
             await using (var db = await factory.CreateDbContextAsync())
             {
@@ -43,6 +40,7 @@ public sealed class DefinitionLifecycleMigrationTests
             var session = await reopenedMemory.LoadAsync(sessionId);
             Assert.NotNull(session);
             Assert.Contains("pre-p7b-session-marker", session!.Definition.SystemInstructions, StringComparison.Ordinal);
+            Assert.Null(session.PinnedPersonaRevision);
 
             var admin = new SqliteAgentDefinitionAdminStore(
                 factory,

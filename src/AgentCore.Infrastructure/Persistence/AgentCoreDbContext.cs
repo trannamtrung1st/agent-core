@@ -24,6 +24,7 @@ public sealed class SessionRecord
     public long? DurablyDeletedAtUtc { get; set; }
     public string? AgentInstanceId { get; set; }
     public string? PinnedPersonaJson { get; set; }
+    public long? PinnedPersonaRevision { get; set; }
     public SnapshotRecord? Snapshot { get; set; }
     public List<EntryRecord> Entries { get; set; } = [];
 }

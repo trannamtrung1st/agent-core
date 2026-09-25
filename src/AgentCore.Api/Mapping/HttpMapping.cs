@@ -43,7 +43,9 @@ public static partial class HttpMapping
             snapshot.PauseReason,
             LifecycleTransition.ToWire(snapshot.LifecycleStatus),
             ToSpeechLocale(snapshot),
-            ToModel(snapshot, catalog));
+            ToModel(snapshot, catalog),
+            snapshot.AgentInstanceId?.ToString("D"),
+            snapshot.PinnedPersonaRevision);
 
     public static SessionCatalogItemResponse ToCatalogItem(SessionSnapshot snapshot) =>
         new(

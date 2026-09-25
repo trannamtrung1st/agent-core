@@ -280,7 +280,8 @@ public sealed record SessionSnapshot(
     DateTimeOffset? SummaryGeneratedAt = null,
     ModelGenerationProvenance? SummaryModel = null,
     Guid? AgentInstanceId = null,
-    AgentIdentity? PinnedPersona = null)
+    AgentIdentity? PinnedPersona = null,
+    long? PinnedPersonaRevision = null)
 {
     public long DurableLastEntrySequence
     {

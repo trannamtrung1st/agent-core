@@ -103,7 +103,7 @@ public sealed class SessionManager
             modelKey,
             reasoningEffort,
             modelSource,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<SessionSnapshot> CreateForInstanceAsync(
@@ -145,6 +145,7 @@ public sealed class SessionManager
             modelKey,
             reasoningEffort,
             modelSource,
+            pinnedPersonaRevision: instance.PersonaRevision,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -160,7 +161,8 @@ public sealed class SessionManager
         string? modelKey,
         string? reasoningEffort,
         ModelSelectionSource modelSource,
-        CancellationToken cancellationToken)
+        long? pinnedPersonaRevision = null,
+        CancellationToken cancellationToken = default)
     {
         var localeOverride = SpeechLocale.NormalizeOverride(speechLocaleOverride);
         var effectiveLocale = SpeechLocale.Resolve(localeOverride, definition.ConversationPolicy.Language).Effective;
@@ -209,7 +211,8 @@ public sealed class SessionManager
             SpeechLocaleOverride: localeOverride,
             ModelSelection: BindCreatedModel(definition, modelKey, reasoningEffort, modelSource),
             AgentInstanceId: instanceId,
-            PinnedPersona: persona);
+            PinnedPersona: persona,
+            PinnedPersonaRevision: pinnedPersonaRevision);
         if (SessionLifecycle.DeadlineElapsed(resolvedPurpose, now))
         {
             snapshot = LifecycleTransition.Apply(

@@ -108,7 +108,9 @@ public sealed record SessionViewResponse(
     string? PauseReason = null,
     string? LifecycleStatus = null,
     SpeechLocaleResponse? SpeechLocale = null,
-    SessionModelSelectionResponse? Model = null);
+    SessionModelSelectionResponse? Model = null,
+    string? AgentInstanceId = null,
+    long? PinnedPersonaRevision = null);
 
 public sealed record AgentDescriptorResponse(
     string Id,
