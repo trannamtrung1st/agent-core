@@ -2,7 +2,8 @@
 
 **Status:** candidate (W01 review-fix batch, round 3)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Behavior candidate SHA:** pending commit on `main` (review range `4ab50695160462965e7e8edcff6adea005d856b5..HEAD` after this turn)
+**Behavior candidate SHA:** `f3988bb5a8b6de7c35f7a7bb98769fc3b00f4214`  
+**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..f3988bb5a8b6de7c35f7a7bb98769fc3b00f4214`
 
 ## Scope delivered
 
