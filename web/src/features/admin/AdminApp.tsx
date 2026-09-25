@@ -113,7 +113,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               emptyLabel="No definitions found."
               loading={definitions.kind === "loading"}
               error={definitions.kind === "error" ? definitions.message : null}
-              unauthorized={definitions.kind === "error" ? definitions.unauthorized : false}
+              unauthorized={definitions.kind === "error" ? (definitions.unauthorized ?? false) : false}
               onRetry={() => void reloadDefinitions()}
               items={
                 definitions.kind === "ready"
@@ -131,7 +131,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               emptyLabel="No instances yet. Start a chat to create compatibility instances."
               loading={instances.kind === "loading"}
               error={instances.kind === "error" ? instances.message : null}
-              unauthorized={instances.kind === "error" ? instances.unauthorized : false}
+              unauthorized={instances.kind === "error" ? (instances.unauthorized ?? false) : false}
               onRetry={() => void reloadInstances()}
               items={
                 instances.kind === "ready"
@@ -278,6 +278,24 @@ function DefinitionDetail({
   );
 }
 
+function InstanceIdentityTags({
+  compatibility,
+  lifecycle,
+  definitionStatus
+}: {
+  compatibility: boolean;
+  lifecycle: string;
+  definitionStatus?: string;
+}) {
+  return (
+    <Flex gap={8} wrap="wrap">
+      {compatibility ? <Tag color="gold">Compatibility / legacy</Tag> : <Tag color="blue">Managed</Tag>}
+      <Tag>{lifecycle}</Tag>
+      {definitionStatus ? <Tag>{definitionStatus}</Tag> : null}
+    </Flex>
+  );
+}
+
 function InstanceDetail({
   instanceId,
   instances,
@@ -295,16 +313,16 @@ function InstanceDetail({
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
     : undefined;
 
+  const headerIdentity =
+    effective.kind === "ready" || !row
+      ? null
+      : { compatibility: row.compatibility, lifecycle: row.lifecycle, definitionStatus: undefined as string | undefined };
+
   return (
     <Flex vertical gap={16}>
       <Button onClick={onBack}>Back to inventory</Button>
       <Typography.Title level={4}>Instance {instanceId}</Typography.Title>
-      {row ? (
-        <Flex gap={8} wrap="wrap">
-          {row.compatibility ? <Tag color="gold">Compatibility / legacy</Tag> : <Tag color="blue">Managed</Tag>}
-          <Tag>{row.lifecycle}</Tag>
-        </Flex>
-      ) : null}
+      {headerIdentity ? <InstanceIdentityTags {...headerIdentity} /> : null}
       {effective.kind === "loading" ? <Spin aria-label="Loading effective configuration" /> : null}
       {effective.kind === "error" ? (
         <Alert
@@ -323,6 +341,20 @@ export function EffectiveConfigView({ config }: { config: AdminEffectiveConfigur
   const trigger = config.triggerPolicy;
   return (
     <Flex vertical gap={20}>
+      <section aria-label="Instance identity">
+        <Typography.Title level={5}>Instance identity</Typography.Title>
+        <InstanceIdentityTags
+          compatibility={config.compatibility}
+          lifecycle={config.instanceLifecycle}
+          definitionStatus={config.definitionStatus}
+        />
+        <Descriptions bordered size="small" column={1} style={{ marginTop: 12 }}>
+          <Descriptions.Item label="Instance id">{config.instanceId}</Descriptions.Item>
+          <Descriptions.Item label="Definition status">{config.definitionStatus}</Descriptions.Item>
+          <Descriptions.Item label="Lifecycle">{config.instanceLifecycle}</Descriptions.Item>
+          <Descriptions.Item label="Compatibility mode">{config.compatibility ? "Yes" : "No"}</Descriptions.Item>
+        </Descriptions>
+      </section>
       <section aria-label="Persona">
         <Typography.Title level={5}>Persona</Typography.Title>
         <Descriptions bordered size="small" column={1}>

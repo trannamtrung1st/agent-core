@@ -1,9 +1,9 @@
 # P7A — Admin shell and effective configuration
 
-**Status:** candidate (W01 review-fix batch, round 3)  
+**Status:** candidate (W01 review-fix batch, round 4)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Behavior candidate SHA:** `f3988bb5a8b6de7c35f7a7bb98769fc3b00f4214`  
-**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..f3988bb5a8b6de7c35f7a7bb98769fc3b00f4214`
+**Behavior candidate SHA:** `8a49e9b75e423cf8b8fb0259d4d8ed7d12be9c38`  
+**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..8a49e9b75e423cf8b8fb0259d4d8ed7d12be9c38`
 
 ## Scope delivered
 

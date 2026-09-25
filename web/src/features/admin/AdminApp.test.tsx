@@ -69,6 +69,8 @@ vi.mock("../../services/adminApi", () => ({
 
 import { getAdminEffectiveConfig, listAdminDefinitions, listAdminInstances } from "../../services/adminApi";
 
+const instanceId = "019944af-00d1-7000-8000-000000000001";
+
 describe("AdminApp", () => {
   it("renders definition and instance inventory", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([
@@ -142,9 +144,29 @@ describe("AdminApp", () => {
 
   it("renders effective configuration fields", () => {
     render(<EffectiveConfigView config={sampleEffective} />);
+    const identity = screen.getByLabelText("Instance identity");
+    expect(within(identity).getByText("Compatibility / legacy")).toBeInTheDocument();
+    expect(within(identity).getByText("Definition status")).toBeInTheDocument();
     expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
     expect(screen.getByText("heuristic")).toBeInTheDocument();
     expect(screen.getAllByText("scripted-alpha").length).toBeGreaterThan(0);
     expect(screen.getByText(/max registrations 4/)).toBeInTheDocument();
+  });
+
+  it("shows instance identity from effective config when inventory is unavailable", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockRejectedValue(new Error("Instances unavailable"));
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(sampleEffective);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
+    });
+    expect(within(screen.getByLabelText("Instance identity")).getByText("Compatibility / legacy")).toBeInTheDocument();
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
   });
 });
