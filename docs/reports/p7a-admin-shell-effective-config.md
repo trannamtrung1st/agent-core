@@ -2,8 +2,8 @@
 
 **Status:** candidate (W01 review-fix batch, round 4)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Behavior candidate SHA:** `8a49e9b75e423cf8b8fb0259d4d8ed7d12be9c38`  
-**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..8a49e9b75e423cf8b8fb0259d4d8ed7d12be9c38`
+**Behavior candidate SHA:** `861efe8f16b8acc99058e8d4f9347af28eccafe3`  
+**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..861efe8f16b8acc99058e8d4f9347af28eccafe3`
 
 ## Scope delivered
 
