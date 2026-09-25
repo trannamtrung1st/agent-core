@@ -25,7 +25,7 @@ The prior freeze on `6900bc1` is superseded for implementation behavior but rema
 | Prior implementation freeze (superseded) | `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (`6900bc1`), workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 |
 | P5 baseline preserved | `4bbc0c17bc54746f87fd211174690659869e3e45`, workflow `35954811544` |
 | Faithful Manual A | **pass** (2026-09-25, Synthetic, disposable SQLite `/tmp/agent-core-manual-p6-faithful.db`) |
-| Closure commit SHA | `c4dc13d8dee9c8429eaf4575c822e8a0fbeaae16` (`c4dc13d`) — docs, Synthetic reminder delivery, Manual A Playwright |
+| Closure commit SHA | `2455de938ad4a156189ea7affcea1ca940cd4ec1` (`2455de9`) — docs, Synthetic reminder delivery, Manual A Playwright |
 
 The commit that records the final freeze SHA is documentation only. It is not the implementation freeze SHA. Parent or descendant CI is not substitute evidence.
 
