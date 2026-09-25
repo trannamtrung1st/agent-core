@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -6,7 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SqliteAgentInstanceStore(IDbContextFactory<AgentCoreDbContext> contexts) : IAgentInstanceStore
+public sealed class SqliteAgentInstanceStore(
+    IDbContextFactory<AgentCoreDbContext> contexts,
+    IIdGenerator ids) : IAgentInstanceStore
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -64,6 +67,91 @@ public sealed class SqliteAgentInstanceStore(IDbContextFactory<AgentCoreDbContex
         catch (DbUpdateException)
         {
             throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
+        }
+    }
+
+    public async ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
+        AgentInstance instance,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
+                db,
+                historyAppend.OperationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (existingEvent is not null)
+        {
+            return await ResolveManagedInstanceCreatedByOperationEventAsync(
+                    existingEvent,
+                    historyAppend,
+                    instance,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        db.AgentInstances.Add(Map(instance));
+        AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            var raced = await AdminEventPersistence.TryGetByOperationIdAsync(
+                    db,
+                    historyAppend.OperationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (raced is not null)
+            {
+                return await ResolveManagedInstanceCreatedByOperationEventAsync(
+                        raced,
+                        historyAppend,
+                        instance,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
+        }
+
+        return instance;
+    }
+
+    private async ValueTask<AgentInstance> ResolveManagedInstanceCreatedByOperationEventAsync(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstance instance,
+        CancellationToken cancellationToken)
+    {
+        if (existingEvent.Operation != AdminEventOperationKind.ManagedInstanceCreated)
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        EnsureManagedInstanceReplayTargetMatches(existingEvent, historyAppend, instance);
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var instanceId))
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history is missing an instance target id.");
+        }
+
+        return await FindAsync(instanceId, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+    }
+
+    private static void EnsureManagedInstanceReplayTargetMatches(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstance instance)
+    {
+        var expectedTargetId = instance.InstanceId.ToString("D");
+        if (!string.Equals(historyAppend.TargetId, expectedTargetId, StringComparison.Ordinal)
+            || !string.Equals(existingEvent.TargetId, expectedTargetId, StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history target does not match the retried command.");
         }
     }
 

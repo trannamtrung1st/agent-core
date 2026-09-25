@@ -1086,6 +1086,29 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_events_records_managed_instance_created_after_create()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=agent.instance&targetId={instance!.InstanceId}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.ManagedInstanceCreated)
+                && item.Summary.TryGetProperty("definitionId", out var definitionId)
+                && definitionId.GetString() == "examiner"
+                && item.Summary.TryGetProperty("version", out var version)
+                && version.GetInt32() == 1);
+    }
+
+    [Fact]
     public async Task Admin_events_records_draft_created_after_create()
     {
         var client = OwnerClient();

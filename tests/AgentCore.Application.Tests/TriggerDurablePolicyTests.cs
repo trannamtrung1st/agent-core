@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Testing;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -418,5 +419,11 @@ public sealed class TriggerDurablePolicyTests
             DateTimeOffset updatedAt,
             CancellationToken cancellationToken = default) =>
             inner.UpdateWithExpectedRevisionAsync(update, updatedAt, cancellationToken);
+
+        public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
+            AgentInstance instance,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            inner.InsertManagedWithHistoryAsync(instance, historyAppend, cancellationToken);
     }
 }

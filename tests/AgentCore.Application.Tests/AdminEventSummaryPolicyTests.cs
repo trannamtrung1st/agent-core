@@ -97,6 +97,19 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
+    public void ManagedInstanceCreated_summary_includes_definition_metadata()
+    {
+        var append = AdminEventFactory.ManagedInstanceCreated(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            Guid.Parse("019944af-00d1-7000-8000-000000000098"),
+            2);
+        Assert.Contains("\"definitionId\":\"examiner\"", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
     public void DraftCreated_summary_includes_source_metadata()
     {
         var append = AdminEventFactory.DraftCreated(

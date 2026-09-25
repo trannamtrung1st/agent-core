@@ -1,6 +1,9 @@
+using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Admin;
+using AgentCore.Infrastructure.Definitions;
 
 namespace AgentCore.Infrastructure.Persistence;
 
@@ -8,6 +11,8 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
+
+    internal InMemoryAdminEventStore? EventStore { get; set; }
 
     public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default)
     {
@@ -62,6 +67,90 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
 
             _instances[instance.InstanceId] = instance;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
+        AgentInstance instance,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (EventStore is null)
+        {
+            throw AgentCoreErrors.Validation("Admin managed instance history is not available.");
+        }
+
+        var operationGate = AdminOperationLockRegistry.For(historyAppend.OperationId);
+        lock (operationGate)
+        {
+            var existingEvent = EventStore.TryGetByOperationIdAsync(historyAppend.OperationId)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (existingEvent is not null)
+            {
+                lock (_gate)
+                {
+                    return ValueTask.FromResult(
+                        ResolveManagedInstanceFromEvent(existingEvent, historyAppend, instance));
+                }
+            }
+
+            lock (_gate)
+            {
+                if (_instances.ContainsKey(instance.InstanceId))
+                {
+                    throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
+                }
+
+                _instances[instance.InstanceId] = instance;
+                try
+                {
+                    EventStore.AppendWithinLock(historyAppend);
+                }
+                catch
+                {
+                    _instances.Remove(instance.InstanceId);
+                    throw;
+                }
+
+                return ValueTask.FromResult(instance);
+            }
+        }
+    }
+
+    private AgentInstance ResolveManagedInstanceFromEvent(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstance instance)
+    {
+        if (existingEvent.Operation != AdminEventOperationKind.ManagedInstanceCreated)
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        EnsureManagedInstanceReplayTargetMatches(existingEvent, historyAppend, instance);
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var instanceId)
+            || !_instances.TryGetValue(instanceId, out var existing))
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+        }
+
+        return existing;
+    }
+
+    private static void EnsureManagedInstanceReplayTargetMatches(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstance instance)
+    {
+        var expectedTargetId = instance.InstanceId.ToString("D");
+        if (!string.Equals(historyAppend.TargetId, expectedTargetId, StringComparison.Ordinal)
+            || !string.Equals(existingEvent.TargetId, expectedTargetId, StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history target does not match the retried command.");
         }
     }
 

@@ -103,7 +103,8 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IStructuredMemoryStore>(provider => new SqliteStructuredMemoryStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IAgentInstanceStore>(provider => new SqliteAgentInstanceStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<IIdGenerator>()));
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
@@ -138,7 +139,13 @@ public static class InfrastructureServiceCollectionExtensions
         {
             services.TryAddSingleton<IMemoryStore, InMemoryMemoryStore>();
             services.TryAddSingleton<IStructuredMemoryStore, InMemoryStructuredMemoryStore>();
-            services.TryAddSingleton<IAgentInstanceStore, InMemoryAgentInstanceStore>();
+            services.TryAddSingleton<InMemoryAgentInstanceStore>();
+            services.TryAddSingleton<IAgentInstanceStore>(provider =>
+            {
+                var instances = provider.GetRequiredService<InMemoryAgentInstanceStore>();
+                instances.EventStore = provider.GetRequiredService<InMemoryAdminEventStore>();
+                return instances;
+            });
             services.TryAddSingleton<InMemoryDurableState>();
             services.TryAddSingleton<ITriggerStore>(provider =>
                 new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>()));

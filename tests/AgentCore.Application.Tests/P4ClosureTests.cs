@@ -48,7 +48,7 @@ public sealed class P4ClosureTests
             await sessions.SaveProfileAsync(Profile(), 0);
             var definitions = new VersionedDefinitions(EligibleV1(), EligibleV2());
             var instances = new AgentInstanceService(
-                new SqliteAgentInstanceStore(factory),
+                new SqliteAgentInstanceStore(factory, new SystemIdGenerator(clock)),
                 definitions,
                 sessions,
                 Ids(8, "019944af-001f-7000-8000-"),
@@ -198,7 +198,9 @@ public sealed class P4ClosureTests
                     true,
                     admission),
                 item => item.MemoryId == user.MemoryId && item.Content == UserSentinel);
-            Assert.Equal(EligibleV1().Identity.Tone, (await new SqliteAgentInstanceStore(factory).FindAsync(alice.InstanceId))!.Persona.Tone);
+            Assert.Equal(
+                EligibleV1().Identity.Tone,
+                (await new SqliteAgentInstanceStore(factory, new SystemIdGenerator(clock)).FindAsync(alice.InstanceId))!.Persona.Tone);
             Assert.Equal(1, (await reopenedSessions.LoadAsync(LongSession))!.Definition.Version);
         }
         finally

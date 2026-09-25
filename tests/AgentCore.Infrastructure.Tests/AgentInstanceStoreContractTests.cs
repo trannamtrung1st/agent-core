@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -188,7 +189,7 @@ public sealed class SqliteAgentInstanceStoreContractTests : AgentInstanceStoreCo
         try
         {
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var store = new SqliteAgentInstanceStore(factory);
+            var store = new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System));
             var now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
             var instance = new AgentInstance(
                 Guid.CreateVersion7(),
@@ -247,7 +248,7 @@ public sealed class SqliteAgentInstanceStoreContractTests : AgentInstanceStoreCo
         try
         {
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            await exercise(new SqliteAgentInstanceStore(factory));
+            await exercise(new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System)));
         }
         finally
         {

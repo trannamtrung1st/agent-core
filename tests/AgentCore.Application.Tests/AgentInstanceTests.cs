@@ -360,7 +360,7 @@ public sealed class AgentInstanceTests
         try
         {
             await sessions.EnsureCreatedAsync();
-            await exercise(sessions, new SqliteAgentInstanceStore(factory), clock);
+            await exercise(sessions, new SqliteAgentInstanceStore(factory, new SystemIdGenerator(clock)), clock);
         }
         finally
         {

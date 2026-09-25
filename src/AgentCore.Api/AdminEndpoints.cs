@@ -152,7 +152,7 @@ internal static class AdminEndpoints
 
         group.MapPost("/agent-instances", async (
             AdminCreateAgentInstanceRequest? request,
-            IAgentInstanceService instances,
+            AdminAgentInstanceService instances,
             CancellationToken cancellationToken) =>
         {
             try
@@ -167,7 +167,7 @@ internal static class AdminEndpoints
                     throw AgentCoreErrors.Validation("version must be a positive publication version.");
                 }
 
-                var instance = await instances.CreateAsync(request.DefinitionId, request.Version, cancellationToken)
+                var instance = await instances.CreateManagedAsync(request.DefinitionId, request.Version, cancellationToken)
                     .ConfigureAwait(false);
                 if (instance.Compatibility)
                 {

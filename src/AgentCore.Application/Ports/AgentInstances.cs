@@ -1,3 +1,4 @@
+using AgentCore.Application.Admin;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Ports;
@@ -13,6 +14,11 @@ public interface IAgentInstanceStore
     ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default);
 
     ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default);
+
+    ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
+        AgentInstance instance,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default);
 
     ValueTask UpdateActiveVersionAsync(
         Guid instanceId,

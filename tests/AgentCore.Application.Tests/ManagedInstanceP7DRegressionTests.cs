@@ -288,7 +288,7 @@ public sealed class ManagedInstanceP7DRegressionTests
             await sessions.EnsureCreatedAsync();
             await exercise(
                 sessions,
-                new SqliteAgentInstanceStore(factory),
+                new SqliteAgentInstanceStore(factory, new SystemIdGenerator(clock)),
                 new SqliteStructuredMemoryStore(factory),
                 new SqliteTriggerStore(factory),
                 clock);

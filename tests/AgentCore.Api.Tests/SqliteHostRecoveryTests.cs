@@ -667,7 +667,8 @@ internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler 
             }
 
             services.AddSingleton<IAgentInstanceStore>(provider => new SqliteAgentInstanceStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<IIdGenerator>()));
 
             foreach (var store in services.Where(item => item.ServiceType == typeof(IWorkItemStore)).ToArray())
             {

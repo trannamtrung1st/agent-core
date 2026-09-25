@@ -347,7 +347,7 @@ public sealed class UserMemoryTests
                 new SqliteStructuredMemoryStore(factory),
                 () => new SqliteStructuredMemoryStore(factory),
                 sessions,
-                new SqliteAgentInstanceStore(factory));
+                new SqliteAgentInstanceStore(factory, new SystemIdGenerator(TimeProvider.System)));
         }
         finally
         {

@@ -35,6 +35,33 @@ public static class AdminEventFactory
         return append;
     }
 
+    public static AdminEventAppend ManagedInstanceCreated(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        Guid instanceId,
+        int version,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.ManagedInstanceCreated,
+            "agent.instance",
+            instanceId.ToString("D"),
+            1,
+            version,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                instanceId = instanceId.ToString("D"),
+                version
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
     public static AdminEventAppend PublicationCreated(
         Guid operationId,
         DateTimeOffset occurredAt,

@@ -58,6 +58,13 @@ public static class AdminEventSummaryPolicy
         "sourceVersion"
     };
 
+    private static readonly HashSet<string> ManagedInstanceCreatedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "instanceId",
+        "version"
+    };
+
     private static readonly HashSet<string> DraftCreatedSourceKinds = new(StringComparer.Ordinal)
     {
         nameof(DefinitionDraftSourceKind.New),
@@ -114,10 +121,27 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation == AdminEventOperationKind.ManagedInstanceCreated)
+            {
+                ValidateManagedInstanceCreatedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
             }
+        }
+    }
+
+    private static void ValidateManagedInstanceCreatedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, ManagedInstanceCreatedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "instanceId");
+        if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Managed instance created event summary must include version.");
         }
     }
 
