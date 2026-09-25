@@ -1,6 +1,6 @@
 # P6 — Durable background work and triggered execution
 
-**P6 closure (pending exact-SHA gate).** **Final P6 behavior freeze candidate** is [`bef77d1`](https://github.com/trannamtrung1st/agent-core/commit/bef77d1da7a9464ab56efb66203e1c1deb9e1b2b) (`bef77d1`): `SessionAttachmentRecallTests` completion baseline race fix on top of `aeefffc`. Do not treat P6 as fully frozen until hosted offline gates and Compose smoke both succeed on that exact SHA.
+**P6 closure (pending exact-SHA gate).** **Exact-SHA hosted verification tree** is [`30adaeb`](https://github.com/trannamtrung1st/agent-core/commit/30adaebde4321531448541ba132cb92941d504e7) (`30adaeb`, docs-only over `bef77d1`). **Last behavior-affecting SHA** is [`bef77d1`](https://github.com/trannamtrung1st/agent-core/commit/bef77d1da7a9464ab56efb66203e1c1deb9e1b2b) (`SessionAttachmentRecallTests` completion baseline race on top of `aeefffc`). There is **no** separate Actions run on `bef77d1`; `bef77d1` and `30adaeb` were pushed in sequence, so hosted workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) runs on `30adaeb` only. Do not treat P6 as fully frozen until offline gates and Compose smoke both succeed on **`30adaeb`**.
 
 [`aeefffc`](https://github.com/trannamtrung1st/agent-core/commit/aeefffcce0dda0f3dbf392d6af994fd64a309d2b) remains the **closure runtime repair** (thread-safe `RecordingModel` in Infrastructure tests, ended→live session attach, session-catalog E2E) on top of the `2455de9` Synthetic reminder harness. Hosted workflow [`36083107045`](https://github.com/trannamtrung1st/agent-core/actions/runs/36083107045) on `aeefffc` **failed**: `SessionAttachmentRecallTests.Later_turn_includes_session_attachment_manifest_and_entry_refs` (`TaskCanceledException` after 5s) due to test synchronization debt (baseline captured after submit), not a P6 durable-runtime regression. Docs-only [`567a9a2`](https://github.com/trannamtrung1st/agent-core/commit/567a9a2) workflow [`36082445992`](https://github.com/trannamtrung1st/agent-core/actions/runs/36082445992) was fully green on the same Application test.
 
@@ -23,22 +23,24 @@ The prior freeze on `6900bc1` is superseded. **P7** is next and not started unti
 | `2067a44` | Cross-version resumed `StepCount` normalization |
 | `2455de9` | Synthetic reminder-delivery harness, Manual A Playwright, durable e2e alignment |
 | `aeefffc` | Closure repair: concurrent test double, ended→live attach, catalog E2E |
-| `bef77d1` | `SessionAttachmentRecallTests` terminal-count baseline before submit (`>` not `== completedBefore + 1`) |
+| `bef77d1` | `SessionAttachmentRecallTests` terminal-count baseline before submit (`>` not `== completedBefore + 1`) — **last behavior-affecting** |
+| `30adaeb` | P6 evidence labeling (exact-SHA tree vs last behavior SHA) — **docs-only** |
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
-| **Final P6 behavior freeze candidate SHA** | `bef77d1da7a9464ab56efb66203e1c1deb9e1b2b` (`bef77d1`) |
-| Hosted workflow (`bef77d1`, exact SHA) | **Pending** at push |
+| **Final P6 freeze SHA (exact-SHA tree)** | `30adaebde4321531448541ba132cb92941d504e7` (`30adaeb`) when gate green |
+| **Last behavior-affecting SHA** | `bef77d1da7a9464ab56efb66203e1c1deb9e1b2b` (`bef77d1`) |
+| Hosted workflow (`30adaeb`, exact SHA) | [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) — **in progress** at last review (Compose smoke **success**; offline gates running) |
 | Closure runtime repair (`aeefffc`) | [`36083107045`](https://github.com/trannamtrung1st/agent-core/actions/runs/36083107045) — **failure** (Application attachment-recall test race; runtime repairs unchanged) |
 | **Core durable-runtime repair SHA** | `2067a44a1534623dafc7803d14b8833ee1ba7890` (`2067a44`) |
 | Hosted workflow (`2067a44`, exact SHA) | [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) — **success**. Synthetic offline gates success. Synthetic Compose smoke success |
 | Harness milestone (not freeze) | `2455de938ad4a156189ea7affcea1ca940cd4ec1` (`2455de9`), workflow [`36081962547`](https://github.com/trannamtrung1st/agent-core/actions/runs/36081962547) — offline **failure** |
-| Docs-only descendants | `567a9a2`, `c7434f3` |
+| Docs-only descendants | `567a9a2`, `c7434f3`, `3b83584`, `30adaeb` |
 | Prior implementation freeze (superseded) | `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (`6900bc1`), workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 |
 | P5 baseline preserved | `4bbc0c17bc54746f87fd211174690659869e3e45`, workflow `35954811544` |
-| Faithful Manual A | **pass** on **`2455de9` Synthetic harness** (2026-09-25); **pass** replay on sync-fix tree (2026-09-25, ~90s wall clock) |
+| Faithful Manual A | **pass** on **`2455de9` Synthetic harness** (2026-09-25); **pass** replay on **`30adaeb` tree** (2026-09-25, ~90s wall clock, `/tmp/agent-core-manual-p6-30adaeb.db`) |
 
 Exact-SHA hosted gates on the **final behavior tree** are required; `2067a44` gates do not substitute. A failed or docs-only descendant is not a behavior freeze SHA.
 
@@ -66,16 +68,16 @@ Exact-SHA hosted gates on the **final behavior tree** are required; `2067a44` ga
 | AC-P6-22 | Domain, Application, Infrastructure, and API suites below; Playwright 50 passed |
 | AC-P6-23 | SQLite reopen journeys; Compose volume recreation |
 | AC-P6-24 | Faithful Manual A below — **pass** (harness). Historical scripted Manual A on `6900bc1` retained |
-| AC-P6-25 | This report. Core repair `2067a44` / `36031813141` green; `aeefffc` / `36083107045` failed on unrelated test race; final tree pending green exact-SHA gate |
+| AC-P6-25 | This report. Core `2067a44` / `36031813141` green; `aeefffc` / `36083107045` failed on test race; `30adaeb` / `36085265506` pending at last review |
 | RULE-01..18 | Covered by the batches above. Review 0014 passed W09 at `7a22b25` |
 | RULE-19 | P4 and P5 freeze reports were not rewritten as P6 evidence. Phase I stays not-applicable |
-| RULE-20 | P6 freezes on `bef77d1` when its exact-SHA gate is green (core repair `2067a44`; runtime closure on `aeefffc`). P7 follows |
+| RULE-20 | P6 freezes on `30adaeb` when workflow `36085265506` is green on that exact SHA (`bef77d1` last behavior; core `2067a44`; runtime closure `aeefffc`). P7 follows |
 
 ## Manual evidence
 
 ### Manual A (faithful, detached wall-clock) — pass
 
-Profile **Synthetic**. Disposable host: API `http://127.0.0.1:5098`, SQLite `/tmp/agent-core-manual-p6-faithful.db`, UI `http://127.0.0.1:5190`. **Synthetic harness from `2455de9`** (`ScriptedLanguageModel` reminder delivery + stored intent). Not run on plain `2067a44`.
+Profile **Synthetic**. Disposable host: API `http://127.0.0.1:5098`, UI `http://127.0.0.1:5190`. **Synthetic harness from `2455de9`** (`ScriptedLanguageModel` reminder delivery + stored intent), unchanged through `30adaeb`. **Authoritative replay on final tree:** SQLite `/tmp/agent-core-manual-p6-30adaeb.db` (2026-09-25). Earlier replay `/tmp/agent-core-manual-p6-faithful.db` on pre-`30adaeb` sync-fix tree also passed.
 
 - User text: `check the oven in 1 minute for me` → schedule intent `check the oven`.
 - Session ended before the due instant (`This conversation has ended.`).

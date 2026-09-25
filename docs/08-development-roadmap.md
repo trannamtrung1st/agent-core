@@ -47,7 +47,7 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 
 ## P6 durable background work
 
-**P6** final behavior freeze candidate is **`bef77d1`** (exact-SHA gate pending). Closure runtime repair **`aeefffc`**; gate [`36083107045`](https://github.com/trannamtrung1st/agent-core/actions/runs/36083107045) **failed** on `SessionAttachmentRecallTests` synchronization (not P6 durable runtime). Core repair `2067a44`, workflow [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) green. **P7** blocked until P6 freeze is recorded. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
+**P6** exact-SHA verification tree **`30adaeb`** (gate [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) pending at last review); last behavior **`bef77d1`**. Closure runtime **`aeefffc`**; gate [`36083107045`](https://github.com/trannamtrung1st/agent-core/actions/runs/36083107045) **failed** on Application test synchronization. Core `2067a44`, workflow [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) green. **P7** blocked until P6 freeze is recorded. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 
