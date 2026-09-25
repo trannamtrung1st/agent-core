@@ -56,7 +56,7 @@
 
 ## Deferred to later P7 slices (not W03 gaps)
 
-- Full instance management, persona revision UX, archive (P7D).
+- Full instance management, persona revision UX, archive — delivered in P7D ([p7d-managed-instance-identity.md](p7d-managed-instance-identity.md)).
 - Eval-gated publish and human-readable diff (P7F).
 - Append-only Admin history (P7G).
 

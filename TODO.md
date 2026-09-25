@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** next).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** P7D gate candidate at product `cad4dab` — see `docs/reports/p7d-managed-instance-identity.md`; slice approval pending).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04+ remaining).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D observed gate candidate at product `cad4dab` — slice gate pending; W05+ remaining).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -439,9 +439,9 @@ Changing any published reusable behavior/configuration should produce a new vers
 
 - [x] Keep existing sessions reproducible against the definition version they actually used. *(W02 session-snapshot regression)*
 
-- [ ] Define how a durable Agent Instance adopts/upgrades to another published definition version. *(P7D)*
+- [x] Define how a durable Agent Instance adopts/upgrades to another published definition version. *(observed explicit active-version PATCH; P7G may extend rollback UX)*
 
-- [ ] Do not make definition upgrade equivalent to identity reset. *(P7D)*
+- [x] Do not make definition upgrade equivalent to identity reset. *(observed version reassociation preserves persona and instance id)*
 
 - [x] Support deprecating a definition version without rewriting historical sessions. *(W02 metadata-only deprecate)*
 
@@ -592,9 +592,11 @@ An admin can configure the current agent harness through instructions, capabilit
 
 ## P7D — Agent Instance and identity/persona administration
 
+**Observed (W04 gate candidate, product `cad4dab`; slice approval pending):** managed instance create, persona Form|JSON, version reassociation, archive, managed new-chat inventory, pinned persona on sessions and `session.ready`, archive admission for triggers/schedules. Evidence: [P7D report](docs/reports/p7d-managed-instance-identity.md).
+
 ### Agent Instance lifecycle
 
-- [ ] Add admin lifecycle for durable Agent Instances created from published Agent Definitions.
+- [x] Add admin lifecycle for durable Agent Instances created from published Agent Definitions. *(observed W04; gate pending)*
 
 Support explicit lifecycle states/operations sufficient for the current product, such as:
 
@@ -626,15 +628,15 @@ Support **two views over one typed schema**:
 Form | JSON
 ```
 
-- [ ] Make the form the default UX.
+- [x] Make the form the default UX. *(observed Admin managed controls)*
 
-- [ ] Provide an advanced JSON editor for technical administrators/debugging/import-export.
+- [x] Provide an advanced JSON editor for technical administrators/debugging/import-export.
 
-- [ ] Validate both views against the same server-owned typed schema.
+- [x] Validate both views against the same server-owned typed schema.
 
-- [ ] Do not accept arbitrary trusted identity fields merely because they appeared in JSON.
+- [x] Do not accept arbitrary trusted identity fields merely because they appeared in JSON.
 
-- [ ] Persist persona revisions so historical sessions can resolve the trusted persona/configuration they actually used.
+- [x] Persist persona revisions so historical sessions can resolve the trusted persona/configuration they actually used.
 
 ### Instance lifecycle interactions
 
@@ -664,12 +666,12 @@ Delete/end user relationship:
 
 ### P7D verification
 
-- [ ] Instance create/activate/archive tests.
-- [ ] Definition-upgrade vs identity-reset tests.
-- [ ] Form ↔ JSON round-trip/schema validation tests.
-- [ ] Persona revision/historical resolution tests.
-- [ ] Instance deactivation + future-trigger handling tests.
-- [ ] Cross-instance ownership/isolation regressions.
+- [x] Instance create/activate/archive tests. *(AgentInstanceTests, AdminApiTests, journey)*
+- [x] Definition-upgrade vs identity-reset tests. *(AgentInstanceTests, occurrence routing)*
+- [x] Form ↔ JSON round-trip/schema validation tests. *(Vitest + journey)*
+- [x] Persona revision/historical resolution tests. *(pinned revision + session.ready)*
+- [x] Instance deactivation + future-trigger handling tests. *(TriggerDurablePolicyTests archive admission)*
+- [ ] Cross-instance ownership/isolation regressions. *(owner scoping only; dedicated two-managed-instance regression not in W04 gate)*
 
 ### P7D stop condition
 
