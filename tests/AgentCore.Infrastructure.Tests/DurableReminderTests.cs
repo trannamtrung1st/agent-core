@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Tools;
@@ -1933,20 +1934,23 @@ public sealed class DurableReminderTests
 
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel
     {
+        private int calls;
+        private ModelRequest? lastRequest;
+
         public ILanguageModel Inner { get; } = inner;
 
-        public int Calls { get; private set; }
-        public ModelRequest? Request { get; private set; }
-        public List<ModelRequest> Requests { get; } = [];
+        public int Calls => Volatile.Read(ref calls);
+        public ModelRequest? Request => Volatile.Read(ref lastRequest);
+        public ConcurrentQueue<ModelRequest> Requests { get; } = new();
         public ModelCapabilities Capabilities => Inner.Capabilities;
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
             ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            Calls++;
-            Request = request;
-            Requests.Add(request);
+            Interlocked.Increment(ref calls);
+            Volatile.Write(ref lastRequest, request);
+            Requests.Enqueue(request);
             await foreach (var update in Inner.GenerateAsync(request, cancellationToken))
             {
                 yield return update;

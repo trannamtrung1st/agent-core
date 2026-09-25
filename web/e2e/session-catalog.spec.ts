@@ -155,3 +155,37 @@ test("session catalog orders by latest update, renames, and deletes ended sessio
   await expect(owned).toHaveCount(1);
   await expect(owned.nth(0)).toContainText(revisedTitle);
 });
+
+test("returns from an ended chat to a live session without stuck Connecting", async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const liveTitle = `Live session ${stamp}`;
+  const endedTitle = `Ended session ${stamp}`;
+
+  await page.goto("/");
+  await startTextSession(page, liveTitle);
+  await returnToPicker(page);
+  await renameFirstRow(page, liveTitle);
+
+  await startTextSession(page, endedTitle);
+  await returnToPicker(page);
+  await renameFirstRow(page, endedTitle);
+
+  const liveRow = page.locator(".session-row").filter({ hasText: liveTitle });
+  const endedRow = page.locator(".session-row").filter({ hasText: endedTitle });
+
+  await endedRow.getByRole("button", { name: endedTitle, exact: true }).click();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await endConversation(page);
+  await expect(page.getByText("This conversation has ended.")).toBeVisible();
+
+  await endedRow.getByRole("button", { name: endedTitle, exact: true }).click();
+  await expect(page.getByText("This conversation has ended.")).toBeVisible();
+  await expect(page.getByTestId("connection")).toHaveText("Ended", { timeout: 15_000 });
+
+  await liveRow.getByRole("button", { name: liveTitle, exact: true }).click();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.getByTestId("connection")).not.toHaveText("Connecting", { timeout: 1_000 });
+  await expect(page.locator(".conversation-scroll").getByText(liveTitle, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+});

@@ -716,11 +716,18 @@ async function recoverFromSequenceGap(): Promise<void> {
 }
 
 function handleEvent(raw: ServerEvent): void {
-  if (!connection || isReadonlySession(useSessionStore.getState())) {
+  if (!connection) {
     return;
   }
 
   const prior = useSessionStore.getState();
+  if (raw.type === "session.ready") {
+    if (!sameSessionId(prior.sessionId, raw.sessionId)) {
+      return;
+    }
+  } else if (isReadonlySession(prior)) {
+    return;
+  }
   if (hasControlSequenceGap(prior, raw)) {
     abortPlayback();
     useSessionStore.setState(applyServerEvent(prior, raw));
@@ -1678,6 +1685,8 @@ async function startConnection(
 
     handleHubClosed();
   });
+  const priorShell = useSessionStore.getState();
+  const bootstrapLifecycle = !sameSessionId(priorShell.sessionId, sessionId);
   useSessionStore.setState({
     connection: "connecting",
     sessionId,
@@ -1687,7 +1696,14 @@ async function startConnection(
     captureLive: false,
     lastServerSequence: 0,
     error: null,
-    errorFatal: false
+    errorFatal: false,
+    ...(bootstrapLifecycle
+      ? {
+          status: "created",
+          lifecycleStatus: null,
+          pauseReason: null
+        }
+      : {})
   });
   if (options?.syncUrl && options.syncUrl !== "none") {
     syncBrowserSessionPath(sessionId, options.syncUrl);
