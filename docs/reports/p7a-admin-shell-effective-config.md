@@ -2,8 +2,8 @@
 
 **Status:** candidate (W01 review-fix batch)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Candidate SHA:** `fcb0f603` (full: `fcb0f60` on `main`)  
-**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..fcb0f60` (includes initial W01 `561d151`/`bd1922f` and review-fix `fcb0f60`)
+**Candidate SHA:** `b2a4afb1f314a5f48d9c017a3349a60e387b5a8b`  
+**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..b2a4afb1f314a5f48d9c017a3349a60e387b5a8b` (initial W01 `561d151`/`bd1922f` plus review-fix commit on `main`). Evidence-only report alignment: `37aba2286d744d86deb10c61ecf30bbb82692d6f`.
 
 ## Scope delivered
 
