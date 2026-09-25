@@ -38,13 +38,10 @@
 
 ## Remaining (W07)
 
-- Frozen P7G §8 whole-phase deterministic E2E (all 26 steps in one Playwright scenario with state/API assertions).
 - Final gate evidence per frozen P7G contract (full regression matrix, hosted CI on candidate SHA).
 
-## W07 browser (partial)
+## W07 browser
 
 | Check | Command | Result |
 | --- | --- | --- |
-| P7G partial Admin lifecycle (persona, version/deprecate/archive/history slice) | `CI=1 pnpm exec playwright test e2e/admin-lifecycle.spec.ts` | Pass (1) with disposable `PLAYWRIGHT_SQLITE_PATH` (optional; no sqlite seeds in this spec) |
-
-Related complementary browser coverage (not a substitute for §8): `z-admin-resource-journey.spec.ts`, `z-admin-managed-instance-journey.spec.ts`, `z-admin-memory-automation-journey.spec.ts`.
+| P7G §8 whole-phase Admin lifecycle | `PLAYWRIGHT_SQLITE_PATH=<disposable.db> CI=1 pnpm exec playwright test e2e/admin-lifecycle.spec.ts` | Pass (1) |

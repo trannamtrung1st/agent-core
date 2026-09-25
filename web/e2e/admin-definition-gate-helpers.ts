@@ -40,9 +40,12 @@ export async function ensureToolAllowlisted(
 export async function completeDefinitionDraftPublishGate(
   page: Page,
   draftsSection: Locator,
-  toolName = "knowledge.retrieve"
+  toolName = "knowledge.retrieve",
+  options?: { skipToolAllowlist?: boolean }
 ) {
-  await ensureToolAllowlisted(page, draftsSection, toolName);
+  if (!options?.skipToolAllowlist) {
+    await ensureToolAllowlisted(page, draftsSection, toolName);
+  }
 
   await draftsSection.getByRole("tab", { name: "Test & Publish" }).click();
   const gate = draftsSection.getByLabel("Test validate and publish gate");

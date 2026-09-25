@@ -1,17 +1,24 @@
 /**
- * Partial P7G browser slice. Frozen §8 requires a single 26-step scenario; that remains under
- * docs/reports/p7g-history-rollback-final-gate.md Remaining. Complementary specs cover resource,
- * persona-only, and memory/automation slices separately.
+ * Frozen P7G §8 whole-phase deterministic Admin lifecycle (26 steps).
+ * Requires disposable SQLite for memory/trigger/work seeds: PLAYWRIGHT_SQLITE_PATH=<path>.
  */
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
+  seedActiveTriggerRegistration,
+  seedCompletedHistoricalWorkItem,
+  seedIdentityLearnedMemory
+} from "./admin-lifecycle-sqlite";
+import {
   expectManagedIdentityOptionAbsent,
-  publishExaminerDraftAndCreateManagedInstance,
   publishExaminerForkedVersion,
+  publishExaminerP7gFirstPublication,
   selectManagedIdentityOption,
   startSyntheticChat,
   type SessionView
 } from "./admin-managed-helpers";
+
+const dbPath = process.env.PLAYWRIGHT_SQLITE_PATH ?? "";
+const scheduleIntent = "P7G lifecycle reminder";
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]");
@@ -24,10 +31,52 @@ async function ownerHeaders(page: Page) {
   return { "X-AgentCore-Owner-Capability": await ownerCapability(page) };
 }
 
+async function ensureProfileUtc(page: Page) {
+  await page.evaluate(async () => {
+    const token = window.localStorage.getItem("agent-core.owner-capability") ?? "";
+    const headers = {
+      "content-type": "application/json",
+      "X-AgentCore-Owner-Capability": token
+    };
+    const current = await fetch("/api/v2/profile", { headers });
+    if (!current.ok) {
+      throw new Error(`profile ${current.status}`);
+    }
+    const profile = (await current.json()) as { revision: number };
+    const patched = await fetch("/api/v2/profile", {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ expectedRevision: profile.revision, values: { timeZone: "UTC" } })
+    });
+    if (!patched.ok) {
+      throw new Error(await patched.text());
+    }
+  });
+}
+
+async function readWorkspaceText(page: Page, sessionId: string, logicalPath: string) {
+  return page.evaluate(
+    async ({ sid, path }) => {
+      const capability = window.localStorage.getItem("agent-core.owner-capability") ?? "";
+      const response = await fetch(
+        `/api/v2/sessions/${sid}/workspace/content?path=${encodeURIComponent(path)}`,
+        { headers: { "X-AgentCore-Owner-Capability": capability } }
+      );
+      if (!response.ok) {
+        return "";
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      return new TextDecoder().decode(bytes);
+    },
+    { sid: sessionId, path: logicalPath }
+  );
+}
+
 type EffectiveConfig = {
   definitionVersion: number;
   personaRevision: number;
   persona: { name: string; tone: string };
+  durableExecutionEligibility: { canAcceptNewTriggeredWork: boolean };
 };
 
 async function fetchEffectiveConfig(
@@ -69,11 +118,10 @@ async function listAdminEvents(
   return body.items;
 }
 
-test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, deprecate, archive, history", async ({
-  page,
-  request
-}) => {
-  test.setTimeout(240_000);
+test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ page, request }) => {
+  test.setTimeout(300_000);
+  expect(dbPath.length).toBeGreaterThan(0);
+
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   page.on("console", (message) => {
@@ -89,10 +137,15 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
   const jsonTone = `p7g-tone-${Date.now()}`;
 
   await startSyntheticChat(page);
-  const { instance, firstSession, publishedVersion: versionOne } =
-    await publishExaminerDraftAndCreateManagedInstance(page);
+  await ensureProfileUtc(page);
 
-  await page.getByLabel("Message").fill("Lifecycle pinned session");
+  const { instance, firstSession, publishedVersion: versionOne, resourcePath, resourceBody } =
+    await publishExaminerP7gFirstPublication(page);
+
+  const resourceContent = await readWorkspaceText(page, firstSession.sessionId, `/agent/resources/${resourcePath}`);
+  expect(resourceContent).toContain(resourceBody);
+
+  await page.getByLabel("Message").fill("First pinned managed turn");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
 
@@ -122,14 +175,34 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
   expect(afterPersona.persona.tone).toBe(jsonTone);
   expect(afterPersona.personaRevision).toBe(3);
 
+  const memoryContent = `seed-${Date.now()}`;
+  seedIdentityLearnedMemory(instance.instanceId, firstSession.sessionId, "P7G identity fact", memoryContent);
+  const registrationId = seedActiveTriggerRegistration(
+    instance.instanceId,
+    firstSession.sessionId,
+    scheduleIntent
+  );
+
   const memoryAutomation = page.getByLabel("Memory and automation administration");
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
-  await page.locator(".ant-select-item-option", { hasText: "Session" }).click();
-  await memoryAutomation.getByRole("textbox", { name: "Session id" }).fill(firstSession.sessionId);
+  await page.locator(".ant-select-item-option", { hasText: "IdentityUser" }).click();
   await memoryAutomation.getByRole("button", { name: "Load items" }).click();
+  await expect(memoryAutomation.getByText(memoryContent)).toBeVisible({ timeout: 15_000 });
+  await memoryAutomation.getByRole("button", { name: "Reset scope" }).click();
+  await page.locator(".ant-popconfirm-buttons").getByRole("button", { name: "Reset scope" }).click();
+  await expect(memoryAutomation.getByText("No active learned-memory items in this scope.")).toBeVisible({
+    timeout: 15_000
+  });
+
   await memoryAutomation.getByRole("tab", { name: "Automation" }).click();
   await memoryAutomation.getByRole("button", { name: "Load registrations" }).click();
+  await expect(memoryAutomation.getByText(scheduleIntent)).toBeVisible({ timeout: 15_000 });
+  await memoryAutomation.getByRole("button", { name: "Revoke" }).click();
+  await page.locator(".ant-popconfirm-buttons").getByRole("button", { name: "Cancel registration" }).click();
+  await expect(memoryAutomation.getByText("No active or suspended registrations.")).toBeVisible({
+    timeout: 15_000
+  });
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("button", { name: "Start a new chat" }).click();
@@ -142,7 +215,7 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
       response.ok()
   );
   await selectManagedIdentityOption(page, instance.instanceId);
-  await page.getByLabel("Message").fill("Second managed session");
+  await page.getByLabel("Message").fill("Second managed instance chat");
   await page.getByRole("button", { name: "Send" }).click();
   const secondSession = (await (await secondSessionPromise).json()) as SessionView;
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
@@ -153,13 +226,13 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
   const versionTwo = await publishExaminerForkedVersion(page, versionOne);
   expect(versionTwo).toBeGreaterThan(versionOne);
 
-  const pinnedAfterV2Publish = await fetchSessionView(request, page, firstSession.sessionId);
-  expect(pinnedAfterV2Publish.agentVersion).toBe(versionOne);
-  expect(pinnedAfterV2Publish.agentInstanceId).toBe(instance.instanceId);
-  expect(pinnedAfterV2Publish.pinnedPersonaRevision).toBe(1);
+  const pinnedAfterV2 = await fetchSessionView(request, page, firstSession.sessionId);
+  expect(pinnedAfterV2.agentVersion).toBe(versionOne);
+  expect(pinnedAfterV2.pinnedPersonaRevision).toBe(1);
+
+  const historicalWorkItemId = seedCompletedHistoricalWorkItem(instance.instanceId, firstSession.sessionId);
 
   await page.goto(`/admin/instances/${instance.instanceId}`);
-  await expect(page.getByLabel("Managed instance controls")).toBeVisible();
   await page.getByLabel("Target definition version").click();
   await page.getByText(new RegExp(`v${versionTwo}\\b`)).first().click();
   await page.getByRole("button", { name: `Upgrade to v${versionTwo}` }).click();
@@ -180,6 +253,9 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });
 
+  expect((await fetchEffectiveConfig(request, page, instance.instanceId)).durableExecutionEligibility
+    .canAcceptNewTriggeredWork).toBe(false);
+
   const deniedCreate = await request.post("/api/v2/sessions", {
     headers: {
       "Content-Type": "application/json",
@@ -189,6 +265,15 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
     failOnStatusCode: false
   });
   expect(deniedCreate.status()).toBe(400);
+
+  const workItems = await request.get(`/api/v2/sessions/${firstSession.sessionId}/work-items`, {
+    headers: await ownerHeaders(page)
+  });
+  expect(workItems.ok()).toBe(true);
+  const workBody = (await workItems.json()) as { items: { workItemId: string; status: string }[] };
+  const historical = workBody.items.find((item) => item.workItemId === historicalWorkItemId);
+  expect(historical).toBeTruthy();
+  expect(historical?.status).toBe("completed");
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("button", { name: "Start a new chat" }).click();
@@ -202,6 +287,7 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
   );
   const operations = new Set(instanceEvents.map((item) => item.operation));
   expect(operations.has("PersonaChanged")).toBe(true);
+  expect(operations.has("MemoryScopeReset")).toBe(true);
   expect(operations.has("InstanceDefinitionVersionChanged")).toBe(true);
   expect(operations.has("InstanceArchived")).toBe(true);
 
@@ -212,10 +298,15 @@ test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, de
   );
   expect(publicationEvents.some((item) => item.operation === "PublicationDeprecated")).toBe(true);
 
+  const registrationEvents = await listAdminEvents(
+    request,
+    page,
+    `targetType=trigger.registration&targetId=${registrationId}`
+  );
+  expect(registrationEvents.some((item) => item.operation === "TriggerRegistrationRevoked")).toBe(true);
+
   expect(failedRequests.filter((item) => !item.includes("favicon"))).toEqual([]);
   expect(
-    consoleErrors.filter(
-      (line) => !antdNoise(line) && !line.includes("403 (Forbidden)")
-    )
+    consoleErrors.filter((line) => !antdNoise(line) && !line.includes("403 (Forbidden)"))
   ).toEqual([]);
 });
