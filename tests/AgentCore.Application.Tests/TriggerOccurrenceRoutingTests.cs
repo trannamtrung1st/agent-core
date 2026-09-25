@@ -274,14 +274,14 @@ public sealed class TriggerOccurrenceRoutingTests
         var support = await StartAsync();
         await using var supportRuntime = support.Runtime;
         var pending = await Ingress(support).PublishOrderStatusAsync(support.Owner, Guid.NewGuid(), "E-1", "delayed", null);
-        await support.Instances.UpdateActiveVersionAsync(InstanceId, 1, Now);
+        _ = await ReassociateActiveVersionAsync(support.Instances, InstanceId, 1, Now);
         await Router(support, [supportRuntime.Snapshot.SessionId], supportRuntime).RouteOnceAsync();
         Assert.Equal(
             OccurrenceRoutingDisposition.Rejected,
             (await support.Store.GetOccurrenceAsync(support.Owner, pending.Occurrence!.OccurrenceId))!.Disposition);
         Assert.Empty(await support.Store.ListByDispositionAsync(OccurrenceRoutingDisposition.AwaitingDurableWork, 10));
 
-        await support.Instances.UpdateActiveVersionAsync(InstanceId, 2, Now);
+        _ = await ReassociateActiveVersionAsync(support.Instances, InstanceId, 2, Now);
         var ended = await Ingress(support).PublishOrderStatusAsync(support.Owner, Guid.NewGuid(), "E-2", "shipped", null);
         Assert.True(await supportRuntime.RequestEndAsync());
         await supportRuntime.WaitUntilIdleAsync();
@@ -565,6 +565,22 @@ public sealed class TriggerOccurrenceRoutingTests
             runtime is null ? new UnavailableMailbox() : new RuntimeMailbox(runtime),
             new SystemIdGenerator(TimeProvider.System),
             harness.Time);
+
+    private static async ValueTask<AgentInstance> ReassociateActiveVersionAsync(
+        IAgentInstanceStore instances,
+        Guid instanceId,
+        int version,
+        DateTimeOffset updatedAt)
+    {
+        var instance = await instances.FindAsync(instanceId).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Managed instance is missing.");
+        var updated = await instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(instanceId, instance.Revision, ActiveVersion: version),
+                updatedAt)
+            .ConfigureAwait(false);
+        Assert.Equal(version, updated.ActiveVersion);
+        return updated;
+    }
 
     private static TriggerAdmissionGuard Guard(InMemoryTriggerStore store, bool includeInstance) =>
         GuardAsync(store, includeInstance).GetAwaiter().GetResult().Guard;

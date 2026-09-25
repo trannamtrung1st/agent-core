@@ -160,6 +160,87 @@ public sealed class TriggerDurablePolicyTests
     }
 
     [Fact]
+    public async Task Archived_managed_instance_denies_schedule_create_and_due_admission()
+    {
+        var definitions = Definitions();
+        var instances = new InMemoryAgentInstanceStore();
+        var memory = new InMemoryMemoryStore();
+        var clock = new FakeTimeProvider(Now);
+        var instanceService = new AgentInstanceService(instances, definitions, memory, Ids(8), clock);
+        var v9 = (await definitions.GetAsync("general-assistant", 9))!;
+        var managed = await instanceService.CreateAsync("general-assistant", 9);
+        await memory.SaveProfileAsync(
+            new UserProfile(ProfileId, 1, new Dictionary<string, UserProfileValue>
+            {
+                ["timeZone"] = new("UTC", UserProfileValueSource.UserSet, Now)
+            }, Now),
+            0);
+
+        var store = new InMemoryTriggerStore();
+        var registrations = new TriggerRegistrationService(store, Ids(4, "019944af-00d2-7000-8000-"), clock);
+        var owner = new TriggerOwner(managed.InstanceId, ProfileId);
+        var due = Now.AddMinutes(1);
+        await store.CreateAsync(new TriggerRegistration(
+            Guid.Parse("019944af-00d2-7000-8000-000000000001"),
+            owner,
+            TriggerRegistrationStatus.Active,
+            "Hello",
+            new OneShotSchedule(due, "UTC", null, null),
+            due,
+            null,
+            0,
+            1,
+            1,
+            new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, null, null, Now, Now),
+            null));
+
+        var archived = await instanceService.SetLifecycleAsync(
+            managed.InstanceId,
+            AgentInstanceLifecycle.Archived,
+            managed.Revision);
+        Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
+
+        var context = new TriggerCommandContext(
+            owner,
+            Guid.NewGuid(),
+            "UTC",
+            "remind me tomorrow at 9",
+            "en",
+            TriggerAuthorizationClassification.CurrentUserTurn,
+            TriggerCommandAction.Create,
+            false,
+            null,
+            Guid.NewGuid(),
+            Now);
+        using var args = JsonDocument.Parse("""{"intent":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        var denied = await TriggerScheduleCommands.ExecuteAsync(
+            v9,
+            registrations,
+            ToolCatalog.TriggerScheduleOnce,
+            args.RootElement,
+            context,
+            CancellationToken.None,
+            new HeuristicTriggerCommandAuthorizer(),
+            instances,
+            definitions,
+            memory);
+        Assert.Contains("\"error\":\"policy\"", denied.Text, StringComparison.Ordinal);
+
+        var guard = new TriggerAdmissionGuard(instances, definitions, memory);
+        var applicationEvent = await guard.EvaluateAsync(owner, TriggerSourceKind.ApplicationEvent, CancellationToken.None);
+        Assert.Equal(TriggerAdmissionDecisionKind.Suspend, applicationEvent.Kind);
+        Assert.Contains("not active", applicationEvent.Reason, StringComparison.OrdinalIgnoreCase);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var scheduler = new TriggerScheduler(store, NullLogger<TriggerScheduler>.Instance, guard);
+        var pass = await scheduler.RunOnceAsync(clock.GetUtcNow());
+        Assert.Equal(0, pass.Admitted);
+        var afterDue = (await store.ListAsync(owner, null))[0];
+        Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, afterDue.Status);
+        Assert.Contains("not active", afterDue.SuspensionReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Schedule_create_denies_when_durable_instance_is_missing()
     {
         var definitions = Definitions();
