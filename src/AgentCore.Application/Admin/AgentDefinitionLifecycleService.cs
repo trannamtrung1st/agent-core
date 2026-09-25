@@ -9,7 +9,8 @@ public sealed class AgentDefinitionLifecycleService(
     IBuiltInAgentDefinitionStore builtIns,
     IAgentDefinitionAdminStore admin,
     ProviderAliasSet aliases,
-    TimeProvider time)
+    TimeProvider time,
+    IIdGenerator ids)
 {
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
         CancellationToken cancellationToken = default) =>
@@ -124,7 +125,12 @@ public sealed class AgentDefinitionLifecycleService(
         }
 
         return await admin.DeprecatePublicationAsync(
-            new AgentDefinitionPublicationDeprecate(definitionId, version, expectedMetadataRevision, time.GetUtcNow()),
+            new AgentDefinitionPublicationDeprecate(
+                definitionId,
+                version,
+                expectedMetadataRevision,
+                time.GetUtcNow(),
+                ids.NewId()),
             cancellationToken).ConfigureAwait(false);
     }
 

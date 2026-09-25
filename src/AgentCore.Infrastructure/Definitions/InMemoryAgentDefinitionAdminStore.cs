@@ -277,32 +277,67 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_publications.TryGetValue((deprecate.DefinitionId, deprecate.Version), out var current))
+        var gate = DefinitionPublicationLockRegistry.For(deprecate.DefinitionId, deprecate.Version);
+        lock (gate)
         {
-            throw AgentCoreErrors.NotFound("Publication was not found.");
-        }
+            if (!_publications.TryGetValue((deprecate.DefinitionId, deprecate.Version), out var current))
+            {
+                throw AgentCoreErrors.NotFound("Publication was not found.");
+            }
 
-        if (current.MetadataRevision != deprecate.ExpectedMetadataRevision)
-        {
-            throw AgentCoreErrors.Conflict("Publication metadata revision is stale.");
-        }
+            if (current.MetadataRevision != deprecate.ExpectedMetadataRevision)
+            {
+                throw AgentCoreErrors.Conflict("Publication metadata revision is stale.");
+            }
 
-        if (current.Status == DefinitionPublicationStatus.Deprecated)
-        {
-            return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(current));
-        }
+            if (current.Status == DefinitionPublicationStatus.Deprecated)
+            {
+                return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(current));
+            }
 
-        var next = AgentDefinitionAdminSnapshots.Freeze(current with
-        {
-            Status = DefinitionPublicationStatus.Deprecated,
-            MetadataRevision = current.MetadataRevision + 1
-        });
-        if (!_publications.TryUpdate((deprecate.DefinitionId, deprecate.Version), next, current))
-        {
-            throw AgentCoreErrors.Conflict("Publication metadata revision is stale.");
-        }
+            var nextMetadataRevision = current.MetadataRevision + 1;
+            AdminEventAppend? historyAppend = null;
+            if (deprecate.OperationId != Guid.Empty)
+            {
+                if (EventStore is null)
+                {
+                    throw AgentCoreErrors.Validation("Admin publication history is not available.");
+                }
 
-        return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
+                historyAppend = AdminEventFactory.PublicationDeprecated(
+                    deprecate.OperationId,
+                    deprecate.UpdatedAt,
+                    deprecate.DefinitionId,
+                    deprecate.Version,
+                    nextMetadataRevision,
+                    deprecate.ActorKind);
+            }
+
+            var next = AgentDefinitionAdminSnapshots.Freeze(current with
+            {
+                Status = DefinitionPublicationStatus.Deprecated,
+                MetadataRevision = nextMetadataRevision
+            });
+            if (!_publications.TryUpdate((deprecate.DefinitionId, deprecate.Version), next, current))
+            {
+                throw AgentCoreErrors.Conflict("Publication metadata revision is stale.");
+            }
+
+            if (historyAppend is not null)
+            {
+                try
+                {
+                    EventStore!.AppendWithinLock(historyAppend);
+                }
+                catch
+                {
+                    _publications.TryUpdate((deprecate.DefinitionId, deprecate.Version), current, next);
+                    throw;
+                }
+            }
+
+            return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
+        }
     }
 
     internal InMemoryAgentDefinitionResourceAdminStore? ResourceStore { get; set; }

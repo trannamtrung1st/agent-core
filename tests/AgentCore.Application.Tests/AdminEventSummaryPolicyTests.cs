@@ -16,6 +16,19 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
+    public void PublicationDeprecated_summary_includes_metadata_revision()
+    {
+        var append = AdminEventFactory.PublicationDeprecated(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            2,
+            3);
+        Assert.Contains("\"metadataRevision\":3", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
     public void PublicationCreated_summary_includes_allowlisted_changed_sections()
     {
         var append = AdminEventFactory.PublicationCreated(

@@ -309,8 +309,31 @@ public sealed class SqliteAgentDefinitionAdminStore(
             return AgentDefinitionAdminMapping.MapPublication(row);
         }
 
+        var nextMetadataRevision = deprecate.ExpectedMetadataRevision + 1;
+        AdminEventAppend? historyAppend = null;
+        if (deprecate.OperationId != Guid.Empty)
+        {
+            historyAppend = AdminEventFactory.PublicationDeprecated(
+                deprecate.OperationId,
+                deprecate.UpdatedAt,
+                deprecate.DefinitionId,
+                deprecate.Version,
+                nextMetadataRevision,
+                deprecate.ActorKind);
+        }
+
         row.Status = (int)DefinitionPublicationStatus.Deprecated;
-        row.MetadataRevision = deprecate.ExpectedMetadataRevision + 1;
+        row.MetadataRevision = nextMetadataRevision;
+        if (historyAppend is not null)
+        {
+            var existing = await AdminEventPersistence.TryGetByOperationIdAsync(db, deprecate.OperationId, cancellationToken)
+                .ConfigureAwait(false);
+            if (existing is null)
+            {
+                AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+            }
+        }
+
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

@@ -71,4 +71,6 @@ public sealed record AgentDefinitionPublicationDeprecate(
     string DefinitionId,
     int Version,
     long ExpectedMetadataRevision,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid OperationId = default,
+    AdminEventActorKind ActorKind = AdminEventActorKind.LocalOwner);

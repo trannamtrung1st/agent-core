@@ -65,7 +65,8 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            clock);
+            clock,
+            new SystemIdGenerator(clock));
         var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
         var validation = new AgentDefinitionDraftValidationService(
             lifecycle,
@@ -234,7 +235,8 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            clock);
+            clock,
+            new SystemIdGenerator(clock));
         var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
         var store = evaluationStore ?? new InMemoryDefinitionDraftEvaluationStore(admin);
         return new AgentDefinitionDraftEvaluationService(

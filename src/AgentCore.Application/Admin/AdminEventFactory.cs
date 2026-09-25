@@ -44,4 +44,31 @@ public static class AdminEventFactory
         AdminEventSummaryPolicy.ValidateAppend(append);
         return append;
     }
+
+    public static AdminEventAppend PublicationDeprecated(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        int version,
+        long metadataRevision,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.PublicationDeprecated,
+            "definition.publication",
+            $"{definitionId}:{version}",
+            metadataRevision,
+            version,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                version,
+                metadataRevision
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
 }

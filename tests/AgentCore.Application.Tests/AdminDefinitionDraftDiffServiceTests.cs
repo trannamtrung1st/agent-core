@@ -84,7 +84,8 @@ public sealed class AdminDefinitionDraftDiffServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            clock);
+            clock,
+            new SystemIdGenerator(clock));
         var forked = await lifecycle.ForkDraftAsync(
             "examiner",
             1,
@@ -120,7 +121,8 @@ public sealed class AdminDefinitionDraftDiffServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            clock);
+            clock,
+            new SystemIdGenerator(clock));
         var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
         return new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);
     }

@@ -42,6 +42,13 @@ public static class AdminEventSummaryPolicy
         "changedSections"
     };
 
+    private static readonly HashSet<string> PublicationDeprecatedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "version",
+        "metadataRevision"
+    };
+
     public static void ValidateAppend(AdminEventAppend append)
     {
         if (string.IsNullOrWhiteSpace(append.SummaryJson))
@@ -79,10 +86,31 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation == AdminEventOperationKind.PublicationDeprecated)
+            {
+                ValidatePublicationDeprecatedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
             }
+        }
+    }
+
+    private static void ValidatePublicationDeprecatedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, PublicationDeprecatedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Publication deprecated event summary must include version.");
+        }
+
+        if (!root.TryGetProperty("metadataRevision", out var revision) || revision.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Publication deprecated event summary must include metadataRevision.");
         }
     }
 

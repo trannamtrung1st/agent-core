@@ -1120,6 +1120,42 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_events_records_publication_deprecated_after_deprecate()
+    {
+        var client = OwnerClient();
+        const string definitionId = "p7g-deprecate-history";
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                definitionId,
+                JsonSerializer.SerializeToElement(SampleDraftCandidate(definitionId), JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        Assert.NotNull(draft);
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(draft.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+
+        var deprecate = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definitions/{definitionId}/publications/{publication!.Version}/deprecate",
+            new AdminDeprecateDefinitionPublicationRequest(publication.MetadataRevision));
+        deprecate.EnsureSuccessStatusCode();
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=definition.publication&targetId={definitionId}:{publication.Version}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.PublicationDeprecated)
+                && item.Version == publication.Version
+                && item.Summary.TryGetProperty("metadataRevision", out var revision)
+                && revision.GetInt64() == publication.MetadataRevision + 1);
+    }
+
+    [Fact]
     public async Task Admin_definitions_inventory_marks_durable_publication_source()
     {
         var client = OwnerClient();

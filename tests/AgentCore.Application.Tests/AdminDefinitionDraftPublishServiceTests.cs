@@ -92,7 +92,8 @@ public sealed class AdminDefinitionDraftPublishServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            clock);
+            clock,
+            new SystemIdGenerator(clock));
         var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
         var validation = new AgentDefinitionDraftValidationService(
             lifecycle,
