@@ -77,6 +77,13 @@ jobs:
           PLAYWRIGHT_FAITHFUL_MANUAL=1 \
             pnpm exec playwright test --project=faithful-manual
 
+      - name: P7G whole-phase Admin lifecycle Playwright
+        working-directory: web
+        run: |
+          rm -f ../data/playwright/admin-lifecycle-isolated.db
+          PLAYWRIGHT_SQLITE_PATH=../data/playwright/admin-lifecycle-isolated.db \
+            pnpm exec playwright test --project=admin-lifecycle
+
       - name: Upload Playwright failure
         if: failure()
         uses: actions/upload-artifact@v4

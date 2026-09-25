@@ -38,10 +38,12 @@
 
 ## Remaining (W07)
 
-- Final gate evidence per frozen P7G contract (full regression matrix, hosted CI on candidate SHA).
+- Full local regression matrix per frozen P7G §9 and W08 candidate gate (solution-wide `dotnet test`, P3–P6 regression selections, Compose smoke).
+- Hosted `synthetic` workflow green on the exact final candidate SHA (CI now runs `admin-lifecycle.spec.ts` on an isolated SQLite file; verify on push).
 
 ## W07 browser
 
 | Check | Command | Result |
 | --- | --- | --- |
-| P7G §8 whole-phase Admin lifecycle | `PLAYWRIGHT_SQLITE_PATH=<disposable.db> CI=1 pnpm exec playwright test e2e/admin-lifecycle.spec.ts` | Pass (1) |
+| P7G §8 whole-phase Admin lifecycle (local) | `PLAYWRIGHT_SQLITE_PATH=<disposable.db> CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) |
+| P7G §8 whole-phase Admin lifecycle (CI) | `.github/workflows/synthetic.yml` step `P7G whole-phase Admin lifecycle Playwright` | Wired (isolated `admin-lifecycle-isolated.db`; excluded from default `synthetic` project to avoid shared-DB pollution) |

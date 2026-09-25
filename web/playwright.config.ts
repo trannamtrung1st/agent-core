@@ -55,9 +55,11 @@ export default defineConfig({
   projects: [
     {
       name: "synthetic",
-      testIgnore: /browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts/
+      testIgnore:
+        /browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts|admin-lifecycle\.spec\.ts/
     },
     { name: "faithful-manual", testMatch: /manual-a-faithful-wall-clock\.spec\.ts/ },
+    { name: "admin-lifecycle", testMatch: /admin-lifecycle\.spec\.ts/ },
     { name: "browser-stt", testMatch: /browser-stt\.spec\.ts/, use: { baseURL: browserSttWebUrl } },
     { name: "browser-browser", testMatch: /browser-browser\.spec\.ts/, use: { baseURL: browserBrowserWebUrl } }
   ],
