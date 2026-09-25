@@ -109,6 +109,9 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IAgentDefinitionAdminStore>(provider => new SqliteAgentDefinitionAdminStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<IIdGenerator>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -130,6 +133,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
+            services.TryAddSingleton<IAgentDefinitionAdminStore, InMemoryAgentDefinitionAdminStore>();
         }
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<ISessionWorkspace>(provider => new FileSessionWorkspace(
@@ -178,7 +182,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<RoleKnowledgeService>();
         services.TryAddSingleton(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
-        services.TryAddSingleton<IAgentDefinitionAdminStore, InMemoryAgentDefinitionAdminStore>();
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new CompositeAgentDefinitionStore(
                 provider.GetRequiredService<FileAgentDefinitionStore>(),

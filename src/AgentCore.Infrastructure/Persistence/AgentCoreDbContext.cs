@@ -105,6 +105,29 @@ public sealed class OwnerCapabilityRecord
     public long CreatedAtUtc { get; set; }
 }
 
+public sealed class AgentDefinitionDraftRecord
+{
+    public string DraftId { get; set; } = "";
+    public string DefinitionId { get; set; } = "";
+    public long Revision { get; set; }
+    public string CandidateJson { get; set; } = "";
+    public int SourceKind { get; set; }
+    public int? SourceVersion { get; set; }
+    public long CreatedAtUtc { get; set; }
+    public long UpdatedAtUtc { get; set; }
+}
+
+public sealed class AgentDefinitionPublicationRecord
+{
+    public string DefinitionId { get; set; } = "";
+    public int Version { get; set; }
+    public string PayloadJson { get; set; } = "";
+    public long SourceDraftRevision { get; set; }
+    public int Status { get; set; }
+    public long MetadataRevision { get; set; }
+    public long PublishedAtUtc { get; set; }
+}
+
 public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> options) : DbContext(options)
 {
     public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
@@ -121,6 +144,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
     public DbSet<WorkItemRecord> WorkItems => Set<WorkItemRecord>();
     public DbSet<WorkApprovalRecord> WorkApprovals => Set<WorkApprovalRecord>();
+    public DbSet<AgentDefinitionDraftRecord> AgentDefinitionDrafts => Set<AgentDefinitionDraftRecord>();
+    public DbSet<AgentDefinitionPublicationRecord> AgentDefinitionPublications => Set<AgentDefinitionPublicationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -324,6 +349,24 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
                 .WithMany()
                 .HasForeignKey(row => row.WorkItemId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AgentDefinitionDraftRecord>(entity =>
+        {
+            entity.ToTable("AgentDefinitionDrafts");
+            entity.HasKey(row => row.DraftId);
+            entity.Property(row => row.DraftId).HasMaxLength(36);
+            entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.CandidateJson).IsRequired();
+            entity.Property(row => row.Revision).IsConcurrencyToken();
+            entity.HasIndex(row => row.DefinitionId);
+        });
+        modelBuilder.Entity<AgentDefinitionPublicationRecord>(entity =>
+        {
+            entity.ToTable("AgentDefinitionPublications");
+            entity.HasKey(row => new { row.DefinitionId, row.Version });
+            entity.Property(row => row.DefinitionId).HasMaxLength(128);
+            entity.Property(row => row.PayloadJson).IsRequired();
+            entity.Property(row => row.MetadataRevision).IsConcurrencyToken();
         });
     }
 
