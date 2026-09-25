@@ -155,7 +155,7 @@ On Riley (`general-assistant` v8–v10) with a trusted profile timezone when wal
 
 ## P6 background work (observed)
 
-Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. An approval-demo application event can wait in that drawer across an API restart and then run the exact approved action once. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 freeze candidate `aeefffc` pending exact-SHA gate (core repair `2067a44`, workflow `36031813141` green). P7 has not started.
+Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. An approval-demo application event can wait in that drawer across an API restart and then run the exact approved action once. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 frozen on `30adaeb` (workflow `36085265506` green). P7 has not started.
 
 ## Post-MVP planned until verified
 

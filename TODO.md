@@ -13,30 +13,20 @@ workflow 35954811544 — green
 
 P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
-P6 final behavior freeze **candidate** (exact-SHA tree `30adaeb`, gate pending):
+P6 implementation freeze:
 
 ```text
-30adaebde4321531448541ba132cb92941d504e7 — exact-SHA hosted verification tree
-workflow 36085265506 — in progress at last review (Compose smoke green)
-bef77d1da7a9464ab56efb66203e1c1deb9e1b2b — last behavior-affecting (no separate Actions run)
-aeefffc closure runtime repair:
-aeefffcce0dda0f3dbf392d6af994fd64a309d2b
-workflow 36083107045 — failed (SessionAttachmentRecallTests baseline race; not P6 runtime)
-
-P6 core durable-runtime repair (2067a44):
-2067a44a1534623dafc7803d14b8833ee1ba7890
-workflow 36031813141 — green (exact SHA)
-
-Harness milestone 2455de9 (not freeze):
-workflow 36081962547 — offline failure (RecordingModel race)
-
-Manual A:
-faithful wall-clock detached reminder — pass on 30adaeb tree (2026-09-25; /tmp/agent-core-manual-p6-30adaeb.db)
+30adaebde4321531448541ba132cb92941d504e7 — final verified P6 tree
+workflow 36085265506 — green
+bef77d1da7a9464ab56efb66203e1c1deb9e1b2b — last behavior-affecting SHA
+aeefffcce0dda0f3dbf392d6af994fd64a309d2b — runtime/UI closure repair
+2067a44a1534623dafc7803d14b8833ee1ba7890 — core durable-runtime repair
+workflow 36031813141 — green
 ```
 
-P6 **closes on `30adaeb`** when workflow **`36085265506`** is green on that exact SHA (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). Gate `36083107045` on `aeefffc` failed on Application test synchronization. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
+P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** P6 exact-SHA closure gate; **P7** blocked until P6 freeze is recorded.
+**Current active phase:** **P7 — agent harness / admin lifecycle** (not started).
 
 P4 implementation freeze:
 
@@ -53,8 +43,8 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P5 are closed/frozen.** **P6** core repair `2067a44` is green; closure runtime repair `aeefffc` done; final behavior freeze **candidate** `30adaeb` pending gate `36085265506` (`bef77d1` last behavior; `36083107045` on `aeefffc` failed on test race).
-2. **P7 — agent harness / admin lifecycle** is next; do not start until P6 freeze is recorded on a green exact-SHA gate for the final tree.
+1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
+2. **P7 — agent harness / admin lifecycle** is the active phase (implementation not started).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -876,7 +866,7 @@ Distinguish:
 
 ### P6 stop condition
 
-Observed: a due P5 occurrence can cause one durable, policy-bounded agent run even when no Session Runtime is attached, and the resulting work can be inspected, cancelled, approved when required, and delivered without replaying the initiating user turn. Freeze waits on the exact-SHA hosted gate and independent review.
+Observed: a due P5 occurrence can cause one durable, policy-bounded agent run even when no Session Runtime is attached, and the resulting work can be inspected, cancelled, approved when required, and delivered without replaying the initiating user turn. **Frozen** on `30adaeb` / workflow `36085265506` (2026-09-25).
 
 ---
 
@@ -1179,9 +1169,9 @@ P2 freeze:  47d6ff6
 P3 freeze:  4dbb920
 P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
-P6 freeze candidate: 30adaeb / gate 36085265506 pending; bef77d1 last behavior; aeefffc gate 36083107045 failed; Manual A pass on 30adaeb tree
+P6 freeze: 30adaeb / workflow 36085265506 green (bef77d1 last behavior)
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
-next phase: P7 — not started
+active phase: P7 — agent harness / admin lifecycle (not started)
 ```
 
 - [ ] Keep TODO focused on current/future work.
@@ -1225,14 +1215,12 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
 - [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
-- [x] Durable triggered/background execution — P6 candidate `30adaeb` (bef77d1 last behavior; core `2067a44` green; gate `36085265506` pending; Manual A pass on `30adaeb`).
+- [x] Durable triggered/background execution — P6 frozen on `30adaeb` (workflow `36085265506` green).
 
 ---
 
 # Next implementation item
 
-**P6 — durable background work and triggered execution** closes on `30adaeb` when workflow `36085265506` is green (last behavior `bef77d1`; core `2067a44`; runtime closure `aeefffc`). Manual A passed 2026-09-25 on the `30adaeb` tree. Evidence: `docs/reports/p6-freeze-candidate.md`. P5 remains frozen on `4bbc0c1`.
+**P7 — agent harness / admin lifecycle** is the next implementation phase. P6 remains frozen on `30adaeb` (workflow `36085265506`). Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
-
-**P7** is the next phase and has not started. Do not implement P7.
+P7 productizes harness, identity, memory, and trigger administration after stable runtime contracts. Do not reopen P6 without a reproducible regression.

@@ -4,7 +4,7 @@ This report records the **P5 implementation freeze**. Whole-phase review accepte
 
 ## Freeze status
 
-**P5 is frozen** on implementation HEAD **`4bbc0c1`** (`4bbc0c17bc54746f87fd211174690659869e3e45`, 2026-09-24). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`35954811544`**](https://github.com/trannamtrung1st/agent-core/actions/runs/35954811544)). **P6** (durable background work and triggered execution) is next.
+**P5 is frozen** on implementation HEAD **`4bbc0c1`** (`4bbc0c17bc54746f87fd211174690659869e3e45`, 2026-09-24). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`35954811544`**](https://github.com/trannamtrung1st/agent-core/actions/runs/35954811544)). **P6** is frozen on `30adaeb` (workflow `36085265506`); **P7** is next.
 
 | Item | Value |
 | --- | --- |

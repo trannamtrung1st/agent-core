@@ -113,7 +113,7 @@ Deterministic coverage uses `FakeTimeProvider` and Synthetic scripts, not wall-c
 
 ## P6 durable work verification (observed)
 
-Deterministic journeys cover detached reminder completion, approval across a SQLite reopen, and cancellation that a stale worker cannot complete. Playwright `e2e/durable-journeys.spec.ts` ends the chat before a seeded due reminder and cancels a retrying item from Background Work. `scripts/compose-sqlite-volume.sh` recreates the API on a SQLite volume that already holds a completed result and a pending approval. Manual wall-clock firing is recorded separately from those seeded tests. Phase I recovery suites for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable. Counts, manual times, and the freeze gap are in [P6 freeze candidate](reports/p6-freeze-candidate.md).
+Deterministic journeys cover detached reminder completion, approval across a SQLite reopen, and cancellation that a stale worker cannot complete. Playwright `e2e/durable-journeys.spec.ts` ends the chat before a seeded due reminder and cancels a retrying item from Background Work. `scripts/compose-sqlite-volume.sh` recreates the API on a SQLite volume that already holds a completed result and a pending approval. Manual wall-clock firing is recorded separately from those seeded tests. Phase I recovery suites for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable. Counts, manual times, and freeze evidence are in [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 
