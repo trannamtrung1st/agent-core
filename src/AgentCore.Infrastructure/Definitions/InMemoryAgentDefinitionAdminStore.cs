@@ -9,6 +9,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
 {
     private readonly ConcurrentDictionary<Guid, AgentDefinitionDraft> _drafts = new();
     private readonly ConcurrentDictionary<(string DefinitionId, int Version), AgentDefinitionPublication> _publications = new();
+    private readonly ConcurrentDictionary<Guid, object> _draftLocks = new();
 
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
         CancellationToken cancellationToken = default)
@@ -31,7 +32,12 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
     public ValueTask<AgentDefinitionDraft?> GetDraftAsync(Guid draftId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(_drafts.TryGetValue(draftId, out var draft) ? draft : null);
+        if (!_drafts.TryGetValue(draftId, out var draft))
+        {
+            return ValueTask.FromResult<AgentDefinitionDraft?>(null);
+        }
+
+        return ValueTask.FromResult<AgentDefinitionDraft?>(AgentDefinitionAdminSnapshots.Freeze(draft));
     }
 
     public ValueTask<AgentDefinitionDraft> CreateDraftAsync(
@@ -39,27 +45,29 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        AgentDefinitionValidator.ValidateCandidate(create.Candidate);
-        if (!string.Equals(create.DefinitionId, create.Candidate.DefinitionId, StringComparison.Ordinal))
+        var candidate = AgentDefinitionAdminSnapshots.Freeze(create.Candidate);
+        AgentDefinitionValidator.ValidateCandidate(candidate);
+        if (!string.Equals(create.DefinitionId, candidate.DefinitionId, StringComparison.Ordinal))
         {
             throw AgentCoreErrors.Validation("definitionId must match the candidate definitionId.");
         }
 
-        var draft = new AgentDefinitionDraft(
+        var draft = AgentDefinitionAdminSnapshots.Freeze(new AgentDefinitionDraft(
             ids.NewId(),
             create.DefinitionId,
             1,
-            create.Candidate,
+            candidate,
             create.SourceKind,
             create.SourceVersion,
             create.CreatedAt,
-            create.CreatedAt);
+            create.CreatedAt));
         if (!_drafts.TryAdd(draft.DraftId, draft))
         {
             throw AgentCoreErrors.Conflict("Draft could not be created.");
         }
 
-        return ValueTask.FromResult(draft);
+        _draftLocks.TryAdd(draft.DraftId, new object());
+        return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(draft));
     }
 
     public ValueTask<AgentDefinitionDraft> UpdateDraftAsync(
@@ -67,34 +75,39 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        AgentDefinitionValidator.ValidateCandidate(update.Candidate);
-        if (!_drafts.TryGetValue(update.DraftId, out var current))
+        var candidate = AgentDefinitionAdminSnapshots.Freeze(update.Candidate);
+        AgentDefinitionValidator.ValidateCandidate(candidate);
+        var gate = LockFor(update.DraftId);
+        lock (gate)
         {
-            throw AgentCoreErrors.NotFound("Draft was not found.");
-        }
+            if (!_drafts.TryGetValue(update.DraftId, out var current))
+            {
+                throw AgentCoreErrors.NotFound("Draft was not found.");
+            }
 
-        if (current.Revision != update.ExpectedRevision)
-        {
-            throw AgentCoreErrors.Conflict("Draft revision is stale.");
-        }
+            if (current.Revision != update.ExpectedRevision)
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
 
-        if (!string.Equals(current.DefinitionId, update.Candidate.DefinitionId, StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.Validation("definitionId cannot change on update.");
-        }
+            if (!string.Equals(current.DefinitionId, candidate.DefinitionId, StringComparison.Ordinal))
+            {
+                throw AgentCoreErrors.Validation("definitionId cannot change on update.");
+            }
 
-        var next = current with
-        {
-            Revision = current.Revision + 1,
-            Candidate = update.Candidate,
-            UpdatedAt = update.UpdatedAt
-        };
-        if (!_drafts.TryUpdate(update.DraftId, next, current))
-        {
-            throw AgentCoreErrors.Conflict("Draft revision is stale.");
-        }
+            var next = AgentDefinitionAdminSnapshots.Freeze(current with
+            {
+                Revision = current.Revision + 1,
+                Candidate = candidate,
+                UpdatedAt = update.UpdatedAt
+            });
+            if (!_drafts.TryUpdate(update.DraftId, next, current))
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
 
-        return ValueTask.FromResult(next);
+            return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
+        }
     }
 
     public ValueTask<AgentDefinitionPublication> PublishDraftAsync(
@@ -102,46 +115,55 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_drafts.TryGetValue(publish.DraftId, out var draft))
+        var gate = LockFor(publish.DraftId);
+        lock (gate)
         {
-            throw AgentCoreErrors.NotFound("Draft was not found.");
+            if (!_drafts.TryGetValue(publish.DraftId, out var draft))
+            {
+                throw AgentCoreErrors.NotFound("Draft was not found.");
+            }
+
+            if (draft.Revision != publish.ExpectedRevision)
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
+
+            var nextVersion = publish.OccupiedVersions.DefaultIfEmpty(0).Max() + 1;
+            if (publish.OccupiedVersions.Contains(nextVersion)
+                || _publications.ContainsKey((draft.DefinitionId, nextVersion)))
+            {
+                throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
+            }
+
+            var payload = AgentDefinitionAdminSnapshots.Freeze(draft.Candidate.ToPublished(nextVersion));
+            AgentDefinitionValidator.Validate(payload);
+            var publication = AgentDefinitionAdminSnapshots.Freeze(new AgentDefinitionPublication(
+                draft.DefinitionId,
+                nextVersion,
+                payload,
+                draft.Revision,
+                DefinitionPublicationStatus.Active,
+                1,
+                publish.PublishedAt));
+
+            var nextDraft = draft with
+            {
+                Revision = draft.Revision + 1,
+                UpdatedAt = publish.PublishedAt
+            };
+            if (!_drafts.TryUpdate(publish.DraftId, nextDraft, draft))
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
+
+            if (!_publications.TryAdd((draft.DefinitionId, nextVersion), publication))
+            {
+                _drafts.TryUpdate(publish.DraftId, draft, nextDraft);
+                throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
+            }
+
+            return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(publication));
         }
-
-        if (draft.Revision != publish.ExpectedRevision)
-        {
-            throw AgentCoreErrors.Conflict("Draft revision is stale.");
-        }
-
-        var nextVersion = publish.OccupiedVersions.DefaultIfEmpty(0).Max() + 1;
-        if (publish.OccupiedVersions.Contains(nextVersion)
-            || _publications.ContainsKey((draft.DefinitionId, nextVersion)))
-        {
-            throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
-        }
-
-        var payload = draft.Candidate.ToPublished(nextVersion);
-        AgentDefinitionValidator.Validate(payload);
-        var publication = new AgentDefinitionPublication(
-            draft.DefinitionId,
-            nextVersion,
-            payload,
-            draft.Revision,
-            DefinitionPublicationStatus.Active,
-            1,
-            publish.PublishedAt);
-        if (!_publications.TryAdd((draft.DefinitionId, nextVersion), publication))
-        {
-            throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
-        }
-
-        var nextDraft = draft with
-        {
-            Revision = draft.Revision + 1,
-            UpdatedAt = publish.PublishedAt
-        };
-        _drafts.TryUpdate(publish.DraftId, nextDraft, draft);
-
-        return ValueTask.FromResult(publication);
     }
 
     public ValueTask<AgentDefinitionPublication?> GetPublicationAsync(
@@ -150,8 +172,12 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(
-            _publications.TryGetValue((definitionId, version), out var publication) ? publication : null);
+        if (!_publications.TryGetValue((definitionId, version), out var publication))
+        {
+            return ValueTask.FromResult<AgentDefinitionPublication?>(null);
+        }
+
+        return ValueTask.FromResult<AgentDefinitionPublication?>(AgentDefinitionAdminSnapshots.Freeze(publication));
     }
 
     public ValueTask<IReadOnlyList<AgentDefinitionPublicationSummary>> ListPublicationsAsync(
@@ -194,19 +220,22 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
 
         if (current.Status == DefinitionPublicationStatus.Deprecated)
         {
-            return ValueTask.FromResult(current);
+            return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(current));
         }
 
-        var next = current with
+        var next = AgentDefinitionAdminSnapshots.Freeze(current with
         {
             Status = DefinitionPublicationStatus.Deprecated,
             MetadataRevision = current.MetadataRevision + 1
-        };
+        });
         if (!_publications.TryUpdate((deprecate.DefinitionId, deprecate.Version), next, current))
         {
             throw AgentCoreErrors.Conflict("Publication metadata revision is stale.");
         }
 
-        return ValueTask.FromResult(next);
+        return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
     }
+
+    private object LockFor(Guid draftId) =>
+        _draftLocks.GetOrAdd(draftId, static _ => new object());
 }

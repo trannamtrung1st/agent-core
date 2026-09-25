@@ -113,6 +113,144 @@ public abstract class AgentDefinitionAdminStoreContractTests
         });
 
     [Fact]
+    public Task Published_payload_survives_caller_mutation_of_source_collections() =>
+        ForEachStoreAsync(async store =>
+        {
+            var goals = new List<string> { "Initial goal" };
+            var metadata = new Dictionary<string, string> { ["tag"] = "alpha" };
+            var candidate = SampleCandidate("demo-agent") with { Goals = goals, Metadata = metadata };
+            var now = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            var created = await store.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            goals.Add("Injected after create");
+            metadata["tag"] = "mutated";
+
+            var publishCandidate = SampleCandidate("demo-agent") with
+            {
+                SystemInstructions = "Publish body",
+                Goals = new[] { "Initial goal" },
+                Metadata = new Dictionary<string, string> { ["tag"] = "alpha" }
+            };
+            var edited = await store.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    created.DraftId,
+                    1,
+                    publishCandidate,
+                    now.AddMinutes(1)),
+                CancellationToken.None);
+            var published = await store.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(edited.DraftId, edited.Revision, [], now.AddMinutes(2)),
+                CancellationToken.None);
+
+            goals.Clear();
+            metadata["tag"] = "cleared";
+            var reloaded = await store.GetPublicationAsync("demo-agent", published.Version);
+            Assert.NotNull(reloaded);
+            Assert.Equal("Initial goal", Assert.Single(reloaded!.Payload.Goals));
+            Assert.Equal("alpha", reloaded.Payload.Metadata["tag"]);
+            Assert.Equal("Publish body", reloaded.Payload.SystemInstructions);
+
+            var draftView = await store.GetDraftAsync(created.DraftId);
+            Assert.NotNull(draftView);
+            if (draftView!.Candidate.Goals is IList<string> mutableGoals)
+            {
+                mutableGoals.Add("mutate returned draft");
+            }
+
+            var draftAgain = await store.GetDraftAsync(created.DraftId);
+            Assert.Equal("Initial goal", Assert.Single(draftAgain!.Candidate.Goals));
+        });
+
+    [Fact]
+    public Task Concurrent_publish_and_update_from_same_revision_commit_once() =>
+        ForEachStoreAsync(async store =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            var candidate = SampleCandidate("demo-agent");
+            var created = await store.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            await store.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    created.DraftId,
+                    1,
+                    candidate with { SystemInstructions = "Ready to race" },
+                    now.AddMinutes(1)),
+                CancellationToken.None);
+
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var publishAttempt = Task.Run(async () =>
+            {
+                await gate.Task;
+                try
+                {
+                    await store.PublishDraftAsync(
+                        new AgentDefinitionDraftPublish(created.DraftId, 2, [], now.AddMinutes(2)),
+                        CancellationToken.None);
+                    return true;
+                }
+                catch (AgentCoreException ex) when (ex.Code == "Conflict")
+                {
+                    return false;
+                }
+            });
+            var updateAttempt = Task.Run(async () =>
+            {
+                await gate.Task;
+                try
+                {
+                    await store.UpdateDraftAsync(
+                        new AgentDefinitionDraftUpdate(
+                            created.DraftId,
+                            2,
+                            candidate with { SystemInstructions = "Concurrent edit" },
+                            now.AddMinutes(3)),
+                        CancellationToken.None);
+                    return true;
+                }
+                catch (AgentCoreException ex) when (ex.Code == "Conflict")
+                {
+                    return false;
+                }
+            });
+            gate.SetResult();
+            var outcomes = await Task.WhenAll(publishAttempt, updateAttempt);
+            Assert.Equal(1, outcomes.Count(success => success));
+
+            var publications = await store.ListPublicationsAsync("demo-agent");
+            Assert.True(publications.Count is 0 or 1);
+            var draft = await store.GetDraftAsync(created.DraftId);
+            Assert.NotNull(draft);
+            Assert.Equal(3, draft!.Revision);
+        });
+
+    [Fact]
+    public Task Duplicate_publish_from_stale_revision_conflicts() =>
+        ForEachStoreAsync(async store =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            var candidate = SampleCandidate("demo-agent");
+            var created = await store.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            await store.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    created.DraftId,
+                    1,
+                    candidate with { SystemInstructions = "v1" },
+                    now.AddMinutes(1)),
+                CancellationToken.None);
+            await store.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(created.DraftId, 2, [], now.AddMinutes(2)),
+                CancellationToken.None);
+            await Assert.ThrowsAsync<AgentCoreException>(() =>
+                store.PublishDraftAsync(
+                    new AgentDefinitionDraftPublish(created.DraftId, 2, [1], now.AddMinutes(3)),
+                    CancellationToken.None).AsTask());
+        });
+
+    [Fact]
     public Task Composite_store_resolves_durable_publication_alongside_built_ins() =>
         ForEachStoreAsync(async admin =>
         {
