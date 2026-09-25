@@ -265,7 +265,7 @@ Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attac
 
 ## P7C harness resources (observed)
 
-**Decision:** Admin-managed harness content is versioned definition resources in application-owned storage, not repository `agents/*` or `.agents/*` mutation. Draft bindings are mutable with optimistic draft revision; publication bindings and content hashes are immutable. Runtime exposes resources through the existing read-only `/agent` projection; session `/workspace` remains the only normal mutable file area with no write-back. Managed chat for P7C evidence uses `Compatibility=false` instances and v2 `agentInstanceId` session create. **Observed** in tree through W03 implementation (`0bc5193`); slice gate **pending reviewer approval** (see [P7C report](reports/p7c-harness-resources-workspace.md)).
+**Decision:** Admin-managed harness content is versioned definition resources in application-owned storage, not repository `agents/*` or `.agents/*` mutation. Draft bindings are mutable with optimistic draft revision; publication bindings and content hashes are immutable. Runtime exposes resources through the existing read-only `/agent` projection; session `/workspace` remains the only normal mutable file area with no write-back. Managed chat for P7C evidence uses `Compatibility=false` instances and v2 `agentInstanceId` session create. **Observed** on W03 slice gate `e25cd46` (see [P7C report](reports/p7c-harness-resources-workspace.md)).
 
 ## What may still be measured
 

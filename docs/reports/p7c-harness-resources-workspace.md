@@ -1,12 +1,12 @@
 # P7C — Harness resources and workspace boundaries
 
-**Status:** pending gate review (W03 slice gate; review-0016)
+**Status:** approved (W03 slice gate; batch review 0016 PASS, review 0044)
 
 **Baseline:** `4a2bf999c553d362c828c617f0218516ab0baeb4` (post-P7B)
 
-**Approved HEAD:** _(recorded only after reviewer PASS in a descendant evidence-only commit; do not embed the pending candidate SHA in the same commit as the gate tree.)_
+**Approved HEAD:** `e25cd4650699ae4ec1e7ddff8a06abcfbde53567` (W03 slice gate)
 
-**Review ranges (incremental):** resource HTTP `d920874`; runtime `/agent` + managed session `1cfca67`; Admin Resources UI `c090e98`; managed chat journey `3731f44`; Capabilities + tool registry `feeb300`; reopen parity `0bc5193`; gate closure on `0bc5193` baseline (review-0016 rounds 2–3)
+**Review ranges (incremental):** resource HTTP `d920874`; runtime `/agent` + managed session `1cfca67`; Admin Resources UI `c090e98`; managed chat journey `3731f44`; Capabilities + tool registry `feeb300`; reopen parity `0bc5193`; gate closure `e25cd46` (from `0bc5193`, review-0016)
 
 ## Scope delivered (observed)
 
