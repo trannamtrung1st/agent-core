@@ -83,6 +83,8 @@ export function AgentPicker({
         placeholder={managedInstancesLoading ? "Loading managed instances…" : "Select identity"}
         disabled={managedInstancesLoading || !hasOptions}
         options={options}
+        showSearch
+        optionFilterProp="label"
         onChange={(nextKey) => onIdentityChange(nextKey)}
         style={{ width: "100%" }}
       />

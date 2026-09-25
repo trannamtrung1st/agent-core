@@ -88,7 +88,10 @@ export function managedInstanceShortId(instanceId: string): string {
 
 export async function selectManagedIdentityOption(page: Page, instanceId: string) {
   const shortId = managedInstanceShortId(instanceId);
-  await page.getByRole("combobox", { name: "Identity" }).click();
+  await expect(page.getByLabel("Loading managed instances")).toBeHidden({ timeout: 15_000 });
+  const combobox = page.getByRole("combobox", { name: "Identity" });
+  await combobox.click();
+  await combobox.pressSequentially(shortId, { delay: 20 });
   const option = page.locator(".ant-select-item-option").filter({ hasText: shortId });
   await expect(option.first()).toBeVisible({ timeout: 15_000 });
   await option.first().click();
@@ -97,6 +100,6 @@ export async function selectManagedIdentityOption(page: Page, instanceId: string
 export async function expectManagedIdentityOptionAbsent(page: Page, instanceId: string) {
   const shortId = managedInstanceShortId(instanceId);
   await page.getByRole("combobox", { name: "Identity" }).click();
-  await expect(page.locator(".ant-select-item-option").filter({ hasText: shortId })).toHaveCount(0);
+  await expect(page.locator(".ant-select-item-option", { hasText: shortId })).toHaveCount(0);
   await page.keyboard.press("Escape");
 }

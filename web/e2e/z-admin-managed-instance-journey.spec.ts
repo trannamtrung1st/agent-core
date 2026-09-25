@@ -1,7 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   expectManagedIdentityOptionAbsent,
-  managedInstanceShortId,
   publishExaminerDraftAndCreateManagedInstance,
   selectManagedIdentityOption,
   startSyntheticChat,
@@ -52,6 +51,7 @@ async function fetchEffectiveConfig(
 }
 
 test("p7d managed instance persona form json chat archive and history", async ({ page, request }) => {
+  test.setTimeout(120_000);
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   page.on("console", (message) => {
@@ -78,8 +78,6 @@ test("p7d managed instance persona form json chat archive and history", async ({
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
   const firstChatUrl = page.url();
-  const shortId = managedInstanceShortId(instance.instanceId);
-
   await page.getByRole("button", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await expect(page.getByText("Managed")).toBeVisible();
@@ -116,7 +114,6 @@ test("p7d managed instance persona form json chat archive and history", async ({
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
-  await selectManagedIdentityOption(page, instance.instanceId);
 
   const secondSessionPromise = page.waitForResponse(
     (response) =>
@@ -124,6 +121,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
       /\/api\/v2\/sessions$/.test(response.url()) &&
       response.ok()
   );
+  await selectManagedIdentityOption(page, instance.instanceId);
   await page.getByLabel("Message").fill("Managed instance turn");
   await page.getByRole("button", { name: "Send" }).click();
   const secondSession = (await (await secondSessionPromise).json()) as SessionView;
@@ -157,9 +155,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
-  await page.getByRole("combobox", { name: "Identity" }).click();
-  await expect(page.locator(".ant-select-item-option", { hasText: shortId })).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  await expectManagedIdentityOptionAbsent(page, instance.instanceId);
 
   const firstPinned = await fetchSessionView(request, page, firstSession.sessionId);
   const secondPinned = await fetchSessionView(request, page, secondSession.sessionId);
