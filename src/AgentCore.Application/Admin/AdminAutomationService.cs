@@ -5,6 +5,12 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application.Admin;
 
+public sealed record AdminAutomationProvenance(
+    string AuthorizationOrigin,
+    string? SourceSessionId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record AdminAutomationRegistration(
     Guid RegistrationId,
     string Intent,
@@ -14,7 +20,8 @@ public sealed record AdminAutomationRegistration(
     string ScheduleSummary,
     DateTimeOffset? NextOccurrenceAtUtc,
     long Revision,
-    string? SuspensionReason);
+    string? SuspensionReason,
+    AdminAutomationProvenance Provenance);
 
 public sealed class AdminAutomationService(
     IAgentInstanceStore instances,
@@ -87,7 +94,12 @@ public sealed class AdminAutomationService(
             summary,
             registration.NextOccurrenceAtUtc,
             registration.Revision,
-            registration.SuspensionReason);
+            registration.SuspensionReason,
+            new AdminAutomationProvenance(
+                registration.Provenance.AuthorizationOrigin.ToString(),
+                registration.Provenance.SourceSessionId?.ToString("D"),
+                registration.Provenance.CreatedAt,
+                registration.Provenance.UpdatedAt));
     }
 
     private static (string Kind, string TimeZoneId, string Summary) DescribeSchedule(TriggerSchedule schedule) =>

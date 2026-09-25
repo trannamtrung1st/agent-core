@@ -507,22 +507,8 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
 
     public async ValueTask<int> ResetSessionScopeAsync(
         TrustedMemoryOwner owner,
-        CancellationToken cancellationToken = default)
-    {
-        var removed = 0;
-        foreach (var item in (await store.ListActiveAsync(owner.SessionId, cancellationToken).ConfigureAwait(false)).ToArray())
-        {
-            if (item.Scope != MemoryScope.Session)
-            {
-                continue;
-            }
-
-            await DeleteAsync(owner, item.MemoryId, cancellationToken).ConfigureAwait(false);
-            removed++;
-        }
-
-        return removed;
-    }
+        CancellationToken cancellationToken = default) =>
+        await store.ResetActiveSessionScopeAsync(owner.SessionId, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
 
     public async ValueTask<int> ResetIdentityUserScopeAsync(
         TrustedIdentityUserOwner owner,
@@ -530,23 +516,9 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         CancellationToken cancellationToken = default)
     {
         RequireIdentityAccess(owner, retrievalAllowed);
-        var removed = 0;
-        foreach (var item in (await store
-                     .ListActiveIdentityUserAsync(owner.InstanceId, owner.ProfileId, cancellationToken)
-                     .ConfigureAwait(false)).ToArray())
-        {
-            if (item.Scope != MemoryScope.IdentityUser
-                || item.OwnerInstanceId != owner.InstanceId
-                || item.OwnerProfileId != owner.ProfileId)
-            {
-                continue;
-            }
-
-            await DeleteIdentityUserAsync(owner, item.MemoryId, retrievalAllowed, cancellationToken).ConfigureAwait(false);
-            removed++;
-        }
-
-        return removed;
+        return await store
+            .ResetActiveIdentityUserScopeAsync(owner.InstanceId, owner.ProfileId, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async ValueTask<int> ResetUserScopeAsync(
@@ -555,19 +527,9 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         CancellationToken cancellationToken = default)
     {
         RequireUserRetrieval(owner, retrievalAllowed);
-        var removed = 0;
-        foreach (var item in (await store.ListActiveUserAsync(owner.ProfileId, cancellationToken).ConfigureAwait(false)).ToArray())
-        {
-            if (item.Scope != MemoryScope.User || item.OwnerProfileId != owner.ProfileId)
-            {
-                continue;
-            }
-
-            await DeleteUserAsync(owner, item.MemoryId, retrievalAllowed, cancellationToken).ConfigureAwait(false);
-            removed++;
-        }
-
-        return removed;
+        return await store
+            .ResetActiveUserScopeAsync(owner.ProfileId, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async ValueTask<StructuredMemoryItem> InsertUserCopyAsync(

@@ -219,6 +219,12 @@ public sealed record AdminLearnedMemoryResetResponse(string Scope, int ItemsRemo
 public sealed record AdminAutomationRegistrationListResponse(
     IReadOnlyList<AdminAutomationRegistrationResponse> Items);
 
+public sealed record AdminAutomationProvenanceResponse(
+    string AuthorizationOrigin,
+    string? SourceSessionId,
+    string CreatedAt,
+    string UpdatedAt);
+
 public sealed record AdminAutomationRegistrationResponse(
     string RegistrationId,
     string Intent,
@@ -228,6 +234,7 @@ public sealed record AdminAutomationRegistrationResponse(
     string ScheduleSummary,
     string? NextOccurrenceAtUtc,
     long Revision,
-    string? SuspensionReason);
+    string? SuspensionReason,
+    AdminAutomationProvenanceResponse Provenance);
 
 public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevision, bool Confirm);

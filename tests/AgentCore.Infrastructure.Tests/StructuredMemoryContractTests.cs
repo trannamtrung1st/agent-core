@@ -41,6 +41,32 @@ public sealed class StructuredMemoryContractTests
     }
 
     [Fact]
+    public async Task Scope_reset_tombstones_all_active_session_items_in_one_operation()
+    {
+        await ForEachStore(async store =>
+        {
+            var time = Clock();
+            var service = Service(store, time, 8);
+            var owner = new TrustedMemoryOwner(SessionA);
+            var admission = Admission();
+            for (var index = 0; index < 3; index++)
+            {
+                await service.WriteAsync(
+                    owner,
+                    new MemoryWriteProposal(MemoryKind.Fact, $"Subject {index}", $"Body {index}", []),
+                    admission);
+                time.Advance(TimeSpan.FromSeconds(1));
+            }
+
+            Assert.Equal(3, await store.CountActiveAsync(SessionA));
+            var removed = await service.ResetSessionScopeAsync(owner);
+            Assert.Equal(3, removed);
+            Assert.Equal(0, await store.CountActiveAsync(SessionA));
+            Assert.Empty(await service.SearchAsync(owner, new MemorySearchQuery(null, null), admission));
+        });
+    }
+
+    [Fact]
     public async Task Correction_supersedes_the_named_item_and_keeps_provenance()
     {
         await ForEachStore(async store =>

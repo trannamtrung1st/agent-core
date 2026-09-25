@@ -176,6 +176,91 @@ public sealed class InMemoryStructuredMemoryStore : IStructuredMemoryStore
         }
     }
 
+    public ValueTask<int> ResetActiveSessionScopeAsync(
+        Guid sessionId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var removed = 0;
+            foreach (var item in _items.Values.ToArray())
+            {
+                if (item.Scope != MemoryScope.Session || item.SessionId != sessionId || item.Status != MemoryItemStatus.Active)
+                {
+                    continue;
+                }
+
+                _items[item.MemoryId] = Tombstone(item, updatedAtUtc);
+                removed++;
+            }
+
+            return ValueTask.FromResult(removed);
+        }
+    }
+
+    public ValueTask<int> ResetActiveIdentityUserScopeAsync(
+        Guid instanceId,
+        Guid profileId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var removed = 0;
+            foreach (var item in _items.Values.ToArray())
+            {
+                if (item.Scope != MemoryScope.IdentityUser
+                    || item.OwnerInstanceId != instanceId
+                    || item.OwnerProfileId != profileId
+                    || item.Status != MemoryItemStatus.Active)
+                {
+                    continue;
+                }
+
+                _items[item.MemoryId] = Tombstone(item, updatedAtUtc);
+                removed++;
+            }
+
+            return ValueTask.FromResult(removed);
+        }
+    }
+
+    public ValueTask<int> ResetActiveUserScopeAsync(
+        Guid profileId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var removed = 0;
+            foreach (var item in _items.Values.ToArray())
+            {
+                if (item.Scope != MemoryScope.User
+                    || item.OwnerProfileId != profileId
+                    || item.Status != MemoryItemStatus.Active)
+                {
+                    continue;
+                }
+
+                _items[item.MemoryId] = Tombstone(item, updatedAtUtc);
+                removed++;
+            }
+
+            return ValueTask.FromResult(removed);
+        }
+    }
+
+    private static StructuredMemoryItem Tombstone(StructuredMemoryItem current, DateTimeOffset updatedAtUtc) =>
+        current with
+        {
+            Status = MemoryItemStatus.Deleted,
+            Subject = string.Empty,
+            Content = string.Empty,
+            SubjectKey = string.Empty,
+            UpdatedAt = updatedAtUtc
+        };
+
     public ValueTask<StructuredMemoryItem?> FindIdentityUserAsync(
         Guid instanceId,
         Guid profileId,

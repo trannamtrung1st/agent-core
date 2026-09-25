@@ -376,4 +376,65 @@ public sealed class SqliteStructuredMemoryStore(IDbContextFactory<AgentCoreDbCon
                 && item.Status == (int)MemoryItemStatus.Active,
             cancellationToken).ConfigureAwait(false);
     }
+
+    public async ValueTask<int> ResetActiveSessionScopeAsync(
+        Guid sessionId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        await ResetScopeAsync(
+            db => db.StructuredMemories.Where(row =>
+                row.SessionId == sessionId.ToString("D")
+                && row.Scope == (int)MemoryScope.Session
+                && row.Status == (int)MemoryItemStatus.Active),
+            updatedAtUtc,
+            cancellationToken).ConfigureAwait(false);
+
+    public async ValueTask<int> ResetActiveIdentityUserScopeAsync(
+        Guid instanceId,
+        Guid profileId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        await ResetScopeAsync(
+            db => db.StructuredMemories.Where(row =>
+                row.Scope == (int)MemoryScope.IdentityUser
+                && row.OwnerInstanceId == instanceId.ToString("D")
+                && row.OwnerProfileId == profileId.ToString("D")
+                && row.Status == (int)MemoryItemStatus.Active),
+            updatedAtUtc,
+            cancellationToken).ConfigureAwait(false);
+
+    public async ValueTask<int> ResetActiveUserScopeAsync(
+        Guid profileId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        await ResetScopeAsync(
+            db => db.StructuredMemories.Where(row =>
+                row.Scope == (int)MemoryScope.User
+                && row.OwnerProfileId == profileId.ToString("D")
+                && row.Status == (int)MemoryItemStatus.Active),
+            updatedAtUtc,
+            cancellationToken).ConfigureAwait(false);
+
+    private async ValueTask<int> ResetScopeAsync(
+        Func<AgentCoreDbContext, IQueryable<StructuredMemoryRecord>> query,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await query(db).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var updatedMs = updatedAtUtc.ToUnixTimeMilliseconds();
+        foreach (var row in rows)
+        {
+            row.Status = (int)MemoryItemStatus.Deleted;
+            row.Subject = string.Empty;
+            row.Content = string.Empty;
+            row.SubjectKey = string.Empty;
+            row.UpdatedAtUtc = updatedMs;
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Count;
+    }
 }

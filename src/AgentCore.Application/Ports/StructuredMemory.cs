@@ -111,6 +111,22 @@ public interface IStructuredMemoryStore
     ValueTask<int> CountActiveUserAsync(
         Guid profileId,
         CancellationToken cancellationToken = default);
+
+    ValueTask<int> ResetActiveSessionScopeAsync(
+        Guid sessionId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> ResetActiveIdentityUserScopeAsync(
+        Guid instanceId,
+        Guid profileId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> ResetActiveUserScopeAsync(
+        Guid profileId,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IStructuredMemoryService

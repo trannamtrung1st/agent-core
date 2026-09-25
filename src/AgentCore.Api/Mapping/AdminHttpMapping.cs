@@ -176,7 +176,12 @@ internal static class AdminHttpMapping
             item.ScheduleSummary,
             item.NextOccurrenceAtUtc?.ToString("o"),
             item.Revision,
-            item.SuspensionReason);
+            item.SuspensionReason,
+            new AdminAutomationProvenanceResponse(
+                item.Provenance.AuthorizationOrigin,
+                item.Provenance.SourceSessionId,
+                item.Provenance.CreatedAt.ToString("o"),
+                item.Provenance.UpdatedAt.ToString("o")));
 
     private static string ToAutomationStatus(TriggerRegistrationStatus status) => status switch
     {
