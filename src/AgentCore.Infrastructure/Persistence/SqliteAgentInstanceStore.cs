@@ -323,6 +323,101 @@ public sealed class SqliteAgentInstanceStore(
             ?? throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
     }
 
+    public async ValueTask<AgentInstance> UpdateLifecycleWithHistoryAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
+                db,
+                historyAppend.OperationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (existingEvent is not null)
+        {
+            return await ResolveInstanceLifecycleChangedByOperationEventAsync(
+                    existingEvent,
+                    historyAppend,
+                    update,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var row = await db.AgentInstances
+            .SingleOrDefaultAsync(item => item.InstanceId == update.InstanceId.ToString("D"), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        if (row.Revision != update.ExpectedRevision)
+        {
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+
+        if (row.Compatibility)
+        {
+            throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
+        }
+
+        if (update.Lifecycle is not AgentInstanceLifecycle lifecycle)
+        {
+            throw AgentCoreErrors.Validation("Lifecycle is required.");
+        }
+
+        row.Lifecycle = lifecycle.ToString();
+        row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
+        row.Revision++;
+        AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            var raced = await AdminEventPersistence.TryGetByOperationIdAsync(
+                    db,
+                    historyAppend.OperationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (raced is not null)
+            {
+                return await ResolveInstanceLifecycleChangedByOperationEventAsync(
+                        raced,
+                        historyAppend,
+                        update,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+
+        return Map(row);
+    }
+
+    private async ValueTask<AgentInstance> ResolveInstanceLifecycleChangedByOperationEventAsync(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstanceRevisionUpdate update,
+        CancellationToken cancellationToken)
+    {
+        if (existingEvent.Operation is not (AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        EnsureAgentInstanceHistoryTargetMatches(existingEvent, historyAppend, update.InstanceId);
+        AdminEventReplayPolicy.EnsureInstanceLifecycleReplayMatches(existingEvent, historyAppend, update);
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var targetId) || targetId != update.InstanceId)
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history is missing an instance target id.");
+        }
+
+        return await FindAsync(update.InstanceId, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+    }
+
     private async ValueTask<AgentInstance> ResolveInstanceDefinitionVersionChangedByOperationEventAsync(
         AdminEvent existingEvent,
         AdminEventAppend historyAppend,

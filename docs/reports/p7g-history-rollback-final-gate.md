@@ -14,6 +14,7 @@
 - `ManagedInstanceCreated` admin events recorded atomically with durable managed instance create (operation id from lifecycle), including bounded `definitionId` / `instanceId` / `version` summary.
 - `InstanceDefinitionVersionChanged` admin events recorded atomically with durable managed active-version reassociate/rollback (operation id from lifecycle), including bounded `definitionId` / `instanceId` / `fromVersion` / `toVersion` summary.
 - `PersonaChanged` admin events recorded atomically with durable managed persona update (operation id from lifecycle), including bounded `definitionId` / `instanceId` / `fromPersonaRevision` / `personaRevision` / `personaFingerprint` summary (no persona payload).
+- `InstanceArchived` / `InstanceUnarchived` admin events recorded atomically with durable managed lifecycle update, including bounded `definitionId` / `instanceId` / `fromLifecycle` / `toLifecycle` summary.
 - Shared `AdminEventSummaryPolicy` validation for in-memory and SQLite event append paths.
 
 ## W07 verification (partial)
@@ -23,12 +24,13 @@
 | Admin event store parity | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminEvent` | Pass (10) |
 | Publication history durability | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminPublication` | Pass (8) |
 | Publication deprecation history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminDeprecation` | Pass (8) |
-| Admin event summary policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminEventSummary` | Pass (11) |
+| Admin event summary policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminEventSummary` | Pass (12) |
 | Draft created history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminDraftCreated` | Pass (10) |
 | Managed instance created history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminManagedInstance` | Pass (12) |
 | Instance definition version history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminInstanceDefinitionVersion` | Pass (9) |
 | Instance persona history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminInstancePersona` | Pass (9) |
-| Admin events API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_events` | Pass (6) |
+| Instance lifecycle history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminInstanceLifecycle` | Pass (6) |
+| Admin events API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_events` | Pass (7) |
 
 ## Remaining (W07)
 

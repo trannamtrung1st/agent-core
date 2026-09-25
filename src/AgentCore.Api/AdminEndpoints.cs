@@ -214,7 +214,7 @@ internal static class AdminEndpoints
         group.MapPatch("/agent-instances/{instanceId:guid}/lifecycle", async (
             Guid instanceId,
             AdminUpdateAgentInstanceLifecycleRequest? request,
-            IAgentInstanceService instances,
+            AdminAgentInstanceService instances,
             CancellationToken cancellationToken) =>
         {
             try

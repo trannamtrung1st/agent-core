@@ -132,6 +132,50 @@ public sealed class AdminAgentInstanceService(
             .ConfigureAwait(false);
     }
 
+    public async ValueTask<AgentInstance> SetLifecycleAsync(
+        Guid instanceId,
+        AgentInstanceLifecycle lifecycle,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        if (lifecycle is not (AgentInstanceLifecycle.Active or AgentInstanceLifecycle.Archived))
+        {
+            throw AgentCoreErrors.Validation("lifecycle must be Active or Archived.");
+        }
+
+        var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+        }
+
+        if (instance.Lifecycle == lifecycle)
+        {
+            return instance;
+        }
+
+        var operationId = ids.NewId();
+        var now = time.GetUtcNow();
+        var nextRevision = instance.Revision + 1;
+        var append = AdminEventFactory.InstanceLifecycleChanged(
+            operationId,
+            now,
+            instance.DefinitionId,
+            instance.InstanceId,
+            instance.ActiveVersion,
+            instance.Lifecycle,
+            lifecycle,
+            nextRevision);
+        var updated = await instances.UpdateLifecycleWithHistoryAsync(
+                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, Lifecycle: lifecycle),
+                now,
+                append,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
+        return updated;
+    }
+
     private async ValueTask<AgentInstance> ResolveManagedInstanceFromEventAsync(
         AdminEvent existingEvent,
         CancellationToken cancellationToken)

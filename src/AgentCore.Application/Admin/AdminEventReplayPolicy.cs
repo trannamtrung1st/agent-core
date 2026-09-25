@@ -101,4 +101,46 @@ public static class AdminEventReplayPolicy
 
         return value.GetInt64();
     }
+
+    public static void EnsureInstanceLifecycleReplayMatches(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstanceRevisionUpdate update)
+    {
+        if (update.Lifecycle is not AgentInstanceLifecycle requestedLifecycle)
+        {
+            throw AgentCoreErrors.Validation("Lifecycle is required.");
+        }
+
+        if (existingEvent.Operation != historyAppend.Operation
+            || existingEvent.Operation is not (AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        var existingFrom = ReadLifecycleTransition(existingEvent.SummaryJson, "fromLifecycle");
+        var existingTo = ReadLifecycleTransition(existingEvent.SummaryJson, "toLifecycle");
+        var incomingFrom = ReadLifecycleTransition(historyAppend.SummaryJson, "fromLifecycle");
+        var incomingTo = ReadLifecycleTransition(historyAppend.SummaryJson, "toLifecycle");
+        var requestedTo = requestedLifecycle.ToString();
+        if (!string.Equals(existingFrom, incomingFrom, StringComparison.Ordinal)
+            || !string.Equals(existingTo, incomingTo, StringComparison.Ordinal)
+            || !string.Equals(incomingTo, requestedTo, StringComparison.Ordinal)
+            || existingEvent.Revision != historyAppend.Revision)
+        {
+            throw AgentCoreErrors.Conflict("Instance lifecycle change does not match the retried command.");
+        }
+    }
+
+    private static string ReadLifecycleTransition(string summaryJson, string propertyName)
+    {
+        using var document = JsonDocument.Parse(summaryJson);
+        if (!document.RootElement.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            throw AgentCoreErrors.Conflict("Instance lifecycle change history is missing lifecycle metadata.");
+        }
+
+        return value.GetString()
+            ?? throw AgentCoreErrors.Conflict("Instance lifecycle change history is missing lifecycle metadata.");
+    }
 }

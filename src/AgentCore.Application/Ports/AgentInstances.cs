@@ -32,6 +32,12 @@ public interface IAgentInstanceStore
         AdminEventAppend historyAppend,
         CancellationToken cancellationToken = default);
 
+    ValueTask<AgentInstance> UpdateLifecycleWithHistoryAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default);
+
     ValueTask UpdateActiveVersionAsync(
         Guid instanceId,
         int activeVersion,

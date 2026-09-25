@@ -82,6 +82,20 @@ public static class AdminEventSummaryPolicy
         "personaFingerprint"
     };
 
+    private static readonly HashSet<string> InstanceLifecycleChangedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "instanceId",
+        "fromLifecycle",
+        "toLifecycle"
+    };
+
+    private static readonly HashSet<string> InstanceLifecycleNames = new(StringComparer.Ordinal)
+    {
+        nameof(AgentInstanceLifecycle.Active),
+        nameof(AgentInstanceLifecycle.Archived)
+    };
+
     private static readonly HashSet<string> DraftCreatedSourceKinds = new(StringComparer.Ordinal)
     {
         nameof(DefinitionDraftSourceKind.New),
@@ -156,6 +170,12 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation is AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived)
+            {
+                ValidateInstanceLifecycleChangedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
@@ -213,6 +233,31 @@ public static class AdminEventSummaryPolicy
         {
             throw AgentCoreErrors.Validation("Persona changed event summary must include a lowercase SHA-256 persona fingerprint.");
         }
+    }
+
+    private static void ValidateInstanceLifecycleChangedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, InstanceLifecycleChangedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "instanceId");
+        var from = RequireLifecycleName(root, "fromLifecycle");
+        var to = RequireLifecycleName(root, "toLifecycle");
+        if (from == to)
+        {
+            throw AgentCoreErrors.Validation("Instance lifecycle change summary must include distinct lifecycle values.");
+        }
+    }
+
+    private static string RequireLifecycleName(JsonElement root, string propertyName)
+    {
+        RequireString(root, propertyName);
+        var value = root.GetProperty(propertyName).GetString();
+        if (string.IsNullOrWhiteSpace(value) || !InstanceLifecycleNames.Contains(value))
+        {
+            throw AgentCoreErrors.Validation($"Instance lifecycle change summary must include a valid {propertyName}.");
+        }
+
+        return value;
     }
 
     private static void ValidateDraftCreatedSummary(JsonElement root)

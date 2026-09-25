@@ -123,6 +123,43 @@ public static class AdminEventFactory
         return append;
     }
 
+    public static AdminEventAppend InstanceLifecycleChanged(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        Guid instanceId,
+        int activeVersion,
+        AgentInstanceLifecycle fromLifecycle,
+        AgentInstanceLifecycle toLifecycle,
+        long instanceRevision,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var operation = (fromLifecycle, toLifecycle) switch
+        {
+            (AgentInstanceLifecycle.Active, AgentInstanceLifecycle.Archived) => AdminEventOperationKind.InstanceArchived,
+            (AgentInstanceLifecycle.Archived, AgentInstanceLifecycle.Active) => AdminEventOperationKind.InstanceUnarchived,
+            _ => throw AgentCoreErrors.Validation("Unsupported managed instance lifecycle transition.")
+        };
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            operation,
+            "agent.instance",
+            instanceId.ToString("D"),
+            instanceRevision,
+            activeVersion,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                instanceId = instanceId.ToString("D"),
+                fromLifecycle = fromLifecycle.ToString(),
+                toLifecycle = toLifecycle.ToString()
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
     public static AdminEventAppend PublicationCreated(
         Guid operationId,
         DateTimeOffset occurredAt,

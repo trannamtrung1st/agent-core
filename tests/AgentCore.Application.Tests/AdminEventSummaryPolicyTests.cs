@@ -97,6 +97,22 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
+    public void InstanceArchived_summary_includes_lifecycle_transition()
+    {
+        var append = AdminEventFactory.InstanceLifecycleChanged(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            Guid.Parse("019944af-00d1-7000-8000-000000000095"),
+            1,
+            AgentInstanceLifecycle.Active,
+            AgentInstanceLifecycle.Archived,
+            2);
+        Assert.Equal(AdminEventOperationKind.InstanceArchived, append.Operation);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
     public void PersonaChanged_summary_includes_persona_revision_transition()
     {
         var append = AdminEventFactory.PersonaChanged(

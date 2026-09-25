@@ -327,6 +327,102 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
         return existing;
     }
 
+    public ValueTask<AgentInstance> UpdateLifecycleWithHistoryAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (EventStore is null)
+        {
+            throw AgentCoreErrors.Validation("Admin managed instance history is not available.");
+        }
+
+        var operationGate = AdminOperationLockRegistry.For(historyAppend.OperationId);
+        lock (operationGate)
+        {
+            var existingEvent = EventStore.TryGetByOperationIdAsync(historyAppend.OperationId)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (existingEvent is not null)
+            {
+                lock (_gate)
+                {
+                    return ValueTask.FromResult(
+                        ResolveInstanceLifecycleChangedFromEvent(existingEvent, historyAppend, update));
+                }
+            }
+
+            lock (_gate)
+            {
+                if (!_instances.TryGetValue(update.InstanceId, out var instance))
+                {
+                    throw AgentCoreErrors.NotFound("Agent instance was not found.");
+                }
+
+                if (instance.Revision != update.ExpectedRevision)
+                {
+                    throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+                }
+
+                if (instance.Compatibility)
+                {
+                    throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
+                }
+
+                if (update.Lifecycle is not AgentInstanceLifecycle lifecycle)
+                {
+                    throw AgentCoreErrors.Validation("Lifecycle is required.");
+                }
+
+                var previous = instance;
+                var next = instance with
+                {
+                    Lifecycle = lifecycle,
+                    UpdatedAt = updatedAt,
+                    Revision = instance.Revision + 1
+                };
+                _instances[update.InstanceId] = next;
+                try
+                {
+                    EventStore.AppendWithinLock(historyAppend);
+                }
+                catch
+                {
+                    _instances[update.InstanceId] = previous;
+                    throw;
+                }
+
+                return ValueTask.FromResult(next);
+            }
+        }
+    }
+
+    private AgentInstance ResolveInstanceLifecycleChangedFromEvent(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstanceRevisionUpdate update)
+    {
+        if (existingEvent.Operation is not (AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived))
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        EnsureAgentInstanceHistoryTargetMatches(existingEvent, historyAppend, update.InstanceId);
+        AdminEventReplayPolicy.EnsureInstanceLifecycleReplayMatches(existingEvent, historyAppend, update);
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var targetId)
+            || targetId != update.InstanceId
+            || !_instances.TryGetValue(update.InstanceId, out var existing))
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+        }
+
+        return existing;
+    }
+
     private AgentInstance ResolveInstanceDefinitionVersionChangedFromEvent(
         AdminEvent existingEvent,
         AdminEventAppend historyAppend,

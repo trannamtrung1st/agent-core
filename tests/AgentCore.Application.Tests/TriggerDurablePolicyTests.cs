@@ -439,5 +439,12 @@ public sealed class TriggerDurablePolicyTests
             AdminEventAppend historyAppend,
             CancellationToken cancellationToken = default) =>
             inner.UpdatePersonaWithHistoryAsync(update, updatedAt, historyAppend, cancellationToken);
+
+        public ValueTask<AgentInstance> UpdateLifecycleWithHistoryAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            inner.UpdateLifecycleWithHistoryAsync(update, updatedAt, historyAppend, cancellationToken);
     }
 }

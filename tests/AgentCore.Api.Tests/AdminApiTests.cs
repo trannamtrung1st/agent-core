@@ -1109,6 +1109,32 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_events_records_instance_archived_after_lifecycle_update()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var archive = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance!.InstanceId}/lifecycle",
+            new AdminUpdateAgentInstanceLifecycleRequest(instance.Revision, "Archived"));
+        archive.EnsureSuccessStatusCode();
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=agent.instance&targetId={instance.InstanceId}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.InstanceArchived)
+                && item.Summary.TryGetProperty("toLifecycle", out var toLifecycle)
+                && toLifecycle.GetString() == "Archived");
+    }
+
+    [Fact]
     public async Task Admin_events_records_persona_changed_after_update()
     {
         var client = OwnerClient();
