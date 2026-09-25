@@ -251,6 +251,37 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_learned_memory_requires_owner_capability()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync(
+            $"/api/v2/admin/agent-instances/{Guid.NewGuid():D}/learned-memory?scope=Session&sessionId={Guid.NewGuid():D}");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_learned_memory_delete_requires_confirm()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+        var session = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance!.InstanceId)));
+        session.EnsureSuccessStatusCode();
+        var view = await session.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.NotNull(view);
+
+        var response = await client.DeleteAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/learned-memory/{Guid.NewGuid():D}?scope=Session&sessionId={view!.SessionId}&confirm=false");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_effective_config_returns_not_found_for_broken_definition_association()
     {
         var client = OwnerClient();

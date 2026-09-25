@@ -193,3 +193,25 @@ public sealed record AdminUpdateAgentInstancePersonaRequest(
 public sealed record AdminUpdateAgentInstanceLifecycleRequest(long ExpectedRevision, string Lifecycle);
 
 public sealed record AdminReassociateAgentInstanceVersionRequest(long ExpectedRevision, int Version);
+
+public sealed record AdminLearnedMemoryListResponse(
+    string Scope,
+    IReadOnlyList<AdminLearnedMemoryItemResponse> Items);
+
+public sealed record AdminLearnedMemoryItemResponse(
+    string MemoryId,
+    string Kind,
+    string Subject,
+    string Content,
+    AdminLearnedMemoryProvenanceResponse Provenance,
+    string UpdatedAt);
+
+public sealed record AdminLearnedMemoryProvenanceResponse(
+    string Source,
+    string? OriginSessionId,
+    string? OriginMemoryId,
+    string RecordedAt);
+
+public sealed record AdminLearnedMemoryResetRequest(string Scope, string? SessionId, bool Confirm);
+
+public sealed record AdminLearnedMemoryResetResponse(string Scope, int ItemsRemoved);

@@ -219,4 +219,18 @@ public interface IStructuredMemoryService
         bool retrievalAllowed,
         MemoryAdmissionContext admission,
         CancellationToken cancellationToken = default);
+
+    ValueTask<int> ResetSessionScopeAsync(
+        TrustedMemoryOwner owner,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> ResetIdentityUserScopeAsync(
+        TrustedIdentityUserOwner owner,
+        bool retrievalAllowed,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<int> ResetUserScopeAsync(
+        TrustedUserOwner owner,
+        bool retrievalAllowed,
+        CancellationToken cancellationToken = default);
 }

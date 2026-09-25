@@ -2018,6 +2018,9 @@ public sealed class DurableReminderTests
         public ValueTask<StructuredMemoryItem> PromoteIdentityUserToUserAsync(TrustedIdentityUserOwner source, Guid memoryId, TrustedUserOwner destination, bool promotionAllowed, MemoryAdmissionContext admission, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem> UpdateUserAsync(TrustedUserOwner owner, MemoryUpdateProposal proposal, bool retrievalAllowed, MemoryAdmissionContext admission, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem> DeleteUserAsync(TrustedUserOwner owner, Guid memoryId, bool retrievalAllowed, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<int> ResetSessionScopeAsync(TrustedMemoryOwner owner, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<int> ResetIdentityUserScopeAsync(TrustedIdentityUserOwner owner, bool retrievalAllowed, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<int> ResetUserScopeAsync(TrustedUserOwner owner, bool retrievalAllowed, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         private StructuredMemoryItem Item(string content, MemoryScope scope) =>
             new(

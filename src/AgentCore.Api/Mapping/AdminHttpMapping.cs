@@ -140,6 +140,27 @@ internal static class AdminHttpMapping
             item.ContentSha256,
             item.ByteLength);
 
+    public static AdminLearnedMemoryListResponse ToLearnedMemoryList(AdminLearnedMemoryListResult result) =>
+        new(
+            result.Scope.ToString(),
+            result.Items.Select(ToLearnedMemoryItem).ToArray());
+
+    public static AdminLearnedMemoryItemResponse ToLearnedMemoryItem(AdminLearnedMemoryItem item) =>
+        new(
+            item.MemoryId.ToString("D"),
+            item.Kind.ToString(),
+            item.Subject,
+            item.Content,
+            new AdminLearnedMemoryProvenanceResponse(
+                item.ProvenanceSource,
+                item.OriginSessionId?.ToString("D"),
+                item.OriginMemoryId?.ToString("D"),
+                item.RecordedAt.ToString("o")),
+            item.UpdatedAt.ToString("o"));
+
+    public static AdminLearnedMemoryResetResponse ToLearnedMemoryReset(AdminLearnedMemoryResetResult result) =>
+        new(result.Scope.ToString(), result.ItemsRemoved);
+
     private static AdminTriggerPolicyResponse ToTriggerPolicy(TriggerPolicy policy) =>
         new(
             policy.Enabled,

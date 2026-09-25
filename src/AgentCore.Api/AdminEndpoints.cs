@@ -267,6 +267,91 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/agent-instances/{instanceId:guid}/learned-memory", async (
+            Guid instanceId,
+            string scope,
+            Guid? sessionId,
+            AdminMemoryService memory,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var parsed = AdminMemoryHttp.ParseScope(scope);
+                var result = await memory.ListAsync(instanceId, parsed, sessionId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToLearnedMemoryList(result));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapDelete("/agent-instances/{instanceId:guid}/learned-memory/{memoryId:guid}", async (
+            Guid instanceId,
+            Guid memoryId,
+            string scope,
+            Guid? sessionId,
+            bool confirm,
+            AdminMemoryService memory,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (!confirm)
+                {
+                    throw AgentCoreErrors.Validation("confirm=true is required for destructive memory operations.");
+                }
+
+                var parsed = AdminMemoryHttp.ParseScope(scope);
+                await memory.DeleteAsync(instanceId, parsed, memoryId, sessionId, cancellationToken).ConfigureAwait(false);
+                return Results.NoContent();
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/agent-instances/{instanceId:guid}/learned-memory/reset", async (
+            Guid instanceId,
+            AdminLearnedMemoryResetRequest? request,
+            AdminMemoryService memory,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null || string.IsNullOrWhiteSpace(request.Scope))
+                {
+                    throw AgentCoreErrors.Validation("scope is required.");
+                }
+
+                if (!request.Confirm)
+                {
+                    throw AgentCoreErrors.Validation("confirm must be true for destructive memory operations.");
+                }
+
+                var parsed = AdminMemoryHttp.ParseScope(request.Scope);
+                Guid? sessionId = null;
+                if (!string.IsNullOrWhiteSpace(request.SessionId))
+                {
+                    if (!Guid.TryParse(request.SessionId, out var parsedSession) || parsedSession == Guid.Empty)
+                    {
+                        throw AgentCoreErrors.Validation("sessionId is invalid.");
+                    }
+
+                    sessionId = parsedSession;
+                }
+
+                var result = await memory.ResetScopeAsync(instanceId, parsed, sessionId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToLearnedMemoryReset(result));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapGet("/definition-drafts", async (
             AgentDefinitionLifecycleService lifecycle,
             CancellationToken cancellationToken) =>
