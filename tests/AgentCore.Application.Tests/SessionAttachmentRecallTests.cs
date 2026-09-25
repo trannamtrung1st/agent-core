@@ -47,11 +47,11 @@ public sealed class SessionAttachmentRecallTests
         Assert.NotNull(firstEntry.Attachments);
         Assert.Equal("proposal.md", firstEntry.Attachments![0].DisplayName);
 
-        Assert.True(await runtime.SubmitUserTextAsync("Count the words in that file."));
         using var second = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var completedBefore = output.Terminals.Count;
+        Assert.True(await runtime.SubmitUserTextAsync("Count the words in that file."));
         await output.WaitForAsync(
-            item => item.Payload is ResponseCompletedOutput && output.Terminals.Count == completedBefore + 1,
+            item => item.Payload is ResponseCompletedOutput && output.Terminals.Count > completedBefore,
             second.Token);
         await runtime.WaitUntilIdleAsync();
 
