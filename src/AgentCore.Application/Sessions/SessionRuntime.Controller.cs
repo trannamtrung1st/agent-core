@@ -357,7 +357,7 @@ public sealed partial class SessionRuntime
             _snapshot.Mode,
             _snapshot.PendingMode,
             _snapshot.Status,
-            PublicHistory.FromDefinition(_snapshot.Definition, _voice.IsAvailable(_snapshot.Definition, SpeechLocale.Resolve(_snapshot).Effective)),
+            PublicHistory.FromSnapshot(_snapshot, _voice.IsAvailable(_snapshot.Definition, SpeechLocale.Resolve(_snapshot).Effective)),
             voice ? _streamId : null,
             voice ? CanonicalAudio.Format : null,
             voice

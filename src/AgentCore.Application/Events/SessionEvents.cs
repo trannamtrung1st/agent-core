@@ -483,12 +483,24 @@ public static class PublicHistory
             block.ArtifactId);
 
     public static PublicAgentDescriptor FromDefinition(AgentDefinition definition, bool voiceAvailable) =>
+        FromIdentity(definition, definition.Identity, voiceAvailable);
+
+    public static PublicAgentDescriptor FromSnapshot(SessionSnapshot snapshot, bool voiceAvailable)
+    {
+        var identity = snapshot.PinnedPersona ?? snapshot.Definition.Identity;
+        return FromIdentity(snapshot.Definition, identity, voiceAvailable);
+    }
+
+    private static PublicAgentDescriptor FromIdentity(
+        AgentDefinition definition,
+        AgentIdentity identity,
+        bool voiceAvailable) =>
         new(
             definition.Id,
             definition.Version,
-            definition.Identity.Name,
-            definition.Identity.Role,
-            definition.Identity.Description,
+            identity.Name,
+            identity.Role,
+            identity.Description,
             voiceAvailable,
             definition.ConversationPolicy.Language);
 }
