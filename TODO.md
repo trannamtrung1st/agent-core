@@ -13,17 +13,24 @@ workflow 35954811544 — green
 
 P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
 
-P6 implementation freeze:
+P6 final behavior freeze:
 
 ```text
+2455de938ad4a156189ea7affcea1ca940cd4ec1
+workflow 36081962547 — Compose green; exact-SHA offline pending (last review)
+
+P6 core durable-runtime repair (2067a44):
 2067a44a1534623dafc7803d14b8833ee1ba7890
 workflow 36031813141 — green (exact SHA)
 
 Manual A:
-faithful wall-clock detached reminder — pass (2026-09-25)
+faithful wall-clock detached reminder — pass on 2455de9 tree (2026-09-25)
+
+Freeze-record docs only:
+c7434f3d2d8d0c91c89da4671bde4ce417bb706d
 ```
 
-P6 is **closed/frozen** at `2067a44` after post-freeze repair and faithful Manual A. Do not reopen P6 unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
+P6 is **closed/frozen** at **`2455de9`** (core repair **`2067a44`**). Do not reopen P6 unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
 **Current active phase:** **P7 — agent harness / admin lifecycle** (not started).
 
@@ -42,7 +49,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P6 are closed/frozen** (`2067a44`, workflow `36031813141`, Manual A pass).
+1. **P0–P6 are closed/frozen** (behavior freeze `2455de9`; core repair `2067a44` / workflow `36031813141`; Manual A on `2455de9` tree).
 2. **P7 — agent harness / admin lifecycle** is the next phase and has not started. Do not implement P7 without an explicit milestone request.
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
@@ -1168,7 +1175,7 @@ P2 freeze:  47d6ff6
 P3 freeze:  4dbb920
 P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
-P6 freeze: 2067a44 / workflow 36031813141 green / Manual A pass
+P6 freeze: 2455de9 (core repair 2067a44 / workflow 36031813141 green) / Manual A on 2455de9 tree
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
 next phase: P7 — not started
 ```
@@ -1214,13 +1221,13 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
 - [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
-- [x] Durable triggered/background execution — P6 closed/frozen on `2067a44` (workflow `36031813141` green; Manual A pass).
+- [x] Durable triggered/background execution — P6 closed/frozen on `2455de9` (core repair `2067a44`, workflow `36031813141` green; Manual A on `2455de9` tree).
 
 ---
 
 # Next implementation item
 
-**P6 — durable background work and triggered execution** is closed/frozen on `2067a44a1534623dafc7803d14b8833ee1ba7890`. Hosted workflow `36031813141` is green; faithful Manual A passed 2026-09-25. Evidence: `docs/reports/p6-freeze-candidate.md`. P5 remains frozen on `4bbc0c1`.
+**P6 — durable background work and triggered execution** is closed/frozen on `2455de938ad4a156189ea7affcea1ca940cd4ec1` (core repair `2067a44`, workflow `36031813141` green). Faithful Manual A passed 2026-09-25 on the `2455de9` tree. Evidence: `docs/reports/p6-freeze-candidate.md`. P5 remains frozen on `4bbc0c1`.
 
 P6 owns `AwaitingDurableWork` execution, headless/background runs, and unattended delivery. P5 does not include a durable `WorkItem` engine, public webhooks, a calendar UI, or standing approval for later sensitive tools.
 

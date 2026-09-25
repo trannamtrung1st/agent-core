@@ -1,6 +1,6 @@
 # P6 — Durable background work and triggered execution
 
-**P6 closed/frozen.** Durable repair ends at [`2067a44`](https://github.com/trannamtrung1st/agent-core/commit/2067a44a1534623dafc7803d14b8833ee1ba7890) (`2067a44`). Hosted workflow [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) is green on that SHA. **Faithful Manual A** passed on 2026-09-25 (wall-clock detached reminder; intent-faithful result `Oven is ready.`). A small Synthetic reminder-delivery alignment and this report land in the closure commit; record that SHA in the table below when pushed.
+**P6 closed/frozen.** **Final P6 behavior freeze** is [`2455de9`](https://github.com/trannamtrung1st/agent-core/commit/2455de938ad4a156189ea7affcea1ca940cd4ec1) (`2455de9`): the last behavior-affecting P6 tree (Synthetic reminder-delivery harness, e2e alignment, `data/**` compile exclude). **Core durable-runtime repair** completed at [`2067a44`](https://github.com/trannamtrung1st/agent-core/commit/2067a44a1534623dafc7803d14b8833ee1ba7890) (`2067a44`); hosted workflow [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) is **green** on that exact SHA. **Faithful Manual A** passed on 2026-09-25 on the **`2455de9` tree** (not on plain `2067a44`): wall-clock detached reminder exercising frozen P6 core through the corrected Synthetic fixture; result `Oven is ready.`. Descendant [`c7434f3`](https://github.com/trannamtrung1st/agent-core/commit/c7434f3d2d8d0c91c89da4671bde4ce417bb706d) is **documentation-only** (freeze-record SHA pointer in this table).
 
 The prior freeze on `6900bc1` is superseded for implementation behavior but remains historical evidence (including scripted Manual A/C on Synthetic). **P7** is the next phase and is not implemented. Phase I WorkItems for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable.
 
@@ -15,19 +15,22 @@ The prior freeze on `6900bc1` is superseded for implementation behavior but rema
 | `2020724` | Legacy SQLite load, multi-tool resume, schedule vs automation UX |
 | `165237d` | Conservative legacy `Succeeded` + batch step reservation |
 | `2067a44` | Cross-version resumed `StepCount` normalization |
+| `2455de9` | Synthetic reminder-delivery harness, Manual A Playwright, durable e2e alignment |
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
-| Implementation freeze SHA | `2067a44a1534623dafc7803d14b8833ee1ba7890` (`2067a44`) |
-| Hosted workflow (exact SHA) | [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) — **success**. Synthetic offline gates success. Synthetic Compose smoke success |
+| **Final P6 behavior freeze SHA** | `2455de938ad4a156189ea7affcea1ca940cd4ec1` (`2455de9`) |
+| Hosted workflow (`2455de9`, exact SHA) | [`36081962547`](https://github.com/trannamtrung1st/agent-core/actions/runs/36081962547) — Synthetic Compose smoke **success**; exact-SHA offline gates **pending** at last review |
+| **Core durable-runtime repair SHA** | `2067a44a1534623dafc7803d14b8833ee1ba7890` (`2067a44`) |
+| Hosted workflow (`2067a44`, exact SHA) | [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) — **success**. Synthetic offline gates success. Synthetic Compose smoke success |
+| Freeze-record docs descendant | `c7434f3d2d8d0c91c89da4671bde4ce417bb706d` (`c7434f3`), workflow [`36081974554`](https://github.com/trannamtrung1st/agent-core/actions/runs/36081974554) — **documentation-only**; Compose smoke success; exact-SHA offline gates pending at last review |
 | Prior implementation freeze (superseded) | `6900bc1d0f0331f8696fc59acdfe7be49d50ebf2` (`6900bc1`), workflow [`35990145456`](https://github.com/trannamtrung1st/agent-core/actions/runs/35990145456) attempt 2 |
 | P5 baseline preserved | `4bbc0c17bc54746f87fd211174690659869e3e45`, workflow `35954811544` |
-| Faithful Manual A | **pass** (2026-09-25, Synthetic, disposable SQLite `/tmp/agent-core-manual-p6-faithful.db`) |
-| Closure commit SHA | `2455de938ad4a156189ea7affcea1ca940cd4ec1` (`2455de9`) — docs, Synthetic reminder delivery, Manual A Playwright |
+| Faithful Manual A | **pass** on **`2455de9` tree** (2026-09-25, Synthetic, disposable SQLite `/tmp/agent-core-manual-p6-faithful.db`) |
 
-The commit that records the final freeze SHA is documentation only. It is not the implementation freeze SHA. Parent or descendant CI is not substitute evidence.
+Exact-SHA hosted gates on `2455de9` are required for full freeze evidence; parent `2067a44` gates do not substitute. A descendant docs-only commit is not a behavior freeze SHA.
 
 ## What shipped
 
@@ -53,16 +56,16 @@ The commit that records the final freeze SHA is documentation only. It is not th
 | AC-P6-22 | Domain, Application, Infrastructure, and API suites below; Playwright 50 passed |
 | AC-P6-23 | SQLite reopen journeys; Compose volume recreation |
 | AC-P6-24 | Faithful Manual A below — **pass**. Historical scripted Manual A on `6900bc1` retained for comparison |
-| AC-P6-25 | This report. Hosted workflow `36031813141` is green on candidate SHA `2067a44` |
+| AC-P6-25 | This report. Core repair gated on `2067a44` / `36031813141`; final tree `2455de9` / `36081962547` (offline pending at last review) |
 | RULE-01..18 | Covered by the batches above. Review 0014 passed W09 at `7a22b25` |
 | RULE-19 | P4 and P5 freeze reports were not rewritten as P6 evidence. Phase I stays not-applicable |
-| RULE-20 | P6 is closed/frozen on `2067a44` plus closure commit (Manual A evidence). P7 is next and is not implemented |
+| RULE-20 | P6 is closed/frozen on final behavior SHA `2455de9` (core repair `2067a44`; Manual A on `2455de9` tree). P7 is next and is not implemented |
 
 ## Manual evidence
 
 ### Manual A (faithful, detached wall-clock) — pass
 
-Profile **Synthetic**. Disposable host: API `http://127.0.0.1:5098`, SQLite `/tmp/agent-core-manual-p6-faithful.db`, UI `http://127.0.0.1:5190`. Tree at `2067a44` plus Synthetic reminder-delivery scripting (`ScriptedLanguageModel` reads `Scheduled reminder delivery mode` + stored intent).
+Profile **Synthetic**. Disposable host: API `http://127.0.0.1:5098`, SQLite `/tmp/agent-core-manual-p6-faithful.db`, UI `http://127.0.0.1:5190`. **Tree at `2455de9`** (includes Synthetic reminder-delivery scripting in `ScriptedLanguageModel` for `Scheduled reminder delivery mode` + stored intent). This manual did **not** run on plain `2067a44`; it validated frozen P6 core behavior through the corrected Synthetic harness.
 
 - User text: `check the oven in 1 minute for me` → schedule intent `check the oven`.
 - Session ended before the due instant (`This conversation has ended.`).
