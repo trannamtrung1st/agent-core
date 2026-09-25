@@ -102,6 +102,141 @@ public sealed class InMemoryAgentDefinitionResourceAdminStoreContractTests : Age
 
 public sealed class SqliteAgentDefinitionResourceAdminStoreContractTests : AgentDefinitionResourceAdminStoreContractTests
 {
+    [Fact]
+    public async Task Reopen_preserves_publication_resource_bindings()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-def-resources-reopen-{Guid.NewGuid():N}.db");
+        var blobRoot = Path.Combine(Path.GetTempPath(), $"agent-core-def-resource-blobs-reopen-{Guid.NewGuid():N}");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        var factory = new SqliteContextFactory(options);
+        int publishedV1Version;
+        int publishedV2Version;
+        Guid resourceId;
+        byte[] bytesV1;
+        byte[] bytesV2;
+        try
+        {
+            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
+            var (admin, resources, content) = CreateSqliteStores(factory, blobRoot);
+            var now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
+            var draft = await admin.CreateDraftAsync(
+                new AgentDefinitionDraftCreate(
+                    "reopen-resource-agent",
+                    SampleCandidate("reopen-resource-agent"),
+                    DefinitionDraftSourceKind.New,
+                    null,
+                    now),
+                CancellationToken.None);
+            bytesV1 = "version-one"u8.ToArray();
+            var hashV1 = DefinitionResourceContentHasher.ComputeSha256Hex(bytesV1);
+            await content.StoreVerifiedAsync(hashV1, bytesV1, CancellationToken.None);
+            var resource = await resources.UpsertDraftResourceAsync(
+                new AgentDefinitionDraftResourceUpsert(
+                    draft.DraftId,
+                    draft.Revision,
+                    null,
+                    "knowledge/policy.md",
+                    AgentDefinitionResourceKind.Knowledge,
+                    "text/markdown",
+                    hashV1,
+                    bytesV1.Length,
+                    now.AddMinutes(1)),
+                CancellationToken.None);
+            resourceId = resource.ResourceId;
+            var draftAfterResource = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+            var publishedV1 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(
+                    draftAfterResource!.DraftId,
+                    draftAfterResource.Revision,
+                    [],
+                    now.AddMinutes(2)),
+                CancellationToken.None);
+            publishedV1Version = publishedV1.Version;
+            var draftAfterPublishV1 = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+
+            bytesV2 = "version-two"u8.ToArray();
+            var hashV2 = DefinitionResourceContentHasher.ComputeSha256Hex(bytesV2);
+            await content.StoreVerifiedAsync(hashV2, bytesV2, CancellationToken.None);
+            _ = await resources.UpsertDraftResourceAsync(
+                new AgentDefinitionDraftResourceUpsert(
+                    draftAfterPublishV1!.DraftId,
+                    draftAfterPublishV1.Revision,
+                    resource.ResourceId,
+                    "knowledge/policy.md",
+                    AgentDefinitionResourceKind.Knowledge,
+                    "text/markdown",
+                    hashV2,
+                    bytesV2.Length,
+                    now.AddMinutes(3)),
+                CancellationToken.None);
+            var draftBeforeV2 = await admin.GetDraftAsync(draftAfterPublishV1.DraftId, CancellationToken.None);
+            var publishedV2 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(
+                    draftBeforeV2!.DraftId,
+                    draftBeforeV2.Revision,
+                    [publishedV1.Version],
+                    now.AddMinutes(4)),
+                CancellationToken.None);
+            publishedV2Version = publishedV2.Version;
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+        }
+
+        try
+        {
+            var reopenedFactory = new SqliteContextFactory(options);
+            var (_, reopenedResources, _) = CreateSqliteStores(reopenedFactory, blobRoot);
+            var v1Bindings = await reopenedResources.ListPublicationResourcesAsync(
+                "reopen-resource-agent",
+                publishedV1Version);
+            var v2Bindings = await reopenedResources.ListPublicationResourcesAsync(
+                "reopen-resource-agent",
+                publishedV2Version);
+            Assert.Single(v1Bindings);
+            Assert.Single(v2Bindings);
+            var v1Read = await reopenedResources.ReadPublicationResourceContentAsync(
+                "reopen-resource-agent",
+                publishedV1Version,
+                resourceId);
+            var v2Read = await reopenedResources.ReadPublicationResourceContentAsync(
+                "reopen-resource-agent",
+                publishedV2Version,
+                resourceId);
+            Assert.Equal(bytesV1, v1Read);
+            Assert.Equal(bytesV2, v2Read);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            if (Directory.Exists(blobRoot))
+            {
+                Directory.Delete(blobRoot, recursive: true);
+            }
+        }
+    }
+
+    private static (SqliteAgentDefinitionAdminStore Admin, SqliteAgentDefinitionResourceAdminStore Resources, FileDefinitionResourceContentStore Content)
+        CreateSqliteStores(IDbContextFactory<AgentCoreDbContext> factory, string blobRoot)
+    {
+        var content = new FileDefinitionResourceContentStore(blobRoot);
+        var admin = new SqliteAgentDefinitionAdminStore(
+            factory,
+            new SystemIdGenerator(TimeProvider.System),
+            content);
+        var resources = new SqliteAgentDefinitionResourceAdminStore(
+            factory,
+            content,
+            new SystemIdGenerator(TimeProvider.System));
+        return (admin, resources, content);
+    }
+
     private sealed class SqliteContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     {
         public AgentCoreDbContext CreateDbContext() => new(options);
@@ -119,15 +254,7 @@ public sealed class SqliteAgentDefinitionResourceAdminStoreContractTests : Agent
         try
         {
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var content = new FileDefinitionResourceContentStore(blobRoot);
-            var admin = new SqliteAgentDefinitionAdminStore(
-                factory,
-                new SystemIdGenerator(TimeProvider.System),
-                content);
-            var resources = new SqliteAgentDefinitionResourceAdminStore(
-                factory,
-                content,
-                new SystemIdGenerator(TimeProvider.System));
+            var (admin, resources, content) = CreateSqliteStores(factory, blobRoot);
             await exercise(new ResourceStoreFixture(admin, resources, content));
         }
         finally

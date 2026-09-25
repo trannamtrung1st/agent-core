@@ -54,6 +54,14 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await page.getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
   await expect(draftsSection.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
 
+  await draftsSection.getByRole("tab", { name: "Capabilities" }).click();
+  const harnessLabel = `e2e-harness-${Date.now()}`;
+  await draftsSection.getByLabel("Harness labels").click();
+  await draftsSection.getByLabel("Harness labels").fill(harnessLabel);
+  await page.keyboard.press("Enter");
+  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
+
   await draftsSection.getByRole("tab", { name: "Resources" }).click();
   await draftsSection.getByLabel("Resource logical path").fill(resourcePath);
   await draftsSection.getByLabel("Resource file").setInputFiles({
