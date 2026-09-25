@@ -47,6 +47,9 @@ interface Window {
     releaseFakeSpeechOutput?: () => void;
     spokenClientSpeech?: () => string[];
     clientSpeechActive?: () => string | null;
+    hubConnected?: () => boolean;
+    sessionConnection?: () => string;
+    captureLiveState?: () => boolean;
   };
   __agentCoreSpeechTest?: {
     fakeRecognizer?: boolean;

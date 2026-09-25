@@ -1,4 +1,4 @@
-import { HttpTransportType, HubConnection, HubConnectionBuilder } from "@microsoft/signalr";
+import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
@@ -3676,6 +3676,9 @@ if (typeof window !== "undefined") {
       injectedSynthesizer?.releaseHold();
     },
     spokenClientSpeech: () => injectedSynthesizer?.spoken.map((item) => item.text) ?? [],
-    clientSpeechActive: () => clientSpeechPlayer?.activeResponseId() ?? null
+    clientSpeechActive: () => clientSpeechPlayer?.activeResponseId() ?? null,
+    hubConnected: () => connection?.state === HubConnectionState.Connected,
+    sessionConnection: () => useSessionStore.getState().connection,
+    captureLiveState: () => useSessionStore.getState().captureLive
   };
 }

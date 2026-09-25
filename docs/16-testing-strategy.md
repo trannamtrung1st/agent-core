@@ -43,6 +43,8 @@ The hard acceptance goal is no OpenRouter, OpenAI, internet, microphone, speaker
 
 Use this mode for CI, frontend development, deterministic conversation scenarios and interruption tests. Keep a separate integration suite with fake browser media devices to verify actual AudioWorklet capture/playback; hardware-free behavioral coverage and real worklet transport coverage are complementary. Synthetic requires zero API keys and rejects outbound provider HTTP by test assertion.
 
+**P7A Admin (observed):** `AdminApiTests` cover owner/trusted-local denial and secret-sentinel absence; `AdminReadServiceTests` cover exact-version resolution and ineligible trigger sources; Vitest covers Admin inventory/error/retry/unauthorized states and effective-config rendering; Playwright `e2e/admin-shell.spec.ts` asserts hub teardown while Admin is open, effective-config fields, return-to-same-chat reconnect, a second Synthetic turn, and narrow-width layout.
+
 ## Deterministic scenario matrix
 
 | Scenario | Stimulus | Required assertion |

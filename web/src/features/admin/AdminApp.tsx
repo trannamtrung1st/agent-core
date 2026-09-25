@@ -17,12 +17,13 @@ import {
   rememberChatUrl,
   type AdminRoute
 } from "../../app/appRoute";
+import { formatAdminLoadError } from "./adminErrors";
 
 const { Header, Content } = Layout;
 
 type LoadState<T> =
   | { kind: "loading" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; unauthorized?: boolean }
   | { kind: "ready"; data: T };
 
 export function AdminApp({ route }: { route: AdminRoute }) {
@@ -30,17 +31,40 @@ export function AdminApp({ route }: { route: AdminRoute }) {
   const [instances, setInstances] = useState<LoadState<AdminInstanceInventoryItem[]>>({ kind: "loading" });
   const [effectiveConfig, setEffectiveConfig] = useState<LoadState<AdminEffectiveConfiguration>>({ kind: "loading" });
 
-  const reloadInventory = useCallback(async () => {
+  const reloadDefinitions = useCallback(async () => {
     setDefinitions({ kind: "loading" });
+    try {
+      const definitionItems = await listAdminDefinitions();
+      setDefinitions({ kind: "ready", data: definitionItems });
+    } catch (error) {
+      const formatted = formatAdminLoadError(error);
+      setDefinitions({ kind: "error", message: formatted.message, unauthorized: formatted.unauthorized });
+    }
+  }, []);
+
+  const reloadInstances = useCallback(async () => {
     setInstances({ kind: "loading" });
     try {
-      const [definitionItems, instanceItems] = await Promise.all([listAdminDefinitions(), listAdminInstances()]);
-      setDefinitions({ kind: "ready", data: definitionItems });
+      const instanceItems = await listAdminInstances();
       setInstances({ kind: "ready", data: instanceItems });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load admin inventory.";
-      setDefinitions({ kind: "error", message });
-      setInstances({ kind: "error", message });
+      const formatted = formatAdminLoadError(error);
+      setInstances({ kind: "error", message: formatted.message, unauthorized: formatted.unauthorized });
+    }
+  }, []);
+
+  const reloadInventory = useCallback(async () => {
+    await Promise.all([reloadDefinitions(), reloadInstances()]);
+  }, [reloadDefinitions, reloadInstances]);
+
+  const reloadEffectiveConfig = useCallback(async (instanceId: string) => {
+    setEffectiveConfig({ kind: "loading" });
+    try {
+      const data = await getAdminEffectiveConfig(instanceId);
+      setEffectiveConfig({ kind: "ready", data });
+    } catch (error) {
+      const formatted = formatAdminLoadError(error);
+      setEffectiveConfig({ kind: "error", message: formatted.message, unauthorized: formatted.unauthorized });
     }
   }, []);
 
@@ -54,25 +78,8 @@ export function AdminApp({ route }: { route: AdminRoute }) {
       return;
     }
 
-    let cancelled = false;
-    setEffectiveConfig({ kind: "loading" });
-    void getAdminEffectiveConfig(route.instanceId)
-      .then((data) => {
-        if (!cancelled) {
-          setEffectiveConfig({ kind: "ready", data });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : "Failed to load effective configuration.";
-          setEffectiveConfig({ kind: "error", message });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [route]);
+    void reloadEffectiveConfig(route.instanceId);
+  }, [route, reloadEffectiveConfig]);
 
   const returnToChat = () => {
     navigateToAppPath(lastChatUrl(), true);
@@ -106,6 +113,8 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               emptyLabel="No definitions found."
               loading={definitions.kind === "loading"}
               error={definitions.kind === "error" ? definitions.message : null}
+              unauthorized={definitions.kind === "error" ? definitions.unauthorized : false}
+              onRetry={() => void reloadDefinitions()}
               items={
                 definitions.kind === "ready"
                   ? definitions.data.map((item) => ({
@@ -122,6 +131,8 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               emptyLabel="No instances yet. Start a chat to create compatibility instances."
               loading={instances.kind === "loading"}
               error={instances.kind === "error" ? instances.message : null}
+              unauthorized={instances.kind === "error" ? instances.unauthorized : false}
+              onRetry={() => void reloadInstances()}
               items={
                 instances.kind === "ready"
                   ? instances.data.map((item) => ({
@@ -142,6 +153,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
             definitionId={route.definitionId}
             definitions={definitions}
             onBack={() => navigateToAppPath(adminHomePath())}
+            onRetryDefinitions={() => void reloadDefinitions()}
           />
         ) : null}
 
@@ -151,6 +163,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
             instances={instances}
             effective={effectiveConfig}
             onBack={() => navigateToAppPath(adminHomePath())}
+            onRetryEffective={() => void reloadEffectiveConfig(route.instanceId)}
           />
         ) : null}
       </Content>
@@ -163,21 +176,37 @@ function InventorySection({
   emptyLabel,
   loading,
   error,
+  unauthorized,
+  onRetry,
   items
 }: {
   title: string;
   emptyLabel: string;
   loading: boolean;
   error: string | null;
+  unauthorized: boolean;
+  onRetry: () => void;
   items: Array<{ key: string; title: string; description: string; tag?: string; onClick: () => void }>;
 }) {
   return (
     <section aria-label={title}>
       <Typography.Title level={4}>{title}</Typography.Title>
-      {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} /> : null}
+      {error ? (
+        <Alert
+          type={unauthorized ? "warning" : "error"}
+          showIcon
+          message={error}
+          action={
+            <Button size="small" onClick={onRetry}>
+              Retry
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
       {loading ? (
         <Spin aria-label={`Loading ${title}`} />
-      ) : items.length === 0 ? (
+      ) : error ? null : items.length === 0 ? (
         <Typography.Text type="secondary">{emptyLabel}</Typography.Text>
       ) : (
         <List
@@ -208,11 +237,13 @@ function InventorySection({
 function DefinitionDetail({
   definitionId,
   definitions,
-  onBack
+  onBack,
+  onRetryDefinitions
 }: {
   definitionId: string;
   definitions: LoadState<AdminDefinitionInventoryItem[]>;
   onBack: () => void;
+  onRetryDefinitions: () => void;
 }) {
   const rows = definitions.kind === "ready"
     ? definitions.data.filter((item) => item.definitionId === definitionId)
@@ -223,7 +254,14 @@ function DefinitionDetail({
       <Button onClick={onBack}>Back to inventory</Button>
       <Typography.Title level={4}>{definitionId}</Typography.Title>
       {definitions.kind === "loading" ? <Spin /> : null}
-      {definitions.kind === "error" ? <Alert type="error" showIcon message={definitions.message} /> : null}
+      {definitions.kind === "error" ? (
+        <Alert
+          type="error"
+          showIcon
+          message={definitions.message}
+          action={<Button size="small" onClick={onRetryDefinitions}>Retry</Button>}
+        />
+      ) : null}
       {definitions.kind === "ready" && rows.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
@@ -244,12 +282,14 @@ function InstanceDetail({
   instanceId,
   instances,
   effective,
-  onBack
+  onBack,
+  onRetryEffective
 }: {
   instanceId: string;
   instances: LoadState<AdminInstanceInventoryItem[]>;
   effective: LoadState<AdminEffectiveConfiguration>;
   onBack: () => void;
+  onRetryEffective: () => void;
 }) {
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
@@ -267,62 +307,117 @@ function InstanceDetail({
       ) : null}
       {effective.kind === "loading" ? <Spin aria-label="Loading effective configuration" /> : null}
       {effective.kind === "error" ? (
-        <Alert type="error" showIcon message={effective.message} />
+        <Alert
+          type={effective.unauthorized ? "warning" : "error"}
+          showIcon
+          message={effective.message}
+          action={<Button size="small" onClick={onRetryEffective}>Retry</Button>}
+        />
       ) : null}
-      {effective.kind === "ready" ? (
+      {effective.kind === "ready" ? <EffectiveConfigView config={effective.data} /> : null}
+    </Flex>
+  );
+}
+
+export function EffectiveConfigView({ config }: { config: AdminEffectiveConfiguration }) {
+  const trigger = config.triggerPolicy;
+  return (
+    <Flex vertical gap={20}>
+      <section aria-label="Persona">
+        <Typography.Title level={5}>Persona</Typography.Title>
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="Name">{config.persona.name}</Descriptions.Item>
+          <Descriptions.Item label="Role">{config.persona.role}</Descriptions.Item>
+          <Descriptions.Item label="Description">{config.persona.description}</Descriptions.Item>
+          <Descriptions.Item label="Tone">{config.persona.tone}</Descriptions.Item>
+        </Descriptions>
+      </section>
+      <section aria-label="Runtime model">
+        <Typography.Title level={5}>Runtime model</Typography.Title>
         <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label="Definition">
-            {effective.data.definitionId} v{effective.data.definitionVersion} ({effective.data.definitionSource})
+            {config.definitionId} v{config.definitionVersion} ({config.definitionSource})
           </Descriptions.Item>
-          <Descriptions.Item label="Persona">
-            {effective.data.persona.name} · {effective.data.persona.role}
+          <Descriptions.Item label="Display name">{config.effectiveModel.displayName}</Descriptions.Item>
+          <Descriptions.Item label="Catalog key">{config.effectiveModel.catalogKey}</Descriptions.Item>
+          <Descriptions.Item label="Model id">{config.effectiveModel.modelId ?? "None"}</Descriptions.Item>
+          <Descriptions.Item label="Selection source">{config.effectiveModel.selectionSource}</Descriptions.Item>
+          <Descriptions.Item label="Reasoning effort">{config.effectiveModel.reasoningEffort ?? "None"}</Descriptions.Item>
+          <Descriptions.Item label="Language model alias">{config.providerPreferences.languageModel}</Descriptions.Item>
+          <Descriptions.Item label="Speech recognizer">
+            {config.providerPreferences.speechRecognizer ?? "None"}
           </Descriptions.Item>
-          <Descriptions.Item label="Effective model">
-            {effective.data.effectiveModel.displayName} ({effective.data.effectiveModel.catalogKey}) ·{" "}
-            {effective.data.effectiveModel.selectionSource}
-            {effective.data.effectiveModel.reasoningEffort
-              ? ` · ${effective.data.effectiveModel.reasoningEffort}`
-              : ""}
+          <Descriptions.Item label="Speech synthesizer">
+            {config.providerPreferences.speechSynthesizer ?? "None"}
           </Descriptions.Item>
-          <Descriptions.Item label="Provider alias">
-            {effective.data.providerPreferences.languageModel}
-          </Descriptions.Item>
-          <Descriptions.Item label="Offered tools">
-            {effective.data.effectiveToolAllowlist.length > 0
-              ? effective.data.effectiveToolAllowlist.join(", ")
-              : "None"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Harness references">
-            {effective.data.harnessReferences.length > 0 ? effective.data.harnessReferences.join(", ") : "None"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Workspace template">
-            {effective.data.workspaceTemplateId ?? "None"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Knowledge">
-            {effective.data.knowledgeSources.length > 0
-              ? effective.data.knowledgeSources.map((item) => item.identity).join(", ")
-              : "None"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Memory policy">
-            Session {effective.data.memoryPolicy.sessionMemory ? "on" : "off"} · Identity retrieval{" "}
-            {effective.data.memoryPolicy.identityUserRetrieval ? "on" : "off"} · User retrieval{" "}
-            {effective.data.memoryPolicy.userRetrieval ? "on" : "off"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Trigger policy">
-            {effective.data.triggerPolicy?.enabled ? "Enabled" : "Disabled"}
-            {effective.data.triggerPolicy
-              ? ` · sources: ${effective.data.triggerPolicy.allowedSourceKinds.join(", ") || "none"}`
-              : ""}
-          </Descriptions.Item>
-          <Descriptions.Item label="Durable work eligibility">
-            {effective.data.durableExecutionEligibility.canAcceptNewTriggeredWork ? "Eligible" : "Not eligible"}
-            {" · schedule "}
-            {effective.data.durableExecutionEligibility.allowsScheduleSource ? "allowed" : "blocked"}
-            {" · application events "}
-            {effective.data.durableExecutionEligibility.allowsApplicationEventSource ? "allowed" : "blocked"}
+          <Descriptions.Item label="Interruption classifier">
+            {config.providerPreferences.interruptionClassifier}
           </Descriptions.Item>
         </Descriptions>
-      ) : null}
+      </section>
+      <section aria-label="Tools and resources">
+        <Typography.Title level={5}>Tools and resources</Typography.Title>
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="Offered tools">
+            {config.effectiveToolAllowlist.length > 0 ? config.effectiveToolAllowlist.join(", ") : "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Harness references">
+            {config.harnessReferences.length > 0 ? config.harnessReferences.join(", ") : "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Workspace template">{config.workspaceTemplateId ?? "None"}</Descriptions.Item>
+          <Descriptions.Item label="Knowledge">
+            {config.knowledgeSources.length > 0
+              ? config.knowledgeSources.map((item) => `${item.identity} (${item.title})`).join("; ")
+              : "None"}
+          </Descriptions.Item>
+        </Descriptions>
+      </section>
+      <section aria-label="Memory policy">
+        <Typography.Title level={5}>Memory policy</Typography.Title>
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="Session memory">{config.memoryPolicy.sessionMemory ? "On" : "Off"}</Descriptions.Item>
+          <Descriptions.Item label="Identity promotion">
+            {config.memoryPolicy.identityUserPromotion ? "On" : "Off"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Identity retrieval">
+            {config.memoryPolicy.identityUserRetrieval ? "On" : "Off"}
+          </Descriptions.Item>
+          <Descriptions.Item label="User promotion">{config.memoryPolicy.userPromotion ? "On" : "Off"}</Descriptions.Item>
+          <Descriptions.Item label="User retrieval">{config.memoryPolicy.userRetrieval ? "On" : "Off"}</Descriptions.Item>
+        </Descriptions>
+      </section>
+      <section aria-label="Automation">
+        <Typography.Title level={5}>Automation</Typography.Title>
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="Trigger enabled">{trigger?.enabled ? "Yes" : "No"}</Descriptions.Item>
+          <Descriptions.Item label="User scheduling">{trigger?.allowUserScheduling ? "Yes" : "No"}</Descriptions.Item>
+          <Descriptions.Item label="Allowed source kinds">
+            {trigger?.allowedSourceKinds.join(", ") || "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="One-shot / daily / weekly">
+            {trigger
+              ? `${trigger.allowOneShot ? "one-shot" : "—"} / ${trigger.allowDaily ? "daily" : "—"} / ${trigger.allowWeekly ? "weekly" : "—"}`
+              : "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Recurrence limits">
+            {trigger
+              ? `max registrations ${trigger.maxActiveRegistrations}, horizon ${trigger.oneShotHorizonDays}d, min recurrence ${trigger.minRecurrenceDays}d`
+              : "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Fixed interval">
+            {trigger?.allowFixedInterval
+              ? `allowed (min ${trigger.minFixedIntervalSeconds}s)`
+              : trigger
+                ? "disabled"
+                : "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Durable work eligibility">
+            {config.durableExecutionEligibility.canAcceptNewTriggeredWork ? "Eligible" : "Not eligible"} · schedule{" "}
+            {config.durableExecutionEligibility.allowsScheduleSource ? "allowed" : "blocked"} · application events{" "}
+            {config.durableExecutionEligibility.allowsApplicationEventSource ? "allowed" : "blocked"}
+          </Descriptions.Item>
+        </Descriptions>
+      </section>
     </Flex>
   );
 }
