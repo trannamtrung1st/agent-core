@@ -45,7 +45,9 @@ public sealed record AgentDefinitionDraftCreate(
     AgentDefinitionCandidate Candidate,
     DefinitionDraftSourceKind SourceKind,
     int? SourceVersion,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid OperationId = default,
+    AdminEventActorKind ActorKind = AdminEventActorKind.LocalOwner);
 
 public sealed record AgentDefinitionDraftUpdate(
     Guid DraftId,

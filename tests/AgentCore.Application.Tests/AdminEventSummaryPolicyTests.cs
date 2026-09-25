@@ -1,5 +1,6 @@
 using AgentCore.Application.Admin;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tests;
 
@@ -96,18 +97,32 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
+    public void DraftCreated_summary_includes_source_metadata()
+    {
+        var append = AdminEventFactory.DraftCreated(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            Guid.Parse("019944af-00d1-7000-8000-000000000099"),
+            DefinitionDraftSourceKind.ForkBuiltIn,
+            1);
+        Assert.Contains("\"sourceKind\":\"ForkBuiltIn\"", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
     public void ValidateAppend_requires_empty_object_for_unimplemented_operations()
     {
         var append = new AdminEventAppend(
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
             AdminEventActorKind.LocalOwner,
-            AdminEventOperationKind.DraftCreated,
-            "definition.draft",
+            AdminEventOperationKind.InstanceArchived,
+            "agent.instance",
             "019944af-00d1-7000-8000-000000000099",
             1,
             null,
-            """{"draftId":"x"}""");
+            """{"instanceId":"x"}""");
         var error = Assert.Throws<AgentCoreException>(() => AdminEventSummaryPolicy.ValidateAppend(append));
         Assert.Equal(400, error.StatusCode);
     }

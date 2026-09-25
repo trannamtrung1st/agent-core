@@ -53,8 +53,49 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
             throw AgentCoreErrors.Validation("definitionId must match the candidate definitionId.");
         }
 
+        if (create.OperationId != Guid.Empty)
+        {
+            if (EventStore is null)
+            {
+                throw AgentCoreErrors.Validation("Admin draft history is not available.");
+            }
+
+            var operationGate = AdminOperationLockRegistry.For(create.OperationId);
+            lock (operationGate)
+            {
+                var existingDraft = TryResolveDraftCreatedByOperationId(create.OperationId);
+                if (existingDraft is not null)
+                {
+                    return ValueTask.FromResult(existingDraft);
+                }
+
+                return ValueTask.FromResult(CreateDraftWithHistory(create, candidate));
+            }
+        }
+
+        return ValueTask.FromResult(CreateDraftWithHistory(create, candidate));
+    }
+
+    private AgentDefinitionDraft CreateDraftWithHistory(
+        AgentDefinitionDraftCreate create,
+        AgentDefinitionCandidate candidate)
+    {
+        var draftId = ids.NewId();
+        AdminEventAppend? historyAppend = null;
+        if (create.OperationId != Guid.Empty)
+        {
+            historyAppend = AdminEventFactory.DraftCreated(
+                create.OperationId,
+                create.CreatedAt,
+                create.DefinitionId,
+                draftId,
+                create.SourceKind,
+                create.SourceVersion,
+                create.ActorKind);
+        }
+
         var draft = AgentDefinitionAdminSnapshots.Freeze(new AgentDefinitionDraft(
-            ids.NewId(),
+            draftId,
             create.DefinitionId,
             1,
             candidate,
@@ -62,12 +103,55 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
             create.SourceVersion,
             create.CreatedAt,
             create.CreatedAt));
-        if (!_drafts.TryAdd(draft.DraftId, draft))
+        var gate = DefinitionDraftLockRegistry.For(draft.DraftId);
+        lock (gate)
         {
-            throw AgentCoreErrors.Conflict("Draft could not be created.");
+            if (!_drafts.TryAdd(draft.DraftId, draft))
+            {
+                throw AgentCoreErrors.Conflict("Draft could not be created.");
+            }
+
+            if (historyAppend is not null)
+            {
+                try
+                {
+                    EventStore!.AppendWithinLock(historyAppend);
+                }
+                catch
+                {
+                    _drafts.TryRemove(draft.DraftId, out _);
+                    throw;
+                }
+            }
         }
 
-        return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(draft));
+        return AgentDefinitionAdminSnapshots.Freeze(draft);
+    }
+
+    private AgentDefinitionDraft? TryResolveDraftCreatedByOperationId(Guid operationId)
+    {
+        var existingEvent = EventStore!.TryGetByOperationIdAsync(operationId).AsTask().GetAwaiter().GetResult();
+        if (existingEvent is null)
+        {
+            return null;
+        }
+
+        if (existingEvent.Operation != AdminEventOperationKind.DraftCreated)
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var draftId))
+        {
+            throw AgentCoreErrors.Conflict("Draft created history is missing a draft target id.");
+        }
+
+        if (!_drafts.TryGetValue(draftId, out var draft))
+        {
+            throw AgentCoreErrors.Conflict("Draft created history references a missing draft.");
+        }
+
+        return AgentDefinitionAdminSnapshots.Freeze(draft);
     }
 
     public ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(

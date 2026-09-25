@@ -1,10 +1,40 @@
 using System.Text.Json;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Admin;
 
 public static class AdminEventFactory
 {
+    public static AdminEventAppend DraftCreated(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        Guid draftId,
+        DefinitionDraftSourceKind sourceKind,
+        int? sourceVersion,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.DraftCreated,
+            "definition.draft",
+            draftId.ToString("D"),
+            1,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                draftId = draftId.ToString("D"),
+                sourceKind = sourceKind.ToString(),
+                sourceVersion
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
     public static AdminEventAppend PublicationCreated(
         Guid operationId,
         DateTimeOffset occurredAt,

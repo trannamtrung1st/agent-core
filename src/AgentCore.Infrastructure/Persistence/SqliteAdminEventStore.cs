@@ -8,6 +8,15 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class SqliteAdminEventStore(IDbContextFactory<AgentCoreDbContext> contexts, IIdGenerator ids)
     : IAdminEventStore
 {
+    public async ValueTask<AdminEvent?> TryGetByOperationIdAsync(
+        Guid operationId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await AdminEventPersistence.TryGetByOperationIdAsync(db, operationId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async ValueTask<AdminEvent> AppendAsync(AdminEventAppend append, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

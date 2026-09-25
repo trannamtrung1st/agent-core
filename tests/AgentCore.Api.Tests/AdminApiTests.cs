@@ -1086,6 +1086,30 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_events_records_draft_created_after_create()
+    {
+        var client = OwnerClient();
+        const string definitionId = "p7g-draft-history";
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                definitionId,
+                JsonSerializer.SerializeToElement(SampleDraftCandidate(definitionId), JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        Assert.NotNull(draft);
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=definition.draft&targetId={draft!.DraftId}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.DraftCreated)
+                && item.Summary.TryGetProperty("sourceKind", out var kind)
+                && kind.GetString() == "New");
+    }
+
+    [Fact]
     public async Task Admin_events_records_publication_created_after_publish()
     {
         var client = OwnerClient();

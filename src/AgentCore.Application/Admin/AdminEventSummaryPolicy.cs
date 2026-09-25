@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Admin;
 
@@ -49,6 +50,21 @@ public static class AdminEventSummaryPolicy
         "metadataRevision"
     };
 
+    private static readonly HashSet<string> DraftCreatedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "draftId",
+        "sourceKind",
+        "sourceVersion"
+    };
+
+    private static readonly HashSet<string> DraftCreatedSourceKinds = new(StringComparer.Ordinal)
+    {
+        nameof(DefinitionDraftSourceKind.New),
+        nameof(DefinitionDraftSourceKind.ForkBuiltIn),
+        nameof(DefinitionDraftSourceKind.ForkDurable)
+    };
+
     public static void ValidateAppend(AdminEventAppend append)
     {
         if (string.IsNullOrWhiteSpace(append.SummaryJson))
@@ -92,10 +108,44 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation == AdminEventOperationKind.DraftCreated)
+            {
+                ValidateDraftCreatedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
             }
+        }
+    }
+
+    private static void ValidateDraftCreatedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, DraftCreatedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "draftId");
+        if (!root.TryGetProperty("sourceKind", out var sourceKind) || sourceKind.ValueKind != JsonValueKind.String)
+        {
+            throw AgentCoreErrors.Validation("Draft created event summary must include sourceKind.");
+        }
+
+        var kind = sourceKind.GetString();
+        if (string.IsNullOrWhiteSpace(kind) || !DraftCreatedSourceKinds.Contains(kind))
+        {
+            throw AgentCoreErrors.Validation("Draft created event summary contains an unknown sourceKind.");
+        }
+
+        if (!root.TryGetProperty("sourceVersion", out var sourceVersion))
+        {
+            throw AgentCoreErrors.Validation("Draft created event summary must include sourceVersion.");
+        }
+
+        if (sourceVersion.ValueKind != JsonValueKind.Null
+            && sourceVersion.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Draft created sourceVersion must be null or a number.");
         }
     }
 

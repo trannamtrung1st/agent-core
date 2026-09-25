@@ -33,7 +33,13 @@ public sealed class AgentDefinitionLifecycleService(
         AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
         var now = time.GetUtcNow();
         return await admin.CreateDraftAsync(
-            new AgentDefinitionDraftCreate(definitionId, candidate, DefinitionDraftSourceKind.New, null, now),
+            new AgentDefinitionDraftCreate(
+                definitionId,
+                candidate,
+                DefinitionDraftSourceKind.New,
+                null,
+                now,
+                ids.NewId()),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -54,7 +60,13 @@ public sealed class AgentDefinitionLifecycleService(
 
         var now = time.GetUtcNow();
         return await admin.CreateDraftAsync(
-            new AgentDefinitionDraftCreate(definitionId, candidate, sourceKind, sourceVersion, now),
+            new AgentDefinitionDraftCreate(
+                definitionId,
+                candidate,
+                sourceKind,
+                sourceVersion,
+                now,
+                ids.NewId()),
             cancellationToken).ConfigureAwait(false);
     }
 

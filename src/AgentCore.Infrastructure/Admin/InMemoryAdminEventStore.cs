@@ -10,6 +10,14 @@ public class InMemoryAdminEventStore(IIdGenerator ids) : IAdminEventStore
     private readonly ConcurrentDictionary<Guid, AdminEvent> _byOperationId = new();
     private readonly ConcurrentBag<AdminEvent> _events = [];
 
+    public ValueTask<AdminEvent?> TryGetByOperationIdAsync(
+        Guid operationId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(_byOperationId.TryGetValue(operationId, out var existing) ? existing : null);
+    }
+
     public ValueTask<AdminEvent> AppendAsync(AdminEventAppend append, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

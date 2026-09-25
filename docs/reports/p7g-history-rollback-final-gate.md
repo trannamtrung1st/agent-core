@@ -10,6 +10,7 @@
 - `GET /api/v2/admin/events` owner-protected list API with target filters.
 - `PublicationCreated` admin events recorded atomically with durable draft publish (when operation id is supplied), including allowlisted `changedSections` metadata from the publish-time diff.
 - `PublicationDeprecated` admin events recorded atomically with metadata-only publication deprecate (operation id from lifecycle), including safe `metadataRevision` summary.
+- `DraftCreated` admin events recorded atomically with durable draft create/fork (operation id from lifecycle), including bounded `sourceKind` / `sourceVersion` summary.
 - Shared `AdminEventSummaryPolicy` validation for in-memory and SQLite event append paths.
 
 ## W07 verification (partial)
@@ -19,8 +20,9 @@
 | Admin event store parity | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminEvent` | Pass (10) |
 | Publication history durability | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminPublication` | Pass (8) |
 | Publication deprecation history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminDeprecation` | Pass (8) |
-| Admin event summary policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminEventSummary` | Pass (7) |
-| Admin events API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_events` | Pass (2) |
+| Admin event summary policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminEventSummary` | Pass (8) |
+| Draft created history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminDraftCreated` | Pass (10) |
+| Admin events API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_events` | Pass (3) |
 
 ## Remaining (W07)
 

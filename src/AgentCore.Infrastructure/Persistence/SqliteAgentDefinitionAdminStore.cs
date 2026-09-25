@@ -54,8 +54,37 @@ public sealed class SqliteAgentDefinitionAdminStore(
             throw AgentCoreErrors.Validation("definitionId must match the candidate definitionId.");
         }
 
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (create.OperationId != Guid.Empty)
+        {
+            var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
+                    db,
+                    create.OperationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (existingEvent is not null)
+            {
+                return await ResolveDraftCreatedByOperationEventAsync(existingEvent, db, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        var draftId = ids.NewId();
+        AdminEventAppend? historyAppend = null;
+        if (create.OperationId != Guid.Empty)
+        {
+            historyAppend = AdminEventFactory.DraftCreated(
+                create.OperationId,
+                create.CreatedAt,
+                create.DefinitionId,
+                draftId,
+                create.SourceKind,
+                create.SourceVersion,
+                create.ActorKind);
+        }
+
         var draft = new AgentDefinitionDraft(
-            ids.NewId(),
+            draftId,
             create.DefinitionId,
             1,
             create.Candidate,
@@ -63,14 +92,32 @@ public sealed class SqliteAgentDefinitionAdminStore(
             create.SourceVersion,
             create.CreatedAt,
             create.CreatedAt);
-        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         db.AgentDefinitionDrafts.Add(AgentDefinitionAdminMapping.MapDraft(draft));
+        if (historyAppend is not null)
+        {
+            AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+        }
+
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {
+            if (create.OperationId != Guid.Empty)
+            {
+                var raced = await AdminEventPersistence.TryGetByOperationIdAsync(
+                        db,
+                        create.OperationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (raced is not null)
+                {
+                    return await ResolveDraftCreatedByOperationEventAsync(raced, db, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+
             throw AgentCoreErrors.Conflict("Draft could not be created.");
         }
 
@@ -344,5 +391,28 @@ public sealed class SqliteAgentDefinitionAdminStore(
         }
 
         return AgentDefinitionAdminMapping.MapPublication(row);
+    }
+
+    private static async ValueTask<AgentDefinitionDraft> ResolveDraftCreatedByOperationEventAsync(
+        AdminEvent existingEvent,
+        AgentCoreDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (existingEvent.Operation != AdminEventOperationKind.DraftCreated)
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var draftId))
+        {
+            throw AgentCoreErrors.Conflict("Draft created history is missing a draft target id.");
+        }
+
+        var row = await db.AgentDefinitionDrafts
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.DraftId == draftId.ToString("D"), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.Conflict("Draft created history references a missing draft.");
+        return AgentDefinitionAdminMapping.MapDraft(row);
     }
 }
