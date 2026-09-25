@@ -231,7 +231,7 @@ public static class AgentDefinitionValidator
         }
     }
 
-    private static void ValidateIdentity(AgentIdentity identity)
+    public static void ValidateIdentity(AgentIdentity identity)
     {
         if (identity.Name.Length is < 1 or > 256
             || identity.Role.Length is < 1 or > 256

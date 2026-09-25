@@ -71,9 +71,15 @@ public sealed class AgentInstanceService(
     public async ValueTask<AgentInstance> UpgradeAsync(
         Guid instanceId,
         int version,
+        long expectedRevision,
         CancellationToken cancellationToken = default)
     {
-        var instance = await RequireAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+        }
+
         var definition = await definitions.GetAsync(instance.DefinitionId, version, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound($"Agent '{instance.DefinitionId}' version {version} was not found.");
         if (definition.Version == instance.ActiveVersion)
@@ -83,12 +89,69 @@ public sealed class AgentInstanceService(
 
         var updatedAt = time.GetUtcNow();
         var updated = await instances.UpdateWithExpectedRevisionAsync(
-                new AgentInstanceRevisionUpdate(instance.InstanceId, instance.Revision, ActiveVersion: definition.Version),
+                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version),
                 updatedAt,
                 cancellationToken)
             .ConfigureAwait(false);
         await NotifySchedulingEligibilityMayHaveImprovedAsync(instance.InstanceId, updatedAt, cancellationToken)
             .ConfigureAwait(false);
+        return updated;
+    }
+
+    public async ValueTask<AgentInstance> UpdatePersonaAsync(
+        Guid instanceId,
+        AgentIdentity persona,
+        long expectedRevision,
+        long expectedPersonaRevision,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var updatedAt = time.GetUtcNow();
+        return await instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(
+                    instanceId,
+                    expectedRevision,
+                    Persona: persona,
+                    ExpectedPersonaRevision: expectedPersonaRevision),
+                updatedAt,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async ValueTask<AgentInstance> SetLifecycleAsync(
+        Guid instanceId,
+        AgentInstanceLifecycle lifecycle,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        if (lifecycle is not (AgentInstanceLifecycle.Active or AgentInstanceLifecycle.Archived))
+        {
+            throw AgentCoreErrors.Validation("lifecycle must be Active or Archived.");
+        }
+
+        var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+        }
+
+        if (instance.Lifecycle == lifecycle)
+        {
+            return instance;
+        }
+
+        var updatedAt = time.GetUtcNow();
+        var updated = await instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(instanceId, expectedRevision, Lifecycle: lifecycle),
+                updatedAt,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (lifecycle == AgentInstanceLifecycle.Active)
+        {
+            await NotifySchedulingEligibilityMayHaveImprovedAsync(instanceId, updatedAt, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         return updated;
     }
 
@@ -208,5 +271,18 @@ public sealed class AgentInstanceService(
             return await instances.FindCompatibilityAsync(definitionId, cancellationToken).ConfigureAwait(false)
                 ?? throw new AgentCoreException("Conflict", "Agent instance already exists.", 409);
         }
+    }
+
+    private async ValueTask<AgentInstance> RequireManagedAsync(
+        Guid instanceId,
+        CancellationToken cancellationToken)
+    {
+        var instance = await RequireAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Compatibility)
+        {
+            throw AgentCoreErrors.Validation("Compatibility instances cannot be mutated through the managed API.");
+        }
+
+        return instance;
     }
 }

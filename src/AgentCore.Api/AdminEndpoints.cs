@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
@@ -160,14 +161,105 @@ internal static class AdminEndpoints
                     throw AgentCoreErrors.Conflict("Managed instance creation produced a compatibility row.");
                 }
 
-                return Results.Json(
-                    new AdminAgentInstanceResponse(
-                        instance.InstanceId.ToString("D"),
-                        instance.DefinitionId,
-                        instance.ActiveVersion,
-                        instance.Compatibility,
-                        instance.Lifecycle.ToString()),
-                    statusCode: StatusCodes.Status201Created);
+                return Results.Json(AdminHttpMapping.ToAgentInstance(instance), statusCode: StatusCodes.Status201Created);
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPatch("/agent-instances/{instanceId:guid}/persona", async (
+            Guid instanceId,
+            HttpRequest http,
+            IAgentInstanceService instances,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var parsed = await AdminAgentInstancePersonaHttp.ReadStrictPersonaUpdateAsync(http, cancellationToken)
+                    .ConfigureAwait(false);
+                var instance = await instances.UpdatePersonaAsync(
+                        instanceId,
+                        parsed.Persona,
+                        parsed.ExpectedRevision,
+                        parsed.ExpectedPersonaRevision,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToAgentInstance(instance));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+            catch (JsonException ex)
+            {
+                return ProblemResults.From(AgentCoreErrors.Validation(ex.Message));
+            }
+        });
+
+        group.MapPatch("/agent-instances/{instanceId:guid}/lifecycle", async (
+            Guid instanceId,
+            AdminUpdateAgentInstanceLifecycleRequest? request,
+            IAgentInstanceService instances,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null || string.IsNullOrWhiteSpace(request.Lifecycle))
+                {
+                    throw AgentCoreErrors.Validation("lifecycle is required.");
+                }
+
+                if (request.ExpectedRevision < 1)
+                {
+                    throw AgentCoreErrors.Validation("expectedRevision must be positive.");
+                }
+
+                if (!Enum.TryParse<AgentInstanceLifecycle>(request.Lifecycle, ignoreCase: true, out var lifecycle))
+                {
+                    throw AgentCoreErrors.Validation("lifecycle is invalid.");
+                }
+
+                var instance = await instances.SetLifecycleAsync(
+                        instanceId,
+                        lifecycle,
+                        request.ExpectedRevision,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToAgentInstance(instance));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPatch("/agent-instances/{instanceId:guid}/active-version", async (
+            Guid instanceId,
+            AdminReassociateAgentInstanceVersionRequest? request,
+            IAgentInstanceService instances,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null)
+                {
+                    throw AgentCoreErrors.Validation("request body is required.");
+                }
+
+                if (request.ExpectedRevision < 1 || request.Version < 1)
+                {
+                    throw AgentCoreErrors.Validation("expectedRevision and version must be positive.");
+                }
+
+                var instance = await instances.UpgradeAsync(
+                        instanceId,
+                        request.Version,
+                        request.ExpectedRevision,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToAgentInstance(instance));
             }
             catch (AgentCoreException ex)
             {

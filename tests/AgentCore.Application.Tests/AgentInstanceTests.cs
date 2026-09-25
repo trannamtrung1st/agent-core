@@ -57,7 +57,7 @@ public sealed class AgentInstanceTests
             new MemoryWriteProposal(MemoryKind.Fact, "Ship the report", "by Monday", []),
             admission);
 
-        var upgraded = await service.UpgradeAsync(alice.InstanceId, 2);
+        var upgraded = await service.UpgradeAsync(alice.InstanceId, 2, alice.Revision);
         Assert.Equal(alice.InstanceId, upgraded.InstanceId);
         Assert.Equal(2, upgraded.ActiveVersion);
         Assert.Equal(alice.Persona, upgraded.Persona);
@@ -104,7 +104,7 @@ public sealed class AgentInstanceTests
         var definitions = new VersionedDefinitions(V1(), V2());
         var service = Service(instances, definitions, sessions, clock, 8);
         var alice = await service.CreateAsync("examiner", 1);
-        await service.UpgradeAsync(alice.InstanceId, 2);
+        await service.UpgradeAsync(alice.InstanceId, 2, alice.Revision);
         var manager = Manager(definitions, sessions, service, clock, new InMemoryStructuredMemoryStore());
         var session = await manager.CreateForInstanceAsync(alice.InstanceId, SessionMode.Text);
         var model = new RecordingLanguageModel(new ScriptedLanguageModel());
@@ -188,6 +188,47 @@ public sealed class AgentInstanceTests
             Assert.NotNull(stored);
             Assert.Equal(3, stored.ActiveVersion);
         });
+    }
+
+    [Fact]
+    public async Task Archived_managed_instance_rejects_new_session()
+    {
+        var sessions = new InMemoryMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var clock = new FakeTimeProvider(Now);
+        var definitions = new VersionedDefinitions(V1());
+        var service = Service(instances, definitions, sessions, clock, 4);
+        var managed = await service.CreateAsync("examiner", 1);
+        var archived = await service.SetLifecycleAsync(
+            managed.InstanceId,
+            AgentInstanceLifecycle.Archived,
+            managed.Revision);
+        Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
+
+        var manager = Manager(definitions, sessions, service, clock, new InMemoryStructuredMemoryStore());
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            manager.CreateForInstanceAsync(managed.InstanceId, SessionMode.Text));
+        Assert.Equal("ValidationError", error.Code);
+    }
+
+    [Fact]
+    public async Task Persona_update_bumps_persona_revision()
+    {
+        var sessions = new InMemoryMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var clock = new FakeTimeProvider(Now);
+        var definitions = new VersionedDefinitions(V1());
+        var service = Service(instances, definitions, sessions, clock, 4);
+        var managed = await service.CreateAsync("examiner", 1);
+        var persona = managed.Persona with { Tone = "edited" };
+        var updated = await service.UpdatePersonaAsync(
+            managed.InstanceId,
+            persona,
+            managed.Revision,
+            managed.PersonaRevision);
+        Assert.Equal("edited", updated.Persona.Tone);
+        Assert.Equal(2, updated.PersonaRevision);
+        Assert.Equal(2, updated.Revision);
     }
 
     [Fact]

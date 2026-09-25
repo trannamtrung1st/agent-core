@@ -48,6 +48,20 @@ public interface IAgentInstanceService
     ValueTask<AgentInstance> UpgradeAsync(
         Guid instanceId,
         int version,
+        long expectedRevision,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<AgentInstance> UpdatePersonaAsync(
+        Guid instanceId,
+        AgentIdentity persona,
+        long expectedRevision,
+        long expectedPersonaRevision,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<AgentInstance> SetLifecycleAsync(
+        Guid instanceId,
+        AgentInstanceLifecycle lifecycle,
+        long expectedRevision,
         CancellationToken cancellationToken = default);
 
     ValueTask<AgentInstance> RequireAsync(Guid instanceId, CancellationToken cancellationToken = default);

@@ -99,6 +99,156 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_can_archive_managed_instance_and_block_new_session()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var archive = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance!.InstanceId}/lifecycle",
+            new AdminUpdateAgentInstanceLifecycleRequest(instance.Revision, "Archived"));
+        archive.EnsureSuccessStatusCode();
+        var archived = await archive.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(archived);
+        Assert.Equal("Archived", archived!.Lifecycle);
+
+        var session = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance.InstanceId)));
+        Assert.Equal(HttpStatusCode.BadRequest, session.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_can_update_managed_instance_persona_with_expected_revisions()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var update = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance!.InstanceId}/persona",
+            new AdminUpdateAgentInstancePersonaRequest(
+                instance.Revision,
+                instance.PersonaRevision,
+                instance.DefinitionId,
+                "Guide",
+                "Helps operators.",
+                "Calm"));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(updated);
+        Assert.Equal(2, updated!.PersonaRevision);
+        Assert.Equal(2, updated.Revision);
+    }
+
+    [Fact]
+    public async Task Admin_persona_update_rejects_unknown_properties()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+        using var content = new StringContent(
+            $$"""
+            {
+              "expectedRevision": {{instance!.Revision}},
+              "expectedPersonaRevision": {{instance.PersonaRevision}},
+              "name": "Examiner",
+              "role": "Guide",
+              "description": "Helps.",
+              "tone": "Calm",
+              "instanceId": "injected"
+            }
+            """,
+            System.Text.Encoding.UTF8,
+            "application/json");
+        var response = await client.PatchAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/persona",
+            content);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_persona_update_rejects_secret_sentinel_and_oversized_fields()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var secret = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance!.InstanceId}/persona",
+            new AdminUpdateAgentInstancePersonaRequest(
+                instance.Revision,
+                instance.PersonaRevision,
+                instance.DefinitionId,
+                "Guide",
+                "Helps.",
+                "OPENROUTER_API_KEY"));
+        Assert.Equal(HttpStatusCode.BadRequest, secret.StatusCode);
+
+        var oversized = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/persona",
+            new AdminUpdateAgentInstancePersonaRequest(
+                instance.Revision,
+                instance.PersonaRevision,
+                new string('n', 257),
+                "Guide",
+                "Helps.",
+                "Calm"));
+        Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_mutations_reject_stale_expected_revision_after_concurrent_change()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+        var staleRevision = instance!.Revision;
+
+        var persona = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/persona",
+            new AdminUpdateAgentInstancePersonaRequest(
+                instance.Revision,
+                instance.PersonaRevision,
+                "Examiner",
+                "Guide",
+                "Helps.",
+                "Edited"));
+        persona.EnsureSuccessStatusCode();
+
+        var staleLifecycle = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/lifecycle",
+            new AdminUpdateAgentInstanceLifecycleRequest(staleRevision, "Archived"));
+        Assert.Equal(HttpStatusCode.Conflict, staleLifecycle.StatusCode);
+
+        var staleVersion = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/active-version",
+            new AdminReassociateAgentInstanceVersionRequest(staleRevision, 1));
+        Assert.Equal(HttpStatusCode.Conflict, staleVersion.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_effective_config_returns_not_found_for_broken_definition_association()
     {
         var client = OwnerClient();

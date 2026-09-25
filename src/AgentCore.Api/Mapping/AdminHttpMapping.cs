@@ -21,6 +21,16 @@ internal static class AdminHttpMapping
             item.CreatedAt.ToString("o"),
             item.UpdatedAt.ToString("o"));
 
+    public static AdminAgentInstanceResponse ToAgentInstance(AgentInstance instance) =>
+        new(
+            instance.InstanceId.ToString("D"),
+            instance.DefinitionId,
+            instance.ActiveVersion,
+            instance.Compatibility,
+            instance.Lifecycle.ToString(),
+            instance.Revision,
+            instance.PersonaRevision);
+
     public static AdminEffectiveConfigurationResponse ToEffectiveConfiguration(AdminEffectiveConfiguration config) =>
         new(
             config.DefinitionSource,

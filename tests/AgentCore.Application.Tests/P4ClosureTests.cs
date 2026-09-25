@@ -55,7 +55,7 @@ public sealed class P4ClosureTests
                 clock);
             var alice = await instances.CreateAsync("customer-support", 1);
             var bob = await instances.CreateAsync("customer-support", 1);
-            var upgraded = await instances.UpgradeAsync(alice.InstanceId, 2);
+            var upgraded = await instances.UpgradeAsync(alice.InstanceId, 2, alice.Revision);
             Assert.Equal(2, upgraded.ActiveVersion);
             Assert.Equal(EligibleV1().Identity.Tone, upgraded.Persona.Tone);
 

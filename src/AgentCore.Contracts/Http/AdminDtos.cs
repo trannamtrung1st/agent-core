@@ -176,4 +176,18 @@ public sealed record AdminAgentInstanceResponse(
     string DefinitionId,
     int ActiveVersion,
     bool Compatibility,
-    string Lifecycle);
+    string Lifecycle,
+    long Revision,
+    long PersonaRevision);
+
+public sealed record AdminUpdateAgentInstancePersonaRequest(
+    long ExpectedRevision,
+    long ExpectedPersonaRevision,
+    string Name,
+    string Role,
+    string Description,
+    string Tone);
+
+public sealed record AdminUpdateAgentInstanceLifecycleRequest(long ExpectedRevision, string Lifecycle);
+
+public sealed record AdminReassociateAgentInstanceVersionRequest(long ExpectedRevision, int Version);

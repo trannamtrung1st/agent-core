@@ -124,6 +124,11 @@ public sealed class SessionManager
         }
 
         var instance = await _instances.RequireAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Lifecycle == AgentInstanceLifecycle.Archived)
+        {
+            throw AgentCoreErrors.Validation("Archived agent instances cannot start new sessions.");
+        }
+
         var definition = await _definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, cancellationToken)
             .ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound(
