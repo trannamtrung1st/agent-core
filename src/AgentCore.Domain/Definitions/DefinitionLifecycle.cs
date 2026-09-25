@@ -44,4 +44,5 @@ public sealed record AgentDefinitionPublicationSummary(
     string DefinitionId,
     int Version,
     DefinitionPublicationStatus Status,
+    long MetadataRevision,
     DateTimeOffset PublishedAt);

@@ -1,12 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Descriptions, Flex, Layout, List, Result, Spin, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, App, Button, Descriptions, Flex, Input, Layout, List, Result, Spin, Tag, Typography } from "antd";
 import {
+  type AdminDefinitionDraft,
+  type AdminDefinitionDraftSummary,
   type AdminDefinitionInventoryItem,
+  type AdminDefinitionPublicationSummary,
   type AdminEffectiveConfiguration,
   type AdminInstanceInventoryItem,
+  forkAdminDefinitionDraft,
+  getAdminDefinitionDraft,
   getAdminEffectiveConfig,
+  listAdminDefinitionDrafts,
+  listAdminDefinitionPublications,
   listAdminDefinitions,
-  listAdminInstances
+  listAdminInstances,
+  publishAdminDefinitionDraft,
+  updateAdminDefinitionDraft
 } from "../../services/adminApi";
 import {
   adminDefinitionPath,
@@ -91,6 +100,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
   };
 
   return (
+    <App className="antd-root" message={{ duration: 3, maxCount: 3 }}>
     <Layout className="admin-layout">
       <Header className="admin-header">
         <Flex align="center" justify="space-between" gap={12} wrap="wrap">
@@ -168,6 +178,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
         ) : null}
       </Content>
     </Layout>
+    </App>
   );
 }
 
@@ -245,9 +256,146 @@ function DefinitionDetail({
   onBack: () => void;
   onRetryDefinitions: () => void;
 }) {
+  const { message, modal } = App.useApp();
   const rows = definitions.kind === "ready"
     ? definitions.data.filter((item) => item.definitionId === definitionId)
     : [];
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
+  const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
+  const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
+  const [instructions, setInstructions] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const savedInstructions = useMemo(() => {
+    if (!activeDraft) {
+      return "";
+    }
+    return (activeDraft.candidate as { systemInstructions?: string }).systemInstructions ?? "";
+  }, [activeDraft]);
+
+  const dirty = activeDraft !== null && instructions !== savedInstructions;
+
+  const buildCandidate = useCallback(() => {
+    if (!activeDraft) {
+      return {};
+    }
+    return { ...activeDraft.candidate, systemInstructions: instructions };
+  }, [activeDraft, instructions]);
+
+  const reloadLifecycle = useCallback(async () => {
+    setLifecycleLoading(true);
+    setLifecycleError(null);
+    try {
+      const [drafts, pubs] = await Promise.all([
+        listAdminDefinitionDrafts(),
+        listAdminDefinitionPublications(definitionId)
+      ]);
+      setDraftSummaries(drafts.filter((item) => item.definitionId === definitionId));
+      setPublications(pubs);
+    } catch (error) {
+      setLifecycleError(error instanceof Error ? error.message : "Failed to load drafts.");
+    } finally {
+      setLifecycleLoading(false);
+    }
+  }, [definitionId]);
+
+  useEffect(() => {
+    if (definitions.kind === "ready" && rows.length > 0) {
+      void reloadLifecycle();
+    }
+  }, [definitions.kind, rows.length, reloadLifecycle]);
+
+  const selectDraft = useCallback(async (draftId: string) => {
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      const draft = await getAdminDefinitionDraft(draftId);
+      setActiveDraft(draft);
+      const candidate = draft.candidate as { systemInstructions?: string };
+      setInstructions(candidate.systemInstructions ?? "");
+    } catch (error) {
+      setLifecycleError(error instanceof Error ? error.message : "Failed to load draft.");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const forkFromVersion = async (row: AdminDefinitionInventoryItem) => {
+    const sourceKind = row.source === "durable" ? "ForkDurable" : "ForkBuiltIn";
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      const draft = await forkAdminDefinitionDraft(definitionId, row.version, sourceKind);
+      await selectDraft(draft.draftId);
+      await reloadLifecycle();
+    } catch (error) {
+      setLifecycleError(error instanceof Error ? error.message : "Fork failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    if (!activeDraft) {
+      return;
+    }
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      const updated = await updateAdminDefinitionDraft(
+        activeDraft.draftId,
+        activeDraft.revision,
+        buildCandidate());
+      setActiveDraft(updated);
+      setInstructions((updated.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+      message.success("Draft saved.");
+      await reloadLifecycle();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Save failed.";
+      setLifecycleError(text);
+      message.error(text);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPublish = () => {
+    if (!activeDraft) {
+      return;
+    }
+    modal.confirm({
+      title: "Publish this draft?",
+      content: dirty
+        ? "Unsaved editor changes will be saved, then published as an immutable version."
+        : "Validated content becomes an immutable published version. You can continue editing the draft afterward.",
+      okText: "Publish",
+      onOk: async () => {
+        setBusy(true);
+        try {
+          let draft = activeDraft;
+          if (dirty) {
+            draft = await updateAdminDefinitionDraft(draft.draftId, draft.revision, buildCandidate());
+            setActiveDraft(draft);
+            setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+          }
+          const publication = await publishAdminDefinitionDraft(draft.draftId, draft.revision);
+          message.success(`Published version ${publication.version}.`);
+          setActiveDraft(null);
+          setInstructions("");
+          await reloadLifecycle();
+          await onRetryDefinitions();
+        } catch (error) {
+          const text = error instanceof Error ? error.message : "Publish failed.";
+          setLifecycleError(text);
+          message.error(text);
+        } finally {
+          setBusy(false);
+        }
+      }
+    });
+  };
 
   return (
     <Flex vertical gap={16}>
@@ -273,6 +421,79 @@ function DefinitionDetail({
             </Descriptions.Item>
           ))}
         </Descriptions>
+      ) : null}
+      {rows.length > 0 ? (
+        <section aria-label="Definition drafts">
+          <Typography.Title level={5} style={{ margin: 0 }}>Drafts and publish</Typography.Title>
+          <Flex gap={8} wrap="wrap" style={{ marginTop: 8 }}>
+            {rows.map((row) => (
+              <Button key={`${row.definitionId}:${row.version}`} onClick={() => void forkFromVersion(row)} disabled={busy}>
+                Fork v{row.version} ({row.source})
+              </Button>
+            ))}
+          </Flex>
+          {lifecycleError ? (
+            <Alert
+              type="error"
+              showIcon
+              message={lifecycleError}
+              action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
+              style={{ marginTop: 12 }}
+            />
+          ) : null}
+          {lifecycleLoading ? <Spin style={{ marginTop: 12 }} /> : null}
+          {!lifecycleLoading && draftSummaries.length > 0 ? (
+            <List
+              style={{ marginTop: 12 }}
+              dataSource={draftSummaries}
+              renderItem={(item) => (
+                <List.Item>
+                  <Button type="link" onClick={() => void selectDraft(item.draftId)} disabled={busy}>
+                    Draft rev {item.revision} · {item.sourceKind}
+                    {item.sourceVersion != null ? ` v${item.sourceVersion}` : ""}
+                  </Button>
+                </List.Item>
+              )}
+            />
+          ) : null}
+          {!lifecycleLoading && draftSummaries.length === 0 ? (
+            <Typography.Text type="secondary">No drafts yet. Fork a catalog version to start.</Typography.Text>
+          ) : null}
+          {activeDraft ? (
+            <Flex vertical gap={12} style={{ marginTop: 16 }}>
+              <Typography.Text>
+                Editing draft {activeDraft.draftId} (revision {activeDraft.revision})
+              </Typography.Text>
+              <Input.TextArea
+                aria-label="System instructions"
+                rows={6}
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value)}
+                disabled={busy}
+              />
+              <Flex gap={8} wrap="wrap">
+                <Button type="primary" onClick={() => void saveDraft()} disabled={busy}>
+                  Save draft
+                </Button>
+                <Button onClick={() => void confirmPublish()} disabled={busy || !activeDraft}>
+                  Publish…
+                </Button>
+              </Flex>
+              {dirty ? (
+                <Typography.Text type="secondary">Unsaved changes — publish will save the visible instructions first.</Typography.Text>
+              ) : null}
+            </Flex>
+          ) : null}
+          {publications.length > 0 ? (
+            <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }} title="Durable publications">
+              {publications.map((item) => (
+                <Descriptions.Item key={item.version} label={`v${item.version}`}>
+                  {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
+                </Descriptions.Item>
+              ))}
+            </Descriptions>
+          ) : null}
+        </section>
       ) : null}
     </Flex>
   );

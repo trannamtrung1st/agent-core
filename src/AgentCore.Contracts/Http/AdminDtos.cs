@@ -115,6 +115,7 @@ public sealed record AdminDefinitionPublicationSummaryResponse(
     string DefinitionId,
     int Version,
     string Status,
+    long MetadataRevision,
     string PublishedAt);
 
 public sealed record AdminCreateDefinitionDraftRequest(string DefinitionId, JsonElement Candidate);
@@ -124,3 +125,5 @@ public sealed record AdminForkDefinitionDraftRequest(string DefinitionId, int So
 public sealed record AdminUpdateDefinitionDraftRequest(long ExpectedRevision, JsonElement Candidate);
 
 public sealed record AdminPublishDefinitionDraftRequest(long ExpectedRevision);
+
+public sealed record AdminDeprecateDefinitionPublicationRequest(long ExpectedMetadataRevision);

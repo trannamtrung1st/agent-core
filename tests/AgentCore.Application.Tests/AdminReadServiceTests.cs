@@ -25,6 +25,8 @@ public sealed class AdminReadServiceTests
             Compatibility: false);
         var service = new AdminReadService(
             definitions,
+            definitions,
+            new EmptyAdminDefinitionStore(),
             new SingleInstanceStore(instance),
             TestModelCatalogs.Synthetic(),
             new AllowAllToolGate());
@@ -64,6 +66,8 @@ public sealed class AdminReadServiceTests
             Compatibility: false);
         var service = new AdminReadService(
             definitions,
+            definitions,
+            new EmptyAdminDefinitionStore(),
             new SingleInstanceStore(instance),
             TestModelCatalogs.Synthetic(),
             new AllowAllToolGate());
@@ -117,7 +121,49 @@ public sealed class AdminReadServiceTests
             ValueTask.CompletedTask;
     }
 
-    private sealed class VersionedDefinitions(params AgentDefinition[] definitions) : IAgentDefinitionStore
+    private sealed class EmptyAdminDefinitionStore : IAgentDefinitionAdminStore
+    {
+        public ValueTask<AgentDefinitionDraft> CreateDraftAsync(
+            AgentDefinitionDraftCreate create,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentDefinitionDraft> UpdateDraftAsync(
+            AgentDefinitionDraftUpdate update,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentDefinitionPublication> PublishDraftAsync(
+            AgentDefinitionDraftPublish publish,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentDefinitionDraft?> GetDraftAsync(Guid draftId, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AgentDefinitionDraft?>(null);
+
+        public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<AgentDefinitionDraftSummary>>([]);
+
+        public ValueTask<AgentDefinitionPublication?> GetPublicationAsync(
+            string definitionId,
+            int version,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AgentDefinitionPublication?>(null);
+
+        public ValueTask<IReadOnlyList<AgentDefinitionPublicationSummary>> ListPublicationsAsync(
+            string? definitionId = null,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<AgentDefinitionPublicationSummary>>([]);
+
+        public ValueTask<AgentDefinitionPublication> DeprecatePublicationAsync(
+            AgentDefinitionPublicationDeprecate deprecate,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class VersionedDefinitions(params AgentDefinition[] definitions)
+        : IAgentDefinitionStore, IBuiltInAgentDefinitionStore
     {
         private readonly Dictionary<(string, int), AgentDefinition> _items = definitions.ToDictionary(
             item => (item.Id, item.Version));

@@ -198,6 +198,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 item.DefinitionId,
                 item.Version,
                 item.Status,
+                item.MetadataRevision,
                 item.PublishedAt))
             .ToArray();
         return ValueTask.FromResult<IReadOnlyList<AgentDefinitionPublicationSummary>>(items);

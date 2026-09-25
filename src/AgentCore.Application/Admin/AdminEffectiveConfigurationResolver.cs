@@ -14,7 +14,9 @@ internal static class AdminEffectiveConfigurationResolver
         AgentInstance instance,
         AgentDefinition definition,
         IModelCatalog catalog,
-        IToolConfigurationGate configurationGate)
+        IToolConfigurationGate configurationGate,
+        string definitionSource,
+        string definitionStatus)
     {
         var environment = RoleEnvironments.Of(definition);
         var trigger = definition.TriggerPolicy;
@@ -42,10 +44,10 @@ internal static class AdminEffectiveConfigurationResolver
             .ToArray();
 
         return new AdminEffectiveConfiguration(
-            DefinitionSource: AdminDefinitionSources.BuiltIn,
+            DefinitionSource: definitionSource,
             DefinitionId: definition.Id,
             DefinitionVersion: definition.Version,
-            DefinitionStatus: AdminDefinitionStatuses.Published,
+            DefinitionStatus: definitionStatus,
             InstanceId: instance.InstanceId,
             InstanceLifecycle: instance.Lifecycle.ToString(),
             Compatibility: instance.Compatibility,

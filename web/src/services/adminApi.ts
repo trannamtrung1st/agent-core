@@ -101,3 +101,101 @@ export async function getAdminEffectiveConfig(instanceId: string): Promise<Admin
   }
   return (await response.json()) as AdminEffectiveConfiguration;
 }
+
+export type AdminDefinitionDraftSummary = {
+  draftId: string;
+  definitionId: string;
+  revision: number;
+  sourceKind: string;
+  sourceVersion: number | null;
+  updatedAt: string;
+};
+
+export type AdminDefinitionDraft = AdminDefinitionDraftSummary & {
+  createdAt: string;
+  candidate: Record<string, unknown>;
+};
+
+export type AdminDefinitionPublicationSummary = {
+  definitionId: string;
+  version: number;
+  status: string;
+  metadataRevision: number;
+  publishedAt: string;
+};
+
+export async function listAdminDefinitionDrafts(): Promise<AdminDefinitionDraftSummary[]> {
+  const response = await ownerFetch("/api/v2/admin/definition-drafts");
+  if (!response.ok) {
+    throw new Error(`Admin definition drafts failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { items: AdminDefinitionDraftSummary[] };
+  return payload.items;
+}
+
+export async function getAdminDefinitionDraft(draftId: string): Promise<AdminDefinitionDraft> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}`);
+  if (!response.ok) {
+    throw new Error(`Admin definition draft failed (${response.status})`);
+  }
+  return (await response.json()) as AdminDefinitionDraft;
+}
+
+export async function forkAdminDefinitionDraft(
+  definitionId: string,
+  sourceVersion: number,
+  sourceKind: "ForkBuiltIn" | "ForkDurable"
+): Promise<AdminDefinitionDraft> {
+  const response = await ownerFetch("/api/v2/admin/definition-drafts/fork", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ definitionId, sourceVersion, sourceKind })
+  });
+  if (!response.ok) {
+    throw new Error(`Admin fork draft failed (${response.status})`);
+  }
+  return (await response.json()) as AdminDefinitionDraft;
+}
+
+export async function updateAdminDefinitionDraft(
+  draftId: string,
+  expectedRevision: number,
+  candidate: Record<string, unknown>
+): Promise<AdminDefinitionDraft> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision, candidate })
+  });
+  if (!response.ok) {
+    const conflict = response.status === 409;
+    throw new Error(conflict ? "Draft revision conflict — reload and try again." : `Admin update draft failed (${response.status})`);
+  }
+  return (await response.json()) as AdminDefinitionDraft;
+}
+
+export async function publishAdminDefinitionDraft(
+  draftId: string,
+  expectedRevision: number
+): Promise<AdminDefinitionPublicationSummary> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision })
+  });
+  if (!response.ok) {
+    throw new Error(`Admin publish draft failed (${response.status})`);
+  }
+  return (await response.json()) as AdminDefinitionPublicationSummary;
+}
+
+export async function listAdminDefinitionPublications(
+  definitionId: string
+): Promise<AdminDefinitionPublicationSummary[]> {
+  const response = await ownerFetch(`/api/v2/admin/definitions/${encodeURIComponent(definitionId)}/publications`);
+  if (!response.ok) {
+    throw new Error(`Admin publications failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { items: AdminDefinitionPublicationSummary[] };
+  return payload.items;
+}

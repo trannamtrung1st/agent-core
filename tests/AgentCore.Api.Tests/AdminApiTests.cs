@@ -284,6 +284,85 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_publication_deprecate_rejects_builtin_version()
+    {
+        var client = OwnerClient();
+        var response = await client.PostAsJsonAsync(
+            "/api/v2/admin/definitions/examiner/publications/1/deprecate",
+            new AdminDeprecateDefinitionPublicationRequest(1));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_publication_deprecate_marks_durable_version_deprecated()
+    {
+        var client = OwnerClient();
+        const string definitionId = "p7b-deprecate-isolated";
+        var candidate = SampleDraftCandidate(definitionId);
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                definitionId,
+                JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        Assert.NotNull(draft);
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(draft.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+
+        var deprecate = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definitions/{definitionId}/publications/{publication!.Version}/deprecate",
+            new AdminDeprecateDefinitionPublicationRequest(publication.MetadataRevision));
+        deprecate.EnsureSuccessStatusCode();
+        var deprecated = await deprecate.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(deprecated);
+        Assert.Equal("Deprecated", deprecated!.Status);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var definitions = scope.ServiceProvider.GetRequiredService<IAgentDefinitionStore>();
+        var exact = await definitions.GetAsync(definitionId, publication.Version);
+        var latest = await definitions.GetAsync(definitionId);
+        Assert.NotNull(exact);
+        Assert.Null(latest);
+        Assert.Equal("You are a demo agent.", exact!.SystemInstructions);
+    }
+
+    [Fact]
+    public async Task Admin_definitions_inventory_marks_durable_publication_source()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with { SystemInstructions = candidate.SystemInstructions + "\nDurable inventory marker." };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(1, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(updated.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+
+        var inventory = await client.GetFromJsonAsync<AdminDefinitionInventoryResponse>("/api/v2/admin/definitions");
+        Assert.NotNull(inventory);
+        var durable = inventory!.Items.Single(item =>
+            item.DefinitionId == "examiner" && item.Version == publication.Version);
+        Assert.Equal("durable", durable.Source, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("published", durable.Status, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_fork_publish_assigns_next_version()
     {
         var client = OwnerClient();

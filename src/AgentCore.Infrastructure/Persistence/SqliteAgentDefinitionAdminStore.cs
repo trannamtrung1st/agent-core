@@ -216,6 +216,7 @@ public sealed class SqliteAgentDefinitionAdminStore(
                     publication.DefinitionId,
                     publication.Version,
                     publication.Status,
+                    publication.MetadataRevision,
                     publication.PublishedAt);
             })
             .ToArray();

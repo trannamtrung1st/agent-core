@@ -150,12 +150,7 @@ internal static class AdminEndpoints
                         request.ExpectedRevision,
                         cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(AdminHttpMapping.ToPublicationSummary(
-                    new AgentDefinitionPublicationSummary(
-                        publication.DefinitionId,
-                        publication.Version,
-                        publication.Status,
-                        publication.PublishedAt)));
+                return Results.Json(AdminHttpMapping.ToPublicationSummary(publication));
             }
             catch (AgentCoreException ex)
             {
@@ -170,6 +165,29 @@ internal static class AdminEndpoints
         {
             var items = await lifecycle.ListPublicationsAsync(definitionId, cancellationToken).ConfigureAwait(false);
             return Results.Json(new AdminDefinitionPublicationListResponse(items.Select(AdminHttpMapping.ToPublicationSummary).ToArray()));
+        });
+
+        group.MapPost("/definitions/{definitionId}/publications/{version:int}/deprecate", async (
+            string definitionId,
+            int version,
+            AdminDeprecateDefinitionPublicationRequest request,
+            AgentDefinitionLifecycleService lifecycle,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var publication = await lifecycle.DeprecatePublicationAsync(
+                        definitionId,
+                        version,
+                        request.ExpectedMetadataRevision,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToPublicationSummary(publication));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
         });
     }
 }

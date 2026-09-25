@@ -7,6 +7,8 @@ namespace AgentCore.Application.Admin;
 
 public sealed class AdminReadService(
     IAgentDefinitionStore definitions,
+    IBuiltInAgentDefinitionStore builtIns,
+    IAgentDefinitionAdminStore adminStore,
     IAgentInstanceStore instances,
     IModelCatalog catalog,
     IToolConfigurationGate configurationGate)
@@ -16,12 +18,30 @@ public sealed class AdminReadService(
     public async ValueTask<IReadOnlyList<AdminDefinitionInventoryItem>> ListDefinitionsAsync(
         CancellationToken cancellationToken = default)
     {
-        var rows = await definitions.ListAsync(cancellationToken).ConfigureAwait(false);
-        return rows
-            .OrderBy(item => item.Id, StringComparer.Ordinal)
+        var items = new List<AdminDefinitionInventoryItem>();
+        foreach (var definition in await builtIns.ListAsync(cancellationToken).ConfigureAwait(false))
+        {
+            items.Add(MapBuiltIn(definition));
+        }
+
+        foreach (var summary in await adminStore.ListPublicationsAsync(cancellationToken: cancellationToken)
+                     .ConfigureAwait(false))
+        {
+            var publication = await adminStore
+                .GetPublicationAsync(summary.DefinitionId, summary.Version, cancellationToken)
+                .ConfigureAwait(false);
+            if (publication is null)
+            {
+                continue;
+            }
+
+            items.Add(MapDurable(publication));
+        }
+
+        return items
+            .OrderBy(item => item.DefinitionId, StringComparer.Ordinal)
             .ThenBy(item => item.Version)
             .Take(MaxInventoryItems)
-            .Select(MapDefinition)
             .ToArray();
     }
 
@@ -52,16 +72,61 @@ public sealed class AdminReadService(
                 $"Agent '{instance.DefinitionId}' version {instance.ActiveVersion} was not found.");
         }
 
-        return AdminEffectiveConfigurationResolver.Resolve(instance, definition, catalog, configurationGate);
+        var (source, status) = await ResolveDefinitionMetadataAsync(
+                instance.DefinitionId,
+                instance.ActiveVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return AdminEffectiveConfigurationResolver.Resolve(
+            instance,
+            definition,
+            catalog,
+            configurationGate,
+            source,
+            status);
     }
 
-    private static AdminDefinitionInventoryItem MapDefinition(AgentDefinition definition) =>
+    private async ValueTask<(string Source, string Status)> ResolveDefinitionMetadataAsync(
+        string definitionId,
+        int version,
+        CancellationToken cancellationToken)
+    {
+        if (await builtIns.GetAsync(definitionId, version, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            return (AdminDefinitionSources.BuiltIn, AdminDefinitionStatuses.Published);
+        }
+
+        var publication = await adminStore.GetPublicationAsync(definitionId, version, cancellationToken)
+            .ConfigureAwait(false);
+        if (publication is not null)
+        {
+            return (
+                AdminDefinitionSources.Durable,
+                publication.Status == DefinitionPublicationStatus.Deprecated
+                    ? AdminDefinitionStatuses.Deprecated
+                    : AdminDefinitionStatuses.Published);
+        }
+
+        return (AdminDefinitionSources.BuiltIn, AdminDefinitionStatuses.Published);
+    }
+
+    private static AdminDefinitionInventoryItem MapBuiltIn(AgentDefinition definition) =>
         new(
             definition.Id,
             definition.Version,
             AdminDefinitionSources.BuiltIn,
             AdminDefinitionStatuses.Published,
             definition.Identity.Name);
+
+    private static AdminDefinitionInventoryItem MapDurable(AgentDefinitionPublication publication) =>
+        new(
+            publication.DefinitionId,
+            publication.Version,
+            AdminDefinitionSources.Durable,
+            publication.Status == DefinitionPublicationStatus.Deprecated
+                ? AdminDefinitionStatuses.Deprecated
+                : AdminDefinitionStatuses.Published,
+            publication.Payload.Identity.Name);
 
     private static AdminInstanceInventoryItem MapInstance(AgentInstance instance) =>
         new(
@@ -78,11 +143,13 @@ public sealed class AdminReadService(
 public static class AdminDefinitionSources
 {
     public const string BuiltIn = "builtIn";
+    public const string Durable = "durable";
 }
 
 public static class AdminDefinitionStatuses
 {
     public const string Published = "published";
+    public const string Deprecated = "deprecated";
 }
 
 public sealed record AdminDefinitionInventoryItem(

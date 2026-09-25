@@ -64,10 +64,26 @@ const sampleEffective: AdminEffectiveConfiguration = {
 vi.mock("../../services/adminApi", () => ({
   listAdminDefinitions: vi.fn(),
   listAdminInstances: vi.fn(),
-  getAdminEffectiveConfig: vi.fn()
+  getAdminEffectiveConfig: vi.fn(),
+  listAdminDefinitionDrafts: vi.fn(),
+  listAdminDefinitionPublications: vi.fn(),
+  getAdminDefinitionDraft: vi.fn(),
+  updateAdminDefinitionDraft: vi.fn(),
+  publishAdminDefinitionDraft: vi.fn(),
+  forkAdminDefinitionDraft: vi.fn()
 }));
 
-import { getAdminEffectiveConfig, listAdminDefinitions, listAdminInstances } from "../../services/adminApi";
+import * as antd from "antd";
+import {
+  getAdminDefinitionDraft,
+  getAdminEffectiveConfig,
+  listAdminDefinitionDrafts,
+  listAdminDefinitionPublications,
+  listAdminDefinitions,
+  listAdminInstances,
+  publishAdminDefinitionDraft,
+  updateAdminDefinitionDraft
+} from "../../services/adminApi";
 
 const instanceId = "019944af-00d1-7000-8000-000000000001";
 
@@ -151,6 +167,90 @@ describe("AdminApp", () => {
     expect(screen.getByText("heuristic")).toBeInTheDocument();
     expect(screen.getAllByText("scripted-alpha").length).toBeGreaterThan(0);
     expect(screen.getByText(/max registrations 4/)).toBeInTheDocument();
+  });
+
+  it("saves visible instructions before publishing a draft", async () => {
+    const draftId = "019944af-00d1-7000-8000-000000000099";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "examiner",
+        revision: 2,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 2,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: { systemInstructions: "Stored body", definitionId: "examiner" }
+    });
+    vi.mocked(updateAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 3,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner" }
+    });
+    vi.mocked(publishAdminDefinitionDraft).mockResolvedValue({
+      definitionId: "examiner",
+      version: 2,
+      status: "published",
+      metadataRevision: 1,
+      publishedAt: "2026-01-02T00:00:00Z"
+    });
+    vi.spyOn(antd.App, "useApp").mockReturnValue({
+      message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+      modal: {
+        confirm: (options: { onOk?: () => void | Promise<void> }) => {
+          void options.onOk?.();
+        }
+      },
+      notification: {}
+    } as unknown as ReturnType<typeof antd.App.useApp>);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText("System instructions"), {
+      target: { value: "Visible publish body" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    await waitFor(() => {
+      expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
+        draftId,
+        2,
+        expect.objectContaining({ systemInstructions: "Visible publish body" })
+      );
+    });
+    expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
   });
 
   it("shows instance identity from effective config when inventory is unavailable", async () => {

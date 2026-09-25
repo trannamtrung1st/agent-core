@@ -19,6 +19,55 @@ public sealed class InMemoryAgentDefinitionAdminStoreContractTests : AgentDefini
 
 public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefinitionAdminStoreContractTests
 {
+    [Fact]
+    public async Task Reopen_preserves_published_definition()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-def-admin-reopen-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        var factory = new SqliteContextFactory(options);
+        try
+        {
+            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
+            var store = new SqliteAgentDefinitionAdminStore(factory, new SystemIdGenerator(TimeProvider.System));
+            var now = DateTimeOffset.Parse("2026-01-04T00:00:00Z");
+            var candidate = SampleCandidate("demo-agent");
+            var draft = await store.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            var published = await store.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1)),
+                CancellationToken.None);
+
+            var reopened = new SqliteAgentDefinitionAdminStore(factory, new SystemIdGenerator(TimeProvider.System));
+            var loaded = await reopened.GetPublicationAsync("demo-agent", published.Version);
+            Assert.NotNull(loaded);
+            Assert.Equal(published.Version, loaded!.Version);
+            Assert.Equal("You are a demo agent.", loaded.Payload.SystemInstructions);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
+        new(
+            1,
+            definitionId,
+            new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
+            ["Help the user"],
+            "You are a demo agent.",
+            new BehaviorPolicy("acknowledgeThenContinue", true, true),
+            new ConversationPolicy("concise", true, "en", 512),
+            new InitiativePolicy(false, 30_000, 60_000, 1, []),
+            new VoiceConfiguration(false, "alloy", 1.0),
+            new ProviderPreferences("primary-llm", null, null),
+            new Dictionary<string, string>());
+
     protected override async Task ForEachStoreAsync(Func<IAgentDefinitionAdminStore, Task> exercise)
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-def-admin-{Guid.NewGuid():N}.db");
@@ -248,6 +297,45 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 store.PublishDraftAsync(
                     new AgentDefinitionDraftPublish(created.DraftId, 2, [1], now.AddMinutes(3)),
                     CancellationToken.None).AsTask());
+        });
+
+    [Fact]
+    public Task Composite_default_lookup_skips_deprecated_publication() =>
+        ForEachStoreAsync(async admin =>
+        {
+            var builtIns = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+            var composite = new CompositeAgentDefinitionStore(builtIns, admin);
+            var now = DateTimeOffset.Parse("2026-01-03T00:00:00Z");
+            var candidate = SampleCandidate("demo-agent");
+
+            var draft = await admin.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            var publishedV1 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1)),
+                CancellationToken.None);
+            await admin.DeprecatePublicationAsync(
+                new AgentDefinitionPublicationDeprecate("demo-agent", publishedV1.Version, 1, now.AddMinutes(2)),
+                CancellationToken.None);
+
+            var edited = await admin.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    draft.DraftId,
+                    2,
+                    candidate with { SystemInstructions = "Active v2 body." },
+                    now.AddMinutes(3)),
+                CancellationToken.None);
+            var publishedV2 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(edited.DraftId, edited.Revision, [publishedV1.Version], now.AddMinutes(4)),
+                CancellationToken.None);
+
+            var exactDeprecated = await composite.GetAsync("demo-agent", publishedV1.Version);
+            var defaultResolved = await composite.GetAsync("demo-agent");
+            Assert.NotNull(exactDeprecated);
+            Assert.NotNull(defaultResolved);
+            Assert.Equal("You are a demo agent.", exactDeprecated!.SystemInstructions);
+            Assert.Equal("Active v2 body.", defaultResolved!.SystemInstructions);
+            Assert.Equal(publishedV2.Version, defaultResolved.Version);
         });
 
     [Fact]

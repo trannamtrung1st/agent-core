@@ -91,7 +91,20 @@ internal static class AdminHttpMapping
             AdminDefinitionJson.WriteCandidate(draft.Candidate));
 
     public static AdminDefinitionPublicationSummaryResponse ToPublicationSummary(AgentDefinitionPublicationSummary item) =>
-        new(item.DefinitionId, item.Version, item.Status.ToString(), item.PublishedAt.ToString("o"));
+        new(
+            item.DefinitionId,
+            item.Version,
+            item.Status.ToString(),
+            item.MetadataRevision,
+            item.PublishedAt.ToString("o"));
+
+    public static AdminDefinitionPublicationSummaryResponse ToPublicationSummary(AgentDefinitionPublication publication) =>
+        new(
+            publication.DefinitionId,
+            publication.Version,
+            publication.Status.ToString(),
+            publication.MetadataRevision,
+            publication.PublishedAt.ToString("o"));
 
     private static AdminTriggerPolicyResponse ToTriggerPolicy(TriggerPolicy policy) =>
         new(
