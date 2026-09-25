@@ -49,6 +49,16 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
+    public async Task V1_session_create_rejects_managed_instance_identity()
+    {
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/sessions",
+            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.CreateVersion7()));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Session_lifecycle_create_get_history_end()
     {
         var client = TestOwnerCapability.CreateOwnerClient(_factory);

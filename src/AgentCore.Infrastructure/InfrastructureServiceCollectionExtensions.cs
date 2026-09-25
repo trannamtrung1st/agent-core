@@ -156,10 +156,12 @@ public static class InfrastructureServiceCollectionExtensions
             });
         }
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
+        services.TryAddSingleton<DefinitionPublicationResourceReader>();
         services.TryAddSingleton<ISessionWorkspace>(provider => new FileSessionWorkspace(
             persistence.WorkspaceRoot,
             persistence.TemplateRoot,
-            provider.GetService<IAttachmentStore>()));
+            provider.GetService<IAttachmentStore>(),
+            publicationResources: provider.GetService<DefinitionPublicationResourceReader>()));
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<IArtifactStore>(provider => new SqliteArtifactStore(

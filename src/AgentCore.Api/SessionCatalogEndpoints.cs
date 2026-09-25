@@ -94,20 +94,16 @@ public static class SessionCatalogEndpoints
                     throw AgentCoreErrors.ShuttingDown();
                 }
 
-                if (body is null || string.IsNullOrWhiteSpace(body.AgentId))
+                if (body is null)
                 {
-                    throw AgentCoreErrors.Validation("agentId is required.");
+                    throw AgentCoreErrors.Validation("Request body is required.");
                 }
 
-                var snapshot = await sessions.CreateAsync(
-                        body.AgentId,
-                        body.AgentVersion,
-                        HttpMapping.ParseMode(body.Mode),
+                var snapshot = await SessionCreateHttp.CreateAsync(
+                        body,
+                        sessions,
                         cancellationToken,
-                        speechLocaleOverride: body.SpeechLocale,
-                        modelKey: body.Model?.Key,
-                        reasoningEffort: body.Model?.ReasoningEffort,
-                        modelSource: ModelSelectionSource.User)
+                        ModelSelectionSource.User)
                     .ConfigureAwait(false);
                 var view = HttpMapping.ToView(snapshot, activeResponseId: null, catalog);
                 http.Response.Headers.Location = $"/api/v2/sessions/{view.SessionId}";

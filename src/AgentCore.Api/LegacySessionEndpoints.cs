@@ -34,6 +34,11 @@ public static class LegacySessionEndpoints
                     throw AgentCoreErrors.Validation("agentId is required.");
                 }
 
+                if (body.AgentInstanceId is Guid instanceId && instanceId != Guid.Empty)
+                {
+                    throw AgentCoreErrors.Validation("agentInstanceId is not supported on this route.");
+                }
+
                 var snapshot = await sessions.CreateAsync(
                         body.AgentId,
                         body.AgentVersion,

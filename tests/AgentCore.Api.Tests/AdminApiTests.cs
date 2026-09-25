@@ -582,6 +582,68 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Contains("Admin durable edit.", resolved!.SystemInstructions, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Managed_instance_session_reads_publication_resource_under_agent()
+    {
+        var client = OwnerClient();
+        const string definitionId = "p7c-runtime-resource";
+        var draft = await CreateIsolatedDraftAsync(client, definitionId);
+        var contentBytes = "runtime-visible policy"u8.ToArray();
+        var stored = await UploadDraftResourceContentAsync(client, draft.DraftId, contentBytes);
+        var bind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                draft.Revision,
+                null,
+                "knowledge/policy.md",
+                "Knowledge",
+                stored.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        bind.EnsureSuccessStatusCode();
+        var boundDraft = await client.GetFromJsonAsync<AdminDefinitionDraftResponse>(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}");
+        Assert.NotNull(boundDraft);
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{boundDraft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(boundDraft.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+
+        var createInstance = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest(definitionId, publication!.Version));
+        createInstance.EnsureSuccessStatusCode();
+        var instance = await createInstance.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+        Assert.False(instance!.Compatibility);
+        Assert.Equal(publication.Version, instance.ActiveVersion);
+
+        var session = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest(null, null, "text", AgentInstanceId: Guid.Parse(instance.InstanceId)));
+        session.EnsureSuccessStatusCode();
+        var view = await session.Content.ReadFromJsonAsync<SessionViewResponse>();
+        Assert.NotNull(view);
+        Assert.Equal(definitionId, view!.AgentId);
+        Assert.Equal(publication.Version, view.AgentVersion);
+
+        var listed = await client.GetFromJsonAsync<WorkspaceNodeResponse[]>(
+            $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");
+        Assert.NotNull(listed);
+        Assert.Contains(listed!, node => node.LogicalPath == "/agent/resources");
+
+        var bytes = await client.GetByteArrayAsync(
+            $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/agent/resources/knowledge/policy.md");
+        Assert.Equal("runtime-visible policy", System.Text.Encoding.UTF8.GetString(bytes));
+
+        var both = await client.PostAsJsonAsync(
+            "/api/v2/sessions",
+            new CreateSessionRequest("examiner", 1, "text", AgentInstanceId: Guid.Parse(instance.InstanceId)));
+        Assert.Equal(HttpStatusCode.BadRequest, both.StatusCode);
+    }
+
     private static async Task<AdminDefinitionDraftResponse> CreateIsolatedDraftAsync(
         HttpClient client,
         string definitionId)

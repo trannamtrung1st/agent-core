@@ -23,6 +23,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
     private readonly string _root;
     private readonly string _templateRoot;
     private readonly IAttachmentStore? _attachments;
+    private readonly DefinitionPublicationResourceReader? _publicationResources;
     private readonly long _maxWritableBytes;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _writers = new();
@@ -32,13 +33,15 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         string workspaceRoot,
         string templateRoot,
         IAttachmentStore? attachments = null,
-        long maxWritableBytes = WorkspaceLimits.MaxWritableBytes)
+        long maxWritableBytes = WorkspaceLimits.MaxWritableBytes,
+        DefinitionPublicationResourceReader? publicationResources = null)
     {
         AttachmentBlobKeys.EnsureSafeRoot(workspaceRoot);
         AttachmentBlobKeys.EnsureSafeRoot(templateRoot);
         _root = Path.GetFullPath(workspaceRoot);
         _templateRoot = Path.GetFullPath(templateRoot);
         _attachments = attachments;
+        _publicationResources = publicationResources;
         _maxWritableBytes = maxWritableBytes;
         Directory.CreateDirectory(_root);
     }
@@ -95,7 +98,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
 
         if (path.StartsWith("/agent", StringComparison.Ordinal))
         {
-            return ListAgent(definition, path);
+            return await ListAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
         }
 
         if (path.StartsWith("/attachments", StringComparison.Ordinal))
@@ -122,7 +125,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
         if (path.StartsWith("/agent/", StringComparison.Ordinal) || path == "/agent")
         {
-            return ReadAgent(definition, path);
+            return await ReadAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
         }
 
         if (path.StartsWith("/attachments/", StringComparison.Ordinal))
@@ -397,8 +400,16 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         }
     }
 
-    private IReadOnlyList<WorkspaceNode> ListAgent(AgentDefinition definition, string path)
+    private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAgentAsync(
+        AgentDefinition definition,
+        string path,
+        CancellationToken cancellationToken)
     {
+        if (path.StartsWith("/agent/resources", StringComparison.Ordinal))
+        {
+            return await ListAgentPublicationResourcesAsync(definition, path, cancellationToken).ConfigureAwait(false);
+        }
+
         var env = RoleEnvironments.Of(definition);
         if (path is "/agent")
         {
@@ -413,12 +424,23 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
                 nodes.Add(new WorkspaceNode("/agent/knowledge", true, 0, false));
             }
 
+            if (_publicationResources is not null)
+            {
+                var published = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
+                    .ConfigureAwait(false);
+                if (published.Count > 0)
+                {
+                    nodes.Add(new WorkspaceNode("/agent/resources", true, 0, false));
+                }
+            }
+
             return nodes;
         }
 
         if (path == "/agent/definition.json")
         {
-            return [new WorkspaceNode(path, false, ReadAgent(definition, path).Bytes.Length, false)];
+            var content = await ReadAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
+            return [new WorkspaceNode(path, false, content.Bytes.Length, false)];
         }
 
         if (path is "/agent/harness")
@@ -435,11 +457,20 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
                 .ToArray();
         }
 
-        return [new WorkspaceNode(path, false, ReadAgent(definition, path).Bytes.Length, false)];
+        var leaf = await ReadAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
+        return [new WorkspaceNode(path, false, leaf.Bytes.Length, false)];
     }
 
-    private WorkspaceContent ReadAgent(AgentDefinition definition, string path)
+    private async ValueTask<WorkspaceContent> ReadAgentAsync(
+        AgentDefinition definition,
+        string path,
+        CancellationToken cancellationToken)
     {
+        if (path.StartsWith("/agent/resources", StringComparison.Ordinal))
+        {
+            return await ReadAgentPublicationResourceAsync(definition, path, cancellationToken).ConfigureAwait(false);
+        }
+
         var env = RoleEnvironments.Of(definition);
         if (path == "/agent/definition.json")
         {
@@ -478,6 +509,97 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
         }
 
         throw AgentCoreErrors.NotFound("Agent path was not found.");
+    }
+
+    private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAgentPublicationResourcesAsync(
+        AgentDefinition definition,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        if (_publicationResources is null)
+        {
+            throw AgentCoreErrors.NotFound("Agent path was not found.");
+        }
+
+        const string root = "/agent/resources";
+        if (path != root && !path.StartsWith(root + "/", StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.NotFound("Agent path was not found.");
+        }
+
+        var relativePrefix = path == root
+            ? string.Empty
+            : path[(root.Length + 1)..];
+        var items = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
+            .ConfigureAwait(false);
+        var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
+        foreach (var item in items)
+        {
+            var logical = DefinitionPublicationResourceReader.NormalizeLogicalPath(item.LogicalPath);
+            if (!string.IsNullOrEmpty(relativePrefix)
+                && !logical.StartsWith(relativePrefix + "/", StringComparison.Ordinal)
+                && !string.Equals(logical, relativePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var remainder = string.IsNullOrEmpty(relativePrefix)
+                ? logical
+                : logical.Length == relativePrefix.Length
+                    ? string.Empty
+                    : logical[(relativePrefix.Length + 1)..];
+            if (string.IsNullOrEmpty(remainder))
+            {
+                continue;
+            }
+
+            if (remainder.Contains('/', StringComparison.Ordinal))
+            {
+                var segment = remainder.Split('/')[0];
+                var dirPath = string.IsNullOrEmpty(relativePrefix)
+                    ? $"{root}/{segment}"
+                    : $"{root}/{relativePrefix}/{segment}";
+                nodes[dirPath] = new WorkspaceNode(dirPath, true, 0, false);
+            }
+            else
+            {
+                var filePath = string.IsNullOrEmpty(relativePrefix)
+                    ? $"{root}/{remainder}"
+                    : $"{root}/{relativePrefix}/{remainder}";
+                nodes[filePath] = new WorkspaceNode(filePath, false, item.ByteLength, false);
+            }
+        }
+
+        return nodes.Values.OrderBy(node => node.LogicalPath, StringComparer.Ordinal).ToArray();
+    }
+
+    private async ValueTask<WorkspaceContent> ReadAgentPublicationResourceAsync(
+        AgentDefinition definition,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        if (_publicationResources is null || path == "/agent/resources")
+        {
+            throw AgentCoreErrors.NotFound("Agent path was not found.");
+        }
+
+        const string root = "/agent/resources/";
+        if (!path.StartsWith(root, StringComparison.Ordinal))
+        {
+            throw AgentCoreErrors.NotFound("Agent path was not found.");
+        }
+
+        var logicalPath = path[root.Length..];
+        var resource = await _publicationResources.FindByLogicalPathAsync(
+                definition.Id,
+                definition.Version,
+                logicalPath,
+                cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Agent path was not found.");
+        var bytes = await _publicationResources.ReadContentAsync(resource, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Agent path was not found.");
+        return new WorkspaceContent(path, resource.MediaType, bytes);
     }
 
     private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAttachmentsAsync(

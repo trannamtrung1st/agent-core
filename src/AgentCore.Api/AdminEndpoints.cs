@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
@@ -121,6 +122,45 @@ internal static class AdminEndpoints
                 var config = await admin.GetEffectiveConfigurationAsync(instanceId, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(AdminHttpMapping.ToEffectiveConfiguration(config));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/agent-instances", async (
+            AdminCreateAgentInstanceRequest? request,
+            IAgentInstanceService instances,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null || string.IsNullOrWhiteSpace(request.DefinitionId))
+                {
+                    throw AgentCoreErrors.Validation("definitionId is required.");
+                }
+
+                if (request.Version < 1)
+                {
+                    throw AgentCoreErrors.Validation("version must be a positive publication version.");
+                }
+
+                var instance = await instances.CreateAsync(request.DefinitionId, request.Version, cancellationToken)
+                    .ConfigureAwait(false);
+                if (instance.Compatibility)
+                {
+                    throw AgentCoreErrors.Conflict("Managed instance creation produced a compatibility row.");
+                }
+
+                return Results.Json(
+                    new AdminAgentInstanceResponse(
+                        instance.InstanceId.ToString("D"),
+                        instance.DefinitionId,
+                        instance.ActiveVersion,
+                        instance.Compatibility,
+                        instance.Lifecycle.ToString()),
+                    statusCode: StatusCodes.Status201Created);
             }
             catch (AgentCoreException ex)
             {

@@ -166,3 +166,12 @@ public sealed record AdminDefinitionPublicationResourceResponse(
     string MediaType,
     string ContentSha256,
     long ByteLength);
+
+public sealed record AdminCreateAgentInstanceRequest(string DefinitionId, int Version);
+
+public sealed record AdminAgentInstanceResponse(
+    string InstanceId,
+    string DefinitionId,
+    int ActiveVersion,
+    bool Compatibility,
+    string Lifecycle);
