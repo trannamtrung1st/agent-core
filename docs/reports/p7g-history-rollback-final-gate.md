@@ -45,6 +45,6 @@
 
 | Check | Command | Result |
 | --- | --- | --- |
-| P7G partial Admin lifecycle (version/deprecate/archive/history slice) | `CI=1 pnpm exec playwright test e2e/admin-lifecycle.spec.ts` | Pass (1) with disposable `PLAYWRIGHT_SQLITE_PATH` |
+| P7G partial Admin lifecycle (persona, version/deprecate/archive/history slice) | `CI=1 pnpm exec playwright test e2e/admin-lifecycle.spec.ts` | Pass (1) with disposable `PLAYWRIGHT_SQLITE_PATH` (optional; no sqlite seeds in this spec) |
 
 Related complementary browser coverage (not a substitute for §8): `z-admin-resource-journey.spec.ts`, `z-admin-managed-instance-journey.spec.ts`, `z-admin-memory-automation-journey.spec.ts`.

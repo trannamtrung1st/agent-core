@@ -1,17 +1,14 @@
 /**
- * Partial P7G browser slice (frozen contract §8 is 26 steps in one scenario).
- * This spec covers: managed publish + chat pin, memory/automation tab load, second
- * publication, session version pinning, upgrade/rollback, deprecate, archive, denied
- * new managed session, and admin events API assertions.
- * Omitted here (covered elsewhere or still under Remaining): resource upload,
- * persona Form/JSON, memory scope reset, schedule revoke, triggered/headless denial,
- * historical work preservation — see z-admin-*-journey.spec.ts and docs/reports/p7g-history-rollback-final-gate.md.
+ * Partial P7G browser slice. Frozen §8 requires a single 26-step scenario; that remains under
+ * docs/reports/p7g-history-rollback-final-gate.md Remaining. Complementary specs cover resource,
+ * persona-only, and memory/automation slices separately.
  */
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   expectManagedIdentityOptionAbsent,
   publishExaminerDraftAndCreateManagedInstance,
   publishExaminerForkedVersion,
+  selectManagedIdentityOption,
   startSyntheticChat,
   type SessionView
 } from "./admin-managed-helpers";
@@ -25,6 +22,24 @@ async function ownerCapability(page: Page): Promise<string> {
 
 async function ownerHeaders(page: Page) {
   return { "X-AgentCore-Owner-Capability": await ownerCapability(page) };
+}
+
+type EffectiveConfig = {
+  definitionVersion: number;
+  personaRevision: number;
+  persona: { name: string; tone: string };
+};
+
+async function fetchEffectiveConfig(
+  request: APIRequestContext,
+  page: Page,
+  instanceId: string
+): Promise<EffectiveConfig> {
+  const response = await request.get(`/api/v2/admin/instances/${instanceId}/effective-config`, {
+    headers: await ownerHeaders(page)
+  });
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as EffectiveConfig;
 }
 
 async function fetchSessionView(
@@ -54,11 +69,11 @@ async function listAdminEvents(
   return body.items;
 }
 
-test("p7g partial admin lifecycle: version pin, upgrade or rollback, deprecate, archive, history", async ({
+test("p7g partial admin lifecycle: persona, version pin, upgrade or rollback, deprecate, archive, history", async ({
   page,
   request
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   page.on("console", (message) => {
@@ -70,6 +85,9 @@ test("p7g partial admin lifecycle: version pin, upgrade or rollback, deprecate, 
     failedRequests.push(`${request.method()} ${request.url()}`);
   });
 
+  const personaName = `P7G Persona ${Date.now()}`;
+  const jsonTone = `p7g-tone-${Date.now()}`;
+
   await startSyntheticChat(page);
   const { instance, firstSession, publishedVersion: versionOne } =
     await publishExaminerDraftAndCreateManagedInstance(page);
@@ -80,6 +98,30 @@ test("p7g partial admin lifecycle: version pin, upgrade or rollback, deprecate, 
 
   await page.getByRole("button", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
+
+  await page.getByLabel("Persona name").fill(personaName);
+  await page.getByRole("button", { name: "Save persona" }).click();
+  await expect(page.getByText("Persona updated.")).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("tab", { name: "JSON" }).click();
+  const personaJson = page.getByLabel("Persona JSON");
+  const parsed = JSON.parse(await personaJson.inputValue()) as {
+    name: string;
+    role: string;
+    description: string;
+    tone: string;
+  };
+  parsed.tone = jsonTone;
+  await personaJson.fill(JSON.stringify(parsed, null, 2));
+  await page.getByRole("button", { name: "Save persona" }).click();
+  await expect(page.getByText("Persona updated.")).toBeVisible({ timeout: 15_000 });
+
+  const afterPersona = await fetchEffectiveConfig(request, page, instance.instanceId);
+  expect(afterPersona.definitionVersion).toBe(versionOne);
+  expect(afterPersona.persona.name).toBe(personaName);
+  expect(afterPersona.persona.tone).toBe(jsonTone);
+  expect(afterPersona.personaRevision).toBe(3);
+
   const memoryAutomation = page.getByLabel("Memory and automation administration");
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
@@ -89,12 +131,32 @@ test("p7g partial admin lifecycle: version pin, upgrade or rollback, deprecate, 
   await memoryAutomation.getByRole("tab", { name: "Automation" }).click();
   await memoryAutomation.getByRole("button", { name: "Load registrations" }).click();
 
+  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
+
+  const secondSessionPromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /\/api\/v2\/sessions$/.test(response.url()) &&
+      response.ok()
+  );
+  await selectManagedIdentityOption(page, instance.instanceId);
+  await page.getByLabel("Message").fill("Second managed session");
+  await page.getByRole("button", { name: "Send" }).click();
+  const secondSession = (await (await secondSessionPromise).json()) as SessionView;
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  expect(secondSession.agentInstanceId).toBe(instance.instanceId);
+  expect(secondSession.agentVersion).toBe(versionOne);
+  expect(secondSession.pinnedPersonaRevision).toBe(3);
+
   const versionTwo = await publishExaminerForkedVersion(page, versionOne);
   expect(versionTwo).toBeGreaterThan(versionOne);
 
   const pinnedAfterV2Publish = await fetchSessionView(request, page, firstSession.sessionId);
   expect(pinnedAfterV2Publish.agentVersion).toBe(versionOne);
   expect(pinnedAfterV2Publish.agentInstanceId).toBe(instance.instanceId);
+  expect(pinnedAfterV2Publish.pinnedPersonaRevision).toBe(1);
 
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await expect(page.getByLabel("Managed instance controls")).toBeVisible();
@@ -139,6 +201,7 @@ test("p7g partial admin lifecycle: version pin, upgrade or rollback, deprecate, 
     `targetType=agent.instance&targetId=${instance.instanceId}`
   );
   const operations = new Set(instanceEvents.map((item) => item.operation));
+  expect(operations.has("PersonaChanged")).toBe(true);
   expect(operations.has("InstanceDefinitionVersionChanged")).toBe(true);
   expect(operations.has("InstanceArchived")).toBe(true);
 

@@ -125,10 +125,10 @@ export async function publishExaminerForkedVersion(page: Page, forkFromVersion: 
   await instructions.fill(`${prior}\n${marker}`);
   await ensureToolAllowlisted(page, draftsSection, "knowledge.retrieve");
   await draftsSection.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Draft saved.").first()).toBeVisible({ timeout: 15_000 });
   await completeDefinitionDraftPublishGate(page, draftsSection);
   await publishDraftFromInstructions(page, draftsSection);
-  const publishedToast = page.getByText(/Published version \d+/);
+  const publishedToast = page.getByText(/Published version \d+/).first();
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];
   expect(version).toBeTruthy();
