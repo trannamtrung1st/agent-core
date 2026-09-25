@@ -80,7 +80,8 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
             evaluationStore,
             ToolConfigurationGates.AllowAll,
             clock);
-        var publish = new AgentDefinitionDraftPublishService(lifecycle, validation, evaluation);
+        var diff = new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);
+        var publish = new AgentDefinitionDraftPublishService(lifecycle, validation, evaluation, diff, ids);
 
         var candidate = PublishableExaminerCandidate();
         var draft = await admin.CreateDraftAsync(

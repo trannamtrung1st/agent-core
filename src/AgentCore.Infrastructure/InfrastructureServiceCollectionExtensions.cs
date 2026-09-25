@@ -11,6 +11,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Application.Work;
 using AgentCore.Infrastructure.Attachments;
+using AgentCore.Infrastructure.Admin;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
@@ -124,6 +125,9 @@ public static class InfrastructureServiceCollectionExtensions
                 new SqliteDefinitionDraftEvaluationStore(
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IIdGenerator>()));
+            services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<IIdGenerator>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -151,11 +155,15 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<InMemoryAgentDefinitionResourceAdminStore>();
             services.TryAddSingleton<IAgentDefinitionResourceAdminStore>(provider =>
                 provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>());
+            services.TryAddSingleton<InMemoryAdminEventStore>();
+            services.TryAddSingleton<IAdminEventStore>(provider =>
+                provider.GetRequiredService<InMemoryAdminEventStore>());
             services.TryAddSingleton<InMemoryAgentDefinitionAdminStore>();
             services.TryAddSingleton<IAgentDefinitionAdminStore>(provider =>
             {
                 var admin = provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>();
                 admin.ResourceStore = provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>();
+                admin.EventStore = provider.GetRequiredService<InMemoryAdminEventStore>();
                 return admin;
             });
             services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>

@@ -58,6 +58,11 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         _publicationResources[(definitionId, version)] = bindings;
     }
 
+    internal void RevertPublicationResourceSnapshot(string definitionId, int version)
+    {
+        _publicationResources.TryRemove((definitionId, version), out _);
+    }
+
     public ValueTask<IReadOnlyList<AgentDefinitionDraftResource>> ListDraftResourcesAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)

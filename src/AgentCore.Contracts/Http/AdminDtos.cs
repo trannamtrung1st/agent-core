@@ -295,3 +295,17 @@ public sealed record AdminAutomationRegistrationResponse(
     AdminAutomationProvenanceResponse Provenance);
 
 public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevision, bool Confirm);
+
+public sealed record AdminEventListResponse(IReadOnlyList<AdminEventResponse> Items);
+
+public sealed record AdminEventResponse(
+    string EventId,
+    string OperationId,
+    string OccurredAt,
+    string ActorKind,
+    string Operation,
+    string TargetType,
+    string TargetId,
+    long? Revision,
+    int? Version,
+    JsonElement Summary);

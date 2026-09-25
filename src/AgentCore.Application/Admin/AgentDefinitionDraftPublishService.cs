@@ -1,3 +1,4 @@
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 
@@ -6,7 +7,9 @@ namespace AgentCore.Application.Admin;
 public sealed class AgentDefinitionDraftPublishService(
     AgentDefinitionLifecycleService lifecycle,
     AgentDefinitionDraftValidationService validation,
-    AgentDefinitionDraftEvaluationService evaluation)
+    AgentDefinitionDraftEvaluationService evaluation,
+    AgentDefinitionDraftDiffService diff,
+    IIdGenerator ids)
 {
     public async ValueTask<AgentDefinitionPublication> PublishDraftAsync(
         Guid draftId,
@@ -38,9 +41,22 @@ public sealed class AgentDefinitionDraftPublishService(
             validationResult.ConfigurationFingerprint,
             cancellationToken).ConfigureAwait(false);
 
+        var diffResult = await diff.GetDraftDiffAsync(draftId, cancellationToken).ConfigureAwait(false);
+        if (diffResult.DraftRevision != validationResult.DraftRevision)
+        {
+            throw AgentCoreErrors.Conflict("Draft changed during publish diff; retry publish.");
+        }
+
+        var changedSectionIds = diffResult.Sections
+            .Where(section => section.ChangeKind != DefinitionDiffChangeKind.Unchanged)
+            .Select(section => section.SectionId)
+            .ToArray();
+
         return await lifecycle.CommitDraftPublicationAsync(
             draftId,
             validationResult.DraftRevision,
+            ids.NewId(),
+            changedSectionIds,
             cancellationToken).ConfigureAwait(false);
     }
 }

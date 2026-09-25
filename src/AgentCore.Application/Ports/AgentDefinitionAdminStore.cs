@@ -1,3 +1,4 @@
+using AgentCore.Application.Admin;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Ports;
@@ -61,7 +62,10 @@ public sealed record AgentDefinitionDraftPublish(
     Guid DraftId,
     long ExpectedRevision,
     IReadOnlyCollection<int> OccupiedVersions,
-    DateTimeOffset PublishedAt);
+    DateTimeOffset PublishedAt,
+    Guid OperationId = default,
+    AdminEventActorKind ActorKind = AdminEventActorKind.LocalOwner,
+    IReadOnlyList<string>? ChangedSectionIds = null);
 
 public sealed record AgentDefinitionPublicationDeprecate(
     string DefinitionId,

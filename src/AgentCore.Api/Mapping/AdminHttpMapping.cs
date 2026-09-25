@@ -259,4 +259,20 @@ internal static class AdminHttpMapping
             policy.AllowedSourceKinds,
             policy.AllowFixedInterval,
             policy.MinFixedIntervalSeconds);
+
+    public static AdminEventResponse ToEvent(AdminEvent item)
+    {
+        using var document = JsonDocument.Parse(item.SummaryJson);
+        return new AdminEventResponse(
+            item.EventId.ToString("D"),
+            item.OperationId.ToString("D"),
+            item.OccurredAt.ToString("o"),
+            item.ActorKind.ToString(),
+            item.Operation.ToString(),
+            item.TargetType,
+            item.TargetId,
+            item.Revision,
+            item.Version,
+            document.RootElement.Clone());
+    }
 }

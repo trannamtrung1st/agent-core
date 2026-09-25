@@ -78,6 +78,8 @@ public sealed class AgentDefinitionLifecycleService(
     internal async ValueTask<AgentDefinitionPublication> CommitDraftPublicationAsync(
         Guid draftId,
         long expectedRevision,
+        Guid operationId,
+        IReadOnlyList<string> changedSectionIds,
         CancellationToken cancellationToken = default)
     {
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
@@ -88,7 +90,13 @@ public sealed class AgentDefinitionLifecycleService(
 
         var occupied = await GetOccupiedVersionsAsync(draft.DefinitionId, cancellationToken).ConfigureAwait(false);
         return await admin.PublishDraftAsync(
-            new AgentDefinitionDraftPublish(draftId, expectedRevision, occupied, time.GetUtcNow()),
+            new AgentDefinitionDraftPublish(
+                draftId,
+                expectedRevision,
+                occupied,
+                time.GetUtcNow(),
+                operationId,
+                ChangedSectionIds: changedSectionIds),
             cancellationToken).ConfigureAwait(false);
     }
 

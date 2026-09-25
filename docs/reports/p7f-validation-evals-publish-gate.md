@@ -1,6 +1,8 @@
 # P7F — Validation, evaluations, diff, and exact publish gate
 
-**Status:** in progress (W06)
+**Status:** approved (W06 slice gate review 0101 at `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0`)
+
+**UI batch:** `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0` (review-0036 / review 0101 PASS)
 
 **Baseline:** `18ffecf9e660ba0772073fb63649fed960e2126f` (W05 closure)
 
@@ -43,6 +45,6 @@
 | Definition lifecycle Playwright | `CI=1 npx playwright test e2e/z-admin-definition-lifecycle.spec.ts` (web) | Pass (validate → eval → diff → publish journey) |
 | Web production build | `npm run build` (web) | Pass |
 
-## Remaining (W06)
+## Remaining (deferred to W07/W08)
 
-- Additional scenario types and Synthetic matrix, dependent Admin journeys re-run, and full gate matrix per frozen P7F contract.
+- Additional evaluation scenario types, full P7F gate matrix items not required for the W06 slice gate, and whole-phase lifecycle automation (`admin-lifecycle.spec.ts`).

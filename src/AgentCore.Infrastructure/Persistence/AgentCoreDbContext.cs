@@ -205,6 +205,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         Set<AgentDefinitionDraftEvaluationResultRecord>();
     public DbSet<AgentDefinitionPublicationResourceRecord> AgentDefinitionPublicationResources =>
         Set<AgentDefinitionPublicationResourceRecord>();
+    public DbSet<AdminEventRecord> AdminEvents => Set<AdminEventRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -473,6 +474,20 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.MediaType).HasMaxLength(64).IsRequired();
             entity.Property(row => row.ContentSha256).HasMaxLength(64).IsRequired();
             entity.HasIndex(row => new { row.DefinitionId, row.Version, row.LogicalPath }).IsUnique();
+        });
+        modelBuilder.Entity<AdminEventRecord>(entity =>
+        {
+            entity.ToTable("AdminEvents");
+            entity.HasKey(row => row.EventId);
+            entity.Property(row => row.EventId).HasMaxLength(36);
+            entity.Property(row => row.OperationId).HasMaxLength(36).IsRequired();
+            entity.HasIndex(row => row.OperationId).IsUnique();
+            entity.Property(row => row.ActorKind).HasMaxLength(32).IsRequired();
+            entity.Property(row => row.Operation).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.TargetType).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.TargetId).HasMaxLength(256).IsRequired();
+            entity.Property(row => row.SummaryJson).IsRequired();
+            entity.HasIndex(row => new { row.TargetType, row.TargetId, row.OccurredAtUtc });
         });
     }
 

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Admin;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 
@@ -176,6 +178,25 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 1,
                 publish.PublishedAt));
 
+            AdminEventAppend? historyAppend = null;
+            if (publish.OperationId != Guid.Empty)
+            {
+                if (EventStore is null)
+                {
+                    throw AgentCoreErrors.Validation("Admin publication history is not available.");
+                }
+
+                historyAppend = AdminEventFactory.PublicationCreated(
+                    publish.OperationId,
+                    publish.PublishedAt,
+                    draft.DefinitionId,
+                    nextVersion,
+                    publish.DraftId,
+                    draft.Revision,
+                    publish.ChangedSectionIds ?? [],
+                    publish.ActorKind);
+            }
+
             var nextDraft = draft with
             {
                 Revision = draft.Revision + 1,
@@ -193,6 +214,21 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
             }
 
             ResourceStore?.SnapshotPublicationOnPublish(publish.DraftId, draft.DefinitionId, nextVersion);
+
+            if (historyAppend is not null)
+            {
+                try
+                {
+                    EventStore!.AppendWithinLock(historyAppend);
+                }
+                catch
+                {
+                    _publications.TryRemove((draft.DefinitionId, nextVersion), out _);
+                    _drafts.TryUpdate(publish.DraftId, draft, nextDraft);
+                    ResourceStore?.RevertPublicationResourceSnapshot(draft.DefinitionId, nextVersion);
+                    throw;
+                }
+            }
 
             return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(publication));
         }
@@ -270,4 +306,6 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
     }
 
     internal InMemoryAgentDefinitionResourceAdminStore? ResourceStore { get; set; }
+
+    internal InMemoryAdminEventStore? EventStore { get; set; }
 }

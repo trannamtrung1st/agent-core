@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `18ffecf` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** P7F in progress).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `18ffecf` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** `03e350a` — see `docs/reports/p7f-validation-evals-publish-gate.md`; **W07** P7G in progress).
 
 P4 implementation freeze:
 

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AgentCore.Api.Http;
 using Microsoft.AspNetCore.Builder;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -1082,6 +1083,40 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
                 stored.ContentSha256,
                 stored.ByteLength));
         Assert.Equal(HttpStatusCode.BadRequest, combinedKind.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_events_records_publication_created_after_publish()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with { SystemInstructions = candidate.SystemInstructions + "\nAdmin history marker." };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(updated.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=definition.publication&targetId=examiner:{publication!.Version}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.PublicationCreated)
+                && item.Version == publication.Version
+                && item.Summary.TryGetProperty("changedSections", out var sections)
+                && sections.GetArrayLength() > 0);
     }
 
     [Fact]

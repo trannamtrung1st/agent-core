@@ -107,7 +107,9 @@ public sealed class AdminDefinitionDraftPublishServiceTests
             evaluationStore,
             ToolConfigurationGates.AllowAll,
             clock);
-        return new AgentDefinitionDraftPublishService(lifecycle, validation, evaluation);
+        var diff = new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);
+        var ids = new SystemIdGenerator(clock);
+        return new AgentDefinitionDraftPublishService(lifecycle, validation, evaluation, diff, ids);
     }
 
     private sealed class VersionedBuiltInDefinitions(AgentDefinition definition) : IBuiltInAgentDefinitionStore

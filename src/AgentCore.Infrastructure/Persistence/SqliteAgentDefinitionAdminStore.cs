@@ -1,3 +1,4 @@
+using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -182,6 +183,20 @@ public sealed class SqliteAgentDefinitionAdminStore(
             throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
         }
 
+        AdminEventAppend? historyAppend = null;
+        if (publish.OperationId != Guid.Empty)
+        {
+            historyAppend = AdminEventFactory.PublicationCreated(
+                publish.OperationId,
+                publish.PublishedAt,
+                draft.DefinitionId,
+                nextVersion,
+                publish.DraftId,
+                draft.Revision,
+                publish.ChangedSectionIds ?? [],
+                publish.ActorKind);
+        }
+
         var payload = draft.Candidate.ToPublished(nextVersion);
         AgentDefinitionValidator.Validate(payload);
         var publication = new AgentDefinitionPublication(
@@ -205,6 +220,16 @@ public sealed class SqliteAgentDefinitionAdminStore(
             nextVersion);
         row.Revision = draft.Revision + 1;
         row.UpdatedAtUtc = publish.PublishedAt.ToUnixTimeMilliseconds();
+        if (historyAppend is not null)
+        {
+            var existing = await AdminEventPersistence.TryGetByOperationIdAsync(db, publish.OperationId, cancellationToken)
+                .ConfigureAwait(false);
+            if (existing is null)
+            {
+                AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+            }
+        }
+
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

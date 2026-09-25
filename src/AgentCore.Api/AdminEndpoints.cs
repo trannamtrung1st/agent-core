@@ -120,6 +120,19 @@ internal static class AdminEndpoints
             return Results.Json(new AdminToolRegistryResponse(names));
         });
 
+        group.MapGet("/events", async (
+            AdminHistoryService history,
+            string? targetType,
+            string? targetId,
+            int? limit,
+            CancellationToken cancellationToken) =>
+        {
+            var items = await history.ListEventsAsync(
+                new AdminEventListQuery(targetType, targetId, limit ?? 100),
+                cancellationToken).ConfigureAwait(false);
+            return Results.Json(new AdminEventListResponse(items.Select(AdminHttpMapping.ToEvent).ToArray()));
+        });
+
         group.MapGet("/instances/{instanceId:guid}/effective-config", async (
             Guid instanceId,
             AdminReadService admin,
