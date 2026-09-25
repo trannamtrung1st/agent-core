@@ -251,7 +251,7 @@ internal static class AdminEndpoints
         group.MapPatch("/agent-instances/{instanceId:guid}/active-version", async (
             Guid instanceId,
             AdminReassociateAgentInstanceVersionRequest? request,
-            IAgentInstanceService instances,
+            AdminAgentInstanceService instances,
             CancellationToken cancellationToken) =>
         {
             try
@@ -266,7 +266,7 @@ internal static class AdminEndpoints
                     throw AgentCoreErrors.Validation("expectedRevision and version must be positive.");
                 }
 
-                var instance = await instances.UpgradeAsync(
+                var instance = await instances.ReassociateActiveVersionAsync(
                         instanceId,
                         request.Version,
                         request.ExpectedRevision,

@@ -130,7 +130,7 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
             throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
         }
 
-        EnsureManagedInstanceReplayTargetMatches(existingEvent, historyAppend, instance);
+        EnsureAgentInstanceHistoryTargetMatches(existingEvent, historyAppend, instance.InstanceId);
 
         if (!Guid.TryParse(existingEvent.TargetId, out var instanceId)
             || !_instances.TryGetValue(instanceId, out var existing))
@@ -141,12 +141,114 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
         return existing;
     }
 
-    private static void EnsureManagedInstanceReplayTargetMatches(
+    public ValueTask<AgentInstance> UpdateActiveVersionWithHistoryAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (EventStore is null)
+        {
+            throw AgentCoreErrors.Validation("Admin managed instance history is not available.");
+        }
+
+        var operationGate = AdminOperationLockRegistry.For(historyAppend.OperationId);
+        lock (operationGate)
+        {
+            var existingEvent = EventStore.TryGetByOperationIdAsync(historyAppend.OperationId)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (existingEvent is not null)
+            {
+                lock (_gate)
+                {
+                    return ValueTask.FromResult(
+                        ResolveInstanceDefinitionVersionChangedFromEvent(
+                            existingEvent,
+                            historyAppend,
+                            update));
+                }
+            }
+
+            lock (_gate)
+            {
+                if (!_instances.TryGetValue(update.InstanceId, out var instance))
+                {
+                    throw AgentCoreErrors.NotFound("Agent instance was not found.");
+                }
+
+                if (instance.Revision != update.ExpectedRevision)
+                {
+                    throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+                }
+
+                if (instance.Compatibility)
+                {
+                    throw new AgentCoreException("Validation", "Compatibility instances cannot change active version.", 400);
+                }
+
+                if (update.ActiveVersion is not int activeVersion)
+                {
+                    throw AgentCoreErrors.Validation("Active version is required.");
+                }
+
+                var previous = instance;
+                var next = instance with
+                {
+                    ActiveVersion = activeVersion,
+                    UpdatedAt = updatedAt,
+                    Revision = instance.Revision + 1
+                };
+                _instances[update.InstanceId] = next;
+                try
+                {
+                    EventStore.AppendWithinLock(historyAppend);
+                }
+                catch
+                {
+                    _instances[update.InstanceId] = previous;
+                    throw;
+                }
+
+                return ValueTask.FromResult(next);
+            }
+        }
+    }
+
+    private AgentInstance ResolveInstanceDefinitionVersionChangedFromEvent(
         AdminEvent existingEvent,
         AdminEventAppend historyAppend,
-        AgentInstance instance)
+        AgentInstanceRevisionUpdate update)
     {
-        var expectedTargetId = instance.InstanceId.ToString("D");
+        if (existingEvent.Operation != AdminEventOperationKind.InstanceDefinitionVersionChanged)
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        EnsureAgentInstanceHistoryTargetMatches(existingEvent, historyAppend, update.InstanceId);
+        AdminEventReplayPolicy.EnsureInstanceDefinitionVersionChangedReplayMatches(
+            existingEvent,
+            historyAppend,
+            update);
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var targetId)
+            || targetId != update.InstanceId
+            || !_instances.TryGetValue(update.InstanceId, out var existing))
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+        }
+
+        return existing;
+    }
+
+    private static void EnsureAgentInstanceHistoryTargetMatches(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        Guid instanceId)
+    {
+        var expectedTargetId = instanceId.ToString("D");
         if (!string.Equals(historyAppend.TargetId, expectedTargetId, StringComparison.Ordinal)
             || !string.Equals(existingEvent.TargetId, expectedTargetId, StringComparison.Ordinal))
         {

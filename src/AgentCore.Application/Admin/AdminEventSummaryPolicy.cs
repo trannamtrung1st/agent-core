@@ -65,6 +65,14 @@ public static class AdminEventSummaryPolicy
         "version"
     };
 
+    private static readonly HashSet<string> InstanceDefinitionVersionChangedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "instanceId",
+        "fromVersion",
+        "toVersion"
+    };
+
     private static readonly HashSet<string> DraftCreatedSourceKinds = new(StringComparer.Ordinal)
     {
         nameof(DefinitionDraftSourceKind.New),
@@ -127,6 +135,12 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation == AdminEventOperationKind.InstanceDefinitionVersionChanged)
+            {
+                ValidateInstanceDefinitionVersionChangedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
@@ -142,6 +156,22 @@ public static class AdminEventSummaryPolicy
         if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number)
         {
             throw AgentCoreErrors.Validation("Managed instance created event summary must include version.");
+        }
+    }
+
+    private static void ValidateInstanceDefinitionVersionChangedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, InstanceDefinitionVersionChangedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "instanceId");
+        if (!root.TryGetProperty("fromVersion", out var fromVersion) || fromVersion.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Instance definition version changed event summary must include fromVersion.");
+        }
+
+        if (!root.TryGetProperty("toVersion", out var toVersion) || toVersion.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Instance definition version changed event summary must include toVersion.");
         }
     }
 

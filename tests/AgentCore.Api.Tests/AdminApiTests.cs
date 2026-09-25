@@ -1109,6 +1109,55 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_events_records_instance_definition_version_changed_after_reassociate()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with { SystemInstructions = candidate.SystemInstructions + "\nVersion two marker." };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(updated.Revision));
+        publish.EnsureSuccessStatusCode();
+        var publication = await publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(publication);
+        Assert.True(publication!.Version > 1);
+
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+        Assert.Equal(1, instance!.ActiveVersion);
+
+        var reassociate = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance.InstanceId}/active-version",
+            new AdminReassociateAgentInstanceVersionRequest(instance.Revision, publication.Version));
+        reassociate.EnsureSuccessStatusCode();
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=agent.instance&targetId={instance.InstanceId}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.InstanceDefinitionVersionChanged)
+                && item.Summary.TryGetProperty("fromVersion", out var fromVersion)
+                && fromVersion.GetInt32() == 1
+                && item.Summary.TryGetProperty("toVersion", out var toVersion)
+                && toVersion.GetInt32() == publication.Version);
+    }
+
+    [Fact]
     public async Task Admin_events_records_draft_created_after_create()
     {
         var client = OwnerClient();

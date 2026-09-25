@@ -272,7 +272,7 @@ public abstract class AdminManagedInstanceHistoryTests
         });
     }
 
-    protected static AgentInstance SampleManagedInstance(DateTimeOffset now, Guid instanceId) =>
+    internal static AgentInstance SampleManagedInstance(DateTimeOffset now, Guid instanceId) =>
         new(
             instanceId,
             "examiner",

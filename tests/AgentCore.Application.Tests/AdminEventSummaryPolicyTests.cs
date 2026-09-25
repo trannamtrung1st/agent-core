@@ -97,6 +97,20 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
+    public void InstanceDefinitionVersionChanged_summary_includes_version_transition()
+    {
+        var append = AdminEventFactory.InstanceDefinitionVersionChanged(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            Guid.Parse("019944af-00d1-7000-8000-000000000097"),
+            1,
+            2);
+        Assert.Contains("\"fromVersion\":1", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
     public void ManagedInstanceCreated_summary_includes_definition_metadata()
     {
         var append = AdminEventFactory.ManagedInstanceCreated(
