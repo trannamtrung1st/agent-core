@@ -2117,7 +2117,9 @@ export async function openCatalogSession(
       return ended;
     }
 
-    syncBrowserSessionPath(null, "replace");
+    if (options?.syncUrl !== false) {
+      syncBrowserSessionPath(null, "replace");
+    }
     return "failed";
   } catch (error) {
     const ended = await openEndedIfTerminal(item.sessionId);
@@ -2129,7 +2131,9 @@ export async function openCatalogSession(
       error: error instanceof Error ? error.message : "Unable to open the session.",
       errorFatal: false
     });
-    syncBrowserSessionPath(null, "replace");
+    if (options?.syncUrl !== false) {
+      syncBrowserSessionPath(null, "replace");
+    }
     return "failed";
   }
 }

@@ -237,6 +237,32 @@ export async function listModels(): Promise<ModelCatalog> {
   return (await response.json()) as ModelCatalog;
 }
 
+export async function createSessionForInstance(
+  agentInstanceId: string,
+  mode = "text",
+  speechLocale?: string | null,
+  model?: SessionModelChoice | null
+): Promise<SessionResponse> {
+  const body: Record<string, unknown> = { agentInstanceId, mode };
+  if (speechLocale) {
+    body.speechLocale = speechLocale;
+  }
+  if (model) {
+    body.model = model;
+  }
+
+  const response = await ownerFetch("/api/v2/sessions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    throw new Error("Unable to create a managed-instance session.");
+  }
+
+  return (await response.json()) as SessionResponse;
+}
+
 export async function createSession(
   agentId: string,
   agentVersion?: number,

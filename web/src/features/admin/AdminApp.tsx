@@ -49,6 +49,7 @@ import {
   type AdminRoute
 } from "../../app/appRoute";
 import { formatAdminLoadError } from "./adminErrors";
+import { startManagedPublicationChat } from "./adminManagedChat";
 
 const { Header, Content } = Layout;
 
@@ -419,6 +420,19 @@ function DefinitionDetail({
     });
   };
 
+  const startManagedChat = async (publicationDefinitionId: string, version: number) => {
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      await startManagedPublicationChat(publicationDefinitionId, version);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Managed chat could not be started.";
+      setLifecycleError(text);
+      message.error(text);
+      setBusy(false);
+    }
+  };
+
   return (
     <Flex vertical gap={16}>
       <Button onClick={onBack}>Back to inventory</Button>
@@ -508,6 +522,14 @@ function DefinitionDetail({
                       {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
                     </span>
                     <PublicationResourcesSummary definitionId={definitionId} version={item.version} />
+                    <Button
+                      size="small"
+                      aria-label={`Start managed chat for v${item.version}`}
+                      disabled={busy || item.status !== "Active"}
+                      onClick={() => void startManagedChat(definitionId, item.version)}
+                    >
+                      Start managed chat
+                    </Button>
                   </Flex>
                 </Descriptions.Item>
               ))}

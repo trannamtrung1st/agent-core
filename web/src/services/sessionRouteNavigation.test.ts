@@ -20,6 +20,11 @@ vi.mock("./catalog", async (importOriginal) => {
   };
 });
 
+const signalrMocks = vi.hoisted(() => ({
+  start: vi.fn().mockResolvedValue(undefined),
+  invoke: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock("@microsoft/signalr", () => ({
   HubConnectionBuilder: vi.fn(() => ({
     withUrl: vi.fn().mockReturnThis(),
@@ -27,10 +32,10 @@ vi.mock("@microsoft/signalr", () => ({
     withAutomaticReconnect: vi.fn().mockReturnThis(),
     build: vi.fn(() => ({
       on: vi.fn(),
-      start: vi.fn().mockResolvedValue(undefined),
+      start: signalrMocks.start,
       stop: vi.fn().mockResolvedValue(undefined),
       off: vi.fn(),
-      invoke: vi.fn()
+      invoke: signalrMocks.invoke
     }))
   })),
   HttpTransportType: { WebSockets: 1 },
@@ -41,13 +46,17 @@ vi.mock("@microsoft/signalr-protocol-msgpack", () => ({
   MessagePackHubProtocol: vi.fn()
 }));
 
-import { applyRouteFromLocation, openCatalogSession } from "./realtime";
+import { applyRouteFromLocation, openCatalogSession, openSessionById } from "./realtime";
 import { getSession, listSessionMessages, reopenSession } from "./api";
 
 describe("session route navigation", () => {
   const endedId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
   beforeEach(() => {
+    signalrMocks.start.mockReset();
+    signalrMocks.start.mockResolvedValue(undefined);
+    signalrMocks.invoke.mockReset();
+    signalrMocks.invoke.mockResolvedValue(undefined);
     vi.mocked(reopenSession).mockReset();
     vi.mocked(getSession).mockReset();
     vi.mocked(listSessionMessages).mockReset();
@@ -302,5 +311,33 @@ describe("session route navigation", () => {
     expect(useSessionStore.getState().connection).toBe("failed");
     expect(useSessionStore.getState().error).toBe("Unable to open the conversation.");
     expect(useSessionStore.getState().routeNotice).toBeNull();
+  });
+
+  it("keeps the admin path when openSessionById fails with syncUrl false", async () => {
+    const adminPath = "/admin/definitions/examiner";
+    const liveId = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+    window.history.replaceState(null, "", adminPath);
+    vi.mocked(getSession).mockResolvedValue({
+      sessionId: liveId,
+      agentId: "examiner",
+      agentVersion: 1,
+      mode: "text",
+      pendingMode: null,
+      status: "created",
+      lastEntrySequence: 0
+    });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [],
+      nextAfter: 0,
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
+    });
+    signalrMocks.start.mockRejectedValueOnce(new Error("connect failed"));
+
+    const result = await openSessionById(liveId, { syncUrl: false });
+
+    expect(result).toBe("failed");
+    expect(window.location.pathname).toBe(adminPath);
   });
 });

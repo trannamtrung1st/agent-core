@@ -1,0 +1,89 @@
+import { expect, test } from "@playwright/test";
+
+const antdNoise = (line: string) =>
+  line.includes("[antd: List]") || line.includes("[antd: Alert]");
+
+async function startSyntheticChat(page: import("@playwright/test").Page) {
+  await page.goto("/");
+  await page.getByLabel("Message").fill("Hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
+  await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
+}
+
+async function readWorkspaceText(page: import("@playwright/test").Page, sessionId: string, logicalPath: string) {
+  return page.evaluate(
+    async ({ sid, path }) => {
+      const capability = window.localStorage.getItem("agent-core.owner-capability") ?? "";
+      const response = await fetch(
+        `/api/v2/sessions/${sid}/workspace/content?path=${encodeURIComponent(path)}`,
+        { headers: { "X-AgentCore-Owner-Capability": capability } }
+      );
+      if (!response.ok) {
+        return "";
+      }
+
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      return new TextDecoder().decode(bytes);
+    },
+    { sid: sessionId, path: logicalPath }
+  );
+}
+
+test("admin resource publish managed chat exposes publication under agent", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  const failedRequests: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  page.on("requestfailed", (request) => {
+    failedRequests.push(`${request.method()} ${request.url()}`);
+  });
+
+  const resourceBody = `e2e-resource-${Date.now()}`;
+  const resourcePath = `knowledge/e2e-${Date.now()}.md`;
+
+  await startSyntheticChat(page);
+  await page.getByRole("button", { name: "Open Admin" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+
+  await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
+  const draftsSection = page.locator('section[aria-label="Definition drafts"]');
+  await page.getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
+  await expect(draftsSection.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+
+  await draftsSection.getByRole("tab", { name: "Resources" }).click();
+  await draftsSection.getByLabel("Resource logical path").fill(resourcePath);
+  await draftsSection.getByLabel("Resource file").setInputFiles({
+    name: "e2e.md",
+    mimeType: "text/plain",
+    buffer: Buffer.from(resourceBody, "utf8")
+  });
+  await draftsSection.getByRole("button", { name: "Upload and bind" }).click();
+  await expect(draftsSection.getByText(resourcePath)).toBeVisible({ timeout: 15_000 });
+
+  await draftsSection.getByRole("tab", { name: "Instructions" }).click();
+  await draftsSection.getByRole("button", { name: "Publish…" }).click();
+  const modal = page.getByRole("dialog");
+  await modal.getByRole("button", { name: "Publish" }).click();
+  const publishedToast = page.getByText(/Published version \d+/);
+  await expect(publishedToast).toBeVisible({ timeout: 15_000 });
+  const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];
+  expect(version).toBeTruthy();
+
+  await draftsSection.getByRole("button", { name: `Start managed chat for v${version}` }).click();
+  await expect(page).toHaveURL(/\/c\/[0-9a-f-]+/i, { timeout: 20_000 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
+  expect(page.getByRole("button", { name: "Publish…" })).toHaveCount(0);
+
+  const sessionId = page.url().match(/\/c\/([^/]+)/i)?.[1];
+  expect(sessionId).toBeTruthy();
+  const agentPath = `/agent/resources/${resourcePath}`;
+  const content = await readWorkspaceText(page, sessionId!, agentPath);
+  expect(content).toContain(resourceBody);
+
+  expect(failedRequests.filter((item) => !item.includes("favicon"))).toEqual([]);
+  expect(consoleErrors.filter((line) => !antdNoise(line))).toEqual([]);
+});
