@@ -1810,6 +1810,28 @@ async function applyRouteFromLocationInner(): Promise<void> {
   }
 }
 
+export async function suspendLiveSessionForNavigation(): Promise<void> {
+  const snapshot = useSessionStore.getState();
+  if (!snapshot.sessionId || snapshot.connection === "idle") {
+    return;
+  }
+
+  disposed = true;
+  abortPlayback();
+  await stopConnection();
+  stopReceipts();
+  capture.release();
+  void releaseClientSpeech();
+  disposed = false;
+  useSessionStore.setState({
+    connection: "idle",
+    captureLive: false,
+    outputState: "idle",
+    pendingMode: null,
+    preflightReady: false
+  });
+}
+
 export async function navigateFromBrowserHistory(): Promise<void> {
   const sessionId = parseSessionIdFromPath(window.location.pathname);
   if (!sessionId) {

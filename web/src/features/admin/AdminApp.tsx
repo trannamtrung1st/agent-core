@@ -274,24 +274,52 @@ function InstanceDetail({
           <Descriptions.Item label="Definition">
             {effective.data.definitionId} v{effective.data.definitionVersion} ({effective.data.definitionSource})
           </Descriptions.Item>
-          <Descriptions.Item label="Persona">{effective.data.persona.name}</Descriptions.Item>
-          <Descriptions.Item label="Language model">
+          <Descriptions.Item label="Persona">
+            {effective.data.persona.name} · {effective.data.persona.role}
+          </Descriptions.Item>
+          <Descriptions.Item label="Effective model">
+            {effective.data.effectiveModel.displayName} ({effective.data.effectiveModel.catalogKey}) ·{" "}
+            {effective.data.effectiveModel.selectionSource}
+            {effective.data.effectiveModel.reasoningEffort
+              ? ` · ${effective.data.effectiveModel.reasoningEffort}`
+              : ""}
+          </Descriptions.Item>
+          <Descriptions.Item label="Provider alias">
             {effective.data.providerPreferences.languageModel}
           </Descriptions.Item>
-          <Descriptions.Item label="Tools">
+          <Descriptions.Item label="Offered tools">
             {effective.data.effectiveToolAllowlist.length > 0
               ? effective.data.effectiveToolAllowlist.join(", ")
               : "None"}
           </Descriptions.Item>
+          <Descriptions.Item label="Harness references">
+            {effective.data.harnessReferences.length > 0 ? effective.data.harnessReferences.join(", ") : "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Workspace template">
+            {effective.data.workspaceTemplateId ?? "None"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Knowledge">
+            {effective.data.knowledgeSources.length > 0
+              ? effective.data.knowledgeSources.map((item) => item.identity).join(", ")
+              : "None"}
+          </Descriptions.Item>
           <Descriptions.Item label="Memory policy">
-            Session {effective.data.memoryPolicy.sessionMemory ? "on" : "off"} · User retrieval{" "}
+            Session {effective.data.memoryPolicy.sessionMemory ? "on" : "off"} · Identity retrieval{" "}
+            {effective.data.memoryPolicy.identityUserRetrieval ? "on" : "off"} · User retrieval{" "}
             {effective.data.memoryPolicy.userRetrieval ? "on" : "off"}
           </Descriptions.Item>
           <Descriptions.Item label="Trigger policy">
             {effective.data.triggerPolicy?.enabled ? "Enabled" : "Disabled"}
+            {effective.data.triggerPolicy
+              ? ` · sources: ${effective.data.triggerPolicy.allowedSourceKinds.join(", ") || "none"}`
+              : ""}
           </Descriptions.Item>
           <Descriptions.Item label="Durable work eligibility">
             {effective.data.durableExecutionEligibility.canAcceptNewTriggeredWork ? "Eligible" : "Not eligible"}
+            {" · schedule "}
+            {effective.data.durableExecutionEligibility.allowsScheduleSource ? "allowed" : "blocked"}
+            {" · application events "}
+            {effective.data.durableExecutionEligibility.allowsApplicationEventSource ? "allowed" : "blocked"}
           </Descriptions.Item>
         </Descriptions>
       ) : null}

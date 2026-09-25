@@ -1,10 +1,15 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Admin;
 
-public sealed class AdminReadService(IAgentDefinitionStore definitions, IAgentInstanceStore instances)
+public sealed class AdminReadService(
+    IAgentDefinitionStore definitions,
+    IAgentInstanceStore instances,
+    IModelCatalog catalog,
+    IToolConfigurationGate configurationGate)
 {
     public const int MaxInventoryItems = 256;
 
@@ -47,40 +52,7 @@ public sealed class AdminReadService(IAgentDefinitionStore definitions, IAgentIn
                 $"Agent '{instance.DefinitionId}' version {instance.ActiveVersion} was not found.");
         }
 
-        return BuildEffectiveConfiguration(instance, definition);
-    }
-
-    internal static AdminEffectiveConfiguration BuildEffectiveConfiguration(
-        AgentInstance instance,
-        AgentDefinition definition)
-    {
-        var environment = RoleEnvironments.Of(definition);
-        var trigger = definition.TriggerPolicy;
-        var memory = definition.MemoryPolicy ?? MemoryPolicy.Disabled;
-        var instanceActive = instance.Lifecycle == AgentInstanceLifecycle.Active;
-        var triggerEnabled = trigger?.Enabled == true;
-        return new AdminEffectiveConfiguration(
-            DefinitionSource: AdminDefinitionSources.BuiltIn,
-            DefinitionId: definition.Id,
-            DefinitionVersion: definition.Version,
-            DefinitionStatus: AdminDefinitionStatuses.Published,
-            InstanceId: instance.InstanceId,
-            InstanceLifecycle: instance.Lifecycle.ToString(),
-            Compatibility: instance.Compatibility,
-            Persona: instance.Persona,
-            ProviderPreferences: definition.ProviderPreferences,
-            ModelDefaults: definition.ModelDefaults,
-            EffectiveToolAllowlist: environment.ToolList.OrderBy(item => item, StringComparer.Ordinal).ToArray(),
-            KnowledgeSources: environment.KnowledgeList
-                .Select(item => new AdminKnowledgeSource(item.Identity, item.Title, item.Citation))
-                .ToArray(),
-            MemoryPolicy: memory,
-            TriggerPolicy: trigger,
-            DurableExecutionEligibility: new AdminDurableExecutionEligibility(
-                InstanceActive: instanceActive,
-                DefinitionResolved: true,
-                TriggerPolicyEnabled: triggerEnabled,
-                CanAcceptNewTriggeredWork: instanceActive && triggerEnabled));
+        return AdminEffectiveConfigurationResolver.Resolve(instance, definition, catalog, configurationGate);
     }
 
     private static AdminDefinitionInventoryItem MapDefinition(AgentDefinition definition) =>
@@ -132,10 +104,19 @@ public sealed record AdminInstanceInventoryItem(
 
 public sealed record AdminKnowledgeSource(string Identity, string Title, string Citation);
 
+public sealed record AdminEffectiveModel(
+    string CatalogKey,
+    string DisplayName,
+    string SelectionSource,
+    string? ReasoningEffort,
+    string? ModelId);
+
 public sealed record AdminDurableExecutionEligibility(
     bool InstanceActive,
     bool DefinitionResolved,
     bool TriggerPolicyEnabled,
+    bool AllowsScheduleSource,
+    bool AllowsApplicationEventSource,
     bool CanAcceptNewTriggeredWork);
 
 public sealed record AdminEffectiveConfiguration(
@@ -148,8 +129,10 @@ public sealed record AdminEffectiveConfiguration(
     bool Compatibility,
     AgentIdentity Persona,
     ProviderPreferences ProviderPreferences,
-    AgentModelDefaults? ModelDefaults,
+    AdminEffectiveModel EffectiveModel,
     IReadOnlyList<string> EffectiveToolAllowlist,
+    IReadOnlyList<string> HarnessReferences,
+    string? WorkspaceTemplateId,
     IReadOnlyList<AdminKnowledgeSource> KnowledgeSources,
     MemoryPolicy MemoryPolicy,
     TriggerPolicy? TriggerPolicy,

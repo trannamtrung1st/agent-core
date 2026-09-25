@@ -31,8 +31,10 @@ internal static class AdminHttpMapping
             config.Compatibility,
             ToPersona(config.Persona),
             ToProviderPreferences(config.ProviderPreferences),
-            config.ModelDefaults is null ? null : ToModelDefaults(config.ModelDefaults),
+            ToEffectiveModel(config.EffectiveModel),
             config.EffectiveToolAllowlist,
+            config.HarnessReferences,
+            config.WorkspaceTemplateId,
             config.KnowledgeSources
                 .Select(item => new AdminKnowledgeSourceResponse(item.Identity, item.Title, item.Citation))
                 .ToArray(),
@@ -42,6 +44,8 @@ internal static class AdminHttpMapping
                 config.DurableExecutionEligibility.InstanceActive,
                 config.DurableExecutionEligibility.DefinitionResolved,
                 config.DurableExecutionEligibility.TriggerPolicyEnabled,
+                config.DurableExecutionEligibility.AllowsScheduleSource,
+                config.DurableExecutionEligibility.AllowsApplicationEventSource,
                 config.DurableExecutionEligibility.CanAcceptNewTriggeredWork));
 
     private static AdminPersonaResponse ToPersona(AgentIdentity persona) =>
@@ -54,8 +58,8 @@ internal static class AdminHttpMapping
             preferences.SpeechSynthesizer,
             preferences.InterruptionClassifier);
 
-    private static AdminModelDefaultsResponse ToModelDefaults(AgentModelDefaults defaults) =>
-        new(defaults.CatalogKey, defaults.ReasoningEffort);
+    private static AdminEffectiveModelResponse ToEffectiveModel(AdminEffectiveModel model) =>
+        new(model.CatalogKey, model.DisplayName, model.SelectionSource, model.ReasoningEffort, model.ModelId);
 
     private static AdminMemoryPolicyResponse ToMemoryPolicy(MemoryPolicy policy) =>
         new(

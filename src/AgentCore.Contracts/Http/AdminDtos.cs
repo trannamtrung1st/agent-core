@@ -31,8 +31,10 @@ public sealed record AdminEffectiveConfigurationResponse(
     bool Compatibility,
     AdminPersonaResponse Persona,
     AdminProviderPreferencesResponse ProviderPreferences,
-    AdminModelDefaultsResponse? ModelDefaults,
+    AdminEffectiveModelResponse EffectiveModel,
     IReadOnlyList<string> EffectiveToolAllowlist,
+    IReadOnlyList<string> HarnessReferences,
+    string? WorkspaceTemplateId,
     IReadOnlyList<AdminKnowledgeSourceResponse> KnowledgeSources,
     AdminMemoryPolicyResponse MemoryPolicy,
     AdminTriggerPolicyResponse? TriggerPolicy,
@@ -46,7 +48,12 @@ public sealed record AdminProviderPreferencesResponse(
     string? SpeechSynthesizer,
     string InterruptionClassifier);
 
-public sealed record AdminModelDefaultsResponse(string? CatalogKey, string? ReasoningEffort);
+public sealed record AdminEffectiveModelResponse(
+    string CatalogKey,
+    string DisplayName,
+    string SelectionSource,
+    string? ReasoningEffort,
+    string? ModelId);
 
 public sealed record AdminKnowledgeSourceResponse(string Identity, string Title, string Citation);
 
@@ -75,4 +82,6 @@ public sealed record AdminDurableExecutionEligibilityResponse(
     bool InstanceActive,
     bool DefinitionResolved,
     bool TriggerPolicyEnabled,
+    bool AllowsScheduleSource,
+    bool AllowsApplicationEventSource,
     bool CanAcceptNewTriggeredWork);

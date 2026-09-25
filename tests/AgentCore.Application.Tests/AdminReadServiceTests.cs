@@ -1,6 +1,7 @@
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tests;
@@ -22,12 +23,56 @@ public sealed class AdminReadServiceTests
             DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
             DateTimeOffset.Parse("2026-01-02T00:00:00Z"),
             Compatibility: false);
-        var store = new SingleInstanceStore(instance);
-        var service = new AdminReadService(definitions, store);
+        var service = new AdminReadService(
+            definitions,
+            new SingleInstanceStore(instance),
+            TestModelCatalogs.Synthetic(),
+            new AllowAllToolGate());
 
         var config = await service.GetEffectiveConfigurationAsync(instance.InstanceId);
         Assert.Equal(1, config.DefinitionVersion);
         Assert.Equal("Pinned", config.Persona.Name);
+        Assert.False(string.IsNullOrWhiteSpace(config.EffectiveModel.CatalogKey));
+    }
+
+    [Fact]
+    public async Task Durable_eligibility_is_false_when_trigger_enabled_but_no_allowed_sources()
+    {
+        var definition = Sample("demo", 1, "Demo") with
+        {
+            TriggerPolicy = new TriggerPolicy(
+                Enabled: true,
+                AllowUserScheduling: true,
+                AllowOneShot: true,
+                AllowDaily: true,
+                AllowWeekly: true,
+                AllowIndefiniteRecurrence: true,
+                MaxActiveRegistrations: 1,
+                OneShotHorizonDays: 1,
+                MinRecurrenceDays: 1,
+                AllowedSourceKinds: [])
+        };
+        var definitions = new VersionedDefinitions(definition);
+        var instance = new AgentInstance(
+            Guid.Parse("019944af-00d1-7000-8000-000000000002"),
+            "demo",
+            1,
+            definition.Identity,
+            AgentInstanceLifecycle.Active,
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+            DateTimeOffset.Parse("2026-01-02T00:00:00Z"),
+            Compatibility: false);
+        var service = new AdminReadService(
+            definitions,
+            new SingleInstanceStore(instance),
+            TestModelCatalogs.Synthetic(),
+            new AllowAllToolGate());
+
+        var config = await service.GetEffectiveConfigurationAsync(instance.InstanceId);
+        Assert.True(config.DurableExecutionEligibility.TriggerPolicyEnabled);
+        Assert.False(config.DurableExecutionEligibility.AllowsScheduleSource);
+        Assert.False(config.DurableExecutionEligibility.AllowsApplicationEventSource);
+        Assert.False(config.DurableExecutionEligibility.CanAcceptNewTriggeredWork);
     }
 
     private static AgentDefinition Sample(string id, int version, string name) =>
@@ -44,6 +89,11 @@ public sealed class AdminReadServiceTests
             new VoiceConfiguration(false, "voice", 1),
             new ProviderPreferences("primary-llm", null, null),
             new Dictionary<string, string>());
+
+    private sealed class AllowAllToolGate : IToolConfigurationGate
+    {
+        public bool IsConfigured(string toolName) => true;
+    }
 
     private sealed class SingleInstanceStore(AgentInstance instance) : IAgentInstanceStore
     {

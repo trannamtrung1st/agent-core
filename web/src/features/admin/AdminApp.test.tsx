@@ -39,8 +39,16 @@ vi.mock("../../services/adminApi", () => ({
       speechSynthesizer: null,
       interruptionClassifier: "heuristic"
     },
-    modelDefaults: null,
+    effectiveModel: {
+      catalogKey: "scripted-alpha",
+      displayName: "Scripted Alpha",
+      selectionSource: "systemDefault",
+      reasoningEffort: "medium",
+      modelId: "scripted-alpha"
+    },
     effectiveToolAllowlist: ["workspace.read"],
+    harnessReferences: [],
+    workspaceTemplateId: null,
     knowledgeSources: [],
     memoryPolicy: {
       sessionMemory: false,
@@ -54,6 +62,8 @@ vi.mock("../../services/adminApi", () => ({
       instanceActive: true,
       definitionResolved: true,
       triggerPolicyEnabled: false,
+      allowsScheduleSource: false,
+      allowsApplicationEventSource: false,
       canAcceptNewTriggeredWork: false
     }
   })

@@ -1,26 +1,27 @@
 # P7A — Admin shell and effective configuration
 
-**Status:** candidate (W01 implementation batch)  
+**Status:** candidate (W01 review-fix batch)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Candidate SHA:** `561d1517` (full: `561d151` on `main`)  
+**Candidate SHA:** `fcb0f603` (full: `fcb0f60` on `main`)  
+**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..fcb0f60` (includes initial W01 `561d151`/`bd1922f` and review-fix `fcb0f60`)
 
 ## Scope delivered
 
 - Owner-protected `/api/v2/admin/definitions`, `/instances`, and `/instances/{id}/effective-config` read APIs.
-- `AdminReadService` resolves built-in definitions, lists durable instances, and projects secret-safe effective configuration (exact version/persona, tools, knowledge refs, memory/trigger policy, durable-work eligibility).
-- React Admin area at `/admin` with Chat navigation, inventory views, effective-config inspection, and return-to-last-chat behavior.
-- API and UI tests for owner/trusted-local enforcement, compatibility labeling, broken association, and secret sentinel absence.
+- Server-resolved effective model (`SessionModelBinder` + catalog), offered tools (`ToolCatalog` + configuration gate), harness references, workspace template id, and trigger/durable eligibility aligned with `OccurrenceCompatibility`.
+- React Admin area at `/admin` with Chat navigation, inventory, effective-config inspection, chat transport teardown on Admin entry, and return-to-last-chat reconnect.
+- API, application, UI, and Playwright coverage for owner matrix, compatibility labeling, broken associations, secret sentinels, and the Chat → Admin → instance effective config → return → new turn journey (desktop and narrow).
 
-## W00 baseline (pre-P7 product tree)
+## W01 verification (this batch)
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Backend | `dotnet test AgentCore.sln --nologo` | Pass (1334 tests, 1 skipped) |
-| Web unit | `pnpm install --frozen-lockfile && pnpm run test --run` | Pass (409 tests) |
-| Web build | `pnpm run build` | Pass |
-| Compose | `./scripts/compose-sqlite-volume.sh` | See worker verification for this batch |
-
-Frozen workflow `36096331077` on baseline `4ab5069` remains authoritative; live `gh` auth was not re-run in this session.
+| Admin API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (worker) |
+| Admin application | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminReadServiceTests` | Pass (worker) |
+| Web unit | `cd web && pnpm run test --run` | Pass (worker) |
+| Web build | `cd web && pnpm run build` | Pass (worker) |
+| P7A Playwright | `cd web && pnpm exec playwright test e2e/admin-shell.spec.ts --project=synthetic` | Pass (worker) |
+| Chat regression | `cd web && pnpm exec playwright test e2e/text-conversation.spec.ts --project=synthetic` | Pass (prior W01 turn) |
 
 ## Acceptance mapping (P7A)
 
@@ -30,13 +31,18 @@ Frozen workflow `36096331077` on baseline `4ab5069` remains authoritative; live 
 | AC-P7A-02 | `AdminApiTests.Admin_definitions_require_owner_capability` |
 | AC-P7A-03 | `AdminApiTests.Admin_definitions_reject_non_trusted_remote_caller` |
 | AC-P7A-04 | `AdminApiTests.Admin_definitions_succeed_for_trusted_owner` |
-| AC-P7A-05 | `AdminApiTests.Admin_effective_config_resolves_exact_instance_state` |
+| AC-P7A-05 | `AdminApiTests.Admin_effective_config_resolves_exact_instance_state` + resolved model/tools in `AdminReadServiceTests` |
 | AC-P7A-06 | Compatibility tag in Admin UI + API `compatibility` flag |
 | AC-P7A-07 | `AdminApiTests.Admin_responses_do_not_leak_secret_sentinels` |
-| AC-P7A-08 | User `GET /api/v1/agents` remains unauthenticated read |
+| AC-P7A-08 | `AdminApiTests.User_catalog_agents_remain_unprotected_read` |
 | AC-P7A-09 | `Admin_effective_config_returns_not_found_for_broken_definition_association` |
-| AC-P7A-10 | `admin-shell.spec.ts` return-to-chat journey |
+| AC-P7A-10 | `admin-shell.spec.ts` (return + second Synthetic turn) |
 
 ## Hosted CI
 
-Pending exact candidate SHA after merge commit.
+Pending exact candidate SHA on `main` after W01 batch approval.
+
+## Gaps / limitations
+
+- Managed/durable definition sources appear in P7B; inventory currently lists built-in file definitions only.
+- Hosted workflow green on the exact review-fix SHA not yet recorded in this report.

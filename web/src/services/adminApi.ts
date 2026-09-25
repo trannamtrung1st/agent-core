@@ -34,8 +34,16 @@ export type AdminEffectiveConfiguration = {
     speechSynthesizer: string | null;
     interruptionClassifier: string;
   };
-  modelDefaults: { catalogKey: string | null; reasoningEffort: string | null } | null;
+  effectiveModel: {
+    catalogKey: string;
+    displayName: string;
+    selectionSource: string;
+    reasoningEffort: string | null;
+    modelId: string | null;
+  };
   effectiveToolAllowlist: string[];
+  harnessReferences: string[];
+  workspaceTemplateId: string | null;
   knowledgeSources: Array<{ identity: string; title: string; citation: string }>;
   memoryPolicy: {
     sessionMemory: boolean;
@@ -62,6 +70,8 @@ export type AdminEffectiveConfiguration = {
     instanceActive: boolean;
     definitionResolved: boolean;
     triggerPolicyEnabled: boolean;
+    allowsScheduleSource: boolean;
+    allowsApplicationEventSource: boolean;
     canAcceptNewTriggeredWork: boolean;
   };
 };
