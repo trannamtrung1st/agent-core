@@ -241,6 +241,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<TriggerScheduler>();
         services.TryAddSingleton<ITriggerAdmissionGuard, TriggerAdmissionGuard>();
         services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
+        services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
@@ -249,7 +250,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<IMemoryStore>(),
             provider.GetRequiredService<IIdGenerator>(),
             provider.GetRequiredService<TimeProvider>(),
-            provider.GetService<ITriggerPolicyRecoveryService>()));
+            provider.GetService<ITriggerInstancePolicyReconciliationService>()));
         services.TryAddSingleton<SessionManager>();
         services.TryAddSingleton<IUserTurnCapabilityValidator, UserTurnCapabilityValidator>();
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();

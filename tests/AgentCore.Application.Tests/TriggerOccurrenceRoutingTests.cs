@@ -781,6 +781,12 @@ public sealed class TriggerOccurrenceRoutingTests
             CancellationToken cancellationToken = default) =>
             inner.ListSuspendedPolicyForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
 
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+            Guid agentInstanceId,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ListFutureRegistrationsForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
+
         public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
             inner.CountActiveAsync(owner, cancellationToken);
 
@@ -914,6 +920,12 @@ public sealed class TriggerOccurrenceRoutingTests
             int limit,
             CancellationToken cancellationToken = default) =>
             inner.ListSuspendedPolicyForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
+
+        public ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+            Guid agentInstanceId,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            inner.ListFutureRegistrationsForAgentInstanceAsync(agentInstanceId, limit, cancellationToken);
 
         public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default) =>
             inner.CountActiveAsync(owner, cancellationToken);

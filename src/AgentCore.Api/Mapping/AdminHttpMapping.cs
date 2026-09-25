@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Admin;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Api.Mapping;
 
@@ -160,6 +161,32 @@ internal static class AdminHttpMapping
 
     public static AdminLearnedMemoryResetResponse ToLearnedMemoryReset(AdminLearnedMemoryResetResult result) =>
         new(result.Scope.ToString(), result.ItemsRemoved);
+
+    public static AdminAutomationRegistrationListResponse ToAutomationRegistrations(
+        IReadOnlyList<AdminAutomationRegistration> items) =>
+        new(items.Select(ToAutomationRegistration).ToArray());
+
+    public static AdminAutomationRegistrationResponse ToAutomationRegistration(AdminAutomationRegistration item) =>
+        new(
+            item.RegistrationId.ToString("D"),
+            item.Intent,
+            ToAutomationStatus(item.Status),
+            item.ScheduleKind,
+            item.TimeZoneId,
+            item.ScheduleSummary,
+            item.NextOccurrenceAtUtc?.ToString("o"),
+            item.Revision,
+            item.SuspensionReason);
+
+    private static string ToAutomationStatus(TriggerRegistrationStatus status) => status switch
+    {
+        TriggerRegistrationStatus.Active => "active",
+        TriggerRegistrationStatus.Completed => "completed",
+        TriggerRegistrationStatus.Cancelled => "cancelled",
+        TriggerRegistrationStatus.Expired => "expired",
+        TriggerRegistrationStatus.SuspendedPolicy => "suspendedPolicy",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+    };
 
     private static AdminTriggerPolicyResponse ToTriggerPolicy(TriggerPolicy policy) =>
         new(

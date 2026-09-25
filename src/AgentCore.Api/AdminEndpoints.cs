@@ -312,6 +312,57 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/agent-instances/{instanceId:guid}/automation/registrations", async (
+            Guid instanceId,
+            AdminAutomationService automation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var items = await automation.ListRegistrationsAsync(instanceId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToAutomationRegistrations(items));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/agent-instances/{instanceId:guid}/automation/registrations/{registrationId:guid}/cancel", async (
+            Guid instanceId,
+            Guid registrationId,
+            AdminCancelAutomationRegistrationRequest? request,
+            AdminAutomationService automation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null)
+                {
+                    throw AgentCoreErrors.Validation("request body is required.");
+                }
+
+                if (!request.Confirm)
+                {
+                    throw AgentCoreErrors.Validation("confirm must be true for destructive automation operations.");
+                }
+
+                if (request.ExpectedRevision < 1)
+                {
+                    throw AgentCoreErrors.Validation("expectedRevision must be positive.");
+                }
+
+                var cancelled = await automation
+                    .CancelRegistrationAsync(instanceId, registrationId, request.ExpectedRevision, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToAutomationRegistration(cancelled));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/agent-instances/{instanceId:guid}/learned-memory/reset", async (
             Guid instanceId,
             AdminLearnedMemoryResetRequest? request,

@@ -83,6 +83,25 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    public ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+        Guid agentInstanceId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_state.Gate)
+        {
+            var items = _state.Registrations.Values
+                .Where(item =>
+                    item.Owner.AgentInstanceId == agentInstanceId
+                    && item.Status is TriggerRegistrationStatus.Active or TriggerRegistrationStatus.SuspendedPolicy)
+                .OrderByDescending(item => item.Provenance.CreatedAt)
+                .ThenByDescending(item => item.RegistrationId)
+                .Take(limit)
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<TriggerRegistration>>(items);
+        }
+    }
+
     public ValueTask<int> CountActiveAsync(TriggerOwner owner, CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)

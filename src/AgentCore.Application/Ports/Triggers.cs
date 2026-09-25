@@ -126,6 +126,11 @@ public interface ITriggerStore
         int limit,
         CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<TriggerRegistration>> ListFutureRegistrationsForAgentInstanceAsync(
+        Guid agentInstanceId,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     ValueTask<int> CountActiveAsync(
         TriggerOwner owner,
         CancellationToken cancellationToken = default);

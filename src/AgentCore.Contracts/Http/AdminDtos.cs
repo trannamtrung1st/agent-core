@@ -215,3 +215,19 @@ public sealed record AdminLearnedMemoryProvenanceResponse(
 public sealed record AdminLearnedMemoryResetRequest(string Scope, string? SessionId, bool Confirm);
 
 public sealed record AdminLearnedMemoryResetResponse(string Scope, int ItemsRemoved);
+
+public sealed record AdminAutomationRegistrationListResponse(
+    IReadOnlyList<AdminAutomationRegistrationResponse> Items);
+
+public sealed record AdminAutomationRegistrationResponse(
+    string RegistrationId,
+    string Intent,
+    string Status,
+    string ScheduleKind,
+    string TimeZoneId,
+    string ScheduleSummary,
+    string? NextOccurrenceAtUtc,
+    long Revision,
+    string? SuspensionReason);
+
+public sealed record AdminCancelAutomationRegistrationRequest(long ExpectedRevision, bool Confirm);

@@ -260,6 +260,15 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_automation_registrations_require_owner_capability()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync(
+            $"/api/v2/admin/agent-instances/{Guid.NewGuid():D}/automation/registrations");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_learned_memory_delete_requires_confirm()
     {
         var client = OwnerClient();

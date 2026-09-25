@@ -12,7 +12,7 @@ public sealed class AgentInstanceService(
     IMemoryStore sessions,
     IIdGenerator ids,
     TimeProvider time,
-    ITriggerPolicyRecoveryService? policyRecovery = null) : IAgentInstanceService
+    ITriggerInstancePolicyReconciliationService? policyReconciliation = null) : IAgentInstanceService
 {
     public async ValueTask<AgentInstance> CreateAsync(
         string definitionId,
@@ -93,8 +93,7 @@ public sealed class AgentInstanceService(
                 updatedAt,
                 cancellationToken)
             .ConfigureAwait(false);
-        await NotifySchedulingEligibilityMayHaveImprovedAsync(instance.InstanceId, updatedAt, cancellationToken)
-            .ConfigureAwait(false);
+        await ReconcileTriggerPolicyAsync(instance.InstanceId, updatedAt, cancellationToken).ConfigureAwait(false);
         return updated;
     }
 
@@ -146,12 +145,7 @@ public sealed class AgentInstanceService(
                 updatedAt,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (lifecycle == AgentInstanceLifecycle.Active)
-        {
-            await NotifySchedulingEligibilityMayHaveImprovedAsync(instanceId, updatedAt, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
+        await ReconcileTriggerPolicyAsync(instanceId, updatedAt, cancellationToken).ConfigureAwait(false);
         return updated;
     }
 
@@ -227,27 +221,24 @@ public sealed class AgentInstanceService(
 
         if (current.ActiveVersion > baselineVersion)
         {
-            await NotifySchedulingEligibilityMayHaveImprovedAsync(
-                    current.InstanceId,
-                    current.UpdatedAt,
-                    cancellationToken)
+            await ReconcileTriggerPolicyAsync(current.InstanceId, current.UpdatedAt, cancellationToken)
                 .ConfigureAwait(false);
         }
 
         return current;
     }
 
-    private async ValueTask NotifySchedulingEligibilityMayHaveImprovedAsync(
+    private async ValueTask ReconcileTriggerPolicyAsync(
         Guid agentInstanceId,
         DateTimeOffset asOfUtc,
         CancellationToken cancellationToken)
     {
-        if (policyRecovery is null)
+        if (policyReconciliation is null)
         {
             return;
         }
 
-        await policyRecovery.ReactivateSuspendedForAgentInstanceAsync(agentInstanceId, asOfUtc, cancellationToken)
+        await policyReconciliation.ReconcileAgentInstanceAsync(agentInstanceId, asOfUtc, cancellationToken)
             .ConfigureAwait(false);
     }
 
