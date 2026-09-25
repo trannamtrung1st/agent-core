@@ -1,9 +1,9 @@
 # P7A — Admin shell and effective configuration
 
-**Status:** candidate (W01 review-fix batch, round 4)  
+**Status:** approved (W01 batch review 0006 PASS)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Behavior candidate SHA:** `861efe8f16b8acc99058e8d4f9347af28eccafe3`  
-**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..861efe8f16b8acc99058e8d4f9347af28eccafe3`
+**Approved HEAD:** `9169bfad2f70d212251e1462f442ff887b6d0caf`  
+**Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..9169bfad2f70d212251e1462f442ff887b6d0caf`
 
 ## Scope delivered
 
@@ -21,7 +21,7 @@
 | Web unit | `cd web && pnpm run test --run src/features/admin` | Pass (worker) |
 | Web build | `cd web && pnpm run build` | Pass (worker) |
 | P7A Playwright | `cd web && pnpm exec playwright test e2e/admin-shell.spec.ts --project=synthetic` | Pass (worker) |
-| Chat regression | `cd web && pnpm exec playwright test e2e/text-conversation.spec.ts --project=synthetic` | Pass (prior W01 turn) |
+| Chat regression | `cd web && pnpm exec playwright test e2e/text-conversation.spec.ts --project=synthetic` | Pass (W01 gate, 9 tests on `9169bfa`) |
 
 ## Acceptance mapping (P7A)
 

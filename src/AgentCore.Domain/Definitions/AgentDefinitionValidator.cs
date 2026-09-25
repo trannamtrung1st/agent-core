@@ -15,6 +15,9 @@ public static class AgentDefinitionValidator
     private static readonly HashSet<string> Triggers =
         ["longSilence", "environmentUpdate", "unfinishedInteraction"];
 
+    public static void ValidateCandidate(AgentDefinitionCandidate candidate) =>
+        Validate(candidate.ToPublished(1));
+
     public static void Validate(AgentDefinition definition)
     {
         if (definition.SchemaVersion != 1)

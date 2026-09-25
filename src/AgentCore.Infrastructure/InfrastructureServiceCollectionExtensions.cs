@@ -176,8 +176,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IApprovedKnowledgeCatalog>(provider =>
             new FileApprovedKnowledgeCatalog(agentDirectory));
         services.TryAddSingleton<RoleKnowledgeService>();
-        services.TryAddSingleton<IAgentDefinitionStore>(provider =>
+        services.TryAddSingleton(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
+        services.TryAddSingleton<IAgentDefinitionAdminStore, InMemoryAgentDefinitionAdminStore>();
+        services.TryAddSingleton<IAgentDefinitionStore>(provider =>
+            new CompositeAgentDefinitionStore(
+                provider.GetRequiredService<FileAgentDefinitionStore>(),
+                provider.GetRequiredService<IAgentDefinitionAdminStore>()));
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();
