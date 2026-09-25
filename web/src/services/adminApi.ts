@@ -94,6 +94,15 @@ export async function listAdminInstances(): Promise<AdminInstanceInventoryItem[]
   return payload.items;
 }
 
+export async function listAdminToolNames(): Promise<string[]> {
+  const response = await ownerFetch("/api/v2/admin/tools");
+  if (!response.ok) {
+    throw new Error(`Admin tool registry failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { toolNames: string[] };
+  return payload.toolNames;
+}
+
 export async function getAdminEffectiveConfig(instanceId: string): Promise<AdminEffectiveConfiguration> {
   const response = await ownerFetch(`/api/v2/admin/instances/${instanceId}/effective-config`);
   if (!response.ok) {

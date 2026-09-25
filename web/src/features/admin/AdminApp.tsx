@@ -11,10 +11,19 @@ import {
   Result,
   Select,
   Spin,
+  Switch,
   Tabs,
   Tag,
   Typography
 } from "antd";
+import {
+  applyDraftEnvironmentToCandidate,
+  draftEnvironmentEquals,
+  emptyDraftEnvironment,
+  readDraftEnvironment,
+  type DraftEnvironment,
+  type DraftKnowledgeSource
+} from "./draftEnvironment";
 import {
   type AdminDefinitionDraft,
   type AdminDefinitionDraftResource,
@@ -33,6 +42,7 @@ import {
   listAdminDraftResources,
   listAdminInstances,
   listAdminPublicationResources,
+  listAdminToolNames,
   publishAdminDefinitionDraft,
   removeAdminDraftResource,
   updateAdminDefinitionDraft,
@@ -289,6 +299,7 @@ function DefinitionDetail({
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
   const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
   const [instructions, setInstructions] = useState("");
+  const [capabilities, setCapabilities] = useState<DraftEnvironment>(emptyDraftEnvironment());
   const [busy, setBusy] = useState(false);
 
   const savedInstructions = useMemo(() => {
@@ -298,14 +309,28 @@ function DefinitionDetail({
     return (activeDraft.candidate as { systemInstructions?: string }).systemInstructions ?? "";
   }, [activeDraft]);
 
-  const dirty = activeDraft !== null && instructions !== savedInstructions;
+  const savedCapabilities = useMemo(() => {
+    if (!activeDraft) {
+      return emptyDraftEnvironment();
+    }
+    return readDraftEnvironment(activeDraft.candidate);
+  }, [activeDraft]);
+
+  const dirtyInstructions = activeDraft !== null && instructions !== savedInstructions;
+  const dirtyCapabilities =
+    activeDraft !== null && !draftEnvironmentEquals(capabilities, savedCapabilities);
+  const dirty = dirtyInstructions || dirtyCapabilities;
 
   const buildCandidate = useCallback(() => {
     if (!activeDraft) {
       return {};
     }
-    return { ...activeDraft.candidate, systemInstructions: instructions };
-  }, [activeDraft, instructions]);
+    const base = {
+      ...(activeDraft.candidate as Record<string, unknown>),
+      systemInstructions: instructions
+    };
+    return applyDraftEnvironmentToCandidate(base, capabilities);
+  }, [activeDraft, capabilities, instructions]);
 
   const reloadLifecycle = useCallback(async () => {
     setLifecycleLoading(true);
@@ -338,6 +363,7 @@ function DefinitionDetail({
       setActiveDraft(draft);
       const candidate = draft.candidate as { systemInstructions?: string };
       setInstructions(candidate.systemInstructions ?? "");
+      setCapabilities(readDraftEnvironment(draft.candidate));
     } catch (error) {
       setLifecycleError(error instanceof Error ? error.message : "Failed to load draft.");
     } finally {
@@ -373,6 +399,7 @@ function DefinitionDetail({
         buildCandidate());
       setActiveDraft(updated);
       setInstructions((updated.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+      setCapabilities(readDraftEnvironment(updated.candidate));
       message.success("Draft saved.");
       await reloadLifecycle();
     } catch (error) {
@@ -402,11 +429,13 @@ function DefinitionDetail({
             draft = await updateAdminDefinitionDraft(draft.draftId, draft.revision, buildCandidate());
             setActiveDraft(draft);
             setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+            setCapabilities(readDraftEnvironment(draft.candidate));
           }
           const publication = await publishAdminDefinitionDraft(draft.draftId, draft.revision);
           message.success(`Published version ${publication.version}.`);
           setActiveDraft(null);
           setInstructions("");
+          setCapabilities(emptyDraftEnvironment());
           await reloadLifecycle();
           await onRetryDefinitions();
         } catch (error) {
@@ -499,15 +528,18 @@ function DefinitionDetail({
             <DraftEditor
               activeDraft={activeDraft}
               instructions={instructions}
+              capabilities={capabilities}
               dirty={dirty}
               busy={busy}
               onInstructionsChange={setInstructions}
+              onCapabilitiesChange={setCapabilities}
               onSave={() => void saveDraft()}
               onPublish={() => void confirmPublish()}
               onDraftRevisionChange={(draft, options) => {
                 setActiveDraft(draft);
-                if (!options?.preserveInstructions) {
+                if (!options?.preserveLocalEdits) {
                   setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+                  setCapabilities(readDraftEnvironment(draft.candidate));
                 }
               }}
               onError={setLifecycleError}
@@ -546,9 +578,11 @@ const RESOURCE_KINDS = ["Knowledge", "Reference", "Template", "StaticAsset", "Ev
 function DraftEditor({
   activeDraft,
   instructions,
+  capabilities,
   dirty,
   busy,
   onInstructionsChange,
+  onCapabilitiesChange,
   onSave,
   onPublish,
   onDraftRevisionChange,
@@ -556,18 +590,23 @@ function DraftEditor({
 }: {
   activeDraft: AdminDefinitionDraft;
   instructions: string;
+  capabilities: DraftEnvironment;
   dirty: boolean;
   busy: boolean;
   onInstructionsChange: (value: string) => void;
+  onCapabilitiesChange: (value: DraftEnvironment) => void;
   onSave: () => void;
   onPublish: () => void;
   onDraftRevisionChange: (
     draft: AdminDefinitionDraft,
-    options?: { preserveInstructions?: boolean }
+    options?: { preserveLocalEdits?: boolean }
   ) => void;
   onError: (message: string | null) => void;
 }) {
   const { message } = App.useApp();
+  const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
+  const [toolRegistryError, setToolRegistryError] = useState<string | null>(null);
+  const [toolNames, setToolNames] = useState<string[]>([]);
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [logicalPath, setLogicalPath] = useState("");
@@ -591,10 +630,58 @@ function DraftEditor({
     void reloadResources();
   }, [reloadResources, activeDraft.revision]);
 
+  const reloadToolRegistry = useCallback(async () => {
+    setToolRegistryLoading(true);
+    setToolRegistryError(null);
+    try {
+      const names = await listAdminToolNames();
+      setToolNames(names);
+    } catch (error) {
+      setToolNames([]);
+      setToolRegistryError(
+        error instanceof Error ? error.message : "Failed to load tool registry."
+      );
+    } finally {
+      setToolRegistryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadToolRegistry();
+  }, [reloadToolRegistry]);
+
   const refreshDraft = async () => {
     const draft = await getAdminDefinitionDraft(activeDraft.draftId);
-    onDraftRevisionChange(draft, { preserveInstructions: dirty });
+    onDraftRevisionChange(draft, { preserveLocalEdits: dirty });
     await reloadResources();
+  };
+
+  const updateKnowledgeSource = (
+    index: number,
+    field: keyof DraftKnowledgeSource,
+    value: string
+  ) => {
+    const next = capabilities.knowledgeSources.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item
+    );
+    onCapabilitiesChange({ ...capabilities, knowledgeSources: next });
+  };
+
+  const addKnowledgeSource = () => {
+    onCapabilitiesChange({
+      ...capabilities,
+      knowledgeSources: [
+        ...capabilities.knowledgeSources,
+        { identity: "", title: "", citation: "" }
+      ]
+    });
+  };
+
+  const removeKnowledgeSource = (index: number) => {
+    onCapabilitiesChange({
+      ...capabilities,
+      knowledgeSources: capabilities.knowledgeSources.filter((_, itemIndex) => itemIndex !== index)
+    });
   };
 
   const addResource = async () => {
@@ -669,9 +756,137 @@ function DraftEditor({
                 </Flex>
                 {dirty ? (
                   <Typography.Text type="secondary">
-                    Unsaved changes — publish will save the visible instructions first.
+                    Unsaved changes — publish will save the visible draft edits first.
                   </Typography.Text>
                 ) : null}
+              </Flex>
+            )
+          },
+          {
+            key: "capabilities",
+            label: "Capabilities",
+            children: (
+              <Flex vertical gap={12} aria-label="Draft capabilities">
+                <Typography.Text type="secondary">
+                  Typed RoleEnvironment fields — tool names come from the server registry.
+                </Typography.Text>
+                <label>
+                  <Typography.Text>Harness labels</Typography.Text>
+                  <Select
+                    aria-label="Harness labels"
+                    mode="tags"
+                    style={{ width: "100%", marginTop: 4 }}
+                    value={capabilities.harness}
+                    onChange={(values) => onCapabilitiesChange({ ...capabilities, harness: values })}
+                    disabled={busy}
+                    placeholder="examiner-turn-taking"
+                  />
+                </label>
+                {toolRegistryError ? (
+                  <Alert
+                    type="error"
+                    showIcon
+                    message={toolRegistryError}
+                    action={
+                      <Button
+                        size="small"
+                        aria-label="Retry tool registry"
+                        onClick={() => void reloadToolRegistry()}
+                        disabled={toolRegistryLoading}
+                      >
+                        Retry
+                      </Button>
+                    }
+                  />
+                ) : null}
+                <label>
+                  <Typography.Text>Tool allowlist</Typography.Text>
+                  {toolRegistryLoading ? <Spin size="small" style={{ marginLeft: 8 }} /> : null}
+                  <Select
+                    aria-label="Tool allowlist"
+                    mode="multiple"
+                    style={{ width: "100%", marginTop: 4 }}
+                    value={capabilities.toolAllowlist}
+                    onChange={(values) =>
+                      onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
+                    }
+                    disabled={busy || toolRegistryLoading || toolRegistryError !== null}
+                    options={toolNames.map((name) => ({ value: name, label: name }))}
+                    placeholder="Select registered tools"
+                  />
+                </label>
+                <Input
+                  aria-label="Workspace template id"
+                  placeholder="Workspace template id (optional)"
+                  value={capabilities.workspaceTemplateId}
+                  onChange={(event) =>
+                    onCapabilitiesChange({
+                      ...capabilities,
+                      workspaceTemplateId: event.target.value
+                    })
+                  }
+                  disabled={busy}
+                />
+                <Flex align="center" gap={8}>
+                  <Switch
+                    aria-label="Allow unread unsupported attachment types"
+                    checked={capabilities.allowUnreadUnsupportedAttachmentTypes}
+                    onChange={(checked) =>
+                      onCapabilitiesChange({
+                        ...capabilities,
+                        allowUnreadUnsupportedAttachmentTypes: checked
+                      })
+                    }
+                    disabled={busy}
+                  />
+                  <Typography.Text>Allow unread unsupported attachment types</Typography.Text>
+                </Flex>
+                <Typography.Text>Knowledge source references</Typography.Text>
+                {capabilities.knowledgeSources.length === 0 ? (
+                  <Typography.Text type="secondary">No knowledge sources configured.</Typography.Text>
+                ) : null}
+                {capabilities.knowledgeSources.map((source, index) => (
+                  <Flex key={`knowledge-${index}`} gap={8} wrap="wrap" align="end">
+                    <Input
+                      aria-label={`Knowledge identity ${index + 1}`}
+                      placeholder="identity"
+                      value={source.identity}
+                      onChange={(event) => updateKnowledgeSource(index, "identity", event.target.value)}
+                      disabled={busy}
+                      style={{ minWidth: 140, flex: 1 }}
+                    />
+                    <Input
+                      aria-label={`Knowledge title ${index + 1}`}
+                      placeholder="title"
+                      value={source.title}
+                      onChange={(event) => updateKnowledgeSource(index, "title", event.target.value)}
+                      disabled={busy}
+                      style={{ minWidth: 140, flex: 1 }}
+                    />
+                    <Input
+                      aria-label={`Knowledge citation ${index + 1}`}
+                      placeholder="citation"
+                      value={source.citation}
+                      onChange={(event) => updateKnowledgeSource(index, "citation", event.target.value)}
+                      disabled={busy}
+                      style={{ minWidth: 140, flex: 1 }}
+                    />
+                    <Button danger type="link" disabled={busy} onClick={() => removeKnowledgeSource(index)}>
+                      Remove
+                    </Button>
+                  </Flex>
+                ))}
+                <Button onClick={addKnowledgeSource} disabled={busy}>
+                  Add knowledge source
+                </Button>
+                <Flex gap={8} wrap="wrap">
+                  <Button type="primary" onClick={onSave} disabled={busy}>
+                    Save draft
+                  </Button>
+                  <Button onClick={onPublish} disabled={busy}>
+                    Publish…
+                  </Button>
+                </Flex>
               </Flex>
             )
           },

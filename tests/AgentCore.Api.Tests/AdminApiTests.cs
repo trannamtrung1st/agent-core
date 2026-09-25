@@ -5,6 +5,7 @@ using AgentCore.Api.Http;
 using Microsoft.AspNetCore.Builder;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
 using Microsoft.AspNetCore.Hosting;
@@ -55,6 +56,18 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var payload = await response.Content.ReadFromJsonAsync<AdminDefinitionInventoryResponse>();
         Assert.NotNull(payload);
         Assert.Contains(payload!.Items, item => item.DefinitionId == "examiner");
+    }
+
+    [Fact]
+    public async Task Admin_tools_lists_registered_tool_names()
+    {
+        var client = OwnerClient();
+        var response = await client.GetAsync("/api/v2/admin/tools");
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<AdminToolRegistryResponse>();
+        Assert.NotNull(payload);
+        Assert.Contains(payload!.ToolNames, name => name == ToolCatalog.WorkspaceRead);
+        Assert.Equal(payload.ToolNames.OrderBy(name => name, StringComparer.Ordinal), payload.ToolNames);
     }
 
     [Fact]

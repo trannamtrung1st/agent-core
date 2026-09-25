@@ -3,6 +3,7 @@ using AgentCore.Api.Mapping;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Tools;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
 using Microsoft.AspNetCore.Mvc;
@@ -110,6 +111,12 @@ internal static class AdminEndpoints
         {
             var items = await admin.ListInstancesAsync(cancellationToken).ConfigureAwait(false);
             return Results.Json(new AdminInstanceInventoryResponse(items.Select(AdminHttpMapping.ToInstanceItem).ToArray()));
+        });
+
+        group.MapGet("/tools", () =>
+        {
+            var names = ToolCatalog.AllKnownNames().OrderBy(name => name, StringComparer.Ordinal).ToArray();
+            return Results.Json(new AdminToolRegistryResponse(names));
         });
 
         group.MapGet("/instances/{instanceId:guid}/effective-config", async (

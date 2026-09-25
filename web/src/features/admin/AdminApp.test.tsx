@@ -73,6 +73,7 @@ vi.mock("../../services/adminApi", () => ({
   forkAdminDefinitionDraft: vi.fn(),
   listAdminDraftResources: vi.fn(),
   listAdminPublicationResources: vi.fn(),
+  listAdminToolNames: vi.fn().mockResolvedValue(["workspace.read"]),
   uploadAdminDraftResourceContent: vi.fn(),
   upsertAdminDraftResource: vi.fn(),
   removeAdminDraftResource: vi.fn()
@@ -87,6 +88,7 @@ import {
   listAdminDefinitions,
   listAdminDraftResources,
   listAdminPublicationResources,
+  listAdminToolNames,
   listAdminInstances,
   removeAdminDraftResource,
   publishAdminDefinitionDraft,
@@ -438,6 +440,7 @@ describe("AdminApp", () => {
       }
     ]);
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminToolNames).mockResolvedValue(["workspace.read"]);
     vi.mocked(listAdminDraftResources).mockResolvedValue([
       {
         resourceId: "019944af-00d1-7000-8000-0000000000aa",
@@ -474,6 +477,145 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText(/knowledge\/policy\.md/)).toBeInTheDocument();
     });
+  });
+
+  it("saves typed capabilities through the draft editor", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000bb";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "examiner",
+        revision: 1,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([]);
+    vi.mocked(listAdminToolNames).mockResolvedValue(["workspace.read", "knowledge.retrieve"]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 1,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: {
+        systemInstructions: "Body",
+        definitionId: "examiner",
+        environment: { harness: ["examiner-turn-taking"], toolAllowlist: [], workspace: {} }
+      }
+    });
+    vi.mocked(updateAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 2,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Capabilities" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    fireEvent.change(screen.getByLabelText("Workspace template id"), {
+      target: { value: "examiner-default" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => {
+      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
+    });
+    const candidate = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
+      environment?: { workspace?: { templateId?: string } };
+    };
+    expect(candidate?.environment?.workspace?.templateId).toBe("examiner-default");
+  });
+
+  it("retries tool registry loading from the Capabilities tab", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000cc";
+    vi.mocked(listAdminToolNames).mockReset();
+    let toolRegistryAttempts = 0;
+    vi.mocked(listAdminToolNames).mockImplementation(async () => {
+      toolRegistryAttempts += 1;
+      if (toolRegistryAttempts === 1) {
+        throw new Error("Registry unavailable");
+      }
+      return ["workspace.read", "knowledge.retrieve"];
+    });
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "examiner",
+        revision: 1,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 1,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Capabilities" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    await waitFor(() => {
+      expect(screen.getByText("Registry unavailable")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry tool registry" }));
+    await waitFor(() => {
+      expect(toolRegistryAttempts).toBe(2);
+    });
+    expect(screen.queryByText("Registry unavailable")).not.toBeInTheDocument();
   });
 
   it("shows instance identity from effective config when inventory is unavailable", async () => {
