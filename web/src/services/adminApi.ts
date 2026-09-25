@@ -252,6 +252,15 @@ function instanceMutationConflictMessage(status: number): string | null {
   return status === 409 ? "Instance revision conflict — reload and try again." : null;
 }
 
+async function adminProblemMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const problem = (await response.json()) as { title?: string; detail?: string };
+    return problem.detail?.trim() || problem.title?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function updateAdminAgentInstancePersona(
   instanceId: string,
   update: AdminPersonaUpdate
@@ -404,4 +413,137 @@ export async function createAdminAgentInstance(
     throw new Error(`Admin create instance failed (${response.status})`);
   }
   return (await response.json()) as AdminAgentInstance;
+}
+
+export type AdminLearnedMemoryScope = "Session" | "IdentityUser" | "User";
+
+export type AdminLearnedMemoryItem = {
+  memoryId: string;
+  kind: string;
+  subject: string;
+  content: string;
+  provenance: {
+    source: string;
+    originSessionId: string | null;
+    originMemoryId: string | null;
+    recordedAt: string;
+  };
+  updatedAt: string;
+};
+
+export type AdminAutomationRegistration = {
+  registrationId: string;
+  intent: string;
+  status: string;
+  scheduleKind: string;
+  timeZoneId: string;
+  scheduleSummary: string;
+  nextOccurrenceAtUtc: string | null;
+  revision: number;
+  suspensionReason: string | null;
+  provenance: {
+    authorizationOrigin: string;
+    sourceSessionId: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+};
+
+export async function listAdminLearnedMemory(
+  instanceId: string,
+  scope: AdminLearnedMemoryScope,
+  sessionId?: string
+): Promise<AdminLearnedMemoryItem[]> {
+  const params = new URLSearchParams({ scope });
+  if (sessionId) {
+    params.set("sessionId", sessionId);
+  }
+  const response = await ownerFetch(
+    `/api/v2/admin/agent-instances/${instanceId}/learned-memory?${params.toString()}`
+  );
+  if (!response.ok) {
+    throw new Error(
+      await adminProblemMessage(response, `Admin learned memory list failed (${response.status})`)
+    );
+  }
+  const payload = (await response.json()) as { items: AdminLearnedMemoryItem[] };
+  return payload.items;
+}
+
+export async function deleteAdminLearnedMemory(
+  instanceId: string,
+  memoryId: string,
+  scope: AdminLearnedMemoryScope,
+  sessionId?: string
+): Promise<void> {
+  const params = new URLSearchParams({ scope, confirm: "true" });
+  if (sessionId) {
+    params.set("sessionId", sessionId);
+  }
+  const response = await ownerFetch(
+    `/api/v2/admin/agent-instances/${instanceId}/learned-memory/${memoryId}?${params.toString()}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await adminProblemMessage(response, `Admin learned memory delete failed (${response.status})`)
+    );
+  }
+}
+
+export async function resetAdminLearnedMemoryScope(
+  instanceId: string,
+  scope: AdminLearnedMemoryScope,
+  sessionId?: string
+): Promise<number> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/learned-memory/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope, sessionId: sessionId ?? null, confirm: true })
+  });
+  if (!response.ok) {
+    throw new Error(
+      await adminProblemMessage(response, `Admin learned memory reset failed (${response.status})`)
+    );
+  }
+  const payload = (await response.json()) as { itemsRemoved: number };
+  return payload.itemsRemoved;
+}
+
+export async function listAdminAutomationRegistrations(
+  instanceId: string
+): Promise<AdminAutomationRegistration[]> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/automation/registrations`);
+  if (!response.ok) {
+    throw new Error(`Admin automation list failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { items: AdminAutomationRegistration[] };
+  return payload.items;
+}
+
+export async function cancelAdminAutomationRegistration(
+  instanceId: string,
+  registrationId: string,
+  expectedRevision: number
+): Promise<AdminAutomationRegistration> {
+  const response = await ownerFetch(
+    `/api/v2/admin/agent-instances/${instanceId}/automation/registrations/${registrationId}/cancel`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision, confirm: true })
+    }
+  );
+  if (response.status === 409) {
+    throw new Error(
+      await adminProblemMessage(
+        response,
+        "Registration revision conflict — reload registrations and try again."
+      )
+    );
+  }
+  if (!response.ok) {
+    throw new Error(`Admin automation cancel failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAutomationRegistration;
 }

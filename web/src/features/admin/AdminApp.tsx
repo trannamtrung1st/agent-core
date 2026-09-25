@@ -73,6 +73,7 @@ import {
 } from "../../app/appRoute";
 import { formatAdminLoadError } from "./adminErrors";
 import { startManagedPublicationChat } from "./adminManagedChat";
+import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
 const { Header, Content } = Layout;
 
@@ -1116,6 +1117,9 @@ function InstanceDetail({
       ) : null}
       {effective.kind === "ready" && !effective.data.compatibility ? (
         <InstanceManagedControls config={effective.data} onUpdated={onInstanceChanged} />
+      ) : null}
+      {effective.kind === "ready" && !effective.data.compatibility ? (
+        <InstanceMemoryAutomationPanel config={effective.data} />
       ) : null}
       {effective.kind === "ready" ? (
         <EffectiveConfigView config={effective.data} hidePersona={!effective.data.compatibility} />
