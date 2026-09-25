@@ -4,6 +4,8 @@ import { waitForResponseSettled } from "./support/response-settled";
 
 const dbPath = process.env.PLAYWRIGHT_SQLITE_PATH ?? "";
 const scheduleIntent = "Call John";
+/** Exclusion id used before a new chat exists; must not match any real session. */
+const noActiveSession = "00000000-0000-0000-0000-000000000000";
 
 function sqlite(script: string, args: string[] = []): string {
   return execFileSync("python3", ["-c", script, dbPath, ...args], { encoding: "utf8" }).trim();
@@ -88,7 +90,7 @@ if updated != 1:
   );
 }
 
-async function releaseOtherLiveRuntimes(page: Page, sessionId?: string): Promise<void> {
+async function releaseOtherLiveRuntimes(page: Page, sessionId: string): Promise<void> {
   await page.evaluate(async (currentId) => {
     const token = window.localStorage.getItem("agent-core.owner-capability") ?? "";
     const headers = {
@@ -114,7 +116,7 @@ async function releaseOtherLiveRuntimes(page: Page, sessionId?: string): Promise
         throw new Error(`deactivate ${item.sessionId} ${deactivated.status}`);
       }
     }
-  }, sessionId ?? "");
+  }, sessionId);
 }
 
 function seedRetry(sessionId: string): void {
@@ -201,13 +203,13 @@ test("a detached reminder completes in Background work and cancel survives reloa
       throw new Error(await patched.text());
     }
   });
+  // Catalog cleanup before a new chat: the /c/<id> path appears only after the first send.
+  await releaseOtherLiveRuntimes(page, noActiveSession);
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await page.getByRole("combobox", { name: "Identity" }).click();
   await page.locator(".ant-select-item-option", { hasText: "Riley — General assistant" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-
-  await releaseOtherLiveRuntimes(page);
 
   const transcript = page.locator(".conversation-scroll");
   await page.getByLabel("Message").fill("remind me tomorrow");

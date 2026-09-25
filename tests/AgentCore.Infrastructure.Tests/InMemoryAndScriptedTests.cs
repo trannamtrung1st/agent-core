@@ -1,6 +1,8 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Triggers;
+using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -83,6 +85,32 @@ public sealed class InMemoryAndScriptedTests
     }
 
     [Fact]
+    public async Task Scripted_language_model_keeps_schedule_scratch_isolated_across_conversations()
+    {
+        var registrationA = Guid.Parse("019944af-00a1-7000-8000-000000000001");
+        var registrationB = Guid.Parse("019944af-00a2-7000-8000-000000000002");
+        var tools = ScheduleToolDefinitions();
+        var model = new ScriptedLanguageModel();
+
+        await SeedScheduleScratchAsync(model, tools, "thread-alpha", registrationA, "Intent Alpha");
+        await SeedScheduleScratchAsync(model, tools, "thread-beta", registrationB, "Intent Beta");
+
+        var cancelA = await AwaitScheduleToolCallAsync(
+            model,
+            CancelRequest(tools, registrationA, "Intent Alpha"),
+            ToolCatalog.TriggerCancel);
+        var cancelB = await AwaitScheduleToolCallAsync(
+            model,
+            CancelRequest(tools, registrationB, "Intent Beta"),
+            ToolCatalog.TriggerCancel);
+
+        Assert.Contains(registrationA.ToString("D"), cancelA.ArgumentsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain(registrationB.ToString("D"), cancelA.ArgumentsJson, StringComparison.Ordinal);
+        Assert.Contains(registrationB.ToString("D"), cancelB.ArgumentsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain(registrationA.ToString("D"), cancelB.ArgumentsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Scripted_language_model_emits_deltas_then_completed()
     {
         var model = new ScriptedLanguageModel(["A", "B"]);
@@ -109,6 +137,88 @@ public sealed class InMemoryAndScriptedTests
         Assert.NotNull(support);
         Assert.Equal(1, examiner!.Version);
         Assert.Equal("Sam", support!.Identity.Name);
+    }
+
+    private static ModelToolDefinition[] ScheduleToolDefinitions() =>
+    [
+        new(ToolCatalog.TriggerScheduleOnce, "Schedule once", """{"type":"object"}"""),
+        new(ToolCatalog.TriggerUpdate, "Update schedule", """{"type":"object"}"""),
+        new(ToolCatalog.TriggerCancel, "Cancel schedule", """{"type":"object"}""")
+    ];
+
+    private static async Task SeedScheduleScratchAsync(
+        ScriptedLanguageModel model,
+        IReadOnlyList<ModelToolDefinition> tools,
+        string threadMarker,
+        Guid registrationId,
+        string intent)
+    {
+        var userText = $"{threadMarker} remind me tomorrow";
+        var create = await AwaitScheduleToolCallAsync(
+            model,
+            new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, userText)], Tools: tools),
+            ToolCatalog.TriggerScheduleOnce);
+        var toolResult =
+            $$"""{"registrationId":"{{registrationId:D}}","revision":1,"intent":"{{intent}}","timeZone":"UTC","status":"Active","scheduleKind":"OneShot"}""";
+        var messages = new List<ModelMessage>
+        {
+            new(ModelRole.User, userText),
+            new(ModelRole.Assistant, string.Empty, ToolCalls: [create]),
+            new(ModelRole.Tool, toolResult, ToolCallId: create.Id, Name: create.Name)
+        };
+        await foreach (var item in model.GenerateAsync(new ModelRequest(Guid.NewGuid(), messages, Tools: tools)))
+        {
+            if (item is ModelCompleted)
+            {
+                break;
+            }
+        }
+    }
+
+    private static ModelRequest CancelRequest(
+        IReadOnlyList<ModelToolDefinition> tools,
+        Guid registrationId,
+        string intent)
+    {
+        var referent = new ScheduleConversationContext(
+            registrationId,
+            1,
+            TriggerCommandAction.Create,
+            intent,
+            "UTC",
+            TriggerScheduleKind.OneShot,
+            TriggerRegistrationStatus.Active,
+            null);
+        var system = string.Join('\n', referent.ToPromptLines());
+        return new ModelRequest(
+            Guid.NewGuid(),
+            [
+                new ModelMessage(ModelRole.System, system),
+                new ModelMessage(ModelRole.User, "cancel that reminder")
+            ],
+            Tools: tools);
+    }
+
+    private static async Task<ModelToolCall> AwaitScheduleToolCallAsync(
+        ScriptedLanguageModel model,
+        ModelRequest request,
+        string expectedTool)
+    {
+        await foreach (var item in model.GenerateAsync(request))
+        {
+            if (item is ModelToolCallEvent toolCall)
+            {
+                Assert.Equal(expectedTool, toolCall.Call.Name);
+                return toolCall.Call;
+            }
+
+            if (item is ModelCompleted completed && completed.Reason != ModelStopReason.ToolCalls)
+            {
+                break;
+            }
+        }
+
+        throw new InvalidOperationException($"Expected {expectedTool} tool call.");
     }
 
     private static string FindAgents()
