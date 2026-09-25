@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace AgentCore.Contracts.Http;
 
 public sealed record AdminDefinitionInventoryResponse(IReadOnlyList<AdminDefinitionInventoryItemResponse> Items);
@@ -85,3 +87,40 @@ public sealed record AdminDurableExecutionEligibilityResponse(
     bool AllowsScheduleSource,
     bool AllowsApplicationEventSource,
     bool CanAcceptNewTriggeredWork);
+
+public sealed record AdminDefinitionDraftListResponse(IReadOnlyList<AdminDefinitionDraftSummaryResponse> Items);
+
+public sealed record AdminDefinitionDraftSummaryResponse(
+    string DraftId,
+    string DefinitionId,
+    long Revision,
+    string SourceKind,
+    int? SourceVersion,
+    string UpdatedAt);
+
+public sealed record AdminDefinitionDraftResponse(
+    string DraftId,
+    string DefinitionId,
+    long Revision,
+    string SourceKind,
+    int? SourceVersion,
+    string CreatedAt,
+    string UpdatedAt,
+    JsonElement Candidate);
+
+public sealed record AdminDefinitionPublicationListResponse(
+    IReadOnlyList<AdminDefinitionPublicationSummaryResponse> Items);
+
+public sealed record AdminDefinitionPublicationSummaryResponse(
+    string DefinitionId,
+    int Version,
+    string Status,
+    string PublishedAt);
+
+public sealed record AdminCreateDefinitionDraftRequest(string DefinitionId, JsonElement Candidate);
+
+public sealed record AdminForkDefinitionDraftRequest(string DefinitionId, int SourceVersion, string SourceKind);
+
+public sealed record AdminUpdateDefinitionDraftRequest(long ExpectedRevision, JsonElement Candidate);
+
+public sealed record AdminPublishDefinitionDraftRequest(long ExpectedRevision);

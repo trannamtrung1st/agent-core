@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentCore.Application.Admin;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Definitions;
@@ -68,6 +69,29 @@ internal static class AdminHttpMapping
             policy.IdentityUserRetrieval,
             policy.UserPromotion,
             policy.UserRetrieval);
+
+    public static AdminDefinitionDraftSummaryResponse ToDraftSummary(AgentDefinitionDraftSummary item) =>
+        new(
+            item.DraftId.ToString("D"),
+            item.DefinitionId,
+            item.Revision,
+            item.SourceKind.ToString(),
+            item.SourceVersion,
+            item.UpdatedAt.ToString("o"));
+
+    public static AdminDefinitionDraftResponse ToDraft(AgentDefinitionDraft draft) =>
+        new(
+            draft.DraftId.ToString("D"),
+            draft.DefinitionId,
+            draft.Revision,
+            draft.SourceKind.ToString(),
+            draft.SourceVersion,
+            draft.CreatedAt.ToString("o"),
+            draft.UpdatedAt.ToString("o"),
+            AdminDefinitionJson.WriteCandidate(draft.Candidate));
+
+    public static AdminDefinitionPublicationSummaryResponse ToPublicationSummary(AgentDefinitionPublicationSummary item) =>
+        new(item.DefinitionId, item.Version, item.Status.ToString(), item.PublishedAt.ToString("o"));
 
     private static AdminTriggerPolicyResponse ToTriggerPolicy(TriggerPolicy policy) =>
         new(

@@ -55,6 +55,7 @@ builder.Services.AddOptions<HostingOptions>()
 var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
 builder.Services.AddSingleton<AdminReadService>();
+builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();

@@ -13,6 +13,8 @@ public interface IAgentDefinitionStore
         CancellationToken cancellationToken = default);
 }
 
+public interface IBuiltInAgentDefinitionStore : IAgentDefinitionStore;
+
 public interface IMemoryStore
 {
     ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default);

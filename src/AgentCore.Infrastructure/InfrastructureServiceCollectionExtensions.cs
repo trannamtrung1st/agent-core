@@ -182,6 +182,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<RoleKnowledgeService>();
         services.TryAddSingleton(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
+        services.TryAddSingleton<IBuiltInAgentDefinitionStore>(provider =>
+            provider.GetRequiredService<FileAgentDefinitionStore>());
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new CompositeAgentDefinitionStore(
                 provider.GetRequiredService<FileAgentDefinitionStore>(),

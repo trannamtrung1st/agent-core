@@ -6,7 +6,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Definitions;
 
-public sealed class FileAgentDefinitionStore : IAgentDefinitionStore
+public sealed class FileAgentDefinitionStore : IBuiltInAgentDefinitionStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
