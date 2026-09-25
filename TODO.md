@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A approved at `9169bfa`; P7B definition lifecycle in progress).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A approved at `9169bfa`; P7B durable draft/publication slice approved at `4a2bf99`; next W03 harness resources).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B drafts/publications underway on `main`).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03+ remaining).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -409,6 +409,8 @@ Admin configuration is a distinct product surface, User mode remains conversatio
 
 ## P7B — Agent Definition draft / version / publish lifecycle
 
+**W02 slice (observed, approved `4a2bf99`):** durable drafts and publications, composite runtime catalog, owner Admin fork/save/publish/deprecate, InMemory/SQLite store parity, session snapshot pinning, and W02 browser gate. See [P7B report](docs/reports/p7b-definition-lifecycle.md). **Later slices own the rest of this section:** harness resources in publications (P7C), managed instance version association (P7D), eval-gated publish and human-readable diff (P7F), and rollback/history UX (P7G).
+
 Implement an explicit publishing lifecycle:
 
 ```text
@@ -420,9 +422,9 @@ Draft
 → Deprecate / Roll back association when needed
 ```
 
-- [ ] Introduce an editable draft representation separate from published immutable versions.
+- [x] Introduce an editable draft representation separate from published immutable versions. *(W02)*
 
-- [ ] Keep published Agent Definition versions immutable.
+- [x] Keep published Agent Definition versions immutable. *(W02)*
 
 Changing any published reusable behavior/configuration should produce a new version, including changes to:
 
@@ -435,19 +437,19 @@ Changing any published reusable behavior/configuration should produce a new vers
 - default persona/configuration;
 - relevant model/runtime defaults.
 
-- [ ] Keep existing sessions reproducible against the definition version they actually used.
+- [x] Keep existing sessions reproducible against the definition version they actually used. *(W02 session-snapshot regression)*
 
-- [ ] Define how a durable Agent Instance adopts/upgrades to another published definition version.
+- [ ] Define how a durable Agent Instance adopts/upgrades to another published definition version. *(P7D)*
 
-- [ ] Do not make definition upgrade equivalent to identity reset.
+- [ ] Do not make definition upgrade equivalent to identity reset. *(P7D)*
 
-- [ ] Support deprecating a definition version without rewriting historical sessions.
+- [x] Support deprecating a definition version without rewriting historical sessions. *(W02 metadata-only deprecate)*
 
-- [ ] Support moving an instance association back to a prior valid published version where policy permits.
+- [ ] Support moving an instance association back to a prior valid published version where policy permits. *(P7D/P7G)*
 
 ### Publish diff
 
-- [ ] Show a human-readable diff before publishing.
+- [ ] Show a human-readable diff before publishing. *(P7F)*
 
 At minimum identify changes in:
 
@@ -467,16 +469,16 @@ Do not require a raw JSON diff as the only review surface.
 
 ### P7B verification
 
-- [ ] Draft mutation/versioning tests.
-- [ ] Published-version immutability tests.
-- [ ] Instance upgrade/rollback association tests.
-- [ ] Historical session version-resolution tests.
-- [ ] Publish-diff projection tests.
-- [ ] Concurrency/revision conflict tests for draft edits and publishing.
+- [x] Draft mutation/versioning tests. *(W02 store/API contracts)*
+- [x] Published-version immutability tests. *(W02)*
+- [ ] Instance upgrade/rollback association tests. *(P7D/P7G)*
+- [x] Historical session version-resolution tests. *(W02 `DefinitionLifecycleSessionSnapshotTests`)*
+- [ ] Publish-diff projection tests. *(P7F)*
+- [x] Concurrency/revision conflict tests for draft edits and publishing. *(W02)*
 
 ### P7B stop condition
 
-Reusable agent configuration has a reproducible draft → validation/test → diff → immutable publish lifecycle, and already-published behavior cannot be silently mutated.
+Reusable agent configuration has a reproducible draft → validation/test → diff → immutable publish lifecycle, and already-published behavior cannot be silently mutated. **W02 met the transitional draft → validate → immutable publish slice** (eval/diff gate and full phase stop remain with P7F/P7G).
 
 ---
 

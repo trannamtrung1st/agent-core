@@ -259,6 +259,10 @@ Unless a later item records a tested change:
 
 Owners: [Protocol](14-api-and-realtime-protocol.md) (capability, leases vs Attachment, additive routes); [Persistence](15-persistence-and-configuration.md) (revision/bind/cleanup); [Controller](05-interaction-controller.md) (initiative/receipts); [Implementation Plan](18-implementation-plan.md) (phase gates).
 
+## P7B definition lifecycle (observed)
+
+**Decision:** Repository `agents/*.json` built-ins remain immutable seeds. Durable definition drafts and published versions live in application-owned storage (`IAgentDefinitionAdminStore`) with optimistic draft revision, exact-revision publish, immutable publication payload, and metadata-only deprecation. Runtime `IAgentDefinitionStore` is a `CompositeAgentDefinitionStore` over file built-ins and durable publications so Session Runtime keeps a single lookup port; exact lookup returns deprecated versions, default lookup skips them. Admin mutates lifecycle only through owner-protected HTTP; stored session definition/persona snapshots are not rewritten when later versions publish or deprecate. Transitional W02 publish runs available validation before immutable publish; eval-gated publish and human-readable diff are P7F. **Observed** on W02 slice gate `4a2bf99` (review 0020). See [Architecture](03-system-architecture.md#p7b-definition-lifecycle-observed), [Interfaces](04-backend-interfaces.md#p7b-definition-lifecycle-observed), [Persistence](15-persistence-and-configuration.md#p7b-definition-lifecycle-store-observed), and [P7B report](reports/p7b-definition-lifecycle.md).
+
 ## What may still be measured
 
 Provider selection within independently configured speech ports, VAD thresholds, frame size within the allowed range, TTS phrase segmentation and latency optimization are tuning variables. The default behavior and degraded paths are specified; measurement must not reopen project ownership, transport, storage or response identity decisions. No guaranteed provider-dependent SLA is implied.
