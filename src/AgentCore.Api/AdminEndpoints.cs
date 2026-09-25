@@ -305,7 +305,7 @@ internal static class AdminEndpoints
             string scope,
             Guid? sessionId,
             bool confirm,
-            AdminMemoryService memory,
+            AdminMemoryHistoryService memory,
             CancellationToken cancellationToken) =>
         {
             try
@@ -345,7 +345,7 @@ internal static class AdminEndpoints
             Guid instanceId,
             Guid registrationId,
             AdminCancelAutomationRegistrationRequest? request,
-            AdminAutomationService automation,
+            AdminAutomationHistoryService automation,
             CancellationToken cancellationToken) =>
         {
             try
@@ -379,7 +379,7 @@ internal static class AdminEndpoints
         group.MapPost("/agent-instances/{instanceId:guid}/learned-memory/reset", async (
             Guid instanceId,
             AdminLearnedMemoryResetRequest? request,
-            AdminMemoryService memory,
+            AdminMemoryHistoryService memory,
             CancellationToken cancellationToken) =>
         {
             try

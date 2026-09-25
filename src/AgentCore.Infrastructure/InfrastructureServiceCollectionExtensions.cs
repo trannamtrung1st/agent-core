@@ -1,3 +1,4 @@
+using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -129,6 +130,14 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>()));
+            services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
+                new SqliteAdminP7eHistoryMutator(
+                    provider.GetRequiredService<AdminMemoryService>(),
+                    provider.GetRequiredService<AdminAutomationService>(),
+                    provider.GetRequiredService<ILocalUserProfileService>(),
+                    provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                    provider.GetRequiredService<IIdGenerator>(),
+                    provider.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -175,6 +184,13 @@ public static class InfrastructureServiceCollectionExtensions
             });
             services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>
                 new InMemoryDefinitionDraftEvaluationStore(provider.GetRequiredService<IAgentDefinitionAdminStore>()));
+            services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
+                new InMemoryAdminP7eHistoryMutator(
+                    provider.GetRequiredService<AdminMemoryService>(),
+                    provider.GetRequiredService<InMemoryAdminEventStore>(),
+                    (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(),
+                    provider.GetRequiredService<AdminAutomationService>(),
+                    provider.GetRequiredService<InMemoryDurableState>()));
         }
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();

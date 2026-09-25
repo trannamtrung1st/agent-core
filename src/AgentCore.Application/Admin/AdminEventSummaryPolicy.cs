@@ -90,6 +90,36 @@ public static class AdminEventSummaryPolicy
         "toLifecycle"
     };
 
+    private static readonly HashSet<string> MemoryItemDeletedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "instanceId",
+        "memoryId",
+        "scope",
+        "sessionId"
+    };
+
+    private static readonly HashSet<string> MemoryScopeResetSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "instanceId",
+        "scope",
+        "itemsRemoved",
+        "sessionId"
+    };
+
+    private static readonly HashSet<string> TriggerRegistrationRevokedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "instanceId",
+        "registrationId",
+        "revision"
+    };
+
+    private static readonly HashSet<string> LearnedMemoryScopeNames = new(StringComparer.Ordinal)
+    {
+        nameof(AdminLearnedMemoryScope.Session),
+        nameof(AdminLearnedMemoryScope.IdentityUser),
+        nameof(AdminLearnedMemoryScope.User)
+    };
+
     private static readonly HashSet<string> InstanceLifecycleNames = new(StringComparer.Ordinal)
     {
         nameof(AgentInstanceLifecycle.Active),
@@ -176,6 +206,24 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation == AdminEventOperationKind.MemoryItemDeleted)
+            {
+                ValidateMemoryItemDeletedSummary(document.RootElement);
+                return;
+            }
+
+            if (append.Operation == AdminEventOperationKind.MemoryScopeReset)
+            {
+                ValidateMemoryScopeResetSummary(document.RootElement);
+                return;
+            }
+
+            if (append.Operation == AdminEventOperationKind.TriggerRegistrationRevoked)
+            {
+                ValidateTriggerRegistrationRevokedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
@@ -232,6 +280,83 @@ public static class AdminEventSummaryPolicy
             || !fingerprint.All(static c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
         {
             throw AgentCoreErrors.Validation("Persona changed event summary must include a lowercase SHA-256 persona fingerprint.");
+        }
+    }
+
+    private static void ValidateMemoryItemDeletedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, MemoryItemDeletedSummaryPropertyNames);
+        RequireString(root, "instanceId");
+        RequireString(root, "memoryId");
+        RequireLearnedMemoryScope(root, "scope");
+        RequireNullableGuidString(root, "sessionId");
+    }
+
+    private static void ValidateMemoryScopeResetSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, MemoryScopeResetSummaryPropertyNames);
+        RequireString(root, "instanceId");
+        RequireLearnedMemoryScope(root, "scope");
+        if (!root.TryGetProperty("itemsRemoved", out var removed) || removed.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Memory scope reset event summary must include itemsRemoved.");
+        }
+
+        if (removed.GetInt32() < 0)
+        {
+            throw AgentCoreErrors.Validation("Memory scope reset itemsRemoved must be non-negative.");
+        }
+
+        RequireNullableGuidString(root, "sessionId");
+    }
+
+    private static void ValidateTriggerRegistrationRevokedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, TriggerRegistrationRevokedSummaryPropertyNames);
+        RequireString(root, "instanceId");
+        RequireString(root, "registrationId");
+        if (!root.TryGetProperty("revision", out var revision) || revision.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Trigger registration revoked event summary must include revision.");
+        }
+
+        if (revision.GetInt64() < 1)
+        {
+            throw AgentCoreErrors.Validation("Trigger registration revoked revision must be positive.");
+        }
+    }
+
+    private static void RequireLearnedMemoryScope(JsonElement root, string propertyName)
+    {
+        RequireString(root, propertyName);
+        var value = root.GetProperty(propertyName).GetString();
+        if (string.IsNullOrWhiteSpace(value) || !LearnedMemoryScopeNames.Contains(value))
+        {
+            throw AgentCoreErrors.Validation($"Memory admin event summary must include a valid {propertyName}.");
+        }
+    }
+
+    private static void RequireNullableGuidString(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            throw AgentCoreErrors.Validation($"Publication event summary must include {propertyName}.");
+        }
+
+        if (value.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw AgentCoreErrors.Validation($"{propertyName} must be null or a string.");
+        }
+
+        var text = value.GetString();
+        if (text is not null && !Guid.TryParse(text, out _))
+        {
+            throw AgentCoreErrors.Validation($"{propertyName} must be null or a GUID string.");
         }
     }
 

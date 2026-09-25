@@ -23,6 +23,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="AgentCore.Infrastructure.Tests" />
     <InternalsVisibleTo Include="AgentCore.Api.Tests" />
+    <InternalsVisibleTo Include="AgentCore.Application.Tests" />
   </ItemGroup>
 
 </Project>

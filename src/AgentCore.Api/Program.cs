@@ -57,7 +57,9 @@ RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConv
 builder.Services.AddSingleton<AdminReadService>();
 builder.Services.AddSingleton<AdminHistoryService>();
 builder.Services.AddSingleton<AdminMemoryService>();
+builder.Services.AddSingleton<AdminMemoryHistoryService>();
 builder.Services.AddSingleton<AdminAutomationService>();
+builder.Services.AddSingleton<AdminAutomationHistoryService>();
 builder.Services.AddSingleton<AdminAgentInstanceService>();
 builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
 builder.Services.AddSingleton<AgentDefinitionDraftValidationService>();

@@ -170,19 +170,31 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
-    public void ValidateAppend_requires_empty_object_for_unimplemented_operations()
+    public void MemoryItemDeleted_summary_includes_scope_metadata()
     {
-        var append = new AdminEventAppend(
+        var memoryId = Guid.Parse("019944af-00d1-7000-8000-000000000099");
+        var instanceId = Guid.Parse("019944af-00d1-7000-8000-000000000098");
+        var append = AdminEventFactory.MemoryItemDeleted(
             Guid.NewGuid(),
-            DateTimeOffset.UtcNow,
-            AdminEventActorKind.LocalOwner,
-            AdminEventOperationKind.InstanceArchived,
-            "agent.instance",
-            "019944af-00d1-7000-8000-000000000099",
-            1,
-            null,
-            """{"instanceId":"x"}""");
-        var error = Assert.Throws<AgentCoreException>(() => AdminEventSummaryPolicy.ValidateAppend(append));
-        Assert.Equal(400, error.StatusCode);
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            instanceId,
+            AdminLearnedMemoryScope.IdentityUser,
+            memoryId,
+            sessionId: null);
+        Assert.Contains("\"scope\":\"IdentityUser\"", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
+    public void TriggerRegistrationRevoked_summary_includes_revision()
+    {
+        var append = AdminEventFactory.TriggerRegistrationRevoked(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            Guid.Parse("019944af-00d1-7000-8000-000000000097"),
+            Guid.Parse("019944af-00d1-7000-8000-000000000096"),
+            4);
+        Assert.Contains("\"revision\":4", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
     }
 }

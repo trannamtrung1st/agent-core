@@ -66,6 +66,42 @@ public sealed class AdminMemoryService(
         };
     }
 
+    public async ValueTask EnsureDeleteAllowedAsync(
+        Guid instanceId,
+        AdminLearnedMemoryScope scope,
+        Guid? sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var effective = await ResolveEffectiveMemoryPolicyAsync(instance, cancellationToken).ConfigureAwait(false);
+        var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
+        switch (scope)
+        {
+            case AdminLearnedMemoryScope.Session:
+            {
+                var session = await RequireSessionForInstanceAsync(sessionId, instance.InstanceId, profile.ProfileId, cancellationToken)
+                    .ConfigureAwait(false);
+                RequireSessionMemoryEnabled(session);
+                return;
+            }
+            case AdminLearnedMemoryScope.IdentityUser:
+                RequireIdentityRetrieval(effective);
+                return;
+            case AdminLearnedMemoryScope.User:
+                RequireUserRetrieval(effective);
+                return;
+            default:
+                throw AgentCoreErrors.Validation("scope is invalid.");
+        }
+    }
+
+    public async ValueTask EnsureResetAllowedAsync(
+        Guid instanceId,
+        AdminLearnedMemoryScope scope,
+        Guid? sessionId,
+        CancellationToken cancellationToken = default) =>
+        await EnsureDeleteAllowedAsync(instanceId, scope, sessionId, cancellationToken).ConfigureAwait(false);
+
     public async ValueTask DeleteAsync(
         Guid instanceId,
         AdminLearnedMemoryScope scope,
@@ -73,6 +109,7 @@ public sealed class AdminMemoryService(
         Guid? sessionId,
         CancellationToken cancellationToken = default)
     {
+        await EnsureDeleteAllowedAsync(instanceId, scope, sessionId, cancellationToken).ConfigureAwait(false);
         var instance = await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
         var effective = await ResolveEffectiveMemoryPolicyAsync(instance, cancellationToken).ConfigureAwait(false);
         var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);

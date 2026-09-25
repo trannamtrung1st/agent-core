@@ -15,6 +15,8 @@
 - `InstanceDefinitionVersionChanged` admin events recorded atomically with durable managed active-version reassociate/rollback (operation id from lifecycle), including bounded `definitionId` / `instanceId` / `fromVersion` / `toVersion` summary.
 - `PersonaChanged` admin events recorded atomically with durable managed persona update (operation id from lifecycle), including bounded `definitionId` / `instanceId` / `fromPersonaRevision` / `personaRevision` / `personaFingerprint` summary (no persona payload).
 - `InstanceArchived` / `InstanceUnarchived` admin events recorded atomically with durable managed lifecycle update, including bounded `definitionId` / `instanceId` / `fromLifecycle` / `toLifecycle` summary.
+- `MemoryItemDeleted` / `MemoryScopeReset` admin events recorded after successful learned-memory delete/reset (operation-id idempotency via `IAdminP7eHistoryMutator`), including bounded `instanceId` / `scope` / `memoryId` or `itemsRemoved` summary (no memory content).
+- `TriggerRegistrationRevoked` admin events recorded after successful automation cancel, including bounded `instanceId` / `registrationId` / `revision` summary.
 - Shared `AdminEventSummaryPolicy` validation for in-memory and SQLite event append paths.
 
 ## W07 verification (partial)
@@ -24,7 +26,9 @@
 | Admin event store parity | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminEvent` | Pass (10) |
 | Publication history durability | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminPublication` | Pass (8) |
 | Publication deprecation history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminDeprecation` | Pass (8) |
-| Admin event summary policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminEventSummary` | Pass (12) |
+| Admin event summary policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminEventSummary` | Pass (13) |
+| Memory admin history | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminMemoryHistory` | Pass (3) |
+| P7E history atomicity | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminP7eHistoryMutator` | Pass (13) |
 | Draft created history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminDraftCreated` | Pass (10) |
 | Managed instance created history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminManagedInstance` | Pass (12) |
 | Instance definition version history | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~AdminInstanceDefinitionVersion` | Pass (9) |
@@ -34,4 +38,4 @@
 
 ## Remaining (W07)
 
-- Thread history through remaining Admin mutations, deprecation/rollback UX, `admin-lifecycle.spec.ts` whole-phase journey, and final gate evidence per frozen P7G contract.
+- Deprecation/rollback UX, `admin-lifecycle.spec.ts` whole-phase journey, and final gate evidence per frozen P7G contract.

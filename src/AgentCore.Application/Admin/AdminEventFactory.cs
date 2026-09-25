@@ -200,6 +200,91 @@ public static class AdminEventFactory
         return append;
     }
 
+    public static AdminEventAppend MemoryItemDeleted(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        Guid instanceId,
+        AdminLearnedMemoryScope scope,
+        Guid memoryId,
+        Guid? sessionId,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.MemoryItemDeleted,
+            "learned-memory.item",
+            memoryId.ToString("D"),
+            null,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                instanceId = instanceId.ToString("D"),
+                memoryId = memoryId.ToString("D"),
+                scope = scope.ToString(),
+                sessionId = sessionId?.ToString("D")
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
+    public static AdminEventAppend MemoryScopeReset(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        Guid instanceId,
+        AdminLearnedMemoryScope scope,
+        int itemsRemoved,
+        Guid? sessionId,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.MemoryScopeReset,
+            "agent.instance",
+            instanceId.ToString("D"),
+            null,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                instanceId = instanceId.ToString("D"),
+                scope = scope.ToString(),
+                itemsRemoved,
+                sessionId = sessionId?.ToString("D")
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
+    public static AdminEventAppend TriggerRegistrationRevoked(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        Guid instanceId,
+        Guid registrationId,
+        long revision,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.TriggerRegistrationRevoked,
+            "trigger.registration",
+            registrationId.ToString("D"),
+            revision,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                instanceId = instanceId.ToString("D"),
+                registrationId = registrationId.ToString("D"),
+                revision
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
     public static AdminEventAppend PublicationDeprecated(
         Guid operationId,
         DateTimeOffset occurredAt,

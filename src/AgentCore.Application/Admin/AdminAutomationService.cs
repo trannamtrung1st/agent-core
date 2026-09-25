@@ -48,6 +48,19 @@ public sealed class AdminAutomationService(
             .ToArray();
     }
 
+    public async ValueTask<AdminAutomationRegistration> GetRegistrationAsync(
+        Guid instanceId,
+        Guid registrationId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireManagedInstanceAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        var profile = await localProfiles.GetLocalProfileAsync(cancellationToken).ConfigureAwait(false);
+        var owner = new TriggerOwner(instanceId, profile.ProfileId);
+        var existing = await triggers.GetAsync(owner, registrationId, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Trigger registration was not found.");
+        return Map(existing);
+    }
+
     public async ValueTask<AdminAutomationRegistration> CancelRegistrationAsync(
         Guid instanceId,
         Guid registrationId,
