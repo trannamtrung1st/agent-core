@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** P7D gate candidate at product `cad4dab` — see `docs/reports/p7d-managed-instance-identity.md`; slice approval pending).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** P7E next).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D observed gate candidate at product `cad4dab` — slice gate pending; W05+ remaining).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05+ remaining).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -592,7 +592,7 @@ An admin can configure the current agent harness through instructions, capabilit
 
 ## P7D — Agent Instance and identity/persona administration
 
-**Observed (W04 gate candidate, product `cad4dab`; slice approval pending):** managed instance create, persona Form|JSON, version reassociation, archive, managed new-chat inventory, pinned persona on sessions and `session.ready`, archive admission for triggers/schedules. Evidence: [P7D report](docs/reports/p7d-managed-instance-identity.md).
+**Observed (W04 slice approved `0aa3ad3`):** managed instance create, persona Form|JSON, version reassociation, archive, managed new-chat inventory, pinned persona on sessions and `session.ready`, archive admission for triggers/schedules, IdentityUser isolation/retention regressions. Evidence: [P7D report](docs/reports/p7d-managed-instance-identity.md).
 
 ### Agent Instance lifecycle
 

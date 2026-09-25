@@ -1,12 +1,12 @@
 # P7D — Managed instance, persona, and managed chat
 
-**Status:** gate candidate (W04 slice; cumulative product approved through review-0024 at `cad4dab`; slice gate approval pending)
+**Status:** approved (W04 slice gate; batch review-0025 PASS, review 0069)
 
 **Baseline:** `e25cd4650699ae4ec1e7ddff8a06abcfbde53567` (post-P7C W03 gate)
 
-**Gate HEAD:** `549dff71366af815f03eeeb221a4d5ed0446b7aa` (W04 slice gate: docs on `cad4dab` product baseline plus P7D regressions)
+**Approved HEAD:** `0aa3ad399d6704411c2517ada789dbcc64287dd0` (W04 slice gate)
 
-**Review ranges (incremental):** storage/API foundation `0e1621b`; lifecycle/persona admin APIs `6b615ce`; pinned persona revision `acf28f2`; Admin managed controls `2f55fe9`; managed new-chat inventory `90ced7c`; archive admission tests `07ae0ce`; P7D Playwright + `session.ready` pinned persona `cad4dab`
+**Review ranges (incremental):** storage/API foundation `0e1621b`; lifecycle/persona admin APIs `6b615ce`; pinned persona revision `acf28f2`; Admin managed controls `2f55fe9`; managed new-chat inventory `90ced7c`; archive admission tests `07ae0ce`; P7D Playwright + `session.ready` pinned persona `cad4dab`; gate closure `0aa3ad3` (from `cad4dab`, review-0025)
 
 ## Scope delivered (observed)
 

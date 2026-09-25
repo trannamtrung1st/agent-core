@@ -47,7 +47,7 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 
 ## P6 durable background work
 
-**P6** is **frozen** on **`30adaeb`** (workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) green; last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). **P7** (agent harness / admin lifecycle) is **active**; P7A–P7C (W03 harness resources) are **approved** on `e25cd46` (see [P7C report](reports/p7c-harness-resources-workspace.md)); **W04** managed instance/persona is **gate candidate** (product approved through review-0024 at `cad4dab`; see [P7D report](reports/p7d-managed-instance-identity.md)). Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
+**P6** is **frozen** on **`30adaeb`** (workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) green; last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). **P7** (agent harness / admin lifecycle) is **active**; P7A–P7C (W03 harness resources) are **approved** on `e25cd46` (see [P7C report](reports/p7c-harness-resources-workspace.md)); **W04** managed instance/persona is **approved** on `0aa3ad3` (see [P7D report](reports/p7d-managed-instance-identity.md)); **W05** P7E memory/automation Admin is next. Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 
