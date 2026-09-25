@@ -1287,3 +1287,28 @@ body,
     scroll-behavior: auto !important;
   }
 }
+
+.admin-layout {
+  min-height: 100%;
+  background: var(--ac-color-layout);
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  min-height: var(--ac-header-height);
+  padding: 0 var(--ac-space-section);
+  background: var(--ac-color-container);
+  border-bottom: 1px solid var(--ac-color-border);
+}
+
+.admin-title {
+  margin: 0 !important;
+  color: var(--ac-color-text) !important;
+}
+
+.admin-content {
+  padding: var(--ac-space-section);
+  max-width: 56rem;
+  margin: 0 auto;
+}

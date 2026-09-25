@@ -7,7 +7,6 @@ import {
   bootstrap,
   cancelVoice,
   clearRouteNotice,
-  navigateFromBrowserHistory,
   composerSendEnabled,
   composerSendLabel,
   composerStopEnabled,
@@ -89,7 +88,7 @@ function useViewport() {
   return { isNarrow, siderWidth: isTablet ? 240 : 280 };
 }
 
-export function ChatApp() {
+export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const state = useSessionStore();
   const [profile, setProfile] = useState("");
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -111,14 +110,6 @@ export function ChatApp() {
     void bootstrap()
       .then(setProfile)
       .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const onPopState = () => {
-      void navigateFromBrowserHistory();
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   useLayoutEffect(() => {
@@ -311,6 +302,11 @@ export function ChatApp() {
               onEnd={() => void hangUp()}
             />
             <Flex align="center" gap={8} className="chat-header-meta">
+              {onOpenAdmin ? (
+                <Button type="link" size="small" onClick={onOpenAdmin} aria-label="Open Admin">
+                  Admin
+                </Button>
+              ) : null}
               <Typography.Text
                 data-testid="profile"
                 type="secondary"

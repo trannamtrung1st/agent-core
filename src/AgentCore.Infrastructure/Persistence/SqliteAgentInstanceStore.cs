@@ -14,6 +14,23 @@ public sealed class SqliteAgentInstanceStore(IDbContextFactory<AgentCoreDbContex
         PropertyNameCaseInsensitive = true
     };
 
+    public async ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.AgentInstances.AsNoTracking()
+            .OrderBy(item => item.DefinitionId)
+            .ThenBy(item => item.InstanceId)
+            .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(Map).ToArray();
+    }
+
     public async ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

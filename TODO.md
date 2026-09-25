@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (not started).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A in progress; Admin shell and read APIs landed in W01 batch).
 
 P4 implementation freeze:
 

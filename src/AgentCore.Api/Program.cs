@@ -2,6 +2,7 @@ using AgentCore.Api;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -53,6 +54,7 @@ builder.Services.AddOptions<HostingOptions>()
     .ValidateOnStart();
 var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
+builder.Services.AddSingleton<AdminReadService>();
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
@@ -95,6 +97,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHub<SessionHub>("/hubs/session");
+AdminEndpoints.Map(app);
 SessionCatalogEndpoints.Map(app);
 TriggerScheduleEndpoints.Map(app);
 WorkItemEndpoints.Map(app);

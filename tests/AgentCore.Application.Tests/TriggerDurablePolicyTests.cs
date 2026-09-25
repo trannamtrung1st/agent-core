@@ -310,6 +310,9 @@ public sealed class TriggerDurablePolicyTests
 
     private sealed class ConflictOnInsertInstanceStore(IAgentInstanceStore inner, AgentInstance racedWinner) : IAgentInstanceStore
     {
+        public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default) =>
+            inner.ListAsync(limit, cancellationToken);
+
         public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
             inner.FindAsync(instanceId, cancellationToken);
 

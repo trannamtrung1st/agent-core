@@ -4,6 +4,10 @@ namespace AgentCore.Application.Ports;
 
 public interface IAgentInstanceStore
 {
+    ValueTask<IReadOnlyList<AgentInstance>> ListAsync(
+        int limit,
+        CancellationToken cancellationToken = default);
+
     ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default);
 
     ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default);

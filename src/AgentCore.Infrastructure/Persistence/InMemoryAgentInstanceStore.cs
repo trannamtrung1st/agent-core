@@ -9,6 +9,25 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
     private readonly object _gate = new();
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
 
+    public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        lock (_gate)
+        {
+            var items = _instances.Values
+                .OrderBy(item => item.DefinitionId, StringComparer.Ordinal)
+                .ThenBy(item => item.InstanceId)
+                .Take(limit)
+                .ToArray();
+            return ValueTask.FromResult<IReadOnlyList<AgentInstance>>(items);
+        }
+    }
+
     public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

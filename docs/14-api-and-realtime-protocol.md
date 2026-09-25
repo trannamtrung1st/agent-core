@@ -15,6 +15,9 @@ REST handles creation, discovery, history, state and terminal ending. Live user 
 | GET /api/v1/sessions/{sessionId}/messages | `limit` 1..100; optional `after` or `before` (not both) | 200 history page | 400 invalid cursor; 404 unknown |
 | DELETE /api/v1/sessions/{sessionId} | No body | 204 after terminal save; repeated known end also 204 | 404 unknown; 503 durable save failed |
 | GET /health | No body | 200 health below | 503 if store/definition startup failed |
+| GET /api/v2/admin/definitions | Owner capability; trusted local caller | 200 built-in definition inventory (id, version, source, status, displayName) | 401 capability; 403 non-local |
+| GET /api/v2/admin/instances | Owner capability; trusted local caller | 200 instance inventory (id, definition, version, lifecycle, compatibility, persona name, timestamps) | 401 capability; 403 non-local |
+| GET /api/v2/admin/instances/{instanceId}/effective-config | Owner capability; trusted local caller | 200 allowlisted effective configuration for the exact pinned definition version and current persona | 401 capability; 403 non-local; 404 unknown instance or missing exact definition version |
 | GET /api/v2/sessions/{sessionId}/triggers | Owner capability | 200 safe schedule list for the session's Agent Instance and trusted profile | 401 missing/invalid capability; 404 session |
 | POST /api/v2/sessions/{sessionId}/triggers/{triggerId}/cancel | `{ "expectedRevision": n }` | 200 updated safe schedule | 400 invalid revision; 401 capability; 404 session, guessed id, or other instance; 409 stale revision |
 | GET /api/v2/sessions/{sessionId}/work-items | Optional `limit` (default 50, minimum 1) | 200 newest-first safe list for the session's Agent Instance and trusted profile | 401 capability; 404 session |
