@@ -1,6 +1,6 @@
 # P6 — Durable background work and triggered execution
 
-**P6 closure (pending exact-SHA gate).** **Final P6 behavior freeze candidate** is the **sync-fix descendant of [`aeefffc`](https://github.com/trannamtrung1st/agent-core/commit/aeefffcce0dda0f3dbf392d6af994fd64a309d2b)** (`SessionAttachmentRecallTests` completion baseline race). Do not treat P6 as fully frozen until hosted offline gates and Compose smoke both succeed on that exact SHA.
+**P6 closure (pending exact-SHA gate).** **Final P6 behavior freeze candidate** is [`bef77d1`](https://github.com/trannamtrung1st/agent-core/commit/bef77d1da7a9464ab56efb66203e1c1deb9e1b2b) (`bef77d1`): `SessionAttachmentRecallTests` completion baseline race fix on top of `aeefffc`. Do not treat P6 as fully frozen until hosted offline gates and Compose smoke both succeed on that exact SHA.
 
 [`aeefffc`](https://github.com/trannamtrung1st/agent-core/commit/aeefffcce0dda0f3dbf392d6af994fd64a309d2b) remains the **closure runtime repair** (thread-safe `RecordingModel` in Infrastructure tests, ended→live session attach, session-catalog E2E) on top of the `2455de9` Synthetic reminder harness. Hosted workflow [`36083107045`](https://github.com/trannamtrung1st/agent-core/actions/runs/36083107045) on `aeefffc` **failed**: `SessionAttachmentRecallTests.Later_turn_includes_session_attachment_manifest_and_entry_refs` (`TaskCanceledException` after 5s) due to test synchronization debt (baseline captured after submit), not a P6 durable-runtime regression. Docs-only [`567a9a2`](https://github.com/trannamtrung1st/agent-core/commit/567a9a2) workflow [`36082445992`](https://github.com/trannamtrung1st/agent-core/actions/runs/36082445992) was fully green on the same Application test.
 
@@ -23,14 +23,14 @@ The prior freeze on `6900bc1` is superseded. **P7** is next and not started unti
 | `2067a44` | Cross-version resumed `StepCount` normalization |
 | `2455de9` | Synthetic reminder-delivery harness, Manual A Playwright, durable e2e alignment |
 | `aeefffc` | Closure repair: concurrent test double, ended→live attach, catalog E2E |
-| *(sync-fix descendant)* | `SessionAttachmentRecallTests` terminal-count baseline before submit (`>` not `== completedBefore + 1`) |
+| `bef77d1` | `SessionAttachmentRecallTests` terminal-count baseline before submit (`>` not `== completedBefore + 1`) |
 
 ## Candidate
 
 | Item | Value |
 | --- | --- |
-| **Final P6 behavior freeze candidate SHA** | Sync-fix descendant of `aeefffc` (record exact SHA when pushed) |
-| Hosted workflow (final tree, exact SHA) | **Pending** after sync-fix push |
+| **Final P6 behavior freeze candidate SHA** | `bef77d1da7a9464ab56efb66203e1c1deb9e1b2b` (`bef77d1`) |
+| Hosted workflow (`bef77d1`, exact SHA) | **Pending** at push |
 | Closure runtime repair (`aeefffc`) | [`36083107045`](https://github.com/trannamtrung1st/agent-core/actions/runs/36083107045) — **failure** (Application attachment-recall test race; runtime repairs unchanged) |
 | **Core durable-runtime repair SHA** | `2067a44a1534623dafc7803d14b8833ee1ba7890` (`2067a44`) |
 | Hosted workflow (`2067a44`, exact SHA) | [`36031813141`](https://github.com/trannamtrung1st/agent-core/actions/runs/36031813141) — **success**. Synthetic offline gates success. Synthetic Compose smoke success |
@@ -69,7 +69,7 @@ Exact-SHA hosted gates on the **final behavior tree** are required; `2067a44` ga
 | AC-P6-25 | This report. Core repair `2067a44` / `36031813141` green; `aeefffc` / `36083107045` failed on unrelated test race; final tree pending green exact-SHA gate |
 | RULE-01..18 | Covered by the batches above. Review 0014 passed W09 at `7a22b25` |
 | RULE-19 | P4 and P5 freeze reports were not rewritten as P6 evidence. Phase I stays not-applicable |
-| RULE-20 | P6 freezes on the sync-fix descendant of `aeefffc` when its exact-SHA gate is green (core repair `2067a44`; runtime closure on `aeefffc`). P7 follows |
+| RULE-20 | P6 freezes on `bef77d1` when its exact-SHA gate is green (core repair `2067a44`; runtime closure on `aeefffc`). P7 follows |
 
 ## Manual evidence
 
