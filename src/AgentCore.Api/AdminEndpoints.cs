@@ -185,7 +185,7 @@ internal static class AdminEndpoints
         group.MapPatch("/agent-instances/{instanceId:guid}/persona", async (
             Guid instanceId,
             HttpRequest http,
-            IAgentInstanceService instances,
+            AdminAgentInstanceService instances,
             CancellationToken cancellationToken) =>
         {
             try

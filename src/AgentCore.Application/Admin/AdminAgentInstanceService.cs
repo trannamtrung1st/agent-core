@@ -85,6 +85,53 @@ public sealed class AdminAgentInstanceService(
         return updated;
     }
 
+    public async ValueTask<AgentInstance> UpdatePersonaAsync(
+        Guid instanceId,
+        AgentIdentity persona,
+        long expectedRevision,
+        long expectedPersonaRevision,
+        CancellationToken cancellationToken = default)
+    {
+        var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+        }
+
+        if (instance.PersonaRevision != expectedPersonaRevision)
+        {
+            throw AgentCoreErrors.Conflict("Agent instance persona revision is stale.");
+        }
+
+        if (instance.Persona.Equals(persona))
+        {
+            return instance;
+        }
+
+        var operationId = ids.NewId();
+        var now = time.GetUtcNow();
+        var toPersonaRevision = instance.PersonaRevision + 1;
+        var append = AdminEventFactory.PersonaChanged(
+            operationId,
+            now,
+            instance.DefinitionId,
+            instance.InstanceId,
+            instance.ActiveVersion,
+            instance.PersonaRevision,
+            toPersonaRevision,
+            persona);
+        return await instances.UpdatePersonaWithHistoryAsync(
+                new AgentInstanceRevisionUpdate(
+                    instance.InstanceId,
+                    expectedRevision,
+                    Persona: persona,
+                    ExpectedPersonaRevision: expectedPersonaRevision),
+                now,
+                append,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async ValueTask<AgentInstance> ResolveManagedInstanceFromEventAsync(
         AdminEvent existingEvent,
         CancellationToken cancellationToken)

@@ -73,6 +73,15 @@ public static class AdminEventSummaryPolicy
         "toVersion"
     };
 
+    private static readonly HashSet<string> PersonaChangedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "instanceId",
+        "fromPersonaRevision",
+        "personaRevision",
+        "personaFingerprint"
+    };
+
     private static readonly HashSet<string> DraftCreatedSourceKinds = new(StringComparer.Ordinal)
     {
         nameof(DefinitionDraftSourceKind.New),
@@ -141,6 +150,12 @@ public static class AdminEventSummaryPolicy
                 return;
             }
 
+            if (append.Operation == AdminEventOperationKind.PersonaChanged)
+            {
+                ValidatePersonaChangedSummary(document.RootElement);
+                return;
+            }
+
             if (document.RootElement.GetPropertyCount() != 0)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be an empty object for this operation.");
@@ -172,6 +187,31 @@ public static class AdminEventSummaryPolicy
         if (!root.TryGetProperty("toVersion", out var toVersion) || toVersion.ValueKind != JsonValueKind.Number)
         {
             throw AgentCoreErrors.Validation("Instance definition version changed event summary must include toVersion.");
+        }
+    }
+
+    private static void ValidatePersonaChangedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, PersonaChangedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "instanceId");
+        if (!root.TryGetProperty("fromPersonaRevision", out var fromRevision) || fromRevision.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Persona changed event summary must include fromPersonaRevision.");
+        }
+
+        if (!root.TryGetProperty("personaRevision", out var toRevision) || toRevision.ValueKind != JsonValueKind.Number)
+        {
+            throw AgentCoreErrors.Validation("Persona changed event summary must include personaRevision.");
+        }
+
+        RequireString(root, "personaFingerprint");
+        var fingerprint = root.GetProperty("personaFingerprint").GetString();
+        if (string.IsNullOrEmpty(fingerprint)
+            || fingerprint.Length != 64
+            || !fingerprint.All(static c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+        {
+            throw AgentCoreErrors.Validation("Persona changed event summary must include a lowercase SHA-256 persona fingerprint.");
         }
     }
 

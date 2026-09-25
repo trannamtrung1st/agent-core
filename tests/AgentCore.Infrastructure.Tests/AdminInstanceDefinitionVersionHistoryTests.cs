@@ -250,7 +250,7 @@ public abstract class AdminInstanceDefinitionVersionHistoryTests
         });
     }
 
-    protected static AgentDefinition SampleExaminerDefinition(int version) =>
+    internal static AgentDefinition SampleExaminerDefinition(int version) =>
         new(
             1,
             "examiner",

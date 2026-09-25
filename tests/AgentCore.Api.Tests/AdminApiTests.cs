@@ -1109,6 +1109,40 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_events_records_persona_changed_after_update()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+
+        var update = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{instance!.InstanceId}/persona",
+            new AdminUpdateAgentInstancePersonaRequest(
+                instance.Revision,
+                instance.PersonaRevision,
+                instance.DefinitionId,
+                "Guide",
+                "Helps operators.",
+                "History marker tone"));
+        update.EnsureSuccessStatusCode();
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=agent.instance&targetId={instance.InstanceId}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.PersonaChanged)
+                && item.Summary.TryGetProperty("fromPersonaRevision", out var fromRevision)
+                && fromRevision.GetInt64() == instance.PersonaRevision
+                && item.Summary.TryGetProperty("personaRevision", out var toRevision)
+                && toRevision.GetInt64() == instance.PersonaRevision + 1);
+    }
+
+    [Fact]
     public async Task Admin_events_records_instance_definition_version_changed_after_reassociate()
     {
         var client = OwnerClient();

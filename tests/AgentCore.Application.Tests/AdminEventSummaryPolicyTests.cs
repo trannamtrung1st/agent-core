@@ -97,6 +97,22 @@ public sealed class AdminEventSummaryPolicyTests
     }
 
     [Fact]
+    public void PersonaChanged_summary_includes_persona_revision_transition()
+    {
+        var append = AdminEventFactory.PersonaChanged(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            Guid.Parse("019944af-00d1-7000-8000-000000000096"),
+            1,
+            1,
+            2,
+            new AgentIdentity("Alex", "Examiner", "Practice.", "Calm"));
+        Assert.Contains("\"personaRevision\":2", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
     public void InstanceDefinitionVersionChanged_summary_includes_version_transition()
     {
         var append = AdminEventFactory.InstanceDefinitionVersionChanged(

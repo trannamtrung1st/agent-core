@@ -214,6 +214,115 @@ public sealed class SqliteAgentInstanceStore(
         return Map(row);
     }
 
+    public async ValueTask<AgentInstance> UpdatePersonaWithHistoryAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        AdminEventAppend historyAppend,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
+                db,
+                historyAppend.OperationId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (existingEvent is not null)
+        {
+            return await ResolvePersonaChangedByOperationEventAsync(
+                    existingEvent,
+                    historyAppend,
+                    update,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var row = await db.AgentInstances
+            .SingleOrDefaultAsync(item => item.InstanceId == update.InstanceId.ToString("D"), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        if (row.Revision != update.ExpectedRevision)
+        {
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+
+        if (row.Compatibility)
+        {
+            throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
+        }
+
+        if (update.Persona is not AgentIdentity persona)
+        {
+            throw AgentCoreErrors.Validation("Persona is required.");
+        }
+
+        if (update.ExpectedPersonaRevision is not long expectedPersonaRevision)
+        {
+            throw new AgentCoreException(
+                "Validation",
+                "Expected persona revision is required for persona edits.",
+                400);
+        }
+
+        if (expectedPersonaRevision != row.PersonaRevision)
+        {
+            throw new AgentCoreException("Conflict", "Agent instance persona revision is stale.", 409);
+        }
+
+        row.PersonaJson = JsonSerializer.Serialize(persona, Json);
+        row.PersonaRevision++;
+        row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
+        row.Revision++;
+        AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            var raced = await AdminEventPersistence.TryGetByOperationIdAsync(
+                    db,
+                    historyAppend.OperationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (raced is not null)
+            {
+                return await ResolvePersonaChangedByOperationEventAsync(
+                        raced,
+                        historyAppend,
+                        update,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+
+        return Map(row);
+    }
+
+    private async ValueTask<AgentInstance> ResolvePersonaChangedByOperationEventAsync(
+        AdminEvent existingEvent,
+        AdminEventAppend historyAppend,
+        AgentInstanceRevisionUpdate update,
+        CancellationToken cancellationToken)
+    {
+        if (existingEvent.Operation != AdminEventOperationKind.PersonaChanged)
+        {
+            throw AgentCoreErrors.Conflict("Operation id is already used for a different admin event.");
+        }
+
+        EnsureAgentInstanceHistoryTargetMatches(existingEvent, historyAppend, update.InstanceId);
+        AdminEventReplayPolicy.EnsurePersonaChangedReplayMatches(existingEvent, historyAppend, update);
+
+        if (!Guid.TryParse(existingEvent.TargetId, out var targetId) || targetId != update.InstanceId)
+        {
+            throw AgentCoreErrors.Conflict("Managed instance history is missing an instance target id.");
+        }
+
+        return await FindAsync(update.InstanceId, cancellationToken).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+    }
+
     private async ValueTask<AgentInstance> ResolveInstanceDefinitionVersionChangedByOperationEventAsync(
         AdminEvent existingEvent,
         AdminEventAppend historyAppend,

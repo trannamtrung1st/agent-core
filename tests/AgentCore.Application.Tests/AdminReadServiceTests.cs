@@ -138,6 +138,13 @@ public sealed class AdminReadServiceTests
             AdminEventAppend historyAppend,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(instance);
+
+        public ValueTask<AgentInstance> UpdatePersonaWithHistoryAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(instance);
     }
 
     private sealed class EmptyAdminDefinitionStore : IAgentDefinitionAdminStore

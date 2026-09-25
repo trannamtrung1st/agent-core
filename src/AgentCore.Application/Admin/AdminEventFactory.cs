@@ -91,6 +91,38 @@ public static class AdminEventFactory
         return append;
     }
 
+    public static AdminEventAppend PersonaChanged(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        Guid instanceId,
+        int activeVersion,
+        long fromPersonaRevision,
+        long toPersonaRevision,
+        AgentIdentity persona,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.PersonaChanged,
+            "agent.instance",
+            instanceId.ToString("D"),
+            toPersonaRevision,
+            activeVersion,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                instanceId = instanceId.ToString("D"),
+                fromPersonaRevision,
+                personaRevision = toPersonaRevision,
+                personaFingerprint = AdminPersonaHistoryFingerprint.Compute(persona)
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
     public static AdminEventAppend PublicationCreated(
         Guid operationId,
         DateTimeOffset occurredAt,
