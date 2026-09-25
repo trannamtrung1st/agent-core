@@ -73,7 +73,7 @@ test("chat to admin effective config and back with a new turn", async ({ page })
 
   await page.getByLabel("Message").fill("Second turn");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Hello from synthetic.")).toBeVisible();
+  await expect(page.getByText("Hello from synthetic.").first()).toBeVisible();
   await expect(page.locator(".conversation-scroll").getByText("Second turn", { exact: true })).toBeVisible();
 
   expect(failedRequests.filter((item) => !item.includes("favicon"))).toEqual([]);

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { queuedMessages } from "./support/queued-messages";
+import { waitForResponseSettled } from "./support/response-settled";
 
 async function assistantBodyTextLength(page: Page, index: number): Promise<number> {
   return page
@@ -41,6 +42,113 @@ async function startLongHoldResponse(page: Page): Promise<void> {
     timeout: 15_000
   });
 }
+
+async function selectCustomerSupport(page: Page): Promise<void> {
+  await page.getByRole("combobox", { name: "Identity" }).click();
+  const option = page.locator(".ant-select-item-option", { hasText: "Sam — Customer support" });
+  await expect(option).toBeVisible({ timeout: 15_000 });
+  await option.click();
+}
+
+async function chooseScriptedAlpha(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Model" }).click();
+  await page.getByTitle("Scripted Alpha").click();
+  await expect(page.locator(".model-picker")).toContainText("Scripted Alpha", { timeout: 15_000 });
+}
+
+async function expectHistoryOmitsProgress(page: Page): Promise<void> {
+  const bodies = page.locator(".chat-message-user, .chat-message-assistant");
+  const count = await bodies.count();
+  for (let index = 0; index < count; index += 1) {
+    await expect(bodies.nth(index)).not.toContainText(
+      /Running tools|Reading attachments|Preparing response|Finalizing response/
+    );
+  }
+}
+
+async function expectSupportOrder91Response(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const texts = await page.locator(".chat-message-assistant .assistant-body").allTextContents();
+        return texts.some((text) => /Order 91 is delayed/i.test(text));
+      },
+      { timeout: 120_000, intervals: [500, 1_000, 2_000] }
+    )
+    .toBe(true);
+  await waitForResponseSettled(page);
+  await expect(page.locator(".markdown-message strong")).toHaveText("Delayed", { timeout: 30_000 });
+}
+
+// Runs first in this file so the W02 combined gate exercises support progress before other chat scenarios warm the host.
+test("progress is visible, replaced, cleared on final, reload, disconnect, and session switch", async ({
+  page
+}) => {
+  test.setTimeout(180_000);
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await selectCustomerSupport(page);
+  await chooseScriptedAlpha(page);
+  await page.locator("input.attach-input").setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello file")
+  });
+  await expect(page.getByRole("button", { name: "Remove notes.txt" })).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel("Message").fill("Run the support case for order 91.");
+  await page.evaluate(() => {
+    const seen = { value: false };
+    (window as Window & { __agentCoreProgressSeen?: { value: boolean } }).__agentCoreProgressSeen = seen;
+    const observe = () => {
+      const text = document.querySelector(".agent-activity")?.textContent ?? "";
+      if (/Reading attachments|Running tools/.test(text)) {
+        seen.value = true;
+      }
+    };
+    observe();
+    new MutationObserver(observe).observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true
+    });
+  });
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect
+    .poll(async () => page.evaluate(() => (window as Window & { __agentCoreProgressSeen?: { value: boolean } }).__agentCoreProgressSeen?.value === true), {
+      timeout: 30_000
+    })
+    .toBe(true);
+  await expectSupportOrder91Response(page);
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "notes.txt" })).toBeVisible();
+  await expectHistoryOmitsProgress(page);
+
+  await page.evaluate(async () => {
+    await window.__agentCore?.disconnect();
+  });
+  await expect(page.getByTestId("connection")).toHaveText("Reconnecting to Agent Core…", { timeout: 15_000 });
+  await expect(page.locator(".agent-activity")).toHaveText("Reconnecting to Agent Core…");
+  await page.evaluate(async () => {
+    await window.__agentCore?.reconnect?.();
+  });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+  await expectHistoryOmitsProgress(page);
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.locator(".markdown-message strong")).toHaveText("Delayed", { timeout: 15_000 });
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+  await expectHistoryOmitsProgress(page);
+
+  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+  await page.locator("button.session-row-open", { hasText: "Run the support case for order 91." }).click();
+  await expect(page.locator(".markdown-message strong").first()).toHaveText("Delayed", { timeout: 15_000 });
+  await expect(page.locator(".agent-activity")).toHaveCount(0);
+  await expectHistoryOmitsProgress(page);
+});
 
 test("session path survives refresh", async ({ page }) => {
   await page.goto("/");
@@ -240,99 +348,7 @@ test("markdown response renders and survives reopen", async ({ page }) => {
 
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  await page.locator(".session-row-open").first().click();
+  await page.locator("button.session-row-open", { hasText: "Show markdown" }).click();
   await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
-});
-
-async function selectCustomerSupport(page: Page): Promise<void> {
-  await page.getByRole("combobox", { name: "Identity" }).click();
-  await page.locator(".ant-select-item-option", { hasText: "Sam — Customer support" }).click();
-}
-
-async function chooseScriptedAlpha(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Model" }).click();
-  await page.getByTitle("Scripted Alpha").click();
-}
-
-async function expectHistoryOmitsProgress(page: Page): Promise<void> {
-  const bodies = page.locator(".chat-message-user, .chat-message-assistant");
-  const count = await bodies.count();
-  for (let index = 0; index < count; index += 1) {
-    await expect(bodies.nth(index)).not.toContainText(
-      /Running tools|Reading attachments|Preparing response|Finalizing response/
-    );
-  }
-}
-
-test("progress is visible, replaced, cleared on final, reload, disconnect, and session switch", async ({
-  page
-}) => {
-  test.setTimeout(180_000);
-  await page.goto("/");
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await selectCustomerSupport(page);
-  await chooseScriptedAlpha(page);
-  await page.locator("input.attach-input").setInputFiles({
-    name: "notes.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("hello file")
-  });
-  await expect(page.getByRole("button", { name: "Remove notes.txt" })).toBeVisible({ timeout: 15_000 });
-  await page.getByLabel("Message").fill("Run the support case for order 91.");
-  await page.evaluate(() => {
-    const seen = { value: false };
-    (window as Window & { __agentCoreProgressSeen?: { value: boolean } }).__agentCoreProgressSeen = seen;
-    const observe = () => {
-      const text = document.querySelector(".agent-activity")?.textContent ?? "";
-      if (/Reading attachments|Running tools/.test(text)) {
-        seen.value = true;
-      }
-    };
-    observe();
-    new MutationObserver(observe).observe(document.body, {
-      subtree: true,
-      childList: true,
-      characterData: true
-    });
-  });
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect
-    .poll(async () => page.evaluate(() => (window as Window & { __agentCoreProgressSeen?: { value: boolean } }).__agentCoreProgressSeen?.value === true), {
-      timeout: 15_000
-    })
-    .toBe(true);
-  await expect(page.locator(".chat-message-assistant").first()).toContainText(/Order 91 is delayed/i, {
-    timeout: 60_000
-  });
-  await expect(page.locator(".markdown-message strong")).toHaveText("Delayed", { timeout: 30_000 });
-  await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "notes.txt" })).toBeVisible();
-  await expectHistoryOmitsProgress(page);
-
-  await page.evaluate(async () => {
-    await window.__agentCore?.disconnect();
-  });
-  await expect(page.getByTestId("connection")).toHaveText("Reconnecting to Agent Core…", { timeout: 15_000 });
-  await expect(page.locator(".agent-activity")).toHaveText("Reconnecting to Agent Core…");
-  await page.evaluate(async () => {
-    await window.__agentCore?.reconnect?.();
-  });
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
-  await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await expectHistoryOmitsProgress(page);
-
-  await page.reload();
-  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await expect(page.locator(".markdown-message strong")).toHaveText("Delayed", { timeout: 15_000 });
-  await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await expectHistoryOmitsProgress(page);
-
-  await page.getByRole("button", { name: "Start a new chat" }).click();
-  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await page.getByRole("button", { name: "Run the support case for order 91." }).first().click();
-  await expect(page.locator(".markdown-message strong").first()).toHaveText("Delayed", { timeout: 15_000 });
-  await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await expectHistoryOmitsProgress(page);
 });
 

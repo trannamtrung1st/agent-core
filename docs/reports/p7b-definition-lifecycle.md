@@ -1,9 +1,9 @@
 # P7B — Durable definition draft and publication lifecycle
 
-**Status:** in progress (W02 implementation; lifecycle API/UI batches approved at `0f39c32`)  
+**Status:** in progress (W02 slice gate on candidate HEAD)  
 **Baseline:** `9169bfad2f70d212251e1462f442ff887b6d0caf` (post-P7A)  
-**Latest approved HEAD (partial W02):** `0f39c32549f576355f2220abcca70a156f28d696`  
-**Review ranges:** storage `6907ea4`; lifecycle APIs `0e7b99f`; deprecate + Admin draft UI `0f39c32`
+**Latest approved HEAD (evidence batch):** `137199c41569659d33ea2d478fe1a8230b555701`  
+**Review ranges:** storage `6907ea4`; lifecycle APIs `0e7b99f`; deprecate + Admin draft UI `0f39c32`; evidence/docs `137199c`
 
 ## Scope delivered (observed)
 
@@ -24,8 +24,7 @@
 | Session snapshot regression | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~DefinitionLifecycleSessionSnapshotTests` | Pass (worker) |
 | P7B migration | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~DefinitionLifecycleMigrationTests` | Pass (worker; from `20260924155535` + session preserve) |
 | Admin UI unit | `cd web && pnpm run test --run src/features/admin` | Pass (6) |
-| Admin shell Playwright | `cd web && pnpm exec playwright test e2e/admin-shell.spec.ts --project=synthetic` | Pending slice gate |
-| Text conversation regression | `cd web && pnpm exec playwright test e2e/text-conversation.spec.ts --project=synthetic` | Pending slice gate |
+| W02 combined browser gate | `cd web && rm -f ../data/playwright/w02-gate.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w02-gate.db CI=1 pnpm exec playwright test e2e/admin-shell.spec.ts e2e/text-conversation.spec.ts e2e/z-admin-definition-lifecycle.spec.ts --project=synthetic` | Pass (worker; disposable DB; lifecycle last) |
 
 ## Acceptance mapping (P7B)
 
@@ -55,9 +54,8 @@
 
 ## Gaps before W02 close
 
-- Playwright journey for definition fork/edit/publish on Synthetic (beyond admin-shell).
 - Stale-draft conflict reload UX polish.
-- Hosted CI green on exact candidate SHA (slice gate).
+- Hosted CI green on exact candidate SHA (record workflow URL after push).
 - Optional: explicit built-in v1/v2 + durable v3 → next v4 collision test in API layer.
 
 ## Hosted CI
