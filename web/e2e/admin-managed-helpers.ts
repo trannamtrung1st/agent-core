@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import {
   completeDefinitionDraftPublishGate,
+  ensureToolAllowlisted,
   publishDraftFromInstructions
 } from "./admin-definition-gate-helpers";
 
@@ -105,4 +106,31 @@ export async function expectManagedIdentityOptionAbsent(page: Page, instanceId: 
   await page.getByRole("combobox", { name: "Identity" }).click();
   await expect(page.locator(".ant-select-item-option", { hasText: shortId })).toHaveCount(0);
   await page.keyboard.press("Escape");
+}
+
+export async function openExaminerDefinitionDrafts(page: Page) {
+  await page.goto("/admin/definitions/examiner");
+  await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
+  return page.locator('section[aria-label="Definition drafts"]');
+}
+
+/** Fork a durable publication, run the publish gate, and return the new immutable version number. */
+export async function publishExaminerForkedVersion(page: Page, forkFromVersion: number): Promise<number> {
+  const draftsSection = await openExaminerDefinitionDrafts(page);
+  await page.getByRole("button", { name: `Fork v${forkFromVersion} (durable)` }).click();
+  const instructions = draftsSection.getByLabel("System instructions");
+  await expect(instructions).toBeVisible({ timeout: 15_000 });
+  const marker = `p7g-next-${Date.now()}`;
+  const prior = (await instructions.inputValue()) || "";
+  await instructions.fill(`${prior}\n${marker}`);
+  await ensureToolAllowlisted(page, draftsSection, "knowledge.retrieve");
+  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
+  await completeDefinitionDraftPublishGate(page, draftsSection);
+  await publishDraftFromInstructions(page, draftsSection);
+  const publishedToast = page.getByText(/Published version \d+/);
+  await expect(publishedToast).toBeVisible({ timeout: 15_000 });
+  const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];
+  expect(version).toBeTruthy();
+  return Number(version);
 }

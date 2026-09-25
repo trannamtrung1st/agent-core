@@ -9,7 +9,7 @@ async function selectAntdComboboxOption(page: Page, combobox: Locator, optionTex
   await option.click();
 }
 
-async function ensureToolAllowlisted(
+export async function ensureToolAllowlisted(
   page: Page,
   draftsSection: Locator,
   toolName: string
