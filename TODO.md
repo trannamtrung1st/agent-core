@@ -671,7 +671,7 @@ Delete/end user relationship:
 - [x] Form ↔ JSON round-trip/schema validation tests. *(Vitest + journey)*
 - [x] Persona revision/historical resolution tests. *(pinned revision + session.ready)*
 - [x] Instance deactivation + future-trigger handling tests. *(TriggerDurablePolicyTests archive admission)*
-- [ ] Cross-instance ownership/isolation regressions. *(owner scoping only; dedicated two-managed-instance regression not in W04 gate)*
+- [x] Cross-instance ownership/isolation regressions. *(ManagedInstanceP7DRegressionTests + UserMemoryTests)*
 
 ### P7D stop condition
 

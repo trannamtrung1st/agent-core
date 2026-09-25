@@ -22,6 +22,7 @@
 | Check | Command | Result |
 | --- | --- | --- |
 | Managed instance application | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AgentInstanceTests` | Pass (9) |
+| P7D ownership/archive regressions | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~ManagedInstanceP7DRegressionTests` | Pass (4) |
 | Trigger archive + routing | `dotnet test tests/AgentCore.Application.Tests --filter "FullyQualifiedName~TriggerDurablePolicyTests\|FullyQualifiedName~TriggerOccurrenceRoutingTests"` | Pass (23) |
 | Session lifecycle API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~HealthAndSessionLifecycleTests` | Pass (11) |
 | Admin API (managed path) | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (33) |
@@ -46,11 +47,11 @@ Criteria follow the frozen P7D contract (`p7d-managed-instance-identity.md` §5)
 | AC-P7D-08 | Stale persona revision conflicts | `UpdatePersonaAsync` expected revision + `ExpectedPersonaRevision`; `AdminApiTests` / application conflict tests |
 | AC-P7D-09 | Old session keeps pinned persona after later edit | `PinnedPersonaRevision` on snapshot; `PublicHistory.FromSnapshot` on `session.ready`; journey reopen header assertions |
 | AC-P7D-10 | New managed session sees new persona | Second managed chat in journey after persona save |
-| AC-P7D-11 | New instance does not inherit another instance's learned memory/triggers | Each managed `CreateAsync` allocates a distinct `InstanceId`; P4/P5 owner keys remain session/instance-scoped (no copy-on-create). **Note:** W04 gate does not add a dedicated two-managed-instance memory/trigger isolation regression beyond existing owner scoping. |
+| AC-P7D-11 | New instance does not inherit another instance's learned memory/triggers | `ManagedInstanceP7DRegressionTests.Two_managed_instances_do_not_share_trigger_registrations` and `Two_managed_instances_do_not_share_session_scoped_memory`; `UserMemoryTests` owner scoping (P4) |
 | AC-P7D-12 | Archived instance rejects new managed session | `SessionManager` archived guard; `Archived_managed_instance_rejects_new_session`; journey archive → create denial |
 | AC-P7D-13 | Archived instance rejects new triggered/headless execution | `TriggerDurablePolicyTests.Archived_managed_instance_denies_schedule_create_and_due_admission` |
-| AC-P7D-14 | Archiving does not delete completed history/memory/trigger history | Archive updates lifecycle only (`SetLifecycleAsync`); journey asserts session histories remain visible after archive; no purge hooks on archive |
-| AC-P7D-15 | Archiving does not silently cancel accepted/running P6 work | Lifecycle mutation does not call WorkItem cancel/suspend (P6 freeze semantics). **Gap:** no W04 automated test proving in-flight WorkItem survives instance archive. |
+| AC-P7D-14 | Archiving does not delete completed history/memory/trigger history | `ManagedInstanceP7DRegressionTests.Archived_managed_instance_retains_session_memory_and_trigger_history` (InMemory + SQLite); journey readable histories |
+| AC-P7D-15 | Archiving does not silently cancel accepted/running P6 work | `ManagedInstanceP7DRegressionTests.Archived_managed_instance_leaves_accepted_running_work_unchanged` (InMemory + SQLite); P6 `WorkItemStoreContractTests` owner isolation |
 
 ## Canonical documentation (updated with this slice)
 
