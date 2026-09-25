@@ -28,7 +28,10 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
         try
         {
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var store = new SqliteAgentDefinitionAdminStore(factory, new SystemIdGenerator(TimeProvider.System));
+            var store = new SqliteAgentDefinitionAdminStore(
+                factory,
+                new SystemIdGenerator(TimeProvider.System),
+                new InMemoryDefinitionResourceContentStore());
             var now = DateTimeOffset.Parse("2026-01-04T00:00:00Z");
             var candidate = SampleCandidate("demo-agent");
             var draft = await store.CreateDraftAsync(
@@ -38,7 +41,10 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
                 new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1)),
                 CancellationToken.None);
 
-            var reopened = new SqliteAgentDefinitionAdminStore(factory, new SystemIdGenerator(TimeProvider.System));
+            var reopened = new SqliteAgentDefinitionAdminStore(
+                factory,
+                new SystemIdGenerator(TimeProvider.System),
+                new InMemoryDefinitionResourceContentStore());
             var loaded = await reopened.GetPublicationAsync("demo-agent", published.Version);
             Assert.NotNull(loaded);
             Assert.Equal(published.Version, loaded!.Version);
@@ -76,7 +82,10 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
         try
         {
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            await exercise(new SqliteAgentDefinitionAdminStore(factory, new SystemIdGenerator(TimeProvider.System)));
+            await exercise(new SqliteAgentDefinitionAdminStore(
+                factory,
+                new SystemIdGenerator(TimeProvider.System),
+                new InMemoryDefinitionResourceContentStore()));
         }
         finally
         {

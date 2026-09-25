@@ -133,6 +133,11 @@ public sealed class AdminReadServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
+            AgentDefinitionDraftRevisionBump bump,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public ValueTask<AgentDefinitionPublication> PublishDraftAsync(
             AgentDefinitionDraftPublish publish,
             CancellationToken cancellationToken = default) =>

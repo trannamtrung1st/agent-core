@@ -9,7 +9,6 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
 {
     private readonly ConcurrentDictionary<Guid, AgentDefinitionDraft> _drafts = new();
     private readonly ConcurrentDictionary<(string DefinitionId, int Version), AgentDefinitionPublication> _publications = new();
-    private readonly ConcurrentDictionary<Guid, object> _draftLocks = new();
 
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
         CancellationToken cancellationToken = default)
@@ -66,8 +65,39 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
             throw AgentCoreErrors.Conflict("Draft could not be created.");
         }
 
-        _draftLocks.TryAdd(draft.DraftId, new object());
         return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(draft));
+    }
+
+    public ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
+        AgentDefinitionDraftRevisionBump bump,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var gate = DefinitionDraftLockRegistry.For(bump.DraftId);
+        lock (gate)
+        {
+            if (!_drafts.TryGetValue(bump.DraftId, out var current))
+            {
+                throw AgentCoreErrors.NotFound("Draft was not found.");
+            }
+
+            if (current.Revision != bump.ExpectedRevision)
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
+
+            var next = AgentDefinitionAdminSnapshots.Freeze(current with
+            {
+                Revision = current.Revision + 1,
+                UpdatedAt = bump.UpdatedAt
+            });
+            if (!_drafts.TryUpdate(bump.DraftId, next, current))
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
+
+            return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
+        }
     }
 
     public ValueTask<AgentDefinitionDraft> UpdateDraftAsync(
@@ -77,7 +107,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         cancellationToken.ThrowIfCancellationRequested();
         var candidate = AgentDefinitionAdminSnapshots.Freeze(update.Candidate);
         AgentDefinitionValidator.ValidateCandidate(candidate);
-        var gate = LockFor(update.DraftId);
+        var gate = DefinitionDraftLockRegistry.For(update.DraftId);
         lock (gate)
         {
             if (!_drafts.TryGetValue(update.DraftId, out var current))
@@ -115,7 +145,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var gate = LockFor(publish.DraftId);
+        var gate = DefinitionDraftLockRegistry.For(publish.DraftId);
         lock (gate)
         {
             if (!_drafts.TryGetValue(publish.DraftId, out var draft))
@@ -161,6 +191,8 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 _drafts.TryUpdate(publish.DraftId, draft, nextDraft);
                 throw AgentCoreErrors.Conflict("Publication version collides with an existing version.");
             }
+
+            ResourceStore?.SnapshotPublicationOnPublish(publish.DraftId, draft.DefinitionId, nextVersion);
 
             return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(publication));
         }
@@ -237,6 +269,5 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         return ValueTask.FromResult(AgentDefinitionAdminSnapshots.Freeze(next));
     }
 
-    private object LockFor(Guid draftId) =>
-        _draftLocks.GetOrAdd(draftId, static _ => new object());
+    internal InMemoryAgentDefinitionResourceAdminStore? ResourceStore { get; set; }
 }

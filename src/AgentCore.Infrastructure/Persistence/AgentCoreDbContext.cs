@@ -128,6 +128,30 @@ public sealed class AgentDefinitionPublicationRecord
     public long PublishedAtUtc { get; set; }
 }
 
+public sealed class AgentDefinitionDraftResourceRecord
+{
+    public string ResourceId { get; set; } = "";
+    public string DraftId { get; set; } = "";
+    public string LogicalPath { get; set; } = "";
+    public int Kind { get; set; }
+    public string MediaType { get; set; } = "";
+    public string ContentSha256 { get; set; } = "";
+    public long ByteLength { get; set; }
+    public long UpdatedAtUtc { get; set; }
+}
+
+public sealed class AgentDefinitionPublicationResourceRecord
+{
+    public string DefinitionId { get; set; } = "";
+    public int Version { get; set; }
+    public string ResourceId { get; set; } = "";
+    public string LogicalPath { get; set; } = "";
+    public int Kind { get; set; }
+    public string MediaType { get; set; } = "";
+    public string ContentSha256 { get; set; } = "";
+    public long ByteLength { get; set; }
+}
+
 public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> options) : DbContext(options)
 {
     public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
@@ -146,6 +170,9 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<WorkApprovalRecord> WorkApprovals => Set<WorkApprovalRecord>();
     public DbSet<AgentDefinitionDraftRecord> AgentDefinitionDrafts => Set<AgentDefinitionDraftRecord>();
     public DbSet<AgentDefinitionPublicationRecord> AgentDefinitionPublications => Set<AgentDefinitionPublicationRecord>();
+    public DbSet<AgentDefinitionDraftResourceRecord> AgentDefinitionDraftResources => Set<AgentDefinitionDraftResourceRecord>();
+    public DbSet<AgentDefinitionPublicationResourceRecord> AgentDefinitionPublicationResources =>
+        Set<AgentDefinitionPublicationResourceRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -367,6 +394,29 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DefinitionId).HasMaxLength(128);
             entity.Property(row => row.PayloadJson).IsRequired();
             entity.Property(row => row.MetadataRevision).IsConcurrencyToken();
+        });
+        modelBuilder.Entity<AgentDefinitionDraftResourceRecord>(entity =>
+        {
+            entity.ToTable("AgentDefinitionDraftResources");
+            entity.HasKey(row => row.ResourceId);
+            entity.Property(row => row.ResourceId).HasMaxLength(36);
+            entity.Property(row => row.DraftId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.LogicalPath).HasMaxLength(240).IsRequired();
+            entity.Property(row => row.MediaType).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.ContentSha256).HasMaxLength(64).IsRequired();
+            entity.HasIndex(row => new { row.DraftId, row.LogicalPath }).IsUnique();
+            entity.HasIndex(row => row.DraftId);
+        });
+        modelBuilder.Entity<AgentDefinitionPublicationResourceRecord>(entity =>
+        {
+            entity.ToTable("AgentDefinitionPublicationResources");
+            entity.HasKey(row => new { row.DefinitionId, row.Version, row.ResourceId });
+            entity.Property(row => row.DefinitionId).HasMaxLength(128);
+            entity.Property(row => row.ResourceId).HasMaxLength(36);
+            entity.Property(row => row.LogicalPath).HasMaxLength(240).IsRequired();
+            entity.Property(row => row.MediaType).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.ContentSha256).HasMaxLength(64).IsRequired();
+            entity.HasIndex(row => new { row.DefinitionId, row.Version, row.LogicalPath }).IsUnique();
         });
     }
 

@@ -7,7 +7,8 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteAgentDefinitionAdminStore(
     IDbContextFactory<AgentCoreDbContext> contexts,
-    IIdGenerator ids) : IAgentDefinitionAdminStore
+    IIdGenerator ids,
+    IDefinitionResourceContentStore content) : IAgentDefinitionAdminStore
 {
     public async ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
         CancellationToken cancellationToken = default)
@@ -119,6 +120,35 @@ public sealed class SqliteAgentDefinitionAdminStore(
         return AgentDefinitionAdminMapping.MapDraft(row);
     }
 
+    public async ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
+        AgentDefinitionDraftRevisionBump bump,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.AgentDefinitionDrafts
+            .SingleOrDefaultAsync(item => item.DraftId == bump.DraftId.ToString("D"), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Draft was not found.");
+
+        if (row.Revision != bump.ExpectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+
+        row.Revision += 1;
+        row.UpdatedAtUtc = bump.UpdatedAt.ToUnixTimeMilliseconds();
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+
+        return AgentDefinitionAdminMapping.MapDraft(row);
+    }
+
     public async ValueTask<AgentDefinitionPublication> PublishDraftAsync(
         AgentDefinitionDraftPublish publish,
         CancellationToken cancellationToken = default)
@@ -162,7 +192,17 @@ public sealed class SqliteAgentDefinitionAdminStore(
             DefinitionPublicationStatus.Active,
             1,
             publish.PublishedAt);
+        await DefinitionResourcePersistence.VerifyDraftResourcesAsync(
+            db,
+            content,
+            publish.DraftId,
+            cancellationToken).ConfigureAwait(false);
         db.AgentDefinitionPublications.Add(AgentDefinitionAdminMapping.MapPublication(publication));
+        DefinitionResourcePersistence.BindDraftResourcesToPublication(
+            db,
+            publish.DraftId,
+            draft.DefinitionId,
+            nextVersion);
         row.Revision = draft.Revision + 1;
         row.UpdatedAtUtc = publish.PublishedAt.ToUnixTimeMilliseconds();
         try

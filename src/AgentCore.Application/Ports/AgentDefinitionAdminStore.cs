@@ -17,6 +17,10 @@ public interface IAgentDefinitionAdminStore
         AgentDefinitionDraftUpdate update,
         CancellationToken cancellationToken = default);
 
+    ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
+        AgentDefinitionDraftRevisionBump bump,
+        CancellationToken cancellationToken = default);
+
     ValueTask<AgentDefinitionPublication> PublishDraftAsync(
         AgentDefinitionDraftPublish publish,
         CancellationToken cancellationToken = default);
@@ -46,6 +50,11 @@ public sealed record AgentDefinitionDraftUpdate(
     Guid DraftId,
     long ExpectedRevision,
     AgentDefinitionCandidate Candidate,
+    DateTimeOffset UpdatedAt);
+
+public sealed record AgentDefinitionDraftRevisionBump(
+    Guid DraftId,
+    long ExpectedRevision,
     DateTimeOffset UpdatedAt);
 
 public sealed record AgentDefinitionDraftPublish(

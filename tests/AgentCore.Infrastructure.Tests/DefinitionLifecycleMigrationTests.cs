@@ -44,7 +44,10 @@ public sealed class DefinitionLifecycleMigrationTests
             Assert.NotNull(session);
             Assert.Contains("pre-p7b-session-marker", session!.Definition.SystemInstructions, StringComparison.Ordinal);
 
-            var admin = new SqliteAgentDefinitionAdminStore(factory, new SystemIdGenerator(TimeProvider.System));
+            var admin = new SqliteAgentDefinitionAdminStore(
+                factory,
+                new SystemIdGenerator(TimeProvider.System),
+                new InMemoryDefinitionResourceContentStore());
             var candidate = SampleCandidate("post-upgrade-agent");
             var draft = await admin.CreateDraftAsync(
                 new AgentDefinitionDraftCreate("post-upgrade-agent", candidate, DefinitionDraftSourceKind.New, null, Now),

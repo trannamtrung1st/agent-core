@@ -111,7 +111,15 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IAgentDefinitionAdminStore>(provider => new SqliteAgentDefinitionAdminStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                provider.GetRequiredService<IIdGenerator>()));
+                provider.GetRequiredService<IIdGenerator>(),
+                provider.GetRequiredService<IDefinitionResourceContentStore>()));
+            services.AddSingleton<IDefinitionResourceContentStore>(provider =>
+                new FileDefinitionResourceContentStore(persistence.DefinitionResourceRoot));
+            services.AddSingleton<IAgentDefinitionResourceAdminStore>(provider =>
+                new SqliteAgentDefinitionResourceAdminStore(
+                    provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                    provider.GetRequiredService<IDefinitionResourceContentStore>(),
+                    provider.GetRequiredService<IIdGenerator>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -133,7 +141,19 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider =>
                 new InMemoryAttachmentStore(provider.GetRequiredService<TimeProvider>()));
-            services.TryAddSingleton<IAgentDefinitionAdminStore, InMemoryAgentDefinitionAdminStore>();
+            services.TryAddSingleton<InMemoryDefinitionResourceContentStore>();
+            services.TryAddSingleton<IDefinitionResourceContentStore>(provider =>
+                provider.GetRequiredService<InMemoryDefinitionResourceContentStore>());
+            services.TryAddSingleton<InMemoryAgentDefinitionResourceAdminStore>();
+            services.TryAddSingleton<IAgentDefinitionResourceAdminStore>(provider =>
+                provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>());
+            services.TryAddSingleton<InMemoryAgentDefinitionAdminStore>();
+            services.TryAddSingleton<IAgentDefinitionAdminStore>(provider =>
+            {
+                var admin = provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>();
+                admin.ResourceStore = provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>();
+                return admin;
+            });
         }
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<ISessionWorkspace>(provider => new FileSessionWorkspace(
