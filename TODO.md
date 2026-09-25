@@ -35,8 +35,6 @@ P4 implementation freeze:
 workflow 35806764609 — green
 ```
 
-`76002a6` is the follow-up documentation/freeze-record commit. Its hosted Synthetic run `35808026110` had started but was still in progress at the time of this review. Do not imply that run is green until it has actually completed successfully.
-
 Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
 
 ---
@@ -82,7 +80,7 @@ Important frozen contracts include:
 - bounded detach grace with reattach continuity;
 - durable terminal interruption-reason visibility.
 
-Do not redesign P1 as part of trigger/background-work implementation.
+Do not redesign P1 while productizing administration.
 
 ---
 
@@ -106,7 +104,7 @@ Important frozen contracts include:
 - trusted explicit profile fields;
 - no conversational guesses silently becoming trusted profile data.
 
-Do not overload trusted-profile state with trigger registration or background-work state.
+Do not overload trusted-profile state with harness configuration or learned memory.
 
 ---
 
@@ -146,7 +144,7 @@ Important frozen P3 contracts include:
 - credentials outside model context;
 - network mediation rather than unrestricted sandbox networking.
 
-A future trigger firing does **not** bypass these tool authorization contracts.
+Admin mode must use the same policy/authorization boundaries. It does not create a privileged bypass around P3.
 
 ---
 
@@ -173,7 +171,7 @@ Important frozen P4 contracts include:
 - layered prompt-memory budgets and trusted-profile precedence;
 - reset learned memory does not reset identity, persona, definition, knowledge, or transcripts.
 
-P5 should build on the durable Agent Instance boundary. Do not store trigger registrations inside published Agent Definitions or learned memory.
+P7 must productize these seams rather than collapsing them into one generic configuration blob or filesystem.
 
 ---
 
@@ -192,20 +190,54 @@ Important frozen P5 contracts include:
 
 - durable trigger registrations and occurrences owned by Agent Instance + trusted profile;
 - OneShot, Daily, Weekly, and FixedInterval schedules with deterministic offline scheduler semantics;
-- `general-assistant` v10 for fixed-interval policy without mutating v8/v9 definition versions;
-- current-turn, action-specific schedule authorization; bounded referents and one-follow-up drafts;
-- scheduled-occurrence delivery without schedule tools; typed durable `ApplicationEvent` order ingress;
-- owner-scoped dedupe; stale schedule revision rejection; `AcceptedLive` / begin recovery;
-- `AwaitingDurableWork` as the explicit P6 handoff (P5 does not execute it);
+- current-turn, action-specific schedule authorization;
+- typed durable application-event ingress;
+- owner-scoped dedupe and stale schedule revision rejection;
+- trigger payload is evidence/data, not instruction authority;
+- trigger registration does not grant later sensitive-tool authority;
 - runtime-local timers remain separate from durable scheduling.
 
-Do not reopen P5 without a reproducible regression or a requirement that genuinely belongs in P5 rather than P6+.
+P7 may expose trigger policy and trigger management, but must not redesign scheduler semantics.
+
+---
+
+## P6 — Durable background work and triggered execution
+
+Frozen on:
+
+```text
+30adaebde4321531448541ba132cb92941d504e7
+workflow 36085265506 — green
+```
+
+Important frozen P6 contracts include:
+
+- one logical durable execution per accepted occurrence/dedupe key;
+- headless execution does not require a live browser Session Runtime;
+- TriggerOccurrence remains the event rather than being replayed as a fake user message;
+- tool permissions remain identical to or stricter than interactive execution unless explicit policy says otherwise;
+- detached work may persist `AwaitingApproval` rather than bypass approval;
+- resuming approval continues the same idempotent work;
+- final work results/progress are durable and separate from ordinary chat history;
+- background work remains inspectable on paused/ended sessions.
+
+Still deferred from P6:
+
+- standing/delegated future-action authorization;
+- generalized background research / long-running sandbox work without a concrete workflow;
+- additional live-attached progress unification where it becomes useful.
+
+P7 may expose P6 execution policy and work visibility, but must not reopen the durable-work engine without a reproducible regression.
 
 ---
 
 # Maintainer notes
 
 Always keep this section.
+
+- [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.
+
+- [ ] Admin assistant agent (future idea).
 
 - [x] Add proprietary license.
 
@@ -225,764 +257,481 @@ Always keep this section.
 
 - [x] Keep runtime-local timers separate from durable scheduling.
 
-  Existing `TimerElapsedReceived` / `Task.Delay` behavior belongs to the live `SessionRuntime` lifecycle. It must not become the durable scheduler for reminders or recurring work.
-
 - [x] Keep trigger registration separate from trigger execution.
-
-  P5 owns trigger definitions, persistence, scheduling, admission, and normalized occurrences. P6 owns work that must execute or continue without a live Session Runtime.
 
 - [x] Keep trigger authorization separate from later tool authorization.
 
-  Permission to create or fire a trigger never means permission to perform future sensitive external actions.
+- [x] Keep background responses/work that must outlive Session Runtime under P6 durable work.
 
-- [x] Background responses / work continuing after the live Session Runtime are tracked under P6.
+- [ ] Keep the P7 product surface simple even when the internal model is richer.
 
-  Do not change session-deactivation semantics merely to keep ordinary responses alive.
+  Prefer the admin mental model:
+
+  ```text
+  Instructions
+  Capabilities
+  Resources
+  Identity
+  Memory
+  Automation
+  Test & Publish
+  ```
+
+  while preserving strict internal ownership and lifecycle boundaries.
 
 ---
 
-# P5 — Events, durable triggers, and configurable scheduling
-
-P5 is **frozen** on `4bbc0c1`. The checklist below records how the phase was implemented; do not treat it as active work.
+# P7 — Agent harness / admin lifecycle
 
 ## Goal
 
-Allow Agent Core to represent, persist, schedule, normalize, and manage future trigger opportunities without turning the live Session Runtime into a long-lived scheduler or silently granting autonomous external-action authority.
+Turn the existing developer-oriented harness/runtime into a product-level agent administration lifecycle without weakening the runtime contracts already frozen in P1–P6.
 
-Conceptually:
-
-```text
-user / application / environment / scheduler
-                ↓
-        trigger registration/source
-                ↓
-        normalized TriggerOccurrence
-                ↓
-       normal agent policy boundary
-                ↓
- active SessionRuntime or P6 durable execution
-```
-
-A trigger is evidence/opportunity for the agent to act. It is not itself a privileged instruction and does not bypass normal policy or tool authorization.
-
-## Existing foundations to preserve
-
-The repository already has useful runtime-local event seams:
+The P7 outcome should let an authorized operator who did **not** clone the repository or edit C#:
 
 ```text
-EventContext
-SessionInput
-EnvironmentReceived
-TimerElapsedReceived
-AgentTrigger / TriggerKind
-InitiativePolicy.Triggers
-longSilence
-environmentUpdate
-unfinishedInteraction
+configure agent
+→ validate
+→ test/evaluate
+→ review changes
+→ publish immutable definition version
+→ create/manage durable Agent Instance
+→ operate memory/identity/automation safely
 ```
 
-These existing timers/triggers are lifecycle-bound to a live Session Runtime. Preserve them for interaction control and initiative.
+P7 is not the general plugin/platform phase. Keep it focused on making the current Agent Core capabilities manageable through an explicit product surface.
 
-Do **not** implement durable reminders by keeping a Session Runtime alive until a future `Task.Delay` completes.
+## Core model
+
+Preserve this architecture:
+
+```text
+Reusable Agent Definition
+  ├── instructions
+  ├── capabilities/tool policy
+  ├── knowledge/resources
+  ├── harness workspace/template
+  ├── default runtime configuration
+  ├── default persona/configuration
+  ├── memory policy
+  ├── trigger/execution policy
+  └── validation/evaluation scenarios
+            │
+            │ publish
+            ▼
+Immutable Agent Definition Version
+            │
+            ▼
+Durable Agent Instance
+  ├── identity id
+  ├── trusted persona revision
+  ├── active/pinned definition association
+  ├── lifecycle metadata
+  ├── learned-memory ownership
+  └── trigger ownership
+            │
+            ▼
+Session
+  ├── conversation
+  ├── session memory
+  ├── isolated mutable runtime workspace
+  ├── attachments/artifacts
+  └── related WorkItems
+```
+
+Do not collapse these into a single generic `agent.json` or shared mutable filesystem.
 
 ---
 
-## P5A — Formalize trigger contracts and ownership
+## P7A — Admin shell and effective configuration
 
-### Trigger categories
+### Admin vs User area
 
-Make the distinction explicit:
+- [ ] Add a dedicated **Admin** area inside the existing application.
 
-```text
-Runtime-local trigger
-- interaction timer / idle / cooldown / retry-style runtime signal
-- owned by the live Session Runtime
-- cancelled with that runtime
-- not a durable user promise
-
-Durable trigger registration
-- one-shot schedule
-- recurring schedule
-- future typed domain/application event subscription
-- future external/webhook subscription
-- survives session detach/deactivation and process restart
-```
-
-- [x] Introduce a provider-neutral durable trigger registration model.
-
-Suggested conceptual fields:
-
-```text
-triggerRegistrationId
-agentInstanceId
-trustedUser/profile owner
-triggerType
-schedule/event criteria
-intent/payload
-status
-createdAt
-updatedAt
-expiresAt?
-revision
-sourceSessionId?
-sourceEventId?
-authorizationOrigin
-```
-
-`authorizationOrigin` should be server-owned provenance, conceptually distinguishing cases such as:
-
-```text
-UserRequested
-UserApprovedProposal
-AdminConfigured
-SystemPolicy
-```
-
-Do not let the model choose arbitrary ownership identifiers or manufacture authorization provenance.
-
-- [x] Introduce a normalized trigger occurrence/event.
-
-Suggested conceptual fields:
-
-```text
-occurrenceId
-triggerRegistrationId?
-agentInstanceId
-trustedUser/profile owner
-triggerType
-scheduledFor / observedAt
-dedupe/idempotency key
-payload/evidence
-source
-expiry?
-sourceSessionId?
-```
-
-- [x] Keep trigger registration separate from trigger occurrence.
-
-  A recurring registration may produce many occurrences. Updating/cancelling the registration must not rewrite already-completed occurrence history.
-
-- [x] Make trigger ownership explicit.
-
-  Durable user-facing triggers normally belong to:
-
-  ```text
-  Agent Instance + trusted user/profile
-  ```
-
-  not an ambiguous reusable Agent Definition id.
-
-  `sourceSessionId` is provenance only; the originating session is not the trigger owner.
-
-- [x] Treat trigger payload as data/evidence, not system authority.
-
-  A scheduled intent such as:
-
-  ```text
-  "Remind me to call John"
-  ```
-
-  is remembered user intent. It must not be injected as a new system/developer instruction.
-
-- [x] Add a distinct trigger store abstraction.
-
-  Prefer a focused abstraction such as:
-
-  ```text
-  ITriggerStore
-  ```
-
-  rather than overloading session persistence or structured-memory stores.
-
-### P5A verification
-
-- [x] Persistence parity tests for InMemory and SQLite.
-- [x] Ownership/isolation tests across Agent Instances and users.
-- [x] Revision/concurrency tests for create/update/cancel.
-- [x] Tests proving trigger payload cannot alter system-instruction authority.
-- [x] Tests proving durable registrations survive process/runtime restart.
-- [x] Tests proving runtime-local timer state is not accidentally persisted as a durable registration.
-
-### P5A stop condition
-
-Agent Core has one explicit durable trigger-registration model and one normalized occurrence model, with ownership and provenance that do not depend on a live Session Runtime.
-
----
-
-## P5B — Durable scheduled triggers
-
-Start with schedules before external webhooks. Scheduled reminders are immediately useful for the personal-assistant direction and have a smaller security surface.
-
-Initial durable types:
-
-```text
-OneShotSchedule
-RecurringSchedule
-```
-
-- [x] Add a durable scheduler service outside Session Runtime ownership.
-
-  For the current modular monolith, prefer a simple hosted scheduler backed by the durable trigger store and `TimeProvider`.
-
-  Do not add Redis, Kafka, Quartz, Hangfire, Kubernetes, or another scheduler platform unless measured requirements justify it.
-
-- [x] Persist schedules before acknowledging creation.
-
-- [x] Use structured schedule arguments rather than exposing raw cron as the primary model-facing contract.
-
-  Example concepts:
-
-  ```text
-  one-shot:
-    local/absolute time
-    timezone
-
-  recurring:
-    frequency
-    interval
-    weekdays/month-day where applicable
-    local time
-    timezone
-    startAt?
-    endAt?
-    maxOccurrences?
-  ```
-
-  Infrastructure may compile this into an internal schedule representation.
-
-- [x] Preserve timezone semantics explicitly.
-
-  Store enough information to distinguish:
-
-  ```text
-  "09:00 every Monday in Europe/London"
-  ```
-
-  from a fixed UTC interval.
-
-  Compute/store the next due instant durably, while retaining the original timezone-aware recurrence semantics for later occurrences.
-
-- [x] Define deterministic daylight-saving behavior for ambiguous or missing local times.
-
-  Cover it with tests even if the initial demo timezone does not use DST.
-
-- [x] Add bounded schedule policy.
-
-  Policy should be able to constrain:
-
-  - allowed schedule types;
-  - minimum recurrence interval;
-  - maximum active registrations per Agent Instance + user;
-  - optional maximum horizon;
-  - whether indefinite recurrence is allowed;
-  - expiry / maximum occurrences where required.
-
-- [x] Define restart and missed-occurrence behavior.
-
-  Initial policy:
-
-  - a due one-shot trigger fires once on recovery if it has not expired;
-  - recurring schedules do not replay an unbounded backlog after downtime;
-  - missed recurring occurrences are coalesced by default and the next future due time is calculated deterministically;
-  - every emitted occurrence has a stable idempotency/dedupe identity.
-
-- [x] Prefer at-least-once scheduler delivery plus idempotent occurrence admission rather than pretending the infrastructure provides exactly-once execution.
-
-- [x] Scheduler failure must not corrupt or silently delete the registration.
-
-### P5B verification
-
-Use fake/deterministic time; do not build tests around real sleeps.
-
-Cover:
-
-- one-shot future schedule;
-- recurring schedule;
-- timezone conversion;
-- DST edge cases;
-- restart before due time;
-- restart after due time;
-- cancellation before due time;
-- update/reschedule;
-- duplicate scheduler wakeup;
-- stale scheduler worker;
-- missed recurring occurrences;
-- expiry/max-occurrence termination;
-- multiple users/instances with overlapping due times.
-
-### P5B stop condition
-
-Durable one-shot and recurring registrations survive restart and deterministically produce normalized, deduplicable trigger occurrences without requiring a live conversation runtime.
-
----
-
-## P5C — Agent/user trigger-management tools and authorization
-
-Allow the agent to manage schedules when the user asks for them, but do not turn model initiative into silent durable autonomy.
-
-Initial model-facing tools:
-
-```text
-trigger.schedule_once
-trigger.schedule_recurring
-trigger.list
-trigger.update
-trigger.cancel
-```
-
-- [x] Keep arguments typed and narrow.
-
-  Do not expose arbitrary SQL, code, raw scheduler internals, or unrestricted cron strings to the model.
-
-- [x] Server-stamp owner, creation time, source event/session, and authorization origin.
-
-  The model supplies the requested schedule/intent, not trusted ownership/security metadata.
-
-- [x] Treat an explicit current user request as sufficient authorization for low-risk trigger registration.
-
-  Example:
-
-  ```text
-  User: "Remind me tomorrow at 9 to call John."
-  → agent may create the one-shot trigger
-  → no redundant second approval dialog is required
-  ```
-
-- [x] Do not let a non-user-triggered agent run silently create durable schedules in the initial P5 design.
-
-  If initiative/environment/another schedule makes the agent think a future trigger would be useful, it should propose/ask the user first. After the user confirms in a user turn, the trigger can be created normally.
-
-  This prevents self-replicating or silently expanding durable autonomy without requiring a second confirmation for normal explicit requests.
-
-- [x] Keep ordinary definition/admin policy able to disable trigger-management tools entirely for roles such as examiner/support agents where scheduling is inappropriate.
-
-- [x] Trigger creation never grants standing permission for future sensitive actions.
-
-  Example:
-
-  ```text
-  "Every Friday check overdue invoices and email customers"
-  ```
-
-  may authorize creation of the Friday trigger, but future email sends still pass through the normal email/tool authorization policy.
-
-- [x] Do not introduce standing/bulk future-action approval in P5.
-
-  If later required, model it explicitly as delegated authorization with scope, limits, expiry, provenance, and revocation rather than inferring it from trigger existence.
-
-- [x] Allow user-requested list/update/cancel operations without an extra approval dialog when they affect triggers owned by that same Agent Instance + user.
-
-- [x] Prevent cross-owner trigger mutation even if the model provides another id.
-
-### P5C verification
-
-- [x] User-requested one-shot creation through the agent.
-- [x] User-requested recurring creation through the agent.
-- [x] List/update/cancel own registrations.
-- [x] Cross-user and cross-instance mutation denied.
-- [x] Non-user-triggered agent execution cannot silently persist a new durable trigger.
-- [x] Scheduling-disabled agent definition cannot create triggers.
-- [x] Trigger registration does not bypass later `RequireApproval` tool policy.
-- [x] Prompt/tool tests use natural user wording rather than only direct synthetic API calls.
-
-### P5C stop condition
-
-A user can naturally ask an eligible agent to create/manage reminders without redundant approval friction, while agent-originated durable scheduling remains user-controlled.
-
----
-
-## P5D — Trigger policy separate from initiative policy
-
-Today `InitiativePolicy.Triggers` controls existing proactive runtime behavior. P5 introduces additional policy concerns that should not be overloaded into one string list indefinitely.
-
-- [x] Introduce/evolve a dedicated trigger policy boundary.
-
-Conceptually it should answer:
-
-```text
-Which trigger types may wake this agent?
-Which durable trigger types may be registered?
-May user turns create them through agent tools?
-What limits apply?
-Which external/domain sources are trusted?
-```
-
-- [x] Keep `InitiativePolicy` responsible for proactive conversational behavior such as silence thresholds, cooldown, consecutive proactive turns, and whether the agent chooses to speak.
-
-- [x] Preserve compatibility with existing `longSilence`, `environmentUpdate`, and `unfinishedInteraction` behavior during migration.
-
-- [x] Do not make trigger eligibility equivalent to model initiative.
-
-  A trigger can wake/evaluate the agent; normal behavior policy still determines whether/how it responds.
-
-### P5D stop condition
-
-Definition policy can restrict durable trigger capabilities without changing existing initiative semantics or reopening P1/P2 behavior.
-
----
-
-## P5E — Typed application/domain/external trigger sources
-
-Do this after scheduled triggers are stable.
-
-Potential sources:
-
-```text
-application/domain event
-allowlisted environment update
-external webhook/event
-```
-
-- [x] Normalize the required P5 typed source (`order_status_changed`) into the same TriggerOccurrence boundary.
-
-  Arbitrary external sources and public webhooks stay deferred. They are not an open P5 normalization gap.
-
-- [x] Require typed/validated allowlisted event shapes.
-
-- [x] External payloads are untrusted data, never executable instructions.
-
-- [x] Preserve source authentication/verification outside model context.
-
-- [x] Add replay/dedupe protection and bounded payload limits.
-
-- [x] Source-specific rate limits and backpressure are future hardening, not unfinished P5 work.
-
-  The required order-status ingress uses the occurrence payload limit and owner-scoped dedupe. A general per-source rate limiter waits for a concrete external source.
-
-- [x] Keep webhook secrets and provider credentials outside model context.
-
-- [x] Do not make arbitrary public webhook creation a P5 scheduling prerequisite.
-
-  Add it only when a concrete integration needs it.
-
-### P5E stop condition
-
-At least one typed non-schedule source can produce the same normalized occurrence semantics without weakening source validation or prompt authority boundaries.
-
----
-
-## P5F — Trigger occurrence routing and P6 handoff
-
-P5 must define what firing means without prematurely implementing all background execution.
-
-- [x] Route every accepted occurrence through one application boundary.
+  Prefer a top-level/sidebar navigation boundary rather than turning normal Chat into a page full of hidden admin controls.
 
   Conceptually:
 
   ```text
-  TriggerOccurrence
-      ↓
-  occurrence admission / dedupe
-      ↓
-  execution routing
+  /chat/...
+  /admin/...
   ```
 
-- [x] Do not target only an originating live session.
+  P10 later adds full multi-user/RBAC enforcement. P7 still keeps the UX and API boundaries explicit.
 
-  Durable trigger ownership is Agent Instance + user. `sourceSessionId` may help result delivery/audit but cannot be the only execution identity.
+- [ ] Keep User mode conversation-first and low-clutter.
 
-- [x] If a compatible live runtime can safely consume the occurrence, allow a bounded live path.
+- [ ] Prevent ordinary user-session operations from mutating source harnesses, trusted instance identity/persona, or published definitions.
 
-- [x] If execution must happen without a live runtime or must outlive it, hand off to P6 durable work.
+### Effective configuration
 
-- [x] Do not replay the original user message as though the user just sent it again.
+- [ ] Add an effective-configuration view for an Agent Definition / Agent Instance.
 
-  The current event should be represented as a trigger occurrence with original user intent/provenance.
-
-- [x] Define occurrence state/provenance sufficiently for P6 to create one idempotent execution per occurrence.
-
-### Important phase boundary
-
-P5 alone provides reliable trigger registration and firing semantics.
-
-The complete unattended product flow:
+It should make behavior explainable with non-secret fields such as:
 
 ```text
-"Remind/check/do this later"
-→ durable trigger
-→ fire while user is away
-→ run agent/work
-→ produce result/notification
+definition/version
+instance
+persona revision
+model/runtime configuration
+enabled capabilities/tools
+tool policy
+knowledge/resources
+memory policy
+trigger policy
+background-execution policy
 ```
 
-requires **P5 + P6**.
+- [ ] Never expose secrets through the effective-config surface:
+
+  - API keys;
+  - raw credentials;
+  - secret environment variables;
+  - webhook secrets;
+  - provider tokens.
+
+- [ ] Resolve effective configuration server-side from trusted sources. Do not trust client/model-supplied owner/security metadata.
+
+### P7A verification
+
+- [ ] Admin navigation and route tests.
+- [ ] User-mode mutation-denial tests.
+- [ ] Effective-config projection tests.
+- [ ] Secret-redaction/non-exposure tests.
+- [ ] Existing conversation UX regression coverage.
+
+### P7A stop condition
+
+Admin configuration is a distinct product surface, User mode remains conversation-first, and an authorized operator can inspect the effective non-secret configuration that will govern an agent.
 
 ---
 
-## P5G — User visibility / management surface
+## P7B — Agent Definition draft / version / publish lifecycle
 
-Once durable schedules exist, users should be able to see what the agent has committed to do.
-
-- [x] Add a minimal API/projection for active trigger registrations.
-
-Expose safe fields such as:
-
-- description/intent summary;
-- schedule;
-- timezone;
-- next occurrence;
-- active/paused state;
-- created source/provenance where useful.
-
-- [x] Add at least a minimal user-facing list/cancel/manage surface when scheduled triggers become a real product feature.
-
-  Rich calendar/task UX can wait. Do not hide durable schedules exclusively inside chat history.
-
-- [x] Do not expose internal scheduler implementation, credentials, raw webhook secrets, or untrusted payload dumps.
-
----
-
-## P5 verification gate
-
-- [x] Domain/Application tests for registration, occurrence, policy, ownership, authorization origin, and dedupe.
-- [x] InMemory/SQLite persistence parity.
-- [x] Deterministic scheduler tests using `TimeProvider`.
-- [x] API tests for list/update/cancel and ownership checks.
-- [x] Tool-policy tests for schedule-management tools.
-- [x] Synthetic end-to-end chat scenario:
-
-  ```text
-  user asks for one-shot reminder
-  → agent creates trigger
-  → trigger is visible/listable
-  → time advances
-  → one normalized occurrence is produced
-  ```
-
-- [x] Synthetic recurring scenario including restart and missed-occurrence handling.
-- [x] Regression coverage proving existing initiative, interruption, detach/reattach, memory, and tool approval behavior remains unchanged.
-- [x] Hosted/provider tests remain optional; P5 scheduler semantics must be fully testable offline.
-
-### P5 stop condition
-
-P5 is complete when:
-
-- durable one-shot and recurring triggers are first-class, persisted resources;
-- users can create/manage eligible schedules naturally through the agent;
-- explicit user requests do not require redundant confirmation for low-risk scheduling;
-- non-user-triggered agent initiative cannot silently create durable schedules;
-- schedules survive restart and produce idempotent normalized occurrences;
-- ownership is Agent Instance + user rather than reusable definition or live session;
-- trigger data does not gain system-instruction authority;
-- trigger firing does not grant future tool privileges;
-- existing Session Runtime timers remain lifecycle-local;
-- P6 has a clean occurrence handoff for unattended execution.
-
----
-
-# P6 — Durable background work and triggered execution
-
-Introduce durable work when accepted work must outlive the active Session Runtime or when a P5 occurrence must execute while no compatible runtime is alive.
-
-Prerequisites:
-
-- P1 purpose/lifecycle semantics;
-- P2 progress/result semantics;
-- P3 tool/policy/approval semantics;
-- P4 durable Agent Instance + memory ownership;
-- P5 normalized durable trigger occurrences.
-
-## WorkItem / durable run
-
-- [x] Introduce durable `WorkItem` when a real accepted workflow requires it. Observed for P5 `AwaitingDurableWork` occurrences. Phase I (Support/Compliance/`sandbox.run` after deactivation) remains not applicable.
-
-Requirements:
-
-- do not duplicate ordinary synchronous tool execution;
-- persist execution state/checkpoints;
-- cancellation;
-- idempotency;
-- stale runtime protection;
-- initiating user/session/Agent Instance provenance;
-- optional TriggerRegistration/TriggerOccurrence provenance;
-- bounded retries where appropriate;
-- explicit terminal states.
-
-- [x] Create at most one logical triggered execution per accepted occurrence/dedupe key.
-
-- [x] Allow work to continue after session deactivation only when explicitly intended.
-
-- [x] Allow paused/reopened sessions to reconnect to existing work without replaying the original user turn.
-
-- [x] Build scheduled-task execution on P5 occurrences rather than embedding scheduling inside WorkItem itself.
-
-- [ ] Add background research and long-running sandbox jobs only when concrete workflows require them.
-
-## Triggered/headless agent execution
-
-- [x] Define a bounded execution context for an Agent Instance + user without requiring an attached browser session.
-
-- [x] Reuse normal definition, persona, trusted profile, and authorized memory composition.
-
-- [x] Represent the TriggerOccurrence as the current event rather than fabricating a new user message.
-
-- [x] Keep model/tool permissions identical to or stricter than normal interactive execution unless an explicit policy says otherwise.
-
-- [x] Decide result delivery independently from execution ownership. Observed delivery is the Background Work result route, not a chat turn.
-
-  Possible delivery targets include:
-
-  - originating/relevant session;
-  - durable notification/inbox item;
-  - assistant message;
-  - artifact;
-  - external integration when separately authorized.
-
-## Approval during detached work
-
-Current P3 approval is live-session oriented. Do not solve detached approval by bypassing it.
-
-- [x] If triggered/background work reaches an operation that requires approval and no live approval surface exists, persist an `AwaitingApproval`-style work state and surface it to the user.
-
-- [x] Resume the same idempotent work after approval rather than starting a duplicate run.
-
-- [x] Do not auto-approve a sensitive action merely because the user previously created the trigger.
-
-- [ ] Standing/delegated future-action authorization remains deferred until a concrete workflow justifies a carefully scoped design.
-
-## Progress/results
-
-- [ ] Reuse P2 progress semantics for live-attached work where appropriate.
-
-- [x] Persist durable WorkItem progress/checkpoints separately from ordinary assistant chat history.
-
-- [x] Persist final result linkage separately from transient progress.
-
-## Session UX
-
-- [x] Revisit pause/deactivation UX after durable work exists. Background Work stays available on paused and ended sessions.
-
-Distinguish:
-
-- user-paused conversation;
-- runtime inactivity pause;
-- disconnected session;
-- scheduled trigger waiting;
-- detached work running;
-- awaiting approval;
-- completed work;
-- cancelled work;
-- fully stopped session.
-
-### P6 stop condition
-
-Observed: a due P5 occurrence can cause one durable, policy-bounded agent run even when no Session Runtime is attached, and the resulting work can be inspected, cancelled, approved when required, and delivered without replaying the initiating user turn. **Frozen** on `30adaeb` / workflow `36085265506` (2026-09-25).
-
----
-
-# P7 — Agent harness / admin mode
-
-The repository already has:
-
-- versioned role environments;
-- isolated session workspaces;
-- `develop` and `document` composition skills;
-- Impeccable UI skill integration;
-- durable Agent Instance / definition separation from P4.
-
-Productize harness, identity, memory, and trigger administration only after the runtime contracts are stable.
-
-## Effective harness context
-
-- [ ] Allow the admin surface to inspect relevant non-secret effective configuration.
-
-Never expose:
-
-- API keys;
-- raw credentials;
-- secret environment variables;
-- webhook secrets.
-
-## Admin vs User mode
-
-- [ ] Separate Admin mode from User mode.
-
-### Admin mode
-
-- [ ] Allow bounded inspection/modification of:
-
-  - reusable agent definitions/harness workspace;
-  - instructions/configuration;
-  - tool/integration configuration;
-  - knowledge/assets;
-  - validation/tests;
-  - behavior previews;
-  - durable Agent Instance configuration;
-  - trusted identity persona/baseline;
-  - memory policy;
-  - trigger policy and limits;
-  - allowed external/domain trigger sources.
-
-- [ ] Require privileged changes to be explicit operations.
+Implement an explicit publishing lifecycle:
 
 ```text
-agent prepares proposed operation
-→ UI presents operation
-→ human approves where required
-→ normal policy/tool authorization executes it
+Draft
+→ Validate
+→ Test / Evaluate
+→ Review Diff
+→ Publish immutable version
+→ Deprecate / Roll back association when needed
 ```
 
-An admin agent does not bypass policy because it generated the change itself.
+- [ ] Introduce an editable draft representation separate from published immutable versions.
 
-### User mode
+- [ ] Keep published Agent Definition versions immutable.
 
-- [ ] Use an immutable/pinned published Agent Definition version for each session.
+Changing any published reusable behavior/configuration should produce a new version, including changes to:
 
-- [ ] Bind sessions to the durable Agent Instance where persistent actor continuity is required.
+- instructions;
+- tool/capability configuration;
+- policies/permissions;
+- knowledge/resource snapshot;
+- harness workspace/template;
+- trigger capabilities/defaults;
+- default persona/configuration;
+- relevant model/runtime defaults.
 
-- [x] Give every session its own isolated runtime workspace.
+- [ ] Keep existing sessions reproducible against the definition version they actually used.
 
-- [ ] Prevent user sessions from mutating source harnesses or trusted identity baseline/persona.
+- [ ] Define how a durable Agent Instance adopts/upgrades to another published definition version.
 
-## Definition publishing lifecycle
+- [ ] Do not make definition upgrade equivalent to identity reset.
 
-- [ ] Define:
+- [ ] Support deprecating a definition version without rewriting historical sessions.
 
-  - draft;
-  - validate;
-  - test/evaluate;
-  - publish immutable version;
-  - rollback/deprecate.
+- [ ] Support moving an instance association back to a prior valid published version where policy permits.
 
-Published versions stay immutable. Changing reusable instructions, tools, policies, trigger capabilities/defaults, or default persona/config publishes a new version rather than mutating a version already pinned by sessions.
+### Publish diff
 
-## Identity / instance lifecycle
+- [ ] Show a human-readable diff before publishing.
 
-- [ ] Add admin lifecycle for durable Agent Instances built from published definitions.
+At minimum identify changes in:
 
-- [ ] Preserve the distinction between definition upgrade and identity reset.
+```text
+instructions
+capabilities/tools
+permissions/policies
+knowledge/resources
+harness workspace
+default persona/configuration
+memory policy
+trigger/execution policy
+model/runtime configuration
+```
 
-- [ ] Decide how trusted persona revisions remain reproducible for historical sessions.
+Do not require a raw JSON diff as the only review surface.
 
-### Trigger lifecycle interaction
+### P7B verification
 
-Preserve these rules:
+- [ ] Draft mutation/versioning tests.
+- [ ] Published-version immutability tests.
+- [ ] Instance upgrade/rollback association tests.
+- [ ] Historical session version-resolution tests.
+- [ ] Publish-diff projection tests.
+- [ ] Concurrency/revision conflict tests for draft edits and publishing.
+
+### P7B stop condition
+
+Reusable agent configuration has a reproducible draft → validation/test → diff → immutable publish lifecycle, and already-published behavior cannot be silently mutated.
+
+---
+
+## P7C — Harness editing: instructions, capabilities, resources, workspace
+
+Keep the product mental model simple:
+
+```text
+Harness
+≈ Instructions
++ Capabilities
++ Resources / Workspace
+```
+
+Internally, preserve typed boundaries rather than treating everything as files.
+
+### Instructions
+
+- [ ] Add bounded admin editing for reusable definition instructions.
+
+- [ ] Keep instructions authoritative behavior configuration, not a dumping ground for learned memory.
+
+### Capabilities / tools
+
+- [ ] Expose currently supported Agent Core capabilities/tools and their relevant policy configuration.
+
+- [ ] Validate missing/invalid tool references before publish.
+
+- [ ] Preserve P3 registry / policy / execution separation.
+
+- [ ] Tool configuration never carries raw provider credentials into model-visible configuration.
+
+### Knowledge / resources
+
+- [ ] Allow definition-scoped knowledge/resources/assets to be managed as reusable harness material.
+
+Examples:
+
+```text
+reference docs
+policies
+templates
+skills/resources
+assets
+test fixtures
+```
+
+- [ ] Preserve provenance/version association for resources included in a published definition.
+
+### Harness workspace
+
+Use a **definition-scoped harness workspace** distinct from the existing session runtime workspace.
+
+Conceptually:
+
+```text
+Definition draft harness workspace
+  → editable by Admin
+  → may contain reusable docs/templates/assets/skills/test fixtures
+
+Published definition harness workspace
+  → immutable snapshot/versioned resource set
+  → available to runtime according to capability/policy
+  → never mutated by ordinary user sessions
+```
+
+- [ ] Do not store learned memory, trigger registrations, credentials, or mutable runtime state as ordinary harness-workspace files.
+
+- [x] Continue giving every session its own isolated mutable runtime workspace.
+
+Conceptually:
+
+```text
+Published harness resources
+        │ read/use according to policy
+        ▼
+Agent runtime
+        │
+        ▼
+Session workspace
+  mutable
+  isolated
+  session-owned
+```
+
+### Explicitly defer persistent Agent Instance workspace
+
+Do **not** add a general mutable cross-session Agent Instance filesystem in P7.
+
+Add it later only when a concrete workflow requires durable files shared across sessions, for example:
+
+```text
+"continue updating the same budget.xlsx across future sessions"
+```
+
+If/when added, keep it separate from learned memory and definition resources.
+
+### P7C verification
+
+- [ ] Draft/published harness-workspace lifecycle tests.
+- [ ] Published resource immutability tests.
+- [ ] Session workspace isolation/regression tests.
+- [ ] Tests proving user sessions cannot mutate published harness resources.
+- [ ] Tests proving memory/trigger/security state is not silently represented as workspace files.
+
+### P7C stop condition
+
+An admin can configure the current agent harness through instructions, capabilities, knowledge/resources, and a versioned harness workspace while session runtime files remain isolated and mutable at the session layer.
+
+---
+
+## P7D — Agent Instance and identity/persona administration
+
+### Agent Instance lifecycle
+
+- [ ] Add admin lifecycle for durable Agent Instances created from published Agent Definitions.
+
+Support explicit lifecycle states/operations sufficient for the current product, such as:
+
+```text
+create
+activate
+change active definition version
+deactivate/archive
+```
+
+Avoid premature organization/tenant lifecycle complexity.
+
+- [ ] Preserve the distinction between:
+
+```text
+definition upgrade
+identity/persona revision
+learned-memory reset
+new/forked Agent Instance
+```
+
+None of these implicitly means another.
+
+### Persona editing
+
+Support **two views over one typed schema**:
+
+```text
+Form | JSON
+```
+
+- [ ] Make the form the default UX.
+
+- [ ] Provide an advanced JSON editor for technical administrators/debugging/import-export.
+
+- [ ] Validate both views against the same server-owned typed schema.
+
+- [ ] Do not accept arbitrary trusted identity fields merely because they appeared in JSON.
+
+- [ ] Persist persona revisions so historical sessions can resolve the trusted persona/configuration they actually used.
+
+### Instance lifecycle interactions
+
+Preserve:
 
 ```text
 Definition upgrade:
-  existing trigger registrations stay owned by the same Agent Instance + user,
-  but future execution must satisfy the effective current policy.
+  Agent Instance identity remains the same.
+  Existing trigger registrations remain owned by the same Agent Instance + user.
+  Future execution must satisfy the effective current policy.
 
 Reset learned memory:
+  does not reset identity/persona.
   does not delete trigger registrations.
 
 New/forked Agent Instance:
-  does not automatically inherit another instance's trigger registrations.
+  does not automatically inherit learned memory.
+  does not automatically inherit trigger registrations.
 
 Deactivate/archive Agent Instance:
-  disables or cancels its future trigger execution according to explicit lifecycle policy.
+  prevents future execution according to explicit lifecycle policy.
+  must not leave silently firing triggers.
 
 Delete/end user relationship:
-  must not leave orphan triggers continuing to fire.
+  must not leave orphan triggers/work continuing without an owner.
 ```
+
+### P7D verification
+
+- [ ] Instance create/activate/archive tests.
+- [ ] Definition-upgrade vs identity-reset tests.
+- [ ] Form ↔ JSON round-trip/schema validation tests.
+- [ ] Persona revision/historical resolution tests.
+- [ ] Instance deactivation + future-trigger handling tests.
+- [ ] Cross-instance ownership/isolation regressions.
+
+### P7D stop condition
+
+Durable Agent Instances can be explicitly managed without conflating reusable definition version, trusted identity/persona, learned memory, or trigger ownership.
+
+---
+
+## P7E — Memory and automation administration
 
 ## Memory policy/admin
 
-- [ ] Expose P4 memory policy seams.
-- [ ] Add **Reset learned memory** operations with explicit scope.
-- [ ] Keep identity reset separate from learned-memory reset.
+Keep this authority distinction explicit:
 
-## Trigger policy/admin
+```text
+Instructions
+= what the agent should do
+
+Trusted persona/profile
+= trusted identity/context
+
+Knowledge
+= authoritative/reference material
+
+Learned memory
+= what the agent learned/remembers
+```
+
+Do **not** replace learned memory with instructions and do not silently promote learned memory into instruction authority.
+
+- [ ] Expose P4 memory-policy configuration.
+
+- [ ] Allow authorized inspection of built-in learned memory with safe metadata such as:
+
+  - scope;
+  - owner;
+  - source/provenance where available;
+  - created/updated timestamps;
+  - content where policy allows.
+
+- [ ] Add explicit scoped reset/delete operations for learned memory.
+
+At minimum preserve relevant scopes:
+
+```text
+Session
+IdentityUser
+User-wide (when policy enables it)
+```
+
+- [ ] Keep identity/persona reset separate from learned-memory reset.
+
+- [ ] Do not initially provide a generic arbitrary editor that rewrites learned memory as if the agent learned something organically.
+
+If manually curated durable facts become necessary, introduce a separate future concept such as:
+
+```text
+Trusted Context
+Pinned Facts
+Admin Context
+```
+
+with explicit authority/provenance rather than mixing them into learned memory.
+
+## Trigger / scheduling / background-execution admin
 
 - [ ] Expose P5 trigger-policy configuration:
 
@@ -991,48 +740,233 @@ Delete/end user relationship:
   - active-trigger limits;
   - minimum recurrence interval;
   - expiry/horizon limits;
-  - allowed external/domain event sources;
-  - whether triggered execution is permitted once P6 exists.
+  - allowed external/domain event sources.
 
-- [ ] Allow admins/users with the proper authority to inspect and revoke durable trigger registrations.
+- [ ] Expose whether P6 triggered/headless execution is permitted for the agent/instance where the existing policy model supports it.
 
-- [ ] Keep trigger policy/defaults in configuration; keep individual user trigger registrations in runtime/user state.
+- [ ] Allow authorized admins/users to inspect and revoke durable trigger registrations.
+
+- [ ] Keep trigger policy/defaults in reusable/effective configuration.
+
+- [ ] Keep individual trigger registrations/occurrences in runtime/user state, not the definition workspace or learned memory.
+
+- [ ] Trigger configuration never grants standing permission for later sensitive external actions.
+
+### P7E verification
+
+- [ ] Memory policy projection/mutation tests.
+- [ ] Scoped learned-memory reset/delete tests.
+- [ ] Tests proving memory reset does not reset identity or triggers.
+- [ ] Trigger-policy configuration tests.
+- [ ] Trigger inspection/revocation ownership tests.
+- [ ] Tests proving admin configuration cannot bypass P3/P6 approval policy.
+
+### P7E stop condition
+
+Authorized operators can understand and manage memory and automation policy/state without confusing instructions, trusted identity, learned memory, trigger registrations, or tool authorization.
+
+---
+
+## P7F — Validation, behavior preview, evaluations, and publish gate
+
+Make testing a first-class part of building an agent rather than a developer-only afterthought.
+
+### Validation
+
+- [ ] Validate draft configuration before publish.
+
+Cover at least:
+
+- schema/config validity;
+- missing tool/capability references;
+- invalid permissions/policies;
+- incompatible model/provider capabilities where deterministically knowable;
+- invalid definition/instance associations;
+- invalid memory/trigger configuration;
+- missing/invalid harness resources;
+- unsafe or secret-bearing configuration where detectable.
+
+### Behavior preview / test scenarios
+
+- [ ] Add admin-visible behavior-preview/test scenarios.
+
+Conceptually:
+
+```text
+Scenario:
+  "Customer asks for refund after 45 days"
+
+Expected checks:
+  cites/uses relevant policy
+  does not perform unauthorized refund
+  proposes escalation
+```
+
+- [ ] Reuse Synthetic/offline infrastructure for deterministic default evaluation whenever possible.
+
+- [ ] Keep hosted/provider evaluation explicitly opt-in where deterministic offline behavior is sufficient.
+
+- [ ] Store evaluation definitions/results with enough provenance to know which draft/version/configuration was tested.
+
+- [ ] Make failed required validation block publish.
+
+- [ ] Decide a narrow initial policy for evaluation failures:
+
+  - structural/security validation: blocking;
+  - optional behavioral evals: report clearly and allow policy to determine whether publish is blocked.
+
+Avoid pretending subjective model behavior can always be reduced to deterministic pass/fail.
+
+### P7F verification
+
+- [ ] Validation unit/application tests.
+- [ ] Synthetic behavior-preview end-to-end flow.
+- [ ] Publish blocked by invalid configuration.
+- [ ] Evaluation provenance/version tests.
+- [ ] Hosted tests remain optional unless a provider-specific requirement demands them.
+
+### P7F stop condition
+
+An admin can validate and test a draft agent before publication, and invalid configuration cannot be silently published.
+
+---
+
+## P7G — Basic admin history, rollback/deprecation, and final UX
+
+### Basic admin history
+
+Record a lightweight immutable administrative event trail for important lifecycle changes, for example:
+
+```text
+definition draft created
+definition published
+definition deprecated
+instance created
+instance definition upgraded/rolled back
+persona revised
+memory reset
+trigger policy changed
+trigger revoked
+instance archived
+```
+
+- [ ] Record actor/source, timestamp, target resource, operation, and safe change metadata.
+
+- [ ] Do not log secrets or raw sensitive payloads merely for audit convenience.
+
+- [ ] Keep this intentionally smaller than P10 enterprise audit/compliance infrastructure.
+
+### Rollback/deprecation UX
+
+- [ ] Allow an authorized admin to inspect prior immutable versions.
+
+- [ ] Allow explicit instance reassociation/rollback to a compatible prior published version.
+
+- [ ] Deprecation must not rewrite history.
+
+### End-to-end Admin UX
+
+- [ ] Provide a coherent Admin flow such as:
+
+```text
+Agent Definitions
+  → edit draft
+  → configure instructions/capabilities/resources
+  → validate
+  → test
+  → review diff
+  → publish
+
+Agent Instances
+  → create/select instance
+  → choose published version
+  → configure identity/persona
+  → inspect memory/automation
+  → activate/archive
+```
+
+- [ ] Keep the primary UI understandable without requiring users to understand internal terms such as `IdentityUser`, occurrence dedupe, or SessionRuntime ownership.
+
+### P7G verification
+
+- [ ] Admin-event-history tests.
+- [ ] Secret-redaction tests.
+- [ ] Publish → instantiate → chat end-to-end scenario.
+- [ ] Draft change → test → diff → publish new version → upgrade instance scenario.
+- [ ] Rollback/deprecate scenario.
+- [ ] Memory reset and trigger revoke scenarios.
+- [ ] Regression coverage across P1–P6 runtime behavior.
+
+### P7 stop condition
+
+P7 is complete when an authorized non-developer operator can:
+
+```text
+create/edit a reusable agent draft
+→ configure instructions, capabilities, knowledge/resources, and harness workspace
+→ validate and test behavior
+→ review the publish diff
+→ publish an immutable definition version
+→ create/manage a durable Agent Instance
+→ manage trusted persona through form or typed JSON
+→ inspect/reset learned memory through explicit scope
+→ configure/inspect/revoke eligible automation
+→ inspect effective non-secret configuration
+→ review basic admin history
+→ safely upgrade/rollback/deprecate without rewriting history
+```
+
+while:
+
+- User mode cannot mutate published harnesses or trusted identity;
+- learned memory remains separate from instructions/trusted context;
+- published harness resources remain separate from mutable session workspaces;
+- P3 tool authorization and P5/P6 trigger/background-work authorization remain intact;
+- secrets never enter model-visible/admin projections unintentionally;
+- no persistent Agent Instance filesystem is introduced without a concrete workflow;
+- no general plugin ecosystem, workflow builder, multi-agent orchestration, or enterprise tenancy/RBAC is pulled into P7.
+
+---
+
+# Explicit P7 deferrals
+
+Do not expand P7 to include these without a concrete new requirement:
+
+- persistent cross-session Agent Instance workspace/filesystem;
+- general plugin marketplace;
+- general MCP/provider ecosystem;
+- arbitrary custom tool-provider framework;
+- visual node/graph workflow builder;
+- multi-agent communication/orchestration;
+- standing/bulk future-action authorization;
+- organization/team management;
+- full RBAC/tenancy;
+- enterprise-grade audit/compliance;
+- generalized distributed scheduler/runtime infrastructure.
+
+These are potential P8/P10 or later concerns.
 
 ---
 
 # P8 — Full harness/platform capabilities and integration extensibility
 
-- [ ] Consolidate the eventual full harness model.
+P8 begins only after P7 establishes a usable administration and publishing lifecycle.
 
-Possible components:
+## Platform/extensibility
+
+- [ ] Consolidate the eventual extensible harness/provider model when real second implementations justify abstraction.
+
+Potential extension boundaries:
 
 ```text
-Reusable Agent Definition
-- instructions/goals
-- runtime configuration
-- tools
-- policies/permissions
-- knowledge
-- trigger capabilities/defaults
-- workspace template
-- validation/evals
-- integrations/extensions
-
-Durable Agent Instance
-- identity id
-- trusted persona/baseline
-- active definition/version association
-- lifecycle metadata
-- memory-policy assignment/overrides where allowed
-
-Runtime/User state
-- trusted user profile
-- sessions
-- learned memory
-- trigger registrations
-- trigger occurrences
-- work items
+model providers
+tool providers
+integration providers
+trigger/event sources
+sandbox providers
 ```
+
+Do not force them into one common abstraction unless implementations demonstrate a useful shared contract.
 
 - [ ] Add external tool-provider/plugin extensibility only when another real provider/integration justifies it.
 
@@ -1044,18 +978,17 @@ Requirements:
 - external providers still pass through Agent Core policy/authorization;
 - provider credentials remain outside model context.
 
-- [ ] Add reusable harness validation:
+- [ ] Extend P7 validation for provider/plugin-specific concerns:
 
-  - schema validation;
-  - missing tool/provider references;
-  - invalid permissions;
-  - incompatible model/provider capabilities;
-  - invalid definition/identity associations;
-  - invalid trigger policy/source configuration;
-  - unsafe configuration;
-  - evaluation/test scenarios.
+  - provider availability/capability mismatches;
+  - missing external-provider references;
+  - provider-specific permission/configuration errors;
+  - extension compatibility/versioning;
+  - extension-specific evaluation scenarios.
 
-- [ ] Keep model-provider extensibility, tool-provider extensibility, and trigger-source extensibility as distinct boundaries unless real implementations prove a common abstraction is useful.
+- [ ] Revisit a durable mutable Agent Instance workspace only when a concrete cross-session file workflow requires it.
+
+- [ ] Revisit richer reusable evaluation suites when multiple harness/provider implementations make them valuable.
 
 ---
 
@@ -1083,10 +1016,11 @@ Do this when Agent Core moves beyond trusted single-owner/local development.
 
 - [ ] Authentication.
 - [ ] User/admin authorization and tenancy.
-- [ ] Per-user resource ownership and quotas.
-- [ ] Enforce tenant ownership across Agent Instance, session, memory, trigger, WorkItem, artifact, and integration resources.
-- [ ] Secure external-integration and webhook credential management.
-- [ ] Audit history for privileged actions/tools and trigger-policy changes.
+- [ ] Organization/team management when required.
+- [ ] Per-user/tenant resource ownership and quotas.
+- [ ] Enforce tenant ownership across Agent Definition, Agent Instance, session, memory, trigger, WorkItem, artifact, and integration resources.
+- [ ] Secure external-integration/webhook credential management.
+- [ ] Expand P7 basic admin history into enterprise-grade audit/compliance where required.
 - [ ] Public-hosting hardening.
 - [ ] Separate host credentials/scopes where browser users must not possess host authority.
 - [ ] Add distributed trigger-claim/lease semantics only when multiple scheduler workers are required.
@@ -1096,11 +1030,11 @@ Do this when Agent Core moves beyond trusted single-owner/local development.
 
 # Deferred / optional provider work
 
-These items do not block P5.
+These items do not block P7.
 
 ## Real P3 provider verification
 
-- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from P5.
+- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from P7.
 
 Keep it bounded, credential-gated, provider-specific, and outside default CI.
 
@@ -1124,7 +1058,7 @@ Keep it bounded, credential-gated, provider-specific, and outside default CI.
 
 - [ ] Keep `main` green before beginning the next architectural slice.
 
-- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, identity, trigger, and background-work change.
+- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, identity, trigger, background-work, definition, publishing, and admin change.
 
 - [ ] Maintain Playwright coverage for meaningful user-visible workflows.
 
@@ -1145,7 +1079,8 @@ Keep it bounded, credential-gated, provider-specific, and outside default CI.
   - sandbox execution;
   - compaction lifecycle;
   - memory retrieval/mutation and scope/owner without sensitive content logging;
-  - identity/definition resolution;
+  - identity/definition/version resolution;
+  - draft/publish/instance lifecycle;
   - trigger registration create/update/cancel;
   - trigger type and owner scope without logging sensitive payload content;
   - scheduler due/claimed/fired state;
@@ -1169,7 +1104,7 @@ P2 freeze:  47d6ff6
 P3 freeze:  4dbb920
 P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
-P6 freeze: 30adaeb / workflow 36085265506 green (bef77d1 last behavior)
+P6 freeze:  30adaeb / workflow 36085265506 green (bef77d1 last behavior)
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
 active phase: P7 — agent harness / admin lifecycle (not started)
 ```
@@ -1221,6 +1156,28 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-**P7 — agent harness / admin lifecycle** is the next implementation phase. P6 remains frozen on `30adaeb` (workflow `36085265506`). Evidence: `docs/reports/p6-freeze-candidate.md`.
+**P7A — Admin shell and effective configuration** is the next implementation slice.
 
-P7 productizes harness, identity, memory, and trigger administration after stable runtime contracts. Do not reopen P6 without a reproducible regression.
+Start with:
+
+```text
+dedicated Admin navigation/route
+→ Agent Definition / Agent Instance read models
+→ safe effective-config projection
+→ secret redaction/non-exposure
+→ User-mode mutation boundary
+```
+
+Then continue in dependency order:
+
+```text
+P7A Admin shell/effective config
+→ P7B Definition lifecycle
+→ P7C Harness editing/resources/workspace
+→ P7D Instance + identity/persona
+→ P7E Memory + automation admin
+→ P7F Validation/evals/publish gate
+→ P7G History/rollback/final UX
+```
+
+P6 remains frozen on `30adaeb` / workflow `36085265506`. Do not reopen P6 without a reproducible regression.

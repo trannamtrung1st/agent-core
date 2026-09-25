@@ -62,8 +62,20 @@ jobs:
 
       - name: Synthetic Playwright
         working-directory: web
-        run: pnpm exec playwright test
+        run: |
+          pnpm exec playwright test \
+            --project=synthetic \
+            --project=browser-stt \
+            --project=browser-browser
         # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.
+
+      - name: Faithful Manual-A wall-clock Playwright
+        working-directory: web
+        run: |
+          rm -f ../data/playwright/manual-a.db
+          PLAYWRIGHT_SQLITE_PATH=../data/playwright/manual-a.db \
+          PLAYWRIGHT_FAITHFUL_MANUAL=1 \
+            pnpm exec playwright test --project=faithful-manual
 
       - name: Upload Playwright failure
         if: failure()

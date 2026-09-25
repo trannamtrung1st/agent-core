@@ -7,7 +7,10 @@ const webDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(webDir, "..");
 const playwrightData = path.join(root, "data", "playwright");
 const sqlitePath = process.env.PLAYWRIGHT_SQLITE_PATH
-  ?? path.join(playwrightData, "synthetic.db");
+  ? path.isAbsolute(process.env.PLAYWRIGHT_SQLITE_PATH)
+    ? process.env.PLAYWRIGHT_SQLITE_PATH
+    : path.resolve(webDir, process.env.PLAYWRIGHT_SQLITE_PATH)
+  : path.join(playwrightData, "synthetic.db");
 process.env.PLAYWRIGHT_SQLITE_PATH = sqlitePath;
 fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
 const apiPort = process.env.PLAYWRIGHT_API_PORT ?? "5080";
@@ -22,6 +25,7 @@ const browserBrowserApiPort = process.env.PLAYWRIGHT_BROWSER_BROWSER_API_PORT ??
 const browserBrowserWebPort = process.env.PLAYWRIGHT_BROWSER_BROWSER_WEB_PORT ?? "5175";
 const browserBrowserApiUrl = `http://127.0.0.1:${browserBrowserApiPort}`;
 const browserBrowserWebUrl = `http://127.0.0.1:${browserBrowserWebPort}`;
+const faithfulManualOnly = process.env.PLAYWRIGHT_FAITHFUL_MANUAL === "1";
 
 const chromium = devices["Desktop Chrome"];
 
@@ -96,6 +100,9 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000
     },
+    ...(faithfulManualOnly
+      ? []
+      : [
     {
       command: `dotnet run --project src/AgentCore.Api --no-launch-profile --urls ${browserSttApiUrl}`,
       cwd: root,
@@ -151,5 +158,6 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000
     }
+      ])
   ]
 });
