@@ -2,7 +2,7 @@
 
 **Status:** candidate (W01 implementation batch)  
 **Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Candidate SHA:** pending commit on this branch  
+**Candidate SHA:** `561d1517` (full: `561d151` on `main`)  
 
 ## Scope delivered
 
