@@ -331,5 +331,11 @@ public sealed class TriggerDurablePolicyTests
             DateTimeOffset updatedAt,
             CancellationToken cancellationToken = default) =>
             inner.UpdateActiveVersionAsync(instanceId, activeVersion, updatedAt, cancellationToken);
+
+        public ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) =>
+            inner.UpdateWithExpectedRevisionAsync(update, updatedAt, cancellationToken);
     }
 }

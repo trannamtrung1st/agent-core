@@ -79,8 +79,77 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
                 throw AgentCoreErrors.NotFound("Agent instance was not found.");
             }
 
-            _instances[instanceId] = instance with { ActiveVersion = activeVersion, UpdatedAt = updatedAt };
+            if (activeVersion <= instance.ActiveVersion)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            _instances[instanceId] = instance with
+            {
+                ActiveVersion = activeVersion,
+                UpdatedAt = updatedAt,
+                Revision = instance.Revision + 1
+            };
             return ValueTask.CompletedTask;
+        }
+    }
+
+    public ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            if (!_instances.TryGetValue(update.InstanceId, out var instance))
+            {
+                throw AgentCoreErrors.NotFound("Agent instance was not found.");
+            }
+
+            if (instance.Revision != update.ExpectedRevision)
+            {
+                throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+            }
+
+            if (instance.Compatibility
+                && (update.Persona is not null || update.Lifecycle is not null))
+            {
+                throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
+            }
+
+            var persona = update.Persona ?? instance.Persona;
+            var personaRevision = instance.PersonaRevision;
+            var personaChanging = update.Persona is not null && !update.Persona.Equals(instance.Persona);
+            if (personaChanging)
+            {
+                if (update.ExpectedPersonaRevision is null)
+                {
+                    throw new AgentCoreException(
+                        "Validation",
+                        "Expected persona revision is required for persona edits.",
+                        400);
+                }
+
+                if (update.ExpectedPersonaRevision != instance.PersonaRevision)
+                {
+                    throw new AgentCoreException("Conflict", "Agent instance persona revision is stale.", 409);
+                }
+
+                personaRevision++;
+            }
+
+            var next = instance with
+            {
+                ActiveVersion = update.ActiveVersion ?? instance.ActiveVersion,
+                Persona = persona,
+                Lifecycle = update.Lifecycle ?? instance.Lifecycle,
+                UpdatedAt = updatedAt,
+                Revision = instance.Revision + 1,
+                PersonaRevision = personaRevision
+            };
+            _instances[update.InstanceId] = next;
+            return ValueTask.FromResult(next);
         }
     }
 }

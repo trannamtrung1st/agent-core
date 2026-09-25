@@ -10,4 +10,6 @@ public sealed class AgentInstanceRecord
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
     public bool Compatibility { get; set; }
+    public long Revision { get; set; } = 1;
+    public long PersonaRevision { get; set; } = 1;
 }

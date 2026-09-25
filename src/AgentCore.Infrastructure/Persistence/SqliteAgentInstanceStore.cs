@@ -78,9 +78,90 @@ public sealed class SqliteAgentInstanceStore(IDbContextFactory<AgentCoreDbContex
             .SingleOrDefaultAsync(item => item.InstanceId == instanceId.ToString("D"), cancellationToken)
             .ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        if (activeVersion <= row.ActiveVersion)
+        {
+            return;
+        }
+
         row.ActiveVersion = activeVersion;
         row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        row.Revision++;
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+    }
+
+    public async ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.AgentInstances
+            .SingleOrDefaultAsync(item => item.InstanceId == update.InstanceId.ToString("D"), cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        if (row.Revision != update.ExpectedRevision)
+        {
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+
+        if (row.Compatibility && (update.Persona is not null || update.Lifecycle is not null))
+        {
+            throw new AgentCoreException("Validation", "Compatibility instances cannot change persona or lifecycle.", 400);
+        }
+
+        var current = Map(row);
+        var persona = update.Persona ?? current.Persona;
+        var personaRevision = row.PersonaRevision;
+        var personaChanging = update.Persona is not null && !update.Persona.Equals(current.Persona);
+        if (personaChanging)
+        {
+            if (update.ExpectedPersonaRevision is null)
+            {
+                throw new AgentCoreException(
+                    "Validation",
+                    "Expected persona revision is required for persona edits.",
+                    400);
+            }
+
+            if (update.ExpectedPersonaRevision != row.PersonaRevision)
+            {
+                throw new AgentCoreException("Conflict", "Agent instance persona revision is stale.", 409);
+            }
+
+            personaRevision++;
+            row.PersonaJson = JsonSerializer.Serialize(persona, Json);
+        }
+
+        if (update.ActiveVersion is int activeVersion)
+        {
+            row.ActiveVersion = activeVersion;
+        }
+
+        if (update.Lifecycle is AgentInstanceLifecycle lifecycle)
+        {
+            row.Lifecycle = lifecycle.ToString();
+        }
+
+        row.UpdatedAtUtc = updatedAt.ToUnixTimeMilliseconds();
+        row.Revision++;
+        row.PersonaRevision = personaRevision;
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new AgentCoreException("Conflict", "Agent instance revision is stale.", 409);
+        }
+
+        return Map(row);
     }
 
     private static AgentInstance Map(AgentInstanceRecord row) =>
@@ -93,7 +174,9 @@ public sealed class SqliteAgentInstanceStore(IDbContextFactory<AgentCoreDbContex
             Enum.Parse<AgentInstanceLifecycle>(row.Lifecycle),
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
-            row.Compatibility);
+            row.Compatibility,
+            row.Revision,
+            row.PersonaRevision);
 
     private static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -105,6 +188,8 @@ public sealed class SqliteAgentInstanceStore(IDbContextFactory<AgentCoreDbContex
             Lifecycle = instance.Lifecycle.ToString(),
             CreatedAtUtc = instance.CreatedAt.ToUnixTimeMilliseconds(),
             UpdatedAtUtc = instance.UpdatedAt.ToUnixTimeMilliseconds(),
-            Compatibility = instance.Compatibility
+            Compatibility = instance.Compatibility,
+            Revision = instance.Revision,
+            PersonaRevision = instance.PersonaRevision
         };
 }

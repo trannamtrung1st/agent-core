@@ -287,6 +287,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
             entity.Property(row => row.PersonaJson).IsRequired();
             entity.Property(row => row.Lifecycle).HasMaxLength(32).IsRequired();
+            entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => row.DefinitionId)
                 .IsUnique()
                 .HasFilter("Compatibility = 1");

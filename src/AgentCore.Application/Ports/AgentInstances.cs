@@ -19,7 +19,20 @@ public interface IAgentInstanceStore
         int activeVersion,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken = default);
+
+    ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+        AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record AgentInstanceRevisionUpdate(
+    Guid InstanceId,
+    long ExpectedRevision,
+    int? ActiveVersion = null,
+    AgentIdentity? Persona = null,
+    AgentInstanceLifecycle? Lifecycle = null,
+    long? ExpectedPersonaRevision = null);
 
 public interface IAgentInstanceService
 {

@@ -82,11 +82,14 @@ public sealed class AgentInstanceService(
         }
 
         var updatedAt = time.GetUtcNow();
-        await instances.UpdateActiveVersionAsync(instance.InstanceId, definition.Version, updatedAt, cancellationToken)
+        var updated = await instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(instance.InstanceId, instance.Revision, ActiveVersion: definition.Version),
+                updatedAt,
+                cancellationToken)
             .ConfigureAwait(false);
         await NotifySchedulingEligibilityMayHaveImprovedAsync(instance.InstanceId, updatedAt, cancellationToken)
             .ConfigureAwait(false);
-        return instance with { ActiveVersion = definition.Version, UpdatedAt = updatedAt };
+        return updated;
     }
 
     public async ValueTask<AgentInstance> RequireAsync(Guid instanceId, CancellationToken cancellationToken = default)
@@ -120,21 +123,43 @@ public sealed class AgentInstanceService(
         AgentDefinition definition,
         CancellationToken cancellationToken)
     {
-        if (definition.Version <= existing.ActiveVersion)
+        var current = existing;
+        if (definition.Version <= current.ActiveVersion)
         {
-            return existing;
+            return current;
         }
 
-        var updatedAt = time.GetUtcNow();
-        await instances.UpdateActiveVersionAsync(
-                existing.InstanceId,
-                definition.Version,
-                updatedAt,
-                cancellationToken)
-            .ConfigureAwait(false);
-        await NotifySchedulingEligibilityMayHaveImprovedAsync(existing.InstanceId, updatedAt, cancellationToken)
-            .ConfigureAwait(false);
-        return existing with { ActiveVersion = definition.Version, UpdatedAt = updatedAt };
+        var baselineVersion = current.ActiveVersion;
+        while (current.ActiveVersion < definition.Version)
+        {
+            var updatedAt = time.GetUtcNow();
+            try
+            {
+                await instances.UpdateActiveVersionAsync(
+                        current.InstanceId,
+                        definition.Version,
+                        updatedAt,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (AgentCoreException ex) when (ex.Code == "Conflict")
+            {
+            }
+
+            current = await instances.FindAsync(current.InstanceId, cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        }
+
+        if (current.ActiveVersion > baselineVersion)
+        {
+            await NotifySchedulingEligibilityMayHaveImprovedAsync(
+                    current.InstanceId,
+                    current.UpdatedAt,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return current;
     }
 
     private async ValueTask NotifySchedulingEligibilityMayHaveImprovedAsync(

@@ -128,6 +128,69 @@ public sealed class AgentInstanceTests
     }
 
     [Fact]
+    public async Task Concurrent_compatibility_forward_align_succeeds()
+    {
+        await ForEachStore(async (sessions, instances, clock) =>
+        {
+            var definitions = new VersionedDefinitions(V1(), V2());
+            var service = Service(instances, definitions, sessions, clock, 4);
+            var now = clock.GetUtcNow();
+            await instances.InsertAsync(
+                new AgentInstance(
+                    AgentInstance.CompatibilityFor("examiner"),
+                    "examiner",
+                    1,
+                    V1().Identity,
+                    AgentInstanceLifecycle.Active,
+                    now,
+                    now,
+                    Compatibility: true));
+
+            var definition = V2();
+            var first = service.ResolveCompatibilityAsync(definition).AsTask();
+            var second = service.ResolveCompatibilityAsync(definition).AsTask();
+            var results = await Task.WhenAll(first, second);
+            Assert.All(results, item => Assert.Equal(2, item.ActiveVersion));
+
+            var stored = await instances.FindCompatibilityAsync("examiner");
+            Assert.NotNull(stored);
+            Assert.Equal(2, stored.ActiveVersion);
+        });
+    }
+
+    [Fact]
+    public async Task Concurrent_compatibility_forward_align_mixed_targets_reaches_highest_version()
+    {
+        await ForEachStore(async (sessions, instances, clock) =>
+        {
+            var definitions = new VersionedDefinitions(V1(), V2(), V3());
+            var service = Service(instances, definitions, sessions, clock, 4);
+            var now = clock.GetUtcNow();
+            await instances.InsertAsync(
+                new AgentInstance(
+                    AgentInstance.CompatibilityFor("examiner"),
+                    "examiner",
+                    1,
+                    V1().Identity,
+                    AgentInstanceLifecycle.Active,
+                    now,
+                    now,
+                    Compatibility: true));
+
+            var v2 = V2();
+            var v3 = V3();
+            var toV2 = service.ResolveCompatibilityAsync(v2).AsTask();
+            var toV3 = service.ResolveCompatibilityAsync(v3).AsTask();
+            var results = await Task.WhenAll(toV2, toV3);
+            Assert.All(results, item => Assert.True(item.ActiveVersion >= 2));
+
+            var stored = await instances.FindCompatibilityAsync("examiner");
+            Assert.NotNull(stored);
+            Assert.Equal(3, stored.ActiveVersion);
+        });
+    }
+
+    [Fact]
     public async Task Backfill_assigns_one_compatibility_instance_without_rewriting_history()
     {
         await ForEachStore(async (sessions, instances, clock) =>
@@ -248,6 +311,14 @@ public sealed class AgentInstanceTests
             Version = 2,
             SystemInstructions = SampleDefinitions.Examiner.SystemInstructions + "\nV2_MARKER",
             Identity = SampleDefinitions.Examiner.Identity with { Tone = "v2 tone" }
+        };
+
+    private static AgentDefinition V3() =>
+        V2() with
+        {
+            Version = 3,
+            SystemInstructions = V2().SystemInstructions + "\nV3_MARKER",
+            Identity = V2().Identity with { Tone = "v3 tone" }
         };
 
     private static AgentDefinition SupportPersona(string tone) =>

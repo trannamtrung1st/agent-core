@@ -119,6 +119,12 @@ public sealed class AdminReadServiceTests
             DateTimeOffset updatedAt,
             CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
+
+        public ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(instance);
     }
 
     private sealed class EmptyAdminDefinitionStore : IAgentDefinitionAdminStore

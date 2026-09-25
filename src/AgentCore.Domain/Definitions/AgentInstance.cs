@@ -5,7 +5,8 @@ namespace AgentCore.Domain.Definitions;
 
 public enum AgentInstanceLifecycle
 {
-    Active
+    Active,
+    Archived
 }
 
 public sealed record AgentInstance(
@@ -16,7 +17,9 @@ public sealed record AgentInstance(
     AgentInstanceLifecycle Lifecycle,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    bool Compatibility)
+    bool Compatibility,
+    long Revision = 1,
+    long PersonaRevision = 1)
 {
     public static Guid CompatibilityFor(string definitionId)
     {
