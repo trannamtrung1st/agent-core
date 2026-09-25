@@ -31,7 +31,9 @@ describe("startManagedPublicationChat", () => {
       definitionId: "examiner",
       activeVersion: 2,
       compatibility: false,
-      lifecycle: "Active"
+      lifecycle: "Active",
+      revision: 1,
+      personaRevision: 1
     });
     vi.mocked(createSessionForInstance).mockResolvedValue({
       sessionId: "019944af-00d1-7000-8000-000000000002",

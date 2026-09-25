@@ -50,6 +50,8 @@ internal static class AdminEffectiveConfigurationResolver
             DefinitionStatus: definitionStatus,
             InstanceId: instance.InstanceId,
             InstanceLifecycle: instance.Lifecycle.ToString(),
+            InstanceRevision: instance.Revision,
+            PersonaRevision: instance.PersonaRevision,
             Compatibility: instance.Compatibility,
             Persona: instance.Persona,
             ProviderPreferences: definition.ProviderPreferences,

@@ -39,6 +39,8 @@ internal static class AdminHttpMapping
             config.DefinitionStatus,
             config.InstanceId.ToString("D"),
             config.InstanceLifecycle,
+            config.InstanceRevision,
+            config.PersonaRevision,
             config.Compatibility,
             ToPersona(config.Persona),
             ToProviderPreferences(config.ProviderPreferences),

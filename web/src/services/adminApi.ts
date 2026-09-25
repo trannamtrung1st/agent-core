@@ -26,6 +26,8 @@ export type AdminEffectiveConfiguration = {
   definitionStatus: string;
   instanceId: string;
   instanceLifecycle: string;
+  instanceRevision: number;
+  personaRevision: number;
   compatibility: boolean;
   persona: { name: string; role: string; description: string; tone: string };
   providerPreferences: {
@@ -233,7 +235,81 @@ export type AdminAgentInstance = {
   activeVersion: number;
   compatibility: boolean;
   lifecycle: string;
+  revision: number;
+  personaRevision: number;
 };
+
+export type AdminPersonaUpdate = {
+  expectedRevision: number;
+  expectedPersonaRevision: number;
+  name: string;
+  role: string;
+  description: string;
+  tone: string;
+};
+
+function instanceMutationConflictMessage(status: number): string | null {
+  return status === 409 ? "Instance revision conflict — reload and try again." : null;
+}
+
+export async function updateAdminAgentInstancePersona(
+  instanceId: string,
+  update: AdminPersonaUpdate
+): Promise<AdminAgentInstance> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/persona`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update)
+  });
+  const conflict = instanceMutationConflictMessage(response.status);
+  if (conflict) {
+    throw new Error(conflict);
+  }
+  if (!response.ok) {
+    throw new Error(`Admin persona update failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAgentInstance;
+}
+
+export async function updateAdminAgentInstanceLifecycle(
+  instanceId: string,
+  expectedRevision: number,
+  lifecycle: "Active" | "Archived"
+): Promise<AdminAgentInstance> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/lifecycle`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision, lifecycle })
+  });
+  const conflict = instanceMutationConflictMessage(response.status);
+  if (conflict) {
+    throw new Error(conflict);
+  }
+  if (!response.ok) {
+    throw new Error(`Admin lifecycle update failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAgentInstance;
+}
+
+export async function updateAdminAgentInstanceActiveVersion(
+  instanceId: string,
+  expectedRevision: number,
+  version: number
+): Promise<AdminAgentInstance> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/active-version`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision, version })
+  });
+  const conflict = instanceMutationConflictMessage(response.status);
+  if (conflict) {
+    throw new Error(conflict);
+  }
+  if (!response.ok) {
+    throw new Error(`Admin version update failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAgentInstance;
+}
 
 export async function listAdminDraftResources(draftId: string): Promise<AdminDefinitionDraftResource[]> {
   const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/resources`);

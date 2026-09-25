@@ -5,9 +5,11 @@ import {
   Button,
   Descriptions,
   Flex,
+  Form,
   Input,
   Layout,
   List,
+  Popconfirm,
   Result,
   Select,
   Spin,
@@ -46,9 +48,20 @@ import {
   publishAdminDefinitionDraft,
   removeAdminDraftResource,
   updateAdminDefinitionDraft,
+  updateAdminAgentInstanceActiveVersion,
+  updateAdminAgentInstanceLifecycle,
+  updateAdminAgentInstancePersona,
   uploadAdminDraftResourceContent,
   upsertAdminDraftResource
 } from "../../services/adminApi";
+import {
+  buildInstanceVersionOptions,
+  isPersonaDraftDirty,
+  parsePersonaJson,
+  syncPersonaOnTabChange,
+  UNSAVED_PERSONA_DISCARD_MESSAGE,
+  type PersonaFields
+} from "./instanceManagedControls";
 import {
   adminDefinitionPath,
   adminHomePath,
@@ -207,6 +220,10 @@ export function AdminApp({ route }: { route: AdminRoute }) {
             effective={effectiveConfig}
             onBack={() => navigateToAppPath(adminHomePath())}
             onRetryEffective={() => void reloadEffectiveConfig(route.instanceId)}
+            onInstanceChanged={() => {
+              void reloadEffectiveConfig(route.instanceId);
+              void reloadInstances();
+            }}
           />
         ) : null}
       </Content>
@@ -1064,13 +1081,15 @@ function InstanceDetail({
   instances,
   effective,
   onBack,
-  onRetryEffective
+  onRetryEffective,
+  onInstanceChanged
 }: {
   instanceId: string;
   instances: LoadState<AdminInstanceInventoryItem[]>;
   effective: LoadState<AdminEffectiveConfiguration>;
   onBack: () => void;
   onRetryEffective: () => void;
+  onInstanceChanged: () => void;
 }) {
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
@@ -1095,12 +1114,341 @@ function InstanceDetail({
           action={<Button size="small" onClick={onRetryEffective}>Retry</Button>}
         />
       ) : null}
-      {effective.kind === "ready" ? <EffectiveConfigView config={effective.data} /> : null}
+      {effective.kind === "ready" && !effective.data.compatibility ? (
+        <InstanceManagedControls config={effective.data} onUpdated={onInstanceChanged} />
+      ) : null}
+      {effective.kind === "ready" ? (
+        <EffectiveConfigView config={effective.data} hidePersona={!effective.data.compatibility} />
+      ) : null}
     </Flex>
   );
 }
 
-export function EffectiveConfigView({ config }: { config: AdminEffectiveConfiguration }) {
+export function InstanceManagedControls({
+  config,
+  onUpdated
+}: {
+  config: AdminEffectiveConfiguration;
+  onUpdated: () => void;
+}) {
+  const { message } = App.useApp();
+  const [busy, setBusy] = useState(false);
+  const [personaTab, setPersonaTab] = useState("form");
+  const [persona, setPersona] = useState<PersonaFields>(() => ({ ...config.persona }));
+  const [personaJsonDraft, setPersonaJsonDraft] = useState(() =>
+    JSON.stringify(config.persona, null, 2)
+  );
+  const [personaJsonError, setPersonaJsonError] = useState<string | null>(null);
+  const [definitionInventory, setDefinitionInventory] = useState<AdminDefinitionInventoryItem[]>([]);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
+  const [publicationsError, setPublicationsError] = useState<string | null>(null);
+  const [targetVersion, setTargetVersion] = useState(config.definitionVersion);
+
+  useEffect(() => {
+    setPersona({ ...config.persona });
+    setPersonaJsonDraft(JSON.stringify(config.persona, null, 2));
+    setPersonaJsonError(null);
+    setTargetVersion(config.definitionVersion);
+  }, [
+    config.instanceRevision,
+    config.personaRevision,
+    config.definitionVersion,
+    config.persona.name,
+    config.persona.role,
+    config.persona.description,
+    config.persona.tone
+  ]);
+
+  useEffect(() => {
+    setInventoryError(null);
+    void listAdminDefinitions()
+      .then((items) => setDefinitionInventory(items))
+      .catch((error) => {
+        setDefinitionInventory([]);
+        setInventoryError(error instanceof Error ? error.message : "Definition inventory unavailable.");
+      });
+  }, []);
+
+  useEffect(() => {
+    setPublicationsError(null);
+    void listAdminDefinitionPublications(config.definitionId)
+      .then((items) => setPublications(items))
+      .catch((error) => {
+        setPublications([]);
+        setPublicationsError(error instanceof Error ? error.message : "Publications unavailable.");
+      });
+  }, [config.definitionId]);
+
+  const handlePersonaTabChange = (nextTab: string) => {
+    const synced = syncPersonaOnTabChange(personaTab, nextTab, persona, personaJsonDraft);
+    if (!synced.ok) {
+      setPersonaJsonError(synced.error);
+      message.error(synced.error);
+      return;
+    }
+    setPersona(synced.persona);
+    setPersonaJsonDraft(synced.personaJsonDraft);
+    setPersonaJsonError(null);
+    setPersonaTab(nextTab);
+  };
+
+  const resolvePersonaForSave = (): PersonaFields | null => {
+    if (personaTab === "form") {
+      return persona;
+    }
+    try {
+      const parsed = parsePersonaJson(personaJsonDraft);
+      setPersona(parsed);
+      setPersonaJsonError(null);
+      return parsed;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Invalid persona JSON.";
+      setPersonaJsonError(text);
+      message.error(text);
+      return null;
+    }
+  };
+
+  const handleMutationError = (error: unknown) => {
+    const text = error instanceof Error ? error.message : "Update failed.";
+    message.error(text);
+    if (text.includes("reload")) {
+      onUpdated();
+    }
+  };
+
+  const savePersona = async () => {
+    const nextPersona = resolvePersonaForSave();
+    if (!nextPersona) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateAdminAgentInstancePersona(config.instanceId, {
+        expectedRevision: config.instanceRevision,
+        expectedPersonaRevision: config.personaRevision,
+        ...nextPersona
+      });
+      message.success("Persona updated.");
+      onUpdated();
+    } catch (error) {
+      handleMutationError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setLifecycle = async (lifecycle: "Active" | "Archived") => {
+    setBusy(true);
+    try {
+      await updateAdminAgentInstanceLifecycle(config.instanceId, config.instanceRevision, lifecycle);
+      message.success(lifecycle === "Archived" ? "Instance archived." : "Instance unarchived.");
+      onUpdated();
+    } catch (error) {
+      handleMutationError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyVersion = async () => {
+    if (targetVersion === config.definitionVersion) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateAdminAgentInstanceActiveVersion(
+        config.instanceId,
+        config.instanceRevision,
+        targetVersion
+      );
+      message.success(`Active version set to v${targetVersion}.`);
+      onUpdated();
+    } catch (error) {
+      handleMutationError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const versionOptions = buildInstanceVersionOptions(
+    config.definitionId,
+    config.definitionVersion,
+    definitionInventory,
+    publications
+  );
+
+  const personaDirty = isPersonaDraftDirty(
+    config.persona,
+    personaTab,
+    persona,
+    personaJsonDraft
+  );
+
+  return (
+    <Flex vertical gap={16} aria-label="Managed instance controls">
+      <section aria-label="Persona editor">
+        <Typography.Title level={5}>Persona</Typography.Title>
+        <Typography.Text type="secondary">
+          Revisions {config.instanceRevision} / persona {config.personaRevision}
+        </Typography.Text>
+        <Tabs
+          activeKey={personaTab}
+          onChange={handlePersonaTabChange}
+          style={{ marginTop: 8 }}
+          items={[
+            {
+              key: "form",
+              label: "Form",
+              children: (
+                <Form layout="vertical" disabled={busy}>
+                  <Form.Item label="Name">
+                    <Input
+                      aria-label="Persona name"
+                      value={persona.name}
+                      onChange={(event) => setPersona({ ...persona, name: event.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Role">
+                    <Input
+                      aria-label="Persona role"
+                      value={persona.role}
+                      onChange={(event) => setPersona({ ...persona, role: event.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Description">
+                    <Input.TextArea
+                      aria-label="Persona description"
+                      rows={3}
+                      value={persona.description}
+                      onChange={(event) => setPersona({ ...persona, description: event.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Tone">
+                    <Input
+                      aria-label="Persona tone"
+                      value={persona.tone}
+                      onChange={(event) => setPersona({ ...persona, tone: event.target.value })}
+                    />
+                  </Form.Item>
+                </Form>
+              )
+            },
+            {
+              key: "json",
+              label: "JSON",
+              children: (
+                <Flex vertical gap={8}>
+                  <Input.TextArea
+                    aria-label="Persona JSON"
+                    rows={8}
+                    value={personaJsonDraft}
+                    onChange={(event) => {
+                      setPersonaJsonDraft(event.target.value);
+                      setPersonaJsonError(null);
+                    }}
+                  />
+                  {personaJsonError ? <Typography.Text type="danger">{personaJsonError}</Typography.Text> : null}
+                </Flex>
+              )
+            }
+          ]}
+        />
+        <Button type="primary" onClick={() => void savePersona()} disabled={busy} style={{ marginTop: 8 }}>
+          Save persona
+        </Button>
+        {personaDirty ? (
+          <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+            Unsaved persona edits — save before other changes, or confirm discard on archive, unarchive, or version
+            apply.
+          </Typography.Text>
+        ) : null}
+      </section>
+      <section aria-label="Lifecycle controls">
+        <Typography.Title level={5}>Lifecycle</Typography.Title>
+        <Flex gap={8} wrap="wrap">
+          {config.instanceLifecycle === "Active" ? (
+            <Popconfirm
+              title="Archive this managed instance?"
+              description={
+                personaDirty
+                  ? `New chats and triggered work will stop until you unarchive. ${UNSAVED_PERSONA_DISCARD_MESSAGE}`
+                  : "New chats and triggered work will stop until you unarchive."
+              }
+              onConfirm={() => void setLifecycle("Archived")}
+              okText="Archive"
+              cancelText="Cancel"
+            >
+              <Button danger disabled={busy}>
+                Archive instance
+              </Button>
+            </Popconfirm>
+          ) : personaDirty ? (
+            <Popconfirm
+              title="Unarchive with unsaved persona?"
+              description={UNSAVED_PERSONA_DISCARD_MESSAGE}
+              onConfirm={() => void setLifecycle("Active")}
+              okText="Unarchive anyway"
+              cancelText="Cancel"
+            >
+              <Button disabled={busy}>Unarchive instance</Button>
+            </Popconfirm>
+          ) : (
+            <Button disabled={busy} onClick={() => void setLifecycle("Active")}>
+              Unarchive instance
+            </Button>
+          )}
+        </Flex>
+      </section>
+      <section aria-label="Active version">
+        <Typography.Title level={5}>Active version</Typography.Title>
+        {inventoryError ? (
+          <Alert type="warning" showIcon message={inventoryError} style={{ marginBottom: 8 }} />
+        ) : null}
+        {publicationsError ? (
+          <Alert type="warning" showIcon message={publicationsError} style={{ marginBottom: 8 }} />
+        ) : null}
+        <Flex gap={8} wrap="wrap" align="center">
+          <Select
+            aria-label="Target definition version"
+            style={{ minWidth: 200 }}
+            value={targetVersion}
+            options={versionOptions}
+            onChange={setTargetVersion}
+            disabled={busy}
+          />
+          {personaDirty ? (
+            <Popconfirm
+              title="Apply version with unsaved persona?"
+              description={UNSAVED_PERSONA_DISCARD_MESSAGE}
+              onConfirm={() => void applyVersion()}
+              okText="Apply anyway"
+              cancelText="Cancel"
+            >
+              <Button disabled={busy || targetVersion === config.definitionVersion}>Apply version</Button>
+            </Popconfirm>
+          ) : (
+            <Button
+              onClick={() => void applyVersion()}
+              disabled={busy || targetVersion === config.definitionVersion}
+            >
+              Apply version
+            </Button>
+          )}
+        </Flex>
+      </section>
+    </Flex>
+  );
+}
+
+export function EffectiveConfigView({
+  config,
+  hidePersona = false
+}: {
+  config: AdminEffectiveConfiguration;
+  hidePersona?: boolean;
+}) {
   const trigger = config.triggerPolicy;
   return (
     <Flex vertical gap={20}>
@@ -1118,15 +1466,17 @@ export function EffectiveConfigView({ config }: { config: AdminEffectiveConfigur
           <Descriptions.Item label="Compatibility mode">{config.compatibility ? "Yes" : "No"}</Descriptions.Item>
         </Descriptions>
       </section>
-      <section aria-label="Persona">
-        <Typography.Title level={5}>Persona</Typography.Title>
-        <Descriptions bordered size="small" column={1}>
-          <Descriptions.Item label="Name">{config.persona.name}</Descriptions.Item>
-          <Descriptions.Item label="Role">{config.persona.role}</Descriptions.Item>
-          <Descriptions.Item label="Description">{config.persona.description}</Descriptions.Item>
-          <Descriptions.Item label="Tone">{config.persona.tone}</Descriptions.Item>
-        </Descriptions>
-      </section>
+      {hidePersona ? null : (
+        <section aria-label="Persona">
+          <Typography.Title level={5}>Persona</Typography.Title>
+          <Descriptions bordered size="small" column={1}>
+            <Descriptions.Item label="Name">{config.persona.name}</Descriptions.Item>
+            <Descriptions.Item label="Role">{config.persona.role}</Descriptions.Item>
+            <Descriptions.Item label="Description">{config.persona.description}</Descriptions.Item>
+            <Descriptions.Item label="Tone">{config.persona.tone}</Descriptions.Item>
+          </Descriptions>
+        </section>
+      )}
       <section aria-label="Runtime model">
         <Typography.Title level={5}>Runtime model</Typography.Title>
         <Descriptions bordered size="small" column={1}>

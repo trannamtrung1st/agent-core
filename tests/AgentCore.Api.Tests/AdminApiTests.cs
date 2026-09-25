@@ -90,6 +90,8 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Equal("examiner", managedConfig.DefinitionId);
         Assert.Equal(1, managedConfig.DefinitionVersion);
         Assert.False(managedConfig.Compatibility);
+        Assert.Equal(managed.Revision, managedConfig.InstanceRevision);
+        Assert.Equal(managed.PersonaRevision, managedConfig.PersonaRevision);
         Assert.Equal(managed.Persona.Name, managedConfig.Persona.Name);
 
         var compatibilityConfig = await client.GetFromJsonAsync<AdminEffectiveConfigurationResponse>(

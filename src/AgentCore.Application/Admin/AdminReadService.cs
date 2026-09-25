@@ -193,6 +193,8 @@ public sealed record AdminEffectiveConfiguration(
     string DefinitionStatus,
     Guid InstanceId,
     string InstanceLifecycle,
+    long InstanceRevision,
+    long PersonaRevision,
     bool Compatibility,
     AgentIdentity Persona,
     ProviderPreferences ProviderPreferences,

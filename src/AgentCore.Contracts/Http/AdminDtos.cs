@@ -30,6 +30,8 @@ public sealed record AdminEffectiveConfigurationResponse(
     string DefinitionStatus,
     string InstanceId,
     string InstanceLifecycle,
+    long InstanceRevision,
+    long PersonaRevision,
     bool Compatibility,
     AdminPersonaResponse Persona,
     AdminProviderPreferencesResponse ProviderPreferences,

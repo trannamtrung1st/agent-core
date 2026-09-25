@@ -11,6 +11,8 @@ const sampleEffective: AdminEffectiveConfiguration = {
   definitionStatus: "published",
   instanceId: "019944af-00d1-7000-8000-000000000001",
   instanceLifecycle: "Active",
+  instanceRevision: 1,
+  personaRevision: 1,
   compatibility: true,
   persona: { name: "Alex", role: "Examiner", description: "Practice speaking.", tone: "Supportive" },
   providerPreferences: {
@@ -76,7 +78,10 @@ vi.mock("../../services/adminApi", () => ({
   listAdminToolNames: vi.fn().mockResolvedValue(["workspace.read"]),
   uploadAdminDraftResourceContent: vi.fn(),
   upsertAdminDraftResource: vi.fn(),
-  removeAdminDraftResource: vi.fn()
+  removeAdminDraftResource: vi.fn(),
+  updateAdminAgentInstancePersona: vi.fn(),
+  updateAdminAgentInstanceLifecycle: vi.fn(),
+  updateAdminAgentInstanceActiveVersion: vi.fn()
 }));
 
 import * as antd from "antd";
@@ -92,7 +97,10 @@ import {
   listAdminInstances,
   removeAdminDraftResource,
   publishAdminDefinitionDraft,
-  updateAdminDefinitionDraft
+  updateAdminDefinitionDraft,
+  updateAdminAgentInstanceActiveVersion,
+  updateAdminAgentInstanceLifecycle,
+  updateAdminAgentInstancePersona
 } from "../../services/adminApi";
 
 const instanceId = "019944af-00d1-7000-8000-000000000001";
@@ -633,5 +641,235 @@ describe("AdminApp", () => {
     expect(within(screen.getByLabelText("Instance identity")).getByText("Compatibility / legacy")).toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getByText("Practice speaking.")).toBeInTheDocument();
+  });
+
+  it("saves managed instance persona from the form tab", async () => {
+    const managedEffective = { ...sampleEffective, compatibility: false };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        status: "published",
+        metadataRevision: 1,
+        publishedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(updateAdminAgentInstancePersona).mockResolvedValue({
+      instanceId: managedEffective.instanceId,
+      definitionId: "examiner",
+      activeVersion: 1,
+      compatibility: false,
+      lifecycle: "Active",
+      revision: 2,
+      personaRevision: 2
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Managed instance controls")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save persona" }));
+
+    await waitFor(() => {
+      expect(updateAdminAgentInstancePersona).toHaveBeenCalledWith(managedEffective.instanceId, {
+        expectedRevision: 1,
+        expectedPersonaRevision: 1,
+        name: "Alex",
+        role: "Coach",
+        description: "Practice speaking.",
+        tone: "Supportive"
+      });
+    });
+  });
+
+  it("syncs persona form edits into the JSON tab before save", async () => {
+    const managedEffective = { ...sampleEffective, compatibility: false };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Persona role")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
+
+    await waitFor(() => {
+      const json = screen.getByLabelText("Persona JSON") as HTMLTextAreaElement;
+      expect(json.value).toContain('"role": "Coach"');
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Form" }));
+    expect(screen.getByLabelText("Persona role")).toHaveValue("Coach");
+  });
+
+  it("lists built-in and durable versions for active-version changes", async () => {
+    const managedEffective = { ...sampleEffective, compatibility: false, definitionVersion: 2 };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner v1"
+      },
+      {
+        definitionId: "examiner",
+        version: 2,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner v2"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 3,
+        status: "published",
+        metadataRevision: 1,
+        publishedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Target definition version")).toBeInTheDocument();
+    });
+
+    fireEvent.mouseDown(screen.getByLabelText("Target definition version"));
+    await waitFor(() => {
+      expect(screen.getByText("v1 (builtIn · published)")).toBeInTheDocument();
+      expect(screen.getByText("v3 (published)")).toBeInTheDocument();
+    });
+  });
+
+  it("warns before archive when persona form has unsaved edits", async () => {
+    const managedEffective = { ...sampleEffective, compatibility: false };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(updateAdminAgentInstanceLifecycle).mockResolvedValue({
+      instanceId: managedEffective.instanceId,
+      definitionId: "examiner",
+      activeVersion: 1,
+      compatibility: false,
+      lifecycle: "Archived",
+      revision: 2,
+      personaRevision: 1
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Persona role")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
+    fireEvent.click(screen.getByRole("button", { name: "Archive instance" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(updateAdminAgentInstanceLifecycle).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Archive instance" }));
+    const confirmButtons = screen.getAllByRole("button", { name: "Archive" });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]!);
+
+    await waitFor(() => {
+      expect(updateAdminAgentInstanceLifecycle).toHaveBeenCalledWith(
+        managedEffective.instanceId,
+        1,
+        "Archived"
+      );
+    });
+  });
+
+  it("warns before apply version when JSON persona draft is dirty", async () => {
+    const managedEffective = { ...sampleEffective, compatibility: false, definitionVersion: 1 };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner v1"
+      },
+      {
+        definitionId: "examiner",
+        version: 2,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner v2"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(updateAdminAgentInstanceActiveVersion).mockResolvedValue({
+      instanceId: managedEffective.instanceId,
+      definitionId: "examiner",
+      activeVersion: 2,
+      compatibility: false,
+      lifecycle: "Active",
+      revision: 2,
+      personaRevision: 1
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "JSON" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Persona JSON")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText("Persona JSON"), {
+      target: { value: '{"name":"Alex","role":"Coach","description":"Practice speaking.","tone":"Supportive"}' }
+    });
+    fireEvent.mouseDown(screen.getByLabelText("Target definition version"));
+    await waitFor(() => {
+      expect(screen.getByText("v2 (builtIn · published)")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("v2 (builtIn · published)"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply version" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
+
+    await waitFor(() => {
+      expect(updateAdminAgentInstanceActiveVersion).toHaveBeenCalledWith(managedEffective.instanceId, 1, 2);
+    });
   });
 });
