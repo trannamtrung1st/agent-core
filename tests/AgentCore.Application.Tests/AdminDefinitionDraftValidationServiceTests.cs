@@ -74,8 +74,6 @@ public sealed class AdminDefinitionDraftValidationServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            TestModelCatalogs.Synthetic(),
-            ToolConfigurationGates.AllowAll,
             clock);
         var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
         return new AgentDefinitionDraftValidationService(

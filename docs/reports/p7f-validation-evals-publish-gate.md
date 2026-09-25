@@ -8,12 +8,15 @@
 
 **Resource-validation batch:** `c1c85c5d88440cd0bcc26769ecee8ddd32573d97` (review-0032 / review 0091 PASS)
 
+**Semantic-diff batch:** `71fcc9a87fbfeda3f676e9d2697935feaa2cfcb3` (review-0033 / review 0093 PASS)
+
 ## Scope delivered (observed, partial)
 
 - `AgentDefinitionDraftValidationService` exposes resolved publication validation as structured blocking findings (domain shape, provider aliases, secrets, model catalog, tools, draft knowledge/template resource bindings) with revision recheck after resource listing (409 when draft changes mid-validation).
 - Owner-protected Admin HTTP: `POST /api/v2/admin/definition-drafts/{draftId}/validate` (`docs/14` route table).
 - `AgentDefinitionDraftDiffService` and `GET .../definition-drafts/{draftId}/diff` with safe grouped sections against fork baseline, explicit policy/identity formatters, new-draft Added sections, and revision recheck after resource listing (409 on concurrent edit).
-- Tests: `AdminDefinitionDraftDiffServiceTests`, `AdminApiTests.Admin_definition_draft_validate_*`, `Admin_definition_draft_diff_*`.
+- `AgentDefinitionDraftPublishService` is the sole application publish command; lifecycle `CommitDraftPublicationAsync` is internal. HTTP `POST .../publish` runs resolved validation (resource bindings included), exact expected revision, and post-validation revision recheck (409 on stale revision).
+- Tests: `AdminDefinitionDraftDiffServiceTests`, `AdminDefinitionDraftPublishServiceTests`, `AdminApiTests.Admin_definition_draft_validate_*`, `Admin_definition_draft_diff_*`, `Admin_definition_draft_publish_*`.
 
 ## W06 verification (partial)
 
@@ -22,7 +25,9 @@
 | Draft validate API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_validate` | Pass (4) at resource batch HEAD |
 | Draft diff API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_diff` | Pass (3) at current W06 HEAD |
 | Draft diff service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftDiffServiceTests` | Pass (3) at current W06 HEAD |
+| Publish gate service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftPublishServiceTests` | Pass (3) at current W06 HEAD |
+| Draft publish API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_publish` | Pass at current W06 HEAD |
 
 ## Remaining (W06)
 
-- Granular field/code findings, evaluation scenarios, fingerprint evidence, safe diff, exact-revision publish hardening, UI steps, and full gate matrix per frozen P7F contract.
+- Evaluation scenarios, fingerprint evidence, Synthetic runner, required-eval blocking, UI steps, and full gate matrix per frozen P7F contract.

@@ -84,8 +84,6 @@ public sealed class AdminDefinitionDraftDiffServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            TestModelCatalogs.Synthetic(),
-            ToolConfigurationGates.AllowAll,
             clock);
         var forked = await lifecycle.ForkDraftAsync(
             "examiner",
@@ -122,8 +120,6 @@ public sealed class AdminDefinitionDraftDiffServiceTests
             builtIns,
             admin,
             SyntheticProviderAliases.Default,
-            TestModelCatalogs.Synthetic(),
-            ToolConfigurationGates.AllowAll,
             clock);
         var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
         return new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);

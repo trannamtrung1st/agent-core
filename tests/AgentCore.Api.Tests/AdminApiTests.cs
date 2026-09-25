@@ -632,6 +632,58 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_publish_rejects_missing_knowledge_resource_binding()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with
+        {
+            Environment = (candidate.Environment ?? RoleEnvironment.Empty) with
+            {
+                KnowledgeSources =
+                [
+                    new KnowledgeSourceRef("policy", "Policy", "Internal policy reference")
+                ]
+            }
+        };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(updated.Revision));
+        Assert.Equal(HttpStatusCode.BadRequest, publish.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_publish_rejects_stale_expected_revision()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with { SystemInstructions = "Revision bump for publish gate." };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var publish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(draft.Revision));
+        Assert.Equal(HttpStatusCode.Conflict, publish.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_validate_reports_unsupported_reasoning_effort_for_known_model()
     {
         var client = OwnerClient();

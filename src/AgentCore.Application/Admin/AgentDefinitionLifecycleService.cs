@@ -9,8 +9,6 @@ public sealed class AgentDefinitionLifecycleService(
     IBuiltInAgentDefinitionStore builtIns,
     IAgentDefinitionAdminStore admin,
     ProviderAliasSet aliases,
-    IModelCatalog catalog,
-    IToolConfigurationGate configurationGate,
     TimeProvider time)
 {
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
@@ -77,17 +75,17 @@ public sealed class AgentDefinitionLifecycleService(
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask<AgentDefinitionPublication> PublishDraftAsync(
+    internal async ValueTask<AgentDefinitionPublication> CommitDraftPublicationAsync(
         Guid draftId,
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        AgentDefinitionCandidateValidator.ValidateForPublication(
-            draft.Candidate,
-            aliases,
-            catalog,
-            configurationGate);
+        if (draft.Revision != expectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+
         var occupied = await GetOccupiedVersionsAsync(draft.DefinitionId, cancellationToken).ConfigureAwait(false);
         return await admin.PublishDraftAsync(
             new AgentDefinitionDraftPublish(draftId, expectedRevision, occupied, time.GetUtcNow()),

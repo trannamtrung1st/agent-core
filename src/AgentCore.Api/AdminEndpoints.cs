@@ -529,12 +529,12 @@ internal static class AdminEndpoints
         group.MapPost("/definition-drafts/{draftId:guid}/publish", async (
             Guid draftId,
             AdminPublishDefinitionDraftRequest request,
-            AgentDefinitionLifecycleService lifecycle,
+            AgentDefinitionDraftPublishService publish,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                var publication = await lifecycle.PublishDraftAsync(
+                var publication = await publish.PublishDraftAsync(
                         draftId,
                         request.ExpectedRevision,
                         cancellationToken)
