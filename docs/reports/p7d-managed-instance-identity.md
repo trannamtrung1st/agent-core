@@ -4,7 +4,7 @@
 
 **Baseline:** `e25cd4650699ae4ec1e7ddff8a06abcfbde53567` (post-P7C W03 gate)
 
-**Gate HEAD:** `faac25ca29a6d35fafa89dc989a3e57ec8d44154` (W04 slice gate documentation on product `cad4dab`)
+**Gate HEAD:** `fcd1c5ebe7161aca2c749d596d24a73414939d73` (W04 slice gate documentation on product `cad4dab`)
 
 **Review ranges (incremental):** storage/API foundation `0e1621b`; lifecycle/persona admin APIs `6b615ce`; pinned persona revision `acf28f2`; Admin managed controls `2f55fe9`; managed new-chat inventory `90ced7c`; archive admission tests `07ae0ce`; P7D Playwright + `session.ready` pinned persona `cad4dab`
 
