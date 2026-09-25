@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  completeDefinitionDraftPublishGate,
+  publishDraftFromInstructions
+} from "./admin-definition-gate-helpers";
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]");
@@ -75,10 +79,8 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await draftsSection.getByRole("button", { name: "Upload and bind" }).click();
   await expect(draftsSection.getByText(resourcePath)).toBeVisible({ timeout: 15_000 });
 
-  await draftsSection.getByRole("tab", { name: "Instructions" }).click();
-  await draftsSection.getByRole("button", { name: "Publish…" }).click();
-  const modal = page.getByRole("dialog");
-  await modal.getByRole("button", { name: "Publish" }).click();
+  await completeDefinitionDraftPublishGate(page, draftsSection);
+  await publishDraftFromInstructions(page, draftsSection);
   const publishedToast = page.getByText(/Published version \d+/);
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];

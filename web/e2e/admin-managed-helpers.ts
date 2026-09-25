@@ -1,4 +1,8 @@
 import { expect, type Page } from "@playwright/test";
+import {
+  completeDefinitionDraftPublishGate,
+  publishDraftFromInstructions
+} from "./admin-definition-gate-helpers";
 
 export type SessionView = {
   sessionId: string;
@@ -37,9 +41,8 @@ export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
   await draftsSection.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
-  await draftsSection.getByRole("button", { name: "Publish…" }).click();
-  const modal = page.getByRole("dialog");
-  await modal.getByRole("button", { name: "Publish" }).click();
+  await completeDefinitionDraftPublishGate(page, draftsSection);
+  await publishDraftFromInstructions(page, draftsSection);
   const publishedToast = page.getByText(/Published version \d+/);
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];

@@ -81,7 +81,11 @@ vi.mock("../../services/adminApi", () => ({
   removeAdminDraftResource: vi.fn(),
   updateAdminAgentInstancePersona: vi.fn(),
   updateAdminAgentInstanceLifecycle: vi.fn(),
-  updateAdminAgentInstanceActiveVersion: vi.fn()
+  updateAdminAgentInstanceActiveVersion: vi.fn(),
+  validateAdminDefinitionDraft: vi.fn(),
+  getAdminDefinitionDraftDiff: vi.fn(),
+  listAdminDefinitionEvaluationScenarios: vi.fn(),
+  listAdminDefinitionEvaluationResults: vi.fn()
 }));
 
 import * as antd from "antd";
@@ -100,7 +104,11 @@ import {
   updateAdminDefinitionDraft,
   updateAdminAgentInstanceActiveVersion,
   updateAdminAgentInstanceLifecycle,
-  updateAdminAgentInstancePersona
+  updateAdminAgentInstancePersona,
+  validateAdminDefinitionDraft,
+  getAdminDefinitionDraftDiff,
+  listAdminDefinitionEvaluationScenarios,
+  listAdminDefinitionEvaluationResults
 } from "../../services/adminApi";
 
 const instanceId = "019944af-00d1-7000-8000-000000000001";
@@ -238,6 +246,22 @@ describe("AdminApp", () => {
       metadataRevision: 1,
       publishedAt: "2026-01-02T00:00:00Z"
     });
+    vi.mocked(validateAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      draftRevision: 3,
+      configurationFingerprint: "fp-3",
+      hasBlockingFindings: false,
+      findings: []
+    });
+    vi.mocked(getAdminDefinitionDraftDiff).mockResolvedValue({
+      draftId,
+      draftRevision: 3,
+      baselineKind: "ForkBuiltIn",
+      baselineVersion: 1,
+      sections: []
+    });
+    vi.mocked(listAdminDefinitionEvaluationScenarios).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionEvaluationResults).mockResolvedValue([]);
     vi.spyOn(antd.App, "useApp").mockReturnValue({
       message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
       modal: {
@@ -261,7 +285,7 @@ describe("AdminApp", () => {
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Visible publish body" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
         draftId,
@@ -269,7 +293,32 @@ describe("AdminApp", () => {
         expect.objectContaining({ systemInstructions: "Visible publish body" })
       );
     });
-    expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 3,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner" }
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Run validation" })).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run validation" }));
+    await waitFor(() => {
+      expect(validateAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Instructions" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Publish…" })).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    await waitFor(() => {
+      expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
+    });
   });
 
   it("preserves unsaved instructions after a resource mutation", async () => {

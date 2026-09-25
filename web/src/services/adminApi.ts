@@ -195,9 +195,154 @@ export async function publishAdminDefinitionDraft(
     body: JSON.stringify({ expectedRevision })
   });
   if (!response.ok) {
-    throw new Error(`Admin publish draft failed (${response.status})`);
+    throw new Error(await adminProblemMessage(response, `Admin publish draft failed (${response.status})`));
   }
   return (await response.json()) as AdminDefinitionPublicationSummary;
+}
+
+export type AdminDefinitionValidationFinding = {
+  field: string;
+  code: string;
+  message: string;
+  severity: string;
+};
+
+export type AdminDefinitionDraftValidation = {
+  draftId: string;
+  draftRevision: number;
+  configurationFingerprint: string;
+  hasBlockingFindings: boolean;
+  findings: AdminDefinitionValidationFinding[];
+};
+
+export async function validateAdminDefinitionDraft(
+  draftId: string
+): Promise<AdminDefinitionDraftValidation> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/validate`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin validate draft failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionDraftValidation;
+}
+
+export type AdminDefinitionDiffSection = {
+  sectionId: string;
+  label: string;
+  changeKind: string;
+  beforeSummary: string | null;
+  afterSummary: string | null;
+};
+
+export type AdminDefinitionDraftDiff = {
+  draftId: string;
+  draftRevision: number;
+  baselineKind: string;
+  baselineVersion: number | null;
+  sections: AdminDefinitionDiffSection[];
+};
+
+export async function getAdminDefinitionDraftDiff(draftId: string): Promise<AdminDefinitionDraftDiff> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/diff`);
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin draft diff failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionDraftDiff;
+}
+
+export type AdminDefinitionEvaluationScenario = {
+  scenarioId: string;
+  scenarioVersion: number;
+  title: string;
+  prompt: string;
+  requirementLevel: "Required" | "Advisory";
+  checkType: "ToolOffered" | "ToolNotOffered";
+  toolName: string | null;
+  updatedAt: string;
+};
+
+export type AdminDefinitionEvaluationResult = {
+  draftId: string;
+  draftRevision: number;
+  configurationFingerprint: string;
+  scenarioId: string;
+  scenarioVersion: number;
+  runtimeKind: string;
+  passed: boolean;
+  findings: string[];
+  recordedAt: string;
+};
+
+export async function listAdminDefinitionEvaluationScenarios(
+  draftId: string
+): Promise<AdminDefinitionEvaluationScenario[]> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios`);
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin evaluation scenarios failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionEvaluationScenario[];
+}
+
+export async function upsertAdminDefinitionEvaluationScenario(
+  draftId: string,
+  body: {
+    expectedRevision: number;
+    scenarioId: string;
+    title: string;
+    prompt: string;
+    requirementLevel: string;
+    checkType: string;
+    toolName: string | null;
+  }
+): Promise<AdminDefinitionEvaluationScenario> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin upsert evaluation scenario failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionEvaluationScenario;
+}
+
+export async function removeAdminDefinitionEvaluationScenario(
+  draftId: string,
+  scenarioId: string,
+  expectedRevision: number
+): Promise<void> {
+  const response = await ownerFetch(
+    `/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios/${encodeURIComponent(scenarioId)}?expectedRevision=${expectedRevision}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin remove evaluation scenario failed (${response.status})`));
+  }
+}
+
+export async function runAdminDefinitionEvaluationScenario(
+  draftId: string,
+  scenarioId: string
+): Promise<AdminDefinitionEvaluationResult> {
+  const response = await ownerFetch(
+    `/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios/${encodeURIComponent(scenarioId)}/run`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin run evaluation scenario failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionEvaluationResult;
+}
+
+export async function listAdminDefinitionEvaluationResults(
+  draftId: string
+): Promise<AdminDefinitionEvaluationResult[]> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-results`);
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin evaluation results failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionEvaluationResult[];
 }
 
 export async function listAdminDefinitionPublications(

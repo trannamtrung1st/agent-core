@@ -12,6 +12,8 @@
 
 **Publish-gate batch:** `2e2e9818733efd975fd127f8375accbb15fa287c` (review-0034 / review 0095 PASS)
 
+**Evaluation batch:** `312336416138343788dd4285ae12d16b3bd85fc7` (review-0035 / review 0098 PASS)
+
 ## Scope delivered (observed, partial)
 
 - `AgentDefinitionDraftValidationService` exposes resolved publication validation as structured blocking findings (domain shape, provider aliases, secrets, model catalog, tools, draft knowledge/template resource bindings) with revision recheck after resource listing (409 when draft changes mid-validation).
@@ -21,6 +23,7 @@
 - Configuration/resource `configurationFingerprint` on validation; draft evaluation scenarios (`SqliteDefinitionDraftEvaluationStore` with transactional revision bump on Sqlite profile, in-memory store with bump-before-mutate ordering), synthetic offline `ToolOffered`/`ToolNotOffered` runner, evaluation result provenance, and publish blocking when required eval evidence is stale or missing.
 - Admin HTTP: evaluation scenario list/upsert/run/results (`docs/14`).
 - Tests: `AdminDefinitionDraftEvaluationServiceTests`, `AdminDefinitionDraftDiffServiceTests`, `AdminDefinitionDraftPublishServiceTests`, `AdminApiTests` draft validate/diff/publish/evaluation coverage.
+- Admin UI: Test & Publish tab on draft editor (validate, required Synthetic scenario run, safe diff, client publish eligibility aligned with revision/fingerprint evidence).
 
 ## W06 verification (partial)
 
@@ -34,7 +37,12 @@
 | Draft evaluation service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests` | Pass (5) at current W06 HEAD |
 | Draft evaluation store | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~DefinitionDraftEvaluationStoreTests` | Pass (4) at current W06 HEAD |
 | Draft admin API suite | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft` | Pass (25) at current W06 HEAD |
+| Publish gate eligibility | `npm test -- --run src/features/admin/definitionDraftPublishGate.test.ts` (web) | Pass (7) |
+| Publish gate panel evidence load | `npm test -- --run src/features/admin/definitionDraftPublishGatePanel.test.tsx` (web) | Pass (2) |
+| Admin app publish gate wiring | `npm test -- --run src/features/admin/AdminApp.test.tsx` (web) | Pass (17) |
+| Definition lifecycle Playwright | `CI=1 npx playwright test e2e/z-admin-definition-lifecycle.spec.ts` (web) | Pass (validate → eval → diff → publish journey) |
+| Web production build | `npm run build` (web) | Pass |
 
 ## Remaining (W06)
 
-- Additional scenario types and Synthetic matrix, UI Test & Validate / Diff & Publish, Playwright journey, and full gate matrix per frozen P7F contract.
+- Additional scenario types and Synthetic matrix, dependent Admin journeys re-run, and full gate matrix per frozen P7F contract.

@@ -26,6 +26,7 @@ import {
   type DraftEnvironment,
   type DraftKnowledgeSource
 } from "./draftEnvironment";
+import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import {
   type AdminDefinitionDraft,
   type AdminDefinitionDraftResource,
@@ -433,6 +434,10 @@ function DefinitionDetail({
     if (!activeDraft) {
       return;
     }
+    if (dirty) {
+      message.warning("Save draft edits before publishing.");
+      return;
+    }
     modal.confirm({
       title: "Publish this draft?",
       content: dirty
@@ -630,6 +635,11 @@ function DraftEditor({
   const [logicalPath, setLogicalPath] = useState("");
   const [kind, setKind] = useState<(typeof RESOURCE_KINDS)[number]>("Reference");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [publishEligible, setPublishEligible] = useState(false);
+
+  useEffect(() => {
+    setPublishEligible(false);
+  }, [activeDraft.draftId, activeDraft.revision]);
 
   const reloadResources = useCallback(async () => {
     setResourcesLoading(true);
@@ -768,13 +778,17 @@ function DraftEditor({
                   <Button type="primary" onClick={onSave} disabled={busy}>
                     Save draft
                   </Button>
-                  <Button onClick={onPublish} disabled={busy}>
+                  <Button onClick={onPublish} disabled={busy || !publishEligible}>
                     Publish…
                   </Button>
                 </Flex>
                 {dirty ? (
                   <Typography.Text type="secondary">
-                    Unsaved changes — publish will save the visible draft edits first.
+                    Unsaved changes — save before using Test &amp; Publish.
+                  </Typography.Text>
+                ) : !publishEligible ? (
+                  <Typography.Text type="secondary">
+                    Complete Test &amp; Publish (validate and required evaluations) to enable publish.
                   </Typography.Text>
                 ) : null}
               </Flex>
@@ -901,7 +915,7 @@ function DraftEditor({
                   <Button type="primary" onClick={onSave} disabled={busy}>
                     Save draft
                   </Button>
-                  <Button onClick={onPublish} disabled={busy}>
+                  <Button onClick={onPublish} disabled={busy || !publishEligible}>
                     Publish…
                   </Button>
                 </Flex>
@@ -970,6 +984,22 @@ function DraftEditor({
                   />
                 ) : null}
               </Flex>
+            )
+          },
+          {
+            key: "publish-gate",
+            label: "Test & Publish",
+            children: (
+              <DefinitionDraftPublishGatePanel
+                key={activeDraft.draftId}
+                activeDraft={activeDraft}
+                dirty={dirty}
+                busy={busy}
+                toolNames={toolNames}
+                onDraftRevisionChange={(draft) => onDraftRevisionChange(draft)}
+                onError={onError}
+                onEligibilityChange={setPublishEligible}
+              />
             )
           }
         ]}

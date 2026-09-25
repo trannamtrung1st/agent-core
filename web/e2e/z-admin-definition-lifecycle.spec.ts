@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  completeDefinitionDraftPublishGate,
+  publishDraftFromInstructions
+} from "./admin-definition-gate-helpers";
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]");
@@ -43,14 +47,14 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   await instructions.fill(`${prior}\n${marker}`);
 
   await expect(
-    draftsSection.getByText("Unsaved changes — publish will save the visible instructions first.")
+    draftsSection.getByText("Unsaved changes — save before using Test & Publish.")
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Publish…" }).click();
-  const modal = page.getByRole("dialog");
-  await expect(modal).toBeVisible();
-  await expect(modal.getByText(/Unsaved editor changes will be saved/i)).toBeVisible();
-  await modal.getByRole("button", { name: "Publish" }).click();
+  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
+
+  await completeDefinitionDraftPublishGate(page, draftsSection);
+  await publishDraftFromInstructions(page, draftsSection);
 
   const publishedToast = page.getByText(/Published version \d+/);
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
