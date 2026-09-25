@@ -34,6 +34,31 @@ public static class SessionCatalogEndpoints
         app.MapGet("/api/v2/models", (IModelCatalog catalog) => Results.Json(HttpMapping.ToCatalog(catalog)))
             .AddEndpointFilter<OwnerCapabilityFilter>();
 
+        app.MapGet("/api/v2/agent-instances", async (
+            IAgentInstanceService instanceService,
+            SessionManager sessions,
+            CancellationToken cancellationToken) =>
+        {
+            var items = await instanceService.ListChatEligibleAsync(cancellationToken).ConfigureAwait(false);
+            var responses = new List<ChatAgentInstanceResponse>(items.Count);
+            foreach (var item in items)
+            {
+                var agent = await sessions
+                    .GetAgentAsync(item.DefinitionId, item.ActiveVersion, cancellationToken)
+                    .ConfigureAwait(false);
+                responses.Add(new ChatAgentInstanceResponse(
+                    item.InstanceId.ToString("D"),
+                    item.DefinitionId,
+                    item.ActiveVersion,
+                    item.Persona.Name,
+                    item.Persona.Role,
+                    agent.VoiceAvailable,
+                    agent.Language));
+            }
+
+            return Results.Json(new ChatAgentInstanceListResponse(responses));
+        }).AddEndpointFilter<OwnerCapabilityFilter>();
+
         var group = app.MapGroup("/api/v2/sessions").AddEndpointFilter<OwnerCapabilityFilter>();
 
         group.MapGet("", async (

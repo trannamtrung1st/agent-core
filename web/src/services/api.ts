@@ -209,6 +209,25 @@ export function ownerHeaders(token: string): HeadersInit {
   return { "X-AgentCore-Owner-Capability": token };
 }
 
+export type ChatAgentInstance = {
+  instanceId: string;
+  definitionId: string;
+  activeVersion: number;
+  name: string;
+  role: string;
+  voiceAvailable: boolean;
+  language: string;
+};
+
+export async function listChatAgentInstances(): Promise<ChatAgentInstance[]> {
+  const response = await ownerFetch("/api/v2/agent-instances");
+  if (!response.ok) {
+    throw new Error(`Unable to list managed chat instances (${response.status}).`);
+  }
+  const payload = (await response.json()) as { items: ChatAgentInstance[] };
+  return payload.items;
+}
+
 export async function listAgents(): Promise<AgentDescriptor[]> {
   const response = await fetch("/api/v1/agents");
   if (!response.ok) {

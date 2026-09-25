@@ -8,6 +8,7 @@ import {
   unarchiveSession,
   type CatalogItem
 } from "./api";
+import { defaultChatIdentityKey } from "../features/chat/chatIdentity";
 import { useSessionStore, type CatalogMutationKind } from "../state/sessionStore";
 
 function sortCatalogItems(items: CatalogItem[]): CatalogItem[] {
@@ -25,6 +26,10 @@ export function catalogShell() {
   const state = useSessionStore.getState();
   return {
     agents: state.agents,
+    chatAgentInstances: state.chatAgentInstances,
+    chatAgentInstancesError: state.chatAgentInstancesError,
+    chatAgentInstancesLoading: false,
+    newChatIdentityKey: defaultChatIdentityKey(state.chatAgentInstances, state.agents),
     selectedAgentId: state.selectedAgentId,
     modelCatalog: state.modelCatalog,
     modelCatalogDefaultKey: state.modelCatalogDefaultKey,

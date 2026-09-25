@@ -161,6 +161,18 @@ public sealed class AgentInstanceService(
             ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
     }
 
+    public async ValueTask<IReadOnlyList<AgentInstance>> ListChatEligibleAsync(
+        CancellationToken cancellationToken = default)
+    {
+        const int limit = 256;
+        var rows = await instances.ListAsync(limit, cancellationToken).ConfigureAwait(false);
+        return rows
+            .Where(item => !item.Compatibility && item.Lifecycle == AgentInstanceLifecycle.Active)
+            .OrderBy(item => item.Persona.Name, StringComparer.Ordinal)
+            .ThenBy(item => item.InstanceId)
+            .ToArray();
+    }
+
     public async ValueTask BackfillAsync(CancellationToken cancellationToken = default)
     {
         var missing = await sessions.ListMissingInstanceAsync(cancellationToken).ConfigureAwait(false);

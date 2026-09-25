@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { AgentDescriptor, CatalogItem, ModelDescriptor, SessionModelSelection } from "../services/api";
+import type {
+  AgentDescriptor,
+  CatalogItem,
+  ChatAgentInstance,
+  ModelDescriptor,
+  SessionModelSelection
+} from "../services/api";
 import type { PendingAttachment } from "../services/attachments";
 import { sessionErrorFromMessage, sessionErrorFromWire, type SessionErrorView } from "../features/chat/sessionError";
 
@@ -860,6 +866,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
 
 export type SessionStore = SessionView & {
   agents: AgentDescriptor[];
+  chatAgentInstances: ChatAgentInstance[];
+  chatAgentInstancesError: string | null;
+  chatAgentInstancesLoading: boolean;
+  newChatIdentityKey: string;
   selectedAgentId: string;
   modelCatalog: ModelDescriptor[];
   modelCatalogDefaultKey: string | null;
@@ -894,6 +904,10 @@ export const emptyCatalog = () => ({
 export const useSessionStore = create<SessionStore>(() => ({
   ...emptySession(),
   agents: [],
+  chatAgentInstances: [],
+  chatAgentInstancesError: null,
+  chatAgentInstancesLoading: false,
+  newChatIdentityKey: "",
   selectedAgentId: "examiner",
   modelCatalog: [],
   modelCatalogDefaultKey: null,

@@ -1691,6 +1691,25 @@ describe("realtime race handling", () => {
   });
 
   it("surfaces start conversation failures", async () => {
+    useSessionStore.setState({
+      ...emptySession(),
+      agents: [
+        {
+          id: "examiner",
+          version: 1,
+          name: "Alex",
+          role: "Examiner",
+          description: "",
+          voiceAvailable: true,
+          language: "en"
+        }
+      ],
+      chatAgentInstances: [],
+      chatAgentInstancesLoading: false,
+      chatAgentInstancesError: null,
+      newChatIdentityKey: "legacy:examiner",
+      selectedAgentId: "examiner"
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo) => {

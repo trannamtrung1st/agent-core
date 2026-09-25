@@ -278,3 +278,14 @@ public sealed record ArtifactResponse(
     string? SourceAttachmentId,
     string? WorkspaceLogicalPath,
     string CreatedAt);
+
+public sealed record ChatAgentInstanceResponse(
+    string InstanceId,
+    string DefinitionId,
+    int ActiveVersion,
+    string Name,
+    string Role,
+    bool VoiceAvailable,
+    string Language);
+
+public sealed record ChatAgentInstanceListResponse(IReadOnlyList<ChatAgentInstanceResponse> Items);

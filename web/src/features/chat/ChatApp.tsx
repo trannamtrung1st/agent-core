@@ -17,7 +17,8 @@ import {
   requestVoice,
   retryConnection,
   resumePausedSession,
-  selectAgent,
+  reloadChatAgentInstances,
+  selectChatIdentity,
   sendDraft,
   applySpeechLocale,
   applySessionModel,
@@ -27,6 +28,7 @@ import {
   setMuted
 } from "../../services/realtime";
 import { AgentPicker } from "./AgentPicker";
+import { resolveNewChatIdentityPresentation } from "./chatIdentity";
 import { SpeechLocalePicker, speechLocaleSelectValue } from "./SpeechLocalePicker";
 import {
   ModelPicker,
@@ -172,7 +174,11 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
       onEffortChange={changeEffort}
     />
   );
-  const selectedAgent = state.agents.find((agent) => agent.id === state.selectedAgentId) ?? state.agents[0];
+  const newChatIdentity = resolveNewChatIdentityPresentation(
+    state.newChatIdentityKey,
+    state.chatAgentInstances,
+    state.agents
+  );
   const liveAssistant = state.entries.find(
     (entry) => entry.responseId === state.liveResponseId && entry.role === "assistant"
   );
@@ -199,13 +205,13 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const connectionTone = conversationStatusTone(connectionText);
   const failedAlertTitle = readonly && state.error ? state.error : connectionText;
   const sessionFailure = state.sessionError ?? state.error;
-  const agentName = inSession ? state.agentName : selectedAgent?.name ?? "Agent Core";
+  const agentName = inSession ? state.agentName : newChatIdentity?.displayName ?? "Agent Core";
   const composerReady = !readonly
     && state.status !== "paused"
     && (state.connection === "ready" || (!inSession && state.connection === "idle"));
   const voiceAvailable =
     voiceControlEnabled({
-      voiceAvailable: inSession ? state.voiceAvailable : Boolean(selectedAgent?.voiceAvailable),
+      voiceAvailable: inSession ? state.voiceAvailable : Boolean(newChatIdentity?.voiceAvailable),
       inputTransport: state.sttTransport,
       outputTransport: state.ttsTransport,
       recognitionSupported: clientRecognitionSupported(),
@@ -374,7 +380,8 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                           </Typography.Title>
                           <AgentPicker
                             agents={state.agents}
-                            selectedAgentId={state.selectedAgentId}
+                            managedInstances={state.chatAgentInstances}
+                            identityKey={state.newChatIdentityKey}
                             error={state.sessionError ?? state.error}
                             speechLocale={speechLocaleSelectValue(
                               state.speechLocaleSource,
@@ -382,8 +389,11 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                               state.pendingSpeechLocale,
                               false
                             )}
-                            onSelect={selectAgent}
+                            managedInstancesError={state.chatAgentInstancesError}
+                            managedInstancesLoading={state.chatAgentInstancesLoading}
+                            onIdentityChange={selectChatIdentity}
                             onSpeechLocaleChange={(locale) => void applySpeechLocale(locale)}
+                            onRetryManagedInstances={() => void reloadChatAgentInstances()}
                           />
                         </div>
                       )

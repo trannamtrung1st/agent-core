@@ -191,6 +191,32 @@ public sealed class AgentInstanceTests
     }
 
     [Fact]
+    public async Task List_chat_eligible_returns_active_managed_instances_only()
+    {
+        var sessions = new InMemoryMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var clock = new FakeTimeProvider(Now);
+        var definitions = new VersionedDefinitions(V1());
+        var service = Service(instances, definitions, sessions, clock, 4);
+        var active = await service.CreateAsync("examiner", 1);
+        var toArchive = await service.CreateAsync("examiner", 1);
+        var archived = await service.SetLifecycleAsync(
+            toArchive.InstanceId,
+            AgentInstanceLifecycle.Archived,
+            toArchive.Revision);
+        Assert.Equal(AgentInstanceLifecycle.Archived, archived.Lifecycle);
+
+        var compatibility = await service.ResolveCompatibilityAsync(V1());
+
+        var eligible = await service.ListChatEligibleAsync();
+        Assert.Contains(eligible, item => item.InstanceId == active.InstanceId);
+        Assert.DoesNotContain(eligible, item => item.InstanceId == toArchive.InstanceId);
+        Assert.DoesNotContain(eligible, item => item.InstanceId == compatibility.InstanceId);
+        Assert.All(eligible, item => Assert.False(item.Compatibility));
+        Assert.All(eligible, item => Assert.Equal(AgentInstanceLifecycle.Active, item.Lifecycle));
+    }
+
+    [Fact]
     public async Task Archived_managed_instance_rejects_new_session()
     {
         var sessions = new InMemoryMemoryStore();

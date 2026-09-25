@@ -66,5 +66,8 @@ public interface IAgentInstanceService
 
     ValueTask<AgentInstance> RequireAsync(Guid instanceId, CancellationToken cancellationToken = default);
 
+    ValueTask<IReadOnlyList<AgentInstance>> ListChatEligibleAsync(
+        CancellationToken cancellationToken = default);
+
     ValueTask BackfillAsync(CancellationToken cancellationToken = default);
 }

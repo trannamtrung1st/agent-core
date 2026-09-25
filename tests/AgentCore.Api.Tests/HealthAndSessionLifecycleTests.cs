@@ -159,6 +159,37 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
     }
 
     [Fact]
+    public async Task Chat_agent_instances_list_active_managed_rows_only()
+    {
+        var client = TestOwnerCapability.CreateOwnerClient(_factory);
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        create.EnsureSuccessStatusCode();
+        var managed = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(managed);
+
+        var archive = await client.PatchAsJsonAsync(
+            $"/api/v2/admin/agent-instances/{managed!.InstanceId}/lifecycle",
+            new AdminUpdateAgentInstanceLifecycleRequest(managed.Revision, "Archived"));
+        archive.EnsureSuccessStatusCode();
+
+        var list = await client.GetFromJsonAsync<ChatAgentInstanceListResponse>("/api/v2/agent-instances");
+        Assert.NotNull(list);
+        Assert.DoesNotContain(list!.Items, item => item.InstanceId == managed.InstanceId);
+
+        var createSecond = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest("examiner", 1));
+        createSecond.EnsureSuccessStatusCode();
+        var active = await createSecond.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(active);
+
+        list = await client.GetFromJsonAsync<ChatAgentInstanceListResponse>("/api/v2/agent-instances");
+        Assert.Contains(list!.Items, item => item.InstanceId == active!.InstanceId && item.DefinitionId == "examiner");
+    }
+
+    [Fact]
     public void Frontend_and_contracts_do_not_embed_provider_credentials()
     {
         var root = FindRepoRoot();

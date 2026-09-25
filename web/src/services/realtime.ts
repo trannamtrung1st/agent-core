@@ -5,7 +5,27 @@ import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio
 import { applyServerEvent, emptySession, hasControlSequenceGap, isReadonlySession, isSessionModelBusy, modelFieldsFromSelection, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
-import { createSession, clearOwnerCapability, endSession, ensureOwnerCapability, getHealth, getSession, listAgents, listModels, reopenSession, setSessionModel, setSpeechLocale } from "./api";
+import {
+  createSession,
+  createSessionForInstance,
+  clearOwnerCapability,
+  endSession,
+  ensureOwnerCapability,
+  getHealth,
+  getSession,
+  listAgents,
+  listChatAgentInstances,
+  listModels,
+  reopenSession,
+  setSessionModel,
+  setSpeechLocale
+} from "./api";
+import {
+  defaultChatIdentityKey,
+  isNewChatIdentityReady,
+  parseChatIdentityKey,
+  resolveNewChatIdentityPresentation
+} from "../features/chat/chatIdentity";
 import { loadNewestHistoryPage, loadOlderHistoryPage, beginSessionHistory } from "./sessionHistory";
 import {
   abortPendingAttachment,
@@ -169,7 +189,24 @@ export function setDraft(draft: string): void {
 }
 
 export function selectAgent(agentId: string): void {
-  useSessionStore.setState({ selectedAgentId: agentId });
+  selectChatIdentity(`legacy:${agentId}`);
+}
+
+export function selectChatIdentity(identityKey: string): void {
+  const parsed = parseChatIdentityKey(identityKey);
+  useSessionStore.setState({
+    newChatIdentityKey: identityKey,
+    ...(parsed?.kind === "legacy" ? { selectedAgentId: parsed.agentId } : {})
+  });
+}
+
+function newChatVoiceAvailable(snapshot: ReturnType<typeof useSessionStore.getState>): boolean {
+  const presentation = resolveNewChatIdentityPresentation(
+    snapshot.newChatIdentityKey,
+    snapshot.chatAgentInstances,
+    snapshot.agents
+  );
+  return Boolean(presentation?.voiceAvailable);
 }
 
 function command(
@@ -1768,14 +1805,54 @@ export async function bootstrap(): Promise<string> {
   return bootstrapTask;
 }
 
+async function loadChatAgentInstances(): Promise<void> {
+  useSessionStore.setState({
+    chatAgentInstancesLoading: true,
+    chatAgentInstancesError: null,
+    newChatIdentityKey: ""
+  });
+  try {
+    const chatAgentInstances = await listChatAgentInstances();
+    const snapshot = useSessionStore.getState();
+    const newChatIdentityKey = defaultChatIdentityKey(chatAgentInstances, snapshot.agents);
+    const parsed = parseChatIdentityKey(newChatIdentityKey);
+    useSessionStore.setState({
+      chatAgentInstances,
+      chatAgentInstancesError: null,
+      chatAgentInstancesLoading: false,
+      newChatIdentityKey,
+      ...(parsed?.kind === "legacy" ? { selectedAgentId: parsed.agentId } : {})
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Managed instances unavailable.";
+    const snapshot = useSessionStore.getState();
+    useSessionStore.setState({
+      chatAgentInstances: [],
+      chatAgentInstancesError: message,
+      chatAgentInstancesLoading: false,
+      newChatIdentityKey: defaultChatIdentityKey([], snapshot.agents),
+      ...(snapshot.agents[0] ? { selectedAgentId: snapshot.agents[0].id } : {})
+    });
+  }
+}
+
+export function reloadChatAgentInstances(): Promise<void> {
+  return loadChatAgentInstances();
+}
+
 async function bootstrapInner(): Promise<string> {
   const [agents, health, models] = await Promise.all([listAgents(), getHealth(), listModels()]);
   useSessionStore.setState({
     agents,
+    chatAgentInstances: [],
+    chatAgentInstancesError: null,
+    chatAgentInstancesLoading: true,
+    newChatIdentityKey: "",
     selectedAgentId: agents[0]?.id ?? "examiner",
     modelCatalog: models.models,
     modelCatalogDefaultKey: models.defaultKey
   });
+  await loadChatAgentInstances();
   await refreshCatalog(true);
   await applyRouteFromLocation();
   return health.profile;
@@ -1867,15 +1944,50 @@ export async function startConversation(): Promise<boolean> {
         return true;
       }
 
-      const agent = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
-      if (!agent) {
-        throw new Error("Unable to create a session.");
+      if (
+        !snapshot.sessionId
+        && !isNewChatIdentityReady({
+          chatAgentInstancesLoading: snapshot.chatAgentInstancesLoading,
+          newChatIdentityKey: snapshot.newChatIdentityKey,
+          chatAgentInstances: snapshot.chatAgentInstances,
+          agents: snapshot.agents
+        })
+      ) {
+        return false;
       }
 
-      const created = await createSession(agent.id, agent.version, "text", snapshot.pendingSpeechLocale, {
+      const identity = parseChatIdentityKey(snapshot.newChatIdentityKey);
+      if (!identity) {
+        return false;
+      }
+      const modelChoice = {
         key: snapshot.pendingModelKey,
         reasoningEffort: snapshot.pendingReasoningEffort
-      });
+      };
+      const created =
+        identity?.kind === "managed"
+          ? await createSessionForInstance(
+              identity.instanceId,
+              "text",
+              snapshot.pendingSpeechLocale,
+              modelChoice
+            )
+          : await (async () => {
+              if (identity.kind !== "legacy") {
+                throw new Error("Unable to create a session.");
+              }
+              const agent = snapshot.agents.find((item) => item.id === identity.agentId);
+              if (!agent) {
+                throw new Error("Unable to create a session.");
+              }
+              return createSession(
+                agent.id,
+                agent.version,
+                "text",
+                snapshot.pendingSpeechLocale,
+                modelChoice
+              );
+            })();
       await startConnection(created.sessionId, { syncUrl: "replace" });
       await refreshCatalog(true);
       return useSessionStore.getState().connection === "ready";
@@ -2552,8 +2664,13 @@ export function composerSendEnabled(): boolean {
   }
 
   if (!snapshot.sessionId) {
-    const hasAgent = snapshot.selectedAgentId.trim().length > 0 && snapshot.agents.length > 0;
-    return hasAgent && snapshot.draft.trim().length > 0 && snapshot.connection === "idle";
+    const ready = isNewChatIdentityReady({
+      chatAgentInstancesLoading: snapshot.chatAgentInstancesLoading,
+      newChatIdentityKey: snapshot.newChatIdentityKey,
+      chatAgentInstances: snapshot.chatAgentInstances,
+      agents: snapshot.agents
+    });
+    return ready && snapshot.draft.trim().length > 0 && snapshot.connection === "idle";
   }
 
   return composerCanSend(
@@ -3341,8 +3458,7 @@ export async function requestVoice(): Promise<void> {
     return;
   }
 
-  const selected = snapshot.agents.find((item) => item.id === snapshot.selectedAgentId) ?? snapshot.agents[0];
-  const voiceAvailable = snapshot.sessionId ? snapshot.voiceAvailable : Boolean(selected?.voiceAvailable);
+  const voiceAvailable = snapshot.sessionId ? snapshot.voiceAvailable : newChatVoiceAvailable(snapshot);
   if (!voiceAvailable) {
     return;
   }
