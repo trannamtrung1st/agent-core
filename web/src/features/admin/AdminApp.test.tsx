@@ -82,6 +82,7 @@ vi.mock("../../services/adminApi", () => ({
   updateAdminAgentInstancePersona: vi.fn(),
   updateAdminAgentInstanceLifecycle: vi.fn(),
   updateAdminAgentInstanceActiveVersion: vi.fn(),
+  deprecateAdminDefinitionPublication: vi.fn(),
   validateAdminDefinitionDraft: vi.fn(),
   getAdminDefinitionDraftDiff: vi.fn(),
   listAdminDefinitionEvaluationScenarios: vi.fn(),
@@ -103,6 +104,7 @@ import {
   publishAdminDefinitionDraft,
   updateAdminDefinitionDraft,
   updateAdminAgentInstanceActiveVersion,
+  deprecateAdminDefinitionPublication,
   updateAdminAgentInstanceLifecycle,
   updateAdminAgentInstancePersona,
   validateAdminDefinitionDraft,
@@ -858,6 +860,73 @@ describe("AdminApp", () => {
     });
   });
 
+  it("deprecates an active durable publication from the definition detail view", async () => {
+    let inventoryLoads = 0;
+    vi.mocked(listAdminDefinitions).mockImplementation(async () => {
+      inventoryLoads += 1;
+      return [
+        {
+          definitionId: "examiner",
+          version: 2,
+          source: "durable",
+          status: inventoryLoads > 1 ? "deprecated" : "published",
+          displayName: "Examiner v2"
+        }
+      ];
+    });
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
+    vi.mocked(listAdminPublicationResources).mockResolvedValue([]);
+    let publicationLoads = 0;
+    vi.mocked(listAdminDefinitionPublications).mockImplementation(async () => {
+      publicationLoads += 1;
+      return [
+        {
+          definitionId: "examiner",
+          version: 2,
+          status: publicationLoads > 1 ? "Deprecated" : "Active",
+          metadataRevision: publicationLoads > 1 ? 4 : 3,
+          publishedAt: "2026-01-02T00:00:00Z"
+        }
+      ];
+    });
+    vi.mocked(deprecateAdminDefinitionPublication).mockResolvedValue({
+      definitionId: "examiner",
+      version: 2,
+      status: "Deprecated",
+      metadataRevision: 4,
+      publishedAt: "2026-01-02T00:00:00Z"
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Deprecate publication v2" })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/durable · published/)).toBeInTheDocument();
+
+    const inventoryCallsBefore = vi.mocked(listAdminDefinitions).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Deprecate publication v2" }));
+    await waitFor(() => {
+      expect(screen.getByText("Deprecate publication v2?")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Deprecate" }));
+
+    await waitFor(() => {
+      expect(deprecateAdminDefinitionPublication).toHaveBeenCalledWith("examiner", 2, 3);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Deprecated/)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(vi.mocked(listAdminDefinitions).mock.calls.length).toBeGreaterThan(inventoryCallsBefore);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/durable · deprecated/i)).toBeInTheDocument();
+    });
+  });
+
   it("warns before apply version when JSON persona draft is dirty", async () => {
     const managedEffective = { ...sampleEffective, compatibility: false, definitionVersion: 1 };
     vi.mocked(listAdminDefinitions).mockResolvedValue([
@@ -909,7 +978,7 @@ describe("AdminApp", () => {
       expect(screen.getByText("v2 (builtIn · published)")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByText("v2 (builtIn · published)"));
-    fireEvent.click(screen.getByRole("button", { name: "Apply version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2" }));
 
     await waitFor(() => {
       expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();

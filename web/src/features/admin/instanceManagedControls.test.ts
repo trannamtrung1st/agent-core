@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInstanceVersionOptions,
   isPersonaDraftDirty,
+  managedInstanceVersionActionLabel,
   parsePersonaJson,
   personaFieldsToJson,
   syncPersonaOnTabChange
@@ -54,6 +55,14 @@ describe("instanceManagedControls persona sync", () => {
   it("serializes and parses persona fields", () => {
     const json = personaFieldsToJson(samplePersona);
     expect(parsePersonaJson(json)).toEqual(samplePersona);
+  });
+});
+
+describe("managedInstanceVersionActionLabel", () => {
+  it("labels rollback, upgrade, and noop", () => {
+    expect(managedInstanceVersionActionLabel(1, 2)).toBe("Rollback to v1");
+    expect(managedInstanceVersionActionLabel(3, 2)).toBe("Upgrade to v3");
+    expect(managedInstanceVersionActionLabel(2, 2)).toBe("Apply version");
   });
 });
 

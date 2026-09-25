@@ -88,6 +88,16 @@ export function syncPersonaOnTabChange(
 
 export type InstanceVersionOption = { value: number; label: string };
 
+export function managedInstanceVersionActionLabel(targetVersion: number, currentVersion: number): string {
+  if (targetVersion < currentVersion) {
+    return `Rollback to v${targetVersion}`;
+  }
+  if (targetVersion > currentVersion) {
+    return `Upgrade to v${targetVersion}`;
+  }
+  return "Apply version";
+}
+
 export function buildInstanceVersionOptions(
   definitionId: string,
   currentVersion: number,

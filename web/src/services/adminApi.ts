@@ -356,6 +356,25 @@ export async function listAdminDefinitionPublications(
   return payload.items;
 }
 
+export async function deprecateAdminDefinitionPublication(
+  definitionId: string,
+  version: number,
+  expectedMetadataRevision: number
+): Promise<AdminDefinitionPublicationSummary> {
+  const response = await ownerFetch(
+    `/api/v2/admin/definitions/${encodeURIComponent(definitionId)}/publications/${version}/deprecate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedMetadataRevision })
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin deprecate publication failed (${response.status})`));
+  }
+  return (await response.json()) as AdminDefinitionPublicationSummary;
+}
+
 export type AdminDefinitionDraftResource = {
   resourceId: string;
   logicalPath: string;

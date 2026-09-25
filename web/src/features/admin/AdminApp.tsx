@@ -36,6 +36,7 @@ import {
   type AdminDefinitionPublicationSummary,
   type AdminEffectiveConfiguration,
   type AdminInstanceInventoryItem,
+  deprecateAdminDefinitionPublication,
   forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
@@ -57,6 +58,7 @@ import {
 } from "../../services/adminApi";
 import {
   buildInstanceVersionOptions,
+  managedInstanceVersionActionLabel,
   isPersonaDraftDirty,
   parsePersonaJson,
   syncPersonaOnTabChange,
@@ -211,7 +213,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
             definitionId={route.definitionId}
             definitions={definitions}
             onBack={() => navigateToAppPath(adminHomePath())}
-            onRetryDefinitions={() => void reloadDefinitions()}
+            onRetryDefinitions={reloadDefinitions}
           />
         ) : null}
 
@@ -306,7 +308,7 @@ function DefinitionDetail({
   definitionId: string;
   definitions: LoadState<AdminDefinitionInventoryItem[]>;
   onBack: () => void;
-  onRetryDefinitions: () => void;
+  onRetryDefinitions: () => Promise<void>;
 }) {
   const { message, modal } = App.useApp();
   const rows = definitions.kind === "ready"
@@ -350,6 +352,28 @@ function DefinitionDetail({
     };
     return applyDraftEnvironmentToCandidate(base, capabilities);
   }, [activeDraft, capabilities, instructions]);
+
+  const deprecatePublication = async (item: AdminDefinitionPublicationSummary) => {
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      const updated = await deprecateAdminDefinitionPublication(
+        definitionId,
+        item.version,
+        item.metadataRevision
+      );
+      setPublications((current) =>
+        current.map((row) => (row.version === updated.version ? updated : row))
+      );
+      message.success(`Publication v${item.version} deprecated.`);
+      await reloadLifecycle();
+      await onRetryDefinitions();
+    } catch (error) {
+      setLifecycleError(error instanceof Error ? error.message : "Failed to deprecate publication.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const reloadLifecycle = useCallback(async () => {
     setLifecycleLoading(true);
@@ -585,6 +609,24 @@ function DefinitionDetail({
                     >
                       Start managed chat
                     </Button>
+                    {item.status === "Active" ? (
+                      <Popconfirm
+                        title={`Deprecate publication v${item.version}?`}
+                        description="Metadata-only change. Exact version lookup and existing sessions stay intact; avoid selecting this version for new managed work."
+                        onConfirm={() => void deprecatePublication(item)}
+                        okText="Deprecate"
+                        cancelText="Cancel"
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          disabled={busy}
+                          aria-label={`Deprecate publication v${item.version}`}
+                        >
+                          Deprecate publication
+                        </Button>
+                      </Popconfirm>
+                    ) : null}
                   </Flex>
                 </Descriptions.Item>
               ))}
@@ -1312,6 +1354,7 @@ export function InstanceManagedControls({
     definitionInventory,
     publications
   );
+  const versionActionLabel = managedInstanceVersionActionLabel(targetVersion, config.definitionVersion);
 
   const personaDirty = isPersonaDraftDirty(
     config.persona,
@@ -1460,14 +1503,14 @@ export function InstanceManagedControls({
               okText="Apply anyway"
               cancelText="Cancel"
             >
-              <Button disabled={busy || targetVersion === config.definitionVersion}>Apply version</Button>
+              <Button disabled={busy || targetVersion === config.definitionVersion}>{versionActionLabel}</Button>
             </Popconfirm>
           ) : (
             <Button
               onClick={() => void applyVersion()}
               disabled={busy || targetVersion === config.definitionVersion}
             >
-              Apply version
+              {versionActionLabel}
             </Button>
           )}
         </Flex>
