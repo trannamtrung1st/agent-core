@@ -79,9 +79,9 @@ public static class TriggerRegistrationMutations
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
         }
 
-        if (current.Status != TriggerRegistrationStatus.Active)
+        if (current.Status is not TriggerRegistrationStatus.Active and not TriggerRegistrationStatus.SuspendedPolicy)
         {
-            throw AgentCoreErrors.Validation("Only an active registration can be cancelled.");
+            throw AgentCoreErrors.Validation("Only an active or policy-suspended registration can be cancelled.");
         }
 
         try

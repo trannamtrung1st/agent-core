@@ -203,7 +203,8 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
                 && row.AgentInstanceId == instanceId
                 && row.ProfileId == profileId
                 && row.Revision == expectedRevision
-                && row.Status == (int)TriggerRegistrationStatus.Active)
+                && (row.Status == (int)TriggerRegistrationStatus.Active
+                    || row.Status == (int)TriggerRegistrationStatus.SuspendedPolicy))
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(row => row.Status, (int)TriggerRegistrationStatus.Cancelled)
@@ -233,7 +234,7 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             throw AgentCoreErrors.Conflict("Registration revision is stale.");
         }
 
-        throw AgentCoreErrors.Validation("Only an active registration can be cancelled.");
+        throw AgentCoreErrors.Validation("Only an active or policy-suspended registration can be cancelled.");
     }
 
     public async ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(

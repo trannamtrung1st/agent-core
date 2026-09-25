@@ -119,6 +119,95 @@ public sealed class AdminMemoryServiceTests
     }
 
     [Fact]
+    public async Task Delete_user_scope_item_leaves_other_scopes_unchanged()
+    {
+        var clock = new FakeTimeProvider(Now);
+        var sessions = new InMemoryMemoryStore();
+        var structured = new InMemoryStructuredMemoryStore();
+        var instances = new InMemoryAgentInstanceStore();
+        var definition = SampleDefinitions.Examiner with
+        {
+            MemoryPolicy = new MemoryPolicy(
+                SessionMemory: true,
+                IdentityUserPromotion: true,
+                IdentityUserRetrieval: true,
+                UserPromotion: true,
+                UserRetrieval: true)
+        };
+        var definitions = new VersionedDefinitions(definition);
+        var instanceService = new AgentInstanceService(instances, definitions, sessions, Ids(8, "019944af-00c6-7000-8000-"), clock);
+        var manager = new SessionManager(
+            definitions,
+            sessions,
+            Ids(16, "019944af-00c7-7000-8000-"),
+            clock,
+            new VoiceAvailability { SpeechAdaptersResolved = true },
+            structuredMemory: structured,
+            instances: instanceService);
+        var memoryService = new StructuredMemoryService(structured, Ids(12, "019944af-00c8-7000-8000-"), clock);
+        var admin = new AdminMemoryService(
+            instances,
+            definitions,
+            sessions,
+            structured,
+            memoryService,
+            new FixedLocalProfile(ProfileId, clock));
+
+        var instance = await instanceService.CreateAsync("examiner", 1);
+        var session = await manager.CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
+        var admission = new MemoryAdmissionContext("test", [], new HashSet<string>(StringComparer.Ordinal));
+
+        _ = await memoryService.WriteAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "Session fact", "SESSION_ONLY", []),
+            admission);
+        var identityItem = await memoryService.WriteAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "Identity fact", "IDENTITY_KEEP", []),
+            admission);
+        await memoryService.PromoteToIdentityUserAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            identityItem.MemoryId,
+            new TrustedIdentityUserOwner(instance.InstanceId, ProfileId),
+            promotionAllowed: true,
+            admission);
+        var userKeepSource = await memoryService.WriteAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "User keep", "USER_KEEP", []),
+            admission);
+        _ = await memoryService.PromoteSessionToUserAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            userKeepSource.MemoryId,
+            new TrustedUserOwner(ProfileId),
+            promotionAllowed: true,
+            admission);
+        var userDeleteSource = await memoryService.WriteAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            new MemoryWriteProposal(MemoryKind.Fact, "User delete", "USER_DELETE", []),
+            admission);
+        var userDelete = await memoryService.PromoteSessionToUserAsync(
+            new TrustedMemoryOwner(session.SessionId),
+            userDeleteSource.MemoryId,
+            new TrustedUserOwner(ProfileId),
+            promotionAllowed: true,
+            admission);
+
+        await admin.DeleteAsync(instance.InstanceId, AdminLearnedMemoryScope.User, userDelete.MemoryId, null);
+
+        var sessionList = await admin.ListAsync(instance.InstanceId, AdminLearnedMemoryScope.Session, session.SessionId);
+        Assert.Contains(sessionList.Items, item => item.Content == "SESSION_ONLY");
+        Assert.Contains(sessionList.Items, item => item.Content == "IDENTITY_KEEP");
+
+        var identityList = await admin.ListAsync(instance.InstanceId, AdminLearnedMemoryScope.IdentityUser, null);
+        Assert.Contains(identityList.Items, item => item.Content == "IDENTITY_KEEP");
+
+        var userList = await admin.ListAsync(instance.InstanceId, AdminLearnedMemoryScope.User, null);
+        Assert.Contains(userList.Items, item => item.Content == "USER_KEEP");
+        Assert.DoesNotContain(userList.Items, item => item.Content == "USER_DELETE");
+        Assert.Single(userList.Items);
+    }
+
+    [Fact]
     public async Task List_identity_user_returns_empty_when_retrieval_disabled()
     {
         var clock = new FakeTimeProvider(Now);

@@ -123,6 +123,63 @@ public sealed class TriggerStoreContractTests
     }
 
     [Fact]
+    public async Task Both_stores_cancel_suspended_policy_registrations()
+    {
+        await ForEachStore(async store =>
+        {
+            var time = Clock();
+            var service = Service(store, time);
+            var owner = new TriggerOwner(InstanceA, ProfileA);
+            var other = new TriggerOwner(InstanceB, ProfileB);
+            var registrationId = Guid.Parse("019944af-0007-7000-8000-000000000001");
+            const string suspensionReason = "Trigger policy ineligible";
+            await store.CreateAsync(new TriggerRegistration(
+                registrationId,
+                owner,
+                TriggerRegistrationStatus.SuspendedPolicy,
+                "Held reminder",
+                OneShot(),
+                Now.AddDays(1),
+                null,
+                0,
+                2,
+                1,
+                new TriggerProvenance(TriggerAuthorizationOrigin.CurrentUserTurn, SourceSessionId, null, Now, Now),
+                suspensionReason));
+
+            var suspended = Assert.Single(await service.ListAsync(owner, TriggerRegistrationStatus.SuspendedPolicy));
+            Assert.Equal(registrationId, suspended.RegistrationId);
+            Assert.Equal(suspensionReason, suspended.SuspensionReason);
+            Assert.Null(await service.GetAsync(other, registrationId));
+
+            var stale = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                service.CancelAsync(owner, registrationId, 1).AsTask());
+            Assert.Equal("Conflict", stale.Code);
+            Assert.Equal(TriggerRegistrationStatus.SuspendedPolicy, (await service.GetAsync(owner, registrationId))!.Status);
+
+            var denied = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                service.CancelAsync(other, registrationId, 2).AsTask());
+            Assert.Equal("NotFound", denied.Code);
+
+            time.Advance(TimeSpan.FromSeconds(1));
+            var cancelled = await service.CancelAsync(owner, registrationId, 2);
+            Assert.Equal(TriggerRegistrationStatus.Cancelled, cancelled.Status);
+            Assert.Equal(3, cancelled.Revision);
+
+            var persisted = await service.GetAsync(owner, registrationId);
+            Assert.NotNull(persisted);
+            Assert.Equal(TriggerRegistrationStatus.Cancelled, persisted!.Status);
+            Assert.Equal(3, persisted.Revision);
+
+            var repeated = await service.CancelAsync(owner, registrationId, 2);
+            Assert.Equal(cancelled.Revision, repeated.Revision);
+            Assert.Equal(
+                registrationId,
+                Assert.Single(await service.ListAsync(owner, TriggerRegistrationStatus.Cancelled)).RegistrationId);
+        });
+    }
+
+    [Fact]
     public async Task ListAsync_returns_newest_created_first()
     {
         await ForEachStore(async store =>
