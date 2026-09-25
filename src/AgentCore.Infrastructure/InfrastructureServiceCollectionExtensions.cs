@@ -120,6 +120,10 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IDefinitionResourceContentStore>(),
                     provider.GetRequiredService<IIdGenerator>()));
+            services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>
+                new SqliteDefinitionDraftEvaluationStore(
+                    provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                    provider.GetRequiredService<IIdGenerator>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
             services.TryAddSingleton<IAttachmentStore>(provider => new SqliteAttachmentStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
@@ -154,6 +158,8 @@ public static class InfrastructureServiceCollectionExtensions
                 admin.ResourceStore = provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>();
                 return admin;
             });
+            services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>
+                new InMemoryDefinitionDraftEvaluationStore(provider.GetRequiredService<IAgentDefinitionAdminStore>()));
         }
         services.TryAddSingleton<IAttachmentProcessor, AttachmentProcessor>();
         services.TryAddSingleton<DefinitionPublicationResourceReader>();

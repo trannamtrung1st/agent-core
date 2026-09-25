@@ -129,6 +129,33 @@ public sealed class AgentDefinitionPublicationRecord
     public long PublishedAtUtc { get; set; }
 }
 
+public sealed class AgentDefinitionDraftEvaluationScenarioRecord
+{
+    public string DraftId { get; set; } = "";
+    public string ScenarioId { get; set; } = "";
+    public int ScenarioVersion { get; set; }
+    public string Title { get; set; } = "";
+    public string Prompt { get; set; } = "";
+    public int RequirementLevel { get; set; }
+    public int CheckType { get; set; }
+    public string ToolName { get; set; } = "";
+    public long UpdatedAtUtc { get; set; }
+}
+
+public sealed class AgentDefinitionDraftEvaluationResultRecord
+{
+    public string ResultId { get; set; } = "";
+    public string DraftId { get; set; } = "";
+    public long DraftRevision { get; set; }
+    public string ConfigurationFingerprint { get; set; } = "";
+    public string ScenarioId { get; set; } = "";
+    public int ScenarioVersion { get; set; }
+    public string RuntimeKind { get; set; } = "";
+    public bool Passed { get; set; }
+    public string FindingsJson { get; set; } = "[]";
+    public long RecordedAtUtc { get; set; }
+}
+
 public sealed class AgentDefinitionDraftResourceRecord
 {
     public string ResourceId { get; set; } = "";
@@ -172,6 +199,10 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AgentDefinitionDraftRecord> AgentDefinitionDrafts => Set<AgentDefinitionDraftRecord>();
     public DbSet<AgentDefinitionPublicationRecord> AgentDefinitionPublications => Set<AgentDefinitionPublicationRecord>();
     public DbSet<AgentDefinitionDraftResourceRecord> AgentDefinitionDraftResources => Set<AgentDefinitionDraftResourceRecord>();
+    public DbSet<AgentDefinitionDraftEvaluationScenarioRecord> AgentDefinitionDraftEvaluationScenarios =>
+        Set<AgentDefinitionDraftEvaluationScenarioRecord>();
+    public DbSet<AgentDefinitionDraftEvaluationResultRecord> AgentDefinitionDraftEvaluationResults =>
+        Set<AgentDefinitionDraftEvaluationResultRecord>();
     public DbSet<AgentDefinitionPublicationResourceRecord> AgentDefinitionPublicationResources =>
         Set<AgentDefinitionPublicationResourceRecord>();
 
@@ -396,6 +427,29 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DefinitionId).HasMaxLength(128);
             entity.Property(row => row.PayloadJson).IsRequired();
             entity.Property(row => row.MetadataRevision).IsConcurrencyToken();
+        });
+        modelBuilder.Entity<AgentDefinitionDraftEvaluationScenarioRecord>(entity =>
+        {
+            entity.ToTable("AgentDefinitionDraftEvaluationScenarios");
+            entity.HasKey(row => new { row.DraftId, row.ScenarioId });
+            entity.Property(row => row.DraftId).HasMaxLength(36);
+            entity.Property(row => row.ScenarioId).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.Title).HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Prompt).HasMaxLength(4096).IsRequired();
+            entity.Property(row => row.ToolName).HasMaxLength(128);
+            entity.HasIndex(row => row.DraftId);
+        });
+        modelBuilder.Entity<AgentDefinitionDraftEvaluationResultRecord>(entity =>
+        {
+            entity.ToTable("AgentDefinitionDraftEvaluationResults");
+            entity.HasKey(row => row.ResultId);
+            entity.Property(row => row.ResultId).HasMaxLength(36);
+            entity.Property(row => row.DraftId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ConfigurationFingerprint).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.ScenarioId).HasMaxLength(128).IsRequired();
+            entity.Property(row => row.RuntimeKind).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.FindingsJson).IsRequired();
+            entity.HasIndex(row => new { row.DraftId, row.ScenarioId, row.RecordedAtUtc });
         });
         modelBuilder.Entity<AgentDefinitionDraftResourceRecord>(entity =>
         {

@@ -100,7 +100,14 @@ public sealed class AdminDefinitionDraftPublishServiceTests
             SyntheticProviderAliases.Default,
             TestModelCatalogs.Synthetic(),
             ToolConfigurationGates.AllowAll);
-        return new AgentDefinitionDraftPublishService(lifecycle, validation);
+        var evaluationStore = new InMemoryDefinitionDraftEvaluationStore(admin);
+        var evaluation = new AgentDefinitionDraftEvaluationService(
+            lifecycle,
+            resources,
+            evaluationStore,
+            ToolConfigurationGates.AllowAll,
+            clock);
+        return new AgentDefinitionDraftPublishService(lifecycle, validation, evaluation);
     }
 
     private sealed class VersionedBuiltInDefinitions(AgentDefinition definition) : IBuiltInAgentDefinitionStore

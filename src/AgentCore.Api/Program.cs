@@ -61,6 +61,7 @@ builder.Services.AddSingleton<AgentDefinitionLifecycleService>();
 builder.Services.AddSingleton<AgentDefinitionDraftValidationService>();
 builder.Services.AddSingleton<AgentDefinitionDraftPublishService>();
 builder.Services.AddSingleton<AgentDefinitionDraftDiffService>();
+builder.Services.AddSingleton<AgentDefinitionDraftEvaluationService>();
 builder.Services.AddSingleton<AgentDefinitionResourceService>();
 builder.Services.AddSingleton<SessionHost>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();

@@ -15,5 +15,6 @@ public sealed record DefinitionValidationFinding(
 public sealed record DefinitionValidationResult(
     Guid DraftId,
     long DraftRevision,
+    string ConfigurationFingerprint,
     bool HasBlockingFindings,
     IReadOnlyList<DefinitionValidationFinding> Findings);

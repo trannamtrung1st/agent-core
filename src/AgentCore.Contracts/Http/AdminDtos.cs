@@ -133,8 +133,39 @@ public sealed record AdminPublishDefinitionDraftRequest(long ExpectedRevision);
 public sealed record AdminDefinitionDraftValidationResponse(
     string DraftId,
     long DraftRevision,
+    string ConfigurationFingerprint,
     bool HasBlockingFindings,
     IReadOnlyList<AdminDefinitionValidationFindingResponse> Findings);
+
+public sealed record AdminUpsertDefinitionEvaluationScenarioRequest(
+    long ExpectedRevision,
+    string ScenarioId,
+    string Title,
+    string Prompt,
+    string RequirementLevel,
+    string CheckType,
+    string? ToolName);
+
+public sealed record AdminDefinitionEvaluationScenarioResponse(
+    string ScenarioId,
+    int ScenarioVersion,
+    string Title,
+    string Prompt,
+    string RequirementLevel,
+    string CheckType,
+    string? ToolName,
+    string UpdatedAt);
+
+public sealed record AdminDefinitionEvaluationResultResponse(
+    string DraftId,
+    long DraftRevision,
+    string ConfigurationFingerprint,
+    string ScenarioId,
+    int ScenarioVersion,
+    string RuntimeKind,
+    bool Passed,
+    IReadOnlyList<string> Findings,
+    string RecordedAt);
 
 public sealed record AdminDefinitionDraftDiffResponse(
     string DraftId,

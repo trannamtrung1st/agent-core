@@ -5,7 +5,8 @@ namespace AgentCore.Application.Admin;
 
 public sealed class AgentDefinitionDraftPublishService(
     AgentDefinitionLifecycleService lifecycle,
-    AgentDefinitionDraftValidationService validation)
+    AgentDefinitionDraftValidationService validation,
+    AgentDefinitionDraftEvaluationService evaluation)
 {
     public async ValueTask<AgentDefinitionPublication> PublishDraftAsync(
         Guid draftId,
@@ -30,6 +31,12 @@ public sealed class AgentDefinitionDraftPublishService(
         {
             throw AgentCoreErrors.Conflict("Draft changed during publish validation; retry publish.");
         }
+
+        await evaluation.EnsureRequiredEvidenceAsync(
+            draftId,
+            validationResult.DraftRevision,
+            validationResult.ConfigurationFingerprint,
+            cancellationToken).ConfigureAwait(false);
 
         return await lifecycle.CommitDraftPublicationAsync(
             draftId,

@@ -510,6 +510,112 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/definition-drafts/{draftId:guid}/evaluation-scenarios", async (
+            Guid draftId,
+            AgentDefinitionDraftEvaluationService evaluation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var scenarios = await evaluation.ListScenariosAsync(draftId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(scenarios.Select(AdminHttpMapping.ToEvaluationScenario).ToArray());
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPut("/definition-drafts/{draftId:guid}/evaluation-scenarios", async (
+            Guid draftId,
+            AdminUpsertDefinitionEvaluationScenarioRequest request,
+            AgentDefinitionDraftEvaluationService evaluation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (!Enum.TryParse<DefinitionEvaluationRequirementLevel>(request.RequirementLevel, true, out var requirement)
+                    || !Enum.IsDefined(requirement)
+                    || !Enum.TryParse<DefinitionEvaluationCheckType>(request.CheckType, true, out var checkType)
+                    || !Enum.IsDefined(checkType))
+                {
+                    throw AgentCoreErrors.Validation("Invalid evaluation scenario requirement or check type.");
+                }
+
+                var scenario = await evaluation.UpsertScenarioAsync(
+                        request.ExpectedRevision,
+                        new DefinitionEvaluationScenarioUpsert(
+                            draftId,
+                            request.ScenarioId,
+                            request.Title,
+                            request.Prompt,
+                            requirement,
+                            checkType,
+                            request.ToolName,
+                            DateTimeOffset.UtcNow),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToEvaluationScenario(scenario));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapDelete("/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}", async (
+            Guid draftId,
+            string scenarioId,
+            long expectedRevision,
+            AgentDefinitionDraftEvaluationService evaluation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await evaluation.RemoveScenarioAsync(draftId, expectedRevision, scenarioId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.NoContent();
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapPost("/definition-drafts/{draftId:guid}/evaluation-scenarios/{scenarioId}/run", async (
+            Guid draftId,
+            string scenarioId,
+            AgentDefinitionDraftEvaluationService evaluation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await evaluation.RunScenarioAsync(draftId, scenarioId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToEvaluationResult(result));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
+        group.MapGet("/definition-drafts/{draftId:guid}/evaluation-results", async (
+            Guid draftId,
+            AgentDefinitionDraftEvaluationService evaluation,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var results = await evaluation.ListResultsAsync(draftId, cancellationToken).ConfigureAwait(false);
+                return Results.Json(results.Select(AdminHttpMapping.ToEvaluationResult).ToArray());
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapGet("/definition-drafts/{draftId:guid}/diff", async (
             Guid draftId,
             AgentDefinitionDraftDiffService diff,

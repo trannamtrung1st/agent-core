@@ -123,6 +123,7 @@ internal static class AdminHttpMapping
         new(
             result.DraftId.ToString("D"),
             result.DraftRevision,
+            result.ConfigurationFingerprint,
             result.HasBlockingFindings,
             result.Findings
                 .Select(finding => new AdminDefinitionValidationFindingResponse(
@@ -131,6 +132,29 @@ internal static class AdminHttpMapping
                     finding.Message,
                     finding.Severity.ToString()))
                 .ToArray());
+
+    public static AdminDefinitionEvaluationScenarioResponse ToEvaluationScenario(DefinitionEvaluationScenario scenario) =>
+        new(
+            scenario.ScenarioId,
+            scenario.ScenarioVersion,
+            scenario.Title,
+            scenario.Prompt,
+            scenario.RequirementLevel.ToString(),
+            scenario.CheckType.ToString(),
+            scenario.ToolName,
+            scenario.UpdatedAt.ToString("o"));
+
+    public static AdminDefinitionEvaluationResultResponse ToEvaluationResult(DefinitionEvaluationResult result) =>
+        new(
+            result.DraftId.ToString("D"),
+            result.DraftRevision,
+            result.ConfigurationFingerprint,
+            result.ScenarioId,
+            result.ScenarioVersion,
+            result.RuntimeKind,
+            result.Passed,
+            result.Findings,
+            result.RecordedAt.ToString("o"));
 
     public static AdminDefinitionDraftDiffResponse ToDiff(DefinitionDraftDiffResult result) =>
         new(

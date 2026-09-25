@@ -10,13 +10,17 @@
 
 **Semantic-diff batch:** `71fcc9a87fbfeda3f676e9d2697935feaa2cfcb3` (review-0033 / review 0093 PASS)
 
+**Publish-gate batch:** `2e2e9818733efd975fd127f8375accbb15fa287c` (review-0034 / review 0095 PASS)
+
 ## Scope delivered (observed, partial)
 
 - `AgentDefinitionDraftValidationService` exposes resolved publication validation as structured blocking findings (domain shape, provider aliases, secrets, model catalog, tools, draft knowledge/template resource bindings) with revision recheck after resource listing (409 when draft changes mid-validation).
 - Owner-protected Admin HTTP: `POST /api/v2/admin/definition-drafts/{draftId}/validate` (`docs/14` route table).
 - `AgentDefinitionDraftDiffService` and `GET .../definition-drafts/{draftId}/diff` with safe grouped sections against fork baseline, explicit policy/identity formatters, new-draft Added sections, and revision recheck after resource listing (409 on concurrent edit).
 - `AgentDefinitionDraftPublishService` is the sole application publish command; lifecycle `CommitDraftPublicationAsync` is internal. HTTP `POST .../publish` runs resolved validation (resource bindings included), exact expected revision, and post-validation revision recheck (409 on stale revision).
-- Tests: `AdminDefinitionDraftDiffServiceTests`, `AdminDefinitionDraftPublishServiceTests`, `AdminApiTests.Admin_definition_draft_validate_*`, `Admin_definition_draft_diff_*`, `Admin_definition_draft_publish_*`.
+- Configuration/resource `configurationFingerprint` on validation; draft evaluation scenarios (`SqliteDefinitionDraftEvaluationStore` with transactional revision bump on Sqlite profile, in-memory store with bump-before-mutate ordering), synthetic offline `ToolOffered`/`ToolNotOffered` runner, evaluation result provenance, and publish blocking when required eval evidence is stale or missing.
+- Admin HTTP: evaluation scenario list/upsert/run/results (`docs/14`).
+- Tests: `AdminDefinitionDraftEvaluationServiceTests`, `AdminDefinitionDraftDiffServiceTests`, `AdminDefinitionDraftPublishServiceTests`, `AdminApiTests` draft validate/diff/publish/evaluation coverage.
 
 ## W06 verification (partial)
 
@@ -26,8 +30,11 @@
 | Draft diff API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_diff` | Pass (3) at current W06 HEAD |
 | Draft diff service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftDiffServiceTests` | Pass (3) at current W06 HEAD |
 | Publish gate service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftPublishServiceTests` | Pass (3) at current W06 HEAD |
-| Draft publish API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_publish` | Pass at current W06 HEAD |
+| Draft publish API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_publish` | Pass at publish-gate HEAD |
+| Draft evaluation service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests` | Pass (5) at current W06 HEAD |
+| Draft evaluation store | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~DefinitionDraftEvaluationStoreTests` | Pass (4) at current W06 HEAD |
+| Draft admin API suite | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft` | Pass (25) at current W06 HEAD |
 
 ## Remaining (W06)
 
-- Evaluation scenarios, fingerprint evidence, Synthetic runner, required-eval blocking, UI steps, and full gate matrix per frozen P7F contract.
+- Additional scenario types and Synthetic matrix, UI Test & Validate / Diff & Publish, Playwright journey, and full gate matrix per frozen P7F contract.

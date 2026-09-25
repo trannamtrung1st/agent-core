@@ -533,6 +533,125 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_evaluation_routes_require_existing_draft_and_scenario()
+    {
+        var client = OwnerClient();
+        var missingDraft = await client.GetAsync(
+            $"/api/v2/admin/definition-drafts/{Guid.NewGuid()}/evaluation-scenarios");
+        Assert.Equal(HttpStatusCode.NotFound, missingDraft.StatusCode);
+
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var deleteMissing = await client.DeleteAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/evaluation-scenarios/missing?expectedRevision={draft.Revision}");
+        Assert.Equal(HttpStatusCode.NotFound, deleteMissing.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_evaluation_upsert_rejects_invalid_requirement_level()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var upsert = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/evaluation-scenarios",
+            new AdminUpsertDefinitionEvaluationScenarioRequest(
+                draft.Revision,
+                "bad-scenario",
+                "Title",
+                "Prompt",
+                "Blocking",
+                "ToolOffered",
+                ToolCatalog.KnowledgeRetrieve));
+        Assert.Equal(HttpStatusCode.BadRequest, upsert.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_validate_returns_configuration_fingerprint()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var validate = await client.PostAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/validate",
+            null);
+        validate.EnsureSuccessStatusCode();
+        var result = await validate.Content.ReadFromJsonAsync<AdminDefinitionDraftValidationResponse>();
+        Assert.NotNull(result);
+        Assert.False(string.IsNullOrWhiteSpace(result!.ConfigurationFingerprint));
+        Assert.Equal(64, result.ConfigurationFingerprint.Length);
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_evaluation_run_records_provenance_and_blocks_stale_publish()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with
+        {
+            Environment = (candidate.Environment ?? RoleEnvironment.Empty) with
+            {
+                ToolAllowlist = [ToolCatalog.KnowledgeRetrieve]
+            }
+        };
+        var seed = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        seed.EnsureSuccessStatusCode();
+        var seeded = await seed.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+
+        var upsert = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{seeded!.DraftId}/evaluation-scenarios",
+            new AdminUpsertDefinitionEvaluationScenarioRequest(
+                seeded.Revision,
+                "knowledge-offered",
+                "Knowledge retrieve",
+                "Synthetic tool offered check",
+                "Required",
+                "ToolOffered",
+                ToolCatalog.KnowledgeRetrieve));
+        upsert.EnsureSuccessStatusCode();
+
+        var afterScenario = await client.GetFromJsonAsync<AdminDefinitionDraftResponse>(
+            $"/api/v2/admin/definition-drafts/{seeded.DraftId}");
+        var run = await client.PostAsync(
+            $"/api/v2/admin/definition-drafts/{afterScenario!.DraftId}/evaluation-scenarios/knowledge-offered/run",
+            null);
+        run.EnsureSuccessStatusCode();
+        var eval = await run.Content.ReadFromJsonAsync<AdminDefinitionEvaluationResultResponse>();
+        Assert.NotNull(eval);
+        Assert.True(eval!.Passed);
+        Assert.Equal(afterScenario.Revision, eval.DraftRevision);
+
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{afterScenario.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(
+                afterScenario.Revision,
+                JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Stale eval after edit." }, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var edited = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+
+        var stalePublish = await client.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{edited!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(edited.Revision));
+        Assert.Equal(HttpStatusCode.BadRequest, stalePublish.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_validate_returns_no_blocking_findings_for_publishable_fork()
     {
         var client = OwnerClient();
