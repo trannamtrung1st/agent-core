@@ -27,6 +27,8 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/test/setup.ts",
-    exclude: ["e2e/**", "node_modules/**", "dist/**"]
+    exclude: ["e2e/**", "node_modules/**", "dist/**"],
+    // Hosted runners run Vitest after the full .NET matrix; Admin UI tests need headroom under load.
+    testTimeout: process.env.CI ? 15_000 : 5_000
   }
 });

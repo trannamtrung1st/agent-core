@@ -53,7 +53,7 @@ jobs:
         working-directory: web
         run: |
           pnpm install --frozen-lockfile
-          pnpm run test --run
+          pnpm run test --run --maxWorkers=2
           pnpm run build
 
       - name: Install Playwright Chromium

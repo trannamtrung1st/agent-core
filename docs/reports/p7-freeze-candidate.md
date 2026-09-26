@@ -101,9 +101,9 @@ Authoritative command table and counts: [p7g-history-rollback-final-gate.md § W
 
 | Step | Status |
 | --- | --- |
-| Push exact candidate SHA to GitHub | **Not done** — local branch ahead of `origin/main`; worker environment: `gh auth login` required |
-| `.github/workflows/synthetic.yml` on that SHA | **Pending** |
-| Record workflow run URL and conclusion here | **Pending** |
+| Push exact candidate SHA to GitHub | **Done** — `cb097f4` pushed to `main` (2026-09-26) |
+| `.github/workflows/synthetic.yml` on that SHA | **Failed** — run [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) (`cb097f4`): Compose green; offline gates failed on Vitest timeouts in Admin UI tests under CI load |
+| Record workflow run URL and conclusion here | **In progress** — repair Vitest CI timeout/`maxWorkers` alignment; re-run required on new exact SHA |
 
 A parent commit, descendant commit, or pre-push local-only run is **not** freeze evidence.
 
