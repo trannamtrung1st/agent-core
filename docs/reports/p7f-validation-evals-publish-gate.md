@@ -36,7 +36,8 @@
 | Draft diff service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftDiffServiceTests` | Pass (3) at current W06 HEAD |
 | Publish gate service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftPublishServiceTests` | Pass (3) at current W06 HEAD |
 | Draft publish API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_publish` | Pass at publish-gate HEAD |
-| Draft evaluation service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests` | Pass (5) at current W06 HEAD |
+| Draft evaluation service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests` | Pass (6) at final-revise HEAD `349429d` |
+| Final eval matrix regression | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~RunScenarioAsync_supports_resource_trigger_and_external_action_checks` | Pass at `349429d` |
 | Draft evaluation store | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~DefinitionDraftEvaluationStoreTests` | Pass (4) at current W06 HEAD |
 | Draft admin API suite | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft` | Pass (25) at current W06 HEAD |
 | Publish gate eligibility | `npm test -- --run src/features/admin/definitionDraftPublishGate.test.ts` (web) | Pass (7) |
