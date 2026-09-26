@@ -58,13 +58,14 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 extended Compose managed Admin path (plan W08 step 7); further canonical doc owners (03–05, 09–18, including Admin observability/Compose in `docs/17`) and hosted exact-SHA CI remain.
+- W08 extended Compose managed Admin path (plan W08 step 7); further canonical doc owners (03–05, 09–16, 18; `docs/17` Admin observability synced at `dac549f`) and hosted exact-SHA CI remain.
 
 ## W08 local gate (partial)
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass on `ae83bfc` (worker run) |
+| Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass (1596 passed, 8 skipped) on `dac549f` |
+| P3–P6 regression selections | filters in W07 final gate table (ToolApproval, P4/P7D, P5 trigger, P5 store + P6 approval, P6 journey API) | Pass (43 + 19 + 5) on `dac549f` |
 | P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `b96942e` |
 | Frontend unit | `pnpm run test --run --maxWorkers=2` | Pass (468) on `a013b5c` |
 | Frontend build | `pnpm run build` | Pass on `a013b5c` |
