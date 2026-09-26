@@ -9,7 +9,7 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
 
   await page.getByRole("button", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
-  await expect(page.getByText("Managed")).toBeVisible();
+  await expect(page.getByLabel("Instance identity").getByText("Managed")).toBeVisible();
 
   const memoryAutomation = page.getByLabel("Memory and automation administration");
   await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
