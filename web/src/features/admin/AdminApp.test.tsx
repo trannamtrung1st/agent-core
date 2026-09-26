@@ -143,9 +143,45 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Examiner \(examiner v1\)/)).toBeInTheDocument();
+      expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
     });
+    expect(within(screen.getByLabelText("Definitions")).getByText("examiner")).toBeInTheDocument();
+    expect(screen.getByText("Default persona: Examiner · 1 version · latest v1")).toBeInTheDocument();
+    expect(screen.getByText("Pinned to v1")).toBeInTheDocument();
     expect(screen.getByText(/Compatibility \/ legacy instance/)).toBeInTheDocument();
+  });
+
+  it("groups immutable versions under one logical definition", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "customer-support",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Sam"
+      },
+      {
+        definitionId: "customer-support",
+        version: 2,
+        source: "builtIn",
+        status: "published",
+        displayName: "Sam"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+    });
+
+    const definitions = screen.getByLabelText("Definitions");
+    await waitFor(() => {
+      expect(within(definitions).getByText("Customer Support")).toBeInTheDocument();
+    });
+    expect(within(definitions).getAllByRole("button")).toHaveLength(1);
+    expect(within(definitions).getByText("customer-support")).toBeInTheDocument();
+    expect(within(definitions).getByText("Default persona: Sam · 2 versions · latest v2")).toBeInTheDocument();
+    expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
   });
 
   it("keeps definitions when instances fail and offers retry", async () => {
@@ -165,7 +201,7 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Examiner \(examiner v1\)/)).toBeInTheDocument();
+      expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
     });
     expect(screen.getByText(/Instances unavailable/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByLabelText("Instances")).getByRole("button", { name: "Retry" }));

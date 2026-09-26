@@ -4,6 +4,7 @@ import {
   App,
   Button,
   Descriptions,
+  Empty,
   Flex,
   Form,
   Input,
@@ -18,6 +19,7 @@ import {
   Tag,
   Typography
 } from "antd";
+import { ArrowLeftOutlined, MessageOutlined, RightOutlined } from "@ant-design/icons";
 import {
   applyDraftEnvironmentToCandidate,
   draftEnvironmentEquals,
@@ -85,6 +87,47 @@ type LoadState<T> =
   | { kind: "error"; message: string; unauthorized?: boolean }
   | { kind: "ready"; data: T };
 
+type DefinitionInventoryGroup = {
+  definitionId: string;
+  logicalName: string;
+  defaultPersona: string;
+  latestVersion: number;
+  latestStatus: string;
+  versions: AdminDefinitionInventoryItem[];
+};
+
+function logicalDefinitionName(definitionId: string) {
+  return definitionId
+    .split("-")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+export function groupDefinitionInventory(
+  items: AdminDefinitionInventoryItem[]
+): DefinitionInventoryGroup[] {
+  const groups = new Map<string, AdminDefinitionInventoryItem[]>();
+  for (const item of items) {
+    const versions = groups.get(item.definitionId) ?? [];
+    versions.push(item);
+    groups.set(item.definitionId, versions);
+  }
+
+  return Array.from(groups, ([definitionId, versions]) => {
+    const orderedVersions = [...versions].sort((left, right) => right.version - left.version);
+    const latest = orderedVersions[0];
+    return {
+      definitionId,
+      logicalName: logicalDefinitionName(definitionId),
+      defaultPersona: latest.displayName,
+      latestVersion: latest.version,
+      latestStatus: latest.status,
+      versions: orderedVersions
+    };
+  });
+}
+
 export function AdminApp({ route }: { route: AdminRoute }) {
   const [definitions, setDefinitions] = useState<LoadState<AdminDefinitionInventoryItem[]>>({ kind: "loading" });
   const [instances, setInstances] = useState<LoadState<AdminInstanceInventoryItem[]>>({ kind: "loading" });
@@ -148,64 +191,87 @@ export function AdminApp({ route }: { route: AdminRoute }) {
     rememberChatUrl(window.location.pathname);
     navigateToAppPath("/", false);
   };
+  const definitionGroups = definitions.kind === "ready"
+    ? groupDefinitionInventory(definitions.data)
+    : [];
 
   return (
     <App className="antd-root" message={{ duration: 3, maxCount: 3 }}>
     <Layout className="admin-layout">
       <Header className="admin-header">
-        <Flex align="center" justify="space-between" gap={12} wrap="wrap">
+        <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="admin-header-inner">
           <Flex align="center" gap={12}>
             <Typography.Title level={3} className="admin-title">
               Admin
             </Typography.Title>
-            <Button type="link" onClick={openChat}>
+            <Button type="text" icon={<MessageOutlined />} onClick={openChat}>
               Chat
             </Button>
           </Flex>
-          <Button onClick={returnToChat}>Return to last chat</Button>
+          <Button icon={<ArrowLeftOutlined />} onClick={returnToChat} aria-label="Return to last chat">
+            <span className="admin-return-label-wide">Return to last chat</span>
+            <span className="admin-return-label-compact">Return</span>
+          </Button>
         </Flex>
       </Header>
       <Content className="admin-content">
         {route.view === "home" ? (
-          <Flex vertical gap={24}>
-            <InventorySection
-              title="Definitions"
-              emptyLabel="No definitions found."
-              loading={definitions.kind === "loading"}
-              error={definitions.kind === "error" ? definitions.message : null}
-              unauthorized={definitions.kind === "error" ? (definitions.unauthorized ?? false) : false}
-              onRetry={() => void reloadDefinitions()}
-              items={
-                definitions.kind === "ready"
-                  ? definitions.data.map((item) => ({
-                      key: `${item.definitionId}:${item.version}`,
-                      title: `${item.displayName} (${item.definitionId} v${item.version})`,
-                      description: `Source: ${item.source} · Status: ${item.status}`,
-                      onClick: () => navigateToAppPath(adminDefinitionPath(item.definitionId))
-                    }))
-                  : []
-              }
-            />
-            <InventorySection
-              title="Instances"
-              emptyLabel="No instances yet. Start a chat to create compatibility instances."
-              loading={instances.kind === "loading"}
-              error={instances.kind === "error" ? instances.message : null}
-              unauthorized={instances.kind === "error" ? (instances.unauthorized ?? false) : false}
-              onRetry={() => void reloadInstances()}
-              items={
-                instances.kind === "ready"
-                  ? instances.data.map((item) => ({
-                      key: item.instanceId,
-                      title: `${item.personaName} · ${item.definitionId} v${item.activeVersion}`,
-                      description: item.compatibility ? "Compatibility / legacy instance" : "Managed instance",
-                      tag: item.compatibility ? "Compatibility" : "Managed",
-                      onClick: () => navigateToAppPath(adminInstancePath(item.instanceId))
-                    }))
-                  : []
-              }
-            />
-          </Flex>
+          <div className="admin-home">
+            <div className="admin-home-intro">
+              <Typography.Title level={2} className="admin-home-title">Agent inventory</Typography.Title>
+              <Typography.Paragraph type="secondary" className="admin-home-subtitle">
+                Inspect published definitions and the agent instances pinned to them.
+              </Typography.Paragraph>
+            </div>
+            <div className="admin-inventory-grid">
+              <InventorySection
+                title="Definitions"
+                countLabel={definitions.kind === "ready"
+                  ? `${definitionGroups.length} ${definitionGroups.length === 1 ? "definition" : "definitions"}`
+                  : null}
+                emptyLabel="No definitions found."
+                loading={definitions.kind === "loading"}
+                error={definitions.kind === "error" ? definitions.message : null}
+                unauthorized={definitions.kind === "error" ? (definitions.unauthorized ?? false) : false}
+                onRetry={() => void reloadDefinitions()}
+                items={
+                  definitions.kind === "ready"
+                    ? definitionGroups.map((group) => ({
+                        key: group.definitionId,
+                        title: group.logicalName,
+                        secondary: group.definitionId,
+                        description: `Default persona: ${group.defaultPersona} · ${group.versions.length} ${
+                          group.versions.length === 1 ? "version" : "versions"
+                        } · latest v${group.latestVersion}`,
+                        tag: group.latestStatus,
+                        onClick: () => navigateToAppPath(adminDefinitionPath(group.definitionId))
+                      }))
+                    : []
+                }
+              />
+              <InventorySection
+                title="Instances"
+                countLabel={instances.kind === "ready" ? `${instances.data.length} instances` : null}
+                emptyLabel="No instances yet. Start a chat to create compatibility instances."
+                loading={instances.kind === "loading"}
+                error={instances.kind === "error" ? instances.message : null}
+                unauthorized={instances.kind === "error" ? (instances.unauthorized ?? false) : false}
+                onRetry={() => void reloadInstances()}
+                items={
+                  instances.kind === "ready"
+                    ? instances.data.map((item) => ({
+                        key: item.instanceId,
+                      title: `${item.personaName} · ${item.definitionId}`,
+                      secondary: item.compatibility ? "Compatibility / legacy instance" : "Managed instance",
+                      description: `Pinned to v${item.activeVersion}`,
+                        tag: item.compatibility ? "Compatibility" : "Managed",
+                        onClick: () => navigateToAppPath(adminInstancePath(item.instanceId))
+                      }))
+                    : []
+                }
+              />
+            </div>
+          </div>
         ) : null}
 
         {route.view === "definition" ? (
@@ -238,6 +304,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
 
 function InventorySection({
   title,
+  countLabel,
   emptyLabel,
   loading,
   error,
@@ -246,16 +313,27 @@ function InventorySection({
   items
 }: {
   title: string;
+  countLabel: string | null;
   emptyLabel: string;
   loading: boolean;
   error: string | null;
   unauthorized: boolean;
   onRetry: () => void;
-  items: Array<{ key: string; title: string; description: string; tag?: string; onClick: () => void }>;
+  items: Array<{
+    key: string;
+    title: string;
+    secondary?: string;
+    description: string;
+    tag?: string;
+    onClick: () => void;
+  }>;
 }) {
   return (
-    <section aria-label={title}>
-      <Typography.Title level={4}>{title}</Typography.Title>
+    <section aria-label={title} className="admin-inventory-section">
+      <Flex align="baseline" justify="space-between" gap={12} className="admin-inventory-heading">
+        <Typography.Title level={4}>{title}</Typography.Title>
+        {countLabel ? <Typography.Text type="secondary">{countLabel}</Typography.Text> : null}
+      </Flex>
       {error ? (
         <Alert
           type={unauthorized ? "warning" : "error"}
@@ -266,31 +344,42 @@ function InventorySection({
               Retry
             </Button>
           }
-          style={{ marginBottom: 16 }}
+          className="admin-inventory-alert"
         />
       ) : null}
       {loading ? (
-        <Spin aria-label={`Loading ${title}`} />
+        <div className="admin-inventory-loading">
+          <Spin aria-label={`Loading ${title}`} />
+        </div>
       ) : error ? null : items.length === 0 ? (
-        <Typography.Text type="secondary">{emptyLabel}</Typography.Text>
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyLabel} className="admin-inventory-empty" />
       ) : (
         <List
+          className="admin-inventory-list"
           dataSource={items}
           renderItem={(item) => (
-            <List.Item>
-              <List.Item.Meta
-                title={
-                  <Button type="link" onClick={item.onClick} style={{ padding: 0, height: "auto" }}>
-                    {item.title}
-                  </Button>
-                }
-                description={
-                  <Flex gap={8} wrap="wrap" align="center">
-                    <span>{item.description}</span>
-                    {item.tag ? <Tag>{item.tag}</Tag> : null}
+            <List.Item className="admin-inventory-item">
+              <Button type="text" block className="admin-inventory-row" onClick={item.onClick}>
+                <Flex align="center" justify="space-between" gap={12}>
+                  <Flex vertical gap={4} className="admin-inventory-row-copy">
+                    <Typography.Text strong className="admin-inventory-row-title">
+                      {item.title}
+                    </Typography.Text>
+                    {item.secondary ? (
+                      <Typography.Text type="secondary" className="admin-inventory-row-secondary">
+                        {item.secondary}
+                      </Typography.Text>
+                    ) : null}
+                    <Flex gap={8} wrap="wrap" align="center">
+                      <Typography.Text type="secondary" className="admin-inventory-row-description">
+                        {item.description}
+                      </Typography.Text>
+                      {item.tag ? <Tag>{item.tag}</Tag> : null}
+                    </Flex>
                   </Flex>
-                }
-              />
+                  <RightOutlined className="admin-inventory-row-arrow" aria-hidden />
+                </Flex>
+              </Button>
             </List.Item>
           )}
         />
@@ -314,6 +403,7 @@ function DefinitionDetail({
   const rows = definitions.kind === "ready"
     ? definitions.data.filter((item) => item.definitionId === definitionId)
     : [];
+  const group = rows.length > 0 ? groupDefinitionInventory(rows)[0] : null;
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
@@ -511,8 +601,16 @@ function DefinitionDetail({
 
   return (
     <Flex vertical gap={16}>
-      <Button onClick={onBack}>Back to inventory</Button>
-      <Typography.Title level={4}>{definitionId}</Typography.Title>
+      <Button className="admin-back-button" onClick={onBack}>Back to inventory</Button>
+      {group ? (
+        <div className="admin-definition-heading">
+          <Typography.Title level={2}>{group.logicalName}</Typography.Title>
+          <Typography.Text type="secondary">{group.definitionId}</Typography.Text>
+          <Typography.Text>Default persona: {group.defaultPersona}</Typography.Text>
+        </div>
+      ) : (
+        <Typography.Title level={4}>{definitionId}</Typography.Title>
+      )}
       {definitions.kind === "loading" ? <Spin /> : null}
       {definitions.kind === "error" ? (
         <Alert
@@ -525,20 +623,26 @@ function DefinitionDetail({
       {definitions.kind === "ready" && rows.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
-      {rows.length > 0 ? (
-        <Descriptions bordered size="small" column={1}>
-          {rows.map((row) => (
-            <Descriptions.Item key={`${row.definitionId}:${row.version}`} label={`Version ${row.version}`}>
-              {row.displayName} · {row.source} · {row.status}
-            </Descriptions.Item>
-          ))}
-        </Descriptions>
+      {group ? (
+        <section aria-label="Definition versions" className="admin-definition-versions">
+          <Typography.Title level={4}>Versions</Typography.Title>
+          <Descriptions bordered size="small" column={1}>
+            {group.versions.map((row) => (
+              <Descriptions.Item key={`${row.definitionId}:${row.version}`} label={`v${row.version}`}>
+                <Flex gap={8} wrap="wrap" align="center">
+                  <span>{row.displayName} · {row.source} · {row.status}</span>
+                  {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
+                </Flex>
+              </Descriptions.Item>
+            ))}
+          </Descriptions>
+        </section>
       ) : null}
       {rows.length > 0 ? (
         <section aria-label="Definition drafts">
           <Typography.Title level={5} style={{ margin: 0 }}>Drafts and publish</Typography.Title>
           <Flex gap={8} wrap="wrap" style={{ marginTop: 8 }}>
-            {rows.map((row) => (
+            {(group?.versions ?? rows).map((row) => (
               <Button key={`${row.definitionId}:${row.version}`} onClick={() => void forkFromVersion(row)} disabled={busy}>
                 Fork v{row.version} ({row.source})
               </Button>
@@ -1175,7 +1279,7 @@ function InstanceDetail({
 
   return (
     <Flex vertical gap={16}>
-      <Button onClick={onBack}>Back to inventory</Button>
+      <Button className="admin-back-button" onClick={onBack}>Back to inventory</Button>
       <Typography.Title level={4}>Instance {instanceId}</Typography.Title>
       {headerIdentity ? <InstanceIdentityTags {...headerIdentity} /> : null}
       {effective.kind === "loading" ? <Spin aria-label="Loading effective configuration" /> : null}

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Typography } from "antd";
-import { MenuOutlined, PlusOutlined } from "@ant-design/icons";
+import { MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
 import {
   beginNewChat,
@@ -309,8 +309,15 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
             />
             <Flex align="center" gap={8} className="chat-header-meta">
               {onOpenAdmin ? (
-                <Button type="link" size="small" onClick={onOpenAdmin} aria-label="Open Admin">
-                  Admin
+                <Button
+                  type="text"
+                  size="small"
+                  className="chat-header-admin"
+                  icon={<SettingOutlined />}
+                  onClick={onOpenAdmin}
+                  aria-label="Open Admin"
+                >
+                  <span className="chat-header-admin-label">Admin</span>
                 </Button>
               ) : null}
               <Typography.Text
@@ -324,7 +331,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
               <Typography.Text
                 data-testid="connection"
                 type={connectionTone === "alarm" ? "danger" : "secondary"}
-                className="chat-header-status"
+                className={`chat-header-status chat-header-status-${connectionTone}`}
                 ellipsis={{ tooltip: connectionText }}
               >
                 {connectionText}
