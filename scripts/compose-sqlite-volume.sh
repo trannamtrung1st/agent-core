@@ -78,6 +78,73 @@ assert status == 200, (status, catalog_body)
 catalog = json.loads(catalog_body)
 assert any(item["sessionId"] == created["sessionId"] for item in catalog["items"]), catalog
 print("catalog", created["sessionId"])
+
+marker = "compose-admin-survival"
+status, fork_body = request(
+    "http://127.0.0.1:5080/api/v2/admin/definition-drafts/fork",
+    method="POST",
+    data=json.dumps(
+        {"definitionId": "examiner", "sourceVersion": 1, "sourceKind": "ForkBuiltIn"}
+    ).encode(),
+    headers=owner_headers,
+)
+fork = json.loads(fork_body)
+draft_id = fork["draftId"]
+candidate = fork["candidate"]
+candidate["systemInstructions"] = candidate.get("systemInstructions", "") + "\n" + marker
+status, updated_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}",
+    method="PUT",
+    data=json.dumps({"expectedRevision": fork["revision"], "candidate": candidate}).encode(),
+    headers=owner_headers,
+)
+updated = json.loads(updated_body)
+status, pub_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/publish",
+    method="POST",
+    data=json.dumps({"expectedRevision": updated["revision"]}).encode(),
+    headers=owner_headers,
+)
+publication = json.loads(pub_body)
+pub_version = publication["version"]
+assert pub_version > 1, publication
+
+status, inst_body = request(
+    "http://127.0.0.1:5080/api/v2/admin/agent-instances",
+    method="POST",
+    data=json.dumps({"definitionId": "examiner", "version": pub_version}).encode(),
+    headers=owner_headers,
+)
+instance = json.loads(inst_body)
+assert instance.get("compatibility") is False, instance
+
+status, managed_body = request(
+    "http://127.0.0.1:5080/api/v2/sessions",
+    method="POST",
+    data=json.dumps({"agentInstanceId": instance["instanceId"], "mode": "text"}).encode(),
+    headers=owner_headers,
+    dest="/tmp/agent-core-managed-session.json",
+)
+managed = json.loads(managed_body)
+assert managed["agentInstanceId"] == instance["instanceId"], managed
+assert managed["agentVersion"] == pub_version, managed
+
+status, events_body = request(
+    "http://127.0.0.1:5080/api/v2/admin/events?limit=50",
+    headers=owner_headers,
+)
+events_text = events_body.decode("utf-8") if isinstance(events_body, bytes) else events_body
+assert marker not in events_text, "draft marker leaked into admin events"
+admin_state = {
+    "draftId": draft_id,
+    "publicationVersion": pub_version,
+    "instanceId": instance["instanceId"],
+    "managedSessionId": managed["sessionId"],
+    "marker": marker,
+}
+json.dump(admin_state, open("/tmp/agent-core-admin.json", "w"))
+print("admin", instance["instanceId"], managed["sessionId"], pub_version)
+
 open("/tmp/agent-core-owner-token.txt", "w").write(token)
 PY
 
@@ -212,6 +279,47 @@ assert "Compose result survived." in result, result
 for secret in ("SECRET_BODY", "SECRET_EVIDENCE", "SECRET_CHECKPOINT"):
     assert secret not in result, secret
 print("work survived", work["completedId"], work["approvalWorkId"])
+PY
+
+python3 - <<PY
+import json, urllib.request
+
+token = open("/tmp/agent-core-owner-token.txt").read()
+admin = json.load(open("/tmp/agent-core-admin.json"))
+instance_id = admin["instanceId"]
+managed_session_id = admin["managedSessionId"]
+pub_version = admin["publicationVersion"]
+marker = admin["marker"]
+
+def get(url):
+    req = urllib.request.Request(url, headers={"X-AgentCore-Owner-Capability": token})
+    with urllib.request.urlopen(req) as response:
+        return response.status, response.read().decode("utf-8")
+
+status, config_json = get(
+    f"http://127.0.0.1:5080/api/v2/admin/instances/{instance_id}/effective-config"
+)
+assert status == 200, config_json
+config = json.loads(config_json)
+assert config["definitionVersion"] == pub_version, config
+assert config.get("compatibility") is False, config
+
+status, managed_json = get(f"http://127.0.0.1:5080/api/v2/sessions/{managed_session_id}")
+assert status == 200, managed_json
+managed = json.loads(managed_json)
+assert managed["sessionId"] == managed_session_id, managed
+assert managed["agentInstanceId"] == instance_id, managed
+assert managed["agentVersion"] == pub_version, managed
+
+status, events = get("http://127.0.0.1:5080/api/v2/admin/events?limit=50")
+assert status == 200, events
+assert marker not in events, events
+assert "PublicationCreated" in events or "publication.created" in events.lower(), events
+
+status, publications = get("http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications")
+assert status == 200, publications
+assert f'"version":{pub_version}' in publications.replace(" ", "") or f'"version": {pub_version}' in publications, publications
+print("admin survived", instance_id, managed_session_id, pub_version)
 PY
 
 spa="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5080/)"
