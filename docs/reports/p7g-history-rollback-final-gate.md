@@ -65,6 +65,7 @@
 | Check | Command | Result |
 | --- | --- | --- |
 | Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass on `ae83bfc` (worker run) |
+| P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `b96942e` |
 
 ## W07 browser
 
