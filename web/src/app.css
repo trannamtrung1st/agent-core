@@ -248,12 +248,24 @@ body,
   overflow-anchor: none;
   scrollbar-width: thin;
   scrollbar-color: var(--ac-color-text-tertiary) transparent;
+  scrollbar-gutter: stable;
+}
+
+/* Bounded scroll regions: thin scrollbar + reserved gutter so controls stay clear of the thumb */
+.ac-scroll-pane,
+.pending-send-queue-list-scroll {
+  overflow: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ac-color-text-tertiary) transparent;
+  scrollbar-gutter: stable;
 }
 
 .session-rail-list,
 .app-sider {
   scrollbar-width: thin;
   scrollbar-color: var(--ac-color-text-tertiary) transparent;
+  scrollbar-gutter: stable;
 }
 
 .conversation-column {
@@ -1144,7 +1156,6 @@ body,
 
 .pending-send-queue-list-scroll {
   max-height: 12.5rem;
-  overflow-y: auto;
 }
 
 .pending-send-queue-item {
@@ -1753,7 +1764,7 @@ body,
 
 .admin-draft-focused {
   min-width: 0;
-  overflow: hidden;
+  overflow: clip;
   scroll-margin-block-start: var(--ac-space-section);
   border: 1px solid var(--ac-color-border);
   border-radius: 8px;
@@ -1789,11 +1800,9 @@ body,
   margin-block-end: var(--ac-space-section);
 }
 
-.admin-draft-tabs .ant-tabs-content {
-  height: 32rem;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ac-color-text-tertiary) transparent;
+.admin-draft-tabs .ant-tabs-content,
+.admin-draft-tabs .ant-tabs-content-holder {
+  min-width: 0;
 }
 
 .admin-draft-tab,
@@ -2043,10 +2052,6 @@ body,
   .admin-instance-version-actions .ant-btn {
     width: 100%;
     min-height: 40px;
-  }
-
-  .admin-draft-tabs .ant-tabs-content {
-    height: 28rem;
   }
 
   .admin-draft-create {
