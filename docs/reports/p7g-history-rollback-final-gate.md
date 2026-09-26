@@ -1,6 +1,6 @@
 # P7G — Admin history, deprecation/rollback, and final P7 gate
 
-**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139 / review-0051 PASS). W08 local gate closed at `2b967cf`. W09 hosted exact-SHA CI green on `f0c9e19`; freeze acceptance pending.
+**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139). W08 local gate closed at `2b967cf` (review 0160). W09 closed at `5eea954` (review 0164). **P7 frozen** on hosted tree `f0c9e19` — see [p7-freeze-candidate.md](p7-freeze-candidate.md).
 
 **Baseline:** `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0` (W06 P7F closure)
 
@@ -54,10 +54,6 @@
 | Compose SQLite volume smoke | `./scripts/compose-sqlite-volume.sh` | Pass |
 
 **Solution gate verification:** `dotnet test AgentCore.sln --nologo` — Pass (1596 passed, 8 skipped) on the W07 regression-fix candidate containing this report; approved baseline `6ec1c675d1a896b3fe95b85d1077f27110577df5` is a git ancestor of that candidate.
-
-## Remaining (phase gate)
-
-- **W09:** [p7-freeze-candidate.md](p7-freeze-candidate.md) acceptance — hosted `synthetic.yml` **green** on verified tree **`f0c9e19`** (workflow [`36218518149`](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)); phase freeze review/acceptance only.
 
 ## W08 local gate (observed at `2b967cf`)
 

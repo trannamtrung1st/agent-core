@@ -1,14 +1,14 @@
 # P7 — Agent harness and Admin lifecycle
 
-This report records the **P7 implementation freeze candidate**. P7 is **not frozen** until hosted Synthetic offline gates and Compose smoke are **green on the exact candidate SHA** recorded below. Do not reopen P1–P6 freeze baselines as part of P7 evidence.
+This report records the **P7 implementation freeze**. Do not reopen P7 without a reproducible regression or an explicit product requirement that belongs in a later phase rather than P8+. Do not reopen P1–P6 freeze baselines as part of P7 evidence.
 
 ## Freeze status
 
-**P7 is not frozen** (2026-09-26) until this W09 batch is accepted; hosted evidence is recorded below. Local W08 gate evidence is on behavior baseline **`df761d8`** and documentation closure **`2b967cf`** (review 0160).
+**P7 is frozen** on verified hosted tree **`f0c9e19`** (`f0c9e19a3e7cc3d2413a32f9e6761979739fb69b`, 2026-09-26). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)). **Last behavior-affecting SHA** is **`df761d8`**. **W09** freeze batch accepted on **`5eea954`** (review **0164** / review-0065 PASS). Documentation-only descendants after **`f0c9e19`** (including **`5eea954`** and later docs-only freeze handoff commits) are not new implementation baselines. **P8** is next.
 
 | Item | Value |
 | --- | --- |
-| **P7 hosted verified freeze tree** | **`f0c9e19`** (`f0c9e19a3e7cc3d2413a32f9e6761979739fb69b` — Vitest CI stabilization over **`cb097f4`** report draft; behavior baseline **`df761d8`**) |
+| **P7 verified freeze tree** | **`f0c9e19`** |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
 | **Last behavior-affecting SHA (W08)** | **`df761d8`** (`df761d855c58ec5ebf8c9d0044910dc101895746` — Compose Admin draft resource upload/bind + `Persistence__DefinitionResourceRoot` volume) |
 | **Prior phase baselines preserved** | P4 **`822028f`** / `35806764609`; P5 **`4bbc0c1`**; P6 **`30adaeb`** / `36085265506` (`bef77d1` last behavior) |
@@ -119,7 +119,5 @@ Per master proposal §14 — not implemented in P7:
 
 ## Unverified / limitations
 
-- Hosted exact-SHA Synthetic + Compose green recorded on **`f0c9e19`** / **`36218518149`**; lifecycle acceptance remains W09 review.
 - Optional Real provider paths may be skipped in key-free CI; Synthetic remains the deterministic gate.
 - Faithful-manual is opt-in and wall-clock; not part of default `synthetic` CI project.
-- P7 does not claim freeze until this report’s candidate SHA matches a green hosted workflow run.
