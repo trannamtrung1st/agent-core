@@ -29,8 +29,11 @@ P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible r
 P7 implementation freeze:
 
 ```text
-f4107d76b7a8ce894f3eb889560dd61aa65260e2 — verified P7 tree (last behavior)
-workflow 36239630112 — green
+0e29cfa — verified P7 tree (last behavior; post-freeze Admin follow-up re-close)
+2b4a4aa — draft delete API/history, focused draft editor workflow
+f4107d76b7a8ce894f3eb889560dd61aa65260e2 — prior canonical tree (W08)
+workflow 36239630112 — green on f4107d7
+workflow 36249987395 — 0e29cfa attempt: Compose green; offline Infrastructure failed (rerun)
 479b637 — closure repair (knowledge.retrieve, WorkItem persona, agent listing)
 f4107d7 — hardening + exact-SHA gate (supersedes 53d439e / 36228090172)
 5eea954 — W09 closure bookkeeping (review 0164; historical)
@@ -53,7 +56,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`f4107d7`**, workflow **`36239630112`** green (last behavior **`f4107d7`**; closure repair **`479b637`** → **`f4107d7`**; supersedes **`53d439e`** / **`36228090172`**) — see `docs/reports/p7-freeze-candidate.md`.
+1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`0e29cfa`** (last behavior **`0e29cfa`**; includes **`2b4a4aa`** draft delete + **`0e29cfa`** fork-default/concurrency follow-up; prior canonical **`f4107d7`** / workflow **`36239630112`** green) — see `docs/reports/p7-freeze-candidate.md`. **Hosted exact-SHA on `0e29cfa`:** rerun required (workflow **`36249987395`** failed at Infrastructure tests).
 2. **P8 — harness/platform extensibility** is the active phase.
 3. **P9 — sandbox evolution when requirements justify it.**
 4. **P10 — multi-user/product infrastructure when requirements justify it.**
