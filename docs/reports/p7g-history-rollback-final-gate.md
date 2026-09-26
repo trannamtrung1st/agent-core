@@ -58,7 +58,7 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 frontend/synthetic/admin-lifecycle Playwright refresh on HEAD, canonical sync (05, 12, 14), and hosted exact-SHA CI remain.
+- W08 canonical sync (05, 12, 14) and hosted exact-SHA CI (W09) remain.
 
 ## W08 local gate (partial)
 
@@ -67,11 +67,11 @@
 | Solution backend suites | `dotnet test AgentCore.sln --nologo -m:1` | Pass (1596 passed, 8 skipped) on `f1017c6` |
 | P3–P6 regression selections | filters in W07 final gate table (ToolApproval, P4/P7D, P5 trigger, P5 store + P6 approval, P6 journey API) | Pass (43 + 19 + 5) on `f1017c6` |
 | P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `f1017c6` |
-| Frontend unit | `pnpm run test --run --maxWorkers=2` | Pass (468) on `a013b5c` |
-| Frontend build | `pnpm run build` | Pass on `a013b5c` |
-| Owner/trusted-local + Admin redaction API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (56) on `a013b5c` |
-| P7G whole-phase journey (disposable DB) | from `web/`: `rm -f ../data/playwright/w08-admin-lifecycle.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-admin-lifecycle.db CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) on `a013b5c` |
-| Synthetic Playwright (`synthetic` project) | from `web/`: `rm -f ../data/playwright/w08-synthetic-gate.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-synthetic-gate.db CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) on `4e868c3` |
+| Frontend unit | from `web/`: `pnpm run test --run --maxWorkers=2` | Pass (468) on `662ab35` |
+| Frontend build | from `web/`: `pnpm run build` | Pass on `662ab35` |
+| Owner/trusted-local + Admin redaction API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (56) on `662ab35` |
+| P7G whole-phase journey (disposable DB) | from `web/`: `rm -f ../data/playwright/w08-admin-lifecycle.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-admin-lifecycle.db CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) on `662ab35` |
+| Synthetic Playwright (`synthetic` project) | from `web/`: `rm -f ../data/playwright/w08-synthetic-gate.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-synthetic-gate.db CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) on `662ab35` |
 | Compose SQLite volume smoke (sessions, work items, Admin fork/resource/publish/instance/managed session) | `./scripts/compose-sqlite-volume.sh` | Pass (local; resource blobs on `/data/definition-resources`; bytes checked after recreate) |
 | Faithful Manual-A wall-clock (P5/P6 detached reminder) | from `web/`: `rm -f ../data/playwright/w08-faithful-manual.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-faithful-manual.db PLAYWRIGHT_FAITHFUL_MANUAL=1 CI=1 pnpm exec playwright test --project=faithful-manual` | Pass (1) on `df761d8` |
 
