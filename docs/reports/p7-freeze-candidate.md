@@ -4,26 +4,25 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 
 ## Freeze status
 
-**P7 is frozen** on verified hosted tree **`f0c9e19`** (`f0c9e19a3e7cc3d2413a32f9e6761979739fb69b`, 2026-09-26). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)). **Last behavior-affecting SHA** is **`df761d8`**. **W09** freeze batch accepted on **`5eea954`** (review **0164** / review-0065 PASS). Documentation-only descendants after **`f0c9e19`** (including **`5eea954`** and later docs-only freeze handoff commits) are not new implementation baselines. **P8** is next.
+**P7 is frozen** on verified hosted tree **`53d439e`** (`53d439e880b91bf28e7b2b72a2d7a157b6d3a813`, 2026-09-26). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172)). **Last behavior-affecting SHA** is **`53d439e`** (`DefinitionDraftSyntheticOfflineLanguageModel` — Scripted-only draft eval; no profile resolver / hosted HTTP). **W09** freeze batch accepted on **`5eea954`** (review **0164** / review-0065 PASS). Prior bookkeeping tree **`f0c9e19`** (workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)) superseded by execution final hosted gate (review **0169** / P7-FINAL-06). Documentation-only descendants after **`53d439e`** are not new implementation baselines. **P8** is next.
 
 **Execution final REVISE candidate (review 0166 / review-0067):** **`349429d`** (`349429dc8a6f6277274ca42787f268c86d11f8c0`, 2026-09-26) — P7F eval matrix completion, pinned P6 detached work on archived instances, canonical status sync, and whitespace repair. Hosted Synthetic + Compose are **green** on that SHA (workflow [**`36225238807`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36225238807)).
 
-**Execution final REVISE candidate (review 0167 / review-0068 round 2):** **`d7dcf8f`** (`d7dcf8f0df5bf5d71d4468b9bb2aa884ae82ec15`, 2026-09-26) — isolated Synthetic draft behavior evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator`), full Admin check-type matrix, and runtime eval regressions. Local gates: `AdminDefinitionDraft*` application tests **15/15**, `AdminDefinitionDraftEvaluationServiceTests` **7/7**, `definitionDraftPublishGate.test.ts` **7/7** on this SHA. Record exact hosted `synthetic.yml` run id on **`d7dcf8f`** when Actions completes; bookkeeping freeze HEAD remains **`f0c9e19`** until execution final COMPLETE and canonical promotion (P7-FINAL-06).
+**Execution final REVISE candidate (review 0167 / review-0068 round 2):** **`d7dcf8f`** (`d7dcf8f0df5bf5d71d4468b9bb2aa884ae82ec15`, 2026-09-26) — isolated Synthetic draft behavior evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator`), full Admin check-type matrix, and runtime eval regressions. Hosted Synthetic + Compose **green** on that SHA (workflow [**`36227705052`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36227705052)).
 
-**Execution final REVISE candidate (review 0168 / review-0069 round 2):** **`53d439e`** (`53d439e880b91bf28e7b2b72a2d7a157b6d3a813`, 2026-09-26) — `DefinitionDraftSyntheticOfflineLanguageModel` (Scripted-only eval; no profile resolver / hosted HTTP). Local: `DefinitionDraftSyntheticBehaviorEvaluatorTests` **2/2**, `AdminDefinitionDraftEvaluationServiceTests` **7/7**. Record green hosted `synthetic.yml` on exact behavior SHA **`53d439e`** before canonical freeze promotion (P7-FINAL-06).
-
-**Execution final REVISE gate retrigger (review 0169 / review-0070):** **`d3d1fc0`** (`d3d1fc0546cc6185f2e979889d63e3b5c791eff5`, 2026-09-26) — empty commit to queue hosted `synthetic.yml` on the **`53d439e`** behavior tree. Local offline gate: `dotnet test AgentCore.sln` **green** (all backend suites). Promote canonical freeze from **`f0c9e19`** to **`53d439e`** only after a **green** hosted Synthetic + Compose run is recorded on that behavior SHA (or this gate HEAD once verified equivalent).
+**Execution final behavior + canonical freeze (review 0168–0169 / review-0070):** **`53d439e`** — offline eval isolation above; hosted Synthetic + Compose **green** (workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172)). Gate retrigger commits **`d3d1fc0`** / doc handoff **`4d55876`** queue duplicate runs; canonical promotion uses exact behavior SHA **`53d439e`**.
 
 | Item | Value |
 | --- | --- |
-| **P7 verified freeze tree** | **`f0c9e19`** |
+| **P7 verified freeze tree** | **`53d439e`** |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
 | **Last behavior-affecting SHA (W08)** | **`df761d8`** (`df761d855c58ec5ebf8c9d0044910dc101895746` — Compose Admin draft resource upload/bind + `Persistence__DefinitionResourceRoot` volume) |
 | **Prior phase baselines preserved** | P4 **`822028f`** / `35806764609`; P5 **`4bbc0c1`**; P6 **`30adaeb`** / `36085265506` (`bef77d1` last behavior) |
 | **Reviewed P7 proposal baseline** | **`4ab5069`** / workflow **`36096331077`** green (pre-P7 product edits) |
-| **Verified hosted Synthetic + Compose on P7 candidate** | workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) — **green** on **`f0c9e19`** (offline gates + Compose smoke) |
+| **Verified hosted Synthetic + Compose on P7 candidate** | workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) — **green** on **`53d439e`** (offline gates + Compose smoke) |
+| **Prior bookkeeping freeze tree (W09)** | **`f0c9e19`** / workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) |
 
-After **`df761d8`**, later commits are gate evidence, canonical status sync, and hosted CI stabilization. **`f0c9e19`** includes Vitest/Actions configuration (`web/vite.config.ts`, `.github/workflows/synthetic.yml`); other post-`df761d8` commits are documentation-only. None supersede **`f0c9e19`** as the verified Admin implementation baseline.
+After **`df761d8`**, later commits add P7F eval isolation, Vitest/Actions stabilization on **`f0c9e19`**, and execution-final behavior on **`53d439e`**. Documentation-only descendants after **`53d439e`** are not new implementation baselines.
 
 ## Slice and work-item SHAs
 
@@ -111,8 +110,9 @@ Authoritative command table and counts: [p7g-history-rollback-final-gate.md § W
 
 | Step | Status |
 | --- | --- |
-| Push exact candidate SHA to GitHub | **Done** — `f0c9e19` on `main` (2026-09-26) |
-| `.github/workflows/synthetic.yml` on that SHA | **Green** — [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) on **`f0c9e19`** |
+| Push exact candidate SHA to GitHub | **Done** — `53d439e` on `main` (2026-09-26) |
+| `.github/workflows/synthetic.yml` on that SHA | **Green** — [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) on **`53d439e`** |
+| Prior W09 bookkeeping tree | [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) on **`f0c9e19`** |
 | Prior failed attempt (superseded) | [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) on **`cb097f4`** — Vitest timeouts under CI load; fixed in `f0c9e19` |
 
 A parent commit, descendant commit, or pre-push local-only run is **not** freeze evidence.

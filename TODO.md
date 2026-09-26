@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P8 — harness/platform extensibility.** **P7 frozen** on `f0c9e19` (workflow `36218518149` green; W09 review 0164 on `5eea954`) — see `docs/reports/p7-freeze-candidate.md`.
+**Current active phase:** **P8 — harness/platform extensibility.** **P7 frozen** on `53d439e` (workflow `36228090172` green; W09 review 0164 on `5eea954`) — see `docs/reports/p7-freeze-candidate.md`.
 
 P4 implementation freeze:
 
@@ -41,7 +41,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`f0c9e19`**, workflow **`36218518149`** green (last behavior **`df761d8`**; closure bookkeeping **`5eea954`**) — see `docs/reports/p7-freeze-candidate.md`.
+1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`53d439e`**, workflow **`36228090172`** green (last behavior **`53d439e`**; closure bookkeeping **`5eea954`**) — see `docs/reports/p7-freeze-candidate.md`.
 2. **P8 — harness/platform extensibility** is the active phase.
 3. **P9 — sandbox evolution when requirements justify it.**
 4. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -898,7 +898,7 @@ Agent Instances
 - [x] Draft change → test → diff → publish new version → upgrade instance scenario. *(admin-lifecycle journey)*
 - [x] Rollback/deprecate scenario. *(admin-lifecycle journey)*
 - [x] Memory reset and trigger revoke scenarios. *(admin-lifecycle journey + P7E history mutator tests)*
-- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA green on `f0c9e19`; P7 frozen review 0164)*
+- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA green on `53d439e`; P7 frozen review 0164 / execution final 0169)*
 
 ### P7 stop condition
 
@@ -1109,7 +1109,7 @@ P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
 P6 freeze:  30adaeb / workflow 36085265506 green (bef77d1 last behavior)
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
-active phase: P8 — harness/platform extensibility (P7 frozen on f0c9e19)
+active phase: P8 — harness/platform extensibility (P7 frozen on 53d439e)
 ```
 
 - [ ] Keep TODO focused on current/future work.
