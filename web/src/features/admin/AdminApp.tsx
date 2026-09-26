@@ -1388,27 +1388,35 @@ function DraftEditor({
                     </label>
                     <label className="admin-draft-field admin-resource-file">
                       <Typography.Text strong>Resource file</Typography.Text>
-                      <Upload.Dragger
-                        beforeUpload={(file) => {
-                          setPendingFile(file);
-                          return false;
-                        }}
-                        onRemove={() => {
-                          setPendingFile(null);
-                          return true;
-                        }}
-                        fileList={pendingFile
-                          ? [{ uid: "draft-resource", name: pendingFile.name, status: "done" }]
-                          : []}
-                        maxCount={1}
-                        multiple={false}
-                        disabled={busy}
-                        className="admin-resource-upload"
-                      >
-                        <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-                        <p className="ant-upload-text">Choose a file or drag it here</p>
-                        <p className="ant-upload-hint">One file will be bound to the logical path above.</p>
-                      </Upload.Dragger>
+                      <div className="admin-resource-upload-block">
+                        <Upload.Dragger
+                          beforeUpload={(file) => {
+                            setPendingFile(file);
+                            return false;
+                          }}
+                          showUploadList={false}
+                          maxCount={1}
+                          multiple={false}
+                          disabled={busy}
+                          className="admin-resource-upload"
+                        >
+                          <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+                          <p className="ant-upload-text">Choose a file or drag it here</p>
+                          <p className="ant-upload-hint">One file will be bound to the logical path above.</p>
+                        </Upload.Dragger>
+                        {pendingFile ? (
+                          <Tag
+                            className="admin-resource-pending"
+                            closable={!busy}
+                            onClose={(event) => {
+                              event.preventDefault();
+                              setPendingFile(null);
+                            }}
+                          >
+                            {pendingFile.name}
+                          </Tag>
+                        ) : null}
+                      </div>
                     </label>
                   </div>
                   <Button

@@ -1909,6 +1909,21 @@ body,
   grid-column: 1 / -1;
 }
 
+.admin-resource-upload-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-compact);
+  min-width: 0;
+}
+
+.admin-resource-pending.ant-tag {
+  align-self: flex-start;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .admin-resource-upload .ant-upload-drag {
   padding: var(--ac-space-section);
 }
@@ -1953,6 +1968,10 @@ body,
 
 .admin-eval-prompt {
   grid-column: 1 / -1;
+}
+
+.admin-eval-prompt-input.ant-input {
+  line-height: 1.6;
 }
 
 .admin-evaluation-list {

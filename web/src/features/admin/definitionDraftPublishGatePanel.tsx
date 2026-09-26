@@ -346,11 +346,13 @@ export function DefinitionDraftPublishGatePanel({
         </label>
         <label className="admin-draft-field admin-eval-prompt">
           <Typography.Text strong>Prompt</Typography.Text>
-          <Input
+          <Input.TextArea
             aria-label="Evaluation scenario prompt"
+            rows={4}
             value={scenarioPrompt}
             onChange={(event) => setScenarioPrompt(event.target.value)}
             disabled={busy || loading}
+            className="admin-eval-prompt-input"
           />
         </label>
         {toolFieldRequired ? (
