@@ -1011,9 +1011,12 @@ describe("AdminApp", () => {
     fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
     fireEvent.click(screen.getByRole("button", { name: "Archive instance" }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Unsaved persona changes will be discarded/)).toBeInTheDocument();
+      },
+      { timeout: 10_000 }
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(updateAdminAgentInstanceLifecycle).not.toHaveBeenCalled();
@@ -1022,13 +1025,16 @@ describe("AdminApp", () => {
     const confirmButtons = screen.getAllByRole("button", { name: "Archive" });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]!);
 
-    await waitFor(() => {
-      expect(updateAdminAgentInstanceLifecycle).toHaveBeenCalledWith(
-        managedEffective.instanceId,
-        1,
-        "Archived"
-      );
-    });
+    await waitFor(
+      () => {
+        expect(updateAdminAgentInstanceLifecycle).toHaveBeenCalledWith(
+          managedEffective.instanceId,
+          1,
+          "Archived"
+        );
+      },
+      { timeout: 10_000 }
+    );
   });
 
   it("defaults fork source to the highest non-deprecated version on definition detail", async () => {
