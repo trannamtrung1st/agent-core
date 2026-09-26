@@ -5,9 +5,22 @@ using AgentCore.Application.Sessions;
 
 namespace AgentCore.Infrastructure.Definitions;
 
-public sealed class InMemoryDefinitionDraftEvaluationStore(IAgentDefinitionAdminStore admin) : IDefinitionDraftEvaluationStore
+public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEvaluationStore
 {
+    private readonly IAgentDefinitionAdminStore admin;
     private readonly ConcurrentDictionary<Guid, DraftEvaluationState> _drafts = new();
+
+    public InMemoryDefinitionDraftEvaluationStore(IAgentDefinitionAdminStore admin)
+    {
+        this.admin = admin;
+        if (admin is InMemoryAgentDefinitionAdminStore inMemory)
+        {
+            inMemory.EvaluationStore = this;
+        }
+    }
+
+    internal void DeleteDraftEvaluation(Guid draftId) =>
+        _drafts.TryRemove(draftId, out _);
 
     public ValueTask<IReadOnlyList<DefinitionEvaluationScenario>> ListScenariosAsync(
         Guid draftId,

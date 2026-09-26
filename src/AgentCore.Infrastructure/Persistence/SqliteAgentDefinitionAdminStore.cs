@@ -168,6 +168,62 @@ public sealed class SqliteAgentDefinitionAdminStore(
         return AgentDefinitionAdminMapping.MapDraft(row);
     }
 
+    public async ValueTask DeleteDraftAsync(
+        AgentDefinitionDraftDelete delete,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var draftId = delete.DraftId.ToString("D");
+        var row = await db.AgentDefinitionDrafts
+            .SingleOrDefaultAsync(item => item.DraftId == draftId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Draft was not found.");
+
+        if (row.Revision != delete.ExpectedRevision)
+        {
+            throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+
+        await db.AgentDefinitionDraftResources
+            .Where(item => item.DraftId == draftId)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await db.AgentDefinitionDraftEvaluationScenarios
+            .Where(item => item.DraftId == draftId)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await db.AgentDefinitionDraftEvaluationResults
+            .Where(item => item.DraftId == draftId)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (delete.OperationId != Guid.Empty)
+        {
+            AdminEventPersistence.StageAppend(
+                db,
+                AdminEventFactory.DraftDeleted(
+                    delete.OperationId,
+                    delete.DeletedAt,
+                    row.DefinitionId,
+                    delete.DraftId,
+                    row.Revision,
+                    delete.ActorKind),
+                ids.NewId());
+        }
+
+        db.AgentDefinitionDrafts.Remove(row);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+    }
+
     public async ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
         AgentDefinitionDraftRevisionBump bump,
         CancellationToken cancellationToken = default)

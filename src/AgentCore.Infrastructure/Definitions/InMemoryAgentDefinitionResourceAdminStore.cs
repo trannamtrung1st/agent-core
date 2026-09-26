@@ -63,6 +63,9 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         _publicationResources.TryRemove((definitionId, version), out _);
     }
 
+    internal void DeleteDraftResources(Guid draftId) =>
+        _draftResources.TryRemove(draftId, out _);
+
     public ValueTask<IReadOnlyList<AgentDefinitionDraftResource>> ListDraftResourcesAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)

@@ -185,6 +185,19 @@ export async function updateAdminDefinitionDraft(
   return (await response.json()) as AdminDefinitionDraft;
 }
 
+export async function deleteAdminDefinitionDraft(
+  draftId: string,
+  expectedRevision: number
+): Promise<void> {
+  const response = await ownerFetch(
+    `/api/v2/admin/definition-drafts/${draftId}?expectedRevision=${expectedRevision}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin delete draft failed (${response.status})`));
+  }
+}
+
 export async function publishAdminDefinitionDraft(
   draftId: string,
   expectedRevision: number

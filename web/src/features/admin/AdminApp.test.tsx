@@ -70,6 +70,7 @@ vi.mock("../../services/adminApi", () => ({
   listAdminDefinitionDrafts: vi.fn(),
   listAdminDefinitionPublications: vi.fn(),
   getAdminDefinitionDraft: vi.fn(),
+  deleteAdminDefinitionDraft: vi.fn(),
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
   forkAdminDefinitionDraft: vi.fn(),
@@ -93,6 +94,7 @@ import * as antd from "antd";
 import {
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
+  deleteAdminDefinitionDraft,
   listAdminDefinitionDrafts,
   listAdminDefinitionPublications,
   listAdminDefinitions,
@@ -146,7 +148,8 @@ describe("AdminApp", () => {
       expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
     });
     expect(within(screen.getByLabelText("Definitions")).getByText("examiner")).toBeInTheDocument();
-    expect(screen.getByText("Default persona: Examiner · 1 version · latest v1")).toBeInTheDocument();
+    expect(screen.getByText("Latest-version persona: Examiner · 1 version · latest v1")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Instances")).getByText("1 instance")).toBeInTheDocument();
     expect(screen.getByText("Pinned to v1")).toBeInTheDocument();
     expect(screen.getByText(/Compatibility \/ legacy instance/)).toBeInTheDocument();
   });
@@ -180,8 +183,69 @@ describe("AdminApp", () => {
     });
     expect(within(definitions).getAllByRole("button")).toHaveLength(1);
     expect(within(definitions).getByText("customer-support")).toBeInTheDocument();
-    expect(within(definitions).getByText("Default persona: Sam · 2 versions · latest v2")).toBeInTheDocument();
+    expect(within(definitions).getByText("Latest-version persona: Sam · 2 versions · latest v2")).toBeInTheDocument();
     expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
+  });
+
+  it("confirms and removes a definition draft at its current revision", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000dd";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Alex"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts)
+      .mockResolvedValueOnce([
+        {
+          draftId,
+          definitionId: "examiner",
+          revision: 3,
+          sourceKind: "ForkBuiltIn",
+          sourceVersion: 1,
+          updatedAt: "2026-01-01T00:00:00Z"
+        }
+      ])
+      .mockResolvedValueOnce([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 4,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      candidate: { systemInstructions: "Draft body", definitionId: "examiner" }
+    });
+    vi.mocked(deleteAdminDefinitionDraft).mockResolvedValue(undefined);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Draft rev 3/ })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Draft rev 3/ }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Draft editor")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(screen.getByLabelText("Draft editor")).getByRole("button", { name: "Delete draft" }));
+    expect(screen.getByText("Delete draft from v1?")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete draft" }).at(-1)!);
+
+    await waitFor(() => {
+      expect(deleteAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 4);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Existing drafts")).not.toBeInTheDocument();
+    });
   });
 
   it("keeps definitions when instances fail and offers retry", async () => {

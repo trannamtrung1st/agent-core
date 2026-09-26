@@ -375,6 +375,11 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
             CancellationToken cancellationToken = default) =>
             inner.UpdateDraftAsync(update, cancellationToken);
 
+        public ValueTask DeleteDraftAsync(
+            AgentDefinitionDraftDelete delete,
+            CancellationToken cancellationToken = default) =>
+            inner.DeleteDraftAsync(delete, cancellationToken);
+
         public ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
             AgentDefinitionDraftRevisionBump bump,
             CancellationToken cancellationToken = default) =>

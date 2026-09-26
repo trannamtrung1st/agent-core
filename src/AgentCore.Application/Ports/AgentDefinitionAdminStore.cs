@@ -18,6 +18,10 @@ public interface IAgentDefinitionAdminStore
         AgentDefinitionDraftUpdate update,
         CancellationToken cancellationToken = default);
 
+    ValueTask DeleteDraftAsync(
+        AgentDefinitionDraftDelete delete,
+        CancellationToken cancellationToken = default);
+
     ValueTask<AgentDefinitionDraft> BumpDraftRevisionAsync(
         AgentDefinitionDraftRevisionBump bump,
         CancellationToken cancellationToken = default);
@@ -54,6 +58,13 @@ public sealed record AgentDefinitionDraftUpdate(
     long ExpectedRevision,
     AgentDefinitionCandidate Candidate,
     DateTimeOffset UpdatedAt);
+
+public sealed record AgentDefinitionDraftDelete(
+    Guid DraftId,
+    long ExpectedRevision,
+    DateTimeOffset DeletedAt,
+    Guid OperationId = default,
+    AdminEventActorKind ActorKind = AdminEventActorKind.LocalOwner);
 
 public sealed record AgentDefinitionDraftRevisionBump(
     Guid DraftId,

@@ -1,4 +1,4 @@
-import { Alert, Button, Descriptions, Flex, Input, List, Select, Spin, Typography } from "antd";
+import { Alert, Button, Descriptions, Flex, Input, List, Select, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AdminDefinitionDraft } from "../../services/adminApi";
 import {
@@ -253,19 +253,21 @@ export function DefinitionDraftPublishGatePanel({
   };
 
   return (
-    <Flex vertical gap={12} aria-label="Test validate and publish gate">
-      <Typography.Text type="secondary">
-        Validate resolved configuration, run required Synthetic evaluations, review the safe diff, then publish from
-        Instructions when eligible.
-      </Typography.Text>
+    <Flex vertical gap={16} aria-label="Test validate and publish gate" className="admin-publish-gate">
+      <div className="admin-draft-tab-intro">
+        <Typography.Title level={5}>Test &amp; Publish</Typography.Title>
+        <Typography.Paragraph type="secondary">
+          Validate this exact revision, run every required Synthetic check, and review the safe diff before publishing.
+        </Typography.Paragraph>
+      </div>
       {loading ? <Spin size="small" /> : null}
       {!eligibility.eligible ? (
         <Alert
           type="warning"
           showIcon
-          message="Publish blocked"
+          title="Publish blocked"
           description={
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <ul className="admin-publish-blockers">
               {eligibility.blockers.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -273,9 +275,9 @@ export function DefinitionDraftPublishGatePanel({
           }
         />
       ) : (
-        <Alert type="success" showIcon message="Draft is eligible to publish (server gate still applies)." />
+        <Alert type="success" showIcon title="Draft is ready for final publish." />
       )}
-      <Flex gap={8} wrap="wrap">
+      <Flex gap={8} wrap="wrap" className="admin-publish-actions">
         <Button type="primary" onClick={() => void runValidate()} disabled={busy || loading || dirty}>
           Run validation
         </Button>
@@ -284,7 +286,7 @@ export function DefinitionDraftPublishGatePanel({
         </Button>
       </Flex>
       {validation ? (
-        <Descriptions bordered size="small" column={1} title="Validation (revision snapshot)">
+        <Descriptions bordered size="small" column={1} title="Validation snapshot" className="admin-validation-summary">
           <Descriptions.Item label="Draft">{validation.draftId}</Descriptions.Item>
           <Descriptions.Item label="Revision">{validation.draftRevision}</Descriptions.Item>
           <Descriptions.Item label="Fingerprint">{validation.configurationFingerprint}</Descriptions.Item>
@@ -308,10 +310,14 @@ export function DefinitionDraftPublishGatePanel({
           )}
         />
       ) : null}
-      <Typography.Title level={5} style={{ margin: 0 }}>Required evaluation scenario</Typography.Title>
-      <Flex gap={8} wrap="wrap" align="end">
-        <label>
-          <Typography.Text>Scenario id</Typography.Text>
+      <section className="admin-draft-form-section" aria-label="Required evaluation scenario">
+        <Typography.Title level={5}>Required evaluation scenario</Typography.Title>
+        <Typography.Paragraph type="secondary">
+          Save a deterministic check for the behavior this definition must satisfy before publication.
+        </Typography.Paragraph>
+        <div className="admin-eval-form-grid">
+        <label className="admin-draft-field">
+          <Typography.Text strong>Scenario ID</Typography.Text>
           <Input
             aria-label="Evaluation scenario id"
             value={scenarioId}
@@ -319,8 +325,8 @@ export function DefinitionDraftPublishGatePanel({
             disabled={busy || loading}
           />
         </label>
-        <label>
-          <Typography.Text>Title</Typography.Text>
+        <label className="admin-draft-field">
+          <Typography.Text strong>Title</Typography.Text>
           <Input
             aria-label="Evaluation scenario title"
             value={scenarioTitle}
@@ -328,34 +334,31 @@ export function DefinitionDraftPublishGatePanel({
             disabled={busy || loading}
           />
         </label>
-        <label>
-          <Typography.Text>Check type</Typography.Text>
+        <label className="admin-draft-field">
+          <Typography.Text strong>Check type</Typography.Text>
           <Select
             aria-label="Evaluation check type"
-            style={{ minWidth: 220 }}
             value={checkType}
             onChange={setCheckType}
             options={checkTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
             disabled={busy || loading}
           />
         </label>
-        <label>
-          <Typography.Text>Prompt</Typography.Text>
+        <label className="admin-draft-field admin-eval-prompt">
+          <Typography.Text strong>Prompt</Typography.Text>
           <Input
             aria-label="Evaluation scenario prompt"
-            style={{ minWidth: 280 }}
             value={scenarioPrompt}
             onChange={(event) => setScenarioPrompt(event.target.value)}
             disabled={busy || loading}
           />
         </label>
         {toolFieldRequired ? (
-          <label>
-            <Typography.Text>{checkType === "ResourceBound" ? "Resource path" : "Tool"}</Typography.Text>
+          <label className="admin-draft-field">
+            <Typography.Text strong>{checkType === "ResourceBound" ? "Resource path" : "Tool"}</Typography.Text>
             {checkType === "ResourceBound" ? (
               <Input
                 aria-label="Evaluation resource logical path"
-                style={{ minWidth: 200 }}
                 value={toolName}
                 onChange={(event) => setToolName(event.target.value)}
                 disabled={busy || loading}
@@ -364,7 +367,6 @@ export function DefinitionDraftPublishGatePanel({
             ) : (
               <Select
                 aria-label="Evaluation tool name"
-                style={{ minWidth: 200 }}
                 showSearch
                 optionFilterProp="label"
                 value={toolName || undefined}
@@ -376,45 +378,57 @@ export function DefinitionDraftPublishGatePanel({
             )}
           </label>
         ) : null}
+        </div>
         <Button onClick={() => void saveScenario()} disabled={busy || loading || dirty}>
           Save required scenario
         </Button>
-      </Flex>
-      {scenarios.length > 0 ? (
-        <List
-          size="small"
-          bordered
-          dataSource={scenarios}
-          renderItem={(item) => {
-            const latest = results
-              .filter((result) => result.scenarioId === item.scenarioId)
-              .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
-            return (
-              <List.Item
-                actions={[
-                  <Button key="run" size="small" onClick={() => void runScenario(item.scenarioId)} disabled={busy || loading}>
-                    Run Synthetic
-                  </Button>
-                ]}
-              >
-                <Flex vertical gap={4}>
-                  <Typography.Text>
-                    {item.title} ({item.requirementLevel}) · {item.checkType} · v{item.scenarioVersion}
-                  </Typography.Text>
-                  <Typography.Text type="secondary">{item.prompt}</Typography.Text>
-                  <Typography.Text type="secondary">
-                    {latest
-                      ? `Last result: ${latest.passed ? "pass" : "fail"} @ rev ${latest.draftRevision}`
-                      : "No results yet"}
-                  </Typography.Text>
-                </Flex>
-              </List.Item>
-            );
-          }}
-        />
-      ) : (
-        <Typography.Text type="secondary">No evaluation scenarios yet.</Typography.Text>
-      )}
+      </section>
+      <section aria-label="Saved evaluation scenarios">
+        <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-section-heading">
+          <Typography.Title level={5}>Saved scenarios</Typography.Title>
+          <Typography.Text type="secondary">{scenarios.length}</Typography.Text>
+        </Flex>
+        {scenarios.length > 0 ? (
+          <List
+            size="small"
+            bordered
+            className="admin-evaluation-list"
+            dataSource={scenarios}
+            renderItem={(item) => {
+              const latest = results
+                .filter((result) => result.scenarioId === item.scenarioId)
+                .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
+              return (
+                <List.Item
+                  actions={[
+                    <Button key="run" size="small" onClick={() => void runScenario(item.scenarioId)} disabled={busy || loading}>
+                      Run Synthetic
+                    </Button>
+                  ]}
+                >
+                  <Flex vertical gap={8}>
+                    <Flex gap={8} wrap="wrap" align="center">
+                      <Typography.Text strong>{item.title}</Typography.Text>
+                      <Tag>{item.requirementLevel}</Tag>
+                      <Tag>{item.checkType}</Tag>
+                    </Flex>
+                    <Typography.Text type="secondary">{item.prompt}</Typography.Text>
+                    {latest ? (
+                      <Tag color={latest.passed ? "success" : "error"}>
+                        {latest.passed ? "Passed" : "Failed"} at revision {latest.draftRevision}
+                      </Tag>
+                    ) : (
+                      <Typography.Text type="secondary">Not run yet</Typography.Text>
+                    )}
+                  </Flex>
+                </List.Item>
+              );
+            }}
+          />
+        ) : (
+          <Typography.Text type="secondary">No evaluation scenarios yet.</Typography.Text>
+        )}
+      </section>
       {diff ? (
         <List
           size="small"

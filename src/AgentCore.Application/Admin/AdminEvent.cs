@@ -9,6 +9,7 @@ public enum AdminEventActorKind
 public enum AdminEventOperationKind
 {
     DraftCreated,
+    DraftDeleted,
     PublicationCreated,
     PublicationDeprecated,
     ManagedInstanceCreated,

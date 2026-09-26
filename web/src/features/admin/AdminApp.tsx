@@ -17,9 +17,10 @@ import {
   Switch,
   Tabs,
   Tag,
-  Typography
+  Typography,
+  Upload
 } from "antd";
-import { ArrowLeftOutlined, MessageOutlined, RightOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined, MessageOutlined, RightOutlined } from "@ant-design/icons";
 import {
   applyDraftEnvironmentToCandidate,
   draftEnvironmentEquals,
@@ -39,6 +40,7 @@ import {
   type AdminEffectiveConfiguration,
   type AdminInstanceInventoryItem,
   deprecateAdminDefinitionPublication,
+  deleteAdminDefinitionDraft,
   forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
@@ -102,6 +104,17 @@ function logicalDefinitionName(definitionId: string) {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+}
+
+function formatAdminTimestamp(value: string) {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(timestamp);
 }
 
 export function groupDefinitionInventory(
@@ -240,7 +253,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                         key: group.definitionId,
                         title: group.logicalName,
                         secondary: group.definitionId,
-                        description: `Default persona: ${group.defaultPersona} · ${group.versions.length} ${
+                        description: `Latest-version persona: ${group.defaultPersona} · ${group.versions.length} ${
                           group.versions.length === 1 ? "version" : "versions"
                         } · latest v${group.latestVersion}`,
                         tag: group.latestStatus,
@@ -251,7 +264,9 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               />
               <InventorySection
                 title="Instances"
-                countLabel={instances.kind === "ready" ? `${instances.data.length} instances` : null}
+                countLabel={instances.kind === "ready"
+                  ? `${instances.data.length} ${instances.data.length === 1 ? "instance" : "instances"}`
+                  : null}
                 emptyLabel="No instances yet. Start a chat to create compatibility instances."
                 loading={instances.kind === "loading"}
                 error={instances.kind === "error" ? instances.message : null}
@@ -409,9 +424,11 @@ function DefinitionDetail({
   const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
   const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
+  const [forkSourceVersion, setForkSourceVersion] = useState<number | null>(null);
   const [instructions, setInstructions] = useState("");
   const [capabilities, setCapabilities] = useState<DraftEnvironment>(emptyDraftEnvironment());
   const [busy, setBusy] = useState(false);
+  const editorSurfaceRef = useRef<HTMLElement | null>(null);
 
   const savedInstructions = useMemo(() => {
     if (!activeDraft) {
@@ -488,6 +505,34 @@ function DefinitionDetail({
     }
   }, [definitions.kind, rows.length, reloadLifecycle]);
 
+  useEffect(() => {
+    if (!group) {
+      setForkSourceVersion(null);
+      return;
+    }
+    setForkSourceVersion((current) =>
+      current !== null && group.versions.some((item) => item.version === current)
+        ? current
+        : group.latestVersion
+    );
+  }, [definitionId, group?.latestVersion, group?.versions.length]);
+
+  useEffect(() => {
+    if (!activeDraft?.draftId) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      editorSurfaceRef.current?.scrollIntoView?.({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeDraft?.draftId]);
+
+  const closeDraftEditor = () => {
+    setActiveDraft(null);
+    setInstructions("");
+    setCapabilities(emptyDraftEnvironment());
+  };
+
   const selectDraft = useCallback(async (draftId: string) => {
     setBusy(true);
     setLifecycleError(null);
@@ -503,6 +548,27 @@ function DefinitionDetail({
       setBusy(false);
     }
   }, []);
+
+  const deleteDraft = async (draft: AdminDefinitionDraftSummary, expectedRevision: number) => {
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      await deleteAdminDefinitionDraft(draft.draftId, expectedRevision);
+      if (activeDraft?.draftId === draft.draftId) {
+        setActiveDraft(null);
+        setInstructions("");
+        setCapabilities(emptyDraftEnvironment());
+      }
+      message.success("Draft deleted.");
+      await reloadLifecycle();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Draft could not be deleted.";
+      setLifecycleError(text);
+      message.error(text);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const forkFromVersion = async (row: AdminDefinitionInventoryItem) => {
     const sourceKind = row.source === "durable" ? "ForkDurable" : "ForkBuiltIn";
@@ -598,15 +664,24 @@ function DefinitionDetail({
       setBusy(false);
     }
   };
+  const selectedForkRow = group?.versions.find((row) => row.version === forkSourceVersion)
+    ?? group?.versions[0]
+    ?? null;
 
   return (
     <Flex vertical gap={16}>
-      <Button className="admin-back-button" onClick={onBack}>Back to inventory</Button>
+      <Button type="text" icon={<ArrowLeftOutlined />} className="admin-back-button" onClick={onBack}>
+        Back to inventory
+      </Button>
       {group ? (
         <div className="admin-definition-heading">
           <Typography.Title level={2}>{group.logicalName}</Typography.Title>
           <Typography.Text type="secondary">{group.definitionId}</Typography.Text>
-          <Typography.Text>Default persona: {group.defaultPersona}</Typography.Text>
+          <Typography.Text>Latest-version persona: {group.defaultPersona}</Typography.Text>
+          <Flex gap={8} wrap="wrap">
+            <Tag>{group.versions.length} {group.versions.length === 1 ? "version" : "versions"}</Tag>
+            <Tag color="blue">{group.latestStatus}</Tag>
+          </Flex>
         </div>
       ) : (
         <Typography.Title level={4}>{definitionId}</Typography.Title>
@@ -623,31 +698,114 @@ function DefinitionDetail({
       {definitions.kind === "ready" && rows.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
-      {group ? (
-        <section aria-label="Definition versions" className="admin-definition-versions">
-          <Typography.Title level={4}>Versions</Typography.Title>
-          <Descriptions bordered size="small" column={1}>
-            {group.versions.map((row) => (
-              <Descriptions.Item key={`${row.definitionId}:${row.version}`} label={`v${row.version}`}>
-                <Flex gap={8} wrap="wrap" align="center">
-                  <span>{row.displayName} · {row.source} · {row.status}</span>
-                  {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
-                </Flex>
-              </Descriptions.Item>
-            ))}
-          </Descriptions>
-        </section>
-      ) : null}
-      {rows.length > 0 ? (
-        <section aria-label="Definition drafts">
-          <Typography.Title level={5} style={{ margin: 0 }}>Drafts and publish</Typography.Title>
-          <Flex gap={8} wrap="wrap" style={{ marginTop: 8 }}>
-            {(group?.versions ?? rows).map((row) => (
-              <Button key={`${row.definitionId}:${row.version}`} onClick={() => void forkFromVersion(row)} disabled={busy}>
-                Fork v{row.version} ({row.source})
-              </Button>
-            ))}
+      {group && activeDraft ? (
+        <section ref={editorSurfaceRef} className="admin-draft-focused" aria-label="Draft editor">
+          <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="admin-draft-focused-toolbar">
+            {dirty ? (
+              <Popconfirm
+                title="Discard unsaved changes?"
+                description="Your saved draft remains available. Only unsaved edits in this editor will be discarded."
+                okText="Discard changes"
+                cancelText="Keep editing"
+                onConfirm={closeDraftEditor}
+              >
+                <Button icon={<ArrowLeftOutlined />} aria-label="Back to drafts">Back to drafts</Button>
+              </Popconfirm>
+            ) : (
+              <Button icon={<ArrowLeftOutlined />} aria-label="Back to drafts" onClick={closeDraftEditor}>Back to drafts</Button>
+            )}
+            <Popconfirm
+              title={activeDraft.sourceVersion != null
+                ? `Delete draft from v${activeDraft.sourceVersion}?`
+                : "Delete this draft?"}
+              description="This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged."
+              okText="Delete draft"
+              cancelText="Keep draft"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void deleteDraft(activeDraft, activeDraft.revision)}
+            >
+              <Button danger icon={<DeleteOutlined />} aria-label="Delete draft" disabled={busy}>Delete draft</Button>
+            </Popconfirm>
           </Flex>
+          {lifecycleError ? (
+            <Alert
+              type="error"
+              showIcon
+              title={lifecycleError}
+              action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
+            />
+          ) : null}
+          <DraftEditor
+            activeDraft={activeDraft}
+            instructions={instructions}
+            capabilities={capabilities}
+            dirty={dirty}
+            busy={busy}
+            onInstructionsChange={setInstructions}
+            onCapabilitiesChange={setCapabilities}
+            onSave={() => void saveDraft()}
+            onPublish={() => void confirmPublish()}
+            onDraftRevisionChange={(draft, options) => {
+              setActiveDraft(draft);
+              if (!options?.preserveLocalEdits) {
+                setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
+                setCapabilities(readDraftEnvironment(draft.candidate));
+              }
+            }}
+            onError={setLifecycleError}
+          />
+        </section>
+      ) : group ? (
+        <div className="admin-definition-workspace">
+          <section aria-label="Definition versions" className="admin-definition-panel admin-definition-versions">
+            <Flex align="baseline" justify="space-between" gap={12} className="admin-definition-panel-heading">
+              <Typography.Title level={4}>Versions</Typography.Title>
+              <Typography.Text type="secondary">Latest v{group.latestVersion}</Typography.Text>
+            </Flex>
+            <div className="admin-definition-panel-body">
+              <Descriptions bordered size="small" column={1}>
+                {group.versions.map((row) => (
+                  <Descriptions.Item key={`${row.definitionId}:${row.version}`} label={`v${row.version}`}>
+                    <Flex gap={8} wrap="wrap" align="center">
+                      <Typography.Text>{row.displayName} · {row.source} · {row.status}</Typography.Text>
+                      {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
+                    </Flex>
+                  </Descriptions.Item>
+                ))}
+              </Descriptions>
+            </div>
+          </section>
+          <section aria-label="Definition drafts" className="admin-definition-panel admin-definition-drafts">
+            <div className="admin-definition-panel-heading">
+              <Typography.Title level={4}>Drafts &amp; publishing</Typography.Title>
+              <Typography.Text type="secondary">
+                Fork an immutable version to edit, validate, and publish a new one.
+              </Typography.Text>
+            </div>
+            <div className="admin-definition-panel-body">
+              <Flex gap={8} wrap="wrap" align="center" className="admin-draft-create">
+                <Select
+                  aria-label="Base version"
+                  value={forkSourceVersion}
+                  onChange={setForkSourceVersion}
+                  options={group.versions.map((row) => ({
+                    value: row.version,
+                    label: `v${row.version} · ${row.source === "builtIn" ? "Built-in" : "Durable"}`
+                  }))}
+                  disabled={busy}
+                  className="admin-draft-version-select"
+                />
+                <Button
+                  type="primary"
+                  aria-label={selectedForkRow
+                    ? `Fork v${selectedForkRow.version} (${selectedForkRow.source})`
+                    : "Fork version"}
+                  onClick={() => selectedForkRow && void forkFromVersion(selectedForkRow)}
+                  disabled={busy || !selectedForkRow}
+                >
+                  Create draft
+                </Button>
+              </Flex>
           {lifecycleError ? (
             <Alert
               type="error"
@@ -659,48 +817,77 @@ function DefinitionDetail({
           ) : null}
           {lifecycleLoading ? <Spin style={{ marginTop: 12 }} /> : null}
           {!lifecycleLoading && draftSummaries.length > 0 ? (
-            <List
-              style={{ marginTop: 12 }}
-              dataSource={draftSummaries}
-              renderItem={(item) => (
-                <List.Item>
-                  <Button type="link" onClick={() => void selectDraft(item.draftId)} disabled={busy}>
-                    Draft rev {item.revision} · {item.sourceKind}
-                    {item.sourceVersion != null ? ` v${item.sourceVersion}` : ""}
-                  </Button>
-                </List.Item>
-              )}
-            />
+            <div className="admin-draft-list">
+              <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-list-heading">
+                <Typography.Text strong>Existing drafts</Typography.Text>
+                <Typography.Text type="secondary">{draftSummaries.length}</Typography.Text>
+              </Flex>
+              <List
+                dataSource={draftSummaries}
+                renderItem={(item) => {
+                  const selected = activeDraft?.draftId === item.draftId;
+                  const deleteRevision = selected ? activeDraft.revision : item.revision;
+                  const draftLabel = item.sourceVersion != null
+                    ? `draft from v${item.sourceVersion}`
+                    : "draft";
+                  return (
+                    <List.Item className="admin-draft-list-item">
+                      <Flex align="center" gap={8} className="admin-draft-row-shell">
+                        <Button
+                          type="text"
+                          block
+                          className="admin-draft-row"
+                          aria-label={`Draft rev ${item.revision} · ${item.sourceKind}${
+                            item.sourceVersion != null ? ` v${item.sourceVersion}` : ""
+                          }`}
+                          onClick={() => void selectDraft(item.draftId)}
+                          disabled={busy}
+                        >
+                          <Flex align="center" justify="space-between" gap={12}>
+                            <Flex vertical gap={4} className="admin-draft-row-copy">
+                              <Typography.Text strong>
+                                {item.sourceVersion != null ? `Draft from v${item.sourceVersion}` : "New draft"}
+                              </Typography.Text>
+                              <Typography.Text type="secondary" className="admin-draft-row-meta">
+                                {item.sourceKind === "ForkBuiltIn" ? "Built-in source" : "Durable source"} · Revision{" "}
+                                {item.revision} · Updated {formatAdminTimestamp(item.updatedAt)}
+                              </Typography.Text>
+                            </Flex>
+                            {selected ? <Tag color="blue">Editing</Tag> : <RightOutlined aria-hidden />}
+                          </Flex>
+                        </Button>
+                        <Popconfirm
+                          title={`Delete ${draftLabel}?`}
+                          description="This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged."
+                          okText="Delete draft"
+                          cancelText="Keep draft"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={() => void deleteDraft(item, deleteRevision)}
+                        >
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            aria-label={`Delete ${draftLabel}, revision ${deleteRevision}`}
+                            disabled={busy}
+                            className="admin-draft-delete"
+                          />
+                        </Popconfirm>
+                      </Flex>
+                    </List.Item>
+                  );
+                }}
+              />
+            </div>
           ) : null}
           {!lifecycleLoading && draftSummaries.length === 0 ? (
             <Typography.Text type="secondary">No drafts yet. Fork a catalog version to start.</Typography.Text>
-          ) : null}
-          {activeDraft ? (
-            <DraftEditor
-              activeDraft={activeDraft}
-              instructions={instructions}
-              capabilities={capabilities}
-              dirty={dirty}
-              busy={busy}
-              onInstructionsChange={setInstructions}
-              onCapabilitiesChange={setCapabilities}
-              onSave={() => void saveDraft()}
-              onPublish={() => void confirmPublish()}
-              onDraftRevisionChange={(draft, options) => {
-                setActiveDraft(draft);
-                if (!options?.preserveLocalEdits) {
-                  setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
-                  setCapabilities(readDraftEnvironment(draft.candidate));
-                }
-              }}
-              onError={setLifecycleError}
-            />
           ) : null}
           {publications.length > 0 ? (
             <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }} title="Durable publications">
               {publications.map((item) => (
                 <Descriptions.Item key={item.version} label={`v${item.version}`}>
-                  <Flex vertical gap={8}>
+                  <Flex vertical gap={8} align="start">
                     <span>
                       {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
                     </span>
@@ -736,7 +923,9 @@ function DefinitionDetail({
               ))}
             </Descriptions>
           ) : null}
+            </div>
         </section>
+        </div>
       ) : null}
     </Flex>
   );
@@ -902,64 +1091,85 @@ function DraftEditor({
   };
 
   return (
-    <Flex vertical gap={12} style={{ marginTop: 16 }}>
-      <Typography.Text>
-        Editing draft {activeDraft.draftId} (revision {activeDraft.revision})
-      </Typography.Text>
+    <Flex vertical gap={12} className="admin-draft-editor">
+      <Flex align="start" justify="space-between" gap={12} wrap="wrap" className="admin-draft-editor-heading">
+        <div>
+          <Typography.Title level={5}>
+            {activeDraft.sourceVersion != null
+              ? `Editing draft from v${activeDraft.sourceVersion}`
+              : "Editing draft"}
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            Revision {activeDraft.revision} · Updated {formatAdminTimestamp(activeDraft.updatedAt)}
+          </Typography.Text>
+        </div>
+        <Typography.Text
+          type="secondary"
+          copyable={{ text: activeDraft.draftId, tooltips: ["Copy draft ID", "Copied"] }}
+          className="admin-draft-id"
+        >
+          ID {activeDraft.draftId.slice(0, 8)}…
+        </Typography.Text>
+      </Flex>
       <Tabs
+        className="admin-draft-tabs"
         items={[
           {
             key: "instructions",
             label: "Instructions",
             children: (
-              <Flex vertical gap={12}>
+              <section className="admin-draft-tab" aria-label="Draft instructions">
+                <div className="admin-draft-tab-intro">
+                  <Typography.Title level={5}>System instructions</Typography.Title>
+                  <Typography.Paragraph type="secondary">
+                    Define the durable behavior and boundaries inherited by sessions created from this definition.
+                  </Typography.Paragraph>
+                </div>
                 <Input.TextArea
                   aria-label="System instructions"
-                  rows={6}
+                  rows={10}
                   value={instructions}
                   onChange={(event) => onInstructionsChange(event.target.value)}
                   disabled={busy}
+                  className="admin-draft-instructions"
                 />
-                <Flex gap={8} wrap="wrap">
-                  <Button type="primary" onClick={onSave} disabled={busy}>
-                    Save draft
-                  </Button>
-                  <Button onClick={onPublish} disabled={busy || !publishEligible}>
-                    Publish…
-                  </Button>
-                </Flex>
-                {dirty ? (
-                  <Typography.Text type="secondary">
-                    Unsaved changes — save before using Test &amp; Publish.
-                  </Typography.Text>
-                ) : !publishEligible ? (
-                  <Typography.Text type="secondary">
-                    Complete Test &amp; Publish (validate and required evaluations) to enable publish.
-                  </Typography.Text>
-                ) : null}
-              </Flex>
+                <DraftEditorActions
+                  dirty={dirty}
+                  busy={busy}
+                  publishEligible={publishEligible}
+                  onSave={onSave}
+                  onPublish={onPublish}
+                />
+              </section>
             )
           },
           {
             key: "capabilities",
             label: "Capabilities",
             children: (
-              <Flex vertical gap={12} aria-label="Draft capabilities">
-                <Typography.Text type="secondary">
-                  Typed RoleEnvironment fields — tool names come from the server registry.
-                </Typography.Text>
-                <label>
-                  <Typography.Text>Harness labels</Typography.Text>
-                  <Select
-                    aria-label="Harness labels"
-                    mode="tags"
-                    style={{ width: "100%", marginTop: 4 }}
-                    value={capabilities.harness}
-                    onChange={(values) => onCapabilitiesChange({ ...capabilities, harness: values })}
-                    disabled={busy}
-                    placeholder="examiner-turn-taking"
-                  />
-                </label>
+              <section className="admin-draft-tab" aria-label="Draft capabilities">
+                <div className="admin-draft-tab-intro">
+                  <Typography.Title level={5}>Capabilities</Typography.Title>
+                  <Typography.Paragraph type="secondary">
+                    Choose the tools, workspace behavior, and knowledge references available to this definition.
+                  </Typography.Paragraph>
+                </div>
+                <section className="admin-draft-form-section" aria-label="Harness and tools">
+                  <Typography.Title level={5}>Harness &amp; tools</Typography.Title>
+                  <Typography.Paragraph type="secondary">
+                    Harness labels identify behavior fixtures. Tool names come from the trusted server registry.
+                  </Typography.Paragraph>
+                  <label className="admin-draft-field">
+                    <Typography.Text strong>Harness labels</Typography.Text>
+                    <Select
+                      aria-label="Harness labels"
+                      mode="tags"
+                      value={capabilities.harness}
+                      onChange={(values) => onCapabilitiesChange({ ...capabilities, harness: values })}
+                      disabled={busy}
+                      placeholder="Add a harness label"
+                    />
+                  </label>
                 {toolRegistryError ? (
                   <Alert
                     type="error"
@@ -977,159 +1187,228 @@ function DraftEditor({
                     }
                   />
                 ) : null}
-                <label>
-                  <Typography.Text>Tool allowlist</Typography.Text>
-                  {toolRegistryLoading ? <Spin size="small" style={{ marginLeft: 8 }} /> : null}
-                  <Select
-                    aria-label="Tool allowlist"
-                    mode="multiple"
-                    style={{ width: "100%", marginTop: 4 }}
-                    value={capabilities.toolAllowlist}
-                    onChange={(values) =>
-                      onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
-                    }
-                    disabled={busy || toolRegistryLoading || toolRegistryError !== null}
-                    options={toolNames.map((name) => ({ value: name, label: name }))}
-                    placeholder="Select registered tools"
-                  />
-                </label>
-                <Input
-                  aria-label="Workspace template id"
-                  placeholder="Workspace template id (optional)"
-                  value={capabilities.workspaceTemplateId}
-                  onChange={(event) =>
-                    onCapabilitiesChange({
-                      ...capabilities,
-                      workspaceTemplateId: event.target.value
-                    })
-                  }
-                  disabled={busy}
-                />
-                <Flex align="center" gap={8}>
-                  <Switch
-                    aria-label="Allow unread unsupported attachment types"
-                    checked={capabilities.allowUnreadUnsupportedAttachmentTypes}
-                    onChange={(checked) =>
-                      onCapabilitiesChange({
-                        ...capabilities,
-                        allowUnreadUnsupportedAttachmentTypes: checked
-                      })
-                    }
-                    disabled={busy}
-                  />
-                  <Typography.Text>Allow unread unsupported attachment types</Typography.Text>
-                </Flex>
-                <Typography.Text>Knowledge source references</Typography.Text>
-                {capabilities.knowledgeSources.length === 0 ? (
-                  <Typography.Text type="secondary">No knowledge sources configured.</Typography.Text>
-                ) : null}
-                {capabilities.knowledgeSources.map((source, index) => (
-                  <Flex key={`knowledge-${index}`} gap={8} wrap="wrap" align="end">
-                    <Input
-                      aria-label={`Knowledge identity ${index + 1}`}
-                      placeholder="identity"
-                      value={source.identity}
-                      onChange={(event) => updateKnowledgeSource(index, "identity", event.target.value)}
-                      disabled={busy}
-                      style={{ minWidth: 140, flex: 1 }}
+                  <label className="admin-draft-field">
+                    <Flex align="center" gap={8}>
+                      <Typography.Text strong>Tool allowlist</Typography.Text>
+                      {toolRegistryLoading ? <Spin size="small" /> : null}
+                    </Flex>
+                    <Select
+                      aria-label="Tool allowlist"
+                      mode="multiple"
+                      maxTagCount="responsive"
+                      value={capabilities.toolAllowlist}
+                      onChange={(values) =>
+                        onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
+                      }
+                      disabled={busy || toolRegistryLoading || toolRegistryError !== null}
+                      options={toolNames.map((name) => ({ value: name, label: name }))}
+                      placeholder="Select registered tools"
                     />
+                  </label>
+                </section>
+                <section className="admin-draft-form-section" aria-label="Workspace behavior">
+                  <Typography.Title level={5}>Workspace behavior</Typography.Title>
+                  <label className="admin-draft-field">
+                    <Typography.Text strong>Workspace template ID</Typography.Text>
                     <Input
-                      aria-label={`Knowledge title ${index + 1}`}
-                      placeholder="title"
-                      value={source.title}
-                      onChange={(event) => updateKnowledgeSource(index, "title", event.target.value)}
+                      aria-label="Workspace template id"
+                      placeholder="Optional template identifier"
+                      value={capabilities.workspaceTemplateId}
+                      onChange={(event) =>
+                        onCapabilitiesChange({
+                          ...capabilities,
+                          workspaceTemplateId: event.target.value
+                        })
+                      }
                       disabled={busy}
-                      style={{ minWidth: 140, flex: 1 }}
                     />
-                    <Input
-                      aria-label={`Knowledge citation ${index + 1}`}
-                      placeholder="citation"
-                      value={source.citation}
-                      onChange={(event) => updateKnowledgeSource(index, "citation", event.target.value)}
+                  </label>
+                  <Flex align="start" gap={12} className="admin-draft-switch-row">
+                    <Switch
+                      aria-label="Allow unread unsupported attachment types"
+                      checked={capabilities.allowUnreadUnsupportedAttachmentTypes}
+                      onChange={(checked) =>
+                        onCapabilitiesChange({
+                          ...capabilities,
+                          allowUnreadUnsupportedAttachmentTypes: checked
+                        })
+                      }
                       disabled={busy}
-                      style={{ minWidth: 140, flex: 1 }}
                     />
-                    <Button danger type="link" disabled={busy} onClick={() => removeKnowledgeSource(index)}>
-                      Remove
-                    </Button>
+                    <div>
+                      <Typography.Text strong>Allow unsupported attachments</Typography.Text>
+                      <Typography.Paragraph type="secondary">
+                        Keep attachments the runtime cannot read instead of rejecting the turn.
+                      </Typography.Paragraph>
+                    </div>
                   </Flex>
-                ))}
-                <Button onClick={addKnowledgeSource} disabled={busy}>
-                  Add knowledge source
-                </Button>
-                <Flex gap={8} wrap="wrap">
-                  <Button type="primary" onClick={onSave} disabled={busy}>
-                    Save draft
+                </section>
+                <section className="admin-draft-form-section" aria-label="Knowledge source references">
+                  <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-section-heading">
+                    <Typography.Title level={5}>Knowledge sources</Typography.Title>
+                    <Typography.Text type="secondary">{capabilities.knowledgeSources.length}</Typography.Text>
+                  </Flex>
+                  <Typography.Paragraph type="secondary">
+                    Bind named references that can be cited by configured knowledge tools.
+                  </Typography.Paragraph>
+                  {capabilities.knowledgeSources.length === 0 ? (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No knowledge sources configured." />
+                  ) : null}
+                  <Flex vertical gap={8}>
+                    {capabilities.knowledgeSources.map((source, index) => (
+                      <div key={`knowledge-${index}`} className="admin-knowledge-source">
+                        <div className="admin-knowledge-source-grid">
+                          <label className="admin-draft-field">
+                            <Typography.Text>Identity</Typography.Text>
+                            <Input
+                              aria-label={`Knowledge identity ${index + 1}`}
+                              placeholder="policy"
+                              value={source.identity}
+                              onChange={(event) => updateKnowledgeSource(index, "identity", event.target.value)}
+                              disabled={busy}
+                            />
+                          </label>
+                          <label className="admin-draft-field">
+                            <Typography.Text>Title</Typography.Text>
+                            <Input
+                              aria-label={`Knowledge title ${index + 1}`}
+                              placeholder="Support policy"
+                              value={source.title}
+                              onChange={(event) => updateKnowledgeSource(index, "title", event.target.value)}
+                              disabled={busy}
+                            />
+                          </label>
+                          <label className="admin-draft-field">
+                            <Typography.Text>Citation</Typography.Text>
+                            <Input
+                              aria-label={`Knowledge citation ${index + 1}`}
+                              placeholder="policy@demo"
+                              value={source.citation}
+                              onChange={(event) => updateKnowledgeSource(index, "citation", event.target.value)}
+                              disabled={busy}
+                            />
+                          </label>
+                        </div>
+                        <Button danger type="text" disabled={busy} onClick={() => removeKnowledgeSource(index)}>
+                          Remove source
+                        </Button>
+                      </div>
+                    ))}
+                  </Flex>
+                  <Button onClick={addKnowledgeSource} disabled={busy}>
+                    Add knowledge source
                   </Button>
-                  <Button onClick={onPublish} disabled={busy || !publishEligible}>
-                    Publish…
-                  </Button>
-                </Flex>
-              </Flex>
+                </section>
+                <DraftEditorActions
+                  dirty={dirty}
+                  busy={busy}
+                  publishEligible={publishEligible}
+                  onSave={onSave}
+                  onPublish={onPublish}
+                />
+              </section>
             )
           },
           {
             key: "resources",
             label: "Resources",
             children: (
-              <Flex vertical gap={12} aria-label="Draft resources">
-                <Flex gap={8} wrap="wrap" align="end">
-                  <Input
-                    aria-label="Resource logical path"
-                    placeholder="knowledge/policy.md"
-                    value={logicalPath}
-                    onChange={(event) => setLogicalPath(event.target.value)}
-                    disabled={busy}
-                    style={{ minWidth: 220, flex: 1 }}
-                  />
-                  <Select
-                    aria-label="Resource kind"
-                    value={kind}
-                    onChange={setKind}
-                    options={RESOURCE_KINDS.map((value) => ({ value, label: value }))}
-                    disabled={busy}
-                    style={{ minWidth: 140 }}
-                  />
-                  <input
-                    aria-label="Resource file"
-                    type="file"
-                    disabled={busy}
-                    onChange={(event) => setPendingFile(event.target.files?.[0] ?? null)}
-                  />
-                  <Button onClick={() => void addResource()} disabled={busy}>
-                    Upload and bind
+              <section className="admin-draft-tab" aria-label="Draft resources">
+                <div className="admin-draft-tab-intro">
+                  <Typography.Title level={5}>Resources</Typography.Title>
+                  <Typography.Paragraph type="secondary">
+                    Upload immutable source material and bind it to a safe path in the published definition.
+                  </Typography.Paragraph>
+                </div>
+                <section className="admin-draft-form-section" aria-label="Add draft resource">
+                  <Typography.Title level={5}>Add resource</Typography.Title>
+                  <div className="admin-resource-form-grid">
+                    <label className="admin-draft-field admin-resource-path">
+                      <Typography.Text strong>Logical path</Typography.Text>
+                      <Input
+                        aria-label="Resource logical path"
+                        placeholder="knowledge/policy.md"
+                        value={logicalPath}
+                        onChange={(event) => setLogicalPath(event.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                    <label className="admin-draft-field">
+                      <Typography.Text strong>Kind</Typography.Text>
+                      <Select
+                        aria-label="Resource kind"
+                        value={kind}
+                        onChange={setKind}
+                        options={RESOURCE_KINDS.map((value) => ({ value, label: value }))}
+                        disabled={busy}
+                      />
+                    </label>
+                    <label className="admin-draft-field admin-resource-file">
+                      <Typography.Text strong>Resource file</Typography.Text>
+                      <Upload.Dragger
+                        beforeUpload={(file) => {
+                          setPendingFile(file);
+                          return false;
+                        }}
+                        onRemove={() => {
+                          setPendingFile(null);
+                          return true;
+                        }}
+                        fileList={pendingFile
+                          ? [{ uid: "draft-resource", name: pendingFile.name, status: "done" }]
+                          : []}
+                        maxCount={1}
+                        multiple={false}
+                        disabled={busy}
+                        className="admin-resource-upload"
+                      >
+                        <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+                        <p className="ant-upload-text">Choose a file or drag it here</p>
+                        <p className="ant-upload-hint">One file will be bound to the logical path above.</p>
+                      </Upload.Dragger>
+                    </label>
+                  </div>
+                  <Button
+                    type="primary"
+                    aria-label="Upload and bind"
+                    onClick={() => void addResource()}
+                    disabled={busy || !pendingFile || !logicalPath.trim()}
+                  >
+                    Upload &amp; bind
                   </Button>
-                </Flex>
+                </section>
                 {resourcesLoading ? <Spin /> : null}
                 {!resourcesLoading && resources.length === 0 ? (
-                  <Typography.Text type="secondary">No draft resources yet.</Typography.Text>
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No resources bound to this draft." />
                 ) : null}
                 {!resourcesLoading && resources.length > 0 ? (
                   <List
+                    className="admin-resource-list"
                     dataSource={resources}
                     renderItem={(item) => (
                       <List.Item
                         actions={[
                           <Button
                             key="remove"
-                            type="link"
+                            type="text"
                             danger
+                            aria-label="Remove"
                             disabled={busy}
                             onClick={() => void removeResource(item)}
                           >
-                            Remove
+                            Remove resource
                           </Button>
                         ]}
                       >
                         <List.Item.Meta
-                          title={`${item.logicalPath} · ${item.kind}`}
-                          description={`${item.byteLength} bytes · ${item.contentSha256.slice(0, 12)}…`}
+                          title={item.logicalPath}
+                          description={`${item.kind} · ${item.byteLength.toLocaleString()} bytes · SHA-256 ${item.contentSha256.slice(0, 12)}…`}
                         />
                       </List.Item>
                     )}
                   />
                 ) : null}
-              </Flex>
+              </section>
             )
           },
           {
@@ -1151,6 +1430,50 @@ function DraftEditor({
         ]}
       />
     </Flex>
+  );
+}
+
+function DraftEditorActions({
+  dirty,
+  busy,
+  publishEligible,
+  onSave,
+  onPublish
+}: {
+  dirty: boolean;
+  busy: boolean;
+  publishEligible: boolean;
+  onSave: () => void;
+  onPublish: () => void;
+}) {
+  return (
+    <div className="admin-draft-actions">
+      <Flex gap={8} wrap="wrap">
+        <Button type={dirty ? "primary" : "default"} onClick={onSave} disabled={busy || !dirty}>
+          Save draft
+        </Button>
+        <Button
+          type={!dirty && publishEligible ? "primary" : "default"}
+          onClick={onPublish}
+          disabled={busy || dirty || !publishEligible}
+        >
+          Publish…
+        </Button>
+      </Flex>
+      {dirty ? (
+        <Typography.Text type="warning">
+          Unsaved changes — save before using Test &amp; Publish.
+        </Typography.Text>
+      ) : !publishEligible ? (
+        <Typography.Text type="secondary">
+          Complete Test &amp; Publish to enable publishing.
+        </Typography.Text>
+      ) : (
+        <Typography.Text type="success">
+          Validation and required evaluations are current. This draft can be published.
+        </Typography.Text>
+      )}
+    </div>
   );
 }
 

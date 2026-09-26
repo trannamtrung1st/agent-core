@@ -1509,8 +1509,337 @@ body,
   margin: 0;
 }
 
-.admin-definition-versions > h4.ant-typography {
-  margin-block: 0 var(--ac-space-default);
+.admin-definition-heading > h2.ant-typography {
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+.admin-definition-heading .ant-tag {
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.admin-definition-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--ac-space-section);
+}
+
+.admin-definition-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ac-color-border);
+  border-radius: 8px;
+  background: var(--ac-color-container);
+}
+
+.admin-definition-panel-heading {
+  min-height: 56px;
+  padding: var(--ac-space-section);
+  border-block-end: 1px solid var(--ac-color-border);
+}
+
+.admin-definition-panel-heading .ant-typography {
+  margin: 0;
+}
+
+.admin-definition-panel-heading h4.ant-typography {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.admin-definition-panel-heading .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.admin-definition-panel-body {
+  padding: var(--ac-space-section);
+}
+
+.admin-definition-panel-body > .ant-typography-secondary {
+  display: block;
+  margin-block-start: var(--ac-space-default);
+}
+
+.admin-draft-version-select {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.admin-draft-list {
+  margin-block-start: var(--ac-space-section);
+  padding-block-start: var(--ac-space-default);
+  border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-draft-list-heading {
+  padding-inline: var(--ac-space-compact);
+  padding-block-end: var(--ac-space-compact);
+}
+
+.admin-draft-list-heading .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.admin-draft-list .ant-list-item.admin-draft-list-item {
+  padding: 0;
+}
+
+.admin-draft-row-shell {
+  width: 100%;
+  min-width: 0;
+  padding-inline-end: var(--ac-space-compact);
+}
+
+.admin-draft-row.ant-btn {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  padding: var(--ac-space-default) var(--ac-space-compact);
+  text-align: start;
+  white-space: normal;
+}
+
+.admin-draft-row.ant-btn > span {
+  display: block;
+  width: 100%;
+}
+
+.admin-draft-row-copy {
+  min-width: 0;
+}
+
+.admin-draft-row-meta {
+  font-size: 12px;
+}
+
+.admin-draft-row .ant-tag {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.admin-draft-delete.ant-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.admin-draft-editor {
+  margin-block-start: var(--ac-space-section);
+  padding-block-start: var(--ac-space-section);
+  border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-draft-focused {
+  min-width: 0;
+  overflow: hidden;
+  scroll-margin-block-start: var(--ac-space-section);
+  border: 1px solid var(--ac-color-border);
+  border-radius: 8px;
+  background: var(--ac-color-container);
+}
+
+.admin-draft-focused-toolbar {
+  min-height: 56px;
+  padding: var(--ac-space-default) var(--ac-space-section);
+  border-block-end: 1px solid var(--ac-color-border);
+}
+
+.admin-draft-focused > .ant-alert {
+  margin: var(--ac-space-section) var(--ac-space-section) 0;
+}
+
+.admin-draft-focused > .admin-draft-editor {
+  margin: 0;
+  padding: var(--ac-space-section);
+  border: 0;
+}
+
+.admin-draft-editor-heading h5.ant-typography {
+  margin: 0 0 var(--ac-space-compact);
+}
+
+.admin-draft-id {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.admin-draft-tabs .ant-tabs-nav {
+  margin-block-end: var(--ac-space-section);
+}
+
+.admin-draft-tabs .ant-tabs-content {
+  height: 32rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ac-color-text-tertiary) transparent;
+}
+
+.admin-draft-tab,
+.admin-publish-gate {
+  min-width: 0;
+}
+
+.admin-draft-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-section);
+}
+
+.admin-draft-tab-intro h5.ant-typography {
+  margin: 0;
+}
+
+.admin-draft-tab-intro .ant-typography {
+  margin-block: var(--ac-space-compact) 0;
+}
+
+.admin-draft-instructions.ant-input {
+  line-height: 1.6;
+}
+
+.admin-draft-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-default);
+  min-width: 0;
+  padding-block-start: var(--ac-space-section);
+  border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-draft-form-section > h5.ant-typography,
+.admin-draft-section-heading h5.ant-typography {
+  margin: 0;
+}
+
+.admin-draft-form-section > .ant-typography,
+.admin-draft-section-heading .ant-typography {
+  margin-block: 0;
+}
+
+.admin-draft-form-section > .ant-btn {
+  align-self: flex-start;
+}
+
+.admin-draft-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-compact);
+  min-width: 0;
+}
+
+.admin-draft-field > .ant-select,
+.admin-draft-field > .ant-input {
+  width: 100%;
+}
+
+.admin-draft-switch-row {
+  padding: var(--ac-space-default);
+  border: 1px solid var(--ac-color-border);
+  border-radius: 8px;
+  background: var(--ac-color-elevated);
+}
+
+.admin-draft-switch-row .ant-switch {
+  flex: 0 0 auto;
+  margin-block-start: 2px;
+}
+
+.admin-draft-switch-row .ant-typography {
+  margin: 0;
+}
+
+.admin-knowledge-source {
+  padding: var(--ac-space-default);
+  border: 1px solid var(--ac-color-border);
+  border-radius: 8px;
+  background: var(--ac-color-elevated);
+}
+
+.admin-knowledge-source-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ac-space-compact);
+}
+
+.admin-knowledge-source > .ant-btn {
+  margin-block-start: var(--ac-space-compact);
+}
+
+.admin-draft-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-compact);
+  padding-block-start: var(--ac-space-section);
+  border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-resource-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr);
+  gap: var(--ac-space-default);
+}
+
+.admin-resource-file {
+  grid-column: 1 / -1;
+}
+
+.admin-resource-upload .ant-upload-drag {
+  padding: var(--ac-space-section);
+}
+
+.admin-resource-upload .ant-upload-drag-icon {
+  margin-block-end: var(--ac-space-compact) !important;
+}
+
+.admin-resource-upload .ant-upload-drag-icon .anticon {
+  color: var(--ac-color-primary);
+  font-size: 28px;
+}
+
+.admin-resource-upload .ant-upload-text,
+.admin-resource-upload .ant-upload-hint {
+  margin: 0 !important;
+}
+
+.admin-resource-upload .ant-upload-hint {
+  color: var(--ac-color-text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.admin-resource-list {
+  border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-publish-blockers {
+  margin: 0;
+  padding-inline-start: var(--ac-space-section);
+}
+
+.admin-validation-summary .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+}
+
+.admin-eval-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ac-space-default);
+}
+
+.admin-eval-prompt {
+  grid-column: 1 / -1;
+}
+
+.admin-evaluation-list {
+  margin-block-start: var(--ac-space-compact);
+}
+
+.admin-evaluation-list .ant-tag {
+  margin: 0;
 }
 
 @media (max-width: 767px) {
@@ -1528,6 +1857,63 @@ body,
 
   .admin-inventory-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-definition-heading > h2.ant-typography {
+    font-size: 22px;
+  }
+
+  .admin-definition-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-draft-focused > .admin-draft-editor {
+    padding: var(--ac-space-default);
+  }
+
+  .admin-draft-tabs .ant-tabs-content {
+    height: 28rem;
+  }
+
+  .admin-draft-create {
+    align-items: stretch;
+  }
+
+  .admin-draft-version-select {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .admin-draft-create .ant-btn {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .admin-draft-delete.ant-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+
+  .admin-knowledge-source-grid,
+  .admin-resource-form-grid,
+  .admin-eval-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-resource-file,
+  .admin-eval-prompt {
+    grid-column: auto;
+  }
+
+  .admin-draft-form-section > .ant-btn {
+    align-self: stretch;
+    min-height: 40px;
+  }
+
+  .admin-draft-actions .ant-btn,
+  .admin-publish-actions .ant-btn {
+    min-height: 40px;
   }
 }
 

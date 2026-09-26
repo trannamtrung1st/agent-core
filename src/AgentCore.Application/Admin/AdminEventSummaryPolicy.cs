@@ -58,6 +58,13 @@ public static class AdminEventSummaryPolicy
         "sourceVersion"
     };
 
+    private static readonly HashSet<string> DraftDeletedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "draftId",
+        "revision"
+    };
+
     private static readonly HashSet<string> ManagedInstanceCreatedSummaryPropertyNames = new(StringComparer.Ordinal)
     {
         "definitionId",
@@ -179,6 +186,12 @@ public static class AdminEventSummaryPolicy
             if (append.Operation == AdminEventOperationKind.DraftCreated)
             {
                 ValidateDraftCreatedSummary(document.RootElement);
+                return;
+            }
+
+            if (append.Operation == AdminEventOperationKind.DraftDeleted)
+            {
+                ValidateDraftDeletedSummary(document.RootElement);
                 return;
             }
 
@@ -410,6 +423,19 @@ public static class AdminEventSummaryPolicy
             && sourceVersion.ValueKind != JsonValueKind.Number)
         {
             throw AgentCoreErrors.Validation("Draft created sourceVersion must be null or a number.");
+        }
+    }
+
+    private static void ValidateDraftDeletedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, DraftDeletedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "draftId");
+        if (!root.TryGetProperty("revision", out var revision)
+            || revision.ValueKind != JsonValueKind.Number
+            || revision.GetInt64() < 1)
+        {
+            throw AgentCoreErrors.Validation("Draft deleted event summary must include a positive revision.");
         }
     }
 

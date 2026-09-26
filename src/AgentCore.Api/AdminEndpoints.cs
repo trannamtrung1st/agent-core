@@ -507,6 +507,23 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapDelete("/definition-drafts/{draftId:guid}", async (
+            Guid draftId,
+            long expectedRevision,
+            AgentDefinitionLifecycleService lifecycle,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await lifecycle.DeleteDraftAsync(draftId, expectedRevision, cancellationToken).ConfigureAwait(false);
+                return Results.NoContent();
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/definition-drafts/{draftId:guid}/validate", async (
             Guid draftId,
             AgentDefinitionDraftValidationService validation,

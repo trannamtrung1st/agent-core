@@ -274,6 +274,7 @@ public interface IAgentDefinitionAdminStore
 {
     ValueTask<AgentDefinitionDraft> CreateDraftAsync(AgentDefinitionDraftCreate create, CancellationToken cancellationToken = default);
     ValueTask<AgentDefinitionDraft> UpdateDraftAsync(AgentDefinitionDraftUpdate update, CancellationToken cancellationToken = default);
+    ValueTask DeleteDraftAsync(AgentDefinitionDraftDelete delete, CancellationToken cancellationToken = default);
     ValueTask<AgentDefinitionPublication> PublishDraftAsync(AgentDefinitionDraftPublish publish, CancellationToken cancellationToken = default);
     ValueTask<AgentDefinitionPublication> DeprecatePublicationAsync(AgentDefinitionPublicationDeprecate deprecate, CancellationToken cancellationToken = default);
     ValueTask<AgentDefinitionDraft?> GetDraftAsync(Guid draftId, CancellationToken cancellationToken = default);

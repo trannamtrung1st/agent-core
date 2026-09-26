@@ -1,3 +1,4 @@
+using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -19,6 +20,86 @@ public sealed class InMemoryAgentDefinitionAdminStoreContractTests : AgentDefini
 
 public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefinitionAdminStoreContractTests
 {
+    [Fact]
+    public async Task Delete_removes_draft_resources_and_evaluation_evidence()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-def-admin-delete-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        var factory = new SqliteContextFactory(options);
+        try
+        {
+            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
+            var ids = new SystemIdGenerator(TimeProvider.System);
+            var content = new InMemoryDefinitionResourceContentStore();
+            var admin = new SqliteAgentDefinitionAdminStore(factory, ids, content);
+            var resources = new SqliteAgentDefinitionResourceAdminStore(factory, content, ids);
+            var evaluations = new SqliteDefinitionDraftEvaluationStore(factory, ids);
+            var now = DateTimeOffset.Parse("2026-01-04T00:00:00Z");
+            var draft = await admin.CreateDraftAsync(
+                new AgentDefinitionDraftCreate(
+                    "delete-with-children",
+                    SampleCandidate("delete-with-children"),
+                    DefinitionDraftSourceKind.New,
+                    null,
+                    now),
+                CancellationToken.None);
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes("draft resource");
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+            await content.StoreVerifiedAsync(hash, bytes);
+            await resources.UpsertDraftResourceAsync(
+                new AgentDefinitionDraftResourceUpsert(
+                    draft.DraftId,
+                    draft.Revision,
+                    null,
+                    "reference.txt",
+                    AgentDefinitionResourceKind.Reference,
+                    "text/plain",
+                    hash,
+                    bytes.Length,
+                    now.AddMinutes(1)));
+
+            await evaluations.UpsertScenarioWithRevisionBumpAsync(
+                draft.DraftId,
+                2,
+                new DefinitionEvaluationScenarioUpsert(
+                    draft.DraftId,
+                    "required-check",
+                    "Required check",
+                    "Run the required check.",
+                    DefinitionEvaluationRequirementLevel.Required,
+                    DefinitionEvaluationCheckType.ToolOffered,
+                    "workspace.read",
+                    now.AddMinutes(2)));
+            await evaluations.SaveResultAsync(
+                new DefinitionEvaluationResult(
+                    draft.DraftId,
+                    3,
+                    "fingerprint",
+                    "required-check",
+                    1,
+                    "Synthetic",
+                    true,
+                    [],
+                    now.AddMinutes(3)));
+
+            await admin.DeleteDraftAsync(
+                new AgentDefinitionDraftDelete(draft.DraftId, 3, now.AddMinutes(4)));
+
+            Assert.Empty(await resources.ListDraftResourcesAsync(draft.DraftId));
+            Assert.Empty(await evaluations.ListScenariosAsync(draft.DraftId));
+            Assert.Empty(await evaluations.ListResultsAsync(draft.DraftId));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
     [Fact]
     public async Task Reopen_preserves_published_definition()
     {
@@ -109,6 +190,37 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
 public abstract class AgentDefinitionAdminStoreContractTests
 {
     protected abstract Task ForEachStoreAsync(Func<IAgentDefinitionAdminStore, Task> exercise);
+
+    [Fact]
+    public Task Draft_delete_is_revision_protected_and_preserves_publications() =>
+        ForEachStoreAsync(async store =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            var candidate = SampleCandidate("delete-demo");
+            var draft = await store.CreateDraftAsync(
+                new AgentDefinitionDraftCreate(
+                    "delete-demo",
+                    candidate,
+                    DefinitionDraftSourceKind.New,
+                    null,
+                    now),
+                CancellationToken.None);
+            var publication = await store.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1)),
+                CancellationToken.None);
+
+            await Assert.ThrowsAsync<AgentCoreException>(() =>
+                store.DeleteDraftAsync(
+                    new AgentDefinitionDraftDelete(draft.DraftId, draft.Revision, now.AddMinutes(2)),
+                    CancellationToken.None).AsTask());
+
+            await store.DeleteDraftAsync(
+                new AgentDefinitionDraftDelete(draft.DraftId, draft.Revision + 1, now.AddMinutes(2)),
+                CancellationToken.None);
+
+            Assert.Null(await store.GetDraftAsync(draft.DraftId));
+            Assert.NotNull(await store.GetPublicationAsync("delete-demo", publication.Version));
+        });
 
     [Fact]
     public Task Draft_edit_publish_deprecate_contract() =>

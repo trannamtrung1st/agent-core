@@ -226,6 +226,51 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         }
     }
 
+    public ValueTask DeleteDraftAsync(
+        AgentDefinitionDraftDelete delete,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var gate = DefinitionDraftLockRegistry.For(delete.DraftId);
+        lock (gate)
+        {
+            if (!_drafts.TryGetValue(delete.DraftId, out var current))
+            {
+                throw AgentCoreErrors.NotFound("Draft was not found.");
+            }
+
+            if (current.Revision != delete.ExpectedRevision)
+            {
+                throw AgentCoreErrors.Conflict("Draft revision is stale.");
+            }
+
+            if (delete.OperationId != Guid.Empty)
+            {
+                if (EventStore is null)
+                {
+                    throw AgentCoreErrors.Validation("Admin draft history is not available.");
+                }
+
+                EventStore.AppendWithinLock(AdminEventFactory.DraftDeleted(
+                    delete.OperationId,
+                    delete.DeletedAt,
+                    current.DefinitionId,
+                    current.DraftId,
+                    current.Revision,
+                    delete.ActorKind));
+            }
+
+            if (!_drafts.TryRemove(delete.DraftId, out _))
+            {
+                throw AgentCoreErrors.Conflict("Draft could not be deleted.");
+            }
+
+            ResourceStore?.DeleteDraftResources(delete.DraftId);
+            EvaluationStore?.DeleteDraftEvaluation(delete.DraftId);
+            return ValueTask.CompletedTask;
+        }
+    }
+
     public ValueTask<AgentDefinitionPublication> PublishDraftAsync(
         AgentDefinitionDraftPublish publish,
         CancellationToken cancellationToken = default)
@@ -425,6 +470,8 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
     }
 
     internal InMemoryAgentDefinitionResourceAdminStore? ResourceStore { get; set; }
+
+    internal InMemoryDefinitionDraftEvaluationStore? EvaluationStore { get; set; }
 
     internal InMemoryAdminEventStore? EventStore { get; set; }
 }

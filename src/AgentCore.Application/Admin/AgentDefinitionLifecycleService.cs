@@ -88,6 +88,18 @@ public sealed class AgentDefinitionLifecycleService(
             cancellationToken).ConfigureAwait(false);
     }
 
+    public ValueTask DeleteDraftAsync(
+        Guid draftId,
+        long expectedRevision,
+        CancellationToken cancellationToken = default) =>
+        admin.DeleteDraftAsync(
+            new AgentDefinitionDraftDelete(
+                draftId,
+                expectedRevision,
+                time.GetUtcNow(),
+                ids.NewId()),
+            cancellationToken);
+
     internal async ValueTask<AgentDefinitionPublication> CommitDraftPublicationAsync(
         Guid draftId,
         long expectedRevision,

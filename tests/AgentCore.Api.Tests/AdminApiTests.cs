@@ -371,6 +371,37 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_delete_is_revision_protected()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        Assert.NotNull(draft);
+
+        var stale = await client.DeleteAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}?expectedRevision={draft.Revision + 1}");
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+
+        var deleted = await client.DeleteAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}?expectedRevision={draft.Revision}");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+
+        var missing = await client.GetAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=definition.draft&targetId={draft.DraftId}");
+        Assert.NotNull(events);
+        Assert.Contains(
+            events!.Items,
+            item => item.Operation == nameof(AdminEventOperationKind.DraftDeleted)
+                && item.Revision == draft.Revision);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_create_rejects_invalid_candidate_with_validation_status()
     {
         var client = OwnerClient();
