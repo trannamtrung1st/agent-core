@@ -6,6 +6,8 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 
 **P7 is frozen** on verified hosted tree **`f0c9e19`** (`f0c9e19a3e7cc3d2413a32f9e6761979739fb69b`, 2026-09-26). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)). **Last behavior-affecting SHA** is **`df761d8`**. **W09** freeze batch accepted on **`5eea954`** (review **0164** / review-0065 PASS). Documentation-only descendants after **`f0c9e19`** (including **`5eea954`** and later docs-only freeze handoff commits) are not new implementation baselines. **P8** is next.
 
+**Execution final REVISE candidate (review 0166 / review-0067):** **`349429d`** (`349429dc8a6f6277274ca42787f268c86d11f8c0`, 2026-09-26) — P7F eval matrix completion, pinned P6 detached work on archived instances, canonical status sync, and whitespace repair. Hosted Synthetic + Compose are **green** on that SHA (workflow [**`36225238807`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36225238807)). Bookkeeping freeze HEAD remains **`f0c9e19`** until execution final COMPLETE.
+
 | Item | Value |
 | --- | --- |
 | **P7 verified freeze tree** | **`f0c9e19`** |
