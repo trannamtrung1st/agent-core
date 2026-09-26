@@ -341,6 +341,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         else
                         {
                             live.CancelDetachGrace();
+                            live.CancelHeadlessFinalize();
                             live.ConnectionId = connectionId;
                             live.LastAttachEventId = command.EventId;
                             live.LastAttachFingerprint = fingerprint;
@@ -762,6 +763,59 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     private async Task FinalizeDetachedSessionAsync(Guid sessionId, Live live)
     {
+        if (!_live.TryGetValue(sessionId, out var current) || !ReferenceEquals(current, live))
+        {
+            return;
+        }
+
+        if (live.ConnectionId is not null)
+        {
+            return;
+        }
+
+        if (await live.Runtime.HasAcceptedConversationWorkAsync().ConfigureAwait(false))
+        {
+            live.CancelHeadlessFinalize();
+            var finalizeCts = new CancellationTokenSource();
+            live.SetHeadlessFinalizeCts(finalizeCts);
+            try
+            {
+                await live.Runtime.TransportDetachAsync().ConfigureAwait(false);
+            }
+            catch (AgentCoreException)
+            {
+                finalizeCts.Dispose();
+                return;
+            }
+
+            _ = WaitForAcceptedWorkThenFinalizeAsync(sessionId, live, finalizeCts);
+            return;
+        }
+
+        await ExtractAndShutdownDetachedAsync(sessionId, live).ConfigureAwait(false);
+    }
+
+    private async Task WaitForAcceptedWorkThenFinalizeAsync(Guid sessionId, Live live, CancellationTokenSource finalizeCts)
+    {
+        using (finalizeCts)
+        {
+            try
+            {
+                await live.Runtime
+                    .WaitUntilAcceptedConversationWorkSettledAsync(finalizeCts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+
+        await ExtractAndShutdownDetachedAsync(sessionId, live).ConfigureAwait(false);
+    }
+
+    private async Task ExtractAndShutdownDetachedAsync(Guid sessionId, Live live)
+    {
         Live? extracted;
         lock (_gate)
         {
@@ -780,7 +834,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return;
         }
 
-        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await ShutdownLiveAsync(extracted, sessionId, detachRuntime: true, joinDispatcher: true, budget.Token)
             .ConfigureAwait(false);
     }
@@ -962,7 +1016,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         {
             try
             {
-                await live.Runtime.DetachAsync(cancellationToken).ConfigureAwait(false);
+                await live.Runtime.FinalizeDetachedPauseAsync(cancellationToken).ConfigureAwait(false);
                 await live.Runtime.WaitUntilIdleAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -2064,6 +2118,29 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         public bool InvalidateAfterPublish { get; set; }
         public CancellationToken DispatchToken => _dispatchLifetime.Token;
         private CancellationTokenSource? _detachGraceCts;
+        private CancellationTokenSource? _headlessFinalizeCts;
+
+        public void CancelHeadlessFinalize()
+        {
+            var cts = Interlocked.Exchange(ref _headlessFinalizeCts, null);
+            if (cts is null)
+            {
+                return;
+            }
+
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            cts.Dispose();
+        }
+
+        public void SetHeadlessFinalizeCts(CancellationTokenSource cts) =>
+            _headlessFinalizeCts = cts;
 
         public void CancelDetachGrace()
         {
@@ -2135,6 +2212,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         public void StopDispatch()
         {
             CancelDetachGrace();
+            CancelHeadlessFinalize();
             Evicted = true;
             try
             {

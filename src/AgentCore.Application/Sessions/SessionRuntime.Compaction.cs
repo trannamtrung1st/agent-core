@@ -19,6 +19,7 @@ public sealed partial class SessionRuntime
     {
         if (_compactionFlight is not null
             || _deactivated
+            || _headlessTransportDetached
             || _activeResponseId is not null
             || _pendingApproval is not null
             || HasPendingUserBatch()

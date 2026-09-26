@@ -325,8 +325,10 @@ public sealed class ResponseProgressRuntimeTests
             wait.Token);
         await runtime.DetachAsync();
         gate.TrySetResult([]);
+        await runtime.WaitUntilAcceptedConversationWorkSettledAsync();
+        await runtime.FinalizeDetachedPauseAsync();
         await runtime.WaitUntilIdleAsync();
-        Assert.Contains(Progress(output), item => item.State == ResponseProgressState.Failed);
+        Assert.Contains(Progress(output), item => item.State == ResponseProgressState.Completed);
     }
 
     [Fact]

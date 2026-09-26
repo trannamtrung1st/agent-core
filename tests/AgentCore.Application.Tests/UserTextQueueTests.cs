@@ -215,7 +215,7 @@ public sealed class UserTextQueueTests
     }
 
     [Fact]
-    public async Task Detach_while_response_generating_records_disconnected_reason()
+    public async Task Detach_while_response_generating_completes_accepted_turn()
     {
         var output = new CapturingSessionOutput();
         var model = new HoldingLanguageModel();
@@ -234,16 +234,24 @@ public sealed class UserTextQueueTests
         Assert.NotNull(r1);
 
         await runtime.DetachAsync();
+        Assert.True(runtime.HeadlessTransportDetached);
+        Assert.Equal(r1, runtime.ActiveResponseId);
+
+        model.Release.TrySetResult();
+        await runtime.WaitUntilAcceptedConversationWorkSettledAsync();
+        await runtime.FinalizeDetachedPauseAsync();
+        await runtime.WaitUntilIdleAsync();
 
         Assert.Contains(
             output.Items,
             item => item.ResponseId == r1
                 && item.Payload is ResponseCompletedOutput completed
-                && completed.InterruptReason == "disconnected");
+                && completed.InterruptReason is null);
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Interrupted, assistant.Status);
-        Assert.Equal("disconnected", assistant.InterruptReason);
-        model.Release.TrySetResult();
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.False(string.IsNullOrWhiteSpace(assistant.Text));
+        Assert.Equal(SessionStatus.Paused, runtime.Snapshot.Status);
+        Assert.Equal("disconnected", runtime.Snapshot.PauseReason);
         await runtime.DisposeAsync();
     }
 

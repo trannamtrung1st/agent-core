@@ -491,7 +491,7 @@ public sealed class PersistenceReceiptTests
     }
 
     [Fact]
-    public async Task Detach_while_voice_response_live_emits_stop_and_interrupted()
+    public async Task Detach_while_voice_response_live_completes_accepted_turn()
     {
         var output = new CapturingSessionOutput();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
@@ -534,11 +534,17 @@ public sealed class PersistenceReceiptTests
         await output.WaitForAsync(item => item.Payload is AudioFrameOutput);
         Assert.NotNull(runtime.ActiveResponseId);
         await runtime.DetachAsync();
+        await output.WaitForAsync(
+            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason is null,
+            CancellationToken.None);
+        await runtime.FinalizeDetachedPauseAsync();
         await runtime.WaitUntilIdleAsync();
-        Assert.Contains(output.Items, item => item.Payload is PlaybackStopOutput);
         Assert.Contains(
             output.Items,
-            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason == "disconnected");
+            item => item.Payload is ResponseCompletedOutput completed && completed.InterruptReason is null);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.False(string.IsNullOrWhiteSpace(assistant.Text));
     }
 
     [Fact]

@@ -407,7 +407,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var detached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = NewContext();
         BeginWork();
-        if (!Enqueue(new DetachReceived(context, detached), urgent: true))
+        if (!Enqueue(new DetachReceived(context, DetachPhase.Auto, detached), urgent: true))
         {
             return;
         }
@@ -761,7 +761,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void DrainOccurrenceQueue(EventContext context)
     {
-        if (_occurrenceQueue.Count == 0 || !IsOutputQuiet() || HasPendingUserBatch() || _deactivated)
+        if (_occurrenceQueue.Count == 0
+            || !IsOutputQuiet()
+            || HasPendingUserBatch()
+            || _deactivated
+            || _headlessTransportDetached)
         {
             return;
         }
@@ -1009,6 +1013,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     break;
                 case DetachReceived detach:
                     await HandleDetachAsync(detach, CancellationToken.None).ConfigureAwait(false);
+                    break;
+                case AcceptedConversationWorkQueryReceived acceptedWorkQuery:
+                    HandleAcceptedConversationWorkQuery(acceptedWorkQuery);
                     break;
                 case SetModeReceived mode:
                     await HandleSetModeAsync(mode, cancellationToken).ConfigureAwait(false);
@@ -1632,6 +1639,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             ModelProvenance: ToProvenance(_snapshot.ModelSelection));
 
         _activeResponseId = input.ResponseId;
+        _activeResponseTriggerKind = input.Trigger.Kind;
         _progressOwnerResponseId = input.ResponseId;
         _activeEntryId = entryId;
         _accumulator.Reset();
@@ -1714,6 +1722,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private void LaunchCompletionEvaluation(EventContext cause)
     {
         if (_deactivated
+            || _headlessTransportDetached
             || _activeResponseId is not null
             || HasPendingUserBatch()
             || !CompletionEvaluator.ShouldEvaluate(_snapshot))
@@ -2080,7 +2089,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var proactive = trigger.Kind != TriggerKind.UserTurn;
-        if (_deactivated || (proactive && _activeResponseId is not null))
+        if (_deactivated
+            || ShouldBlockProactiveWhileHeadless(trigger.Kind)
+            || (proactive && _activeResponseId is not null))
         {
             _outputActivity = OutputActivity.Idle;
             return;
@@ -3740,6 +3751,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         ClearPendingApproval();
         _activeResponseId = null;
+        _activeResponseTriggerKind = null;
         _activeEntryId = null;
         _modelFinishReason = null;
         _progressOwnerResponseId = null;

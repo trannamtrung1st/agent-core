@@ -173,11 +173,9 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task Refresh_attach_loads_interrupted_assistant_after_previous_runtime_disposes()
+    public async Task Refresh_attach_sees_persisted_assistant_after_disconnect_during_generation()
     {
         var releaseModel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var snapshotRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var continueAttach = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var factory = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
@@ -216,68 +214,44 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
             }
         });
 
-        try
-        {
-            host.AfterAttachDurableSnapshotRead = async cancellationToken =>
-            {
-                snapshotRead.TrySetResult();
-                await continueAttach.Task.WaitAsync(cancellationToken);
-            };
+        _ = hubA.InvokeAsync<CommandAck>(
+            "SendText",
+            Text(session.SessionId, 1, attachmentA, "Hi", Guid.NewGuid().ToString()));
+        await deltaSeen.Task.WaitAsync(TimeSpan.FromSeconds(15));
 
-            var send = hubA.InvokeAsync<CommandAck>(
-                "SendText",
-                Text(session.SessionId, 1, attachmentA, "Hi", Guid.NewGuid().ToString()));
-            await deltaSeen.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await hubA.StopAsync();
+        await hubA.DisposeAsync();
+        releaseModel.TrySetResult();
+        await WaitForPersistedAssistantPrefixAsync(store, sessionId);
 
-            var hubB = await ConnectFactoryAsync(factory);
-            var readyB = ReadyWaiter(hubB);
-            var attachB = AttachWhenSessionAvailableAsync(hubB, session.SessionId);
+        await using var hubB = await ConnectFactoryAsync(factory);
+        var readyB = ReadyWaiter(hubB);
+        var attachedB = await AttachWhenSessionAvailableAsync(hubB, session.SessionId);
+        Assert.True(attachedB.Accepted, attachedB.Error?.Message);
+        var attachmentB = await readyB.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.NotEqual(attachmentA, attachmentB);
 
-            var stopA = hubA.StopAsync();
-            await snapshotRead.Task.WaitAsync(TimeSpan.FromSeconds(15));
-            await WaitForInterruptedAssistantAsync(store, sessionId);
-            continueAttach.TrySetResult();
+        var durable = (await store.LoadAsync(sessionId))!;
+        var durableAssistant = durable.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.StartsWith("Hello, this is", durableAssistant.Text, StringComparison.Ordinal);
+        Assert.Equal(EntryStatus.Completed, durableAssistant.Status);
 
-            var attachedB = await attachB.WaitAsync(TimeSpan.FromSeconds(15));
-            Assert.True(attachedB.Accepted, attachedB.Error?.Message);
-            var attachmentB = await readyB.WaitAsync(TimeSpan.FromSeconds(15));
-            Assert.NotEqual(attachmentA, attachmentB);
-
-            var durable = (await store.LoadAsync(sessionId))!;
-            var durableAssistant = durable.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-            Assert.Equal(EntryStatus.Interrupted, durableAssistant.Status);
-            Assert.StartsWith("Hello, this is", durableAssistant.Text, StringComparison.Ordinal);
-
-            var live = host.LiveSnapshot(sessionId);
-            Assert.NotNull(live);
-            Assert.Equal(durable.Revision, live.Revision);
-            var liveAssistant = live.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-            Assert.Equal(durableAssistant.EntryId, liveAssistant.EntryId);
-            Assert.Equal(EntryStatus.Interrupted, liveAssistant.Status);
-            Assert.Equal(durableAssistant.Text, liveAssistant.Text);
-
-            await stopA;
-            await hubA.DisposeAsync();
-            await hubB.DisposeAsync();
-        }
-        finally
-        {
-            host.AfterAttachDurableSnapshotRead = null;
-            releaseModel.TrySetResult();
-            continueAttach.TrySetResult();
-        }
+        var live = host.LiveSnapshot(sessionId);
+        Assert.NotNull(live);
+        var liveAssistant = live.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(durableAssistant.EntryId, liveAssistant.EntryId);
+        Assert.Equal(EntryStatus.Completed, liveAssistant.Status);
+        Assert.Equal(durableAssistant.Text, liveAssistant.Text);
     }
 
-    private static async Task WaitForInterruptedAssistantAsync(IMemoryStore store, Guid sessionId)
+    private static async Task WaitForPersistedAssistantPrefixAsync(IMemoryStore store, Guid sessionId)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
             var snapshot = await store.LoadAsync(sessionId);
             var assistant = snapshot?.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant);
-            if (assistant is not null
-                && assistant.Status == EntryStatus.Interrupted
-                && assistant.Text.StartsWith("Hello, this is", StringComparison.Ordinal))
+            if (assistant is not null && assistant.Text.StartsWith("Hello, this is", StringComparison.Ordinal))
             {
                 return;
             }
@@ -285,7 +259,7 @@ public sealed class SessionHostRaceTests : IClassFixture<AgentCoreApiFactory>
             await Task.Delay(25);
         }
 
-        Assert.Fail("Interrupted assistant text was not persisted before refresh attach continued.");
+        Assert.Fail("Assistant text was not persisted before refresh attach continued.");
     }
 
     private async Task<HubConnection> ConnectFactoryAsync(WebApplicationFactory<Program> factory)

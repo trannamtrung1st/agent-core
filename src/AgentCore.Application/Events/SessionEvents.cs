@@ -89,7 +89,21 @@ public sealed record TimerElapsedReceived(
 
 public sealed record AttachReceived(EventContext Context, TaskCompletionSource<bool> Attached) : SessionInput(Context);
 
-public sealed record DetachReceived(EventContext Context, TaskCompletionSource Detached) : SessionInput(Context);
+public enum DetachPhase
+{
+    Auto,
+    TransportOnly,
+    FinalizePaused
+}
+
+public sealed record DetachReceived(
+    EventContext Context,
+    DetachPhase Phase,
+    TaskCompletionSource Detached) : SessionInput(Context);
+
+public sealed record AcceptedConversationWorkQueryReceived(
+    EventContext Context,
+    TaskCompletionSource<bool> Result) : SessionInput(Context);
 
 public sealed record SetModeReceived(EventContext Context, SessionMode Mode) : SessionInput(Context);
 

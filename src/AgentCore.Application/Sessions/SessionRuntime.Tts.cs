@@ -115,6 +115,21 @@ public sealed partial class SessionRuntime
         _ttsBusy = false;
     }
 
+    private void MarkVoicePlaybackSettledForHeadlessDetach()
+    {
+        if (_snapshot.Mode != SessionMode.Voice)
+        {
+            return;
+        }
+
+        _playbackDone = true;
+        _audioFinalSent = true;
+        _ttsBusy = false;
+        _pendingSegments.Clear();
+        _modelBackpressure?.TrySetResult();
+        _modelBackpressure = null;
+    }
+
     private void InvalidateSpeechJobs()
     {
         _segmentTimerGeneration++;

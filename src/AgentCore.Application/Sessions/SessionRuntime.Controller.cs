@@ -79,6 +79,7 @@ public sealed partial class SessionRuntime
         }
 
         _deactivated = false;
+        _headlessTransportDetached = false;
         PinModelSelectionIfMissing();
         if (_snapshot.ProfileId is { } profileId)
         {
@@ -154,11 +155,28 @@ public sealed partial class SessionRuntime
         _pendingTriggerProposal = null;
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
-            AbandonLiveSpeech(rotateEpoch: true);
-            _input = InputActivity.Idle;
-            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
-            InvalidateSpeechJobs();
-            _ttsCts?.Cancel();
+            await StopTransportDeliveryAsync().ConfigureAwait(false);
+            return;
+        }
+
+        var phase = input.Phase switch
+        {
+            DetachPhase.TransportOnly => DetachPhase.TransportOnly,
+            DetachPhase.FinalizePaused => DetachPhase.FinalizePaused,
+            DetachPhase.Auto when HasAcceptedConversationWork() => DetachPhase.TransportOnly,
+            _ => DetachPhase.FinalizePaused
+        };
+
+        if (phase == DetachPhase.TransportOnly)
+        {
+            await StopTransportDeliveryAsync(cancelActiveSynthesis: false).ConfigureAwait(false);
+            MarkVoicePlaybackSettledForHeadlessDetach();
+            if (_modelDone)
+            {
+                await TryCompleteVoiceAsync(input.Context, failed: false, cancellationToken).ConfigureAwait(false);
+            }
+
+            _headlessTransportDetached = true;
             return;
         }
 
@@ -176,17 +194,11 @@ public sealed partial class SessionRuntime
 
         if (_snapshot.Status == SessionStatus.Paused)
         {
-            _input = InputActivity.Idle;
-            _muted = false;
-            _environmentQueue.Clear();
-            AbandonLiveSpeech(rotateEpoch: true);
-            _input = InputActivity.Idle;
-            InvalidateSpeechJobs();
-            _ttsCts?.Cancel();
-            await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
+            await StopTransportDeliveryAsync().ConfigureAwait(false);
             return;
         }
 
+        _headlessTransportDetached = false;
         _snapshot = LifecycleTransition.Apply(
             _snapshot,
             SessionLifecycleStatus.Paused,
@@ -194,17 +206,26 @@ public sealed partial class SessionRuntime
             _time.GetUtcNow(),
             "disconnected");
         SessionPauseTelemetry.Record("disconnected");
+        await StopTransportDeliveryAsync().ConfigureAwait(false);
+        RequestPersist(
+            _snapshot,
+            PersistKind.Pause,
+            then: ct => PublishStateAsync(input.Context, "disconnected", ct));
+    }
+
+    private async Task StopTransportDeliveryAsync(bool cancelActiveSynthesis = true)
+    {
         _muted = false;
         _environmentQueue.Clear();
         AbandonLiveSpeech(rotateEpoch: true);
         _input = InputActivity.Idle;
         InvalidateSpeechJobs();
-        _ttsCts?.Cancel();
+        if (cancelActiveSynthesis)
+        {
+            _ttsCts?.Cancel();
+        }
+
         await StopRecognitionAsync(null, assignStreamId: true).ConfigureAwait(false);
-        RequestPersist(
-            _snapshot,
-            PersistKind.Pause,
-            then: ct => PublishStateAsync(input.Context, "disconnected", ct));
     }
 
     private async Task HandleMuteAsync(MuteReceived input, CancellationToken cancellationToken)
