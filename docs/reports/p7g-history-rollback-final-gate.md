@@ -58,7 +58,7 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- **W09:** `docs/reports/p7-freeze-candidate.md`, hosted `synthetic.yml` green on exact freeze candidate SHA (local `gh` may be unavailable).
+- **W09:** [p7-freeze-candidate.md](p7-freeze-candidate.md) drafted; hosted `synthetic.yml` green on exact freeze candidate SHA remains pending (local `gh` unavailable).
 
 ## W08 local gate (observed at `2b967cf`)
 
