@@ -70,6 +70,19 @@
 | Compose SQLite volume smoke (sessions, work items, Admin fork/resource/publish/instance/managed session) | `./scripts/compose-sqlite-volume.sh` | Pass (local; resource blobs on `/data/definition-resources`; bytes checked after recreate) |
 | Faithful Manual-A wall-clock (P5/P6 detached reminder) | from `web/`: `rm -f ../data/playwright/w08-faithful-manual.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-faithful-manual.db PLAYWRIGHT_FAITHFUL_MANUAL=1 CI=1 pnpm exec playwright test --project=faithful-manual` | Pass (1) on `df761d8` |
 
+## Execution final revise gate (review 0166 / review-0067)
+
+Behavior fixes land on **`349429d`**; documentation evidence through **`0a00ea5`**. Bookkeeping freeze tree remains **`f0c9e19`** until execution final COMPLETE.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| P7F eval matrix + pinned work factory | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests\|FullyQualifiedName~DurableWorkContextFactoryTests` | Pass (9) on `349429d` |
+| P6 archive / approval-resume durable regressions | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~Accepted_scheduled_work_executes_when_instance_archived\|FullyQualifiedName~Approval_resumes_after` | Pass (3) on `349429d` |
+| Admin definition draft API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft` | Pass (25) on `0a00ea5` |
+| P7G whole-phase Admin lifecycle | from `web/`: `PLAYWRIGHT_SQLITE_PATH=../data/playwright/admin-lifecycle-worker.db CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) local on `0a00ea5` |
+| Compose SQLite volume smoke | `./scripts/compose-sqlite-volume.sh` | Pass local on `0a00ea5` |
+| Hosted Synthetic + Compose | workflow [**`36225238807`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36225238807) on **`349429d`** | Green |
+
 ## W07 browser
 
 | Check | Command | Result |
