@@ -26,7 +26,17 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P8 — harness/platform extensibility.** **P7 frozen** on `53d439e` (workflow `36228090172` green; W09 review 0164 on `5eea954`) — see `docs/reports/p7-freeze-candidate.md`.
+P7 implementation freeze:
+
+```text
+53d439e880b91bf28e7b2b72a2d7a157b6d3a813 — verified P7 tree (last behavior)
+workflow 36228090172 — green
+5eea954 — W09 closure bookkeeping (review 0164)
+```
+
+P7 is **closed/frozen**. Evidence: `docs/reports/p7-freeze-candidate.md`.
+
+**Current active phase:** **P8 — harness/platform extensibility.**
 
 P4 implementation freeze:
 
@@ -262,7 +272,7 @@ Always keep this section.
 
 - [x] Keep background responses/work that must outlive Session Runtime under P6 durable work.
 
-- [ ] Keep the P7 product surface simple even when the internal model is richer.
+- [x] Keep the P7 product surface simple even when the internal model is richer. *(observed Admin shell; frozen on `53d439e`)*
 
   Prefer the admin mental model:
 
@@ -340,69 +350,19 @@ Session
 
 Do not collapse these into a single generic `agent.json` or shared mutable filesystem.
 
+## P7 phase status (frozen)
+
+**P7 is closed/frozen** on verified tree **`53d439e`** (workflow **`36228090172`** green). Work items W01–W08 and whole-phase gate: [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
+
+The slice subsections below record **frozen invariants and orientation** only. Original planning checklists are retired here; open work lives under **P8+** or [Explicit P7 deferrals](#explicit-p7-deferrals).
+
 ---
 
 ## P7A — Admin shell and effective configuration
 
-### Admin vs User area
+**Observed (W01, approved `9169bfa`):** dedicated Admin area (`/admin/...`), owner/trusted-local `/api/v2/admin/...` APIs, server-resolved effective configuration with secret redaction, User-mode boundaries (no harness/persona/publication mutation from ordinary chat). Verification: Admin navigation, mutation-denial, projection, and redaction suites in W01/W08 gates.
 
-- [ ] Add a dedicated **Admin** area inside the existing application.
-
-  Prefer a top-level/sidebar navigation boundary rather than turning normal Chat into a page full of hidden admin controls.
-
-  Conceptually:
-
-  ```text
-  /chat/...
-  /admin/...
-  ```
-
-  P10 later adds full multi-user/RBAC enforcement. P7 still keeps the UX and API boundaries explicit.
-
-- [ ] Keep User mode conversation-first and low-clutter.
-
-- [ ] Prevent ordinary user-session operations from mutating source harnesses, trusted instance identity/persona, or published definitions.
-
-### Effective configuration
-
-- [ ] Add an effective-configuration view for an Agent Definition / Agent Instance.
-
-It should make behavior explainable with non-secret fields such as:
-
-```text
-definition/version
-instance
-persona revision
-model/runtime configuration
-enabled capabilities/tools
-tool policy
-knowledge/resources
-memory policy
-trigger policy
-background-execution policy
-```
-
-- [ ] Never expose secrets through the effective-config surface:
-
-  - API keys;
-  - raw credentials;
-  - secret environment variables;
-  - webhook secrets;
-  - provider tokens.
-
-- [ ] Resolve effective configuration server-side from trusted sources. Do not trust client/model-supplied owner/security metadata.
-
-### P7A verification
-
-- [ ] Admin navigation and route tests.
-- [ ] User-mode mutation-denial tests.
-- [ ] Effective-config projection tests.
-- [ ] Secret-redaction/non-exposure tests.
-- [ ] Existing conversation UX regression coverage.
-
-### P7A stop condition
-
-Admin configuration is a distinct product surface, User mode remains conversation-first, and an authorized operator can inspect the effective non-secret configuration that will govern an agent.
+**Invariants:** Admin is a distinct product surface; User mode stays conversation-first; effective config never exposes secrets; resolution is server-side only.
 
 ---
 
@@ -448,7 +408,7 @@ Changing any published reusable behavior/configuration should produce a new vers
 
 ### Publish diff
 
-- [ ] Show a human-readable diff before publishing. *(P7F)*
+- [x] Show a human-readable diff before publishing. *(observed P7F / W06)*
 
 At minimum identify changes in:
 
@@ -472,7 +432,7 @@ Do not require a raw JSON diff as the only review surface.
 - [x] Published-version immutability tests. *(W02)*
 - [x] Instance upgrade/rollback association tests. *(observed P7D + P7G admin-lifecycle and instance version history tests)*
 - [x] Historical session version-resolution tests. *(W02 `DefinitionLifecycleSessionSnapshotTests`)*
-- [ ] Publish-diff projection tests. *(P7F)*
+- [x] Publish-diff projection tests. *(observed P7F)*
 - [x] Concurrency/revision conflict tests for draft edits and publishing. *(W02)*
 
 ### P7B stop condition
@@ -483,68 +443,15 @@ Reusable agent configuration has a reproducible draft → validation/test → di
 
 ## P7C — Harness editing: instructions, capabilities, resources, workspace
 
-Keep the product mental model simple:
+**Observed (W03, approved `e25cd46`):** Admin editing for instructions, capabilities, and definition-scoped resources; publish-time resource binding with hashes; read-only runtime `/agent` harness view vs mutable session `/workspace`; validation before publish; P3 tool/registry separation preserved. See [P7C report](docs/reports/p7c-harness-resources-workspace.md).
+
+**Mental model:**
 
 ```text
-Harness
-≈ Instructions
-+ Capabilities
-+ Resources / Workspace
+Harness ≈ Instructions + Capabilities + Resources / Workspace
 ```
 
-Internally, preserve typed boundaries rather than treating everything as files.
-
-### Instructions
-
-- [ ] Add bounded admin editing for reusable definition instructions.
-
-- [ ] Keep instructions authoritative behavior configuration, not a dumping ground for learned memory.
-
-### Capabilities / tools
-
-- [ ] Expose currently supported Agent Core capabilities/tools and their relevant policy configuration.
-
-- [ ] Validate missing/invalid tool references before publish.
-
-- [ ] Preserve P3 registry / policy / execution separation.
-
-- [ ] Tool configuration never carries raw provider credentials into model-visible configuration.
-
-### Knowledge / resources
-
-- [ ] Allow definition-scoped knowledge/resources/assets to be managed as reusable harness material.
-
-Examples:
-
-```text
-reference docs
-policies
-templates
-skills/resources
-assets
-test fixtures
-```
-
-- [ ] Preserve provenance/version association for resources included in a published definition.
-
-### Harness workspace
-
-Use a **definition-scoped harness workspace** distinct from the existing session runtime workspace.
-
-Conceptually:
-
-```text
-Definition draft harness workspace
-  → editable by Admin
-  → may contain reusable docs/templates/assets/skills/test fixtures
-
-Published definition harness workspace
-  → immutable snapshot/versioned resource set
-  → available to runtime according to capability/policy
-  → never mutated by ordinary user sessions
-```
-
-- [ ] Do not store learned memory, trigger registrations, credentials, or mutable runtime state as ordinary harness-workspace files.
+**Invariants:** published harness resources are immutable; session workspaces stay isolated and mutable; learned memory, triggers, and credentials are not harness-workspace files.
 
 - [x] Continue giving every session its own isolated mutable runtime workspace.
 
@@ -575,17 +482,7 @@ Add it later only when a concrete workflow requires durable files shared across 
 
 If/when added, keep it separate from learned memory and definition resources.
 
-### P7C verification
-
-- [ ] Draft/published harness-workspace lifecycle tests.
-- [ ] Published resource immutability tests.
-- [ ] Session workspace isolation/regression tests.
-- [ ] Tests proving user sessions cannot mutate published harness resources.
-- [ ] Tests proving memory/trigger/security state is not silently represented as workspace files.
-
-### P7C stop condition
-
-An admin can configure the current agent harness through instructions, capabilities, knowledge/resources, and a versioned harness workspace while session runtime files remain isolated and mutable at the session layer.
+**Verification (observed):** draft/publish resource lifecycle, immutability, session isolation, and user-session mutation-denial tests in W03/W08 gates (see P7C report).
 
 ---
 
@@ -595,7 +492,7 @@ An admin can configure the current agent harness through instructions, capabilit
 
 ### Agent Instance lifecycle
 
-- [x] Add admin lifecycle for durable Agent Instances created from published Agent Definitions. *(observed W04; gate pending)*
+- [x] Add admin lifecycle for durable Agent Instances created from published Agent Definitions. *(observed W04; approved `0aa3ad3`)*
 
 Support explicit lifecycle states/operations sufficient for the current product, such as:
 
@@ -608,16 +505,7 @@ deactivate/archive
 
 Avoid premature organization/tenant lifecycle complexity.
 
-- [ ] Preserve the distinction between:
-
-```text
-definition upgrade
-identity/persona revision
-learned-memory reset
-new/forked Agent Instance
-```
-
-None of these implicitly means another.
+- [x] Preserve the distinction between definition upgrade, identity/persona revision, learned-memory reset, and new/forked Agent Instance (none implicitly means another). *(observed W04 regressions)*
 
 ### Persona editing
 
@@ -772,65 +660,9 @@ Authorized operators can understand and manage memory and automation policy/stat
 
 ## P7F — Validation, behavior preview, evaluations, and publish gate
 
-Make testing a first-class part of building an agent rather than a developer-only afterthought.
+**Observed (W06, approved `03e350a`; execution-final eval isolation on `53d439e`):** layered pure vs resolved validation, required deterministic Synthetic draft evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator` / offline Scripted model), Admin check-type matrix, safe publish diff, exact-revision publish with configuration fingerprint; invalid configuration blocks publish. Hosted provider paths remain opt-in; Synthetic is the key-free gate. See [P7F report](docs/reports/p7f-validation-evals-publish-gate.md).
 
-### Validation
-
-- [ ] Validate draft configuration before publish.
-
-Cover at least:
-
-- schema/config validity;
-- missing tool/capability references;
-- invalid permissions/policies;
-- incompatible model/provider capabilities where deterministically knowable;
-- invalid definition/instance associations;
-- invalid memory/trigger configuration;
-- missing/invalid harness resources;
-- unsafe or secret-bearing configuration where detectable.
-
-### Behavior preview / test scenarios
-
-- [ ] Add admin-visible behavior-preview/test scenarios.
-
-Conceptually:
-
-```text
-Scenario:
-  "Customer asks for refund after 45 days"
-
-Expected checks:
-  cites/uses relevant policy
-  does not perform unauthorized refund
-  proposes escalation
-```
-
-- [ ] Reuse Synthetic/offline infrastructure for deterministic default evaluation whenever possible.
-
-- [ ] Keep hosted/provider evaluation explicitly opt-in where deterministic offline behavior is sufficient.
-
-- [ ] Store evaluation definitions/results with enough provenance to know which draft/version/configuration was tested.
-
-- [ ] Make failed required validation block publish.
-
-- [ ] Decide a narrow initial policy for evaluation failures:
-
-  - structural/security validation: blocking;
-  - optional behavioral evals: report clearly and allow policy to determine whether publish is blocked.
-
-Avoid pretending subjective model behavior can always be reduced to deterministic pass/fail.
-
-### P7F verification
-
-- [ ] Validation unit/application tests.
-- [ ] Synthetic behavior-preview end-to-end flow.
-- [ ] Publish blocked by invalid configuration.
-- [ ] Evaluation provenance/version tests.
-- [ ] Hosted tests remain optional unless a provider-specific requirement demands them.
-
-### P7F stop condition
-
-An admin can validate and test a draft agent before publication, and invalid configuration cannot be silently published.
+**Invariants:** validation and eval provenance tie to draft revision; behavioral eval uses offline Synthetic by default; structural/security failures block publish.
 
 ---
 
