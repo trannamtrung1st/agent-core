@@ -58,7 +58,7 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 extended Compose managed Admin path (plan W08 step 7) and canonical doc sync (plan W08 steps 1–8).
+- W08 extended Compose managed Admin path (plan W08 step 7); further canonical doc owners (03–05, 09–18, including Admin observability/Compose in `docs/17`) and hosted exact-SHA CI remain.
 
 ## W08 local gate (partial)
 
@@ -66,6 +66,10 @@
 | --- | --- | --- |
 | Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass on `ae83bfc` (worker run) |
 | P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `b96942e` |
+| Frontend unit | `pnpm run test --run --maxWorkers=2` | Pass (468) on `a013b5c` |
+| Frontend build | `pnpm run build` | Pass on `a013b5c` |
+| Owner/trusted-local + Admin redaction API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (56) on `a013b5c` |
+| P7G whole-phase journey (disposable DB) | `PLAYWRIGHT_SQLITE_PATH=data/playwright/w08-admin-lifecycle.db CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) on `a013b5c` |
 
 ## W07 browser
 
