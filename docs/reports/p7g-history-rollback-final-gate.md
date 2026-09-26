@@ -49,13 +49,14 @@
 | Frontend unit | `pnpm run test --run` | Pass (468) with `--maxWorkers=2` on candidate HEAD |
 | Frontend build | `pnpm run build` | Pass |
 | Synthetic Playwright (`synthetic` project) | `rm -f data/playwright/synthetic.db && CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) |
+| Compose SQLite volume smoke | `./scripts/compose-sqlite-volume.sh` | Pass |
 
 **Solution gate verification:** `dotnet test AgentCore.sln --nologo` — Pass (1596 passed, 8 skipped) on the W07 regression-fix candidate containing this report; approved baseline `6ec1c675d1a896b3fe95b85d1077f27110577df5` is a git ancestor of that candidate.
 
 ## Remaining (W07)
 
-- Compose smoke per W08 local candidate gate.
-- Hosted `synthetic` workflow green on the exact final candidate SHA (CI now runs `admin-lifecycle.spec.ts` on an isolated SQLite file; verify on push).
+- Hosted `synthetic` workflow green on the exact final candidate SHA (CI runs full synthetic + `admin-lifecycle` on isolated SQLite; verify on push).
+- W08 extended Compose managed Admin path (plan W08 step 7) remains for whole-phase closure.
 
 ## W07 browser
 
