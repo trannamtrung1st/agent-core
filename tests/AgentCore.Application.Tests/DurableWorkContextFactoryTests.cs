@@ -63,6 +63,25 @@ public sealed class DurableWorkContextFactoryTests
         Assert.Equal("Alex", context.Definition.Identity.Name);
     }
 
+    [Fact]
+    public async Task CreateAsync_uses_pinned_persona_snapshot_for_role_and_tone()
+    {
+        var definition = SampleDefinitions.Examiner;
+        var harness = await SeedHarnessAsync(AgentInstanceLifecycle.Active, definition, 1, "Live Name");
+        var pinned = new AgentIdentity(
+            "Alice",
+            "Executive Secretary",
+            "Pinned at intake.",
+            "Formal");
+        var item = NewWorkItem(definition.Id, definition.Version, pinned);
+
+        var context = await harness.Factory.CreateAsync(item, CancellationToken.None);
+        Assert.NotNull(context.Persona);
+        Assert.Equal(pinned, context.Persona);
+        Assert.Equal("Alex", context.Definition.Identity.Name);
+        Assert.NotEqual(context.Definition.Identity.Tone, context.Persona.Tone);
+    }
+
     private static WorkItem NewWorkItem(string definitionId, int definitionVersion, string personaName) =>
         WorkItem.Create(
             Guid.Parse("019944af-00a4-7000-8000-000000000004"),
@@ -80,6 +99,28 @@ public sealed class DurableWorkContextFactoryTests
                 definitionId,
                 definitionVersion,
                 personaName),
+            new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", "medium"),
+            3,
+            Now);
+
+    private static WorkItem NewWorkItem(string definitionId, int definitionVersion, AgentIdentity pinnedPersona) =>
+        WorkItem.Create(
+            Guid.Parse("019944af-00a4-7000-8000-000000000004"),
+            new WorkOwner(InstanceId, ProfileId),
+            new WorkProvenance(
+                SourceId,
+                WorkSourceKind.Schedule,
+                null,
+                Guid.Parse("019944af-00a5-7000-8000-000000000005"),
+                null,
+                $"source|{SourceId:N}",
+                Now,
+                Now,
+                """{"instruction":"synthetic"}""",
+                definitionId,
+                definitionVersion,
+                pinnedPersona.Name,
+                pinnedPersona),
             new WorkModelPin("scripted-alpha", "primary-llm", "scripted-alpha", "medium"),
             3,
             Now);

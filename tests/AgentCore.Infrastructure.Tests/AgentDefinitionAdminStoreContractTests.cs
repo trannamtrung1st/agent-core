@@ -309,6 +309,66 @@ public abstract class AgentDefinitionAdminStoreContractTests
         });
 
     [Fact]
+    public Task Composite_list_inventory_resolves_default_not_deprecated_highest_version() =>
+        ForEachStoreAsync(async admin =>
+        {
+            var builtIns = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
+            var composite = new CompositeAgentDefinitionStore(builtIns, admin);
+            var now = DateTimeOffset.Parse("2026-01-03T00:00:00Z");
+            var candidate = SampleCandidate("inventory-agent");
+
+            var draft = await admin.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("inventory-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            var v1 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(draft.DraftId, draft.Revision, [], now.AddMinutes(1)),
+                CancellationToken.None);
+            var v2Draft = await admin.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    draft.DraftId,
+                    2,
+                    candidate with { SystemInstructions = "Active v2 body." },
+                    now.AddMinutes(2)),
+                CancellationToken.None);
+            var v2 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(v2Draft.DraftId, v2Draft.Revision, [v1.Version], now.AddMinutes(3)),
+                CancellationToken.None);
+            var draftAfterV2 = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+            var v3Draft = await admin.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    draft.DraftId,
+                    draftAfterV2!.Revision,
+                    candidate with { SystemInstructions = "Deprecated v3 body." },
+                    now.AddMinutes(4)),
+                CancellationToken.None);
+            var v3 = await admin.PublishDraftAsync(
+                new AgentDefinitionDraftPublish(v3Draft.DraftId, v3Draft.Revision, [v2.Version], now.AddMinutes(5)),
+                CancellationToken.None);
+            await admin.DeprecatePublicationAsync(
+                new AgentDefinitionPublicationDeprecate("inventory-agent", v3.Version, 1, now.AddMinutes(6)),
+                CancellationToken.None);
+
+            var all = await composite.ListAsync(CancellationToken.None);
+            var ids = all.Select(item => item.Id).Distinct(StringComparer.Ordinal);
+            var inventory = new List<AgentDefinition>();
+            foreach (var id in ids)
+            {
+                var resolved = await composite.GetAsync(id, version: null, CancellationToken.None);
+                if (resolved is not null)
+                {
+                    inventory.Add(resolved);
+                }
+            }
+
+            var listed = inventory.Single(item => item.Id == "inventory-agent");
+            Assert.Equal(v2.Version, listed.Version);
+            Assert.Equal("Active v2 body.", listed.SystemInstructions);
+            var exactDeprecated = await composite.GetAsync("inventory-agent", v3.Version, CancellationToken.None);
+            Assert.NotNull(exactDeprecated);
+            Assert.Equal("Deprecated v3 body.", exactDeprecated!.SystemInstructions);
+        });
+
+    [Fact]
     public Task Composite_default_lookup_skips_deprecated_publication() =>
         ForEachStoreAsync(async admin =>
         {

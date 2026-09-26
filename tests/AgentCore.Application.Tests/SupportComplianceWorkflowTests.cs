@@ -49,7 +49,7 @@ public sealed class SupportComplianceWorkflowTests
                 store,
                 attachments,
                 artifacts,
-                knowledge: new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
+                knowledge: RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
                 workspace);
             await runtime.AttachAsync();
             Assert.True(await runtime.SubmitUserTextAsync(prompt, attachmentIds: [uploaded.AttachmentId]));
@@ -144,7 +144,7 @@ public sealed class SupportComplianceWorkflowTests
             TimeProvider.System,
             new VoiceAvailability { SpeechAdaptersResolved = true },
             attachments,
-            knowledge: new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
+            knowledge: RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
             workspace,
             artifacts);
     }

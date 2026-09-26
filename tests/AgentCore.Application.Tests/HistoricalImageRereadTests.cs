@@ -309,7 +309,7 @@ public sealed class HistoricalImageRereadTests
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var processor = new AttachmentProcessor(attachments);
-        var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var tools = new SessionToolExecutor(knowledge, attachments, processor);
         var model = new RecordingLanguageModel(new MixedHistoricalImageModel());
         var output = new CapturingSessionOutput();

@@ -60,7 +60,10 @@ Observed durable Admin and managed-instance schema (SQLite; InMemory parity for 
 | `20260925084907_P7DefinitionResources` | Draft/publication resource binding metadata (hash, path, kind, size); not content bytes |
 | `20260925101355_P7ManagedAgentInstance` | Managed instance lifecycle columns |
 | `20260925101918_P7ManagedAgentInstanceRevisionToken` | Instance/persona revision tokens |
+| `20260925103832_P7PinnedPersonaRevision` | Session pinned persona revision |
+| `20260925150254_P7DefinitionDraftEvaluation` | Draft evaluation scenarios and results |
 | `20260925161000_P7AdminEvents` | Append-only Admin history |
+| `20260926083213_P7WorkPinnedPersona` | Durable work item pinned persona snapshot |
 
 Resource content bytes live in `IDefinitionResourceContentStore` (InMemory for Synthetic; file-backed under `Persistence:DefinitionResourceRoot` for SQLite). The migration stores bindings and verified SHA-256 references only.
 

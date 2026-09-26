@@ -695,11 +695,18 @@ public sealed class SessionManager
         CancellationToken cancellationToken = default)
     {
         var definitions = await _definitions.ListAsync(cancellationToken).ConfigureAwait(false);
-        return definitions
-            .GroupBy(definition => definition.Id, StringComparer.Ordinal)
-            .Select(group => group.OrderByDescending(item => item.Version).First())
-            .Select(definition => PublicHistory.FromDefinition(definition, _voice.IsAvailable(definition)))
-            .ToArray();
+        var ids = definitions.Select(definition => definition.Id).Distinct(StringComparer.Ordinal);
+        var resolved = new List<PublicAgentDescriptor>();
+        foreach (var id in ids)
+        {
+            var definition = await _definitions.GetAsync(id, version: null, cancellationToken).ConfigureAwait(false);
+            if (definition is not null)
+            {
+                resolved.Add(PublicHistory.FromDefinition(definition, _voice.IsAvailable(definition)));
+            }
+        }
+
+        return resolved;
     }
 
     public async Task<PublicAgentDescriptor> GetAgentAsync(

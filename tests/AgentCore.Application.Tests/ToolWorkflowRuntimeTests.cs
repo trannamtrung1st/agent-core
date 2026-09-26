@@ -83,7 +83,7 @@ public sealed class ToolWorkflowRuntimeTests
         var workspace = new GatedWorkspace();
         var definition = await Load("customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var tools = new SessionToolExecutor(knowledge, workspace: workspace, artifacts: artifacts);
         var model = new WorkspaceWriteLanguageModel();
         var output = new CapturingSessionOutput();
@@ -102,7 +102,7 @@ public sealed class ToolWorkflowRuntimeTests
     {
         var definition = await Load(compliance ? "compliance" : "customer-support");
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var tools = new SessionToolExecutor(knowledge, artifacts: artifacts);
         var model = new ScriptedLanguageModel(alwaysToolCall: alwaysToolCall);
         var output = new CapturingSessionOutput();

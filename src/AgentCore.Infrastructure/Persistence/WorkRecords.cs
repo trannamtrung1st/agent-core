@@ -86,6 +86,8 @@ public sealed class WorkItemRecord
 
     public string PersonaName { get; set; } = "";
 
+    public string? PinnedPersonaJson { get; set; }
+
     public string ModelCatalogKey { get; set; } = "";
 
     public string ModelProviderAlias { get; set; } = "";

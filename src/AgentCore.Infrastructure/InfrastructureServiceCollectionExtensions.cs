@@ -241,6 +241,11 @@ public static class InfrastructureServiceCollectionExtensions
             LanguageModelFactory.Create(provider, profile, languageModel));
         services.TryAddSingleton<IApprovedKnowledgeCatalog>(provider =>
             new FileApprovedKnowledgeCatalog(agentDirectory));
+        services.TryAddSingleton<IRoleKnowledgeContentResolver>(provider =>
+            new DefinitionBoundKnowledgeContentResolver(
+                provider.GetRequiredService<IApprovedKnowledgeCatalog>(),
+                provider.GetRequiredService<IAgentDefinitionAdminStore>(),
+                provider.GetRequiredService<DefinitionPublicationResourceReader>()));
         services.TryAddSingleton<RoleKnowledgeService>();
         services.TryAddSingleton(provider =>
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));

@@ -1,4 +1,5 @@
 using System.Text;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Work;
 
@@ -121,7 +122,8 @@ public sealed class WorkProvenance
         string evidenceJson,
         string definitionId,
         int definitionVersion,
-        string personaName)
+        string personaName,
+        AgentIdentity? pinnedPersona = null)
     {
         if (sourceOccurrenceId == Guid.Empty)
         {
@@ -155,6 +157,13 @@ public sealed class WorkProvenance
         DefinitionId = WorkText.RequireToken(definitionId, WorkLimits.MaxDefinitionIdCharacters, "Definition");
         DefinitionVersion = definitionVersion;
         PersonaName = WorkText.RequireLine(personaName, WorkLimits.MaxPersonaNameCharacters, "Persona");
+        if (pinnedPersona is not null
+            && !string.Equals(pinnedPersona.Name, PersonaName, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Pinned persona name must match provenance persona name.", nameof(pinnedPersona));
+        }
+
+        PinnedPersona = pinnedPersona;
     }
 
     public Guid SourceOccurrenceId { get; }
@@ -180,6 +189,11 @@ public sealed class WorkProvenance
     public int DefinitionVersion { get; }
 
     public string PersonaName { get; }
+
+    public AgentIdentity? PinnedPersona { get; }
+
+    public AgentIdentity ResolvePersona(AgentDefinition definition) =>
+        PinnedPersona ?? definition.Identity with { Name = PersonaName };
 }
 
 public sealed class WorkModelPin

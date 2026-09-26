@@ -156,7 +156,7 @@ public sealed class RoleEnvironmentTests
     {
         var definition = await Load("customer-support");
         var catalog = new FileApprovedKnowledgeCatalog(FindAgents());
-        var service = new RoleKnowledgeService(catalog, TimeProvider.System);
+        var service = RoleKnowledgeService.FromApprovedCatalog(catalog, TimeProvider.System);
         var document = await service.RetrieveAsync(definition, "support-order-policy");
         Assert.Equal("support-order-policy@demo", document.Citation);
         Assert.Contains("order", document.Content, StringComparison.OrdinalIgnoreCase);

@@ -107,8 +107,11 @@ public interface IApprovedKnowledgeCatalog
     ValueTask<string?> ReadContentAsync(string identity, CancellationToken cancellationToken = default);
 }
 
-public sealed class RoleKnowledgeService(IApprovedKnowledgeCatalog catalog, TimeProvider time)
+public sealed class RoleKnowledgeService(IRoleKnowledgeContentResolver contentResolver, TimeProvider time)
 {
+    public static RoleKnowledgeService FromApprovedCatalog(IApprovedKnowledgeCatalog catalog, TimeProvider time) =>
+        new(new FileOnlyRoleKnowledgeContentResolver(catalog), time);
+
     public async ValueTask<KnowledgeDocument> RetrieveAsync(
         AgentDefinition definition,
         string identity,
@@ -118,7 +121,7 @@ public sealed class RoleKnowledgeService(IApprovedKnowledgeCatalog catalog, Time
         var source = RoleEnvironments.Of(definition).KnowledgeList
             .FirstOrDefault(item => string.Equals(item.Identity, identity, StringComparison.Ordinal))
             ?? throw AgentCoreErrors.Forbidden("Knowledge identity is not approved for this role.");
-        var content = await catalog.ReadContentAsync(identity, cancellationToken).ConfigureAwait(false)
+        var content = await contentResolver.ReadContentAsync(definition, identity, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound("Approved knowledge content was not found.");
         return new KnowledgeDocument(
             source.Identity,

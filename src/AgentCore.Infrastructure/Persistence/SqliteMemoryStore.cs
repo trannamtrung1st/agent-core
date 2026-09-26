@@ -1226,6 +1226,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await TableExistsAsync(connection, "WorkItems", cancellationToken).ConfigureAwait(false)
+            && await ColumnExistsAsync(connection, "WorkItems", "PinnedPersonaJson", cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260926083213_P7WorkPinnedPersona', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(

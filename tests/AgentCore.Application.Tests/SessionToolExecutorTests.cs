@@ -205,7 +205,7 @@ public sealed class SessionToolExecutorTests
     [Fact]
     public async Task Knowledge_retrieve_returns_valid_json_when_output_is_truncated()
     {
-        var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var executor = new SessionToolExecutor(knowledge);
         var result = await ExecuteTextAsync(
             executor,

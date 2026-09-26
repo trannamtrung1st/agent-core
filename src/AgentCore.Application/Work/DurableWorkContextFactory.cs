@@ -82,7 +82,7 @@ public sealed class DurableWorkContextFactory(
             LanguageModel: models.Resolve(selection, ModelPurpose.Conversation),
             ReasoningEffort: item.Model.ReasoningEffort,
             LearnedMemories: learned,
-            Persona: definition.Identity with { Name = item.Provenance.PersonaName },
+            Persona: item.Provenance.ResolvePersona(definition),
             ModelSupportsTools: descriptor.Tools,
             DetachedExecution: true);
     }

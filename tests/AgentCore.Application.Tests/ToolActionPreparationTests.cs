@@ -13,7 +13,7 @@ public sealed class ToolActionPreparationTests
     {
         var provider = new SyntheticEmailProvider();
         var executor = new SessionToolExecutor(
-            new RoleKnowledgeService(new EmptyKnowledgeCatalog(), TimeProvider.System),
+            RoleKnowledgeService.FromApprovedCatalog(new EmptyKnowledgeCatalog(), TimeProvider.System),
             emailProvider: provider);
         var draft = await provider.CreateDraftAsync(
             new EmailCreateDraftRequest(

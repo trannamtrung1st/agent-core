@@ -128,7 +128,8 @@ public sealed class DurableWorkIntake(
                 occurrence.EvidenceJson,
                 definition.Id,
                 definition.Version,
-                instance.Persona.Name),
+                instance.Persona.Name,
+                instance.Persona),
             new WorkModelPin(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort),
             WorkLimits.DefaultMaxAttempts,
             now);

@@ -1659,7 +1659,7 @@ public sealed class DurableReminderTests
             time,
             new WorkCancellationRegistry(),
             new SessionToolExecutor(
-                new RoleKnowledgeService(knowledge, time),
+                RoleKnowledgeService.FromApprovedCatalog(knowledge, time),
                 emailProvider: new SyntheticEmailProvider(),
                 httpRequestClient: http));
         return new Harness(

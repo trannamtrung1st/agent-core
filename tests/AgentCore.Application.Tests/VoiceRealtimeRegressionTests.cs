@@ -357,7 +357,7 @@ public sealed class VoiceRealtimeRegressionTests
     {
         var store = new InMemoryMemoryStore();
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var knowledge = new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
+        var knowledge = RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System);
         var tools = new SessionToolExecutor(knowledge, artifacts: artifacts);
         var definition = await Load("customer-support");
         Guid sessionId;
@@ -409,7 +409,7 @@ public sealed class VoiceRealtimeRegressionTests
         var synthesizer = new RecordingSynthesizer();
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var tools = new SessionToolExecutor(
-            new RoleKnowledgeService(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
+            RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
             artifacts: artifacts);
         var definition = await Load("customer-support");
         await using var runtime = CreateVoice(

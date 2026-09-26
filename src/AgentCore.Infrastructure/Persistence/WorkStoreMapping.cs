@@ -1,11 +1,14 @@
+using System.Text.Json;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Work;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
 
 namespace AgentCore.Infrastructure.Persistence;
 
 internal static class WorkStoreMapping
 {
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static WorkItemRecord ToRecord(WorkItem item)
     {
         var row = new WorkItemRecord();
@@ -57,6 +60,9 @@ internal static class WorkStoreMapping
         row.DefinitionId = item.Provenance.DefinitionId;
         row.DefinitionVersion = item.Provenance.DefinitionVersion;
         row.PersonaName = item.Provenance.PersonaName;
+        row.PinnedPersonaJson = item.Provenance.PinnedPersona is null
+            ? null
+            : JsonSerializer.Serialize(item.Provenance.PinnedPersona, Json);
         row.ModelCatalogKey = item.Model.CatalogKey;
         row.ModelProviderAlias = item.Model.ProviderAlias;
         row.ModelId = item.Model.ModelId;
@@ -159,7 +165,8 @@ internal static class WorkStoreMapping
                 row.EvidenceJson,
                 row.DefinitionId,
                 row.DefinitionVersion,
-                row.PersonaName),
+                row.PersonaName,
+                DeserializePinnedPersona(row.PinnedPersonaJson)),
             new WorkModelPin(row.ModelCatalogKey, row.ModelProviderAlias, row.ModelId, row.ModelReasoningEffort),
             (WorkItemStatus)row.Status,
             row.Revision,
@@ -225,4 +232,9 @@ internal static class WorkStoreMapping
 
     private static DateTimeOffset? OptionalUnix(long? value) =>
         value is null ? null : DateTimeOffset.FromUnixTimeMilliseconds(value.Value);
+
+    private static AgentIdentity? DeserializePinnedPersona(string? json) =>
+        string.IsNullOrWhiteSpace(json)
+            ? null
+            : JsonSerializer.Deserialize<AgentIdentity>(json, Json);
 }
