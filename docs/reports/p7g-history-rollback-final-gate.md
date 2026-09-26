@@ -1,8 +1,10 @@
 # P7G — Admin history, deprecation/rollback, and final P7 gate
 
-**Status:** in progress (W07)
+**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139 / review-0051 PASS). W08 local candidate gate and hosted exact-SHA CI remain.
 
 **Baseline:** `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0` (W06 P7F closure)
+
+**W07 closure HEAD:** `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f`
 
 ## Scope delivered (observed, partial)
 
@@ -53,10 +55,16 @@
 
 **Solution gate verification:** `dotnet test AgentCore.sln --nologo` — Pass (1596 passed, 8 skipped) on the W07 regression-fix candidate containing this report; approved baseline `6ec1c675d1a896b3fe95b85d1077f27110577df5` is a git ancestor of that candidate.
 
-## Remaining (W07)
+## Remaining (phase gate)
 
-- Hosted `synthetic` workflow green on the exact final candidate SHA (CI runs full synthetic + `admin-lifecycle` on isolated SQLite; verify on push).
-- W08 extended Compose managed Admin path (plan W08 step 7) remains for whole-phase closure.
+- Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
+- W08 extended Compose managed Admin path (plan W08 step 7) and canonical doc sync (plan W08 steps 1–8).
+
+## W08 local gate (partial)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass on `ae83bfc` (worker run) |
 
 ## W07 browser
 

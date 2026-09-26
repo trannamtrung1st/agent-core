@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on **2026-09-25**.
+Reviewed against `main` on **2026-09-26**.
 
 P5 implementation freeze:
 
@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `18ffecf` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** `03e350a` — see `docs/reports/p7f-validation-evals-publish-gate.md`; **W07** P7G in progress).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `18ffecf` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** `03e350a` — see `docs/reports/p7f-validation-evals-publish-gate.md`; **W07** `ae83bfc` — review 0139; see `docs/reports/p7g-history-rollback-final-gate.md`; **W08** whole-phase gate/docs in progress).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05 P7E slice gate approved at `59a812a`; W06+ remaining).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05 P7E slice gate approved at `59a812a`; W06 P7F slice gate approved at `03e350a`; W07 P7G slice gate approved at `ae83bfc` review 0139; **W08** local candidate gate, canonical docs, hosted exact-SHA CI, and freeze report remain).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -445,7 +445,7 @@ Changing any published reusable behavior/configuration should produce a new vers
 
 - [x] Support deprecating a definition version without rewriting historical sessions. *(W02 metadata-only deprecate)*
 
-- [ ] Support moving an instance association back to a prior valid published version where policy permits. *(P7D/P7G)*
+- [x] Support moving an instance association back to a prior valid published version where policy permits. *(observed managed rollback/reassociate; P7G `admin-lifecycle` + history tests)*
 
 ### Publish diff
 
@@ -471,7 +471,7 @@ Do not require a raw JSON diff as the only review surface.
 
 - [x] Draft mutation/versioning tests. *(W02 store/API contracts)*
 - [x] Published-version immutability tests. *(W02)*
-- [ ] Instance upgrade/rollback association tests. *(P7D/P7G)*
+- [x] Instance upgrade/rollback association tests. *(observed P7D + P7G admin-lifecycle and instance version history tests)*
 - [x] Historical session version-resolution tests. *(W02 `DefinitionLifecycleSessionSnapshotTests`)*
 - [ ] Publish-diff projection tests. *(P7F)*
 - [x] Concurrency/revision conflict tests for draft edits and publishing. *(W02)*
@@ -854,23 +854,23 @@ trigger revoked
 instance archived
 ```
 
-- [ ] Record actor/source, timestamp, target resource, operation, and safe change metadata.
+- [x] Record actor/source, timestamp, target resource, operation, and safe change metadata. *(observed `AdminEvents` + `GET /api/v2/admin/events`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md))*
 
-- [ ] Do not log secrets or raw sensitive payloads merely for audit convenience.
+- [x] Do not log secrets or raw sensitive payloads merely for audit convenience. *(observed `AdminEventSummaryPolicy` + sentinel tests)*
 
-- [ ] Keep this intentionally smaller than P10 enterprise audit/compliance infrastructure.
+- [x] Keep this intentionally smaller than P10 enterprise audit/compliance infrastructure.
 
 ### Rollback/deprecation UX
 
-- [ ] Allow an authorized admin to inspect prior immutable versions.
+- [x] Allow an authorized admin to inspect prior immutable versions. *(observed publication inventory + exact-version read APIs)*
 
-- [ ] Allow explicit instance reassociation/rollback to a compatible prior published version.
+- [x] Allow explicit instance reassociation/rollback to a compatible prior published version. *(observed managed version PATCH + P7G journey)*
 
-- [ ] Deprecation must not rewrite history.
+- [x] Deprecation must not rewrite history. *(observed metadata-only deprecate + session/history retention)*
 
 ### End-to-end Admin UX
 
-- [ ] Provide a coherent Admin flow such as:
+- [x] Provide a coherent Admin flow such as:
 
 ```text
 Agent Definitions
@@ -889,17 +889,17 @@ Agent Instances
   → activate/archive
 ```
 
-- [ ] Keep the primary UI understandable without requiring users to understand internal terms such as `IdentityUser`, occurrence dedupe, or SessionRuntime ownership.
+- [x] Keep the primary UI understandable without requiring users to understand internal terms such as `IdentityUser`, occurrence dedupe, or SessionRuntime ownership. *(observed Admin shell copy and scoped memory/automation labels; whole-phase journey green)*
 
 ### P7G verification
 
-- [ ] Admin-event-history tests.
-- [ ] Secret-redaction tests.
-- [ ] Publish → instantiate → chat end-to-end scenario.
-- [ ] Draft change → test → diff → publish new version → upgrade instance scenario.
-- [ ] Rollback/deprecate scenario.
-- [ ] Memory reset and trigger revoke scenarios.
-- [ ] Regression coverage across P1–P6 runtime behavior.
+- [x] Admin-event-history tests. *(see [P7G report](docs/reports/p7g-history-rollback-final-gate.md))*
+- [x] Secret-redaction tests. *(summary policy + storage sentinel coverage)*
+- [x] Publish → instantiate → chat end-to-end scenario. *(`e2e/admin-lifecycle.spec.ts`)*
+- [x] Draft change → test → diff → publish new version → upgrade instance scenario. *(admin-lifecycle journey)*
+- [x] Rollback/deprecate scenario. *(admin-lifecycle journey)*
+- [x] Memory reset and trigger revoke scenarios. *(admin-lifecycle journey + P7E history mutator tests)*
+- [ ] Regression coverage across P1–P6 runtime behavior. *(W07 focused filters + full solution/Playwright recorded at `ae83bfc`; W08/W09 hosted exact-SHA and extended Compose gate remain)*
 
 ### P7 stop condition
 
