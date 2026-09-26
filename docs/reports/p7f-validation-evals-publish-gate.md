@@ -36,8 +36,9 @@
 | Draft diff service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftDiffServiceTests` | Pass (3) at current W06 HEAD |
 | Publish gate service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftPublishServiceTests` | Pass (3) at current W06 HEAD |
 | Draft publish API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft_publish` | Pass at publish-gate HEAD |
-| Draft evaluation service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests` | Pass (6) at final-revise HEAD `349429d` |
-| Final eval matrix regression | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~RunScenarioAsync_supports_resource_trigger_and_external_action_checks` | Pass at `349429d` |
+| Draft evaluation service | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~AdminDefinitionDraftEvaluationServiceTests` | Pass (7) at `d7dcf8f` (isolated Synthetic runtime) |
+| Final eval matrix regression | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~RunScenarioAsync_supports_resource_trigger_and_external_action_checks` | Pass at `d7dcf8f` |
+| Synthetic runtime negative eval | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~RunScenarioAsync_fails_when_offered_tool_is_not_invoked_in_synthetic_runtime` | Pass at `d7dcf8f` |
 | Draft evaluation store | `dotnet test tests/AgentCore.Infrastructure.Tests --filter FullyQualifiedName~DefinitionDraftEvaluationStoreTests` | Pass (4) at current W06 HEAD |
 | Draft admin API suite | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~Admin_definition_draft` | Pass (25) at current W06 HEAD |
 | Publish gate eligibility | `npm test -- --run src/features/admin/definitionDraftPublishGate.test.ts` (web) | Pass (7) |
@@ -48,7 +49,7 @@
 
 ## Final gate matrix (observed)
 
-- Bounded Synthetic checks cover tool offer/deny, draft resource binding by logical path, user-scheduling trigger policy boundaries, and external HTTP action denial via tool policy.
+- Isolated Synthetic behavior evaluation runs the scenario prompt and draft resource bytes through catalog-bound offline model turns; bounded checks cover tool offer/deny, draft resource binding by logical path, user-scheduling trigger policy boundaries, and external HTTP action denial via tool policy.
 - Regression: `AdminDefinitionDraftEvaluationServiceTests.RunScenarioAsync_supports_resource_trigger_and_external_action_checks`.
 
 ## Remaining (deferred to W07/W08)
