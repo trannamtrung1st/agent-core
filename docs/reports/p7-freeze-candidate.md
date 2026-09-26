@@ -50,10 +50,12 @@ Observed durable Admin and managed-instance schema (SQLite; InMemory parity for 
 | Migration | Purpose |
 | --- | --- |
 | `20260925071140_P7DefinitionLifecycle` | Drafts and publications |
-| `20260925084907_P7DefinitionResources` | Resource blobs and draft/publication bindings |
+| `20260925084907_P7DefinitionResources` | Draft/publication resource binding metadata (hash, path, kind, size); not content bytes |
 | `20260925101355_P7ManagedAgentInstance` | Managed instance lifecycle columns |
 | `20260925101918_P7ManagedAgentInstanceRevisionToken` | Instance/persona revision tokens |
 | `20260925161000_P7AdminEvents` | Append-only Admin history |
+
+Resource content bytes live in `IDefinitionResourceContentStore` (InMemory for Synthetic; file-backed under `Persistence:DefinitionResourceRoot` for SQLite). The migration stores bindings and verified SHA-256 references only.
 
 Prior P4–P6 migrations remain unchanged. See [Persistence and configuration](../15-persistence-and-configuration.md).
 

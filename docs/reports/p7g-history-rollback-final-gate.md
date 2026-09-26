@@ -1,6 +1,6 @@
 # P7G — Admin history, deprecation/rollback, and final P7 gate
 
-**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139 / review-0051 PASS). W08 local candidate gate and hosted exact-SHA CI remain.
+**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139 / review-0051 PASS). W08 local gate closed at `2b967cf`. W09 hosted exact-SHA CI green on `f0c9e19`; freeze acceptance pending.
 
 **Baseline:** `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0` (W06 P7F closure)
 
@@ -57,8 +57,7 @@
 
 ## Remaining (phase gate)
 
-- Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- **W09:** [p7-freeze-candidate.md](p7-freeze-candidate.md) drafted; hosted `synthetic.yml` green on exact freeze candidate SHA remains pending (local `gh` unavailable).
+- **W09:** [p7-freeze-candidate.md](p7-freeze-candidate.md) acceptance — hosted `synthetic.yml` **green** on verified tree **`f0c9e19`** (workflow [`36218518149`](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)); phase freeze review/acceptance only.
 
 ## W08 local gate (observed at `2b967cf`)
 

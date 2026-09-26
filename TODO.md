@@ -26,7 +26,7 @@ workflow 36031813141 — green
 
 P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
 
-**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `18ffecf` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** `03e350a` — see `docs/reports/p7f-validation-evals-publish-gate.md`; **W07** `ae83bfc` — review 0139; see `docs/reports/p7g-history-rollback-final-gate.md`; **W08** local gate closed `2b967cf`; **W09** freeze report drafted — hosted exact-SHA CI pending; see `docs/reports/p7-freeze-candidate.md`).
+**Current active phase:** **P7 — agent harness / admin lifecycle** (P7A `9169bfa`; P7B `4a2bf99`; **W03** `e25cd46` — see `docs/reports/p7c-harness-resources-workspace.md`; **W04** `0aa3ad3` — see `docs/reports/p7d-managed-instance-identity.md`; **W05** `18ffecf` — see `docs/reports/p7e-memory-automation-admin.md`; **W06** `03e350a` — see `docs/reports/p7f-validation-evals-publish-gate.md`; **W07** `ae83bfc` — review 0139; see `docs/reports/p7g-history-rollback-final-gate.md`; **W08** local gate closed `2b967cf`; **W09** hosted exact-SHA CI green on `f0c9e19` (workflow `36218518149`); freeze acceptance pending — see `docs/reports/p7-freeze-candidate.md`).
 
 P4 implementation freeze:
 
@@ -42,7 +42,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 # Current roadmap
 
 1. **P0–P6 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**).
-2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05 P7E slice gate approved at `59a812a`; W06 P7F slice gate approved at `03e350a`; W07 P7G slice gate approved at `ae83bfc` review 0139; **W08** local candidate gate closed at `2b967cf`; **W09** freeze report drafted — see `docs/reports/p7-freeze-candidate.md`; hosted exact-SHA CI remain).
+2. **P7 — agent harness / admin lifecycle** is the active phase (P7A approved; P7B W02 slice approved at `4a2bf99`; W03 P7C slice gate approved at `e25cd46`; W04 P7D slice gate approved at `0aa3ad3`; W05 P7E slice gate approved at `59a812a`; W06 P7F slice gate approved at `03e350a`; W07 P7G slice gate approved at `ae83bfc` review 0139; **W08** local candidate gate closed at `2b967cf`; **W09** hosted exact-SHA CI green on `f0c9e19`; freeze acceptance pending — see `docs/reports/p7-freeze-candidate.md`).
 3. **P8 — harness/platform extensibility.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -899,7 +899,7 @@ Agent Instances
 - [x] Draft change → test → diff → publish new version → upgrade instance scenario. *(admin-lifecycle journey)*
 - [x] Rollback/deprecate scenario. *(admin-lifecycle journey)*
 - [x] Memory reset and trigger revoke scenarios. *(admin-lifecycle journey + P7E history mutator tests)*
-- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA is W09)*
+- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA green on `f0c9e19` (W09 freeze acceptance pending))*
 
 ### P7 stop condition
 
