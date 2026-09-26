@@ -1,5 +1,7 @@
+using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 using System.Text;
 
@@ -32,6 +34,11 @@ public sealed class DefinitionBoundKnowledgeContentResolver(
         if (resource is null)
         {
             return null;
+        }
+
+        if (!DefinitionResourcePolicies.IsTextualKnowledgeMediaType(resource.MediaType))
+        {
+            throw AgentCoreErrors.Forbidden("Knowledge content is not available as text for this resource.");
         }
 
         var bytes = await publicationResources.ReadContentAsync(resource, cancellationToken).ConfigureAwait(false);

@@ -12,6 +12,7 @@ import {
   expectManagedIdentityOptionAbsent,
   publishExaminerForkedVersion,
   publishExaminerP7gFirstPublication,
+  savePersonaAndAwaitPatch,
   selectManagedIdentityOption,
   startSyntheticChat,
   type SessionView
@@ -153,8 +154,10 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await page.goto(`/admin/instances/${instance.instanceId}`);
 
   await page.getByLabel("Persona name").fill(personaName);
-  await page.getByRole("button", { name: "Save persona" }).click();
-  await expect(page.getByText("Persona updated.")).toBeVisible({ timeout: 15_000 });
+  await savePersonaAndAwaitPatch(page, instance.instanceId);
+  let afterFormSave = await fetchEffectiveConfig(request, page, instance.instanceId);
+  expect(afterFormSave.persona.name).toBe(personaName);
+  expect(afterFormSave.personaRevision).toBe(2);
 
   await page.getByRole("tab", { name: "JSON" }).click();
   const personaJson = page.getByLabel("Persona JSON");
@@ -166,8 +169,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   };
   parsed.tone = jsonTone;
   await personaJson.fill(JSON.stringify(parsed, null, 2));
-  await page.getByRole("button", { name: "Save persona" }).click();
-  await expect(page.getByText("Persona updated.")).toBeVisible({ timeout: 15_000 });
+  await savePersonaAndAwaitPatch(page, instance.instanceId);
 
   const afterPersona = await fetchEffectiveConfig(request, page, instance.instanceId);
   expect(afterPersona.definitionVersion).toBe(versionOne);

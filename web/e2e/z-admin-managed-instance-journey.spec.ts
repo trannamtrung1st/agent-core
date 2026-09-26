@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import {
   expectManagedIdentityOptionAbsent,
   publishExaminerDraftAndCreateManagedInstance,
+  savePersonaAndAwaitPatch,
   selectManagedIdentityOption,
   startSyntheticChat,
   type SessionView
@@ -83,8 +84,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
   await expect(page.getByText("Managed")).toBeVisible();
 
   await page.getByLabel("Persona name").fill(personaName);
-  await page.getByRole("button", { name: "Save persona" }).click();
-  await expect(page.getByText("Persona updated.")).toBeVisible({ timeout: 15_000 });
+  await savePersonaAndAwaitPatch(page, instance.instanceId);
 
   await page.getByRole("tab", { name: "JSON" }).click();
   const personaJson = page.getByLabel("Persona JSON");
@@ -97,8 +97,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
   };
   parsed.tone = jsonTone;
   await personaJson.fill(JSON.stringify(parsed, null, 2));
-  await page.getByRole("button", { name: "Save persona" }).click();
-  await expect(page.getByText("Persona updated.")).toBeVisible({ timeout: 15_000 });
+  await savePersonaAndAwaitPatch(page, instance.instanceId);
 
   await page.getByRole("tab", { name: "Form" }).click();
   await expect(page.getByLabel("Persona name")).toHaveValue(personaName);

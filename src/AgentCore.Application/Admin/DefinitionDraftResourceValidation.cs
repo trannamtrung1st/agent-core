@@ -31,6 +31,16 @@ internal static class DefinitionDraftResourceValidation
                     "missing_knowledge_resource",
                     $"Draft is missing a Knowledge resource at '{expectedPath}'.",
                     DefinitionValidationSeverity.Blocking);
+                continue;
+            }
+
+            if (!DefinitionResourcePolicies.IsTextualKnowledgeMediaType(resource.MediaType))
+            {
+                yield return new DefinitionValidationFinding(
+                    $"environment.knowledgeSources[{index}].identity",
+                    "non_textual_knowledge_resource",
+                    $"Knowledge resource at '{expectedPath}' must use text/plain, text/markdown, or application/json.",
+                    DefinitionValidationSeverity.Blocking);
             }
         }
 

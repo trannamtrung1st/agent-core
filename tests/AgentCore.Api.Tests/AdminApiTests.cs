@@ -714,6 +714,70 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_definition_draft_validate_reports_non_textual_knowledge_resource_binding()
+    {
+        var client = OwnerClient();
+        var fork = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/fork",
+            new AdminForkDefinitionDraftRequest("examiner", 1, "ForkBuiltIn"));
+        fork.EnsureSuccessStatusCode();
+        var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
+        candidate = candidate with
+        {
+            Environment = (candidate.Environment ?? RoleEnvironment.Empty) with
+            {
+                KnowledgeSources =
+                [
+                    new KnowledgeSourceRef("policy", "Policy", "policy@demo")
+                ]
+            }
+        };
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(1, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+
+        var pdfBytes = "%PDF-1.4 synthetic"u8.ToArray();
+        using var contentRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v2/admin/definition-drafts/{updated!.DraftId}/resources/content")
+        {
+            Content = new ByteArrayContent(pdfBytes)
+        };
+        contentRequest.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        var storedResponse = await client.SendAsync(contentRequest);
+        storedResponse.EnsureSuccessStatusCode();
+        var stored = await storedResponse.Content.ReadFromJsonAsync<AdminDefinitionResourceContentStoredResponse>();
+        Assert.NotNull(stored);
+
+        var bind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{updated.DraftId}/resources",
+            new AdminUpsertDefinitionDraftResourceRequest(
+                updated.Revision,
+                null,
+                "knowledge/policy",
+                "Knowledge",
+                stored!.MediaType,
+                stored.ContentSha256,
+                stored.ByteLength));
+        bind.EnsureSuccessStatusCode();
+
+        var validate = await client.PostAsync(
+            $"/api/v2/admin/definition-drafts/{updated.DraftId}/validate",
+            null);
+        validate.EnsureSuccessStatusCode();
+        var result = await validate.Content.ReadFromJsonAsync<AdminDefinitionDraftValidationResponse>();
+        Assert.NotNull(result);
+        Assert.True(result!.HasBlockingFindings);
+        Assert.Contains(
+            result.Findings,
+            finding => finding.Code == "non_textual_knowledge_resource"
+                       && finding.Field == "environment.knowledgeSources[0].identity");
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_validate_reports_missing_knowledge_resource_binding()
     {
         var client = OwnerClient();
@@ -891,6 +955,72 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             "/api/v2/admin/definitions/examiner/publications/1/deprecate",
             new AdminDeprecateDefinitionPublicationRequest(1));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Agents_list_resolves_active_publication_not_deprecated_highest_version()
+    {
+        var owner = OwnerClient();
+        var catalog = _factory.CreateClient();
+        const string definitionId = "p7-legacy-agents-list";
+        var candidate = SampleDraftCandidate(definitionId);
+        var create = await owner.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts",
+            new AdminCreateDefinitionDraftRequest(
+                definitionId,
+                JsonSerializer.SerializeToElement(candidate, JsonOptions())));
+        create.EnsureSuccessStatusCode();
+        var draft = await create.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        Assert.NotNull(draft);
+        var v1Publish = await owner.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(draft.Revision));
+        v1Publish.EnsureSuccessStatusCode();
+        var v1 = await v1Publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(v1);
+
+        var v2Update = await owner.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(
+                draft.Revision + 1,
+                JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Active v2 body." }, JsonOptions())));
+        v2Update.EnsureSuccessStatusCode();
+        var v2Draft = await v2Update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var v2Publish = await owner.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{v2Draft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(v2Draft.Revision));
+        v2Publish.EnsureSuccessStatusCode();
+        var v2 = await v2Publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(v2);
+
+        var v3Update = await owner.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(
+                v2Draft.Revision + 1,
+                JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Deprecated v3 body." }, JsonOptions())));
+        v3Update.EnsureSuccessStatusCode();
+        var v3Draft = await v3Update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
+        var v3Publish = await owner.PostAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{v3Draft!.DraftId}/publish",
+            new AdminPublishDefinitionDraftRequest(v3Draft.Revision));
+        v3Publish.EnsureSuccessStatusCode();
+        var v3 = await v3Publish.Content.ReadFromJsonAsync<AdminDefinitionPublicationSummaryResponse>();
+        Assert.NotNull(v3);
+
+        var deprecate = await owner.PostAsJsonAsync(
+            $"/api/v2/admin/definitions/{definitionId}/publications/{v3!.Version}/deprecate",
+            new AdminDeprecateDefinitionPublicationRequest(1));
+        deprecate.EnsureSuccessStatusCode();
+
+        var agents = await catalog.GetFromJsonAsync<AgentListResponse>("/api/v1/agents");
+        var listed = Assert.Single(agents!.Agents, agent => agent.Id == definitionId);
+        Assert.Equal(v2.Version, listed.Version);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var definitions = scope.ServiceProvider.GetRequiredService<IAgentDefinitionStore>();
+        var exactDeprecated = await definitions.GetAsync(definitionId, v3.Version);
+        Assert.NotNull(exactDeprecated);
+        Assert.Equal("Deprecated v3 body.", exactDeprecated!.SystemInstructions);
     }
 
     [Fact]

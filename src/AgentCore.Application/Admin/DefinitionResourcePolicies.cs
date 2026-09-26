@@ -32,6 +32,16 @@ public static class DefinitionResourcePolicies
         "application/pdf"
     };
 
+    private static readonly HashSet<string> TextualKnowledgeMediaTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "text/plain",
+        "text/markdown",
+        "application/json"
+    };
+
+    public static bool IsTextualKnowledgeMediaType(string mediaType) =>
+        TextualKnowledgeMediaTypes.Contains(mediaType);
+
     public static string NormalizeLogicalPath(string logicalPath)
     {
         if (string.IsNullOrWhiteSpace(logicalPath))

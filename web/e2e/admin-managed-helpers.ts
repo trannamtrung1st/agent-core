@@ -260,3 +260,16 @@ export async function publishExaminerForkedVersion(page: Page, forkFromVersion: 
   expect(version).toBeTruthy();
   return Number(version);
 }
+
+/** Wait for the durable persona PATCH contract instead of overlapping Ant Design toasts. */
+export async function savePersonaAndAwaitPatch(page: Page, instanceId: string) {
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/v2/admin/agent-instances/${instanceId}/persona`) &&
+      response.ok(),
+    { timeout: 30_000 }
+  );
+  await page.getByRole("button", { name: "Save persona" }).click();
+  return await responsePromise;
+}

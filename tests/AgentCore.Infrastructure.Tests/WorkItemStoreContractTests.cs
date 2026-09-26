@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Work;
+using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -582,6 +583,34 @@ public sealed class WorkItemStoreContractTests
     }
 
     [Fact]
+    public async Task Sqlite_reopen_preserves_pinned_persona_snapshot()
+    {
+        var path = TempDatabase();
+        var factory = Factory(path);
+        try
+        {
+            await new SqliteMemoryStore(factory, new FakeTimeProvider(Now)).EnsureCreatedAsync();
+            var owner = new WorkOwner(InstanceA, ProfileA);
+            var pinned = new AgentIdentity(
+                "Alice",
+                "Executive Secretary",
+                "Pinned at intake.",
+                "Formal");
+            var store = new SqliteWorkItemStore(factory);
+            var created = await store.CreateAsync(NewItem(owner, Id(20), Id(21), Now, pinnedPersona: pinned));
+            var reopened = new SqliteWorkItemStore(Factory(path));
+            var loaded = await reopened.GetAsync(owner, created.Item.WorkItemId);
+            Assert.NotNull(loaded);
+            Assert.Equal(pinned, loaded!.Provenance.PinnedPersona);
+            Assert.Equal("Alice", loaded.Provenance.PersonaName);
+        }
+        finally
+        {
+            Release(path);
+        }
+    }
+
+    [Fact]
     public async Task Sqlite_reopen_preserves_cancellation_result_and_approval()
     {
         var path = TempDatabase();
@@ -799,7 +828,8 @@ public sealed class WorkItemStoreContractTests
         Guid sourceId,
         DateTimeOffset createdAt,
         int maxAttempts = 3,
-        WorkSourceKind kind = WorkSourceKind.ApplicationEvent) =>
+        WorkSourceKind kind = WorkSourceKind.ApplicationEvent,
+        AgentIdentity? pinnedPersona = null) =>
         WorkItem.Create(
             workItemId,
             owner,
@@ -815,7 +845,8 @@ public sealed class WorkItemStoreContractTests
                 """{"instruction":"SECRET_EVIDENCE"}""",
                 "general-assistant",
                 10,
-                "Alex"),
+                pinnedPersona?.Name ?? "Alex",
+                pinnedPersona),
             new WorkModelPin("synthetic-default", "synthetic", "synthetic-small", "minimal"),
             maxAttempts,
             createdAt);
