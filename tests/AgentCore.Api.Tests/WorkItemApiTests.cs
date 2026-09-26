@@ -175,13 +175,15 @@ public sealed class WorkItemApiTests : IClassFixture<AgentCoreApiFactory>
     [Fact]
     public async Task Work_result_and_pending_approval_survive_sqlite_restart()
     {
+        // This test drives WorkItem transitions directly on IWorkItemStore; disable the background
+        // scheduler so DurableWorkHostedService cannot recover expired claims and race revisions.
         var db = Path.Combine(Path.GetTempPath(), $"agent-core-work-{Guid.NewGuid():N}.db");
         try
         {
             string sessionId;
             string completedId;
             string approvalId;
-            await using (var first = new DurableSqliteHostFactory(db))
+            await using (var first = new DurableSqliteHostFactory(db, runScheduler: false))
             {
                 var client = TestOwnerCapability.CreateOwnerClient(first);
                 var session = await CreateAsync(client, "examiner", 1);
@@ -200,7 +202,7 @@ public sealed class WorkItemApiTests : IClassFixture<AgentCoreApiFactory>
             }
 
             SqliteConnection.ClearAllPools();
-            await using var second = new DurableSqliteHostFactory(db);
+            await using var second = new DurableSqliteHostFactory(db, runScheduler: false);
             var reopened = TestOwnerCapability.CreateOwnerClient(second);
             var result = await reopened.GetAsync($"/api/v2/sessions/{sessionId}/work-items/{completedId}/result");
             result.EnsureSuccessStatusCode();
