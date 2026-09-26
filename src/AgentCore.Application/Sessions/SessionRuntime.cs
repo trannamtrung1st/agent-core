@@ -190,7 +190,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ILanguageModelResolver? modelResolver = null,
         IModelCatalog? catalog = null,
         IUserTurnCapabilityValidator? turnCapabilities = null,
-        IStructuredMemoryService? structuredMemory = null)
+        IStructuredMemoryService? structuredMemory = null,
+        IConversationTurnExecutionStore? turnExecutions = null)
     {
         _snapshot = snapshot;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
@@ -209,6 +210,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _processor = processor;
         _turnCapabilities = turnCapabilities;
         _structuredMemory = structuredMemory;
+        _turnExecutions = turnExecutions;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
@@ -1446,8 +1448,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         SessionId,
                         cause.EventId,
                         text.Length);
-                    await TryCaptureExplicitUserMemoryAsync(userEntry, text, ct).ConfigureAwait(false);
-                    await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
+                    try
+                    {
+                        await CloseBoundExecutionIfAssistantTerminalAsync(ct).ConfigureAwait(false);
+                        var execution = await EnsureConversationExecutionForUserTurnAsync(userEntry, cause, ct)
+                            .ConfigureAwait(false);
+                        if (_turnExecutions is not null && execution is null)
+                        {
+                            input.Persisted?.TrySetResult(false);
+                            return;
+                        }
+
+                        await TryCaptureExplicitUserMemoryAsync(userEntry, text, ct).ConfigureAwait(false);
+                        await TryStartPendingUserBatchAsync(cause, ct, execution).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        input.Persisted?.TrySetResult(false);
+                        throw;
+                    }
                 },
                 ended: input.Persisted);
         }
@@ -1867,12 +1886,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private bool HasPendingUserBatch() => TrailingUserSuffix.HasPending(_snapshot.Entries);
 
-    private async Task<bool> TryStartPendingUserBatchAsync(EventContext cause, CancellationToken cancellationToken)
+    private async Task<bool> TryStartPendingUserBatchAsync(
+        EventContext cause,
+        CancellationToken cancellationToken,
+        ConversationTurnExecution? execution = null)
     {
-        _ = cancellationToken;
-        if (_deactivated
-            || _activeResponseId is not null
-            || _snapshot.Status is not (SessionStatus.Attached or SessionStatus.Created))
+        if (!CanStartUserConversationBatch())
         {
             return false;
         }
@@ -1885,6 +1904,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         RetainProposalOnlyForConfirmingTurn(suffix.Select(entry => entry.Text).ToArray());
         var last = suffix[^1];
+        execution ??= await EnsureConversationExecutionForUserTurnAsync(last, cause, cancellationToken)
+            .ConfigureAwait(false);
+        if (execution is not null && !await BindConversationExecutionForStartAsync(execution, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
         var eventId = last.SourceEventId ?? last.EntryId;
         var batchCause = new EventContext(
             eventId,
@@ -1900,12 +1926,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ToArray();
         var trigger = new AgentTrigger(eventId, TriggerKind.UserTurn, last.Text);
         var turn = ++_turnGeneration;
+        var responseId = execution?.ResponseId ?? _ids.NewId();
         _pendingUploadHold = false;
         NoteUserActivity();
         _environmentQueue.Clear();
         _outputActivity = OutputActivity.WaitingForAgent;
         UserTextQueueTelemetry.RecordPendingBatchStarted(suffix.Count);
-        await LaunchPreparedTurnAsync(batchCause, trigger, _ids.NewId(), turn, attachmentIds).ConfigureAwait(false);
+        await LaunchPreparedTurnAsync(batchCause, trigger, responseId, turn, attachmentIds).ConfigureAwait(false);
         await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
         return true;
     }
@@ -2820,6 +2847,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             if (_activeResponseId == input.ResponseId)
             {
+                if (_turnExecutions is not null
+                    && _boundConversationExecution is { Claim: not null } bound
+                    && bound.ResponseId == input.ResponseId)
+                {
+                    var requested = await _turnExecutions.RequestCancellationAsync(
+                            SessionId,
+                            bound.ExecutionId,
+                            bound.Revision,
+                            _time.GetUtcNow(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    _boundConversationExecution = requested;
+                }
+
                 await SupersedeAsync(input.Context, input.ResponseId, cancellationToken, "userStop").ConfigureAwait(false);
                 input.Completed?.TrySetResult(ResponseCancelResult.Cancelled);
                 return;
@@ -2987,7 +3028,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .ConfigureAwait(false);
             if (requestPersist && _snapshot.Status is SessionStatus.Attached or SessionStatus.Created)
             {
-                RequestPersist(_snapshot);
+                var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+                if (userTerminal)
+                {
+                    MarkConversationExecutionPendingTerminal();
+                }
+
+                RequestPersist(_snapshot, userConversationTerminal: userTerminal);
             }
         }
 
@@ -3014,36 +3061,51 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var capturedEntryId = _activeEntryId;
         var textLength = DisplayLength();
         var heard = CurrentHeard();
+        var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+        if (userTerminal)
+        {
+            MarkConversationExecutionPendingTerminal();
+        }
+
         RequestPersist(
             _snapshot,
+            userConversationTerminal: userTerminal,
             then: async ct =>
             {
-                if (_activeResponseId != capturedResponseId || _activeEntryId != capturedEntryId)
+                var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;
+                if (stillOwns)
                 {
-                    return;
-                }
+                    if (!failed)
+                    {
+                        await PublishAsync(
+                                new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
+                                ct)
+                            .ConfigureAwait(false);
+                    }
 
-                if (!failed)
-                {
                     await PublishAsync(
-                            new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
+                            new SessionOutput(
+                                context,
+                                capturedResponseId,
+                                new ResponseCompletedOutput(
+                                    failed,
+                                    HeardTextEndExclusive: heard,
+                                    FinishReason: failed ? null : _modelFinishReason,
+                                    SpeechText: PublicSpeechText())),
                             ct)
                         .ConfigureAwait(false);
                 }
 
-                await PublishAsync(
-                        new SessionOutput(
-                            context,
-                            capturedResponseId,
-                            new ResponseCompletedOutput(
-                                failed,
-                                HeardTextEndExclusive: heard,
-                                FinishReason: failed ? null : _modelFinishReason,
-                                SpeechText: PublicSpeechText())),
-                        ct)
-                    .ConfigureAwait(false);
-                ClearActive();
-                await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
+                if (_activeResponseId == capturedResponseId)
+                {
+                    ClearActive();
+                    await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
+                }
+
+                if (userTerminal)
+                {
+                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                }
             });
     }
 
@@ -4131,7 +4193,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         long terminalFence,
         Func<CancellationToken, Task>? then,
         TaskCompletionSource<bool>? ended,
-        long started)
+        long started,
+        bool userConversationTerminal)
     {
         public SessionSnapshot Proposed { get; } = proposed;
         public PersistKind Kind { get; } = kind;
@@ -4140,6 +4203,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         public Func<CancellationToken, Task>? Then { get; set; } = then;
         public TaskCompletionSource<bool>? Ended { get; } = ended;
         public long Started { get; } = started;
+        public bool UserConversationTerminal { get; } = userConversationTerminal;
         public TaskCompletionSource Applied { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
@@ -4183,7 +4247,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         SessionSnapshot snapshot,
         PersistKind kind = PersistKind.Normal,
         Func<CancellationToken, Task>? then = null,
-        TaskCompletionSource<bool>? ended = null)
+        TaskCompletionSource<bool>? ended = null,
+        bool userConversationTerminal = false)
     {
         if (snapshot.Entries.Count > 1000)
         {
@@ -4194,12 +4259,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         var token = Interlocked.Increment(ref _persistToken);
         var fence = Volatile.Read(ref _terminalFence);
-        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started);
+        if (userConversationTerminal)
+        {
+            BeginUserConversationTerminalPersist();
+        }
+
+        var job = new PersistJob(snapshot, kind, token, fence, then, ended, started, userConversationTerminal);
         BeginWork();
         _pendingPersist[token] = job;
         if (!_persistJobs.Writer.TryWrite(job))
         {
             _pendingPersist.TryRemove(token, out _);
+            if (userConversationTerminal)
+            {
+                EndUserConversationTerminalPersist();
+            }
+
             ended?.TrySetResult(false);
             job.Applied.TrySetResult();
             EndWork();
@@ -4272,6 +4347,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         _undurableUserEntryIds.Remove(entry.EntryId);
                     }
                 }
+
+                if (job.UserConversationTerminal && job.Then is null)
+                {
+                    if (_pendingTerminalExecutionId is null && _boundConversationExecution is not null)
+                    {
+                        _pendingTerminalExecutionId = _boundConversationExecution.ExecutionId;
+                    }
+
+                    await FinalizeConversationExecutionAfterPersistAsync(saved, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             try
@@ -4288,6 +4373,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         finally
         {
+            if (job.UserConversationTerminal)
+            {
+                EndUserConversationTerminalPersist();
+                if (_boundConversationExecution is not null && _pendingTerminalExecutionId is null)
+                {
+                    _boundConversationExecution = null;
+                }
+            }
+
             job.Applied.TrySetResult();
         }
     }

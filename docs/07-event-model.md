@@ -126,6 +126,8 @@ Keep a bounded 500-event developer timeline per runtime without raw audio or con
 
 A detached WorkItem does not add a SignalR event family and does not write its result into conversation history. Progress and the final result are owner-scoped HTTP reads. A stale execution generation cannot commit a checkpoint, side effect, or completion. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
+User-accepted chat turns use a separate `ConversationTurnExecution` record. `user.text` is accepted only after the user entry and that execution row are durable. The execution becomes Completed, Failed, or Cancelled only after the terminal assistant entry is persisted. These rows are not Background Work items.
+
 ## Follow-on P1 observed and frozen
 
 Observed event families stay as above, including mailbox `LifecycleTransitionReceived`, `CompletionReturned`, additive `lifecycleStatus` on `StateChanged` / `session.ready`, and `session.completion.intent` for advisory RequestComplete. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).

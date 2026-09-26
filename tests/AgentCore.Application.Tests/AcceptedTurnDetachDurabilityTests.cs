@@ -58,6 +58,109 @@ public sealed class AcceptedTurnDetachDurabilityTests
     }
 
     [Fact]
+    public async Task Headless_finalizer_waits_for_terminal_assistant_persistence()
+    {
+        var releaseTerminalPersist = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new TerminalAssistantPersistGate(releaseTerminalPersist);
+        var output = new CapturingSessionOutput();
+        var model = new DetachHoldingLanguageModel();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        var sessionId = Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842");
+        await using var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hi");
+        await WaitForActiveResponseAsync(runtime);
+        await runtime.DetachAsync();
+        model.Release.TrySetResult();
+        await store.WaitForSaveStartedAsync(TimeSpan.FromSeconds(5));
+        var inMemoryAssistant = runtime.Snapshot.Entries.Single(e => e.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, inMemoryAssistant.Status);
+        Assert.True(await runtime.HasAcceptedConversationWorkAsync());
+        using (var early = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => runtime.WaitUntilAcceptedConversationWorkSettledAsync(early.Token));
+        }
+
+        store.Release();
+        await runtime.WaitUntilAcceptedConversationWorkSettledAsync();
+        await runtime.FinalizeDetachedPauseAsync();
+        await runtime.WaitUntilIdleAsync();
+
+        var durable = (await store.LoadAsync(sessionId))!;
+        Assert.Equal(SessionStatus.Paused, durable.Status);
+        Assert.Equal(["hi"], durable.Entries.Where(e => e.Role == ConversationRole.User).Select(e => e.Text).ToArray());
+        var assistants = durable.Entries.Where(e => e.Role == ConversationRole.Assistant).ToArray();
+        Assert.Single(assistants);
+        Assert.Equal(EntryStatus.Completed, assistants[0].Status);
+        Assert.Equal("T1", assistants[0].Text);
+        Assert.DoesNotContain(assistants, entry => entry.Status == EntryStatus.Streaming && string.IsNullOrEmpty(entry.Text));
+
+        var reopened = await PausedSessionReopen.ReopenAsync(store, durable, time);
+        await using var restored = CreateRuntime(
+            output,
+            new ScriptedLanguageModel(),
+            time,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            reopened);
+        await restored.AttachAsync();
+        await restored.WaitUntilMailboxDrainedAsync();
+        Assert.Equal("hi", restored.Snapshot.Entries.Single(e => e.Role == ConversationRole.User).Text);
+        var restoredAssistant = restored.Snapshot.Entries.Single(e => e.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, restoredAssistant.Status);
+        Assert.Equal("T1", restoredAssistant.Text);
+    }
+
+    [Fact]
+    public async Task Reattach_during_blocked_terminal_persist_keeps_response_until_save_applies()
+    {
+        var releaseTerminalPersist = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new TerminalAssistantPersistGate(releaseTerminalPersist);
+        var turnExecutions = new InMemoryConversationTurnExecutionStore();
+        var output = new CapturingSessionOutput();
+        var model = new DetachHoldingLanguageModel();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+        await using var runtime = CreateRuntime(
+            output,
+            model,
+            time,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            store,
+            turnExecutions: turnExecutions);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hi");
+        await WaitForActiveResponseAsync(runtime);
+        await runtime.DetachAsync();
+        model.Release.TrySetResult();
+        await store.WaitForSaveStartedAsync(TimeSpan.FromSeconds(5));
+        Assert.True(runtime.HeadlessTransportDetached);
+        var openBefore = await turnExecutions.ListOpenForSessionAsync(runtime.SessionId);
+        Assert.Single(openBefore);
+        var executionId = openBefore[0].ExecutionId;
+
+        var attaching = runtime.AttachAsync();
+        await Task.Delay(30);
+        Assert.True(await runtime.HasAcceptedConversationWorkAsync());
+        Assert.Equal(executionId, (await turnExecutions.ListOpenForSessionAsync(runtime.SessionId)).Single().ExecutionId);
+
+        store.Release();
+        Assert.True(await attaching);
+        await WaitUntilAsync(async () => !await runtime.HasAcceptedConversationWorkAsync());
+        Assert.Empty(await turnExecutions.ListOpenForSessionAsync(runtime.SessionId));
+        Assert.Null(runtime.ActiveResponseId);
+
+        var assistant = runtime.Snapshot.Entries.Single(e => e.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("T1", assistant.Text);
+    }
+
+    [Fact]
     public async Task Cancel_after_transport_detach_still_interrupts()
     {
         var output = new CapturingSessionOutput();
@@ -123,14 +226,16 @@ public sealed class AcceptedTurnDetachDurabilityTests
         ILanguageModel model,
         FakeTimeProvider time,
         IAgentBrain brain,
-        IMemoryStore? store = null)
+        IMemoryStore? store = null,
+        SessionSnapshot? snapshot = null,
+        InMemoryConversationTurnExecutionStore? turnExecutions = null)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 256).Select(index => Guid.Parse($"019944af-0000-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
         var memory = store ?? new InMemoryMemoryStore();
         var now = time.GetUtcNow();
-        var snapshot = new SessionSnapshot(
+        var initial = snapshot ?? new SessionSnapshot(
             1,
             ids.NewSessionId(),
             1,
@@ -144,10 +249,21 @@ public sealed class AcceptedTurnDetachDurabilityTests
             null,
             null,
             now,
-            now);
-        memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+            now,
+            ModelSelection: new SessionModelSelection(
+                "synthetic-offline/scripted",
+                "primary-llm",
+                "scripted",
+                ModelSelectionSource.SystemDefault,
+                null));
+        if (snapshot is null)
+        {
+            memory.SaveAsync(initial, 0).AsTask().GetAwaiter().GetResult();
+        }
+
+        turnExecutions ??= new InMemoryConversationTurnExecutionStore();
         return new SessionRuntime(
-            snapshot,
+            initial,
             model,
             brain,
             memory,
@@ -155,9 +271,75 @@ public sealed class AcceptedTurnDetachDurabilityTests
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
-            new FakeInterruptionClassifier());
+            new FakeInterruptionClassifier(),
+            turnExecutions: turnExecutions);
     }
 
+    private sealed class TerminalAssistantPersistGate(TaskCompletionSource release) : IMemoryStore
+    {
+        private readonly InMemoryMemoryStore _inner = new();
+        public TaskCompletionSource TerminalSaveStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => release.TrySetResult();
+
+        public async Task WaitForSaveStartedAsync(TimeSpan timeout)
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            await TerminalSaveStarted.Task.WaitAsync(cts.Token).ConfigureAwait(false);
+        }
+
+        public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            _inner.LoadAsync(sessionId, cancellationToken);
+
+        public async ValueTask SaveAsync(
+            SessionSnapshot snapshot,
+            long expectedRevision,
+            CancellationToken cancellationToken = default)
+        {
+            if (IsTerminalAssistantPersist(snapshot))
+            {
+                TerminalSaveStarted.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await _inner.SaveAsync(snapshot, expectedRevision, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static bool IsTerminalAssistantPersist(SessionSnapshot snapshot)
+        {
+            var assistant = snapshot.Entries.LastOrDefault(entry => entry.Role == ConversationRole.Assistant);
+            return assistant is { Status: EntryStatus.Completed }
+                && !string.IsNullOrWhiteSpace(assistant.Text);
+        }
+
+        public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+            Guid sessionId,
+            long afterEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+        public ValueTask<ConversationHistoryPage?> ReadHistoryPageAsync(
+            Guid sessionId,
+            long? afterEntrySequence,
+            long? beforeEntrySequence,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadHistoryPageAsync(sessionId, afterEntrySequence, beforeEntrySequence, limit, cancellationToken);
+
+        public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+            _inner.LoadProfileAsync(profileId, cancellationToken);
+
+        public ValueTask SaveProfileAsync(
+            UserProfile profile,
+            long expectedRevision,
+            CancellationToken cancellationToken = default) =>
+            _inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+        public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+            _inner.RecoverCrashedSessionsAsync(cancellationToken);
+    }
 }
 
 file sealed class DetachHoldingLanguageModel : ILanguageModel

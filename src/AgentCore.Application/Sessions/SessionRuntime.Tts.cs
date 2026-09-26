@@ -535,32 +535,47 @@ public sealed partial class SessionRuntime
         var capturedResponseId = responseId;
         var capturedEntryId = _activeEntryId;
         var textLength = DisplayLength();
+        var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+        if (userTerminal)
+        {
+            MarkConversationExecutionPendingTerminal();
+        }
+
         RequestPersist(
             _snapshot,
+            userConversationTerminal: userTerminal,
             then: async ct =>
             {
-                if (_activeResponseId != capturedResponseId || _activeEntryId != capturedEntryId)
+                var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;
+                if (stillOwns)
                 {
-                    return;
+                    await PublishAsync(
+                            new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
+                            ct)
+                        .ConfigureAwait(false);
+                    await PublishAsync(
+                            new SessionOutput(
+                                context,
+                                capturedResponseId,
+                                new ResponseCompletedOutput(
+                                    failed,
+                                    HeardTextEndExclusive: heard,
+                                    FinishReason: failed ? null : _modelFinishReason,
+                                    SpeechText: PublicSpeechText())),
+                            ct)
+                        .ConfigureAwait(false);
                 }
 
-                await PublishAsync(
-                        new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
-                        ct)
-                    .ConfigureAwait(false);
-                await PublishAsync(
-                        new SessionOutput(
-                            context,
-                            capturedResponseId,
-                            new ResponseCompletedOutput(
-                                failed,
-                                HeardTextEndExclusive: heard,
-                                FinishReason: failed ? null : _modelFinishReason,
-                                SpeechText: PublicSpeechText())),
-                        ct)
-                    .ConfigureAwait(false);
-                ClearActive();
-                await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
+                if (_activeResponseId == capturedResponseId)
+                {
+                    ClearActive();
+                    await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
+                }
+
+                if (userTerminal)
+                {
+                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                }
             });
     }
 

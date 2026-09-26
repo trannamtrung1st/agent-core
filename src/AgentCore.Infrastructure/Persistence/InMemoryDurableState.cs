@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Triggers;
 using AgentCore.Domain.Work;
 
@@ -17,5 +18,11 @@ internal sealed class InMemoryDurableState
 
     public Dictionary<Guid, Guid> WorkBySource { get; } = [];
 
+    public Dictionary<Guid, ConversationTurnExecution> TurnExecutions { get; } = [];
+
+    public Dictionary<SourceEventIdentity, Guid> TurnExecutionBySource { get; } = [];
+
     public readonly record struct DedupeIdentity(Guid AgentInstanceId, Guid ProfileId, string DedupeKey);
+
+    public readonly record struct SourceEventIdentity(Guid SessionId, Guid SourceEventId);
 }

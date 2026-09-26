@@ -1,4 +1,5 @@
 using AgentCore.Application.Admin;
+using AgentCore.Application.Conversation;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -113,6 +114,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+            services.AddSingleton<IConversationTurnExecutionStore>(provider => new SqliteConversationTurnExecutionStore(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IAgentDefinitionAdminStore>(provider => new SqliteAgentDefinitionAdminStore(
@@ -163,6 +166,8 @@ public static class InfrastructureServiceCollectionExtensions
                 new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<IWorkItemStore>(provider =>
                 new InMemoryWorkItemStore(provider.GetRequiredService<InMemoryDurableState>()));
+            services.TryAddSingleton<IConversationTurnExecutionStore>(provider =>
+                new InMemoryConversationTurnExecutionStore(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<IDurableWorkHandoff>(provider =>
                 new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
@@ -344,8 +349,10 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<ILanguageModelResolver>(),
                 provider.GetRequiredService<IModelCatalog>(),
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
-                provider.GetRequiredService<IStructuredMemoryService>());
+                provider.GetRequiredService<IStructuredMemoryService>(),
+                provider.GetRequiredService<IConversationTurnExecutionStore>());
         });
+        services.TryAddSingleton<ConversationExecutionCoordinator>();
         return services;
     }
 }

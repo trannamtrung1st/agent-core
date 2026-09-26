@@ -55,7 +55,7 @@ public sealed partial class SessionRuntime
         return await WaitOrCancelAsync(completed, ResponseApprovalResult.Unknown, cancellationToken).ConfigureAwait(false);
     }
 
-    private Task HandleApprovalResponseAsync(
+    private async Task HandleApprovalResponseAsync(
         ApprovalResponseReceived input,
         CancellationToken cancellationToken)
     {
@@ -71,7 +71,7 @@ public sealed partial class SessionRuntime
             if (pending is null)
             {
                 input.Completed?.TrySetResult(ResponseApprovalResult.Unknown);
-                return Task.CompletedTask;
+                return;
             }
 
             if (pending.Decided
@@ -79,7 +79,7 @@ public sealed partial class SessionRuntime
                 && pending.ResponseId == input.ResponseId)
             {
                 input.Completed?.TrySetResult(ResponseApprovalResult.Idempotent);
-                return Task.CompletedTask;
+                return;
             }
 
             if (pending.ApprovalId != input.ApprovalId
@@ -88,7 +88,7 @@ public sealed partial class SessionRuntime
                 || pending.Epoch != _epoch)
             {
                 input.Completed?.TrySetResult(ResponseApprovalResult.Stale);
-                return Task.CompletedTask;
+                return;
             }
 
             pending.Decided = true;
@@ -97,8 +97,9 @@ public sealed partial class SessionRuntime
                 input.Decision == ToolApprovalDecision.Approve
                     ? ApprovalWaitResult.Approved
                     : ApprovalWaitResult.Rejected);
+            await ResumeBoundExecutionAfterApprovalAsync(CancellationToken.None).ConfigureAwait(false);
             input.Completed?.TrySetResult(ResponseApprovalResult.Accepted);
-            return Task.CompletedTask;
+            return;
         }
         catch
         {
@@ -158,6 +159,8 @@ public sealed partial class SessionRuntime
         {
             _pendingApproval = pending;
         }
+
+        await MarkBoundExecutionWaitingForApprovalAsync(CancellationToken.None).ConfigureAwait(false);
 
         await PublishAsync(
                 new SessionOutput(

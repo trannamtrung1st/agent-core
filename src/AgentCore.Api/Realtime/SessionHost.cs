@@ -773,7 +773,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             return;
         }
 
-        if (await live.Runtime.HasAcceptedConversationWorkAsync().ConfigureAwait(false))
+        if (await live.Runtime.HasAcceptedConversationWorkAsync().ConfigureAwait(false)
+            || await live.Runtime.HasOpenConversationExecutionsAsync().ConfigureAwait(false))
         {
             live.CancelHeadlessFinalize();
             var finalizeCts = new CancellationTokenSource();
@@ -2555,6 +2556,8 @@ public static class SessionEventMapper
             ["mode"] = HttpMapping.ToMode(ready.Mode),
             ["pendingMode"] = ready.PendingMode is { } pending ? HttpMapping.ToMode(pending) : null,
             ["status"] = HttpMapping.ToStatus(ready.Status),
+            ["outputState"] = ToOutput(ready.OutputActivity),
+            ["conversationExecutionId"] = ready.ConversationExecutionId?.ToString(),
             ["lifecycleStatus"] = LifecycleTransition.ToWire(ready.LifecycleStatus),
             ["agent"] = new Dictionary<string, object?>
             {

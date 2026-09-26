@@ -294,7 +294,9 @@ public sealed record SessionReadyProjection(
     SessionLifecycleStatus LifecycleStatus = SessionLifecycleStatus.Active,
     SpeechLocaleResolution? SpeechLocale = null,
     SessionModelSelection? ModelSelection = null,
-    PublicPendingApproval? PendingApproval = null);
+    PublicPendingApproval? PendingApproval = null,
+    Guid? ConversationExecutionId = null,
+    string OutputActivity = "Idle");
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 

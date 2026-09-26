@@ -181,18 +181,16 @@ export function mapAgentActivity(source: StatusSource): AgentActivityState {
     return { kind: "tools", label: "Running tools…" };
   }
 
-  const hasLiveContent =
-    Boolean(source.liveAssistantText?.trim()) || Boolean(source.liveAssistantHasContent);
   const generating = source.outputState === "agentGenerating" && live;
-  if ((source.outputState === "waitingForAgent" && live) || generating || live) {
-    if (hasLiveContent) {
-      return { kind: "idle" };
-    }
-
+  if ((source.outputState === "waitingForAgent" && live) || generating || (live && source.outputState !== "idle")) {
     return {
       kind: "thinking",
       label: generating ? "Generating response…" : "Thinking…"
     };
+  }
+
+  if (live) {
+    return { kind: "thinking", label: "Thinking…" };
   }
 
   if (source.voiceLive) {

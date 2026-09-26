@@ -141,15 +141,15 @@ describe("agent activity mapping", () => {
     ).toBe("idle");
   });
 
-  it("hides thinking once assistant text or blocks have started", () => {
+  it("keeps generating visible after partial assistant text has started", () => {
     expect(
       mapAgentActivity({
         ...ready,
         outputState: "agentGenerating",
         liveResponseId: "r1",
         liveAssistantText: "Hello"
-      }).kind
-    ).toBe("idle");
+      })
+    ).toEqual({ kind: "thinking", label: "Generating response…" });
     expect(
       mapAgentActivity({
         ...ready,
@@ -157,7 +157,7 @@ describe("agent activity mapping", () => {
         liveResponseId: "r1",
         liveAssistantHasContent: true
       }).kind
-    ).toBe("idle");
+    ).toBe("thinking");
   });
 
   it("maps copy to live, wait, and alarm tones", () => {

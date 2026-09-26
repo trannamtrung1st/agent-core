@@ -195,6 +195,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<TriggerRegistrationRecord> TriggerRegistrations => Set<TriggerRegistrationRecord>();
     public DbSet<TriggerOccurrenceRecord> TriggerOccurrences => Set<TriggerOccurrenceRecord>();
     public DbSet<WorkItemRecord> WorkItems => Set<WorkItemRecord>();
+
+    public DbSet<ConversationTurnExecutionRecord> ConversationTurnExecutions => Set<ConversationTurnExecutionRecord>();
     public DbSet<WorkApprovalRecord> WorkApprovals => Set<WorkApprovalRecord>();
     public DbSet<AgentDefinitionDraftRecord> AgentDefinitionDrafts => Set<AgentDefinitionDraftRecord>();
     public DbSet<AgentDefinitionPublicationRecord> AgentDefinitionPublications => Set<AgentDefinitionPublicationRecord>();
@@ -357,6 +359,30 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.DedupeKey }).IsUnique();
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Disposition });
             entity.HasIndex(row => new { row.Disposition, row.ClaimLeaseExpiresAtUtc });
+        });
+        modelBuilder.Entity<ConversationTurnExecutionRecord>(entity =>
+        {
+            entity.ToTable("ConversationTurnExecutions");
+            entity.HasKey(row => row.ExecutionId);
+            entity.Property(row => row.ExecutionId).HasMaxLength(36);
+            entity.Property(row => row.Revision).IsConcurrencyToken();
+            entity.Property(row => row.SessionId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.SourceUserEntryId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.SourceEventId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.ResponseId).HasMaxLength(36).IsRequired();
+            entity.Property(row => row.AgentInstanceId).HasMaxLength(36);
+            entity.Property(row => row.ProfileId).HasMaxLength(36);
+            entity.Property(row => row.DefinitionId).HasMaxLength(WorkLimits.MaxDefinitionIdCharacters).IsRequired();
+            entity.Property(row => row.ModelCatalogKey).HasMaxLength(WorkLimits.MaxModelFieldCharacters).IsRequired();
+            entity.Property(row => row.ModelProviderAlias).HasMaxLength(WorkLimits.MaxModelFieldCharacters).IsRequired();
+            entity.Property(row => row.ModelId).HasMaxLength(WorkLimits.MaxModelFieldCharacters).IsRequired();
+            entity.Property(row => row.ModelReasoningEffort).HasMaxLength(WorkLimits.MaxReasoningEffortCharacters);
+            entity.Property(row => row.ClaimGeneration).HasMaxLength(36);
+            entity.Property(row => row.AssistantEntryId).HasMaxLength(36);
+            entity.HasIndex(row => new { row.SessionId, row.SourceEventId }).IsUnique();
+            entity.HasIndex(row => new { row.Status, row.ClaimLeaseExpiresAtUtc });
+            entity.HasIndex(row => new { row.SessionId, row.Status });
+            entity.HasIndex(row => row.ResponseId);
         });
         modelBuilder.Entity<WorkItemRecord>(entity =>
         {

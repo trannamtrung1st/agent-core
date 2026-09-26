@@ -8,20 +8,14 @@ public sealed partial class SessionRuntime
 {
     private bool _headlessTransportDetached;
     private TriggerKind? _activeResponseTriggerKind;
+    private int _userConversationTerminalPersistDepth;
 
     public bool HeadlessTransportDetached => _headlessTransportDetached;
 
-    public async Task<bool> HasAcceptedConversationWorkAsync(CancellationToken cancellationToken = default)
+    public Task<bool> HasAcceptedConversationWorkAsync(CancellationToken cancellationToken = default)
     {
-        var result = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var context = NewContext();
-        BeginWork();
-        if (!Enqueue(new AcceptedConversationWorkQueryReceived(context, result), urgent: true))
-        {
-            return false;
-        }
-
-        return await result.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _ = cancellationToken;
+        return Task.FromResult(HasAcceptedConversationWork());
     }
 
     public async Task WaitUntilAcceptedConversationWorkSettledAsync(CancellationToken cancellationToken = default)
@@ -59,6 +53,12 @@ public sealed partial class SessionRuntime
 
     private bool HasAcceptedConversationWork()
     {
+        if (_boundConversationExecution?.IsOpen == true
+            && (!_responseTerminal || HasPendingConversationTerminalPersist()))
+        {
+            return true;
+        }
+
         if (_pendingApproval is not null)
         {
             return true;
@@ -74,9 +74,16 @@ public sealed partial class SessionRuntime
             return true;
         }
 
-        if (_activeResponseId is { } responseId && _activeResponseTriggerKind == TriggerKind.UserTurn)
+        if (_activeResponseId is not null
+            && !_responseTerminal
+            && _activeResponseTriggerKind == TriggerKind.UserTurn)
         {
-            return IsUserResponseStillExecuting(responseId);
+            return true;
+        }
+
+        if (HasPendingConversationTerminalPersist())
+        {
+            return true;
         }
 
         if (_outputActivity == OutputActivity.ProcessingAttachments && HasDurablePendingUserBatch())
@@ -87,11 +94,17 @@ public sealed partial class SessionRuntime
         return false;
     }
 
-    private bool IsUserResponseStillExecuting(Guid responseId)
+    private bool HasPendingConversationTerminalPersist() => _userConversationTerminalPersistDepth > 0;
+
+    private void BeginUserConversationTerminalPersist() =>
+        Interlocked.Increment(ref _userConversationTerminalPersistDepth);
+
+    private void EndUserConversationTerminalPersist()
     {
-        var assistant = _snapshot.Entries.LastOrDefault(
-            entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == responseId);
-        return assistant is null || assistant.Status == EntryStatus.Streaming;
+        if (Interlocked.Decrement(ref _userConversationTerminalPersistDepth) < 0)
+        {
+            Interlocked.Exchange(ref _userConversationTerminalPersistDepth, 0);
+        }
     }
 
     private bool HasDurablePendingUserBatch()

@@ -933,7 +933,8 @@ public sealed class SessionRuntimeFactory(
     ILanguageModelResolver? models = null,
     IModelCatalog? catalog = null,
     IUserTurnCapabilityValidator? turnCapabilities = null,
-    IStructuredMemoryService? structuredMemory = null)
+    IStructuredMemoryService? structuredMemory = null,
+    IConversationTurnExecutionStore? turnExecutions = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -960,5 +961,6 @@ public sealed class SessionRuntimeFactory(
             modelResolver: models,
             catalog: catalog,
             turnCapabilities: turnCapabilities,
-            structuredMemory: structuredMemory);
+            structuredMemory: structuredMemory,
+            turnExecutions: turnExecutions);
 }

@@ -398,7 +398,9 @@ public sealed partial class SessionRuntime
             _snapshot.LifecycleStatus,
             SpeechLocale.Resolve(_snapshot),
             _snapshot.ModelSelection,
-            BuildPublicPendingApproval());
+            BuildPublicPendingApproval(),
+            _boundConversationExecution?.ExecutionId,
+            _outputActivity.ToString());
     }
 
     private Task PublishStateAsync(EventContext context, CancellationToken cancellationToken) =>
