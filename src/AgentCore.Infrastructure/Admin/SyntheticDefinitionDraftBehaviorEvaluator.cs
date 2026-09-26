@@ -9,7 +9,7 @@ using AgentCore.Domain.Definitions;
 namespace AgentCore.Infrastructure.Admin;
 
 public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
-    ILanguageModelResolver models,
+    DefinitionDraftSyntheticOfflineLanguageModel offlineModel,
     IModelCatalog catalog,
     IToolConfigurationGate configurationGate) : IDefinitionDraftSyntheticBehaviorEvaluator
 {
@@ -23,8 +23,7 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
     {
         var definition = candidate.ToPublished(1);
         var selection = SessionModelBinder.PinDefault(catalog, definition);
-        var model = models.Resolve(selection, ModelPurpose.Conversation);
-        var modelSelection = $"{selection.CatalogKey}/{selection.ProviderAlias}/{selection.ModelId}";
+        var modelSelection = $"synthetic-offline/scripted/{selection.CatalogKey}";
         var tools = ToolCatalog.For(definition, context: null, configurationGate);
         var messages = new List<ModelMessage>
         {
@@ -41,7 +40,7 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
             cancellationToken.ThrowIfCancellationRequested();
             var request = new ModelRequest(Guid.NewGuid(), messages, Tools: tools);
             ModelStopReason? stop = null;
-            await foreach (var eventItem in model.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            await foreach (var eventItem in offlineModel.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 switch (eventItem)
                 {

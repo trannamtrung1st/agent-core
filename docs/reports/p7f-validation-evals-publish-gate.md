@@ -49,7 +49,7 @@
 
 ## Final gate matrix (observed)
 
-- Isolated Synthetic behavior evaluation runs the scenario prompt and draft resource bytes through catalog-bound offline model turns; bounded checks cover tool offer/deny, draft resource binding by logical path, user-scheduling trigger policy boundaries, and external HTTP action denial via tool policy.
+- Isolated Synthetic behavior evaluation runs the scenario prompt and draft resource bytes through `DefinitionDraftSyntheticOfflineLanguageModel` (Scripted only; never the profile `ILanguageModelResolver` / hosted adapters). Bounded checks cover tool offer/deny, draft resource binding by logical path, user-scheduling trigger policy boundaries, and external HTTP action denial via tool policy.
 - Regression: `AdminDefinitionDraftEvaluationServiceTests.RunScenarioAsync_supports_resource_trigger_and_external_action_checks`.
 
 ## Remaining (deferred to W07/W08)
