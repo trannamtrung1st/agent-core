@@ -58,15 +58,15 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 further canonical sync (05, 12, 14, 18; partial `docs/16` faithful-manual note) and hosted exact-SHA CI remain.
+- W08 frontend/synthetic/admin-lifecycle Playwright refresh on HEAD, canonical sync (05, 12, 14), and hosted exact-SHA CI remain.
 
 ## W08 local gate (partial)
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Solution backend suites | `dotnet test AgentCore.sln --nologo -m:1` | Pass (1596 passed, 8 skipped) on `f5ee3e5` |
-| P3–P6 regression selections | filters in W07 final gate table (ToolApproval, P4/P7D, P5 trigger, P5 store + P6 approval, P6 journey API) | Pass (43 + 19 + 5) on `dac549f` |
-| P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `b96942e` |
+| Solution backend suites | `dotnet test AgentCore.sln --nologo -m:1` | Pass (1596 passed, 8 skipped) on `f1017c6` |
+| P3–P6 regression selections | filters in W07 final gate table (ToolApproval, P4/P7D, P5 trigger, P5 store + P6 approval, P6 journey API) | Pass (43 + 19 + 5) on `f1017c6` |
+| P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `f1017c6` |
 | Frontend unit | `pnpm run test --run --maxWorkers=2` | Pass (468) on `a013b5c` |
 | Frontend build | `pnpm run build` | Pass on `a013b5c` |
 | Owner/trusted-local + Admin redaction API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (56) on `a013b5c` |
