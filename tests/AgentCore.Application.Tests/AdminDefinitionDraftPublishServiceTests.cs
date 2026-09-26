@@ -106,7 +106,8 @@ public sealed class AdminDefinitionDraftPublishServiceTests
             lifecycle,
             resources,
             evaluationStore,
-            ToolConfigurationGates.AllowAll,
+            content,
+            AdminEvaluationTestSupport.CreateRunner(),
             clock);
         var diff = new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);
         var ids = new SystemIdGenerator(clock);

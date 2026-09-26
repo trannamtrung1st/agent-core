@@ -76,6 +76,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IEmailProvider>()));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(provider.GetRequiredService<IToolConfigurationGate>()));
+        services.TryAddSingleton<IDefinitionDraftSyntheticBehaviorEvaluator, SyntheticDefinitionDraftBehaviorEvaluator>();
+        services.TryAddSingleton<AgentDefinitionDraftSyntheticEvaluationRunner>();
         services.TryAddSingleton<IInitiativeEvaluator>(provider =>
             new DefaultInitiativeEvaluator(
                 provider.GetRequiredService<PromptContextBuilder>(),

@@ -257,7 +257,12 @@ export type AdminDefinitionEvaluationScenario = {
   title: string;
   prompt: string;
   requirementLevel: "Required" | "Advisory";
-  checkType: "ToolOffered" | "ToolNotOffered";
+  checkType:
+    | "ToolOffered"
+    | "ToolNotOffered"
+    | "ResourceBound"
+    | "TriggerSchedulePermitted"
+    | "ExternalActionDenied";
   toolName: string | null;
   updatedAt: string;
 };

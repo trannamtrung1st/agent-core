@@ -43,7 +43,23 @@ export function DefinitionDraftPublishGatePanel({
   const [evidenceLoadStatus, setEvidenceLoadStatus] = useState<EvidenceLoadStatus>("idle");
   const [scenarioId, setScenarioId] = useState("tool-offered");
   const [scenarioTitle, setScenarioTitle] = useState("Tool offered check");
+  const [scenarioPrompt, setScenarioPrompt] = useState(
+    "Run a Synthetic behavior check against this draft using the selected tool policy."
+  );
+  const [checkType, setCheckType] = useState<AdminDefinitionEvaluationScenario["checkType"]>("ToolOffered");
   const [toolName, setToolName] = useState("");
+  const checkTypeOptions = useMemo(
+    () =>
+      [
+        { value: "ToolOffered", label: "Tool offered" },
+        { value: "ToolNotOffered", label: "Tool not offered" },
+        { value: "ResourceBound", label: "Resource bound" },
+        { value: "TriggerSchedulePermitted", label: "Trigger schedule permitted" },
+        { value: "ExternalActionDenied", label: "External action denied" }
+      ] as const,
+    []
+  );
+  const toolFieldRequired = checkType !== "TriggerSchedulePermitted";
   const requestGenerationRef = useRef(0);
 
   const resetGateState = useCallback(() => {
@@ -196,8 +212,8 @@ export function DefinitionDraftPublishGatePanel({
   };
 
   const saveScenario = async () => {
-    if (!scenarioId.trim() || !toolName) {
-      onError("Scenario id and tool name are required.");
+    if (!scenarioId.trim() || !scenarioPrompt.trim() || (toolFieldRequired && !toolName)) {
+      onError("Scenario id, prompt, and required fields for the check type are required.");
       return;
     }
     setLoading(true);
@@ -207,10 +223,10 @@ export function DefinitionDraftPublishGatePanel({
         expectedRevision: activeDraft.revision,
         scenarioId: scenarioId.trim(),
         title: scenarioTitle.trim() || scenarioId.trim(),
-        prompt: "Synthetic tool policy check",
+        prompt: scenarioPrompt.trim(),
         requirementLevel: "Required",
-        checkType: "ToolOffered",
-        toolName
+        checkType,
+        toolName: toolFieldRequired ? toolName : null
       });
       onDraftRevisionChange(await getAdminDefinitionDraft(activeDraft.draftId));
       setValidation(null);
@@ -313,19 +329,53 @@ export function DefinitionDraftPublishGatePanel({
           />
         </label>
         <label>
-          <Typography.Text>Tool</Typography.Text>
+          <Typography.Text>Check type</Typography.Text>
           <Select
-            aria-label="Evaluation tool name"
-            style={{ minWidth: 200 }}
-            showSearch
-            optionFilterProp="label"
-            value={toolName || undefined}
-            onChange={setToolName}
-            options={toolNames.map((name) => ({ value: name, label: name }))}
+            aria-label="Evaluation check type"
+            style={{ minWidth: 220 }}
+            value={checkType}
+            onChange={setCheckType}
+            options={checkTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
             disabled={busy || loading}
-            placeholder="Select tool"
           />
         </label>
+        <label>
+          <Typography.Text>Prompt</Typography.Text>
+          <Input
+            aria-label="Evaluation scenario prompt"
+            style={{ minWidth: 280 }}
+            value={scenarioPrompt}
+            onChange={(event) => setScenarioPrompt(event.target.value)}
+            disabled={busy || loading}
+          />
+        </label>
+        {toolFieldRequired ? (
+          <label>
+            <Typography.Text>{checkType === "ResourceBound" ? "Resource path" : "Tool"}</Typography.Text>
+            {checkType === "ResourceBound" ? (
+              <Input
+                aria-label="Evaluation resource logical path"
+                style={{ minWidth: 200 }}
+                value={toolName}
+                onChange={(event) => setToolName(event.target.value)}
+                disabled={busy || loading}
+                placeholder="brief.md"
+              />
+            ) : (
+              <Select
+                aria-label="Evaluation tool name"
+                style={{ minWidth: 200 }}
+                showSearch
+                optionFilterProp="label"
+                value={toolName || undefined}
+                onChange={setToolName}
+                options={toolNames.map((name) => ({ value: name, label: name }))}
+                disabled={busy || loading}
+                placeholder="Select tool"
+              />
+            )}
+          </label>
+        ) : null}
         <Button onClick={() => void saveScenario()} disabled={busy || loading || dirty}>
           Save required scenario
         </Button>
@@ -349,8 +399,9 @@ export function DefinitionDraftPublishGatePanel({
               >
                 <Flex vertical gap={4}>
                   <Typography.Text>
-                    {item.title} ({item.requirementLevel}) · v{item.scenarioVersion}
+                    {item.title} ({item.requirementLevel}) · {item.checkType} · v{item.scenarioVersion}
                   </Typography.Text>
+                  <Typography.Text type="secondary">{item.prompt}</Typography.Text>
                   <Typography.Text type="secondary">
                     {latest
                       ? `Last result: ${latest.passed ? "pass" : "fail"} @ rev ${latest.draftRevision}`

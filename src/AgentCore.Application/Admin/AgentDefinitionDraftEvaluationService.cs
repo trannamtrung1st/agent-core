@@ -1,6 +1,5 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
-using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Admin;
@@ -9,7 +8,8 @@ public sealed class AgentDefinitionDraftEvaluationService(
     AgentDefinitionLifecycleService lifecycle,
     AgentDefinitionResourceService resources,
     IDefinitionDraftEvaluationStore store,
-    IToolConfigurationGate configurationGate,
+    IDefinitionResourceContentStore contentStore,
+    AgentDefinitionDraftSyntheticEvaluationRunner evaluationRunner,
     TimeProvider time)
 {
     public async ValueTask<IReadOnlyList<DefinitionEvaluationScenario>> ListScenariosAsync(
@@ -73,11 +73,11 @@ public sealed class AgentDefinitionDraftEvaluationService(
         }
 
         var fingerprint = DefinitionDraftConfigurationFingerprint.Compute(draft.Candidate, draftResources);
-        var (passed, findings) = AgentDefinitionDraftSyntheticEvaluationRunner.Run(
-            draft.Candidate,
-            draftResources,
-            scenario,
-            configurationGate);
+        var snapshots = await LoadResourceSnapshotsAsync(draftId, draftResources, cancellationToken)
+            .ConfigureAwait(false);
+        var (passed, findings) = await evaluationRunner
+            .RunAsync(draft.Candidate, snapshots, scenario, cancellationToken)
+            .ConfigureAwait(false);
         var result = new DefinitionEvaluationResult(
             draft.DraftId,
             draft.Revision,
@@ -120,5 +120,26 @@ public sealed class AgentDefinitionDraftEvaluationService(
                     "Required evaluation evidence is missing, stale, or failed for this draft revision.");
             }
         }
+    }
+
+    private async ValueTask<IReadOnlyList<DefinitionDraftSyntheticResourceSnapshot>> LoadResourceSnapshotsAsync(
+        Guid draftId,
+        IReadOnlyList<AgentDefinitionDraftResource> draftResources,
+        CancellationToken cancellationToken)
+    {
+        var snapshots = new List<DefinitionDraftSyntheticResourceSnapshot>(draftResources.Count);
+        foreach (var resource in draftResources)
+        {
+            var bytes = await contentStore.ReadAsync(resource.ContentSha256, cancellationToken).ConfigureAwait(false)
+                ?? throw AgentCoreErrors.Validation(
+                    $"Draft resource '{resource.LogicalPath}' content is missing for evaluation.");
+            snapshots.Add(new DefinitionDraftSyntheticResourceSnapshot(
+                resource.LogicalPath,
+                resource.Kind,
+                resource.ContentSha256,
+                bytes));
+        }
+
+        return snapshots;
     }
 }

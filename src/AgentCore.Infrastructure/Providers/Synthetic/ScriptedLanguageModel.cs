@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
@@ -192,6 +193,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         {
             yield return new ModelTextDelta(HistoricalImageRereadAnswer);
             yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
+        if (TryScriptDefinitionEvaluation(request, toolRounds, out var definitionEvaluationEvents))
+        {
+            foreach (var definitionEvaluationEvent in definitionEvaluationEvents)
+            {
+                yield return definitionEvaluationEvent;
+            }
+
             yield break;
         }
 
@@ -816,7 +827,110 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
             || IsScheduleTurn(request, lastUser)
-            || request.Messages.Any(message => message.Role == ModelRole.Tool);
+            || request.Messages.Any(message => message.Role == ModelRole.Tool)
+            || request.Messages.Any(message =>
+                message.Role == ModelRole.System
+                && message.Text.StartsWith(DefinitionEvaluationHarness.SystemPrefix, StringComparison.Ordinal));
+    }
+
+    private static bool TryScriptDefinitionEvaluation(
+        ModelRequest request,
+        int toolRounds,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        if (!TryReadDefinitionEvaluationDirective(request, out var checkType, out var toolName))
+        {
+            return false;
+        }
+
+        if (toolRounds > 0)
+        {
+            events =
+            [
+                new ModelTextDelta("Definition evaluation completed."),
+                new ModelCompleted(ModelStopReason.Completed)
+            ];
+            return true;
+        }
+
+        switch (checkType)
+        {
+            case DefinitionEvaluationCheckType.TriggerSchedulePermitted:
+                events =
+                [
+                    new ModelTextDelta("Trigger scheduling permitted for this draft."),
+                    new ModelCompleted(ModelStopReason.Completed)
+                ];
+                return true;
+            case DefinitionEvaluationCheckType.ResourceBound:
+                if (string.IsNullOrWhiteSpace(toolName))
+                {
+                    return false;
+                }
+
+                events =
+                [
+                    new ModelToolCallEvent(new ModelToolCall(
+                        "call-definition-eval-resource",
+                        ToolCatalog.KnowledgeRetrieve,
+                        $$"""{"identity":"{{toolName}}"}""")),
+                    new ModelCompleted(ModelStopReason.ToolCalls)
+                ];
+                return true;
+            case DefinitionEvaluationCheckType.ToolOffered:
+            case DefinitionEvaluationCheckType.ToolNotOffered:
+            case DefinitionEvaluationCheckType.ExternalActionDenied:
+                if (string.IsNullOrWhiteSpace(toolName))
+                {
+                    return false;
+                }
+
+                events =
+                [
+                    new ModelToolCallEvent(new ModelToolCall(
+                        "call-definition-eval-tool",
+                        toolName,
+                        """{"synthetic":"definition-evaluation"}""")),
+                    new ModelCompleted(ModelStopReason.ToolCalls)
+                ];
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryReadDefinitionEvaluationDirective(
+        ModelRequest request,
+        out DefinitionEvaluationCheckType checkType,
+        out string? toolName)
+    {
+        checkType = default;
+        toolName = null;
+        var directive = request.Messages
+            .FirstOrDefault(message =>
+                message.Role == ModelRole.System
+                && message.Text.StartsWith(DefinitionEvaluationHarness.SystemPrefix, StringComparison.Ordinal))
+            ?.Text;
+        if (directive is null)
+        {
+            return false;
+        }
+
+        foreach (var token in directive.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (token.StartsWith("check=", StringComparison.Ordinal)
+                && Enum.TryParse(token["check=".Length..], true, out DefinitionEvaluationCheckType parsed))
+            {
+                checkType = parsed;
+            }
+            else if (token.StartsWith("tool=", StringComparison.Ordinal))
+            {
+                toolName = token["tool=".Length..];
+            }
+        }
+
+        return Enum.IsDefined(checkType);
     }
 
     public const string EmailHarnessMarker = "email harness";

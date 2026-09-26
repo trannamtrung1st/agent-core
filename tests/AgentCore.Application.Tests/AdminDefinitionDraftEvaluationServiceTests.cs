@@ -38,7 +38,7 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
                 draft.DraftId,
                 "tool-offered",
                 "Knowledge retrieve offered",
-                "Synthetic tool-offered check",
+                "Please use the offered knowledge tool for this definition evaluation.",
                 DefinitionEvaluationRequirementLevel.Advisory,
                 DefinitionEvaluationCheckType.ToolOffered,
                 ToolCatalog.KnowledgeRetrieve,
@@ -79,7 +79,8 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
             lifecycle,
             resources,
             evaluationStore,
-            ToolConfigurationGates.AllowAll,
+            content,
+            AdminEvaluationTestSupport.CreateRunner(),
             clock);
         var diff = new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);
         var publish = new AgentDefinitionDraftPublishService(lifecycle, validation, evaluation, diff, ids);
@@ -200,7 +201,7 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
     }
 
     [Fact]
-    public async Task RunScenarioAsync_supports_resource_trigger_and_external_action_checks()
+    public async Task RunScenarioAsync_fails_when_offered_tool_is_not_invoked_in_synthetic_runtime()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));
         var ids = new SystemIdGenerator(clock);
@@ -208,6 +209,43 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
         var content = new InMemoryDefinitionResourceContentStore();
         var resourcesStore = new InMemoryAgentDefinitionResourceAdminStore(admin, content, ids);
         var evaluation = CreateEvaluationService(admin, resourcesStore, clock);
+
+        var candidate = PublishableExaminerCandidate() with
+        {
+            Environment = RoleEnvironment.Empty with { ToolAllowlist = [ToolCatalog.KnowledgeRetrieve] }
+        };
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate("examiner", candidate, DefinitionDraftSourceKind.New, null, clock.GetUtcNow()),
+            CancellationToken.None);
+
+        _ = await evaluation.UpsertScenarioAsync(
+            draft.Revision,
+            new DefinitionEvaluationScenarioUpsert(
+                draft.DraftId,
+                "missing-invoke",
+                "Missing invoke",
+                "Definition evaluation without tool invocation.",
+                DefinitionEvaluationRequirementLevel.Advisory,
+                DefinitionEvaluationCheckType.ToolOffered,
+                ToolCatalog.WebSearch,
+                clock.GetUtcNow()),
+            CancellationToken.None);
+        draft = (await admin.GetDraftAsync(draft.DraftId, CancellationToken.None))!;
+
+        var result = await evaluation.RunScenarioAsync(draft.DraftId, "missing-invoke", CancellationToken.None);
+        Assert.False(result.Passed);
+        Assert.Contains(result.Findings, finding => finding.Contains("not offered", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_supports_resource_trigger_and_external_action_checks()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));
+        var ids = new SystemIdGenerator(clock);
+        var admin = new InMemoryAgentDefinitionAdminStore(ids);
+        var content = new InMemoryDefinitionResourceContentStore();
+        var resourcesStore = new InMemoryAgentDefinitionResourceAdminStore(admin, content, ids);
+        var evaluation = CreateEvaluationService(admin, resourcesStore, clock, contentStore: content);
 
         var candidate = PublishableExaminerCandidate() with
         {
@@ -253,7 +291,7 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
                     draft.DraftId,
                     scenarioId,
                     scenarioId,
-                    "prompt",
+                    $"Synthetic behavior check for {scenarioId}.",
                     DefinitionEvaluationRequirementLevel.Advisory,
                     checkType,
                     toolName,
@@ -297,9 +335,10 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
         IAgentDefinitionAdminStore admin,
         IAgentDefinitionResourceAdminStore resourcesStore,
         FakeTimeProvider clock,
-        IDefinitionDraftEvaluationStore? evaluationStore = null)
+        IDefinitionDraftEvaluationStore? evaluationStore = null,
+        InMemoryDefinitionResourceContentStore? contentStore = null)
     {
-        var content = new InMemoryDefinitionResourceContentStore();
+        var content = contentStore ?? new InMemoryDefinitionResourceContentStore();
         var builtIns = new VersionedBuiltInDefinitions(SampleDefinitions.Examiner);
         var lifecycle = new AgentDefinitionLifecycleService(
             builtIns,
@@ -313,7 +352,8 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
             lifecycle,
             resources,
             store,
-            ToolConfigurationGates.AllowAll,
+            content,
+            AdminEvaluationTestSupport.CreateRunner(),
             clock);
     }
 
