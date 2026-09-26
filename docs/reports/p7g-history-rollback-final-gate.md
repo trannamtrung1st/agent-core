@@ -58,7 +58,7 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 faithful-manual Playwright; further canonical sync (05, 12, 14, 16, 18; `docs/03`/`04`/`15`/`09`/`17` updated on W08 batches) and hosted exact-SHA CI remain.
+- W08 further canonical sync (05, 12, 14, 18; partial `docs/16` faithful-manual note) and hosted exact-SHA CI remain.
 
 ## W08 local gate (partial)
 
@@ -73,6 +73,7 @@
 | P7G whole-phase journey (disposable DB) | from `web/`: `rm -f ../data/playwright/w08-admin-lifecycle.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-admin-lifecycle.db CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) on `a013b5c` |
 | Synthetic Playwright (`synthetic` project) | from `web/`: `rm -f ../data/playwright/w08-synthetic-gate.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-synthetic-gate.db CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) on `4e868c3` |
 | Compose SQLite volume smoke (sessions, work items, Admin fork/resource/publish/instance/managed session) | `./scripts/compose-sqlite-volume.sh` | Pass (local; resource blobs on `/data/definition-resources`; bytes checked after recreate) |
+| Faithful Manual-A wall-clock (P5/P6 detached reminder) | from `web/`: `rm -f ../data/playwright/w08-faithful-manual.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-faithful-manual.db PLAYWRIGHT_FAITHFUL_MANUAL=1 CI=1 pnpm exec playwright test --project=faithful-manual` | Pass (1) on `df761d8` |
 
 ## W07 browser
 
