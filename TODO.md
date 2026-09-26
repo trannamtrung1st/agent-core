@@ -29,9 +29,11 @@ P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible r
 P7 implementation freeze:
 
 ```text
-53d439e880b91bf28e7b2b72a2d7a157b6d3a813 — verified P7 tree (last behavior)
-workflow 36228090172 — green
-5eea954 — W09 closure bookkeeping (review 0164)
+f4107d76b7a8ce894f3eb889560dd61aa65260e2 — verified P7 tree (last behavior)
+workflow 36239630112 — green
+479b637 — closure repair (knowledge.retrieve, WorkItem persona, agent listing)
+f4107d7 — hardening + exact-SHA gate (supersedes 53d439e / 36228090172)
+5eea954 — W09 closure bookkeeping (review 0164; historical)
 ```
 
 P7 is **closed/frozen**. Evidence: `docs/reports/p7-freeze-candidate.md`.
@@ -51,7 +53,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`53d439e`**, workflow **`36228090172`** green (last behavior **`53d439e`**; closure bookkeeping **`5eea954`**) — see `docs/reports/p7-freeze-candidate.md`.
+1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`f4107d7`**, workflow **`36239630112`** green (last behavior **`f4107d7`**; closure repair **`479b637`** → **`f4107d7`**; supersedes **`53d439e`** / **`36228090172`**) — see `docs/reports/p7-freeze-candidate.md`.
 2. **P8 — harness/platform extensibility** is the active phase.
 3. **P9 — sandbox evolution when requirements justify it.**
 4. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -272,7 +274,7 @@ Always keep this section.
 
 - [x] Keep background responses/work that must outlive Session Runtime under P6 durable work.
 
-- [x] Keep the P7 product surface simple even when the internal model is richer. *(observed Admin shell; frozen on `53d439e`)*
+- [x] Keep the P7 product surface simple even when the internal model is richer. *(observed Admin shell; frozen on `f4107d7`)*
 
   Prefer the admin mental model:
 
@@ -352,7 +354,7 @@ Do not collapse these into a single generic `agent.json` or shared mutable files
 
 ## P7 phase status (frozen)
 
-**P7 is closed/frozen** on verified tree **`53d439e`** (workflow **`36228090172`** green). Work items W01–W08 and whole-phase gate: [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
+**P7 is closed/frozen** on verified tree **`f4107d7`** (workflow **`36239630112`** green). Closure repair **`479b637`**–**`f4107d7`** documented in [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Work items W01–W08 and whole-phase gate: same report. Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
 
 The slice subsections below record **frozen invariants and orientation** only. Original planning checklists are retired here; open work lives under **P8+** or [Explicit P7 deferrals](#explicit-p7-deferrals).
 
@@ -660,7 +662,7 @@ Authorized operators can understand and manage memory and automation policy/stat
 
 ## P7F — Validation, behavior preview, evaluations, and publish gate
 
-**Observed (W06, approved `03e350a`; execution-final eval isolation on `53d439e`):** layered pure vs resolved validation, required deterministic Synthetic draft evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator` / offline Scripted model), Admin check-type matrix, safe publish diff, exact-revision publish with configuration fingerprint; invalid configuration blocks publish. Hosted provider paths remain opt-in; Synthetic is the key-free gate. See [P7F report](docs/reports/p7f-validation-evals-publish-gate.md).
+**Observed (W06, approved `03e350a`; eval isolation from `53d439e`; textual Knowledge binding rule from `f4107d7`):** layered pure vs resolved validation, required deterministic Synthetic draft evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator` / offline Scripted model), Admin check-type matrix, safe publish diff, exact-revision publish with configuration fingerprint; invalid configuration blocks publish. Hosted provider paths remain opt-in; Synthetic is the key-free gate. See [P7F report](docs/reports/p7f-validation-evals-publish-gate.md).
 
 **Invariants:** validation and eval provenance tie to draft revision; behavioral eval uses offline Synthetic by default; structural/security failures block publish.
 
@@ -730,7 +732,7 @@ Agent Instances
 - [x] Draft change → test → diff → publish new version → upgrade instance scenario. *(admin-lifecycle journey)*
 - [x] Rollback/deprecate scenario. *(admin-lifecycle journey)*
 - [x] Memory reset and trigger revoke scenarios. *(admin-lifecycle journey + P7E history mutator tests)*
-- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA green on `53d439e`; P7 frozen review 0164 / execution final 0169)*
+- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA green on `f4107d7` workflow `36239630112`; closure repair `479b637`–`f4107d7`)*
 
 ### P7 stop condition
 
@@ -941,7 +943,7 @@ P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
 P6 freeze:  30adaeb / workflow 36085265506 green (bef77d1 last behavior)
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
-active phase: P8 — harness/platform extensibility (P7 frozen on 53d439e)
+active phase: P8 — harness/platform extensibility (P7 frozen on f4107d7)
 ```
 
 - [ ] Keep TODO focused on current/future work.

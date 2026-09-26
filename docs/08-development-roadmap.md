@@ -47,7 +47,7 @@ Trusted catalog, system default, persisted per-session resolved choice, session-
 
 ## P6 durable background work
 
-**P6** is **frozen** on **`30adaeb`** (workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) green; last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). **P7** (agent harness / admin lifecycle) is **frozen** on **`53d439e`** (workflow [`36228090172`](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) green; last behavior **`53d439e`**; W09 review **0164** on **`5eea954`**). **P8** is next. See [p7-freeze-candidate.md](reports/p7-freeze-candidate.md). Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
+**P6** is **frozen** on **`30adaeb`** (workflow [`36085265506`](https://github.com/trannamtrung1st/agent-core/actions/runs/36085265506) green; last behavior **`bef77d1`**; core **`2067a44`**; runtime closure **`aeefffc`**). **P7** (agent harness / admin lifecycle) is **frozen** on **`f4107d7`** (workflow [`36239630112`](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) green; last behavior **`f4107d7`**; closure repair **`479b637`** → **`f4107d7`**; supersedes **`53d439e`** / **`36228090172`**). **P8** is next. See [p7-freeze-candidate.md](reports/p7-freeze-candidate.md). Phase I WorkItems for Support, Compliance, and `sandbox.run` after deactivation remain not-applicable. Closure report: [p6-freeze-candidate.md](reports/p6-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 

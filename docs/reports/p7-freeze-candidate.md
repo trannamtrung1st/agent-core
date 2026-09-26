@@ -4,25 +4,28 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 
 ## Freeze status
 
-**P7 is frozen** on verified hosted tree **`53d439e`** (`53d439e880b91bf28e7b2b72a2d7a157b6d3a813`, 2026-09-26). Hosted Synthetic offline gates and Compose smoke are **green** on that exact SHA (workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172)). **Last behavior-affecting SHA** is **`53d439e`** (`DefinitionDraftSyntheticOfflineLanguageModel` — Scripted-only draft eval; no profile resolver / hosted HTTP). **W09** freeze batch accepted on **`5eea954`** (review **0164** / review-0065 PASS). Prior bookkeeping tree **`f0c9e19`** (workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149)) superseded by execution final hosted gate (review **0169** / P7-FINAL-06). Documentation-only descendants after **`53d439e`** are not new implementation baselines. **P8** is next.
+**P7 is frozen** on verified hosted tree **`f4107d7`** (`f4107d76b7a8ce894f3eb889560dd61aa65260e2`, 2026-09-26). Hosted Synthetic offline gates, full Synthetic Playwright (57 tests, including P7G `admin-lifecycle`), faithful Manual-A, and Compose smoke are **green** on that exact SHA (workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112)). **Last behavior-affecting SHA** is **`f4107d7`**. **Supersedes** prior canonical freeze **`53d439e`** / workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172). **P8** is next.
 
-**Execution final REVISE candidate (review 0166 / review-0067):** **`349429d`** (`349429dc8a6f6277274ca42787f268c86d11f8c0`, 2026-09-26) — P7F eval matrix completion, pinned P6 detached work on archived instances, canonical status sync, and whitespace repair. Hosted Synthetic + Compose are **green** on that SHA (workflow [**`36225238807`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36225238807)).
+### Closure repair chain (2026-09-26)
 
-**Execution final REVISE candidate (review 0167 / review-0068 round 2):** **`d7dcf8f`** (`d7dcf8f0df5bf5d71d4468b9bb2aa884ae82ec15`, 2026-09-26) — isolated Synthetic draft behavior evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator`), full Admin check-type matrix, and runtime eval regressions. Hosted Synthetic + Compose **green** on that SHA (workflow [**`36227705052`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36227705052)).
+| SHA | Role |
+| --- | --- |
+| **`479b637`** | Production closure: publication-backed `knowledge.retrieve` (`IRoleKnowledgeContentResolver` / `DefinitionBoundKnowledgeContentResolver`), full WorkItem `PinnedPersona` (`AgentIdentity`) snapshots with SQLite migration `P7WorkPinnedPersona`, and `SessionManager.ListAgentsAsync` default catalog resolution (deprecated highest version excluded from normal legacy selection). |
+| **`f4107d7`** | Hardening + exact-SHA gate: textual-only referenced Knowledge resources (validate/publish + runtime guard), SQLite pinned-persona round-trip test, `/api/v1/agents` API regression, P7G persona saves synchronized on successful PATCH and effective-config revision (not Ant Design toast text). |
 
-**Execution final behavior + canonical freeze (review 0168–0169 / review-0070):** **`53d439e`** — offline eval isolation above; hosted Synthetic + Compose **green** (workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172)). Gate retrigger commits **`d3d1fc0`** / doc handoff **`4d55876`** queue duplicate runs; canonical promotion uses exact behavior SHA **`53d439e`**.
+**Historical (superseded canonical):** execution-final tree **`53d439e`** — offline eval isolation (`DefinitionDraftSyntheticOfflineLanguageModel`); W09 bookkeeping **`5eea954`** (review **0164**). Earlier REVISE candidates **`349429d`**, **`d7dcf8f`**, and bookkeeping **`f0c9e19`** remain in slice reports only.
 
 | Item | Value |
 | --- | --- |
-| **P7 verified freeze tree** | **`53d439e`** |
+| **P7 verified freeze tree** | **`f4107d7`** |
+| **Verified hosted gate** | workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`** |
+| **Superseded P7 canonical tree** | **`53d439e`** / workflow **`36228090172`** |
+| **Closure repair (behavior)** | **`479b637`** → **`f4107d7`** |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
-| **Last behavior-affecting SHA (W08)** | **`df761d8`** (`df761d855c58ec5ebf8c9d0044910dc101895746` — Compose Admin draft resource upload/bind + `Persistence__DefinitionResourceRoot` volume) |
+| **Last behavior-affecting SHA (W08 slice)** | **`df761d8`** (`df761d855c58ec5ebf8c9d0044910dc101895746` — Compose Admin draft resource upload/bind + `Persistence__DefinitionResourceRoot` volume) |
 | **Prior phase baselines preserved** | P4 **`822028f`** / `35806764609`; P5 **`4bbc0c1`**; P6 **`30adaeb`** / `36085265506` (`bef77d1` last behavior) |
 | **Reviewed P7 proposal baseline** | **`4ab5069`** / workflow **`36096331077`** green (pre-P7 product edits) |
-| **Verified hosted Synthetic + Compose on P7 candidate** | workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) — **green** on **`53d439e`** (offline gates + Compose smoke) |
 | **Prior bookkeeping freeze tree (W09)** | **`f0c9e19`** / workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) |
-
-After **`df761d8`**, later commits add P7F eval isolation, Vitest/Actions stabilization on **`f0c9e19`**, and execution-final behavior on **`53d439e`**. Documentation-only descendants after **`53d439e`** are not new implementation baselines.
 
 ## Slice and work-item SHAs
 
@@ -47,6 +50,7 @@ After **`df761d8`**, later commits add P7F eval isolation, Vitest/Actions stabil
 - Layered validation, required deterministic Synthetic evaluation, safe diff, exact-revision publish with configuration fingerprint evidence (P7F).
 - Append-only `AdminEvents`, compatible rollback/reassociation, full Admin UX and whole-phase deterministic journey (P7G).
 - W08: canonical docs/TODO alignment, migration/reopen parity, full local command matrix, extended Compose Admin path (fork, resources, publish, managed session survival).
+- **Closure repair (`479b637`–`f4107d7`):** durable publication knowledge wired into `knowledge.retrieve` without silent repo fallback; detached WorkItem persona pinning (name, role, description, tone); legacy agent inventory via composite default lookup; referenced Knowledge resources limited to textual media types; stabilized P7G persona PATCH synchronization in Playwright.
 
 Repository runtime seeds (`agents/*.json`, knowledge/templates, `.agents/*`) are not edited by Admin. Session runtime remains the mutable conversation owner; raw audio does not enter the domain mailbox.
 
@@ -90,7 +94,7 @@ Slice-level AC-P7A–G criteria are satisfied per the slice reports linked above
 
 ## Whole-phase journey (deterministic)
 
-Covered by Playwright `admin-lifecycle` (1 test) and backend/API suites referenced in [P7G W08 local gate](p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf): fork built-in draft → edit instruction/capability/resource → validate → evaluate → diff → publish → managed instance → persona Form/JSON → managed chat by instance id → memory inspect/reset → trigger revoke → publish v2 → old session history preserved → upgrade/rollback/deprecate → archive denies new managed/triggered work → safe Admin history list.
+Covered by Playwright `admin-lifecycle` (1 test) and backend/API suites referenced in [P7G W08 local gate](p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf): fork built-in draft → edit instruction/capability/resource → validate → evaluate → diff → publish → managed instance → persona Form/JSON (PATCH-synchronized saves; effective-config revision assertions) → managed chat by instance id → memory inspect/reset → trigger revoke → publish v2 → old session history preserved → upgrade/rollback/deprecate → archive denies new managed/triggered work → safe Admin history list. Hosted exact-SHA evidence on **`f4107d7`** (workflow **`36239630112`**).
 
 Faithful Manual-A wall-clock detached reminder replay: **pass** on `df761d8` tree (`faithful-manual` project; see P7G table).
 
@@ -113,8 +117,9 @@ Authoritative command table and counts: [p7g-history-rollback-final-gate.md § W
 
 | Step | Status |
 | --- | --- |
-| Push exact candidate SHA to GitHub | **Done** — `53d439e` on `main` (2026-09-26) |
-| `.github/workflows/synthetic.yml` on that SHA | **Green** — [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) on **`53d439e`** |
+| Push exact candidate SHA to GitHub | **Done** — `f4107d7` on `main` (2026-09-26) |
+| `.github/workflows/synthetic.yml` on that SHA | **Green** — [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) on **`f4107d7`** (Domain, Infrastructure, Application, API, frontend, 57 Playwright Synthetic, faithful Manual-A, Compose) |
+| Superseded prior canonical gate | [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) on **`53d439e`** |
 | Prior W09 bookkeeping tree | [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) on **`f0c9e19`** |
 | Prior failed attempt (superseded) | [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) on **`cb097f4`** — Vitest timeouts under CI load; fixed in `f0c9e19` |
 

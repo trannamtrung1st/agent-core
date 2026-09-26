@@ -1,6 +1,6 @@
 # P7G — Admin history, deprecation/rollback, and final P7 gate
 
-**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139). W08 local gate closed at `2b967cf` (review 0160). W09 closed at `5eea954` (review 0164). **P7 frozen** on hosted tree `53d439e` (workflow `36228090172` green) — see [p7-freeze-candidate.md](p7-freeze-candidate.md).
+**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139). W08 local gate closed at `2b967cf` (review 0160). W09 closed at `5eea954` (review 0164). **P7 frozen** on hosted tree `f4107d7` (workflow `36239630112` green; closure repair `479b637`–`f4107d7`) — see [p7-freeze-candidate.md](p7-freeze-candidate.md).
 
 **Baseline:** `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0` (W06 P7F closure)
 
@@ -72,7 +72,7 @@
 
 ## Execution final revise gate (review 0166 / review-0067)
 
-Behavior fixes land on **`349429d`**; documentation evidence through **`0a00ea5`**. Execution final behavior and canonical freeze on **`53d439e`** (hosted workflow [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) green; review **0169** P7-FINAL-06).
+Behavior fixes land on **`349429d`**; documentation evidence through **`0a00ea5`**. Historical execution-final freeze **`53d439e`** (workflow **`36228090172`**). **Canonical P7 freeze** after closure repair: **`f4107d7`** (hosted workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) green).
 
 | Check | Command | Result |
 | --- | --- | --- |
