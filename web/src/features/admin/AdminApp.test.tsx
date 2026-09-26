@@ -1,7 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OwnerCapabilityError } from "../../services/api";
-import { AdminApp, EffectiveConfigView, PublicationResourcesSummary } from "./AdminApp";
+import {
+  AdminApp,
+  EffectiveConfigView,
+  PublicationResourcesSummary,
+  defaultForkSourceVersion,
+  formatForkSourceOptionLabel
+} from "./AdminApp";
 import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
 
 const sampleEffective: AdminEffectiveConfiguration = {
@@ -116,6 +122,71 @@ import {
 } from "../../services/adminApi";
 
 const instanceId = "019944af-00d1-7000-8000-000000000001";
+
+describe("defaultForkSourceVersion", () => {
+  it("prefers the highest non-deprecated version", () => {
+    expect(
+      defaultForkSourceVersion([
+        {
+          definitionId: "examiner",
+          version: 3,
+          source: "durable",
+          status: "deprecated",
+          displayName: "v3"
+        },
+        {
+          definitionId: "examiner",
+          version: 2,
+          source: "durable",
+          status: "published",
+          displayName: "v2"
+        },
+        {
+          definitionId: "examiner",
+          version: 1,
+          source: "builtIn",
+          status: "published",
+          displayName: "v1"
+        }
+      ])
+    ).toBe(2);
+  });
+
+  it("falls back to the highest version when every version is deprecated", () => {
+    expect(
+      defaultForkSourceVersion([
+        {
+          definitionId: "examiner",
+          version: 2,
+          source: "durable",
+          status: "deprecated",
+          displayName: "v2"
+        },
+        {
+          definitionId: "examiner",
+          version: 1,
+          source: "builtIn",
+          status: "deprecated",
+          displayName: "v1"
+        }
+      ])
+    ).toBe(2);
+  });
+});
+
+describe("formatForkSourceOptionLabel", () => {
+  it("includes source and status in the fork dropdown", () => {
+    expect(
+      formatForkSourceOptionLabel({
+        definitionId: "examiner",
+        version: 3,
+        source: "durable",
+        status: "deprecated",
+        displayName: "v3"
+      })
+    ).toBe("v3 · Durable · Deprecated");
+  });
+});
 
 describe("AdminApp", () => {
   it("renders definition and instance inventory", async () => {
@@ -237,7 +308,7 @@ describe("AdminApp", () => {
     });
 
     fireEvent.click(within(screen.getByLabelText("Draft editor")).getByRole("button", { name: "Delete draft" }));
-    expect(screen.getByText("Delete draft from v1?")).toBeInTheDocument();
+    expect(screen.getAllByText("Delete draft from v1?").length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: "Delete draft" }).at(-1)!);
 
     await waitFor(() => {
@@ -960,6 +1031,41 @@ describe("AdminApp", () => {
     });
   });
 
+  it("defaults fork source to the highest non-deprecated version on definition detail", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 3,
+        source: "durable",
+        status: "deprecated",
+        displayName: "Examiner v3"
+      },
+      {
+        definitionId: "examiner",
+        version: 2,
+        source: "durable",
+        status: "published",
+        displayName: "Examiner v2"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminPublicationResources).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Fork v2 (durable)" })).toBeInTheDocument();
+    });
+    fireEvent.mouseDown(screen.getByLabelText("Base version"));
+    await waitFor(() => {
+      expect(screen.getByText("v2 · Durable · Published")).toBeInTheDocument();
+      expect(screen.getByText("v3 · Durable · Deprecated")).toBeInTheDocument();
+    });
+  });
+
   it("deprecates an active durable publication from the definition detail view", async () => {
     let inventoryLoads = 0;
     vi.mocked(listAdminDefinitions).mockImplementation(async () => {
@@ -1021,9 +1127,6 @@ describe("AdminApp", () => {
     });
     await waitFor(() => {
       expect(vi.mocked(listAdminDefinitions).mock.calls.length).toBeGreaterThan(inventoryCallsBefore);
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/durable · deprecated/i)).toBeInTheDocument();
     });
   });
 

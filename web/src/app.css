@@ -1590,6 +1590,12 @@ body,
   width: 100%;
   min-width: 0;
   padding-inline-end: var(--ac-space-compact);
+  border-radius: 6px;
+}
+
+.admin-draft-row-shell:hover,
+.admin-draft-row-shell:focus-within {
+  background: var(--ac-color-fill);
 }
 
 .admin-draft-row.ant-btn {
@@ -1605,6 +1611,11 @@ body,
 .admin-draft-row.ant-btn > span {
   display: block;
   width: 100%;
+}
+
+.admin-draft-row.ant-btn:not(:disabled):hover,
+.admin-draft-row.ant-btn:not(:disabled):focus-visible {
+  background: transparent;
 }
 
 .admin-draft-row-copy {

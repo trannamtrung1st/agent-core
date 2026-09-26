@@ -117,6 +117,31 @@ function formatAdminTimestamp(value: string) {
   }).format(timestamp);
 }
 
+function formatInventorySource(source: string) {
+  return source === "builtIn" ? "Built-in" : "Durable";
+}
+
+function formatInventoryStatus(status: string) {
+  if (!status) {
+    return status;
+  }
+  const normalized = status.toLowerCase();
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+}
+
+export function defaultForkSourceVersion(versions: AdminDefinitionInventoryItem[]): number | null {
+  if (versions.length === 0) {
+    return null;
+  }
+  const ordered = [...versions].sort((left, right) => right.version - left.version);
+  const eligible = ordered.find((row) => row.status.toLowerCase() !== "deprecated");
+  return (eligible ?? ordered[0]).version;
+}
+
+export function formatForkSourceOptionLabel(row: AdminDefinitionInventoryItem) {
+  return `v${row.version} · ${formatInventorySource(row.source)} · ${formatInventoryStatus(row.status)}`;
+}
+
 export function groupDefinitionInventory(
   items: AdminDefinitionInventoryItem[]
 ): DefinitionInventoryGroup[] {
@@ -513,7 +538,7 @@ function DefinitionDetail({
     setForkSourceVersion((current) =>
       current !== null && group.versions.some((item) => item.version === current)
         ? current
-        : group.latestVersion
+        : defaultForkSourceVersion(group.versions)
     );
   }, [definitionId, group?.latestVersion, group?.versions.length]);
 
@@ -568,6 +593,23 @@ function DefinitionDetail({
     } finally {
       setBusy(false);
     }
+  };
+
+  const confirmDeleteDraft = (
+    draft: AdminDefinitionDraftSummary,
+    expectedRevision: number
+  ) => {
+    const draftLabel = draft.sourceVersion != null
+      ? `draft from v${draft.sourceVersion}`
+      : "draft";
+    modal.confirm({
+      title: `Delete ${draftLabel}?`,
+      content: "This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged.",
+      okText: "Delete draft",
+      cancelText: "Keep draft",
+      okButtonProps: { danger: true },
+      onOk: () => deleteDraft(draft, expectedRevision)
+    });
   };
 
   const forkFromVersion = async (row: AdminDefinitionInventoryItem) => {
@@ -714,18 +756,15 @@ function DefinitionDetail({
             ) : (
               <Button icon={<ArrowLeftOutlined />} aria-label="Back to drafts" onClick={closeDraftEditor}>Back to drafts</Button>
             )}
-            <Popconfirm
-              title={activeDraft.sourceVersion != null
-                ? `Delete draft from v${activeDraft.sourceVersion}?`
-                : "Delete this draft?"}
-              description="This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged."
-              okText="Delete draft"
-              cancelText="Keep draft"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => void deleteDraft(activeDraft, activeDraft.revision)}
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              aria-label="Delete draft"
+              disabled={busy}
+              onClick={() => confirmDeleteDraft(activeDraft, activeDraft.revision)}
             >
-              <Button danger icon={<DeleteOutlined />} aria-label="Delete draft" disabled={busy}>Delete draft</Button>
-            </Popconfirm>
+              Delete draft
+            </Button>
           </Flex>
           {lifecycleError ? (
             <Alert
@@ -790,8 +829,12 @@ function DefinitionDetail({
                   onChange={setForkSourceVersion}
                   options={group.versions.map((row) => ({
                     value: row.version,
-                    label: `v${row.version} · ${row.source === "builtIn" ? "Built-in" : "Durable"}`
+                    label: `v${row.version} · ${formatInventorySource(row.source)}`
                   }))}
+                  optionRender={(option) => {
+                    const row = group.versions.find((item) => item.version === option.value);
+                    return row ? formatForkSourceOptionLabel(row) : option.label;
+                  }}
                   disabled={busy}
                   className="admin-draft-version-select"
                 />
@@ -827,9 +870,6 @@ function DefinitionDetail({
                 renderItem={(item) => {
                   const selected = activeDraft?.draftId === item.draftId;
                   const deleteRevision = selected ? activeDraft.revision : item.revision;
-                  const draftLabel = item.sourceVersion != null
-                    ? `draft from v${item.sourceVersion}`
-                    : "draft";
                   return (
                     <List.Item className="admin-draft-list-item">
                       <Flex align="center" gap={8} className="admin-draft-row-shell">
@@ -856,23 +896,17 @@ function DefinitionDetail({
                             {selected ? <Tag color="blue">Editing</Tag> : <RightOutlined aria-hidden />}
                           </Flex>
                         </Button>
-                        <Popconfirm
-                          title={`Delete ${draftLabel}?`}
-                          description="This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged."
-                          okText="Delete draft"
-                          cancelText="Keep draft"
-                          okButtonProps={{ danger: true }}
-                          onConfirm={() => void deleteDraft(item, deleteRevision)}
-                        >
-                          <Button
-                            type="text"
-                            danger
-                            icon={<DeleteOutlined />}
-                            aria-label={`Delete ${draftLabel}, revision ${deleteRevision}`}
-                            disabled={busy}
-                            className="admin-draft-delete"
-                          />
-                        </Popconfirm>
+                        <Button
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          aria-label={`Delete ${
+                            item.sourceVersion != null ? `draft from v${item.sourceVersion}` : "draft"
+                          }, revision ${deleteRevision}`}
+                          disabled={busy}
+                          className="admin-draft-delete"
+                          onClick={() => confirmDeleteDraft(item, deleteRevision)}
+                        />
                       </Flex>
                     </List.Item>
                   );

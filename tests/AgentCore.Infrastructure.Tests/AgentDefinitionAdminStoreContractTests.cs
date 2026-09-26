@@ -396,6 +396,81 @@ public abstract class AgentDefinitionAdminStoreContractTests
         });
 
     [Fact]
+    public Task Concurrent_delete_and_update_from_same_revision_commit_once() =>
+        ForEachStoreAsync(async store =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            var candidate = SampleCandidate("demo-agent");
+            var created = await store.CreateDraftAsync(
+                new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
+                CancellationToken.None);
+            await store.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    created.DraftId,
+                    1,
+                    candidate with { SystemInstructions = "Rev 2" },
+                    now.AddMinutes(1)),
+                CancellationToken.None);
+            await store.UpdateDraftAsync(
+                new AgentDefinitionDraftUpdate(
+                    created.DraftId,
+                    2,
+                    candidate with { SystemInstructions = "Rev 3" },
+                    now.AddMinutes(2)),
+                CancellationToken.None);
+
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var deleteAttempt = Task.Run(async () =>
+            {
+                await gate.Task;
+                try
+                {
+                    await store.DeleteDraftAsync(
+                        new AgentDefinitionDraftDelete(created.DraftId, 3, now.AddMinutes(3)),
+                        CancellationToken.None);
+                    return true;
+                }
+                catch (AgentCoreException ex) when (ex.Code == "Conflict")
+                {
+                    return false;
+                }
+            });
+            var updateAttempt = Task.Run(async () =>
+            {
+                await gate.Task;
+                try
+                {
+                    await store.UpdateDraftAsync(
+                        new AgentDefinitionDraftUpdate(
+                            created.DraftId,
+                            3,
+                            candidate with { SystemInstructions = "Concurrent edit" },
+                            now.AddMinutes(4)),
+                        CancellationToken.None);
+                    return true;
+                }
+                catch (AgentCoreException ex) when (ex.Code == "Conflict")
+                {
+                    return false;
+                }
+            });
+            gate.SetResult();
+            var outcomes = await Task.WhenAll(deleteAttempt, updateAttempt);
+            Assert.Equal(1, outcomes.Count(success => success));
+
+            var draft = await store.GetDraftAsync(created.DraftId);
+            if (outcomes[0])
+            {
+                Assert.Null(draft);
+            }
+            else
+            {
+                Assert.NotNull(draft);
+                Assert.Equal(4, draft!.Revision);
+            }
+        });
+
+    [Fact]
     public Task Duplicate_publish_from_stale_revision_conflicts() =>
         ForEachStoreAsync(async store =>
         {
