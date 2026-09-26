@@ -19,7 +19,7 @@ WORKDIR /app
 COPY --from=build /app/publish ./
 COPY --from=web /src/web/dist ./wwwroot
 COPY agents ./agents
-RUN mkdir -p /data /app/data/workspaces /app/data/attachments /app/data/artifacts \
+RUN mkdir -p /data /data/definition-resources /app/data/workspaces /app/data/attachments /app/data/artifacts \
     && chown -R $APP_UID:$APP_UID /data /app/data
 USER $APP_UID
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
@@ -27,6 +27,7 @@ ENV AgentCore__Profile=Synthetic
 ENV AgentCore__AgentDirectory=/app/agents
 ENV Persistence__Provider=Sqlite
 ENV Persistence__ConnectionString=Data Source=/data/agent-core.db
+ENV Persistence__DefinitionResourceRoot=/data/definition-resources
 ENV Providers__LanguageModels__primary-llm__Adapter=Scripted
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "AgentCore.Api.dll"]

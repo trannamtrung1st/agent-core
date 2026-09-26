@@ -22,7 +22,7 @@ if [[ "$ready" -ne 1 ]]; then
 fi
 
 python3 - <<'PY'
-import json, urllib.error, urllib.request
+import json, urllib.error, urllib.parse, urllib.request
 
 def load(path):
     return json.load(open(path))
@@ -99,10 +99,41 @@ status, updated_body = request(
     headers=owner_headers,
 )
 updated = json.loads(updated_body)
+resource_path = "knowledge/compose-policy.md"
+resource_bytes = b"compose resource survival"
+content_headers = {**owner_headers, "Content-Type": "text/plain"}
+status, stored_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/resources/content",
+    method="POST",
+    data=resource_bytes,
+    headers=content_headers,
+)
+stored = json.loads(stored_body)
+status, _bind_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/resources",
+    method="PUT",
+    data=json.dumps(
+        {
+            "expectedRevision": updated["revision"],
+            "resourceId": None,
+            "logicalPath": resource_path,
+            "kind": "Knowledge",
+            "mediaType": stored["mediaType"],
+            "contentSha256": stored["contentSha256"],
+            "byteLength": stored["byteLength"],
+        }
+    ).encode(),
+    headers=owner_headers,
+)
+status, draft_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}",
+    headers=owner_headers,
+)
+draft_after_bind = json.loads(draft_body)
 status, pub_body = request(
     f"http://127.0.0.1:5080/api/v2/admin/definition-drafts/{draft_id}/publish",
     method="POST",
-    data=json.dumps({"expectedRevision": updated["revision"]}).encode(),
+    data=json.dumps({"expectedRevision": draft_after_bind["revision"]}).encode(),
     headers=owner_headers,
 )
 publication = json.loads(pub_body)
@@ -135,12 +166,33 @@ status, events_body = request(
 )
 events_text = events_body.decode("utf-8") if isinstance(events_body, bytes) else events_body
 assert marker not in events_text, "draft marker leaked into admin events"
+status, pub_resources_body = request(
+    f"http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications/{pub_version}/resources",
+    headers=owner_headers,
+)
+pub_resources = json.loads(pub_resources_body)
+assert any(item["logicalPath"] == resource_path for item in pub_resources["items"]), pub_resources
+content_sha256 = stored["contentSha256"]
+assert any(item["contentSha256"] == content_sha256 for item in pub_resources["items"]), pub_resources
+
+agent_resource_path = f"/agent/resources/{resource_path}"
+workspace_url = (
+    f"http://127.0.0.1:5080/api/v2/sessions/{managed['sessionId']}/workspace/content?path="
+    + urllib.parse.quote(agent_resource_path, safe="")
+)
+status, workspace_body = request(workspace_url, headers=owner_headers)
+workspace_text = workspace_body.decode("utf-8") if isinstance(workspace_body, bytes) else workspace_body
+assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
+
 admin_state = {
     "draftId": draft_id,
     "publicationVersion": pub_version,
     "instanceId": instance["instanceId"],
     "managedSessionId": managed["sessionId"],
     "marker": marker,
+    "resourcePath": resource_path,
+    "contentSha256": content_sha256,
+    "resourceText": resource_bytes.decode("utf-8"),
 }
 json.dump(admin_state, open("/tmp/agent-core-admin.json", "w"))
 print("admin", instance["instanceId"], managed["sessionId"], pub_version)
@@ -282,7 +334,7 @@ print("work survived", work["completedId"], work["approvalWorkId"])
 PY
 
 python3 - <<PY
-import json, urllib.request
+import json, urllib.parse, urllib.request
 
 token = open("/tmp/agent-core-owner-token.txt").read()
 admin = json.load(open("/tmp/agent-core-admin.json"))
@@ -319,7 +371,29 @@ assert "PublicationCreated" in events or "publication.created" in events.lower()
 status, publications = get("http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications")
 assert status == 200, publications
 assert f'"version":{pub_version}' in publications.replace(" ", "") or f'"version": {pub_version}' in publications, publications
-print("admin survived", instance_id, managed_session_id, pub_version)
+
+resource_path = admin["resourcePath"]
+content_sha256 = admin["contentSha256"]
+status, pub_resources = get(
+    f"http://127.0.0.1:5080/api/v2/admin/definitions/examiner/publications/{pub_version}/resources"
+)
+assert status == 200, pub_resources
+resources = json.loads(pub_resources)
+assert any(
+    item["logicalPath"] == resource_path and item["contentSha256"] == content_sha256
+    for item in resources["items"]
+), resources
+
+resource_text = admin["resourceText"]
+agent_resource_path = f"/agent/resources/{resource_path}"
+workspace_url = (
+    f"http://127.0.0.1:5080/api/v2/sessions/{managed_session_id}/workspace/content?path="
+    + urllib.parse.quote(agent_resource_path, safe="/")
+)
+status, workspace = get(workspace_url)
+assert status == 200, workspace
+assert resource_text in workspace, workspace
+print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
 PY
 
 spa="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5080/)"

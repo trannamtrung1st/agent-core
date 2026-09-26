@@ -11,6 +11,7 @@ services:
       AgentCore__AgentDirectory: /app/agents
       Persistence__Provider: Sqlite
       Persistence__ConnectionString: Data Source=/data/agent-core.db
+      Persistence__DefinitionResourceRoot: /data/definition-resources
       Providers__LanguageModels__primary-llm__Adapter: Scripted
       # Published 127.0.0.1:5080:8080 is SNATed to this container's default
       # gateway. Trust that one hop, not private IP ranges.
