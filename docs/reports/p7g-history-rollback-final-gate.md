@@ -58,7 +58,7 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 canonical sync (05, 12, 14) and hosted exact-SHA CI (W09) remain.
+- W08 closure: reconcile TODO/README/`docs/18` W08 status; hosted exact-SHA CI is W09 (`p7-freeze-candidate.md`).
 
 ## W08 local gate (partial)
 

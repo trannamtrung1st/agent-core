@@ -6,6 +6,8 @@ This document owns wire protocol version 1. Contracts contains closed typed DTOs
 
 REST handles creation, discovery, history, state and terminal ending. Live user text, audio and playback use SignalR. All examples are JSON, including the JSON-equivalent view of MessagePack messages. Nullable fields are serialized explicitly as null, except optional HTTP validation errors/extensions. Content-Type is application/json. IDs below are illustrative; creation generates fresh IDs.
 
+**P7 Admin (observed):** Owner-protected `/api/v2/admin/...` routes in the table below are trusted-local HTTP only; they do not attach a Session Runtime or enter the SignalR mailbox. Managed user chat still uses `POST /api/v2/sessions` with `agentInstanceId` to pin definition version and persona into the session snapshot. History, effective-config, validation, diff, and event list responses use allowlisted projections (no secrets or raw provider credentials). Owner-protected draft read, evaluation scenario, and resource content routes return editing payloads the Admin UI needs; learned-memory and automation surfaces still redact sensitive bodies. See [Backend Implementation](12-backend-implementation-spec.md#p7b-definition-lifecycle-observed).
+
 | Method | Request | Success | Errors |
 | --- | --- | --- | --- |
 | GET /api/v1/agents | No body | 200 list below | 503 definitions unavailable |

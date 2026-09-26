@@ -164,6 +164,10 @@ Timers use TimeProvider generations. User activity, pending upload, parsing/tool
 
 **R2 receipts (observed):** speech-coordinate playback progress is independent of display receipts. Conservative heard context uses speech receipts only. Display receipts do not copy onto heard. When `reply.speech` is absent, TTS synthesizes `reply.text` once; a later speech field on the same response does not start a second TTS source.
 
+## P7 managed session pinning (observed)
+
+Managed chat create uses `agentInstanceId`; Session Runtime pins the active definition version and persona revision into `SessionSnapshot` for that session’s lifetime. Admin persona edits, active-version reassociation, archive, and publication deprecation change future eligibility and new sessions only—they do not rewrite pinned snapshots, transcript history, or supersession rules on sessions already created. Turn-taking, interruption, and full-duplex behavior are unchanged. See [Architecture](03-system-architecture.md#p7dp7g-admin-lifecycle-completion-observed) and [P7D report](reports/p7d-managed-instance-identity.md).
+
 ## P6 detached work (observed)
 
 Durable work does not keep a Session Runtime attached and does not change live turn-taking, interruption, or the microphone-during-playback rule. A due occurrence still prefers one compatible live runtime. When none exists, durable intake accepts the occurrence as a WorkItem and `DurableWorkHostedService` runs it without a browser or SignalR connection, on a cadence separate from P5 scheduling and routing. Approval and cancellation for that work happen in Background Work, not on the live response mailbox. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
