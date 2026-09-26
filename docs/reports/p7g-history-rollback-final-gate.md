@@ -64,7 +64,7 @@
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass (1596 passed, 8 skipped) on `dac549f` |
+| Solution backend suites | `dotnet test AgentCore.sln --nologo -m:1` | Pass (1596 passed, 8 skipped) on `f5ee3e5` |
 | P3–P6 regression selections | filters in W07 final gate table (ToolApproval, P4/P7D, P5 trigger, P5 store + P6 approval, P6 journey API) | Pass (43 + 19 + 5) on `dac549f` |
 | P7 migration + legacy reopen | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~P7EnsureCreatedReopen\|FullyQualifiedName~DefinitionLifecycleMigration"` | Pass (7) on `b96942e` |
 | Frontend unit | `pnpm run test --run --maxWorkers=2` | Pass (468) on `a013b5c` |
