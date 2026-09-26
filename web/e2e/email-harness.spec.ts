@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
 
 test("email harness approval modal approves synthetic send", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("combobox", { name: "Identity" }).click();
-  await page.locator(".ant-select-item-option", { hasText: "Riley — General assistant" }).click();
+  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
 
   await page.getByLabel("Message").fill("Please run the email harness end to end.");
   await page.getByRole("button", { name: "Send" }).click();

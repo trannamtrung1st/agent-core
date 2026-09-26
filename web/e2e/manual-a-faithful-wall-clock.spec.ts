@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
+import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
 
 const dbPath = process.env.PLAYWRIGHT_SQLITE_PATH ?? "";
 const scheduleIntent = "check the oven";
@@ -145,8 +146,7 @@ test("MANUAL_A faithful wall-clock detached reminder", async ({ page }) => {
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
   await page.getByRole("button", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
-  await page.getByRole("combobox", { name: "Identity" }).click();
-  await page.locator(".ant-select-item-option", { hasText: "Riley — General assistant" }).click();
+  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
   await page.getByLabel("Message").fill("check the oven in 1 minute for me");

@@ -41,12 +41,20 @@
 | Check | Command | Result |
 | --- | --- | --- |
 | Solution backend suites | `dotnet test AgentCore.sln --nologo` | Pass (1596 passed, 8 skipped) |
+| P3 approval/tool policy | `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~ToolApprovalTests` | Pass (12) |
+| P4 identity/memory + P7D isolation | `dotnet test tests/AgentCore.Application.Tests --filter "FullyQualifiedName~P4ClosureTests\|FullyQualifiedName~IdentityUserMemoryTests\|FullyQualifiedName~ManagedInstanceP7DRegressionTests"` | Pass (8) |
+| P5 trigger/scheduler | `dotnet test tests/AgentCore.Application.Tests --filter "FullyQualifiedName~TriggerDurablePolicyTests\|FullyQualifiedName~TriggerOccurrenceRoutingTests"` | Pass (23) |
+| P5 store parity + P6 detached approval | `dotnet test tests/AgentCore.Infrastructure.Tests --filter "FullyQualifiedName~TriggerStoreContractTests\|FullyQualifiedName~WorkItemStoreContractTests\|FullyQualifiedName~DurableReminderTests.P7E_detached"` | Pass (19) |
+| P6 durable journey API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~DurableWorkJourneyTests` | Pass (5) |
+| Frontend unit | `pnpm run test --run` | Pass (468) with `--maxWorkers=2` on candidate HEAD |
+| Frontend build | `pnpm run build` | Pass |
+| Synthetic Playwright (`synthetic` project) | `rm -f data/playwright/synthetic.db && CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) |
 
 **Solution gate verification:** `dotnet test AgentCore.sln --nologo` — Pass (1596 passed, 8 skipped) on the W07 regression-fix candidate containing this report; approved baseline `6ec1c675d1a896b3fe95b85d1077f27110577df5` is a git ancestor of that candidate.
 
 ## Remaining (W07)
 
-- P3–P6 regression filter selections, `pnpm run test --run` / `pnpm run build`, full Synthetic Playwright, Compose smoke per W08 local candidate gate.
+- Compose smoke per W08 local candidate gate.
 - Hosted `synthetic` workflow green on the exact final candidate SHA (CI now runs `admin-lifecycle.spec.ts` on an isolated SQLite file; verify on push).
 
 ## W07 browser

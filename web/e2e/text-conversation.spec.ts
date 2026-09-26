@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { LEGACY_IDENTITY_LABELS, selectLegacyIdentity } from "./support/legacy-identity";
 import { queuedMessages } from "./support/queued-messages";
 import { waitForResponseSettled } from "./support/response-settled";
 
@@ -44,10 +45,7 @@ async function startLongHoldResponse(page: Page): Promise<void> {
 }
 
 async function selectCustomerSupport(page: Page): Promise<void> {
-  await page.getByRole("combobox", { name: "Identity" }).click();
-  const option = page.locator(".ant-select-item-option", { hasText: "Sam — Customer support" });
-  await expect(option).toBeVisible({ timeout: 15_000 });
-  await option.click();
+  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.customerSupport);
 }
 
 async function chooseScriptedAlpha(page: Page): Promise<void> {
