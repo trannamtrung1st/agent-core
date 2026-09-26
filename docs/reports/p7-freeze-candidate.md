@@ -8,7 +8,7 @@ This report records the **P7 implementation freeze candidate**. P7 is **not froz
 
 | Item | Value |
 | --- | --- |
-| **P7 hosted verified freeze tree** | **`f0c9e19`** (`f0c9e19…` — Vitest CI stabilization over **`cb097f4`** report draft; behavior baseline **`df761d8`**) |
+| **P7 hosted verified freeze tree** | **`f0c9e19`** (`f0c9e19a3e7cc3d2413a32f9e6761979739fb69b` — Vitest CI stabilization over **`cb097f4`** report draft; behavior baseline **`df761d8`**) |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
 | **Last behavior-affecting SHA (W08)** | **`df761d8`** (`df761d855c58ec5ebf8c9d0044910dc101895746` — Compose Admin draft resource upload/bind + `Persistence__DefinitionResourceRoot` volume) |
 | **Prior phase baselines preserved** | P4 **`822028f`** / `35806764609`; P5 **`4bbc0c1`**; P6 **`30adaeb`** / `36085265506` (`bef77d1` last behavior) |
