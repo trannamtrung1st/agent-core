@@ -4,6 +4,12 @@ import {
   ensureToolAllowlisted,
   publishDraftFromInstructions
 } from "./admin-definition-gate-helpers";
+import {
+  definitionDraftsSection,
+  draftEditorSection,
+  forkBuiltInV1Draft,
+  forkDurablePublicationDraft
+} from "./admin-draft-editor-helpers";
 
 export type SessionView = {
   sessionId: string;
@@ -53,12 +59,13 @@ async function patchExaminerDraftMemoryPolicy(page: Page, draftId: string) {
 }
 
 async function reopenExaminerDraftByMarker(page: Page, marker: string) {
-  const draftsSection = page.locator('section[aria-label="Definition drafts"]');
-  await draftsSection.getByRole("button", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
-  await expect(draftsSection.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
+  const draftsList = definitionDraftsSection(page);
+  await draftsList.getByRole("button", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
+  const editor = draftEditorSection(page);
+  await expect(editor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });
-  return draftsSection;
+  return editor;
 }
 
 /** P7G §8 steps 3–11: fork, resource, capability, memory policy, publish gate, managed instance. */
@@ -67,39 +74,37 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
   await expect(page).toHaveURL(/\/admin$/);
   await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
 
-  const draftsSection = page.locator('section[aria-label="Definition drafts"]');
   const forkResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
       response.url().includes("/api/v2/admin/definition-drafts/fork") &&
       response.ok()
   );
-  await page.getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
+  const draftEditor = await forkBuiltInV1Draft(page);
   const forkResponse = await forkResponsePromise;
   const forkBody = (await forkResponse.json()) as { draftId: string };
 
-  await expect(draftsSection.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
   const marker = `p7g-whole-${Date.now()}`;
-  await draftsSection.getByLabel("System instructions").fill(marker);
+  await draftEditor.getByLabel("System instructions").fill(marker);
 
-  await draftsSection.getByRole("tab", { name: "Capabilities" }).click();
+  await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
   const harnessLabel = `p7g-harness-${Date.now()}`;
-  await draftsSection.getByLabel("Harness labels").click();
-  await draftsSection.getByLabel("Harness labels").fill(harnessLabel);
+  await draftEditor.getByLabel("Harness labels").click();
+  await draftEditor.getByLabel("Harness labels").fill(harnessLabel);
   await page.keyboard.press("Enter");
-  await ensureToolAllowlisted(page, draftsSection, "knowledge.retrieve");
+  await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
 
   const resourceBody = `p7g-resource-${Date.now()}`;
   const resourcePath = `knowledge/p7g-${Date.now()}.md`;
-  await draftsSection.getByRole("tab", { name: "Resources" }).click();
-  await draftsSection.getByLabel("Resource logical path").fill(resourcePath);
-  await draftsSection.getByLabel("Resource file").setInputFiles({
+  await draftEditor.getByRole("tab", { name: "Resources" }).click();
+  await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
+  await draftEditor.getByLabel("Resource file").setInputFiles({
     name: "p7g.md",
     mimeType: "text/plain",
     buffer: Buffer.from(resourceBody, "utf8")
   });
-  await draftsSection.getByRole("button", { name: "Upload and bind" }).click();
-  await expect(draftsSection.getByText(resourcePath)).toBeVisible({ timeout: 15_000 });
+  await draftEditor.getByRole("button", { name: "Upload and bind" }).click();
+  await expect(draftEditor.getByText(resourcePath)).toBeVisible({ timeout: 15_000 });
 
   await patchExaminerDraftMemoryPolicy(page, forkBody.draftId);
   await page.goto("/admin/definitions/examiner");
@@ -126,7 +131,9 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
       /\/api\/v2\/sessions$/.test(response.url()) &&
       response.ok()
   );
-  await refreshed.getByRole("button", { name: `Start managed chat for v${version}` }).click();
+  await definitionDraftsSection(page)
+    .getByRole("button", { name: `Start managed chat for v${version}` })
+    .click();
   const instance = (await (await instanceResponsePromise).json()) as ManagedInstance;
   const firstSession = (await (await sessionResponsePromise).json()) as SessionView;
 
@@ -160,16 +167,14 @@ export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
   await expect(page).toHaveURL(/\/admin$/);
   await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
 
-  const draftsSection = page.locator('section[aria-label="Definition drafts"]');
-  await page.getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
-  await expect(draftsSection.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+  const draftEditor = await forkBuiltInV1Draft(page);
   const marker = `p7d-managed-${Date.now()}`;
-  await draftsSection.getByLabel("System instructions").fill(marker);
-  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await draftEditor.getByLabel("System instructions").fill(marker);
+  await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
-  await completeDefinitionDraftPublishGate(page, draftsSection);
-  await publishDraftFromInstructions(page, draftsSection);
+  await completeDefinitionDraftPublishGate(page, draftEditor);
+  await publishDraftFromInstructions(page, draftEditor);
   const publishedToast = page.getByText(/Published version \d+/);
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];
@@ -187,7 +192,9 @@ export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
       /\/api\/v2\/sessions$/.test(response.url()) &&
       response.ok()
   );
-  await draftsSection.getByRole("button", { name: `Start managed chat for v${version}` }).click();
+  await definitionDraftsSection(page)
+    .getByRole("button", { name: `Start managed chat for v${version}` })
+    .click();
   const instanceResponse = await instanceResponsePromise;
   const sessionResponse = await sessionResponsePromise;
   const instance = (await instanceResponse.json()) as ManagedInstance;
@@ -237,23 +244,22 @@ export async function expectManagedIdentityOptionAbsent(page: Page, instanceId: 
 export async function openExaminerDefinitionDrafts(page: Page) {
   await page.goto("/admin/definitions/examiner");
   await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
-  return page.locator('section[aria-label="Definition drafts"]');
+  return definitionDraftsSection(page);
 }
 
 /** Fork a durable publication, run the publish gate, and return the new immutable version number. */
 export async function publishExaminerForkedVersion(page: Page, forkFromVersion: number): Promise<number> {
-  const draftsSection = await openExaminerDefinitionDrafts(page);
-  await page.getByRole("button", { name: `Fork v${forkFromVersion} (durable)` }).click();
-  const instructions = draftsSection.getByLabel("System instructions");
-  await expect(instructions).toBeVisible({ timeout: 15_000 });
+  await openExaminerDefinitionDrafts(page);
+  const draftEditor = await forkDurablePublicationDraft(page, forkFromVersion);
+  const instructions = draftEditor.getByLabel("System instructions");
   const marker = `p7g-next-${Date.now()}`;
   const prior = (await instructions.inputValue()) || "";
   await instructions.fill(`${prior}\n${marker}`);
-  await ensureToolAllowlisted(page, draftsSection, "knowledge.retrieve");
-  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
+  await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.").first()).toBeVisible({ timeout: 15_000 });
-  await completeDefinitionDraftPublishGate(page, draftsSection);
-  await publishDraftFromInstructions(page, draftsSection);
+  await completeDefinitionDraftPublishGate(page, draftEditor);
+  await publishDraftFromInstructions(page, draftEditor);
   const publishedToast = page.getByText(/Published version \d+/).first();
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];

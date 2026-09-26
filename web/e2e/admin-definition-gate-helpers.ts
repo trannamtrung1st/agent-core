@@ -11,11 +11,11 @@ async function selectAntdComboboxOption(page: Page, combobox: Locator, optionTex
 
 export async function ensureToolAllowlisted(
   page: Page,
-  draftsSection: Locator,
+  draftEditor: Locator,
   toolName: string
 ) {
-  await draftsSection.getByRole("tab", { name: "Capabilities" }).click();
-  const allowlist = draftsSection.getByLabel("Tool allowlist");
+  await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
+  const allowlist = draftEditor.getByLabel("Tool allowlist");
   const alreadySelected = await allowlist
     .locator(".ant-select-selection-item")
     .filter({ hasText: toolName })
@@ -25,7 +25,7 @@ export async function ensureToolAllowlisted(
   }
 
   await selectAntdComboboxOption(page, allowlist, toolName);
-  const saveDraft = draftsSection.getByRole("button", { name: "Save draft" });
+  const saveDraft = draftEditor.getByRole("button", { name: "Save draft" });
   await Promise.all([
     page.waitForResponse(
       (response) =>
@@ -39,16 +39,16 @@ export async function ensureToolAllowlisted(
 
 export async function completeDefinitionDraftPublishGate(
   page: Page,
-  draftsSection: Locator,
+  draftEditor: Locator,
   toolName = "knowledge.retrieve",
   options?: { skipToolAllowlist?: boolean }
 ) {
   if (!options?.skipToolAllowlist) {
-    await ensureToolAllowlisted(page, draftsSection, toolName);
+    await ensureToolAllowlisted(page, draftEditor, toolName);
   }
 
-  await draftsSection.getByRole("tab", { name: "Test & Publish" }).click();
-  const gate = draftsSection.getByLabel("Test validate and publish gate");
+  await draftEditor.getByRole("tab", { name: "Test & Publish" }).click();
+  const gate = draftEditor.getByLabel("Test validate and publish gate");
   await expect(gate.getByRole("button", { name: "Run validation" })).toBeVisible({ timeout: 15_000 });
 
   if (await gate.getByText("No evaluation scenarios yet.").isVisible()) {
@@ -61,16 +61,16 @@ export async function completeDefinitionDraftPublishGate(
   }
 
   await gate.getByRole("button", { name: "Run validation" }).click();
-  await expect(gate.getByText("Validation (revision snapshot)")).toBeVisible({ timeout: 30_000 });
+  await expect(gate.getByText("Validation snapshot")).toBeVisible({ timeout: 30_000 });
   await expect(gate.getByText(/Diff vs/)).toBeVisible({ timeout: 30_000 });
 
   await gate.getByRole("button", { name: "Run Synthetic" }).first().click();
-  await expect(gate.getByText(/eligible to publish/i)).toBeVisible({ timeout: 30_000 });
+  await expect(gate.getByText("Draft is ready for final publish.")).toBeVisible({ timeout: 30_000 });
 }
 
-export async function publishDraftFromInstructions(page: Page, draftsSection: Locator) {
-  await draftsSection.getByRole("tab", { name: "Instructions" }).click();
-  await draftsSection.getByRole("button", { name: "Publish…" }).click();
+export async function publishDraftFromInstructions(page: Page, draftEditor: Locator) {
+  await draftEditor.getByRole("tab", { name: "Instructions" }).click();
+  await draftEditor.getByRole("button", { name: "Publish…" }).click();
   const modal = page.getByRole("dialog");
   await expect(modal).toBeVisible();
   await modal.getByRole("button", { name: "Publish" }).click();

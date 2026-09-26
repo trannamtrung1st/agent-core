@@ -3,6 +3,7 @@ import {
   completeDefinitionDraftPublishGate,
   publishDraftFromInstructions
 } from "./admin-definition-gate-helpers";
+import { definitionDraftsSection, forkBuiltInV1Draft } from "./admin-draft-editor-helpers";
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]");
@@ -55,32 +56,30 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await expect(page).toHaveURL(/\/admin$/);
 
   await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
-  const draftsSection = page.locator('section[aria-label="Definition drafts"]');
-  await page.getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
-  await expect(draftsSection.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+  const draftEditor = await forkBuiltInV1Draft(page);
 
-  await draftsSection.getByLabel("System instructions").fill(instructionMarker);
+  await draftEditor.getByLabel("System instructions").fill(instructionMarker);
 
-  await draftsSection.getByRole("tab", { name: "Capabilities" }).click();
+  await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
   const harnessLabel = `e2e-harness-${Date.now()}`;
-  await draftsSection.getByLabel("Harness labels").click();
-  await draftsSection.getByLabel("Harness labels").fill(harnessLabel);
+  await draftEditor.getByLabel("Harness labels").click();
+  await draftEditor.getByLabel("Harness labels").fill(harnessLabel);
   await page.keyboard.press("Enter");
-  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
-  await draftsSection.getByRole("tab", { name: "Resources" }).click();
-  await draftsSection.getByLabel("Resource logical path").fill(resourcePath);
-  await draftsSection.getByLabel("Resource file").setInputFiles({
+  await draftEditor.getByRole("tab", { name: "Resources" }).click();
+  await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
+  await draftEditor.getByLabel("Resource file").setInputFiles({
     name: "e2e.md",
     mimeType: "text/plain",
     buffer: Buffer.from(resourceBody, "utf8")
   });
-  await draftsSection.getByRole("button", { name: "Upload and bind" }).click();
-  await expect(draftsSection.getByText(resourcePath)).toBeVisible({ timeout: 15_000 });
+  await draftEditor.getByRole("button", { name: "Upload and bind" }).click();
+  await expect(draftEditor.getByText(resourcePath)).toBeVisible({ timeout: 15_000 });
 
-  await completeDefinitionDraftPublishGate(page, draftsSection);
-  await publishDraftFromInstructions(page, draftsSection);
+  await completeDefinitionDraftPublishGate(page, draftEditor);
+  await publishDraftFromInstructions(page, draftEditor);
   const publishedToast = page.getByText(/Published version \d+/);
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];
@@ -99,7 +98,9 @@ test("admin resource publish managed chat exposes publication under agent", asyn
       /\/api\/v2\/sessions$/.test(response.url()) &&
       response.ok()
   );
-  await draftsSection.getByRole("button", { name: `Start managed chat for v${version}` }).click();
+  await definitionDraftsSection(page)
+    .getByRole("button", { name: `Start managed chat for v${version}` })
+    .click();
   const instanceResponse = await instanceResponsePromise;
   const sessionResponse = await sessionResponsePromise;
   const instance = (await instanceResponse.json()) as {

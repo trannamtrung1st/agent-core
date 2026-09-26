@@ -3,6 +3,11 @@ import {
   completeDefinitionDraftPublishGate,
   publishDraftFromInstructions
 } from "./admin-definition-gate-helpers";
+import {
+  definitionDraftsSection,
+  forkBuiltInV1Draft,
+  forkDurablePublicationDraft
+} from "./admin-draft-editor-helpers";
 
 const antdNoise = (line: string) =>
   line.includes("[antd: List]") || line.includes("[antd: Alert]");
@@ -37,33 +42,31 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   await definitions.getByRole("button", { name: /examiner/i }).first().click();
   await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
 
-  const draftsSection = page.locator('section[aria-label="Definition drafts"]');
+  const draftEditor = await forkBuiltInV1Draft(page);
 
-  await page.getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
-  await expect(draftsSection.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
-
-  const instructions = draftsSection.getByLabel("System instructions");
+  const instructions = draftEditor.getByLabel("System instructions");
   const prior = (await instructions.inputValue()) || "";
   await instructions.fill(`${prior}\n${marker}`);
 
   await expect(
-    draftsSection.getByText("Unsaved changes — save before using Test & Publish.")
+    draftEditor.getByText("Unsaved changes — save before using Test & Publish.")
   ).toBeVisible();
 
-  await draftsSection.getByRole("button", { name: "Save draft" }).click();
+  await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
-  await completeDefinitionDraftPublishGate(page, draftsSection);
-  await publishDraftFromInstructions(page, draftsSection);
+  await completeDefinitionDraftPublishGate(page, draftEditor);
+  await publishDraftFromInstructions(page, draftEditor);
 
   const publishedToast = page.getByText(/Published version \d+/);
   await expect(publishedToast).toBeVisible({ timeout: 15_000 });
   const version = (await publishedToast.textContent())?.match(/Published version (\d+)/)?.[1];
   expect(version).toBeTruthy();
 
-  await expect(draftsSection.getByText("Durable publications")).toBeVisible({ timeout: 15_000 });
-  await draftsSection.getByRole("button", { name: `Fork v${version} (durable)` }).click();
-  await expect(draftsSection.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
+  const draftsList = definitionDraftsSection(page);
+  await expect(draftsList.getByText("Durable publications")).toBeVisible({ timeout: 15_000 });
+  const forkedEditor = await forkDurablePublicationDraft(page, Number(version));
+  await expect(forkedEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });
 

@@ -449,7 +449,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                         CancellationToken.None);
                     return true;
                 }
-                catch (AgentCoreException ex) when (ex.Code == "Conflict")
+                catch (AgentCoreException ex) when (ex.Code is "Conflict" or "NotFound")
                 {
                     return false;
                 }
@@ -466,7 +466,8 @@ public abstract class AgentDefinitionAdminStoreContractTests
             else
             {
                 Assert.NotNull(draft);
-                Assert.Equal(4, draft!.Revision);
+                Assert.Equal("Concurrent edit", draft!.Candidate.SystemInstructions);
+                Assert.Equal(4, draft.Revision);
             }
         });
 
