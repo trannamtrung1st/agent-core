@@ -29,14 +29,14 @@ P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible r
 P7 implementation freeze:
 
 ```text
-0e29cfa — verified P7 tree (last behavior; post-freeze Admin follow-up re-close)
-2b4a4aa — draft delete API/history, focused draft editor workflow
-f4107d76b7a8ce894f3eb889560dd61aa65260e2 — prior canonical tree (W08)
+2acb1a8 — verified P7 follow-up tree (gate/test repair; confirm hosted green on push)
+1090535 — last behavior-affecting SHA (resource upload + eval prompt)
+9519a83 — concurrent draft contract + focused-editor Playwright repair
+workflow 36253536025 — 9519a83: offline gates green; Synthetic PW 56/57 (fixed in 2acb1a8)
+2b4a4aa → aa6cf18 → 15524ca — post-freeze Admin behavior chain
+f4107d7 — prior canonical W08 tree
 workflow 36239630112 — green on f4107d7
-workflow 36249987395 — 0e29cfa attempt: Compose green; offline Infrastructure failed (rerun)
 479b637 — closure repair (knowledge.retrieve, WorkItem persona, agent listing)
-f4107d7 — hardening + exact-SHA gate (supersedes 53d439e / 36228090172)
-5eea954 — W09 closure bookkeeping (review 0164; historical)
 ```
 
 P7 is **closed/frozen**. Evidence: `docs/reports/p7-freeze-candidate.md`.
@@ -56,7 +56,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on **`0e29cfa`** (last behavior **`0e29cfa`**; includes **`2b4a4aa`** draft delete + **`0e29cfa`** fork-default/concurrency follow-up; prior canonical **`f4107d7`** / workflow **`36239630112`** green) — see `docs/reports/p7-freeze-candidate.md`. **Hosted exact-SHA on `0e29cfa`:** rerun required (workflow **`36249987395`** failed at Infrastructure tests).
+1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on follow-up tree **`2acb1a8`** (last behavior **`1090535`**; gate repair **`9519a83`**–**`2acb1a8`**; prior canonical **`f4107d7`** / workflow **`36239630112`** green) — see `docs/reports/p7-freeze-candidate.md`. **Confirm hosted exact-SHA green on `2acb1a8`** (workflow **`36253536025`** on **`9519a83`** was 56/57 Synthetic PW).
 2. **P8 — harness/platform extensibility** is the active phase.
 3. **P9 — sandbox evolution when requirements justify it.**
 4. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -357,7 +357,7 @@ Do not collapse these into a single generic `agent.json` or shared mutable files
 
 ## P7 phase status (frozen)
 
-**P7 is closed/frozen** on verified tree **`f4107d7`** (workflow **`36239630112`** green). Closure repair **`479b637`**–**`f4107d7`** documented in [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Work items W01–W08 and whole-phase gate: same report. Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
+**P7 is closed/frozen** on follow-up tree **`2acb1a8`** (last behavior **`1090535`**; confirm hosted exact-SHA green on push). W08 canonical **`f4107d7`** / workflow **`36239630112`**; post-freeze behavior **`2b4a4aa`**–**`1090535`**; gate repair **`9519a83`**–**`2acb1a8`**. Documented in [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
 
 The slice subsections below record **frozen invariants and orientation** only. Original planning checklists are retired here; open work lives under **P8+** or [Explicit P7 deferrals](#explicit-p7-deferrals).
 
@@ -946,7 +946,7 @@ P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
 P6 freeze:  30adaeb / workflow 36085265506 green (bef77d1 last behavior)
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
-active phase: P8 — harness/platform extensibility (P7 frozen on f4107d7)
+active phase: P8 — harness/platform extensibility (P7 follow-up frozen on 2acb1a8)
 ```
 
 - [ ] Keep TODO focused on current/future work.

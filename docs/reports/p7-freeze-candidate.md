@@ -4,7 +4,7 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 
 ## Freeze status
 
-**P7 is frozen** on verified tree **`0e29cfa`** (`0e29cfa` on `main`, 2026-09-26). **Last behavior-affecting SHA** is **`0e29cfa`** (re-closes P7 after post-freeze Admin lifecycle follow-up: revision-protected draft deletion, fork-default alignment with non-deprecated publications, and concurrent delete/update store evidence). Prior canonical gate **`f4107d7`** / workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) remains historical evidence for the original W08 closure. **Hosted exact-SHA gate on `0e29cfa`:** workflow [**`36249987395`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36249987395) — **Synthetic Compose smoke green**; **Synthetic offline gates failed** at Backend Infrastructure tests (investigate/rerun before treating as final hosted evidence). **P8** is next.
+**P7 is frozen** on verified follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). Prior canonical W08 gate **`f4107d7`** / workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) remains historical evidence for the original closure. **Hosted exact-SHA gate on `2acb1a8`:** confirm workflow **green** on push (repair **`9519a83`**, run [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) — Domain through Compose **green**, Synthetic Playwright **56/57** before P7E selector fix). **P8** is next.
 
 ### Closure repair chain (2026-09-26)
 
@@ -13,16 +13,21 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 | **`479b637`** | Production closure: publication-backed `knowledge.retrieve` (`IRoleKnowledgeContentResolver` / `DefinitionBoundKnowledgeContentResolver`), full WorkItem `PinnedPersona` (`AgentIdentity`) snapshots with SQLite migration `P7WorkPinnedPersona`, and `SessionManager.ListAgentsAsync` default catalog resolution (deprecated highest version excluded from normal legacy selection). |
 | **`f4107d7`** | Hardening + exact-SHA gate: textual-only referenced Knowledge resources (validate/publish + runtime guard), SQLite pinned-persona round-trip test, `/api/v1/agents` API regression, P7G persona saves synchronized on successful PATCH and effective-config revision (not Ant Design toast text). |
 | **`2b4a4aa`** | Admin draft deletion (`DELETE /api/v2/admin/definition-drafts/{id}`), `DraftDeleted` history, child cleanup parity, focused draft editor and Test & Publish polish. |
-| **`0e29cfa`** | P7 follow-up re-close: default fork source skips deprecated highest version (explicit fork still allowed), fork picker shows version · source · status, concurrent delete/update contract test, modal draft-delete confirmation, draft-row hover polish. |
+| **`aa6cf18`** | Fork-default alignment with non-deprecated publications, modal draft-delete confirmation, concurrent delete/update contract test (initial). |
+| **`15524ca`** | Instance page hierarchy and compact knowledge-source layout. |
+| **`1090535`** | Draft resource pending-file chip + multiline evaluation prompt (**last behavior-affecting**). |
+| **`9519a83`** | Gate repair: concurrent draft store contract (`NotFound` on losing update); focused-editor Playwright helpers and publish-gate copy. |
+| **`2acb1a8`** | Gate repair: P7E `Managed` tag assertion scoped to `Instance identity` (test-only). |
 
 **Historical (superseded canonical):** execution-final tree **`53d439e`** — offline eval isolation (`DefinitionDraftSyntheticOfflineLanguageModel`); W09 bookkeeping **`5eea954`** (review **0164**). Earlier REVISE candidates **`349429d`**, **`d7dcf8f`**, and bookkeeping **`f0c9e19`** remain in slice reports only.
 
 | Item | Value |
 | --- | --- |
-| **P7 verified freeze tree** | **`0e29cfa`** |
-| **Last behavior-affecting SHA** | **`0e29cfa`** |
+| **P7 verified follow-up tree** | **`2acb1a8`** |
+| **Last behavior-affecting SHA** | **`1090535`** |
 | **Verified hosted gate (canonical W08)** | workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`** |
-| **Latest hosted gate attempt** | workflow [**`36249987395`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36249987395) on **`0e29cfa`** — offline Infrastructure step **failed** (Compose **green**) |
+| **Latest hosted gate attempt (follow-up)** | workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — offline gates **green**, Synthetic Playwright **56/57** (fixed in **`2acb1a8`**) |
+| **Hosted exact-SHA on `2acb1a8`** | **Confirm green** on push (supersedes partial **`36253536025`**) |
 | **Superseded P7 canonical tree** | **`53d439e`** / workflow **`36228090172`** |
 | **Closure repair (behavior)** | **`479b637`** → **`f4107d7`** |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
@@ -55,7 +60,8 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 - Append-only `AdminEvents`, compatible rollback/reassociation, full Admin UX and whole-phase deterministic journey (P7G).
 - W08: canonical docs/TODO alignment, migration/reopen parity, full local command matrix, extended Compose Admin path (fork, resources, publish, managed session survival).
 - **Closure repair (`479b637`–`f4107d7`):** durable publication knowledge wired into `knowledge.retrieve` without silent repo fallback; detached WorkItem persona pinning (name, role, description, tone); legacy agent inventory via composite default lookup; referenced Knowledge resources limited to textual media types; stabilized P7G persona PATCH synchronization in Playwright.
-- **Post-freeze Admin follow-up (`2b4a4aa`–`0e29cfa`):** revision-protected draft deletion with durable child cleanup and `DraftDeleted` admin events; fork defaults aligned with non-deprecated publication selection; Admin draft editor UX (focused mode, modal delete confirm, resource upload polish).
+- **Post-freeze Admin follow-up (`2b4a4aa`–`1090535`):** revision-protected draft deletion with durable child cleanup and `DraftDeleted` admin events; fork defaults aligned with non-deprecated publication selection; focused draft editor; instance/knowledge layout polish; resource upload and evaluation prompt UX.
+- **Follow-up gate repair (`9519a83`–`2acb1a8`):** concurrent delete/update store contract test; focused-editor Playwright alignment; P7E instance `Managed` selector scope (test-only).
 
 Repository runtime seeds (`agents/*.json`, knowledge/templates, `.agents/*`) are not edited by Admin. Session runtime remains the mutable conversation owner; raw audio does not enter the domain mailbox.
 
