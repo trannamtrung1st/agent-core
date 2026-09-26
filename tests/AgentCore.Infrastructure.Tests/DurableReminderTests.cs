@@ -546,6 +546,105 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Accepted_scheduled_work_executes_when_instance_archived_after_acceptance()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            await AcceptObservedAsync(harness, occurrence);
+            var instance = await harness.Instances.FindAsync(InstanceId);
+            Assert.NotNull(instance);
+            _ = await harness.Instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(InstanceId, instance!.Revision, Lifecycle: AgentInstanceLifecycle.Archived),
+                Now,
+                CancellationToken.None);
+
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal("Oven is ready.", completed.Result!.Text);
+        });
+    }
+
+    [Fact]
+    public async Task Approval_resumes_after_instance_archived_while_waiting()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            var created = await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+
+            var instance = await harness.Instances.FindAsync(InstanceId);
+            Assert.NotNull(instance);
+            _ = await harness.Instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(InstanceId, instance!.Revision, Lifecycle: AgentInstanceLifecycle.Archived),
+                Now,
+                CancellationToken.None);
+
+            var approved = await harness.Work.DecideApprovalAsync(
+                owner,
+                waiting.WorkItemId,
+                waiting.Approval!.ApprovalId,
+                waiting.Revision,
+                waiting.Approval.Revision,
+                waiting.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal(created.WorkItemId, completed.WorkItemId);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
+    public async Task Approval_resumes_after_recovery_when_instance_archived_while_waiting()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new WorkOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, new TriggerOwner(InstanceId, ProfileId), Now, "order shipped");
+            var created = await AcceptObservedAsync(harness, occurrence);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var waiting = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, waiting!.Status);
+
+            var instance = await harness.Instances.FindAsync(InstanceId);
+            Assert.NotNull(instance);
+            _ = await harness.Instances.UpdateWithExpectedRevisionAsync(
+                new AgentInstanceRevisionUpdate(InstanceId, instance!.Revision, Lifecycle: AgentInstanceLifecycle.Archived),
+                Now,
+                CancellationToken.None);
+
+            _ = await harness.Reopen();
+            var stored = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.WaitingForApproval, stored!.Status);
+            Assert.Equal(created.WorkItemId, stored.WorkItemId);
+
+            _ = await harness.Work.DecideApprovalAsync(
+                owner,
+                stored.WorkItemId,
+                stored.Approval!.ApprovalId,
+                stored.Revision,
+                stored.Approval.Revision,
+                stored.Approval.ActionHash,
+                WorkApprovalDecision.Approved,
+                Now);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            Assert.Equal(1, harness.Http.Calls);
+            var completed = await harness.Work.GetBySourceOccurrenceAsync(occurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Completed, completed!.Status);
+            Assert.Equal(created.WorkItemId, completed.WorkItemId);
+        }, () => new ApprovalHttpModel());
+    }
+
+    [Fact]
     public async Task Expired_approval_is_not_dispatched_and_late_approval_is_rejected()
     {
         await ForEachAsync(async harness =>

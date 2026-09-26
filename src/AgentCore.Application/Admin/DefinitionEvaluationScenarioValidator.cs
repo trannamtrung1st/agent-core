@@ -36,12 +36,26 @@ internal static class DefinitionEvaluationScenarioValidator
             throw AgentCoreErrors.Validation("checkType is not supported.");
         }
 
-        if (upsert.CheckType is DefinitionEvaluationCheckType.ToolOffered or DefinitionEvaluationCheckType.ToolNotOffered)
+        if (upsert.CheckType is DefinitionEvaluationCheckType.ToolOffered
+            or DefinitionEvaluationCheckType.ToolNotOffered
+            or DefinitionEvaluationCheckType.ExternalActionDenied)
         {
             if (string.IsNullOrWhiteSpace(upsert.ToolName) || upsert.ToolName.Length > 128)
             {
                 throw AgentCoreErrors.Validation("toolName is required and must be at most 128 characters for tool checks.");
             }
+        }
+
+        if (upsert.CheckType == DefinitionEvaluationCheckType.ResourceBound
+            && (string.IsNullOrWhiteSpace(upsert.ToolName) || upsert.ToolName.Length > 256))
+        {
+            throw AgentCoreErrors.Validation("toolName must carry the resource logical path (1..256 characters) for ResourceBound checks.");
+        }
+
+        if (upsert.CheckType == DefinitionEvaluationCheckType.TriggerSchedulePermitted
+            && !string.IsNullOrWhiteSpace(upsert.ToolName))
+        {
+            throw AgentCoreErrors.Validation("toolName must be omitted for TriggerSchedulePermitted checks.");
         }
     }
 }

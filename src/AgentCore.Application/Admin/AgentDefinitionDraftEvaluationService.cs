@@ -75,6 +75,7 @@ public sealed class AgentDefinitionDraftEvaluationService(
         var fingerprint = DefinitionDraftConfigurationFingerprint.Compute(draft.Candidate, draftResources);
         var (passed, findings) = AgentDefinitionDraftSyntheticEvaluationRunner.Run(
             draft.Candidate,
+            draftResources,
             scenario,
             configurationGate);
         var result = new DefinitionEvaluationResult(

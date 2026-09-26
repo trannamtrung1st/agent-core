@@ -1,8 +1,8 @@
 # P7A — Admin shell and effective configuration
 
-**Status:** approved (W01 batch review 0006 PASS)  
-**Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`  
-**Approved HEAD:** `9169bfad2f70d212251e1462f442ff887b6d0caf`  
+**Status:** approved (W01 batch review 0006 PASS)
+**Baseline:** `4ab50695160462965e7e8edcff6adea005d856b5`
+**Approved HEAD:** `9169bfad2f70d212251e1462f442ff887b6d0caf`
 **Review range:** `4ab50695160462965e7e8edcff6adea005d856b5..9169bfad2f70d212251e1462f442ff887b6d0caf`
 
 ## Scope delivered

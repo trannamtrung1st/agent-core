@@ -26,16 +26,10 @@ public sealed class DurableWorkContextFactory(
         }
 
         var instance = await instances.FindAsync(item.Owner.AgentInstanceId, cancellationToken).ConfigureAwait(false);
-        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active)
+        if (instance is null
+            || instance.Lifecycle is not (AgentInstanceLifecycle.Active or AgentInstanceLifecycle.Archived))
         {
             throw AgentCoreErrors.NotFound("Agent instance was not found.");
-        }
-
-        if (!string.Equals(instance.DefinitionId, item.Provenance.DefinitionId, StringComparison.Ordinal)
-            || instance.ActiveVersion != item.Provenance.DefinitionVersion
-            || !string.Equals(instance.Persona.Name, item.Provenance.PersonaName, StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.Validation("Pinned agent identity is no longer eligible.");
         }
 
         var definition = await definitions.GetAsync(
@@ -88,7 +82,7 @@ public sealed class DurableWorkContextFactory(
             LanguageModel: models.Resolve(selection, ModelPurpose.Conversation),
             ReasoningEffort: item.Model.ReasoningEffort,
             LearnedMemories: learned,
-            Persona: instance.Persona,
+            Persona: definition.Identity with { Name = item.Provenance.PersonaName },
             ModelSupportsTools: descriptor.Tools,
             DetachedExecution: true);
     }

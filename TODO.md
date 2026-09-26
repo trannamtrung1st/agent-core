@@ -1109,7 +1109,7 @@ P4 freeze:  822028f / workflow 35806764609 green
 P5 freeze:  4bbc0c1 / workflow 35954811544 green
 P6 freeze:  30adaeb / workflow 36085265506 green (bef77d1 last behavior)
 prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
-active phase: P7 — agent harness / admin lifecycle (not started)
+active phase: P8 — harness/platform extensibility (P7 frozen on f0c9e19)
 ```
 
 - [ ] Keep TODO focused on current/future work.
@@ -1159,9 +1159,9 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-**P7A — Admin shell and effective configuration** is the next implementation slice.
+**P8 — harness/platform extensibility** is the next phase. P7 Admin lifecycle is **frozen** — see `docs/reports/p7-freeze-candidate.md`.
 
-Start with:
+Do not reopen P7 without a reproducible regression. Historical P7 slice entry point was:
 
 ```text
 dedicated Admin navigation/route

@@ -22,7 +22,7 @@
 - Owner-protected Admin HTTP: `POST /api/v2/admin/definition-drafts/{draftId}/validate` (`docs/14` route table).
 - `AgentDefinitionDraftDiffService` and `GET .../definition-drafts/{draftId}/diff` with safe grouped sections against fork baseline, explicit policy/identity formatters, new-draft Added sections, and revision recheck after resource listing (409 on concurrent edit).
 - `AgentDefinitionDraftPublishService` is the sole application publish command; lifecycle `CommitDraftPublicationAsync` is internal. HTTP `POST .../publish` runs resolved validation (resource bindings included), exact expected revision, and post-validation revision recheck (409 on stale revision).
-- Configuration/resource `configurationFingerprint` on validation; draft evaluation scenarios (`SqliteDefinitionDraftEvaluationStore` with transactional revision bump on Sqlite profile, in-memory store with bump-before-mutate ordering), synthetic offline `ToolOffered`/`ToolNotOffered` runner, evaluation result provenance, and publish blocking when required eval evidence is stale or missing.
+- Configuration/resource `configurationFingerprint` on validation; draft evaluation scenarios (`SqliteDefinitionDraftEvaluationStore` with transactional revision bump on Sqlite profile, in-memory store with bump-before-mutate ordering), synthetic offline evaluation runner for `ToolOffered`, `ToolNotOffered`, `ResourceBound`, `TriggerSchedulePermitted`, and `ExternalActionDenied`, evaluation result provenance, and publish blocking when required eval evidence is stale or missing.
 - Admin HTTP: evaluation scenario list/upsert/run/results (`docs/14`).
 - Tests: `AdminDefinitionDraftEvaluationServiceTests`, `AdminDefinitionDraftDiffServiceTests`, `AdminDefinitionDraftPublishServiceTests`, `AdminApiTests` draft validate/diff/publish/evaluation coverage.
 - Admin UI: Test & Publish tab on draft editor (validate, required Synthetic scenario run, safe diff, client publish eligibility aligned with revision/fingerprint evidence).
@@ -45,6 +45,11 @@
 | Definition lifecycle Playwright | `CI=1 npx playwright test e2e/z-admin-definition-lifecycle.spec.ts` (web) | Pass (validate → eval → diff → publish journey) |
 | Web production build | `npm run build` (web) | Pass |
 
+## Final gate matrix (observed)
+
+- Bounded Synthetic checks cover tool offer/deny, draft resource binding by logical path, user-scheduling trigger policy boundaries, and external HTTP action denial via tool policy.
+- Regression: `AdminDefinitionDraftEvaluationServiceTests.RunScenarioAsync_supports_resource_trigger_and_external_action_checks`.
+
 ## Remaining (deferred to W07/W08)
 
-- Additional evaluation scenario types, full P7F gate matrix items not required for the W06 slice gate, and whole-phase lifecycle automation (`admin-lifecycle.spec.ts`).
+- Whole-phase lifecycle automation beyond the W09 `admin-lifecycle` gate (`admin-lifecycle.spec.ts` observed in W09).

@@ -15,7 +15,7 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 | **Reviewed P7 proposal baseline** | **`4ab5069`** / workflow **`36096331077`** green (pre-P7 product edits) |
 | **Verified hosted Synthetic + Compose on P7 candidate** | workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) — **green** on **`f0c9e19`** (offline gates + Compose smoke) |
 
-Documentation-only descendants after **`df761d8`** (gate evidence rows, canonical doc sync, observed-status handoff) are not new implementation baselines.
+After **`df761d8`**, later commits are gate evidence, canonical status sync, and hosted CI stabilization. **`f0c9e19`** includes Vitest/Actions configuration (`web/vite.config.ts`, `.github/workflows/synthetic.yml`); other post-`df761d8` commits are documentation-only. None supersede **`f0c9e19`** as the verified Admin implementation baseline.
 
 ## Slice and work-item SHAs
 

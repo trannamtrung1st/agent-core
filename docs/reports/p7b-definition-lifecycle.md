@@ -1,8 +1,8 @@
 # P7B — Durable definition draft and publication lifecycle
 
-**Status:** approved (W02 slice gate; batch review 0020 PASS)  
-**Baseline:** `9169bfad2f70d212251e1462f442ff887b6d0caf` (post-P7A)  
-**Approved HEAD:** `4a2bf999c553d362c828c617f0218516ab0baeb4`  
+**Status:** approved (W02 slice gate; batch review 0020 PASS)
+**Baseline:** `9169bfad2f70d212251e1462f442ff887b6d0caf` (post-P7A)
+**Approved HEAD:** `4a2bf999c553d362c828c617f0218516ab0baeb4`
 **Review ranges:** storage `6907ea4`; lifecycle APIs `0e7b99f`; deprecate + Admin draft UI `0f39c32`; evidence/docs `137199c`; Playwright slice gate `4a2bf99` (from `137199c`)
 
 ## Scope delivered (observed)

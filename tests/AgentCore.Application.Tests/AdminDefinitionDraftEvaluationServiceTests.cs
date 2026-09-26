@@ -200,6 +200,76 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
     }
 
     [Fact]
+    public async Task RunScenarioAsync_supports_resource_trigger_and_external_action_checks()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));
+        var ids = new SystemIdGenerator(clock);
+        var admin = new InMemoryAgentDefinitionAdminStore(ids);
+        var content = new InMemoryDefinitionResourceContentStore();
+        var resourcesStore = new InMemoryAgentDefinitionResourceAdminStore(admin, content, ids);
+        var evaluation = CreateEvaluationService(admin, resourcesStore, clock);
+
+        var candidate = PublishableExaminerCandidate() with
+        {
+            TriggerPolicy = new TriggerPolicy(
+                true,
+                true,
+                true,
+                false,
+                false,
+                false,
+                4,
+                30,
+                1,
+                ["schedule", "applicationEvent"],
+                false,
+                60)
+        };
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate("examiner", candidate, DefinitionDraftSourceKind.New, null, clock.GetUtcNow()),
+            CancellationToken.None);
+        var bytes = "brief"u8.ToArray();
+        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
+        await content.StoreVerifiedAsync(hash, bytes, CancellationToken.None);
+        _ = await resourcesStore.UpsertDraftResourceAsync(
+            new AgentDefinitionDraftResourceUpsert(
+                draft.DraftId,
+                draft.Revision,
+                null,
+                "brief.md",
+                AgentDefinitionResourceKind.Knowledge,
+                "text/markdown",
+                hash,
+                bytes.Length,
+                clock.GetUtcNow()),
+            CancellationToken.None);
+        draft = (await admin.GetDraftAsync(draft.DraftId, CancellationToken.None))!;
+
+        async Task AssertPass(string scenarioId, DefinitionEvaluationCheckType checkType, string? toolName)
+        {
+            _ = await evaluation.UpsertScenarioAsync(
+                draft!.Revision,
+                new DefinitionEvaluationScenarioUpsert(
+                    draft.DraftId,
+                    scenarioId,
+                    scenarioId,
+                    "prompt",
+                    DefinitionEvaluationRequirementLevel.Advisory,
+                    checkType,
+                    toolName,
+                    clock.GetUtcNow()),
+                CancellationToken.None);
+            draft = await admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+            var result = await evaluation.RunScenarioAsync(draft!.DraftId, scenarioId, CancellationToken.None);
+            Assert.True(result.Passed);
+        }
+
+        await AssertPass("resource", DefinitionEvaluationCheckType.ResourceBound, "brief.md");
+        await AssertPass("trigger", DefinitionEvaluationCheckType.TriggerSchedulePermitted, null);
+        await AssertPass("external", DefinitionEvaluationCheckType.ExternalActionDenied, "http.request");
+    }
+
+    [Fact]
     public async Task RemoveScenarioAsync_throws_when_scenario_is_missing()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));

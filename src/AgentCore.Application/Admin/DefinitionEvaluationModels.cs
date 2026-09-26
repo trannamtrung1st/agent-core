@@ -3,7 +3,10 @@ namespace AgentCore.Application.Admin;
 public enum DefinitionEvaluationCheckType
 {
     ToolOffered,
-    ToolNotOffered
+    ToolNotOffered,
+    ResourceBound,
+    TriggerSchedulePermitted,
+    ExternalActionDenied
 }
 
 public enum DefinitionEvaluationRequirementLevel
