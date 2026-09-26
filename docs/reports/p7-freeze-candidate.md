@@ -4,16 +4,16 @@ This report records the **P7 implementation freeze candidate**. P7 is **not froz
 
 ## Freeze status
 
-**P7 is not frozen** (2026-09-26). Local W08 gate evidence is recorded on behavior baseline **`df761d8`** and documentation closure **`2b967cf`** (review 0160). This report draft is the W09 freeze candidate bookkeeping; **hosted** `.github/workflows/synthetic.yml` on the **exact** post-report SHA remains **pending** (local `gh` not authenticated; `main` is not pushed to the remote used for Actions).
+**P7 is not frozen** (2026-09-26) until this W09 batch is accepted; hosted evidence is recorded below. Local W08 gate evidence is on behavior baseline **`df761d8`** and documentation closure **`2b967cf`** (review 0160).
 
 | Item | Value |
 | --- | --- |
-| **P7 local candidate tree (pre-hosted)** | Git HEAD when this report is merged (documentation over **`f906c38`** / **`2b967cf`**; behavior baseline **`df761d8`**); hosted CI must run on that exact SHA |
+| **P7 hosted verified freeze tree** | **`f0c9e19`** (`f0c9e19…` — Vitest CI stabilization over **`cb097f4`** report draft; behavior baseline **`df761d8`**) |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
 | **Last behavior-affecting SHA (W08)** | **`df761d8`** (`df761d855c58ec5ebf8c9d0044910dc101895746` — Compose Admin draft resource upload/bind + `Persistence__DefinitionResourceRoot` volume) |
 | **Prior phase baselines preserved** | P4 **`822028f`** / `35806764609`; P5 **`4bbc0c1`**; P6 **`30adaeb`** / `36085265506` (`bef77d1` last behavior) |
 | **Reviewed P7 proposal baseline** | **`4ab5069`** / workflow **`36096331077`** green (pre-P7 product edits) |
-| **Verified hosted Synthetic + Compose on P7 candidate** | **Pending** — record workflow id and URL after push on exact SHA |
+| **Verified hosted Synthetic + Compose on P7 candidate** | workflow [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) — **green** on **`f0c9e19`** (offline gates + Compose smoke) |
 
 Documentation-only descendants after **`df761d8`** (gate evidence rows, canonical doc sync, observed-status handoff) are not new implementation baselines.
 
@@ -101,9 +101,9 @@ Authoritative command table and counts: [p7g-history-rollback-final-gate.md § W
 
 | Step | Status |
 | --- | --- |
-| Push exact candidate SHA to GitHub | **Done** — `cb097f4` pushed to `main` (2026-09-26) |
-| `.github/workflows/synthetic.yml` on that SHA | **Failed** — run [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) (`cb097f4`): Compose green; offline gates failed on Vitest timeouts in Admin UI tests under CI load |
-| Record workflow run URL and conclusion here | **In progress** — repair Vitest CI timeout/`maxWorkers` alignment; re-run required on new exact SHA |
+| Push exact candidate SHA to GitHub | **Done** — `f0c9e19` on `main` (2026-09-26) |
+| `.github/workflows/synthetic.yml` on that SHA | **Green** — [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) on **`f0c9e19`** |
+| Prior failed attempt (superseded) | [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) on **`cb097f4`** — Vitest timeouts under CI load; fixed in `f0c9e19` |
 
 A parent commit, descendant commit, or pre-push local-only run is **not** freeze evidence.
 
@@ -117,7 +117,7 @@ Per master proposal §14 — not implemented in P7:
 
 ## Unverified / limitations
 
-- Hosted exact-SHA Synthetic + Compose green **not** recorded.
+- Hosted exact-SHA Synthetic + Compose green recorded on **`f0c9e19`** / **`36218518149`**; lifecycle acceptance remains W09 review.
 - Optional Real provider paths may be skipped in key-free CI; Synthetic remains the deterministic gate.
 - Faithful-manual is opt-in and wall-clock; not part of default `synthetic` CI project.
 - P7 does not claim freeze until this report’s candidate SHA matches a green hosted workflow run.
