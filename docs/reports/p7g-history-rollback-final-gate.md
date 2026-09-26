@@ -50,7 +50,7 @@
 | P6 durable journey API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~DurableWorkJourneyTests` | Pass (5) |
 | Frontend unit | `pnpm run test --run` | Pass (468) with `--maxWorkers=2` on candidate HEAD |
 | Frontend build | `pnpm run build` | Pass |
-| Synthetic Playwright (`synthetic` project) | `rm -f data/playwright/synthetic.db && CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) |
+| Synthetic Playwright (`synthetic` project) | from `web/`: `rm -f ../data/playwright/w08-synthetic-gate.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-synthetic-gate.db CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) |
 | Compose SQLite volume smoke | `./scripts/compose-sqlite-volume.sh` | Pass |
 
 **Solution gate verification:** `dotnet test AgentCore.sln --nologo` — Pass (1596 passed, 8 skipped) on the W07 regression-fix candidate containing this report; approved baseline `6ec1c675d1a896b3fe95b85d1077f27110577df5` is a git ancestor of that candidate.
@@ -58,7 +58,7 @@
 ## Remaining (phase gate)
 
 - Hosted `synthetic` workflow green on the exact final candidate SHA (push `ae83bfc` or later freeze candidate; local `gh` auth was unavailable in the worker environment).
-- W08 extended Compose managed Admin path (plan W08 step 7); further canonical doc owners (03–05, 09–16, 18; `docs/17` Admin observability synced at `dac549f`) and hosted exact-SHA CI remain.
+- W08 extended Compose managed Admin path (plan W08 step 7); faithful-manual Playwright; further canonical doc owners (03–05, 14–16, 18; `docs/09` and `docs/17` synced on W08 batches) and hosted exact-SHA CI remain.
 
 ## W08 local gate (partial)
 
@@ -71,6 +71,7 @@
 | Frontend build | `pnpm run build` | Pass on `a013b5c` |
 | Owner/trusted-local + Admin redaction API | `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~AdminApiTests` | Pass (56) on `a013b5c` |
 | P7G whole-phase journey (disposable DB) | `PLAYWRIGHT_SQLITE_PATH=data/playwright/w08-admin-lifecycle.db CI=1 pnpm exec playwright test --project=admin-lifecycle` | Pass (1) on `a013b5c` |
+| Synthetic Playwright (`synthetic` project) | from `web/`: `rm -f ../data/playwright/w08-synthetic-gate.db && PLAYWRIGHT_SQLITE_PATH=../data/playwright/w08-synthetic-gate.db CI=1 pnpm exec playwright test --project=synthetic` | Pass (51) on `d1f29cb` |
 
 ## W07 browser
 

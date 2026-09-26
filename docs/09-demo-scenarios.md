@@ -155,7 +155,11 @@ On Riley (`general-assistant` v8–v10) with a trusted profile timezone when wal
 
 ## P6 background work (observed)
 
-Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. An approval-demo application event can wait in that drawer across an API restart and then run the exact approved action once. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 frozen on `30adaeb` (workflow `36085265506` green). P7 has not started.
+Ending the chat before a one-shot reminder fires still completes that reminder as one Background Work item. The result is in the Background Work drawer and is not a new transcript turn. An approval-demo application event can wait in that drawer across an API restart and then run the exact approved action once. Cancelling a retrying item stays cancelled after restart. Phase I continuation of Support, Compliance, and `sandbox.run` after deactivation is still not this behavior. P6 frozen on `30adaeb` (workflow `36085265506` green).
+
+## P7 Admin harness lifecycle (observed)
+
+With trusted-local owner capability in Synthetic mode, an operator can fork a built-in definition, edit instructions/capabilities/resources, validate/evaluate/diff/publish, create a managed `Compatibility=false` instance, edit persona through Form and JSON, start User chat by instance id, inspect and reset scoped memory, revoke an eligible schedule, publish v2, upgrade and rollback the instance, deprecate a publication, archive the instance, and inspect redacted Admin history—without rewriting pinned session snapshots. Slice browser gates include `e2e/admin-shell.spec.ts`, slice journeys under `e2e/z-admin-*.spec.ts`, and the whole-phase `e2e/admin-lifecycle.spec.ts` (`admin-lifecycle` Playwright project on disposable `PLAYWRIGHT_SQLITE_PATH`). W07 closure: `ae83bfc` (review 0139). See [P7G report](reports/p7g-history-rollback-final-gate.md).
 
 ## Post-MVP planned until verified
 
