@@ -272,6 +272,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
 
   return (
     <Tabs
+      className="admin-instance-admin-tabs"
       aria-label="Memory and automation administration"
       items={[
         {
