@@ -56,7 +56,7 @@ Detailed historical verification belongs in `docs/reports`. Keep this file focus
 
 # Current roadmap
 
-1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 frozen** on follow-up tree **`2acb1a8`** (last behavior **`1090535`**; gate repair **`9519a83`**–**`2acb1a8`**; prior canonical **`f4107d7`** / workflow **`36239630112`** green) — see `docs/reports/p7-freeze-candidate.md`. **Confirm hosted exact-SHA green on `2acb1a8`** (workflow **`36253536025`** on **`9519a83`** was 56/57 Synthetic PW).
+1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 Harness Admin** on **`2acb1a8`** (last harness behavior **`1090535`**; W08 canonical **`f4107d7`** / workflow **`36239630112`** green). Session **`ConversationTurnExecution`** observer-durability bookkeeping on **`93cb2ab`**–**`3e75934`** (docs **`2b3188f`**) — see `docs/reports/p7-freeze-candidate.md`. Confirm hosted Synthetic + Compose green on **`3e75934`** for durability evidence closure.
 2. **P8 — harness/platform extensibility** is the active phase.
 3. **P9 — sandbox evolution when requirements justify it.**
 4. **P10 — multi-user/product infrastructure when requirements justify it.**
@@ -357,7 +357,7 @@ Do not collapse these into a single generic `agent.json` or shared mutable files
 
 ## P7 phase status (frozen)
 
-**P7 is closed/frozen** on follow-up tree **`2acb1a8`** (last behavior **`1090535`**; confirm hosted exact-SHA green on push). W08 canonical **`f4107d7`** / workflow **`36239630112`**; post-freeze behavior **`2b4a4aa`**–**`1090535`**; gate repair **`9519a83`**–**`2acb1a8`**. Documented in [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
+**P7 Harness Admin is closed/frozen** on **`2acb1a8`** (last harness behavior **`1090535`**). W08 canonical **`f4107d7`** / workflow **`36239630112`**; post-freeze Admin **`2b4a4aa`**–**`1090535`**; gate repair **`9519a83`**–**`2acb1a8`**. Session observer-durability (separate from harness scope): **`93cb2ab`**–**`3e75934`**, scope/docs **`2b3188f`**. [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
 
 The slice subsections below record **frozen invariants and orientation** only. Original planning checklists are retired here; open work lives under **P8+** or [Explicit P7 deferrals](#explicit-p7-deferrals).
 

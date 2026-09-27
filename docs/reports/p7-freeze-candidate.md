@@ -65,8 +65,10 @@ There is no separate Playwright assertion that counts provider HTTP posts on ref
 
 | Item | Value |
 | --- | --- |
-| **P7 verified follow-up tree** | **`2acb1a8`** |
-| **Last behavior-affecting SHA** | **`1090535`** |
+| **Harness Admin follow-up tree** | **`2acb1a8`** |
+| **Last harness behavior-affecting SHA** | **`1090535`** |
+| **Session observer-durability (code)** | **`93cb2ab`** → **`3e75934`** (confirm hosted gate on **`3e75934`**) |
+| **Session observer-durability (scope/docs)** | **`2b3188f`** |
 | **Verified hosted gate (canonical W08)** | workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`** |
 | **Latest hosted gate attempt (follow-up)** | workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — offline gates **green**, Synthetic Playwright **56/57** (fixed in **`2acb1a8`**) |
 | **Hosted exact-SHA on `2acb1a8`** | **Confirm green** on push (supersedes partial **`36253536025`**) |
