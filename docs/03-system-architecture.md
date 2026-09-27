@@ -96,14 +96,19 @@ Known boundaries that stay separate:
 - `ConversationTurnExecution` stays a session/runtime contract. Admin does not absorb it.
 - `DurableOrderEventIngress.PublishOrderStatusAsync` is the application-event admitter, registered as `IDurableApplicationEventIngress`. `TriggerRegistrationService.AdmitOccurrenceAsync` can insert an occurrence and has no production caller. That method is a test-only port leftover, not a second product owner.
 
-### Consolidation candidates
+### Consolidation audit
 
-These are evidence for later consolidation slices. This section does not move code.
+`EffectiveConfigurationComposer` builds the Admin projection and the shared memory-policy default. Session model override, detached work, and evaluation stay at their callers. The file audit below does not move code. Line count is not a reason to split.
 
-- Effective configuration is recomposed per surface. Interactive binding, `AdminEffectiveConfigurationResolver`, the Admin memory-policy read, and `DurableWorkContextFactory` each assemble definition, instance, persona, and tool offer. A later helper may return the current Admin projection only where those rules already match. Session model override, detached tool denial, exact-action grants, and evaluation evidence stay at their callers.
-- `SessionHost` (`src/AgentCore.Api/Realtime/SessionHost.cs`), `AdminEndpoints`, `PromptContextBuilder`, `SessionToolExecutor`, and `TriggerScheduleCommands` are large. A later slice may move an application rule out of the host or an endpoint, or split one mixed method group. Line count alone is not a reason to split.
-- `SessionRuntime` is already split into partials (`Controller`, `ConversationExecution`, `Initiative`, `Tts`, `Approval`, `AcceptedWork`, `Compaction`, `Memory`, `Triggers`, `Speech`). Further splits wait until one partial owns two unrelated lifecycles.
-- The history-free managed-instance methods on `AgentInstanceService` are a candidate to retire only after tests still cover the Admin history path. Deleting them in the ownership write-up would change a port that tests still call.
+| File | Decision | Evidence |
+| --- | --- | --- |
+| `SessionHost` (`src/AgentCore.Api/Realtime/SessionHost.cs`, plus `ConversationExecution` and `Occurrences` partials) | Defer | The host owns the live connection table, command admission, wire `Map`, audio ingress, and detach grace. On attach, when no conversation execution is open, a newer durable revision or `NeedsDurableConversationConvergence` calls `ApplyTransportResumedSnapshotAsync`. When executions are still open, `ConvergeAttachedConversationAsync` waits until they drain and then calls `RefreshDurableConversationProjectionAsync`. That refresh does not use the comparison. `ListCompatible` filters runtimes this host already holds. Those are adapter steps, not a second conversation owner. |
+| `AdminEndpoints` | Defer | Routes parse HTTP and call Admin application services. Required-field, confirm, and revision checks are request mapping. `AdminDefinitionResourceHttp` stops an unbounded upload at `AgentResourceLimits.MaxItemBytes`; `DefinitionResourcePolicies.ValidateContentSize` checks the same limit once the bytes exist. `ParseResourceKind` maps the wire string onto `AgentDefinitionResourceKind`. |
+| `PromptContextBuilder` | Defer | Methods in the builder assemble prompt sections. `DefaultAgentBrain` starts at the same file and chooses speak or stay-silent by calling the builder. Moving the brain to another file would not remove a duplicated rule. |
+| `SessionToolExecutor` | Defer | `ExecuteAsync` is the one execution policy. Workspace and trigger handlers already live in partials. Email, web, sandbox, attachment, and artifact handlers stay behind that dispatch. `LooksLikeHostPath` rejects rooted tool arguments. It does not store a host path. |
+| `TriggerScheduleCommands` | Defer | `TriggerAuthorization` classifies the current turn. `TriggerScheduleCommands` parses the tool arguments and writes through `ITriggerRegistrationService`. Schedule resolution stays inside that command. |
+| `SessionRuntime` partials | Defer | `Controller`, `ConversationExecution`, `Tts`, `Approval`, `AcceptedWork`, `Compaction`, `Memory`, `Triggers`, and `Speech` each follow one mailbox concern. `Initiative` also handles rename, speech locale, model selection, and resume. Those are still mailbox handlers on the same runtime. Another partial would not remove a second writer. The main file keeps the mailbox loop, user text, brain, model stream, tools, receipts, and persist. |
+| `AgentInstanceService` history-free managed methods | Defer | `CreateAsync`, `UpgradeAsync`, `UpdatePersonaAsync`, and `SetLifecycleAsync` have no production HTTP caller. Tests still call them. Retiring the port would move those tests, and pointing them at `AdminAgentInstanceService` would start writing `AdminEvent` rows the current tests do not expect. |
 
 Justified non-merges: do not merge managed and compatibility instance services; do not merge attachment, artifact, definition-resource, and workspace stores; do not add a project per box in the diagram above; do not fold Admin into Session Runtime.
 
