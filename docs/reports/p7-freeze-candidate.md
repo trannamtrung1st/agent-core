@@ -1,23 +1,24 @@
 # P7 — Agent harness and Admin lifecycle
 
-This report records the **P7 implementation freeze**. Do not reopen P7 without a reproducible regression or an explicit product requirement that belongs in a later phase rather than P8+. Do not reopen P1–P6 freeze baselines as part of P7 evidence.
+This report records the **P7 Harness Admin freeze (W01–W08)** and, in a separate bookkeeping appendix, a **post-freeze session-runtime correction** for observer durability. Do not reopen P7 Harness Admin without a reproducible regression or an explicit product requirement that belongs in a later phase rather than P8+. Do not reopen P1–P6 freeze baselines as part of P7 evidence.
 
 ## P7 scope boundary (what P7 owns)
 
-P7 is **not** a generic run-control console, Workflow orchestration layer, parent/child run manager, or autonomous execution loop. It is two **separate** observed capabilities on the same product:
+**P7 owns Harness Admin slices W01–W08 only.**
 
-| Track | Owns | Does not own |
-| --- | --- | --- |
-| **Harness Admin (W01–W08)** | Owner-protected `/api/v2/admin/...`: definition drafts/publications, managed instances, personas, scoped learned-memory delete/reset, automation registration revoke, append-only **`AdminEvents`**, effective-config read models, publish/validation/eval gates | Session Runtime mailbox, SignalR transport, live pause/resume/cancel/approve of an in-flight chat turn, P6 `WorkItem` execution control, server-derived `allowed_actions[]` for runs |
-| **Session observer durability (post-freeze correction)** | **`ConversationTurnExecution`** for accepted user turns; detach/refresh/reopen **reattach** to the same execution/response; **`session.ready`** snapshot + sequenced **`SessionEvent`** deltas as the observation contract | Unattended autonomous Plan→Execute→Validate loops; execution continuing without any runtime host; Background Work as a substitute for conversational execution authority |
+That scope is owner-protected `/api/v2/admin/...`: definition drafts and publications, managed instances, personas, scoped learned-memory delete/reset, automation registration revoke, append-only **`AdminEvents`**, effective-config read models, and publish/validation/eval gates. Harness Admin mutates harness state only through existing Application services (`AgentDefinitionLifecycleService`, `AdminAgentInstanceService`, `AdminMemoryHistoryService`, `AdminAutomationHistoryService`, …). Chat and Background Work remain separate surfaces (SignalR + session/work HTTP), not Admin routes.
 
-Harness Admin mutates harness state only through existing Application services (`AgentDefinitionLifecycleService`, `AdminAgentInstanceService`, `AdminMemoryHistoryService`, `AdminAutomationHistoryService`, …). Chat and Background Work remain separate surfaces (SignalR + session/work HTTP), not Admin routes.
+P7 Harness Admin is **not** a generic run-control console, Workflow orchestration layer, parent/child run manager, or autonomous execution loop. It does **not** own Session Runtime mailbox semantics, SignalR transport, live pause/resume/cancel/approve of an in-flight chat turn, P6 `WorkItem` execution control, or server-derived `allowed_actions[]` for runs.
+
+### Bookkeeping appendix — post-freeze session-runtime correction (not P7 contract)
+
+**`ConversationTurnExecution` observer durability** (detach/refresh/reopen reattach, **`session.ready`** + sequenced **`SessionEvent`** observation) is a **post-freeze session-runtime correction**. It is **recorded in this report for traceability** next to the P7 freeze narrative. It is **not** a P7 Harness Admin capability, **not** part of W01–W08 acceptance criteria, and **not** an Admin API or `/admin` contract obligation. It does **not** claim unattended autonomous Plan→Execute→Validate loops.
 
 ## Freeze status
 
-**Harness Admin is frozen** on verified follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last harness behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). Prior canonical W08 gate **`f4107d7`** / workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) remains historical evidence for the original Admin closure. **Hosted exact-SHA gate on `2acb1a8`:** workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — Domain through Compose **green**, Synthetic Playwright **56/57** before P7E selector fix in **`2acb1a8`**.
+**Harness Admin is frozen** on follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last harness behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). **Canonical W08 hosted exact-SHA gate:** workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`**. **Latest hosted precursor** before the test-only repair on **`2acb1a8`:** workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — Domain through Compose **green**, Synthetic Playwright **56/57** (selector failure fixed in **`2acb1a8`**). **Exact-SHA hosted verification on commit `2acb1a8` is not recorded in this report** — cite a workflow run whose checkout SHA is **`2acb1a8`** when available.
 
-**Session durable streaming evidence (bookkeeping, not a second harness milestone)** is recorded on **`93cb2ab`** (refresh/live delta continuation) and **`3e75934`** (gate evidence: scheduler test race fix, past-grace live resume E2E, in-flight history merge guard). Confirm hosted **Synthetic + Compose green** on **`3e75934`** before treating this bookkeeping row as closed. Earlier implementation landed from **`94b65b8`** through **`b6f577d`** (migration stamp, queued execution ownership, detach/headless acceptance). **P8** is next for platform/harness extensibility; execution-control façade work is explicitly deferred (see below).
+**Session-runtime observer-durability bookkeeping** (appendix only) is on **`93cb2ab`** (refresh/live delta continuation) and **`3e75934`** (scheduler API test race fix, past-grace live-resume E2E, in-flight history merge guard). Confirm hosted **Synthetic + Compose green** on **`3e75934`** before treating that bookkeeping row as closed. Implementation history from **`94b65b8`** through **`b6f577d`** (migration stamp, queued execution ownership, detach/headless acceptance). **P8** is next for platform/harness extensibility; execution-control façade work is explicitly deferred (see below).
 
 ### Session durable streaming — precise claim (not autonomous execution)
 
@@ -31,7 +32,11 @@ This correction proves **observer durability** only:
 
 This does **not** close unattended or autonomous execution generally.
 
-### Session durable streaming — evidence map
+### Session-runtime correction — evidence map (bookkeeping appendix)
+
+#### Direct reconnect / identity evidence
+
+Proves the **same** `ConversationTurnExecution` / `responseId` survives observer disconnect, refresh, or reattach (not equivalent UI text alone).
 
 | Claim | Primary evidence |
 | --- | --- |
@@ -39,14 +44,21 @@ This does **not** close unattended or autonomous execution generally.
 | Same identity after detach grace while response still running | Playwright `web/e2e/text-conversation.spec.ts` — *reopening past detach grace while response is still running…* (`expect.poll` on `executionId`, `responseId`, `outputState`) |
 | Headless detach + transport reattach projects execution on `session.ready` | `ConversationTurnExecutionDurabilityTests.Transport_detach_then_reattach_ready_restores_open_execution_projection` |
 | Open execution row stable across detach with accepted work | `AcceptedTurnDetachDurabilityTests` (single open `ExecutionId` before/after detach path) |
-| No duplicate user turn or execution on repeated source event | `ConversationTurnExecutionDurabilityTests.Repeated_source_event_does_not_duplicate_turn_or_execution` |
-| No duplicate tool side effect for same response identity | `ToolApprovalTests` / `EmailToolTests` duplicate paths scoped to `responseId` |
 | `session.ready` publishes live stream prefix without widening durable receipt boundary | `DeliveryReceiptTests.Reattach_ready_includes_published_stream_text_before_receipts_catch_up`; protocol field notes in [14-api-and-realtime-protocol.md](../14-api-and-realtime-protocol.md) (`session.ready` history row + `conversationExecutionId`) |
 | Wire maps `conversationExecutionId` on ready | `SessionEventMapperProgressTests` |
-| Uncertain `user.text` retry across reconstruction does not duplicate turn | `SessionRealtimeLifecycleTests.Uncertain_source_event_retry_across_reconstruction_does_not_duplicate_user_turn` |
 | Client history merge does not clear live execution while output still in flight after ready | `web/src/services/sessionHistory.test.ts` — *keeps live execution state when durable history is terminal but output is still in flight* |
 
-There is no separate Playwright assertion that counts provider HTTP posts on refresh; continuity is bounded by **one open execution row per accepted source event** and **no second accepted turn** on reconnect tests above.
+There is **no** Playwright or integration assertion that counts provider HTTP posts or model invocations on refresh. Direct identity evidence above is the bounded reconnect proof.
+
+#### Supporting idempotency invariants (not refresh-specific)
+
+Related runtime guarantees; they do **not** substitute for detach/refresh identity tests above.
+
+| Claim | Primary evidence |
+| --- | --- |
+| No duplicate user turn or execution on repeated source event | `ConversationTurnExecutionDurabilityTests.Repeated_source_event_does_not_duplicate_turn_or_execution` |
+| Uncertain `user.text` retry across reconstruction does not duplicate turn | `SessionRealtimeLifecycleTests.Uncertain_source_event_retry_across_reconstruction_does_not_duplicate_user_turn` |
+| No duplicate tool/email side effect for the same `responseId` | `ToolApprovalTests` / `EmailToolTests` duplicate paths scoped to `responseId` |
 
 ### Closure repair chain (2026-09-26)
 
@@ -69,9 +81,10 @@ There is no separate Playwright assertion that counts provider HTTP posts on ref
 | **Last harness behavior-affecting SHA** | **`1090535`** |
 | **Session observer-durability (code)** | **`93cb2ab`** → **`3e75934`** (confirm hosted gate on **`3e75934`**) |
 | **Session observer-durability (scope/docs)** | **`2b3188f`** |
-| **Verified hosted gate (canonical W08)** | workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`** |
-| **Latest hosted gate attempt (follow-up)** | workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — offline gates **green**, Synthetic Playwright **56/57** (fixed in **`2acb1a8`**) |
-| **Hosted exact-SHA on `2acb1a8`** | **Confirm green** on push (supersedes partial **`36253536025`**) |
+| **Verified hosted gate (canonical W08 Harness Admin)** | workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`** |
+| **Latest hosted precursor (pre-`2acb1a8` test repair)** | workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — Domain through Compose **green**, Synthetic Playwright **56/57** (repair in **`2acb1a8`**) |
+| **Hosted exact-SHA on `2acb1a8`** | **Not recorded** — pending a workflow run whose head SHA is **`2acb1a8`** |
+| **Hosted gate target (session appendix bookkeeping)** | Confirm **Synthetic + Compose green** on **`3e75934`** (or later docs-only descendants do not replace that code SHA) |
 | **Superseded P7 canonical tree** | **`53d439e`** / workflow **`36228090172`** |
 | **Closure repair (behavior)** | **`479b637`** → **`f4107d7`** |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
@@ -170,10 +183,15 @@ Authoritative command table and counts: [p7g-history-rollback-final-gate.md § W
 
 ## Hosted CI (required for freeze)
 
+Harness Admin W08 canonical evidence and follow-up precursor runs:
+
 | Step | Status |
 | --- | --- |
 | Push exact candidate SHA to GitHub | **Done** — `f4107d7` on `main` (2026-09-26) |
-| `.github/workflows/synthetic.yml` on that SHA | **Green** — [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) on **`f4107d7`** (Domain, Infrastructure, Application, API, frontend, 57 Playwright Synthetic, faithful Manual-A, Compose) |
+| `.github/workflows/synthetic.yml` exact-SHA (canonical W08) | **Green** — [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) on **`f4107d7`** (Domain, Infrastructure, Application, API, frontend, 57 Playwright Synthetic, faithful Manual-A, Compose) |
+| Latest hosted precursor before `2acb1a8` repair | [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — **green** except Synthetic Playwright **56/57** (fixed test-only in **`2acb1a8`**) |
+| Exact-SHA hosted run on **`2acb1a8`** | **Not recorded** in this report |
+| Session appendix bookkeeping target | Confirm **green** on **`3e75934`** (Synthetic + Compose) when closing observer-durability evidence |
 | Superseded prior canonical gate | [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) on **`53d439e`** |
 | Prior W09 bookkeeping tree | [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) on **`f0c9e19`** |
 | Prior failed attempt (superseded) | [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) on **`cb097f4`** — Vitest timeouts under CI load; fixed in `f0c9e19` |
