@@ -274,11 +274,20 @@ P7.5 may change implementation structure, names, internal APIs, dependency direc
 
 P7.5 must not intentionally change user-visible product behavior.
 
+Observed through `b0c2e09`, without a closure report or hosted SHA:
+
+- Ownership map is in `docs/03-system-architecture.md`. Authoring, Runtime, and Operations are responsibilities, not new projects.
+- `EffectiveConfigurationComposer` owns the Admin projection and the shared memory-policy default. Session bind, detached work, and draft evaluation stay on their own use cases. No policy defect was found.
+- Cohesion audit deferred splits of the large runtime files. History-free instance methods remain because tests still call them.
+- Persistence audit kept SQLite, separate stores, explicit transactions, and the single-process scheduler. Recorded in `docs/15-persistence-and-configuration.md`.
+- Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
+- Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
+
 ---
 
 ## P7.5A — Architecture and ownership inventory
 
-- [ ] Update the top-level architecture model so Agent Core is no longer described primarily as only a Session Runtime.
+- [x] Update the top-level architecture model so Agent Core is no longer described primarily as only a Session Runtime.
 
 Represent the system explicitly around:
 
@@ -310,7 +319,7 @@ Shared cross-cutting boundaries
   observability
 ```
 
-- [ ] Map each durable entity to exactly one primary owner/lifecycle.
+- [x] Map each durable entity to exactly one primary owner/lifecycle.
 
 At minimum:
 
@@ -333,11 +342,11 @@ DefinitionResource
 SessionWorkspace
 ```
 
-- [ ] Identify duplicated ownership, ambiguous lifecycle, and write paths that bypass the intended Application boundary.
+- [x] Identify duplicated ownership, ambiguous lifecycle, and write paths that bypass the intended Application boundary.
 
-- [ ] Confirm Session Runtime is not becoming the owner of Admin, background-work, or definition lifecycle state.
+- [x] Confirm Session Runtime is not becoming the owner of Admin, background-work, or definition lifecycle state.
 
-- [ ] Confirm Admin services do not duplicate runtime behavior.
+- [x] Confirm Admin services do not duplicate runtime behavior.
 
 ### P7.5A stop condition
 
@@ -347,7 +356,7 @@ Architecture documents and code ownership describe the same system, and every ma
 
 ## P7.5B — Effective configuration and policy consolidation
 
-- [ ] Establish one obvious server-side composition path for effective agent configuration.
+- [x] Establish one obvious server-side composition path for effective agent configuration.
 
 Inputs may include:
 
@@ -364,13 +373,13 @@ background-execution policy
 trusted caller/profile context
 ```
 
-- [ ] Ensure Chat, Admin preview/evaluation, Triggered Work, and future P8 integrations reuse the same authoritative resolution rules where semantics should match.
+- [x] Ensure Chat, Admin preview/evaluation, Triggered Work, and future P8 integrations reuse the same authoritative resolution rules where semantics should match.
 
 - [ ] Do not let each execution surface reconstruct effective configuration independently.
 
 - [ ] Audit tool, trigger, background-work, Admin, memory, and resource authorization checks for duplicated or contradictory policy evaluation.
 
-- [ ] Centralize shared policy decisions only where there is a genuinely shared contract.
+- [x] Centralize shared policy decisions only where there is a genuinely shared contract.
 
 - [ ] Keep action-specific approval and ownership checks close enough to execution that stale configuration cannot bypass them.
 
@@ -382,7 +391,7 @@ Effective configuration and policy decisions have explicit ownership and no know
 
 ## P7.5C — Application complexity and domain cleanup
 
-- [ ] Identify services/classes that became orchestration god objects during P4–P7.
+- [x] Identify services/classes that became orchestration god objects during P4–P7.
 
 Refactor only when responsibilities are clearly separable.
 
@@ -429,48 +438,48 @@ Do **not** migrate to the production stack in P7.5.
 
 ### Persistence
 
-- [ ] Audit EF/persistence code for accidental SQLite-specific assumptions that would make a future PostgreSQL migration unnecessarily invasive.
+- [x] Audit EF/persistence code for accidental SQLite-specific assumptions that would make a future PostgreSQL migration unnecessarily invasive.
 
-- [ ] Keep migrations deterministic and repeatable.
+- [x] Keep migrations deterministic and repeatable.
 
-- [ ] Preserve explicit transaction boundaries around operations that must be atomic.
+- [x] Preserve explicit transaction boundaries around operations that must be atomic.
 
-- [ ] Preserve idempotency/retry semantics for accepted turns, trigger occurrences, WorkItems, approvals, publication, and other side-effecting lifecycle operations.
+- [x] Preserve idempotency/retry semantics for accepted turns, trigger occurrences, WorkItems, approvals, publication, and other side-effecting lifecycle operations.
 
-- [ ] Avoid using in-memory state as the durable source of truth.
+- [x] Avoid using in-memory state as the durable source of truth.
 
 ### File/blob storage
 
-- [ ] Keep host filesystem paths out of Domain and wire contracts.
+- [x] Keep host filesystem paths out of Domain and wire contracts.
 
-- [ ] Preserve separate conceptual stores for:
+- [x] Preserve separate conceptual stores for:
 
   - attachments;
   - artifacts;
   - definition resources;
   - session workspaces.
 
-- [ ] Do not collapse immutable blobs/resources and mutable workspace semantics into one generic file store.
+- [x] Do not collapse immutable blobs/resources and mutable workspace semantics into one generic file store.
 
-- [ ] Keep the current local filesystem implementation while it satisfies development requirements.
+- [x] Keep the current local filesystem implementation while it satisfies development requirements.
 
 ### Sandbox
 
-- [ ] Keep Docker as the sandbox implementation.
+- [x] Keep Docker as the sandbox implementation.
 
-- [ ] Do not introduce a new sandbox-provider abstraction unless a real second implementation is being added.
+- [x] Do not introduce a new sandbox-provider abstraction unless a real second implementation is being added.
 
 ### Scheduler/background workers
 
-- [ ] Keep the current single-process scheduler/background-worker model while one process is the real deployment shape.
+- [x] Keep the current single-process scheduler/background-worker model while one process is the real deployment shape.
 
-- [ ] Do not add a distributed queue, Redis lease system, Kafka/RabbitMQ, or distributed scheduler simply because durable WorkItems exist.
+- [x] Do not add a distributed queue, Redis lease system, Kafka/RabbitMQ, or distributed scheduler simply because durable WorkItems exist.
 
 ### Secrets
 
-- [ ] Continue using environment/user-secrets/gitignored local configuration for development credentials.
+- [x] Continue using environment/user-secrets/gitignored local configuration for development credentials.
 
-- [ ] Keep secrets outside model-visible configuration, effective-config projection, Admin history, and logs.
+- [x] Keep secrets outside model-visible configuration, effective-config projection, Admin history, and logs.
 
 ### P7.5D stop condition
 
@@ -482,7 +491,7 @@ The current dev stack remains simple, while core/application behavior is not unn
 
 Do not deploy a large observability platform yet, but keep instrumentation production-ready.
 
-- [ ] Maintain structured logs/metrics/traces for:
+- [x] Maintain structured logs/metrics/traces for:
 
   - model/provider selection and calls;
   - session/response/execution lifecycle;
@@ -497,7 +506,7 @@ Do not deploy a large observability platform yet, but keep instrumentation produ
   - policy denials;
   - resource limits.
 
-- [ ] Avoid sensitive content in operational telemetry unless explicitly required and protected.
+- [x] Avoid sensitive content in operational telemetry unless explicitly required and protected.
 
 - [ ] Keep health/readiness checks meaningful.
 
@@ -509,7 +518,11 @@ Operational events are structured enough for future hosted diagnostics without r
 
 ---
 
-## P7.5F — Refactor gate and architecture freeze
+## P7.5F — UI review and closure evidence
+
+The phase outcome is the A–E consolidation above, the shared Admin spacing slice, then documentation and context sync. It is not a separate refactor-only gate.
+
+- [x] Shared Admin spacing for draft status, publications, and instance identity uses the 8/12/16 tokens in `web/src/app.css` (`b0c2e09`).
 
 - [ ] Run the complete deterministic test suite after architectural changes.
 
@@ -953,32 +966,8 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-**P7.5A — Architecture and ownership inventory** is next.
+**P7.5G — documentation and context synchronization** continues.
 
-Start with:
-
-```text
-current architecture map
-→ durable entity/lifecycle ownership table
-→ effective-configuration call-path map
-→ policy/authorization call-path map
-→ persistence/storage implementation dependency map
-→ identify concrete duplication/god objects
-→ propose bounded refactors only where evidence exists
-```
-
-Then continue:
-
-```text
-P7.5A architecture/ownership inventory
-→ P7.5B effective configuration + policy consolidation
-→ P7.5C application/domain cleanup
-→ P7.5D persistence/infrastructure portability audit
-→ P7.5E observability/operational shape
-→ P7.5F regression gate + architecture freeze
-→ P8 extensibility
-```
+Canonical handoff text no longer calls P8 next. Still open: `.agents/context/PRODUCT.md` and `DESIGN.md`, the P7.5 closure report, and a hosted Synthetic run on the candidate SHA. P7.5 is not closed. P8 does not start.
 
 Do **not** begin by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
-
-The next phase should first prove which architecture changes are actually necessary.
