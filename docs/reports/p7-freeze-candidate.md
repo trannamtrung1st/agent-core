@@ -2,11 +2,51 @@
 
 This report records the **P7 implementation freeze**. Do not reopen P7 without a reproducible regression or an explicit product requirement that belongs in a later phase rather than P8+. Do not reopen P1–P6 freeze baselines as part of P7 evidence.
 
+## P7 scope boundary (what P7 owns)
+
+P7 is **not** a generic run-control console, Workflow orchestration layer, parent/child run manager, or autonomous execution loop. It is two **separate** observed capabilities on the same product:
+
+| Track | Owns | Does not own |
+| --- | --- | --- |
+| **Harness Admin (W01–W08)** | Owner-protected `/api/v2/admin/...`: definition drafts/publications, managed instances, personas, scoped learned-memory delete/reset, automation registration revoke, append-only **`AdminEvents`**, effective-config read models, publish/validation/eval gates | Session Runtime mailbox, SignalR transport, live pause/resume/cancel/approve of an in-flight chat turn, P6 `WorkItem` execution control, server-derived `allowed_actions[]` for runs |
+| **Session observer durability (post-freeze correction)** | **`ConversationTurnExecution`** for accepted user turns; detach/refresh/reopen **reattach** to the same execution/response; **`session.ready`** snapshot + sequenced **`SessionEvent`** deltas as the observation contract | Unattended autonomous Plan→Execute→Validate loops; execution continuing without any runtime host; Background Work as a substitute for conversational execution authority |
+
+Harness Admin mutates harness state only through existing Application services (`AgentDefinitionLifecycleService`, `AdminAgentInstanceService`, `AdminMemoryHistoryService`, `AdminAutomationHistoryService`, …). Chat and Background Work remain separate surfaces (SignalR + session/work HTTP), not Admin routes.
+
 ## Freeze status
 
-**P7 is frozen** on verified follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). Prior canonical W08 gate **`f4107d7`** / workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) remains historical evidence for the original closure. **Hosted exact-SHA gate on `2acb1a8`:** confirm workflow **green** on push (repair **`9519a83`**, run [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) — Domain through Compose **green**, Synthetic Playwright **56/57** before P7E selector fix). **P8** is next.
+**Harness Admin is frozen** on verified follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last harness behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). Prior canonical W08 gate **`f4107d7`** / workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) remains historical evidence for the original Admin closure. **Hosted exact-SHA gate on `2acb1a8`:** workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — Domain through Compose **green**, Synthetic Playwright **56/57** before P7E selector fix in **`2acb1a8`**.
 
-**Post-freeze session-durability correction:** `94b65b8` introduced `ConversationTurnExecution`, but workflow `36264158651` was red because legacy current-model `EnsureCreated()` databases did not stamp its migration. The follow-up working tree validates/stamps the complete table/index shape, gives queued accepted turns execution ownership, exposes stable execution identity on reattach, restores durable streaming/terminal history without duplicate prefixes, and covers refresh, close-past-grace, Stop-after-refresh, approval reattach, and Voice terminal text in Synthetic Playwright. This is not a new P7 freeze claim until the follow-up exact SHA is hosted green.
+**Session durable streaming evidence (bookkeeping, not a second harness milestone)** is recorded on **`93cb2ab`** (refresh/live delta continuation) and **`3e75934`** (gate evidence: scheduler test race fix, past-grace live resume E2E, in-flight history merge guard). Confirm hosted **Synthetic + Compose green** on **`3e75934`** before treating this bookkeeping row as closed. Earlier implementation landed from **`94b65b8`** through **`b6f577d`** (migration stamp, queued execution ownership, detach/headless acceptance). **P8** is next for platform/harness extensibility; execution-control façade work is explicitly deferred (see below).
+
+### Session durable streaming — precise claim (not autonomous execution)
+
+This correction proves **observer durability** only:
+
+- An accepted turn’s **`ConversationTurnExecution`** survives client refresh or transport detach while the runtime still owns open work.
+- A new browser attachment **reattaches** to the same execution/response identity instead of minting another accepted turn for the same user event.
+- **`session.ready`** and the durable session/history snapshot are **current authoritative state** for lifecycle, history rows, `conversationExecutionId`, and `activeResponseId`.
+- **`SessionEvent` sequence** (`lastServerSequence` on the client) orders **observation/progress** (deltas, terminal notifications, receipts). Reconnect applies a fresh ready snapshot, then continues sequenced events; the client store is a **projection**, not execution authority.
+- Reconnect does **not** claim closed-loop unattended autonomy (no self-directed next work item, no operator run console, no unified execution audit).
+
+This does **not** close unattended or autonomous execution generally.
+
+### Session durable streaming — evidence map
+
+| Claim | Primary evidence |
+| --- | --- |
+| Same `executionId` / `responseId` across browser refresh | Playwright `web/e2e/text-conversation.spec.ts` — *refresh mid-stream restores the same durable execution…* (`before`/`after` `window.__agentCore.conversationExecution()`); Playwright `web/e2e/approval-flow.spec.ts` — approval reattach identity |
+| Same identity after detach grace while response still running | Playwright `web/e2e/text-conversation.spec.ts` — *reopening past detach grace while response is still running…* (`expect.poll` on `executionId`, `responseId`, `outputState`) |
+| Headless detach + transport reattach projects execution on `session.ready` | `ConversationTurnExecutionDurabilityTests.Transport_detach_then_reattach_ready_restores_open_execution_projection` |
+| Open execution row stable across detach with accepted work | `AcceptedTurnDetachDurabilityTests` (single open `ExecutionId` before/after detach path) |
+| No duplicate user turn or execution on repeated source event | `ConversationTurnExecutionDurabilityTests.Repeated_source_event_does_not_duplicate_turn_or_execution` |
+| No duplicate tool side effect for same response identity | `ToolApprovalTests` / `EmailToolTests` duplicate paths scoped to `responseId` |
+| `session.ready` publishes live stream prefix without widening durable receipt boundary | `DeliveryReceiptTests.Reattach_ready_includes_published_stream_text_before_receipts_catch_up`; protocol field notes in [14-api-and-realtime-protocol.md](../14-api-and-realtime-protocol.md) (`session.ready` history row + `conversationExecutionId`) |
+| Wire maps `conversationExecutionId` on ready | `SessionEventMapperProgressTests` |
+| Uncertain `user.text` retry across reconstruction does not duplicate turn | `SessionRealtimeLifecycleTests.Uncertain_source_event_retry_across_reconstruction_does_not_duplicate_user_turn` |
+| Client history merge does not clear live execution while output still in flight after ready | `web/src/services/sessionHistory.test.ts` — *keeps live execution state when durable history is terminal but output is still in flight* |
+
+There is no separate Playwright assertion that counts provider HTTP posts on refresh; continuity is bounded by **one open execution row per accepted source event** and **no second accepted turn** on reconnect tests above.
 
 ### Closure repair chain (2026-09-26)
 
@@ -138,11 +178,23 @@ Authoritative command table and counts: [p7g-history-rollback-final-gate.md § W
 
 A parent commit, descendant commit, or pre-push local-only run is **not** freeze evidence.
 
-## Explicit deferrals (unchanged)
+## Explicit deferrals (unchanged proposal §14)
 
-Per master proposal §14 — not implemented in P7:
+Not implemented in P7:
 
 - Admin conversational operator agent; persistent mutable instance filesystem; plugin marketplace; generalized MCP/provider framework; arbitrary custom tool-provider framework; visual workflow builder; multi-agent orchestration; standing/bulk future-action authorization; organization/team management; full RBAC/tenancy; enterprise audit/compliance; distributed scheduler/runtime infrastructure.
+
+## P8+ follow-ons (execution control — not unfinished P7)
+
+These are **future** product/architecture items. They are **not** P7 acceptance criteria and are **not** defects in the frozen harness Admin scope:
+
+| Follow-on | Notes |
+| --- | --- |
+| Unified **execution-control façade** across Session Runtime + P6 `WorkItem` | Today: SignalR/session lifecycle HTTP, `WorkItemEndpoints`, and `SessionHost` own separate paths; no `ChildRunControlPort` or Workflow parent/child product exists in this repository. |
+| **Server-derived `allowed_actions[]`** for operator UI | Chat and Background Work infer buttons from status flags (`needsApproval`, `cancellationAvailable`, session `lifecycleStatus`); Admin effective-config is harness read-only. |
+| **Unified append-only operator audit** for session pause/cancel/resume and work-item approve/reject/cancel | Harness mutations use **`AdminEvents`** (`LocalOwner` / `System`, `OperationId`, allowlisted summaries). Live session and work interventions are out of scope for that store by design. |
+| **Workflow / parent-child run orchestration** | Not a product surface in `agent-core`; no `workflow-contract.md` in this repo. |
+| **Autonomous loop durability** (Plan→Execute→Validate→next item without user/trigger) | Distinct from **observer** durable streaming after refresh/detach. |
 
 **P8** harness/platform extensibility and **P10** multi-user auth/RBAC remain later phases.
 

@@ -128,6 +128,8 @@ A detached WorkItem does not add a SignalR event family and does not write its r
 
 User-accepted chat turns use a separate `ConversationTurnExecution` record. `user.text` is accepted only after the user entry and that execution row are durable. The execution becomes Completed, Failed, or Cancelled only after the terminal assistant entry is persisted. These rows are not Background Work items.
 
+For live observation, **`session.ready`** and the durable history snapshot are authoritative; **`SessionEvent`** envelopes carry sequenced progress (including `agent.text.delta` and terminal response events). Clients track `lastServerSequence` as the replay cursor. Reconnect fetches a fresh ready snapshot, then continues from the server sequence—client projections must not treat replayed events as the source of lifecycle or execution identity.
+
 ## Follow-on P1 observed and frozen
 
 Observed event families stay as above, including mailbox `LifecycleTransitionReceived`, `CompletionReturned`, additive `lifecycleStatus` on `StateChanged` / `session.ready`, and `session.completion.intent` for advisory RequestComplete. History paging does not invent a second event bus. See [Technology Decisions](10-technology-decisions.md#decision-additive-semantic-lifecycle-beside-protocol-v1-status).
