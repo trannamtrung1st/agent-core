@@ -79,6 +79,51 @@ public sealed class AdminReadServiceTests
         Assert.False(config.DurableExecutionEligibility.CanAcceptNewTriggeredWork);
     }
 
+    [Fact]
+    public async Task Effective_configuration_projects_shared_definition_fields()
+    {
+        var preferences = new ProviderPreferences("primary-llm", "primary-stt", "primary-tts");
+        var definition = Sample("examiner", 1, "Examiner v1") with
+        {
+            ProviderPreferences = preferences,
+            Environment = new RoleEnvironment(
+                Harness: ["beta-harness", "alpha-harness"],
+                KnowledgeSources: [new KnowledgeSourceRef("handbook", "Handbook", "cite-handbook")],
+                ToolAllowlist: [ToolCatalog.KnowledgeRetrieve],
+                Workspace: new WorkspaceTemplatePolicy("support-desk"))
+        };
+        var instance = new AgentInstance(
+            Guid.Parse("019944af-00d1-7000-8000-000000000003"),
+            "examiner",
+            1,
+            definition.Identity,
+            AgentInstanceLifecycle.Active,
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+            DateTimeOffset.Parse("2026-01-02T00:00:00Z"),
+            Compatibility: false);
+        var service = new AdminReadService(
+            new VersionedDefinitions(definition),
+            new VersionedDefinitions(definition),
+            new EmptyAdminDefinitionStore(),
+            new SingleInstanceStore(instance),
+            TestModelCatalogs.Synthetic(),
+            new AllowAllToolGate());
+
+        var config = await service.GetEffectiveConfigurationAsync(instance.InstanceId);
+
+        Assert.Equal(["alpha-harness", "beta-harness"], config.HarnessReferences);
+        Assert.Equal("support-desk", config.WorkspaceTemplateId);
+        var source = Assert.Single(config.KnowledgeSources);
+        Assert.Equal("handbook", source.Identity);
+        Assert.Equal("Handbook", source.Title);
+        Assert.Equal("cite-handbook", source.Citation);
+        Assert.Equal(MemoryPolicy.Disabled, config.MemoryPolicy);
+        Assert.Equal(preferences, config.ProviderPreferences);
+        Assert.Equal([ToolCatalog.KnowledgeRetrieve], config.EffectiveToolAllowlist);
+        Assert.Equal("scripted-alpha", config.EffectiveModel.CatalogKey);
+        Assert.Equal("systemDefault", config.EffectiveModel.SelectionSource);
+    }
+
     private static AgentDefinition Sample(string id, int version, string name) =>
         new(
             1,
