@@ -1,3 +1,4 @@
+using AgentCore.Application;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -21,7 +22,7 @@ public static class ExplicitUserMemoryAdmission
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
-        var policy = definition.MemoryPolicy ?? MemoryPolicy.Disabled;
+        var policy = EffectiveConfigurationComposer.MemoryPolicyOf(definition);
         if (!policy.SessionMemory)
         {
             return ExplicitUserMemoryCaptureOutcome.Unavailable;

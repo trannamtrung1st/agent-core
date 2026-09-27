@@ -1,3 +1,4 @@
+using AgentCore.Application;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -305,7 +306,7 @@ public sealed class AdminMemoryService(
             .ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound(
                 $"Agent '{instance.DefinitionId}' version {instance.ActiveVersion} was not found.");
-        return definition.MemoryPolicy ?? MemoryPolicy.Disabled;
+        return EffectiveConfigurationComposer.MemoryPolicyOf(definition);
     }
 
     private async ValueTask<SessionSnapshot> RequireSessionForInstanceAsync(
