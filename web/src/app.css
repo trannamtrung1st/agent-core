@@ -1675,6 +1675,16 @@ body,
   margin-block-end: var(--ac-space-default);
 }
 
+.admin-instance-identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-default);
+}
+
+.admin-instance-identity > h5.ant-typography {
+  margin: 0;
+}
+
 .admin-effective-config-wide {
   grid-column: 1 / -1;
 }
@@ -1688,6 +1698,14 @@ body,
   margin-block-start: var(--ac-space-section);
   padding-block-start: var(--ac-space-default);
   border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-definition-drafts .admin-draft-status {
+  margin-block-start: var(--ac-space-default);
+}
+
+.admin-definition-drafts .admin-durable-publications {
+  margin-block-start: var(--ac-space-section);
 }
 
 .admin-draft-list-heading {

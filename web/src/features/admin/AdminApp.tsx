@@ -852,14 +852,14 @@ function DefinitionDetail({
               </Flex>
           {lifecycleError ? (
             <Alert
+              className="admin-draft-status"
               type="error"
               showIcon
               message={lifecycleError}
               action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
-              style={{ marginTop: 12 }}
             />
           ) : null}
-          {lifecycleLoading ? <Spin style={{ marginTop: 12 }} /> : null}
+          {lifecycleLoading ? <Spin className="admin-draft-status" /> : null}
           {!lifecycleLoading && draftSummaries.length > 0 ? (
             <div className="admin-draft-list">
               <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-list-heading">
@@ -919,7 +919,13 @@ function DefinitionDetail({
             <Typography.Text type="secondary">No drafts yet. Fork a catalog version to start.</Typography.Text>
           ) : null}
           {publications.length > 0 ? (
-            <Descriptions bordered size="small" column={1} style={{ marginTop: 16 }} title="Durable publications">
+            <Descriptions
+              className="admin-durable-publications"
+              bordered
+              size="small"
+              column={1}
+              title="Durable publications"
+            >
               {publications.map((item) => (
                 <Descriptions.Item key={item.version} label={`v${item.version}`}>
                   <Flex vertical gap={8} align="start">
@@ -2083,7 +2089,7 @@ export function EffectiveConfigView({
   return (
     <div className="admin-effective-config-grid">
       <section
-        className={`admin-effective-config-section${hidePersona ? " admin-effective-config-wide" : ""}`}
+        className={`admin-effective-config-section admin-instance-identity${hidePersona ? " admin-effective-config-wide" : ""}`}
         aria-label="Instance identity"
       >
         <Typography.Title level={5}>Instance identity</Typography.Title>
@@ -2092,7 +2098,7 @@ export function EffectiveConfigView({
           lifecycle={config.instanceLifecycle}
           definitionStatus={config.definitionStatus}
         />
-        <Descriptions bordered size="small" column={1} style={{ marginTop: 12 }}>
+        <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label="Instance id">{config.instanceId}</Descriptions.Item>
           <Descriptions.Item label="Definition status">{config.definitionStatus}</Descriptions.Item>
           <Descriptions.Item label="Lifecycle">{config.instanceLifecycle}</Descriptions.Item>
