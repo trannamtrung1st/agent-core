@@ -103,6 +103,26 @@ Observed A–H persistence/layout. Phase I remains not-applicable: Support, Comp
 
 PostgreSQL migration later replaces EF provider, revisits GUID/time conversions, migrations and concurrency tests; business interfaces stay stable. Provider change alone does not magically make SQLite-specific SQL portable, so avoid provider SQL outside Infrastructure and test migration data explicitly.
 
+## P7.5 persistence audit (observed)
+
+This pass keeps the current stores. No persistence code changed. SQLite stays the durable provider. Domain and Application do not reference `Microsoft.Data.Sqlite` or EF Core.
+
+| Check | Decision | Evidence |
+| --- | --- | --- |
+| SQLite SQL and locking | Keep | `sqlite_master` queries and `Microsoft.Data.Sqlite` stay in Infrastructure, including `SqliteMemoryStore`. `SqlitePragmaInterceptor` sets `journal_mode=WAL`, `busy_timeout`, and `foreign_keys`. `SqliteMemoryStore.BackupDatabaseWithRetryAsync` retries backup. |
+| Migration determinism | Keep | EF migrations stay under `src/AgentCore.Infrastructure/Persistence/Migrations`. `P7EnsureCreatedReopenMigrationTests` reopens a legacy database and refuses to stamp an incompatible shape. No non-repeatable migration was shown. |
+| Transactions | Keep | Explicit transactions cover `SqliteMemoryStore.SaveAsync`, definition `DeleteDraftAsync` and `PublishDraftAsync`, structured-memory writes, `SqliteTriggerStore.TryAdmitScheduledAsync`, work-item `MutateAsync`, `RecoverExpiredClaimsAsync`, and `ExpireDueApprovalsAsync`, `SqliteDurableWorkHandoff.AcceptCoreAsync`, attachment `BindToEntryAsync`, and Admin history append plus memory-scope reset. Managed instance history stages the instance row and `AdminEvent` in one `SaveChanges`. |
+| Idempotency | Keep | Operation-id replay is covered by `AdminManagedInstanceHistoryTests`, `AdminInstanceDefinitionVersionHistoryTests`, `AdminInstancePersonaHistoryTests`, and `AdminInstanceLifecycleHistoryTests`. `WorkItemStoreContractTests.Create_is_owner_scoped_and_idempotent_for_one_source_occurrence` and `TriggerStoreContractTests.Occurrence_admission_dedupes_and_hides_other_owners` cover duplicate source events. |
+| Process-local versus durable truth | Keep | The Session Runtime mailbox and the `SessionHost` connection table are process-local. Snapshots, `ConversationTurnExecution`, triggers, WorkItems, approvals, and Admin events are durable. Accepted user text creates the execution row from `EnsureConversationExecutionsForUserBatchAsync` on the save path. `AcceptedTurnDetachDurabilityTests.Detach_after_ack_before_response_still_executes` covers work that continues after detach. |
+| Restart and reopen | Keep | `P7EnsureCreatedReopenMigrationTests`, `TriggerStoreContractTests.Sqlite_reopen_preserves_registration_and_occurrence`, `WorkItemStoreContractTests.Sqlite_reopen_preserves_cancellation_result_and_approval`, and `TriggerOccurrenceRoutingTests.Pending_occurrence_survives_sqlite_restart`. |
+| Stale revision | Keep | `WorkItemStoreContractTests.Stale_revision_and_generation_cannot_checkpoint_or_complete`. Instance history updates reject a mismatched `ExpectedRevision` before `SaveChanges`. |
+| Approval resume | Keep | `ToolApprovalTests.Approval_flow_executes_once_after_explicit_approve`, `DurableReminderTests.Approval_waits_without_a_claim_and_resumes_the_same_work_item`, and `WorkItemStoreContractTests.Approval_resume_claims_the_same_attempt_at_the_budget_limit`. |
+| Logical `Path` checks | Keep | `WorkspaceFileNames` uses `GetFileName`, `GetExtension`, and `GetFileNameWithoutExtension` after slash normalization. `RolePermissions.AllowsLogicalPath` rejects a non-slash rooted logical path. `SessionToolExecutor.LooksLikeHostPath` rejects drive, UNC, and non-slash rooted tool arguments. Workspace search uses `GetFileName` on logical paths. Attachment materialization uses `GetFileName` on `LogicalPath`. None of these writes a host path. |
+| Physical bytes | Keep | `FileSessionWorkspace`, attachment blobs, artifact blobs, and definition-resource content stay in Infrastructure. Contracts keep logical ids. |
+| Separate stores | Keep | `IAttachmentStore`, `IArtifactStore`, `IAgentDefinitionResourceAdminStore`, and `ISessionWorkspace` stay separate. |
+| Sandbox and workers | Keep | `DockerSandboxExecutor` remains the sandbox. There is no `ISandboxProvider`. `TriggerSchedulerHostedService`, `DurableWorkIntakeHostedService`, `DurableWorkHostedService`, and `ConversationExecutionHostedService` stay single-process. |
+| Secrets | Keep | Credentials stay in the environment, `dotnet user-secrets`, or the gitignored Compose `.env`. `ProviderPreferences` names aliases only. `Admin_responses_do_not_leak_secret_sentinels` rejects `OPENROUTER_SECRET_SENTINEL` on definition, inventory, and effective-config responses. |
+
 ## Strongly typed options
 
 Bind/validate on startup with standard .NET options and ValidateOnStart. These option type names match the root sections below. Nested providers use capability-specific records; do not inject IConfiguration into Domain/Application. Session factory receives a validated effective policy snapshot.
