@@ -4,6 +4,8 @@
 
 Agent Core is one .NET 10 modular monolith with a React SPA. Its purpose remains to make an AI agent feel present in a live conversation. The Agent Runtime owns conversational meaning; the Interaction Controller arbitrates turn-taking. Both execute under one Session Runtime's state ownership.
 
+The pipeline in this section is the live conversation path. Authoring and Operations sit beside that path. The [responsibility model](#responsibility-model) names the current owner of each durable concept. It does not add projects, services, or a second runtime.
+
 The canonical MVP is a composed, text-first voice pipeline: STT → Interaction Controller → Agent Runtime / text Language Model → speech segmentation → TTS. `serverAudio` keeps processing microphone input during generated speech; full-duplex there describes the user's experience, not a requirement for audio reasoning. Browser STT (`clientTranscript`) is currently half-duplex during agent output; see [Voice](06-realtime-voice.md). Native speech-to-speech is future-only and does not participate in MVP startup, routing or provider selection.
 
 ```mermaid
@@ -34,6 +36,76 @@ The adapter's outgoing edges are deployment choices, not three simultaneous requ
 
 
 [Repository Structure](11-repository-structure.md) specifies project references. [Backend Interfaces](04-backend-interfaces.md) owns C# ports. [Protocol](14-api-and-realtime-protocol.md) owns browser DTOs; no universal event bus DTO bridges every layer.
+
+## Responsibility model
+
+Authoring, Runtime, and Operations are responsibilities inside the existing modular monolith. Effective configuration is a projection of trusted server state. Use-case authorization stays at the caller. Persistence and providers store or adapt; they do not become the product owner. Observability records identifiers, state, reason, and timing. It does not own lifecycle.
+
+```text
+                         Agent Core
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+      Authoring            Runtime           Operations
+          │                  │                  │
+  Definition drafts     Agent instances     Triggers
+  Resources             Sessions            Occurrences
+  Validation/evals      Conversation exec   WorkItems
+  Publication           Tools               Approvals
+  Version history       Memory              Admin history
+```
+
+**Authoring** prepares immutable configuration. `AgentDefinitionLifecycleService` creates, updates, and deletes drafts and deprecates publications through `IAgentDefinitionAdminStore`. `AgentDefinitionDraftPublishService` runs validation, evaluation evidence, and diff, then asks the lifecycle service to commit the publication. `AgentDefinitionResourceService` mutates draft resource bytes; publish freezes those bytes. Built-in definition files stay immutable seeds. Publishing or deprecating does not rewrite stored session snapshots.
+
+**Runtime** executes one conversation per session. `SessionManager` activates a session. That session's `SessionRuntime` mailbox is the only writer of live conversational state. Learned memory is `StructuredMemoryService` over `IStructuredMemoryStore`. Session snapshots stay on `IMemoryStore`. Session tools mutate the session workspace and create artifacts under session authorization. The chat catalog lists active managed instances through `AgentInstanceService.ListChatEligibleAsync`. Compatibility agent instances are resolved by `AgentInstanceService` when a chat session has no managed instance.
+
+**Operations** covers future and background work plus harness evidence. `TriggerRegistrationService` writes registration rows for live schedule commands. Admin cancel applies the same `TriggerRegistrationMutations.Cancel` and records a revoke event. `TriggerScheduler` admits due schedules. `DurableOrderEventIngress` admits an allowlisted application event into the same occurrence store. `TriggerOccurrenceRouter` routes an admitted occurrence to one live runtime or leaves it `AwaitingDurableWork`. `DurableWorkIntake`, hosted by `DurableWorkIntakeHostedService`, accepts that waiting occurrence as one `WorkItem`. `DurableReminderExecutor`, run by `DurableWorkHostedService`, claims and completes due work. Admin history is append-only evidence of a harness mutation, not a second policy engine.
+
+`AdminReadService` and `AdminEffectiveConfigurationResolver` project configuration for Admin. They do not own definitions, instances, persona, tools, or policy, and they do not execute tools. Session Runtime files do not call Admin lifecycle services. Admin services do not dispatch conversation turns.
+
+Infrastructure stores persist the rows named below. API routes map commands and results. A route that only checks the trusted-local owner and forwards to an application service is not a second owner.
+
+### Ownership
+
+| Concept | Primary lifecycle owner | Mutation authority | Durable source | Readers / references | Category |
+| --- | --- | --- | --- | --- | --- |
+| AgentDefinitionDraft | `AgentDefinitionLifecycleService` | draft create, fork, update, delete | `IAgentDefinitionAdminStore` (InMemory or SQLite) | Admin HTTP, validation, diff, evaluation | configuration |
+| AgentDefinitionVersion / publication | `AgentDefinitionDraftPublishService` commits through the lifecycle service; deprecate stays on the lifecycle service | publish freezes bytes; deprecate changes metadata only | built-in files plus durable publications via `IAgentDefinitionStore` | sessions, instances, work provenance, Admin reads | configuration |
+| DefinitionResource | `AgentDefinitionResourceService` | draft resource bytes; publish freezes them in the publication transaction | definition-resource stores | evaluation manifest, published knowledge reads | configuration |
+| AgentInstance, managed | `AdminAgentInstanceService` | create, reassociate/rollback, persona revision, archive/unarchive, each with an `AdminEvent` | `IAgentInstanceStore` | sessions pin `agentInstanceId`; chat catalog `GET /api/v2/agent-instances` through `AgentInstanceService.ListChatEligibleAsync`; triggers; work owner; Admin reads | runtime identity |
+| AgentInstance, compatibility | `AgentInstanceService` | resolve, backfill, and forward-align `Compatibility: true` rows | same `IAgentInstanceStore` | legacy chat sessions that have no managed instance | runtime identity |
+| PersonaRevision | `AdminAgentInstanceService.UpdatePersonaAsync` | typed persona revision on the managed instance, with history | instance row | prompt context, work provenance | trusted identity |
+| Session | `SessionManager` activates; `SessionRuntime` mailbox owns live mutation | mailbox only | `IMemoryStore` snapshots | hub, catalog, history | runtime |
+| ConversationTurnExecution | Session runtime creates the row when a user turn is accepted | session claims on live start and completes, fails, or cancels the row; `ConversationExecutionCoordinator` recovers expired claims, claims runnable rows, and dispatches through `ConversationTurnRunner` back to the session | `IConversationTurnExecutionStore` | `session.ready`, sequenced events | runtime evidence |
+| Learned memory | `StructuredMemoryService` | admit, retrieve, reset under memory policy | `IStructuredMemoryStore` | prompt via `SessionMemoryPrompt`; Admin memory operations | learned state |
+| Admin memory operations | `AdminMemoryHistoryService` for delete/reset; `AdminMemoryService` for list and the allow check | HTTP delete/reset builds an `AdminEvent` and calls `IAdminP7eHistoryMutator`. The mutator calls `EnsureDeleteAllowedAsync` or `EnsureResetAllowedAsync`. InMemory then calls `AdminMemoryService` delete/reset. SQLite tombstones or resets the same scopes inside the history transaction | `IStructuredMemoryStore` plus `IAdminEventStore`. Session lookup for a session-scoped operation uses `IMemoryStore` | Admin UI | learned-state operation |
+| TriggerRegistration | `TriggerRegistrationService` for live commands | create, update, and cancel. Admin HTTP cancel goes through `AdminAutomationHistoryService`. InMemory reaches `TriggerRegistrationService`. SQLite applies `TriggerRegistrationMutations.Cancel` in `SqliteAdminP7eHistoryPersistence` inside the revoke transaction | `ITriggerStore` | scheduler, live schedule commands, Admin automation | security / future-event state |
+| TriggerOccurrence | `TriggerScheduler` admits due schedules; `DurableOrderEventIngress` admits allowlisted application events; `TriggerOccurrenceRouter` routes | admit, route live, or leave `AwaitingDurableWork` | `ITriggerStore` | live runtime or `DurableWorkIntake` | runtime |
+| WorkItem | `DurableWorkIntake`, hosted by `DurableWorkIntakeHostedService`; then `DurableReminderExecutor`, run by `DurableWorkHostedService` | accept, checkpoint, approve-resume, complete/cancel | work store | Background Work UI, recovery | runtime execution |
+| Approval | `ToolPolicy` decides | live wait in `SessionRuntime.Approval`; durable resume in work checkpoints; grant matches the action hash | session/work receipts | hub `agent.approval.*`, work HTTP | security |
+| AdminEvent | harness mutation that owns the change | append-only in the same transaction as that mutation | `IAdminEventStore` | `AdminHistoryService`, owner-protected GET | evidence |
+| Attachment | session authorization in `SessionManager`; bytes in `IAttachmentStore` | upload, bind, TTL delete | attachment store | composer, history chips | runtime input |
+| Artifact | session tools and `SessionManager` through `IArtifactStore` | create under session authorization | artifact store | history refs | runtime output |
+| SessionWorkspace | `ISessionWorkspace`; `FileSessionWorkspace` in Infrastructure | session-owned file mutations from `SessionToolExecutor` and `SessionManager` | host filesystem; paths stay in Infrastructure | workspace tools, sandbox | runtime mutable files |
+
+Known boundaries that stay separate:
+
+- Managed and compatibility instances share `IAgentInstanceStore` and stay different use cases. Product HTTP for create, persona, lifecycle, and active-version changes calls `AdminAgentInstanceService` and writes an `AdminEvent`. `AgentInstanceService` still exposes history-free `CreateAsync`, `UpgradeAsync`, `UpdatePersonaAsync`, and `SetLifecycleAsync`. Production HTTP and `SessionManager` do not call those four methods. They remain on `IAgentInstanceService` for existing tests. They are not the Admin owner and are not a second product policy.
+- Admin HTTP cancel goes through `AdminAutomationHistoryService`. Live schedule commands authorize with `TriggerAuthorization` and then use `TriggerRegistrationService`. The InMemory history mutator also uses that service, via `AdminAutomationService.CancelRegistrationAsync`. The SQLite history mutator applies `TriggerRegistrationMutations.Cancel` in the same database transaction as the revoke event. `AdminAutomationService.CancelRegistrationAsync` is not the Admin HTTP entry. The cancel rule is the domain mutation, not a second registration policy.
+- Definition draft create/delete and publication create/deprecate append `AdminEvent` rows inside `IAgentDefinitionAdminStore`, which calls `AdminEventFactory`. Instance and persona events are built by `AdminAgentInstanceService` and written by `IAgentInstanceStore` in the same mutation. Memory and trigger-revoke events are built by `AdminMemoryHistoryService` and `AdminAutomationHistoryService` and written by `IAdminP7eHistoryMutator` in the same mutation. The store does not decide whether the mutation is allowed.
+- `ConversationTurnExecution` stays a session/runtime contract. Admin does not absorb it.
+- `DurableOrderEventIngress.PublishOrderStatusAsync` is the application-event admitter, registered as `IDurableApplicationEventIngress`. `TriggerRegistrationService.AdmitOccurrenceAsync` can insert an occurrence and has no production caller. That method is a test-only port leftover, not a second product owner.
+
+### Consolidation candidates
+
+These are evidence for later consolidation slices. This section does not move code.
+
+- Effective configuration is recomposed per surface. Interactive binding, `AdminEffectiveConfigurationResolver`, the Admin memory-policy read, and `DurableWorkContextFactory` each assemble definition, instance, persona, and tool offer. A later helper may return the current Admin projection only where those rules already match. Session model override, detached tool denial, exact-action grants, and evaluation evidence stay at their callers.
+- `SessionHost` (`src/AgentCore.Api/Realtime/SessionHost.cs`), `AdminEndpoints`, `PromptContextBuilder`, `SessionToolExecutor`, and `TriggerScheduleCommands` are large. A later slice may move an application rule out of the host or an endpoint, or split one mixed method group. Line count alone is not a reason to split.
+- `SessionRuntime` is already split into partials (`Controller`, `ConversationExecution`, `Initiative`, `Tts`, `Approval`, `AcceptedWork`, `Compaction`, `Memory`, `Triggers`, `Speech`). Further splits wait until one partial owns two unrelated lifecycles.
+- The history-free managed-instance methods on `AgentInstanceService` are a candidate to retire only after tests still cover the Admin history path. Deleting them in the ownership write-up would change a port that tests still call.
+
+Justified non-merges: do not merge managed and compatibility instance services; do not merge attachment, artifact, definition-resource, and workspace stores; do not add a project per box in the diagram above; do not fold Admin into Session Runtime.
 
 ## Per-session execution
 
@@ -126,7 +198,7 @@ P7 **owns Harness Admin W01–W08 only**; it is not a run-control or Workflow or
 
 ## P6 durable work (observed)
 
-`DurableWorkHostedService` accepts each `AwaitingDurableWork` occurrence as one `WorkItem` and runs due work on a separate cadence from P5 scheduling and routing. P5 still admits schedules and chooses live versus durable. The owner is Agent Instance plus trusted profile. The source session is provenance only. A scheduled reminder is tool-free. An application event uses the same tool limits as a live turn and a narrower offer: session-scoped tools and trigger writes are not available. Sensitive tools suspend without a claim until Background Work approves the exact action hash. Results stay out of chat history. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` still do not continue after `RequestDeactivate`. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
+`DurableWorkIntake`, hosted by `DurableWorkIntakeHostedService`, accepts each `AwaitingDurableWork` occurrence as one `WorkItem`. `DurableReminderExecutor`, run by `DurableWorkHostedService`, claims and completes due work on a separate cadence from P5 scheduling and routing. P5 still admits schedules and chooses live versus durable. The owner is Agent Instance plus trusted profile. The source session is provenance only. A scheduled reminder is tool-free. An application event uses the same tool limits as a live turn and a narrower offer: session-scoped tools and trigger writes are not available. Sensitive tools suspend without a claim until Background Work approves the exact action hash. Results stay out of chat history. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` still do not continue after `RequestDeactivate`. See [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
 ## P3 tools and integrations (observed)
 
