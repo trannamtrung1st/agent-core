@@ -274,7 +274,7 @@ P7.5 may change implementation structure, names, internal APIs, dependency direc
 
 P7.5 must not intentionally change user-visible product behavior.
 
-Observed through the local closure report in `docs/reports/p7.5-freeze-candidate.md`. That report does not record a hosted SHA, so P7.5 is not closed:
+Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36348699304` is green on `b112198`:
 
 - Ownership map is in `docs/03-system-architecture.md`. Authoring, Runtime, and Operations are responsibilities, not new projects.
 - `EffectiveConfigurationComposer` owns the Admin projection and the shared memory-policy default. Session bind, detached work, and draft evaluation stay on their own use cases. No policy defect was found.
@@ -283,7 +283,7 @@ Observed through the local closure report in `docs/reports/p7.5-freeze-candidate
 - Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
 - Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
 - Canonical handoff text no longer calls P8 next. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `/docs` still wins.
-- The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. The hosted workflow on the candidate SHA is still open.
+- The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. Hosted workflow `36348699304` is green on `b112198`.
 
 ---
 
@@ -968,8 +968,8 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-**P7.5G — hosted Synthetic SHA** is still open.
+**P8** is next.
 
-Canonical handoff text no longer calls P8 next. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `docs/reports/p7.5-freeze-candidate.md` records the local gate and Compose result and does not freeze P7.5. A green hosted run of `.github/workflows/synthetic.yml` on the candidate SHA is still required. P8 does not start.
+P7.5 is frozen on `b112198`. Hosted workflow [`36348699304`](https://github.com/trannamtrung1st/agent-core/actions/runs/36348699304) is green on that SHA. The closure report is `docs/reports/p7.5-freeze-candidate.md`. Start P8 from one concrete provider need. Do not add a universal provider interface.
 
 Do **not** begin by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
