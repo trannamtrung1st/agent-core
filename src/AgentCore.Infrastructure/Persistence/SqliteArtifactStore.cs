@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -59,6 +60,7 @@ public sealed class SqliteArtifactStore(
         ThrowIfDeleted(sessionId);
         if (bytes.Length > maxBytesEach)
         {
+            OperationalDiagnostics.RecordResourceLimit("artifactItem");
             throw AgentCoreErrors.ArtifactQuotaExceeded();
         }
 
@@ -78,6 +80,7 @@ public sealed class SqliteArtifactStore(
                 .ConfigureAwait(false);
             if (used + bytes.Length > maxBytesSession)
             {
+                OperationalDiagnostics.RecordResourceLimit("artifactSession");
                 throw AgentCoreErrors.ArtifactQuotaExceeded();
             }
 

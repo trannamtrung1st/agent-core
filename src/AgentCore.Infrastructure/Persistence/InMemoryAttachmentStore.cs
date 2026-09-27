@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -52,11 +53,13 @@ internal static class AttachmentStreamIntake
                 total += read;
                 if (total > AttachmentLimits.MaxBytesEach)
                 {
+                    OperationalDiagnostics.RecordResourceLimit("attachmentItem");
                     throw AgentCoreErrors.Validation("Attachment exceeds 25 MiB.");
                 }
 
                 if (sessionUsedBytes + total > AttachmentLimits.MaxBytesSession)
                 {
+                    OperationalDiagnostics.RecordResourceLimit("attachmentSession");
                     throw AgentCoreErrors.Validation("Session attachment quota of 250 MiB would be exceeded.");
                 }
 

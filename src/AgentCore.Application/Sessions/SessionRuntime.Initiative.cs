@@ -229,6 +229,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        OperationalDiagnostics.RecordModelSelection(selection.CatalogKey, selection.ProviderAlias);
         var proposed = _snapshot with
         {
             ModelSelection = selection,

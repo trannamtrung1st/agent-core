@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
@@ -42,6 +43,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
         ThrowIfDeleted(sessionId);
         if (bytes.Length > _maxEach)
         {
+            OperationalDiagnostics.RecordResourceLimit("artifactItem");
             throw AgentCoreErrors.ArtifactQuotaExceeded();
         }
 
@@ -55,6 +57,7 @@ public sealed class InMemoryArtifactStore : IArtifactStore
             var used = _items.Values.Where(item => item.SessionId == sessionId).Sum(item => item.ByteSize);
             if (used + bytes.Length > _maxSession)
             {
+                OperationalDiagnostics.RecordResourceLimit("artifactSession");
                 throw AgentCoreErrors.ArtifactQuotaExceeded();
             }
 

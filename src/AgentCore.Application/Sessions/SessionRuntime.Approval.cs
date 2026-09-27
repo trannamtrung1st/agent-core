@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text.Json;
 using AgentCore.Application.Events;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -70,6 +72,7 @@ public sealed partial class SessionRuntime
 
             if (pending is null)
             {
+                OperationalDiagnostics.RecordApproval("unknown", "unknown", null);
                 input.Completed?.TrySetResult(ResponseApprovalResult.Unknown);
                 return;
             }
@@ -78,6 +81,7 @@ public sealed partial class SessionRuntime
                 && pending.ApprovalId == input.ApprovalId
                 && pending.ResponseId == input.ResponseId)
             {
+                OperationalDiagnostics.RecordApproval("idempotent", "idempotent", null);
                 input.Completed?.TrySetResult(ResponseApprovalResult.Idempotent);
                 return;
             }
@@ -87,6 +91,7 @@ public sealed partial class SessionRuntime
                 || _activeResponseId != input.ResponseId
                 || pending.Epoch != _epoch)
             {
+                OperationalDiagnostics.RecordApproval("stale", "stale", null);
                 input.Completed?.TrySetResult(ResponseApprovalResult.Stale);
                 return;
             }
@@ -161,6 +166,8 @@ public sealed partial class SessionRuntime
         }
 
         await MarkBoundExecutionWaitingForApprovalAsync(CancellationToken.None).ConfigureAwait(false);
+        var waitStarted = Stopwatch.GetTimestamp();
+        OperationalDiagnostics.RecordApproval("waiting", "waiting", null);
 
         await PublishAsync(
                 new SessionOutput(
@@ -201,6 +208,10 @@ public sealed partial class SessionRuntime
         }
         catch (OperationCanceledException)
         {
+            OperationalDiagnostics.RecordApproval(
+                "superseded",
+                "superseded",
+                RuntimeTelemetry.ElapsedMs(waitStarted));
             ClearPendingApproval(ApprovalWaitResult.Superseded);
             throw;
         }
@@ -217,6 +228,14 @@ public sealed partial class SessionRuntime
 
         await CompleteWaitingExternalProgressAsync(cause, responseId, operationId, CancellationToken.None)
             .ConfigureAwait(false);
+        var waitState = waitResult switch
+        {
+            ApprovalWaitResult.Approved => "approved",
+            ApprovalWaitResult.Rejected => "rejected",
+            ApprovalWaitResult.Expired => "expired",
+            _ => "superseded"
+        };
+        OperationalDiagnostics.RecordApproval(waitState, waitState, RuntimeTelemetry.ElapsedMs(waitStarted));
 
         if (waitResult != ApprovalWaitResult.Approved)
         {

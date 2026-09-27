@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
@@ -16,15 +18,20 @@ public sealed class AgentDefinitionDraftPublishService(
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
+        var started = Stopwatch.GetTimestamp();
         var draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         if (draft.Revision != expectedRevision)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "publish", "rejected", "conflict", started, draft.DefinitionId, null, null, null);
             throw AgentCoreErrors.Conflict("Draft revision is stale.");
         }
 
         var validationResult = await validation.ValidateDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         if (validationResult.HasBlockingFindings)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "publish", "rejected", "validation", started, draft.DefinitionId, null, null, null);
             var blocking = validationResult.Findings.First(finding =>
                 finding.Severity == DefinitionValidationSeverity.Blocking);
             throw AgentCoreErrors.Validation(blocking.Message);
@@ -32,6 +39,8 @@ public sealed class AgentDefinitionDraftPublishService(
 
         if (validationResult.DraftRevision != expectedRevision)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "publish", "rejected", "conflict", started, draft.DefinitionId, null, null, null);
             throw AgentCoreErrors.Conflict("Draft changed during publish validation; retry publish.");
         }
 
@@ -44,6 +53,8 @@ public sealed class AgentDefinitionDraftPublishService(
         var diffResult = await diff.GetDraftDiffAsync(draftId, cancellationToken).ConfigureAwait(false);
         if (diffResult.DraftRevision != validationResult.DraftRevision)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "publish", "rejected", "conflict", started, draft.DefinitionId, null, null, null);
             throw AgentCoreErrors.Conflict("Draft changed during publish diff; retry publish.");
         }
 

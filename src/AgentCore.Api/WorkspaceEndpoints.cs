@@ -1,5 +1,6 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
@@ -71,6 +72,7 @@ public static class WorkspaceEndpoints
 
                 if (http.Request.ContentLength is > WorkspaceLimits.MaxWritableBytes)
                 {
+                    OperationalDiagnostics.RecordResourceLimit("workspaceContentLength");
                     throw AgentCoreErrors.WorkspaceQuotaExceeded();
                 }
 
@@ -88,6 +90,7 @@ public static class WorkspaceEndpoints
                     total += read;
                     if (total > WorkspaceLimits.MaxWritableBytes)
                     {
+                        OperationalDiagnostics.RecordResourceLimit("workspaceStream");
                         throw AgentCoreErrors.WorkspaceQuotaExceeded();
                     }
 

@@ -67,6 +67,7 @@ public sealed partial class SessionRuntime
                     cancellationToken)
                 .ConfigureAwait(false);
             await persisted.Task.ConfigureAwait(false);
+            OperationalDiagnostics.RecordAttach("refused", "deadline");
             input.Attached.TrySetResult(false);
             return;
         }
@@ -74,9 +75,12 @@ public sealed partial class SessionRuntime
         if (_snapshot.Status == SessionStatus.Paused
             && SessionPauseSemantics.RequiresExplicitResume(_snapshot.PauseReason))
         {
+            OperationalDiagnostics.RecordAttach("refused", "explicitResume");
             input.Attached.TrySetResult(false);
             return;
         }
+
+        var attachPhase = _snapshot.Status == SessionStatus.Paused ? "resumed" : "cold";
 
         await ReconcileDurableConversationBeforeAttachAsync(cancellationToken).ConfigureAwait(false);
         _deactivated = false;
@@ -140,6 +144,7 @@ public sealed partial class SessionRuntime
                     plan.OutputTransport,
                     plan.RecognitionResolvable,
                     plan.SynthesisResolvable);
+                OperationalDiagnostics.RecordAttach(attachPhase, "attached");
                 RuntimeTelemetry.Record("attach", RuntimeTelemetry.ElapsedMs(started));
                 if (!await TryStartPendingUserBatchAsync(input.Context, ct).ConfigureAwait(false))
                 {
@@ -156,15 +161,19 @@ public sealed partial class SessionRuntime
         _pendingTriggerProposal = null;
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
+            OperationalDiagnostics.RecordDetach(
+                "ended",
+                _snapshot.Status == SessionStatus.Ending ? "ending" : "ended");
             await StopTransportDeliveryAsync().ConfigureAwait(false);
             return;
         }
 
+        var acceptedWork = input.Phase == DetachPhase.Auto && HasAcceptedConversationWork();
         var phase = input.Phase switch
         {
             DetachPhase.TransportOnly => DetachPhase.TransportOnly,
             DetachPhase.FinalizePaused => DetachPhase.FinalizePaused,
-            DetachPhase.Auto when HasAcceptedConversationWork() => DetachPhase.TransportOnly,
+            _ when acceptedWork => DetachPhase.TransportOnly,
             _ => DetachPhase.FinalizePaused
         };
 
@@ -188,6 +197,9 @@ public sealed partial class SessionRuntime
             }
 
             _headlessTransportDetached = true;
+            OperationalDiagnostics.RecordDetach(
+                "transportOnly",
+                acceptedWork ? "acceptedWork" : "transportOnly");
             return;
         }
 
@@ -205,6 +217,7 @@ public sealed partial class SessionRuntime
 
         if (_snapshot.Status == SessionStatus.Paused)
         {
+            OperationalDiagnostics.RecordDetach("alreadyPaused", "alreadyPaused");
             await StopTransportDeliveryAsync().ConfigureAwait(false);
             return;
         }

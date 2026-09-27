@@ -54,6 +54,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         }
 
         await store.InsertAsync(drafted, cancellationToken).ConfigureAwait(false);
+        RecordMutation("session", "written");
         return drafted;
     }
 
@@ -89,6 +90,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             UpdatedAt = created.UpdatedAt
         };
         await store.SupersedeAsync(superseded, created, cancellationToken).ConfigureAwait(false);
+        RecordMutation("session", "updated");
         return created;
     }
 
@@ -108,6 +110,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             UpdatedAt = now
         };
         await store.TombstoneAsync(tombstone, cancellationToken).ConfigureAwait(false);
+        RecordMutation("session", "deleted");
         return tombstone;
     }
 
@@ -265,6 +268,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         }
 
         await store.InsertAsync(copy, cancellationToken).ConfigureAwait(false);
+        RecordMutation("identityUser", "promoted");
         return copy;
     }
 
@@ -315,6 +319,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             current with { Status = MemoryItemStatus.Superseded, UpdatedAt = created.UpdatedAt },
             created,
             cancellationToken).ConfigureAwait(false);
+        RecordMutation("identityUser", "updated");
         return created;
     }
 
@@ -335,6 +340,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             UpdatedAt = time.GetUtcNow()
         };
         await store.TombstoneAsync(tombstone, cancellationToken).ConfigureAwait(false);
+        RecordMutation("identityUser", "deleted");
         return tombstone;
     }
 
@@ -443,6 +449,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             current with { Status = MemoryItemStatus.Superseded, UpdatedAt = created.UpdatedAt },
             created,
             cancellationToken).ConfigureAwait(false);
+        RecordMutation("user", "updated");
         return created;
     }
 
@@ -463,6 +470,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             UpdatedAt = time.GetUtcNow()
         };
         await store.TombstoneAsync(tombstone, cancellationToken).ConfigureAwait(false);
+        RecordMutation("user", "deleted");
         return tombstone;
     }
 
@@ -507,8 +515,13 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
 
     public async ValueTask<int> ResetSessionScopeAsync(
         TrustedMemoryOwner owner,
-        CancellationToken cancellationToken = default) =>
-        await store.ResetActiveSessionScopeAsync(owner.SessionId, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        CancellationToken cancellationToken = default)
+    {
+        var removed = await store.ResetActiveSessionScopeAsync(owner.SessionId, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+        RecordMutation("session", "reset");
+        return removed;
+    }
 
     public async ValueTask<int> ResetIdentityUserScopeAsync(
         TrustedIdentityUserOwner owner,
@@ -516,9 +529,11 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         CancellationToken cancellationToken = default)
     {
         RequireIdentityAccess(owner, retrievalAllowed);
-        return await store
+        var removed = await store
             .ResetActiveIdentityUserScopeAsync(owner.InstanceId, owner.ProfileId, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
+        RecordMutation("identityUser", "reset");
+        return removed;
     }
 
     public async ValueTask<int> ResetUserScopeAsync(
@@ -527,9 +542,11 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         CancellationToken cancellationToken = default)
     {
         RequireUserRetrieval(owner, retrievalAllowed);
-        return await store
+        var removed = await store
             .ResetActiveUserScopeAsync(owner.ProfileId, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
+        RecordMutation("user", "reset");
+        return removed;
     }
 
     private async ValueTask<StructuredMemoryItem> InsertUserCopyAsync(
@@ -566,6 +583,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         }
 
         await store.InsertAsync(copy, cancellationToken).ConfigureAwait(false);
+        RecordMutation("user", "promoted");
         return copy;
     }
 
@@ -830,4 +848,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
     }
 
     private static void Reject(string kind) => RuntimeTelemetry.RecordDropped(kind);
+
+    private static void RecordMutation(string scope, string result) =>
+        OperationalDiagnostics.RecordMemoryMutation(scope, result);
 }

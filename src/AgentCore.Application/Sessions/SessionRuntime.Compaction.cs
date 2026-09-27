@@ -179,6 +179,7 @@ public sealed partial class SessionRuntime
             BaseThrough = candidate.ThroughEntrySequence,
             BaseFormat = candidate.FormatVersion
         };
+        OperationalDiagnostics.RecordCompactionAccepted();
         RequestPersist(_snapshot);
         return true;
     }

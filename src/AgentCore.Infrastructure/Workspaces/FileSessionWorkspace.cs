@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -186,6 +187,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             var existing = File.Exists(physical) ? new FileInfo(physical).Length : 0;
             if (used - existing + bytes.Length > _maxWritableBytes)
             {
+                OperationalDiagnostics.RecordResourceLimit("workspaceStore");
                 throw AgentCoreErrors.WorkspaceQuotaExceeded();
             }
 
@@ -287,6 +289,7 @@ public sealed class FileSessionWorkspace : ISessionWorkspace
             var existing = originalBytes.Length;
             if (used - existing + newBytes.Length > _maxWritableBytes)
             {
+                OperationalDiagnostics.RecordResourceLimit("workspaceStore");
                 throw AgentCoreErrors.WorkspaceQuotaExceeded();
             }
 

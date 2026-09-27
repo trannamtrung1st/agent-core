@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
@@ -18,16 +20,33 @@ public sealed class AdminAgentInstanceService(
         int version,
         CancellationToken cancellationToken = default)
     {
+        var started = Stopwatch.GetTimestamp();
         var operationId = ids.NewId();
         var existingEvent = await events.TryGetByOperationIdAsync(operationId, cancellationToken)
             .ConfigureAwait(false);
         if (existingEvent is not null)
         {
-            return await ResolveManagedInstanceFromEventAsync(existingEvent, cancellationToken).ConfigureAwait(false);
+            var replayed = await ResolveManagedInstanceFromEventAsync(existingEvent, cancellationToken)
+                .ConfigureAwait(false);
+            OperationalDiagnostics.RecordAdmin(
+                "instanceCreate",
+                "existing",
+                "replay",
+                started,
+                replayed.DefinitionId,
+                replayed.ActiveVersion,
+                replayed.InstanceId,
+                "active");
+            return replayed;
         }
 
-        var definition = await definitions.GetAsync(definitionId, version, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound($"Agent '{definitionId}' was not found.");
+        var definition = await definitions.GetAsync(definitionId, version, cancellationToken).ConfigureAwait(false);
+        if (definition is null)
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceCreate", "rejected", "notFound", started, definitionId, version, null, null);
+            throw AgentCoreErrors.NotFound($"Agent '{definitionId}' was not found.");
+        }
         var now = time.GetUtcNow();
         var instance = new AgentInstance(
             ids.NewId(),
@@ -44,7 +63,18 @@ public sealed class AdminAgentInstanceService(
             definition.Id,
             instance.InstanceId,
             definition.Version);
-        return await instances.InsertManagedWithHistoryAsync(instance, append, cancellationToken).ConfigureAwait(false);
+        var created = await instances.InsertManagedWithHistoryAsync(instance, append, cancellationToken)
+            .ConfigureAwait(false);
+        OperationalDiagnostics.RecordAdmin(
+            "instanceCreate",
+            "completed",
+            "completed",
+            started,
+            created.DefinitionId,
+            created.ActiveVersion,
+            created.InstanceId,
+            "active");
+        return created;
     }
 
     public async ValueTask<AgentInstance> ReassociateActiveVersionAsync(
@@ -53,16 +83,41 @@ public sealed class AdminAgentInstanceService(
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
+        var started = Stopwatch.GetTimestamp();
         var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
         if (instance.Revision != expectedRevision)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceVersion", "rejected", "conflict", started, instance.DefinitionId, version, instanceId, null);
             throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
         }
 
-        var definition = await definitions.GetAsync(instance.DefinitionId, version, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound($"Agent '{instance.DefinitionId}' version {version} was not found.");
+        var definition = await definitions.GetAsync(instance.DefinitionId, version, cancellationToken).ConfigureAwait(false);
+        if (definition is null)
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceVersion",
+                "rejected",
+                "notFound",
+                started,
+                instance.DefinitionId,
+                version,
+                instanceId,
+                null);
+            throw AgentCoreErrors.NotFound($"Agent '{instance.DefinitionId}' version {version} was not found.");
+        }
+
         if (definition.Version == instance.ActiveVersion)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceVersion",
+                "unchanged",
+                "completed",
+                started,
+                instance.DefinitionId,
+                instance.ActiveVersion,
+                instance.InstanceId,
+                "unchanged");
             return instance;
         }
 
@@ -82,6 +137,15 @@ public sealed class AdminAgentInstanceService(
                 cancellationToken)
             .ConfigureAwait(false);
         await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
+        OperationalDiagnostics.RecordAdmin(
+            "instanceVersion",
+            "completed",
+            "completed",
+            started,
+            updated.DefinitionId,
+            updated.ActiveVersion,
+            updated.InstanceId,
+            "active");
         return updated;
     }
 
@@ -92,19 +156,29 @@ public sealed class AdminAgentInstanceService(
         long expectedPersonaRevision,
         CancellationToken cancellationToken = default)
     {
+        var started = Stopwatch.GetTimestamp();
         var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
-        if (instance.Revision != expectedRevision)
+        if (instance.Revision != expectedRevision || instance.PersonaRevision != expectedPersonaRevision)
         {
-            throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
-        }
-
-        if (instance.PersonaRevision != expectedPersonaRevision)
-        {
-            throw AgentCoreErrors.Conflict("Agent instance persona revision is stale.");
+            OperationalDiagnostics.RecordAdmin(
+                "instancePersona", "rejected", "conflict", started, instance.DefinitionId, instance.ActiveVersion, instanceId, null);
+            throw AgentCoreErrors.Conflict(
+                instance.Revision != expectedRevision
+                    ? "Agent instance revision is stale."
+                    : "Agent instance persona revision is stale.");
         }
 
         if (instance.Persona.Equals(persona))
         {
+            OperationalDiagnostics.RecordAdmin(
+                "instancePersona",
+                "unchanged",
+                "completed",
+                started,
+                instance.DefinitionId,
+                instance.ActiveVersion,
+                instance.InstanceId,
+                "unchanged");
             return instance;
         }
 
@@ -120,7 +194,7 @@ public sealed class AdminAgentInstanceService(
             instance.PersonaRevision,
             toPersonaRevision,
             persona);
-        return await instances.UpdatePersonaWithHistoryAsync(
+        var updatedPersona = await instances.UpdatePersonaWithHistoryAsync(
                 new AgentInstanceRevisionUpdate(
                     instance.InstanceId,
                     expectedRevision,
@@ -130,6 +204,16 @@ public sealed class AdminAgentInstanceService(
                 append,
                 cancellationToken)
             .ConfigureAwait(false);
+        OperationalDiagnostics.RecordAdmin(
+            "instancePersona",
+            "completed",
+            "completed",
+            started,
+            updatedPersona.DefinitionId,
+            updatedPersona.ActiveVersion,
+            updatedPersona.InstanceId,
+            "none");
+        return updatedPersona;
     }
 
     public async ValueTask<AgentInstance> SetLifecycleAsync(
@@ -138,19 +222,33 @@ public sealed class AdminAgentInstanceService(
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
+        var started = Stopwatch.GetTimestamp();
         if (lifecycle is not (AgentInstanceLifecycle.Active or AgentInstanceLifecycle.Archived))
         {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceLifecycle", "rejected", "validation", started, null, null, instanceId, null);
             throw AgentCoreErrors.Validation("lifecycle must be Active or Archived.");
         }
 
         var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
         if (instance.Revision != expectedRevision)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceLifecycle", "rejected", "conflict", started, instance.DefinitionId, instance.ActiveVersion, instanceId, null);
             throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
         }
 
         if (instance.Lifecycle == lifecycle)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceLifecycle",
+                "unchanged",
+                "completed",
+                started,
+                instance.DefinitionId,
+                instance.ActiveVersion,
+                instance.InstanceId,
+                "unchanged");
             return instance;
         }
 
@@ -173,6 +271,15 @@ public sealed class AdminAgentInstanceService(
                 cancellationToken)
             .ConfigureAwait(false);
         await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
+        OperationalDiagnostics.RecordAdmin(
+            "instanceLifecycle",
+            "completed",
+            "completed",
+            started,
+            updated.DefinitionId,
+            updated.ActiveVersion,
+            updated.InstanceId,
+            lifecycle == AgentInstanceLifecycle.Archived ? "archived" : "active");
         return updated;
     }
 

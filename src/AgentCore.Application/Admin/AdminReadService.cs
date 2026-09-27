@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -60,14 +62,29 @@ public sealed class AdminReadService(
         Guid instanceId,
         CancellationToken cancellationToken = default)
     {
-        var instance = await instances.FindAsync(instanceId, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        var started = Stopwatch.GetTimestamp();
+        var instance = await instances.FindAsync(instanceId, cancellationToken).ConfigureAwait(false);
+        if (instance is null)
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "resolve", "rejected", "notFound", started, null, null, instanceId, null);
+            throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        }
 
         var definition = await definitions
             .GetAsync(instance.DefinitionId, instance.ActiveVersion, cancellationToken)
             .ConfigureAwait(false);
         if (definition is null)
         {
+            OperationalDiagnostics.RecordAdmin(
+                "resolve",
+                "rejected",
+                "notFound",
+                started,
+                instance.DefinitionId,
+                instance.ActiveVersion,
+                instance.InstanceId,
+                null);
             throw AgentCoreErrors.NotFound(
                 $"Agent '{instance.DefinitionId}' version {instance.ActiveVersion} was not found.");
         }
@@ -77,13 +94,23 @@ public sealed class AdminReadService(
                 instance.ActiveVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        return AdminEffectiveConfigurationResolver.Resolve(
+        var resolved = AdminEffectiveConfigurationResolver.Resolve(
             instance,
             definition,
             catalog,
             configurationGate,
             source,
             status);
+        OperationalDiagnostics.RecordAdmin(
+            "resolve",
+            "completed",
+            "completed",
+            started,
+            definition.Id,
+            definition.Version,
+            instance.InstanceId,
+            "resolved");
+        return resolved;
     }
 
     private async ValueTask<(string Source, string Status)> ResolveDefinitionMetadataAsync(

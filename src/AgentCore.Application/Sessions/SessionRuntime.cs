@@ -2440,6 +2440,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 admission: new ToolExecutionAdmission(Detached: false, trigger.Kind));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
+                                OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
                             }
