@@ -101,12 +101,15 @@ public sealed class TriggerScheduleApiTests : IClassFixture<AgentCoreApiFactory>
                 var session = await CreateAsync(client, "examiner", 1);
                 sessionId = session.SessionId;
                 var owner = await OwnerAsync(first.Services, sessionId);
-                var due = new DateTimeOffset(2026, 9, 24, 9, 0, 0, TimeSpan.Zero);
+                var clock = first.Services.GetRequiredService<TimeProvider>();
+                var due = clock.GetUtcNow().AddDays(7);
+                var localDate = DateOnly.FromDateTime(due.UtcDateTime);
+                var localTime = TimeOnly.FromDateTime(due.UtcDateTime);
                 var created = await first.Services.GetRequiredService<ITriggerRegistrationService>().CreateAsync(
                     new TriggerRegistrationDraft(
                         owner,
                         "After restart",
-                        new OneShotSchedule(due, "UTC"),
+                        new OneShotSchedule(due, "UTC", localDate, localTime),
                         due,
                         null,
                         TriggerAuthorizationOrigin.CurrentUserTurn,

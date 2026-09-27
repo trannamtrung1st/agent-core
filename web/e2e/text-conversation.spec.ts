@@ -209,10 +209,12 @@ test("refresh mid-stream restores the same durable execution and continues witho
 test("reopening past detach grace while response is still running resumes live streaming", async ({
   page
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   await page.goto("/");
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await page.getByLabel("Message").fill("[test:durable-stream] Continue after detach while streaming");
+  await page
+    .getByLabel("Message")
+    .fill("[test:durable-stream-long] Continue after detach while streaming");
   await page.getByRole("button", { name: "Send" }).click();
   const assistant = page.locator(".chat-message-assistant");
   await expect(assistant).toHaveCount(1);
@@ -225,7 +227,7 @@ test("reopening past detach grace while response is still running resumes live s
   const context = page.context();
 
   await page.close();
-  // Detach grace is two seconds; synthetic durable stream pauses eight seconds on the first chunk.
+  // Detach grace is two seconds; [test:durable-stream-long] holds the first chunk for forty-five seconds.
   await new Promise((resolve) => setTimeout(resolve, 3_500));
 
   const reopened = await context.newPage();
@@ -247,11 +249,12 @@ test("reopening past detach grace while response is still running resumes live s
 
   const body = liveAssistant.first().locator(".assistant-body");
   const lengthAfterReopen = (await body.innerText()).length;
+  // Additional chunks arrive only after the forty-five second first-chunk hold completes.
   await expect
-    .poll(async () => (await body.innerText()).length, { timeout: 12_000 })
+    .poll(async () => (await body.innerText()).length, { timeout: 60_000 })
     .toBeGreaterThan(lengthAfterReopen);
 
-  await expect(liveAssistant.first()).toContainText("Hello from synthetic.", { timeout: 20_000 });
+  await expect(liveAssistant.first()).toContainText("Hello from synthetic.", { timeout: 60_000 });
   await waitForResponseSettled(reopened);
   await expect(liveAssistant).toHaveCount(1);
   await expect(liveAssistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
