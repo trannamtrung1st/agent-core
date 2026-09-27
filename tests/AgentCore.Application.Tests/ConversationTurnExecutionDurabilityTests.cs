@@ -131,6 +131,40 @@ public sealed class ConversationTurnExecutionDurabilityTests
     }
 
     [Fact]
+    public async Task Transport_detach_then_reattach_ready_restores_open_execution_projection()
+    {
+        var output = new CapturingSessionOutput();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 27, 0, 0, 0, TimeSpan.Zero));
+        var model = new HoldingLanguageModel();
+        await using var runtime = CreateRuntime(output, model, time, turns);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("[test:durable-stream] resume");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        var open = await turns.ListOpenForSessionAsync(runtime.SessionId);
+        var executionId = Assert.Single(open).ExecutionId;
+        var responseId = runtime.ActiveResponseId;
+        Assert.NotNull(responseId);
+
+        await runtime.TransportDetachAsync();
+        Assert.True(await runtime.AttachAsync());
+        await runtime.WaitUntilMailboxDrainedAsync();
+
+        var ready = Assert.IsType<ReadyOutput>(
+            output.Items.Last(item => item.Payload is ReadyOutput).Payload);
+        Assert.Equal(executionId, ready.Ready.ConversationExecutionId);
+        Assert.Equal(responseId, ready.Ready.ActiveResponseId);
+        var streaming = Assert.Single(
+            ready.Ready.History,
+            entry => entry.ResponseId == responseId);
+        Assert.Equal(EntryStatus.Streaming, streaming.Status);
+        Assert.False(string.IsNullOrEmpty(streaming.Text));
+
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+    }
+
+    [Fact]
     public async Task Stop_cancels_durable_execution_after_interrupted_assistant_persists()
     {
         var turns = new InMemoryConversationTurnExecutionStore();

@@ -341,7 +341,7 @@ function transportsFromPayload(payload: Record<string, unknown>): {
   };
 }
 
-function isInFlightOutput(value: string): boolean {
+export function isInFlightOutput(value: string): boolean {
   return (
     value === "waitingForAgent" ||
     value === "agentGenerating" ||

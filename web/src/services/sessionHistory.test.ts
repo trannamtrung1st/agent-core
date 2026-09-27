@@ -91,7 +91,7 @@ describe("session history controller", () => {
     expect(merged[0]?.status).toBe("completed");
   });
 
-  it("clears live execution state when durable history is terminal", async () => {
+  it("keeps live execution state when durable history is terminal but output is still in flight", async () => {
     const streaming = row(2, {
       text: "Hello",
       status: "streaming",
@@ -112,6 +112,45 @@ describe("session history controller", () => {
       conversationExecutionId: "x1",
       liveResponseId: "r2",
       outputState: "agentGenerating",
+      entries: [streaming]
+    });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [payload(completed)],
+      nextAfter: 2,
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
+    });
+
+    await loadNewestHistoryPage("s1", { replaceWindow: true });
+
+    const state = useSessionStore.getState();
+    expect(state.liveResponseId).toBe("r2");
+    expect(state.conversationExecutionId).toBe("x1");
+    expect(state.outputState).toBe("agentGenerating");
+  });
+
+  it("clears live execution state when durable history is terminal", async () => {
+    const streaming = row(2, {
+      text: "Hello",
+      status: "streaming",
+      responseId: "r2",
+      receivedTextEndExclusive: 5
+    });
+    const completed = row(2, {
+      text: "Hello from synthetic.",
+      status: "completed",
+      responseId: "r2",
+      receivedTextEndExclusive: 21
+    });
+    useSessionStore.setState({
+      ...emptySession(),
+      sessionId: "s1",
+      attachmentId: "a1",
+      connection: "ready",
+      conversationExecutionId: "x1",
+      liveResponseId: "r2",
+      outputState: "idle",
       entries: [streaming]
     });
     vi.mocked(listSessionMessages).mockResolvedValue({

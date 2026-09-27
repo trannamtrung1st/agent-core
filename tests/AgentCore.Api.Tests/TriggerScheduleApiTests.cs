@@ -27,12 +27,16 @@ public sealed class TriggerScheduleApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
 
         var owner = await OwnerAsync(examiner.SessionId);
-        var due = new DateTimeOffset(2026, 9, 24, 9, 0, 0, TimeSpan.Zero);
+        var clock = _factory.Services.GetRequiredService<TimeProvider>();
+        var due = clock.GetUtcNow().AddDays(7);
+        var localDate = DateOnly.FromDateTime(due.UtcDateTime);
+        var localTime = TimeOnly.FromDateTime(due.UtcDateTime);
+        var expectedSchedule = $"Once on {localDate:yyyy-MM-dd} at {localTime:HH:mm}";
         var created = await _factory.Services.GetRequiredService<ITriggerRegistrationService>().CreateAsync(
             new TriggerRegistrationDraft(
                 owner,
                 "Call John",
-                new OneShotSchedule(due, "UTC", new DateOnly(2026, 9, 24), new TimeOnly(9, 0)),
+                new OneShotSchedule(due, "UTC", localDate, localTime),
                 due,
                 null,
                 TriggerAuthorizationOrigin.CurrentUserTurn,
@@ -50,7 +54,7 @@ public sealed class TriggerScheduleApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal("Call John", item.GetProperty("intent").GetString());
         Assert.Equal("active", item.GetProperty("status").GetString());
         Assert.Equal("UTC", item.GetProperty("timeZone").GetString());
-        Assert.Equal("Once on 2026-09-24 at 09:00", item.GetProperty("schedule").GetString());
+        Assert.Equal(expectedSchedule, item.GetProperty("schedule").GetString());
         Assert.Equal(created.Revision, item.GetProperty("revision").GetInt64());
 
         var hidden = await client.GetFromJsonAsync<TriggerScheduleListResponse>($"/api/v2/sessions/{other.SessionId}/triggers");

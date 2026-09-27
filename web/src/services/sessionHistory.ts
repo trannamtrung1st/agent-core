@@ -1,6 +1,7 @@
 import { sameSessionId } from "../app/sessionRoute";
 import {
   historyFromPayload,
+  isInFlightOutput,
   useSessionStore,
   type HistoryEntry
 } from "../state/sessionStore";
@@ -153,9 +154,12 @@ export async function loadNewestHistoryPage(
           && (entry.status === "completed"
             || entry.status === "failed"
             || entry.status === "interrupted"));
+    const clearLiveConversation =
+      durableTerminal != null
+      && !isInFlightOutput(latest.outputState);
     useSessionStore.setState({
       entries: withLive,
-      ...(durableTerminal
+      ...(clearLiveConversation
         ? {
             liveResponseId: null,
             conversationExecutionId: null,

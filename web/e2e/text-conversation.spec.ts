@@ -206,6 +206,62 @@ test("refresh mid-stream restores the same durable execution and continues witho
   await expect(assistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
 });
 
+test("reopening past detach grace while response is still running resumes live streaming", async ({
+  page
+}) => {
+  test.setTimeout(60_000);
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("[test:durable-stream] Continue after detach while streaming");
+  await page.getByRole("button", { name: "Send" }).click();
+  const assistant = page.locator(".chat-message-assistant");
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first()).toContainText("Hello", { timeout: 15_000 });
+
+  const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(before?.executionId).toBeTruthy();
+  expect(before?.responseId).toBeTruthy();
+  const url = page.url();
+  const context = page.context();
+
+  await page.close();
+  // Detach grace is two seconds; synthetic durable stream pauses eight seconds on the first chunk.
+  await new Promise((resolve) => setTimeout(resolve, 3_500));
+
+  const reopened = await context.newPage();
+  await reopened.goto(url);
+  await expect(reopened.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect
+    .poll(async () => reopened.evaluate(() => window.__agentCore?.conversationExecution?.()), {
+      timeout: 20_000
+    })
+    .toEqual({
+      executionId: before?.executionId,
+      responseId: before?.responseId,
+      outputState: "agentGenerating"
+    });
+
+  const liveAssistant = reopened.locator(".chat-message-assistant");
+  await expect(liveAssistant).toHaveCount(1);
+  await expect(liveAssistant.first()).toContainText("Hello");
+
+  const body = liveAssistant.first().locator(".assistant-body");
+  const lengthAfterReopen = (await body.innerText()).length;
+  await expect
+    .poll(async () => (await body.innerText()).length, { timeout: 12_000 })
+    .toBeGreaterThan(lengthAfterReopen);
+
+  await expect(liveAssistant.first()).toContainText("Hello from synthetic.", { timeout: 20_000 });
+  await waitForResponseSettled(reopened);
+  await expect(liveAssistant).toHaveCount(1);
+  await expect(liveAssistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
+
+  await reopened.reload();
+  await expect(reopened.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(liveAssistant).toHaveCount(1);
+  await expect(liveAssistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
+});
+
 test("closing the page past detach grace keeps the accepted execution and durable response", async ({
   page
 }) => {
@@ -423,11 +479,13 @@ test("manual pause via deactivate shows Resume and keeps history", async ({ page
     return { ok: response.ok, status: response.status };
   });
   expect(deactivated.ok).toBe(true);
-  await expect(page.getByRole("button", { name: "Resume" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeVisible({
+    timeout: 15_000
+  });
   await expect(page.getByRole("button", { name: "Model" })).toHaveCount(0);
   await expect(page.getByTestId("connection")).toHaveText("Paused");
   await expect(page.getByText("Hello from synthetic.")).toBeVisible();
-  await page.getByRole("button", { name: "Resume" }).click();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
   await expect(page.getByLabel("Message")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
