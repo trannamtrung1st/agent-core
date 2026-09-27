@@ -2,64 +2,69 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on **2026-09-26**.
+Reviewed against `main` on **2026-09-28**.
 
-P5 implementation freeze:
+---
 
-```text
-4bbc0c17bc54746f87fd211174690659869e3e45
-workflow 35954811544 — green
-```
+# Current state
 
-P5 is closed/frozen. Evidence: `docs/reports/p5-freeze-candidate.md`.
+## Frozen phases
 
-P6 implementation freeze:
+P0–P7 are closed/frozen unless a reproducible regression or a concrete new product requirement requires reopening a boundary.
 
-```text
-30adaebde4321531448541ba132cb92941d504e7 — final verified P6 tree
-workflow 36085265506 — green
-bef77d1da7a9464ab56efb66203e1c1deb9e1b2b — last behavior-affecting SHA
-aeefffcce0dda0f3dbf392d6af994fd64a309d2b — runtime/UI closure repair
-2067a44a1534623dafc7803d14b8833ee1ba7890 — core durable-runtime repair
-workflow 36031813141 — green
-```
-
-P6 is **closed/frozen**. Do not reopen P6 implementation unless a reproducible regression appears. Evidence: `docs/reports/p6-freeze-candidate.md`.
-
-P7 implementation freeze:
+Important freeze references:
 
 ```text
-2acb1a8 — verified P7 follow-up tree (gate/test repair; confirm hosted green on push)
-1090535 — last behavior-affecting SHA (resource upload + eval prompt)
-9519a83 — concurrent draft contract + focused-editor Playwright repair
-workflow 36253536025 — 9519a83: offline gates green; Synthetic PW 56/57 (fixed in 2acb1a8)
-2b4a4aa → aa6cf18 → 15524ca — post-freeze Admin behavior chain
-f4107d7 — prior canonical W08 tree
-workflow 36239630112 — green on f4107d7
-479b637 — closure repair (knowledge.retrieve, WorkItem persona, agent listing)
+P1: dceaccb
+P2: 47d6ff6
+P3: 4dbb920
+P4: 822028f / workflow 35806764609 green
+P5: 4bbc0c1 / workflow 35954811544 green
+P6: 30adaeb / workflow 36085265506 green
+P7 Harness Admin: follow-up tree 2acb1a8
+  last harness behavior: 1090535
+  canonical W08 hosted gate: f4107d7 / workflow 36239630112 green
 ```
 
-P7 is **closed/frozen**. Evidence: `docs/reports/p7-freeze-candidate.md`.
+P7 evidence: `docs/reports/p7-freeze-candidate.md`.
 
-**Current active phase:** **P8 — harness/platform extensibility.**
+P7 owns **Harness Admin W01–W08 only**. The later `ConversationTurnExecution` observer-durability correction is session/runtime work, not part of the P7 Admin contract.
 
-P4 implementation freeze:
+Current observer-durability bookkeeping:
 
 ```text
-822028f7cf17e5a978aced4996022e4085c4efa2
-workflow 35806764609 — green
+93cb2ab → 3e75934 — runtime/streaming correction
+2b3188f → f45ea27 — scope/evidence documentation
 ```
 
-Detailed historical verification belongs in `docs/reports`. Keep this file focused on current/future work, frozen architectural invariants, and enough baseline context to prevent accidental redesign.
+Do not merge that correction conceptually into Harness Admin.
+
+## Current active phase
+
+**P7.5 — architecture consolidation and infrastructure readiness.**
+
+P8 must not begin until P7.5 closes.
+
+P7.5 is a bounded refactoring/review phase:
+
+```text
+no new product features
+no speculative rewrite
+no premature production stack
+preserve P1–P7 behavior
+```
+
+The purpose is to use the completed P7 product surface as an architectural stress test before P8 turns internal seams into extension contracts.
 
 ---
 
 # Current roadmap
 
-1. **P0–P7 are closed/frozen.** P6 verified tree **`30adaeb`**, workflow **`36085265506`** green (last behavior **`bef77d1`**). **P7 Harness Admin** on **`2acb1a8`** (last harness behavior **`1090535`**; W08 canonical **`f4107d7`** / workflow **`36239630112`** green). Session **`ConversationTurnExecution`** observer-durability bookkeeping on **`93cb2ab`**–**`3e75934`** (docs **`2b3188f`**) — see `docs/reports/p7-freeze-candidate.md`. Confirm hosted Synthetic + Compose green on **`3e75934`** for durability evidence closure.
-2. **P8 — harness/platform extensibility** is the active phase.
-3. **P9 — sandbox evolution when requirements justify it.**
-4. **P10 — multi-user/product infrastructure when requirements justify it.**
+1. **P0–P7 — closed/frozen.**
+2. **P7.5 — architecture consolidation and infrastructure readiness — ACTIVE.**
+3. **P8 — harness/platform extensibility.**
+4. **P9 — sandbox evolution when requirements justify it.**
+5. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
@@ -68,180 +73,93 @@ Do not reopen a frozen phase without either:
 
 ---
 
-# Frozen baseline
+# Frozen architectural baseline
 
-## P1 — Conversation/session ergonomics
+Keep these invariants while refactoring.
 
-Frozen on:
+## Conversation/runtime
 
-```text
-dceaccbad9a4db8908af147b5353805a2b1af288
-```
+- one logical Session owns one conversation;
+- one Session Runtime owns mutable conversational state while resident;
+- provider callbacks do not mutate runtime state directly;
+- detach/reconnect does not create a second logical conversation;
+- accepted work must not be silently lost because the browser disconnects;
+- historical durable state and transient live streaming remain distinct;
+- session runtime state is not stored in Agent Definition configuration.
 
-Important frozen contracts include:
+## Agent lifecycle
 
-- bounded/paginated durable history;
-- bounded runtime restore;
-- session purpose and lifecycle;
-- deadline / maximum-duration semantics;
-- completion authority;
-- terminal read-only history;
-- conversation language separate from speech locale;
-- replaceable speech providers;
-- deterministic reconnect/pause behavior;
-- explicit queue vs intentional steer/interruption semantics;
-- accepted-send through response-start treated as an in-flight/busy turn;
-- bounded detach grace with reattach continuity;
-- durable terminal interruption-reason visibility.
-
-Do not redesign P1 while productizing administration.
-
----
-
-## P2 — Response, progress, multimodal input and personalization
-
-Frozen on:
+Preserve:
 
 ```text
-47d6ff65142d2d454c4aa3101b0f43a38f01389a
+Reusable Agent Definition
+        ↓ publish
+Immutable Agent Definition Version
+        ↓
+Durable Agent Instance
+        ↓
+Session
 ```
 
-Important frozen contracts include:
+Do not collapse these into one mutable `agent.json`.
 
-- first-class transient response progress;
-- provider reasoning isolated from user-visible output;
-- validated display/speech response semantics;
-- model selection and reasoning effort;
-- model capability metadata;
-- current-turn image input;
-- capability-aware image/model admission;
-- trusted explicit profile fields;
-- no conversational guesses silently becoming trusted profile data.
+Definition upgrade, identity/persona revision, learned-memory reset, and creating/forking an Agent Instance remain separate operations.
 
-Do not overload trusted-profile state with harness configuration or learned memory.
+## Authority/context boundaries
 
----
-
-## P3 — Tools and external integrations
-
-Key-free freeze:
+Keep these concepts distinct:
 
 ```text
-4dbb9201de8028e7454b3be70a2e0730ac7c84f7
+Instructions
+= what the agent should do
+
+Trusted persona/profile
+= trusted identity/context
+
+Knowledge/resources
+= authoritative/reference material
+
+Learned memory
+= what the agent learned/remembers
+
+Trigger registrations
+= durable future event/runtime state
+
+WorkItems
+= durable execution state
+
+Session workspace
+= mutable session-owned files
 ```
 
-Verified hosted descendant:
+Do not silently promote learned memory into instructions or trusted identity.
 
-```text
-ac795b656e2e8ebd7d97f08d2d6ebc632d100cde
-workflow 35682808408 — green
-```
+## Tool/security boundaries
 
-P3A historical multimodal attachment reread remains frozen on:
-
-```text
-c0f8a85
-```
-
-Important frozen P3 contracts include:
+Preserve:
 
 - registry / policy / execution separation;
-- workspace read/write/list/patch/search/move;
-- historical attachment reread;
-- artifact creation/export/verification;
-- offline `sandbox.run`;
-- public `web.search` / SSRF-safe `web.fetch`;
-- bounded approval-gated generic HTTP;
-- live approval protocol/UI;
-- email search/read/draft/send;
-- exact approved-action binding;
-- credentials outside model context;
-- network mediation rather than unrestricted sandbox networking.
+- exact action approval for sensitive tool execution;
+- credentials outside model-visible context;
+- trigger registration does not grant future sensitive-tool permission;
+- background/headless execution is never a privileged authorization bypass;
+- Admin uses the same security/policy boundaries rather than a hidden privileged runtime path.
 
-Admin mode must use the same policy/authorization boundaries. It does not create a privileged bypass around P3.
+## Workspace/resource boundaries
 
----
-
-## P4 — Context compaction, structured memory, and durable identity
-
-Frozen on:
+Preserve:
 
 ```text
-822028f7cf17e5a978aced4996022e4085c4efa2
-workflow 35806764609 — green
+Published definition resources
+  immutable/versioned
+
+Session workspace
+  mutable
+  isolated
+  session-owned
 ```
 
-Evidence: `docs/reports/p4-freeze-candidate.md`.
-
-Important frozen P4 contracts include:
-
-- semantic compaction without destructive transcript rewriting;
-- valid summary boundaries and stale/cancelled compaction fencing;
-- structured session memory separate from trusted profile data;
-- durable Agent Instance separate from reusable Agent Definition/version;
-- pinned instance persona as runtime identity;
-- IdentityUser learned memory scoped to Agent Instance + trusted user/profile;
-- optional User-wide learned memory gated by policy;
-- layered prompt-memory budgets and trusted-profile precedence;
-- reset learned memory does not reset identity, persona, definition, knowledge, or transcripts.
-
-P7 must productize these seams rather than collapsing them into one generic configuration blob or filesystem.
-
----
-
-## P5 — Events, durable triggers, and configurable scheduling
-
-Frozen on:
-
-```text
-4bbc0c17bc54746f87fd211174690659869e3e45
-workflow 35954811544 — green
-```
-
-Evidence: `docs/reports/p5-freeze-candidate.md`.
-
-Important frozen P5 contracts include:
-
-- durable trigger registrations and occurrences owned by Agent Instance + trusted profile;
-- OneShot, Daily, Weekly, and FixedInterval schedules with deterministic offline scheduler semantics;
-- current-turn, action-specific schedule authorization;
-- typed durable application-event ingress;
-- owner-scoped dedupe and stale schedule revision rejection;
-- trigger payload is evidence/data, not instruction authority;
-- trigger registration does not grant later sensitive-tool authority;
-- runtime-local timers remain separate from durable scheduling.
-
-P7 may expose trigger policy and trigger management, but must not redesign scheduler semantics.
-
----
-
-## P6 — Durable background work and triggered execution
-
-Frozen on:
-
-```text
-30adaebde4321531448541ba132cb92941d504e7
-workflow 36085265506 — green
-```
-
-Important frozen P6 contracts include:
-
-- one logical durable execution per accepted occurrence/dedupe key;
-- headless execution does not require a live browser Session Runtime;
-- TriggerOccurrence remains the event rather than being replayed as a fake user message;
-- tool permissions remain identical to or stricter than interactive execution unless explicit policy says otherwise;
-- detached work may persist `AwaitingApproval` rather than bypass approval;
-- resuming approval continues the same idempotent work;
-- final work results/progress are durable and separate from ordinary chat history;
-- background work remains inspectable on paused/ended sessions.
-
-Still deferred from P6:
-
-- standing/delegated future-action authorization;
-- generalized background research / long-running sandbox work without a concrete workflow;
-- additional live-attached progress unification where it becomes useful.
-
-P7 may expose P6 execution policy and work visibility, but must not reopen the durable-work engine without a reproducible regression.
+Do not add a general cross-session Agent Instance filesystem without a concrete workflow that requires it.
 
 ---
 
@@ -249,9 +167,9 @@ P7 may expose P6 execution policy and work visibility, but must not reopen the d
 
 Always keep this section.
 
-- [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.
+- [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.5/P8 without a concrete requirement.
 
-- [ ] Admin assistant agent (future idea).
+- [ ] Admin assistant agent remains a future idea.
 
 - [x] Add proprietary license.
 
@@ -267,7 +185,7 @@ Always keep this section.
 
 - [x] Keep reusable Agent Definition separate from durable Agent Instance.
 
-- [x] Keep trusted identity persona/baseline separate from learned memory.
+- [x] Keep trusted identity/persona separate from learned memory.
 
 - [x] Keep runtime-local timers separate from durable scheduling.
 
@@ -277,9 +195,9 @@ Always keep this section.
 
 - [x] Keep background responses/work that must outlive Session Runtime under P6 durable work.
 
-- [x] Keep the P7 product surface simple even when the internal model is richer. *(observed Admin shell; frozen on `f4107d7`)*
+- [x] Keep the P7 product surface simple even when the internal model is richer.
 
-  Prefer the admin mental model:
+  Product mental model:
 
   ```text
   Instructions
@@ -291,512 +209,416 @@ Always keep this section.
   Test & Publish
   ```
 
-  while preserving strict internal ownership and lifecycle boundaries.
+- [ ] Keep infrastructure boring until product/hosting requirements justify more complexity.
 
 ---
 
-# P7 — Agent harness / admin lifecycle
+# P7 — Agent harness / Admin lifecycle
+
+**Status: closed/frozen.**
+
+P7 delivered a product-level lifecycle for reusable agents without weakening P1–P6 runtime contracts.
+
+Observed product flow:
+
+```text
+create/edit draft
+→ configure instructions/capabilities/resources
+→ validate/test
+→ review diff
+→ publish immutable version
+→ create/manage durable Agent Instance
+→ manage persona
+→ inspect/reset eligible learned memory
+→ configure/inspect/revoke eligible automation
+→ inspect effective non-secret configuration
+→ review Admin history
+→ upgrade/rollback/deprecate without rewriting history
+```
+
+Important P7 contracts:
+
+- Admin is a distinct product surface from normal Chat.
+- published definition versions are immutable;
+- sessions resolve the definition/version they actually used;
+- Agent Instance identity survives definition version reassociation;
+- persona revisions are typed and durable;
+- learned-memory reset is not identity reset;
+- trigger registrations are runtime/user state, not definition files;
+- Admin history is append-only lifecycle evidence, not enterprise audit infrastructure;
+- validation/evaluation evidence is tied to the relevant draft/version;
+- ordinary user sessions cannot mutate published harness resources;
+- secrets are not exposed by effective-config/Admin projections.
+
+Detailed P7 slice history belongs in `docs/reports`.
+
+---
+
+# P7.5 — Architecture consolidation and infrastructure readiness
 
 ## Goal
 
-Turn the existing developer-oriented harness/runtime into a product-level agent administration lifecycle without weakening the runtime contracts already frozen in P1–P6.
+Consolidate the architecture **after** P7 has exercised Definition, Version, Instance, Session, Memory, Automation, Admin, evaluation, and background-work boundaries.
 
-The P7 outcome should let an authorized operator who did **not** clone the repository or edit C#:
+P7.5 is intentionally not a redesign milestone.
+
+Use this rule:
+
+> Refactor only where completed P1–P7 behavior demonstrates real architectural pressure.
+
+P7.5 may change implementation structure, names, internal APIs, dependency direction, and persistence plumbing where safe.
+
+P7.5 must not intentionally change user-visible product behavior.
+
+---
+
+## P7.5A — Architecture and ownership inventory
+
+- [ ] Update the top-level architecture model so Agent Core is no longer described primarily as only a Session Runtime.
+
+Represent the system explicitly around:
 
 ```text
-configure agent
-→ validate
-→ test/evaluate
-→ review changes
-→ publish immutable definition version
-→ create/manage durable Agent Instance
-→ operate memory/identity/automation safely
+Authoring
+  definitions
+  drafts
+  resources
+  validation/evaluation
+  publication
+
+Runtime
+  agent instances
+  sessions
+  conversation execution
+  tools
+  memory
+
+Operations
+  triggers
+  work items
+  approvals
+  Admin lifecycle/history
+
+Shared cross-cutting boundaries
+  effective configuration
+  policy/authorization
+  persistence/storage
+  observability
 ```
 
-P7 is not the general plugin/platform phase. Keep it focused on making the current Agent Core capabilities manageable through an explicit product surface.
+- [ ] Map each durable entity to exactly one primary owner/lifecycle.
 
-## Core model
-
-Preserve this architecture:
+At minimum:
 
 ```text
-Reusable Agent Definition
-  ├── instructions
-  ├── capabilities/tool policy
-  ├── knowledge/resources
-  ├── harness workspace/template
-  ├── default runtime configuration
-  ├── default persona/configuration
-  ├── memory policy
-  ├── trigger/execution policy
-  └── validation/evaluation scenarios
-            │
-            │ publish
-            ▼
-Immutable Agent Definition Version
-            │
-            ▼
-Durable Agent Instance
-  ├── identity id
-  ├── trusted persona revision
-  ├── active/pinned definition association
-  ├── lifecycle metadata
-  ├── learned-memory ownership
-  └── trigger ownership
-            │
-            ▼
+AgentDefinitionDraft
+AgentDefinitionVersion
+AgentInstance
+PersonaRevision
 Session
-  ├── conversation
-  ├── session memory
-  ├── isolated mutable runtime workspace
-  ├── attachments/artifacts
-  └── related WorkItems
+ConversationTurnExecution
+LearnedMemory
+TriggerRegistration
+TriggerOccurrence
+WorkItem
+Approval
+AdminEvent
+Attachment
+Artifact
+DefinitionResource
+SessionWorkspace
 ```
 
-Do not collapse these into a single generic `agent.json` or shared mutable filesystem.
+- [ ] Identify duplicated ownership, ambiguous lifecycle, and write paths that bypass the intended Application boundary.
 
-## P7 phase status (frozen)
+- [ ] Confirm Session Runtime is not becoming the owner of Admin, background-work, or definition lifecycle state.
 
-**P7 Harness Admin is closed/frozen** on **`2acb1a8`** (last harness behavior **`1090535`**). W08 canonical **`f4107d7`** / workflow **`36239630112`**; post-freeze Admin **`2b4a4aa`**–**`1090535`**; gate repair **`9519a83`**–**`2acb1a8`**. Session observer-durability (separate from harness scope): **`93cb2ab`**–**`3e75934`**, scope/docs **`2b3188f`**. [p7-freeze-candidate.md](docs/reports/p7-freeze-candidate.md). Slice reports: [P7A](docs/reports/p7a-admin-shell-effective-config.md) · [P7B](docs/reports/p7b-definition-lifecycle.md) · [P7C](docs/reports/p7c-harness-resources-workspace.md) · [P7D](docs/reports/p7d-managed-instance-identity.md) · [P7E](docs/reports/p7e-memory-automation-admin.md) · [P7F](docs/reports/p7f-validation-evals-publish-gate.md) · [P7G](docs/reports/p7g-history-rollback-final-gate.md).
+- [ ] Confirm Admin services do not duplicate runtime behavior.
 
-The slice subsections below record **frozen invariants and orientation** only. Original planning checklists are retired here; open work lives under **P8+** or [Explicit P7 deferrals](#explicit-p7-deferrals).
+### P7.5A stop condition
+
+Architecture documents and code ownership describe the same system, and every major durable concept has one clear lifecycle owner.
 
 ---
 
-## P7A — Admin shell and effective configuration
+## P7.5B — Effective configuration and policy consolidation
 
-**Observed (W01, approved `9169bfa`):** dedicated Admin area (`/admin/...`), owner/trusted-local `/api/v2/admin/...` APIs, server-resolved effective configuration with secret redaction, User-mode boundaries (no harness/persona/publication mutation from ordinary chat). Verification: Admin navigation, mutation-denial, projection, and redaction suites in W01/W08 gates.
+- [ ] Establish one obvious server-side composition path for effective agent configuration.
 
-**Invariants:** Admin is a distinct product surface; User mode stays conversation-first; effective config never exposes secrets; resolution is server-side only.
-
----
-
-## P7B — Agent Definition draft / version / publish lifecycle
-
-**W02 slice (observed, approved `4a2bf99`):** durable drafts and publications, composite runtime catalog, owner Admin fork/save/publish/deprecate, InMemory/SQLite store parity, session snapshot pinning, and W02 browser gate. See [P7B report](docs/reports/p7b-definition-lifecycle.md). **Later slices own the rest of this section:** harness resources in publications (P7C), managed instance version association (P7D), eval-gated publish and human-readable diff (P7F), and rollback/history UX (P7G).
-
-Implement an explicit publishing lifecycle:
+Inputs may include:
 
 ```text
-Draft
-→ Validate
-→ Test / Evaluate
-→ Review Diff
-→ Publish immutable version
-→ Deprecate / Roll back association when needed
-```
-
-- [x] Introduce an editable draft representation separate from published immutable versions. *(W02)*
-
-- [x] Keep published Agent Definition versions immutable. *(W02)*
-
-Changing any published reusable behavior/configuration should produce a new version, including changes to:
-
-- instructions;
-- tool/capability configuration;
-- policies/permissions;
-- knowledge/resource snapshot;
-- harness workspace/template;
-- trigger capabilities/defaults;
-- default persona/configuration;
-- relevant model/runtime defaults.
-
-- [x] Keep existing sessions reproducible against the definition version they actually used. *(W02 session-snapshot regression)*
-
-- [x] Define how a durable Agent Instance adopts/upgrades to another published definition version. *(observed explicit active-version PATCH; P7G may extend rollback UX)*
-
-- [x] Do not make definition upgrade equivalent to identity reset. *(observed version reassociation preserves persona and instance id)*
-
-- [x] Support deprecating a definition version without rewriting historical sessions. *(W02 metadata-only deprecate)*
-
-- [x] Support moving an instance association back to a prior valid published version where policy permits. *(observed managed rollback/reassociate; P7G `admin-lifecycle` + history tests)*
-
-### Publish diff
-
-- [x] Show a human-readable diff before publishing. *(observed P7F / W06)*
-
-At minimum identify changes in:
-
-```text
-instructions
-capabilities/tools
-permissions/policies
+definition version
+instance association
+persona revision
+model/runtime defaults
+capability/tool policy
 knowledge/resources
-harness workspace
-default persona/configuration
 memory policy
-trigger/execution policy
-model/runtime configuration
+trigger policy
+background-execution policy
+trusted caller/profile context
 ```
 
-Do not require a raw JSON diff as the only review surface.
+- [ ] Ensure Chat, Admin preview/evaluation, Triggered Work, and future P8 integrations reuse the same authoritative resolution rules where semantics should match.
 
-### P7B verification
+- [ ] Do not let each execution surface reconstruct effective configuration independently.
 
-- [x] Draft mutation/versioning tests. *(W02 store/API contracts)*
-- [x] Published-version immutability tests. *(W02)*
-- [x] Instance upgrade/rollback association tests. *(observed P7D + P7G admin-lifecycle and instance version history tests)*
-- [x] Historical session version-resolution tests. *(W02 `DefinitionLifecycleSessionSnapshotTests`)*
-- [x] Publish-diff projection tests. *(observed P7F)*
-- [x] Concurrency/revision conflict tests for draft edits and publishing. *(W02)*
+- [ ] Audit tool, trigger, background-work, Admin, memory, and resource authorization checks for duplicated or contradictory policy evaluation.
 
-### P7B stop condition
+- [ ] Centralize shared policy decisions only where there is a genuinely shared contract.
 
-Reusable agent configuration has a reproducible draft → validation/test → diff → immutable publish lifecycle, and already-published behavior cannot be silently mutated. **W02 met the transitional draft → validate → immutable publish slice** (eval/diff gate and full phase stop remain with P7F/P7G).
+- [ ] Keep action-specific approval and ownership checks close enough to execution that stale configuration cannot bypass them.
+
+### P7.5B stop condition
+
+Effective configuration and policy decisions have explicit ownership and no known parallel implementations that can drift.
 
 ---
 
-## P7C — Harness editing: instructions, capabilities, resources, workspace
+## P7.5C — Application complexity and domain cleanup
 
-**Observed (W03, approved `e25cd46`):** Admin editing for instructions, capabilities, and definition-scoped resources; publish-time resource binding with hashes; read-only runtime `/agent` harness view vs mutable session `/workspace`; validation before publish; P3 tool/registry separation preserved. See [P7C report](docs/reports/p7c-harness-resources-workspace.md).
+- [ ] Identify services/classes that became orchestration god objects during P4–P7.
 
-**Mental model:**
+Refactor only when responsibilities are clearly separable.
 
-```text
-Harness ≈ Instructions + Capabilities + Resources / Workspace
-```
+- [ ] Remove transitional compatibility code that is no longer needed after the P7 freeze.
 
-**Invariants:** published harness resources are immutable; session workspaces stay isolated and mutable; learned memory, triggers, and credentials are not harness-workspace files.
+- [ ] Normalize naming where the same concept has accumulated multiple names.
 
-- [x] Continue giving every session its own isolated mutable runtime workspace.
+- [ ] Keep Domain focused on durable business concepts/policies rather than provider/storage mechanics.
 
-Conceptually:
+- [ ] Keep Application focused on use cases/orchestration/ports rather than HTTP, EF, file paths, provider DTOs, or frontend-specific details.
 
-```text
-Published harness resources
-        │ read/use according to policy
-        ▼
-Agent runtime
-        │
-        ▼
-Session workspace
-  mutable
-  isolated
-  session-owned
-```
+- [ ] Keep Infrastructure implementation-specific.
 
-### Explicitly defer persistent Agent Instance workspace
+- [ ] Avoid adding:
 
-Do **not** add a general mutable cross-session Agent Instance filesystem in P7.
+  - a generic `Common` project;
+  - MediatR solely for indirection;
+  - generic repository-per-entity abstractions;
+  - a universal internal event bus;
+  - microservices merely to make boundaries look cleaner.
 
-Add it later only when a concrete workflow requires durable files shared across sessions, for example:
+### P7.5C stop condition
 
-```text
-"continue updating the same budget.xlsx across future sessions"
-```
-
-If/when added, keep it separate from learned memory and definition resources.
-
-**Verification (observed):** draft/publish resource lifecycle, immutability, session isolation, and user-session mutation-denial tests in W03/W08 gates (see P7C report).
+The modular monolith remains easy to navigate, with fewer accidental dependencies and no speculative architectural layer added solely for P8.
 
 ---
 
-## P7D — Agent Instance and identity/persona administration
+## P7.5D — Persistence and infrastructure portability audit
 
-**Observed (W04 slice approved `0aa3ad3`):** managed instance create, persona Form|JSON, version reassociation, archive, managed new-chat inventory, pinned persona on sessions and `session.ready`, archive admission for triggers/schedules, IdentityUser isolation/retention regressions. Evidence: [P7D report](docs/reports/p7d-managed-instance-identity.md).
-
-### Agent Instance lifecycle
-
-- [x] Add admin lifecycle for durable Agent Instances created from published Agent Definitions. *(observed W04; approved `0aa3ad3`)*
-
-Support explicit lifecycle states/operations sufficient for the current product, such as:
+Current development infrastructure should remain the default:
 
 ```text
-create
-activate
-change active definition version
-deactivate/archive
+.NET modular monolith
+SQLite
+local filesystem-backed stores
+Docker / Docker Compose
+single-process Session Runtime ownership
+single-process scheduler/background workers
+Synthetic/offline CI by default
+optional hosted providers
 ```
 
-Avoid premature organization/tenant lifecycle complexity.
+Do **not** migrate to the production stack in P7.5.
 
-- [x] Preserve the distinction between definition upgrade, identity/persona revision, learned-memory reset, and new/forked Agent Instance (none implicitly means another). *(observed W04 regressions)*
+### Persistence
 
-### Persona editing
+- [ ] Audit EF/persistence code for accidental SQLite-specific assumptions that would make a future PostgreSQL migration unnecessarily invasive.
 
-Support **two views over one typed schema**:
+- [ ] Keep migrations deterministic and repeatable.
 
-```text
-Form | JSON
-```
+- [ ] Preserve explicit transaction boundaries around operations that must be atomic.
 
-- [x] Make the form the default UX. *(observed Admin managed controls)*
+- [ ] Preserve idempotency/retry semantics for accepted turns, trigger occurrences, WorkItems, approvals, publication, and other side-effecting lifecycle operations.
 
-- [x] Provide an advanced JSON editor for technical administrators/debugging/import-export.
+- [ ] Avoid using in-memory state as the durable source of truth.
 
-- [x] Validate both views against the same server-owned typed schema.
+### File/blob storage
 
-- [x] Do not accept arbitrary trusted identity fields merely because they appeared in JSON.
+- [ ] Keep host filesystem paths out of Domain and wire contracts.
 
-- [x] Persist persona revisions so historical sessions can resolve the trusted persona/configuration they actually used.
+- [ ] Preserve separate conceptual stores for:
 
-### Instance lifecycle interactions
+  - attachments;
+  - artifacts;
+  - definition resources;
+  - session workspaces.
 
-Preserve:
+- [ ] Do not collapse immutable blobs/resources and mutable workspace semantics into one generic file store.
 
-```text
-Definition upgrade:
-  Agent Instance identity remains the same.
-  Existing trigger registrations remain owned by the same Agent Instance + user.
-  Future execution must satisfy the effective current policy.
+- [ ] Keep the current local filesystem implementation while it satisfies development requirements.
 
-Reset learned memory:
-  does not reset identity/persona.
-  does not delete trigger registrations.
+### Sandbox
 
-New/forked Agent Instance:
-  does not automatically inherit learned memory.
-  does not automatically inherit trigger registrations.
+- [ ] Keep Docker as the sandbox implementation.
 
-Deactivate/archive Agent Instance:
-  prevents future execution according to explicit lifecycle policy.
-  must not leave silently firing triggers.
+- [ ] Do not introduce a new sandbox-provider abstraction unless a real second implementation is being added.
 
-Delete/end user relationship:
-  must not leave orphan triggers/work continuing without an owner.
-```
+### Scheduler/background workers
 
-### P7D verification
+- [ ] Keep the current single-process scheduler/background-worker model while one process is the real deployment shape.
 
-- [x] Instance create/activate/archive tests. *(AgentInstanceTests, AdminApiTests, journey)*
-- [x] Definition-upgrade vs identity-reset tests. *(AgentInstanceTests, occurrence routing)*
-- [x] Form ↔ JSON round-trip/schema validation tests. *(Vitest + journey)*
-- [x] Persona revision/historical resolution tests. *(pinned revision + session.ready)*
-- [x] Instance deactivation + future-trigger handling tests. *(TriggerDurablePolicyTests archive admission)*
-- [x] Cross-instance ownership/isolation regressions. *(ManagedInstanceP7DRegressionTests + UserMemoryTests)*
+- [ ] Do not add a distributed queue, Redis lease system, Kafka/RabbitMQ, or distributed scheduler simply because durable WorkItems exist.
 
-### P7D stop condition
+### Secrets
 
-Durable Agent Instances can be explicitly managed without conflating reusable definition version, trusted identity/persona, learned memory, or trigger ownership.
+- [ ] Continue using environment/user-secrets/gitignored local configuration for development credentials.
+
+- [ ] Keep secrets outside model-visible configuration, effective-config projection, Admin history, and logs.
+
+### P7.5D stop condition
+
+The current dev stack remains simple, while core/application behavior is not unnecessarily coupled to SQLite, local disk, Docker-host paths, or single-process implementation details.
 
 ---
 
-## P7E — Memory and automation administration
+## P7.5E — Observability and operational shape
 
-## Memory policy/admin
+Do not deploy a large observability platform yet, but keep instrumentation production-ready.
 
-Keep this authority distinction explicit:
+- [ ] Maintain structured logs/metrics/traces for:
 
-```text
-Instructions
-= what the agent should do
+  - model/provider selection and calls;
+  - session/response/execution lifecycle;
+  - interruption/queue/steer/detach/reattach;
+  - tool calls and approvals;
+  - sandbox execution;
+  - compaction/memory mutation;
+  - definition/version/instance resolution;
+  - draft/publish/rollback/deprecation;
+  - trigger registration/occurrence/scheduler lag;
+  - WorkItem lifecycle;
+  - policy denials;
+  - resource limits.
 
-Trusted persona/profile
-= trusted identity/context
+- [ ] Avoid sensitive content in operational telemetry unless explicitly required and protected.
 
-Knowledge
-= authoritative/reference material
+- [ ] Keep health/readiness checks meaningful.
 
-Learned memory
-= what the agent learned/remembers
-```
+- [ ] Make it possible to export through OpenTelemetry later without requiring OpenTelemetry infrastructure as a local-development dependency now.
 
-Do **not** replace learned memory with instructions and do not silently promote learned memory into instruction authority.
+### P7.5E stop condition
 
-- [x] Expose P4 memory-policy configuration (effective policy via definition + instance Admin; observed W05).
-
-- [x] Allow authorized inspection of built-in learned memory with safe metadata such as:
-
-  - scope;
-  - owner;
-  - source/provenance where available;
-  - created/updated timestamps;
-  - content where policy allows.
-
-- [x] Add explicit scoped reset/delete operations for learned memory.
-
-At minimum preserve relevant scopes:
-
-```text
-Session
-IdentityUser
-User-wide (when policy enables it)
-```
-
-- [x] Keep identity/persona reset separate from learned-memory reset.
-
-- [x] Do not initially provide a generic arbitrary editor that rewrites learned memory as if the agent learned something organically (no Admin learned-memory editor; W05).
-
-If manually curated durable facts become necessary, introduce a separate future concept such as:
-
-```text
-Trusted Context
-Pinned Facts
-Admin Context
-```
-
-with explicit authority/provenance rather than mixing them into learned memory.
-
-## Trigger / scheduling / background-execution admin
-
-- [x] Expose P5 trigger-policy configuration (effective via published definition; observed W05):
-
-  - allowed trigger types;
-  - whether user-requested scheduling is enabled;
-  - active-trigger limits;
-  - minimum recurrence interval;
-  - expiry/horizon limits;
-  - allowed external/domain event sources.
-
-- [x] Expose whether P6 triggered/headless execution is permitted for the agent/instance where the existing policy model supports it (effective-config eligibility; observed W05).
-
-- [x] Allow authorized admins/users to inspect and revoke durable trigger registrations.
-
-- [x] Keep trigger policy/defaults in reusable/effective configuration.
-
-- [x] Keep individual trigger registrations/occurrences in runtime/user state, not the definition workspace or learned memory.
-
-- [x] Trigger configuration never grants standing permission for later sensitive external actions.
-
-### P7E verification
-
-- [x] Memory policy projection/mutation tests (`AdminMemoryServiceTests`, `AdminApiTests`).
-- [x] Scoped learned-memory reset/delete tests (`AdminMemoryServiceTests`).
-- [x] Tests proving memory reset does not reset identity or triggers (`Reset_session_scope_preserves_definition_persona_profile_transcript_and_triggers`).
-- [x] Trigger-policy configuration tests (`TriggerInstancePolicyReconciliationTests`).
-- [x] Trigger inspection/revocation ownership tests (`AdminAutomationServiceTests`, `TriggerStoreContractTests`).
-- [x] Tests proving admin configuration cannot bypass P3/P6 approval policy (`P7E_detached_sensitive_work_waits_for_approval_without_http_side_effect`).
-
-### P7E stop condition
-
-Authorized operators can understand and manage memory and automation policy/state without confusing instructions, trusted identity, learned memory, trigger registrations, or tool authorization.
+Operational events are structured enough for future hosted diagnostics without requiring a production monitoring stack during development.
 
 ---
 
-## P7F — Validation, behavior preview, evaluations, and publish gate
+## P7.5F — Refactor gate and architecture freeze
 
-**Observed (W06, approved `03e350a`; eval isolation from `53d439e`; textual Knowledge binding rule from `f4107d7`):** layered pure vs resolved validation, required deterministic Synthetic draft evaluation (`IDefinitionDraftSyntheticBehaviorEvaluator` / offline Scripted model), Admin check-type matrix, safe publish diff, exact-revision publish with configuration fingerprint; invalid configuration blocks publish. Hosted provider paths remain opt-in; Synthetic is the key-free gate. See [P7F report](docs/reports/p7f-validation-evals-publish-gate.md).
+- [ ] Run the complete deterministic test suite after architectural changes.
 
-**Invariants:** validation and eval provenance tie to draft revision; behavioral eval uses offline Synthetic by default; structural/security failures block publish.
+- [ ] Run meaningful Synthetic Playwright journeys covering:
+
+  - chat;
+  - reconnect/durable streaming;
+  - tools/approval;
+  - memory;
+  - automation;
+  - background WorkItems;
+  - Admin draft/publish/instance lifecycle.
+
+- [ ] Keep behavior changes out of refactor commits where practical.
+
+- [ ] Update:
+
+  - `docs/03-system-architecture.md`;
+  - `docs/04-backend-interfaces.md`;
+  - `docs/10-technology-decisions.md`;
+  - `docs/11-repository-structure.md`;
+  - persistence/configuration docs;
+  - relevant implementation-plan/report references.
+
+- [ ] Record a P7.5 closure report with:
+
+  - what architectural pressure was found;
+  - what was refactored;
+  - what was deliberately left unchanged;
+  - which potential P8 abstractions are now justified;
+  - which abstractions remain speculative and therefore deferred.
+
+### P7.5 stop condition
+
+P7.5 is complete when:
+
+```text
+P1–P7 behavior remains green
+architecture docs match implementation
+effective configuration has a clear authority path
+policy ownership is explicit
+major lifecycle boundaries remain distinct
+persistence/storage dependencies remain replaceable enough
+no premature production infrastructure was added
+P8 extension seams are evidence-based rather than speculative
+```
 
 ---
 
-## P7G — Basic admin history, rollback/deprecation, and final UX
+# Infrastructure stance before production
 
-### Basic admin history
-
-Record a lightweight immutable administrative event trail for important lifecycle changes, for example:
+Until a real external pilot/hosting requirement appears, prefer:
 
 ```text
-definition draft created
-definition published
-definition deprecated
-instance created
-instance definition upgraded/rolled back
-persona revised
-memory reset
-trigger policy changed
-trigger revoked
-instance archived
+SQLite
+local filesystem
+Docker / Compose
+single application process
+single scheduler/background-worker process
+Synthetic deterministic CI
+optional hosted model/speech/integration providers
 ```
 
-- [x] Record actor/source, timestamp, target resource, operation, and safe change metadata. *(observed `AdminEvents` + `GET /api/v2/admin/events`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md))*
-
-- [x] Do not log secrets or raw sensitive payloads merely for audit convenience. *(observed `AdminEventSummaryPolicy` + sentinel tests)*
-
-- [x] Keep this intentionally smaller than P10 enterprise audit/compliance infrastructure.
-
-### Rollback/deprecation UX
-
-- [x] Allow an authorized admin to inspect prior immutable versions. *(observed publication inventory + exact-version read APIs)*
-
-- [x] Allow explicit instance reassociation/rollback to a compatible prior published version. *(observed managed version PATCH + P7G journey)*
-
-- [x] Deprecation must not rewrite history. *(observed metadata-only deprecate + session/history retention)*
-
-### End-to-end Admin UX
-
-- [x] Provide a coherent Admin flow such as:
+Do not add by default:
 
 ```text
-Agent Definitions
-  → edit draft
-  → configure instructions/capabilities/resources
-  → validate
-  → test
-  → review diff
-  → publish
-
-Agent Instances
-  → create/select instance
-  → choose published version
-  → configure identity/persona
-  → inspect memory/automation
-  → activate/archive
+PostgreSQL
+Redis
+Kafka / RabbitMQ / SQS
+Kubernetes
+service mesh
+distributed cache
+distributed scheduler
+remote object storage
+cloud secret manager
+multi-node SignalR
+microservices
 ```
 
-- [x] Keep the primary UI understandable without requiring users to understand internal terms such as `IdentityUser`, occurrence dedupe, or SessionRuntime ownership. *(observed Admin shell copy and scoped memory/automation labels; whole-phase journey green)*
+This is not a prohibition on those technologies.
 
-### P7G verification
+It is a requirement that each infrastructure dependency solve a real product/operational problem before becoming part of the base stack.
 
-- [x] Admin-event-history tests. *(see [P7G report](docs/reports/p7g-history-rollback-final-gate.md))*
-- [x] Secret-redaction tests. *(summary policy + storage sentinel coverage)*
-- [x] Publish → instantiate → chat end-to-end scenario. *(`e2e/admin-lifecycle.spec.ts`)*
-- [x] Draft change → test → diff → publish new version → upgrade instance scenario. *(admin-lifecycle journey)*
-- [x] Rollback/deprecate scenario. *(admin-lifecycle journey)*
-- [x] Memory reset and trigger revoke scenarios. *(admin-lifecycle journey + P7E history mutator tests)*
-- [x] Regression coverage across P1–P6 runtime behavior. *(W08 focused filters recorded at `f1017c6`/`662ab35`; see [P7G report](docs/reports/p7g-history-rollback-final-gate.md#w08-local-gate-observed-at-2b967cf); hosted exact-SHA green on `f4107d7` workflow `36239630112`; closure repair `479b637`–`f4107d7`)*
+Production-shaped properties that **should** exist now:
 
-### P7 stop condition
-
-P7 is complete when an authorized non-developer operator can:
-
-```text
-create/edit a reusable agent draft
-→ configure instructions, capabilities, knowledge/resources, and harness workspace
-→ validate and test behavior
-→ review the publish diff
-→ publish an immutable definition version
-→ create/manage a durable Agent Instance
-→ manage trusted persona through form or typed JSON
-→ inspect/reset learned memory through explicit scope
-→ configure/inspect/revoke eligible automation
-→ inspect effective non-secret configuration
-→ review basic admin history
-→ safely upgrade/rollback/deprecate without rewriting history
-```
-
-while:
-
-- User mode cannot mutate published harnesses or trusted identity;
-- learned memory remains separate from instructions/trusted context;
-- published harness resources remain separate from mutable session workspaces;
-- P3 tool authorization and P5/P6 trigger/background-work authorization remain intact;
-- secrets never enter model-visible/admin projections unintentionally;
-- no persistent Agent Instance filesystem is introduced without a concrete workflow;
-- no general plugin ecosystem, workflow builder, multi-agent orchestration, or enterprise tenancy/RBAC is pulled into P7.
+- durable source-of-truth state where required;
+- explicit ownership IDs;
+- idempotent/retry-safe side effects;
+- deterministic migrations;
+- cancellation/timeouts;
+- bounded work;
+- secrets outside model context;
+- storage/provider ports where an actual boundary already exists;
+- health checks;
+- structured observability;
+- clear transactional boundaries;
+- no Domain/Application dependence on host paths.
 
 ---
 
-# Explicit P7 deferrals
+# P8 — Harness/platform extensibility
 
-Do not expand P7 to include these without a concrete new requirement:
+P8 begins only after P7.5 closes.
 
-- persistent cross-session Agent Instance workspace/filesystem;
-- general plugin marketplace;
-- general MCP/provider ecosystem;
-- arbitrary custom tool-provider framework;
-- visual node/graph workflow builder;
-- multi-agent communication/orchestration;
-- standing/bulk future-action authorization;
-- organization/team management;
-- full RBAC/tenancy;
-- enterprise-grade audit/compliance;
-- generalized distributed scheduler/runtime infrastructure.
+## Goal
 
-These are potential P8/P10 or later concerns.
-
----
-
-# P8 — Full harness/platform capabilities and integration extensibility
-
-P8 begins only after P7 establishes a usable administration and publishing lifecycle.
+Make the established Agent Core harness extensible without turning every implementation detail into a plugin API.
 
 ## Platform/extensibility
 
-- [ ] Consolidate the eventual extensible harness/provider model when real second implementations justify abstraction.
+- [ ] Use P7.5 findings to identify extension seams backed by real second implementations.
 
-Potential extension boundaries:
+Potential boundaries:
 
 ```text
 model providers
@@ -806,7 +628,7 @@ trigger/event sources
 sandbox providers
 ```
 
-Do not force them into one common abstraction unless implementations demonstrate a useful shared contract.
+Do not force these into one generic provider abstraction.
 
 - [ ] Add external tool-provider/plugin extensibility only when another real provider/integration justifies it.
 
@@ -814,21 +636,39 @@ MCP-like providers may be adapters.
 
 Requirements:
 
-- native Agent Core tools remain supported;
-- external providers still pass through Agent Core policy/authorization;
-- provider credentials remain outside model context.
+- native Agent Core tools remain first-class;
+- external tools still pass through Agent Core policy/authorization;
+- provider credentials remain outside model context;
+- provider-specific DTOs do not leak into Domain/Application contracts;
+- extension failure does not corrupt durable agent/session state.
+
+- [ ] Define extension identity/versioning/compatibility only to the degree required by actual extensions.
 
 - [ ] Extend P7 validation for provider/plugin-specific concerns:
 
   - provider availability/capability mismatches;
-  - missing external-provider references;
-  - provider-specific permission/configuration errors;
-  - extension compatibility/versioning;
-  - extension-specific evaluation scenarios.
+  - missing provider references;
+  - provider-specific permissions/configuration;
+  - compatibility/versioning;
+  - extension-specific validation/evaluation.
+
+- [ ] Preserve one authoritative effective-configuration path when extensions are enabled.
 
 - [ ] Revisit a durable mutable Agent Instance workspace only when a concrete cross-session file workflow requires it.
 
-- [ ] Revisit richer reusable evaluation suites when multiple harness/provider implementations make them valuable.
+- [ ] Revisit richer reusable evaluation suites when multiple harness/provider implementations make them useful.
+
+## P8 non-goals
+
+Do not automatically turn P8 into:
+
+- a plugin marketplace;
+- visual workflow builder;
+- multi-agent orchestration engine;
+- generic distributed job platform;
+- enterprise tenant/RBAC implementation;
+- Kubernetes migration;
+- microservice decomposition.
 
 ---
 
@@ -840,7 +680,14 @@ Requirements:
 
 - [ ] Introduce `ISandboxProvider` only when a second implementation is genuinely required.
 
-- [ ] Evaluate OpenSandbox when requirements include remote execution, stronger multi-tenant isolation, pools, faster provisioning, distributed workers, or multiple runtime images.
+- [ ] Evaluate OpenSandbox when requirements include:
+
+  - remote execution;
+  - stronger multi-tenant isolation;
+  - pools/faster provisioning;
+  - distributed workers;
+  - multiple runtime images;
+  - remote resource controls.
 
 - [ ] Keep model-facing `sandbox.run` stable while changing implementation providers.
 
@@ -850,31 +697,172 @@ Do not adopt Kubernetes merely to replace a working Docker sandbox.
 
 ---
 
-# P10 — Multi-user/product infrastructure
+# P10 — Multi-user and production infrastructure
 
-Do this when Agent Core moves beyond trusted single-owner/local development.
+Start this phase when Agent Core moves beyond trusted single-owner/local development or begins a real external hosted pilot.
+
+Do not start all P10 infrastructure at once. Add it in dependency order.
+
+---
+
+## P10A — Authentication, authorization, and tenant ownership
 
 - [ ] Authentication.
-- [ ] User/admin authorization and tenancy.
-- [ ] Organization/team management when required.
+
+- [ ] User/Admin authorization.
+
+- [ ] Tenant/organization model only when required.
+
 - [ ] Per-user/tenant resource ownership and quotas.
-- [ ] Enforce tenant ownership across Agent Definition, Agent Instance, session, memory, trigger, WorkItem, artifact, and integration resources.
-- [ ] Secure external-integration/webhook credential management.
-- [ ] Expand P7 basic admin history into enterprise-grade audit/compliance where required.
-- [ ] Public-hosting hardening.
-- [ ] Separate host credentials/scopes where browser users must not possess host authority.
-- [ ] Add distributed trigger-claim/lease semantics only when multiple scheduler workers are required.
-- [ ] Add horizontal/distributed Session Runtime only when single-process ownership becomes a real constraint.
+
+- [ ] Enforce ownership across:
+
+  - Agent Definition;
+  - Agent Definition Version;
+  - Agent Instance;
+  - Session;
+  - memory;
+  - triggers;
+  - WorkItems;
+  - approvals;
+  - attachments/artifacts;
+  - resources;
+  - integrations.
+
+- [ ] Remove trusted-local assumptions from externally reachable paths.
+
+- [ ] Separate browser/user credentials from host/service authority.
+
+---
+
+## P10B — Production persistence
+
+Expected first major production infrastructure migration:
+
+```text
+SQLite
+  ↓
+PostgreSQL
+```
+
+Trigger this when real requirements include concurrent external users, stronger production operations, multi-process services, or hosted reliability needs.
+
+- [ ] Add PostgreSQL provider/configuration.
+
+- [ ] Verify migrations and transaction semantics on PostgreSQL.
+
+- [ ] Verify concurrency/revision protections under real database concurrency.
+
+- [ ] Keep SQLite available where useful for local/Synthetic development unless maintaining both becomes counterproductive.
+
+- [ ] Define backup/restore policy and verify restore, not only backup creation.
+
+Do not introduce a new generic persistence architecture solely for the provider swap if EF Core boundaries are already sufficient.
+
+---
+
+## P10C — Production object storage and secret management
+
+Add only when local-disk assumptions no longer fit deployment.
+
+Potential migration:
+
+```text
+attachments/artifacts/immutable resources
+local disk
+    ↓
+S3 / Azure Blob / compatible object storage
+```
+
+- [ ] Preserve distinct workspace semantics rather than treating mutable session workspace as an ordinary immutable blob.
+
+- [ ] Add lifecycle/retention policy where required.
+
+- [ ] Add production secret management when deployment requires it.
+
+Potential implementations:
+
+```text
+cloud secret manager
+Vault-like service
+platform-managed secrets
+```
+
+Credentials must remain outside model context and normal Admin projections.
+
+---
+
+## P10D — Hosted operations
+
+When externally hosted:
+
+- [ ] TLS/reverse-proxy/ingress hardening.
+
+- [ ] Production logging/metrics/tracing backend.
+
+- [ ] OpenTelemetry export where useful.
+
+- [ ] Alerting for meaningful failure conditions.
+
+- [ ] Backup + restore drills.
+
+- [ ] Deployment rollback strategy.
+
+- [ ] Rate limits/resource quotas where required.
+
+- [ ] Public-hosting security review.
+
+- [ ] Expand P7 Admin history into enterprise-grade audit/compliance only where required.
+
+---
+
+## P10E — Distributed scaling only when load requires it
+
+Do not assume this is required for the first production deployment.
+
+Potential future needs:
+
+```text
+multiple API nodes
+multi-node SignalR
+distributed scheduler/work claims
+worker pools
+shared ephemeral coordination
+horizontal Session Runtime
+```
+
+Only then evaluate:
+
+- [ ] Redis or another coordination/cache technology where a specific use case exists.
+
+- [ ] SignalR backplane when multiple realtime nodes require it.
+
+- [ ] Distributed trigger/work claiming/leases.
+
+- [ ] Queue/broker infrastructure when durable DB-backed work is no longer sufficient.
+
+- [ ] Horizontal/distributed Session Runtime only when single-process ownership is a measured bottleneck.
+
+- [ ] Kubernetes only when deployment/scale/isolation requirements justify it.
+
+Avoid:
+
+```text
+Redis because sessions exist
+Kafka because events exist
+Kubernetes because Docker exists
+microservices because modules exist
+```
 
 ---
 
 # Deferred / optional provider work
 
-These items do not block P7.
+These items do not block P7.5.
 
 ## Real P3 provider verification
 
-- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from P7.
+- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from architecture work.
 
 Keep it bounded, credential-gated, provider-specific, and outside default CI.
 
@@ -898,56 +886,19 @@ Keep it bounded, credential-gated, provider-specific, and outside default CI.
 
 - [ ] Keep `main` green before beginning the next architectural slice.
 
-- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, identity, trigger, background-work, definition, publishing, and admin change.
+- [ ] Add regression coverage with every lifecycle, response, speech, multimodal, tool, memory, identity, trigger, background-work, definition, publishing, Admin, and infrastructure change.
 
 - [ ] Maintain Playwright coverage for meaningful user-visible workflows.
 
 - [ ] Make asynchronous/race-sensitive tests deterministic.
 
-  Prefer explicit gates/events and `TimeProvider` over wall-clock sleeps.
+Prefer explicit gates/events and `TimeProvider` over wall-clock sleeps.
 
-- [ ] Keep hosted-provider tests explicitly opt-in.
+- [ ] Keep hosted-provider tests explicitly opt-in unless a provider-specific requirement is under acceptance.
 
-- [ ] Maintain observability for:
-
-  - model calls and provider/model selection;
-  - response/interruption/queue/steer lifecycle;
-  - detach/reattach lifecycle;
-  - progress lifecycle;
-  - speech provider/capability selection;
-  - tool calls and pending approvals;
-  - sandbox execution;
-  - compaction lifecycle;
-  - memory retrieval/mutation and scope/owner without sensitive content logging;
-  - identity/definition/version resolution;
-  - draft/publish/instance lifecycle;
-  - trigger registration create/update/cancel;
-  - trigger type and owner scope without logging sensitive payload content;
-  - scheduler due/claimed/fired state;
-  - scheduler lag;
-  - trigger occurrence dedupe/drop/expiry;
-  - missed-occurrence handling;
-  - trigger authorization origin;
-  - background work lifecycle;
-  - policy denials;
-  - resource limits.
-
-- [ ] Add startup catalog/provider capability-consistency validation if provider capability configuration becomes independently variable enough that contradictory declarations can occur.
+- [ ] Keep hosted infrastructure optional for local development.
 
 - [ ] Keep docs synchronized with observed implementation.
-
-Current important baselines:
-
-```text
-P1 freeze:  dceaccb
-P2 freeze:  47d6ff6
-P3 freeze:  4dbb920
-P4 freeze:  822028f / workflow 35806764609 green
-P5 freeze:  4bbc0c1 / workflow 35954811544 green
-P6 freeze:  30adaeb / workflow 36085265506 green (bef77d1 last behavior)
-prior P6 freeze: 6900bc1 / workflow 35990145456 attempt 2 (superseded)
-active phase: P8 — harness/platform extensibility (P7 follow-up frozen on 2acb1a8)
-```
 
 - [ ] Keep TODO focused on current/future work.
 
@@ -971,6 +922,7 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] First-class transient progress semantics.
 - [x] Durable multi-session catalog/history and paginated conversation history.
 - [x] Bounded runtime restore.
+- [x] Durable accepted conversation-turn execution / observer reattachment behavior.
 - [x] Session purpose/lifecycle/completion policy and terminal read-only history.
 - [x] Trusted owner profile API/persistence.
 - [x] Session attachments/artifacts and current/historical image access.
@@ -989,35 +941,40 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] P4 structured session memory.
 - [x] Durable Agent Definition vs Agent Instance separation.
 - [x] IdentityUser/User learned-memory scopes and layered prompt composition.
-- [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1` (workflow `35954811544` green).
-- [x] Durable triggered/background execution — P6 frozen on `30adaeb` (workflow `36085265506` green).
+- [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1`.
+- [x] Durable triggered/background execution — P6 frozen on `30adaeb`.
+- [x] P7 Harness Admin: draft/version/publish, resources, instances/persona, memory/automation administration, validation/evaluation, history/rollback.
 
 ---
 
 # Next implementation item
 
-**P8 — harness/platform extensibility** is the next phase. P7 Admin lifecycle is **frozen** — see `docs/reports/p7-freeze-candidate.md`.
+**P7.5A — Architecture and ownership inventory** is next.
 
-Do not reopen P7 without a reproducible regression. Historical P7 slice entry point was:
-
-```text
-dedicated Admin navigation/route
-→ Agent Definition / Agent Instance read models
-→ safe effective-config projection
-→ secret redaction/non-exposure
-→ User-mode mutation boundary
-```
-
-Then continue in dependency order:
+Start with:
 
 ```text
-P7A Admin shell/effective config
-→ P7B Definition lifecycle
-→ P7C Harness editing/resources/workspace
-→ P7D Instance + identity/persona
-→ P7E Memory + automation admin
-→ P7F Validation/evals/publish gate
-→ P7G History/rollback/final UX
+current architecture map
+→ durable entity/lifecycle ownership table
+→ effective-configuration call-path map
+→ policy/authorization call-path map
+→ persistence/storage implementation dependency map
+→ identify concrete duplication/god objects
+→ propose bounded refactors only where evidence exists
 ```
 
-P6 remains frozen on `30adaeb` / workflow `36085265506`. Do not reopen P6 without a reproducible regression.
+Then continue:
+
+```text
+P7.5A architecture/ownership inventory
+→ P7.5B effective configuration + policy consolidation
+→ P7.5C application/domain cleanup
+→ P7.5D persistence/infrastructure portability audit
+→ P7.5E observability/operational shape
+→ P7.5F regression gate + architecture freeze
+→ P8 extensibility
+```
+
+Do **not** begin by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+
+The next phase should first prove which architecture changes are actually necessary.
