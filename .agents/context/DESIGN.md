@@ -1,6 +1,6 @@
 ---
 name: Agent Core
-description: Ant Design v6 dark operate UI for one persistent text/voice session.
+description: Ant Design v6 dark operate UI for Chat and the shipped Admin configuration surface.
 colors:
   primary: "#1677ff"
   success: "#52c41a"
@@ -110,7 +110,7 @@ This file is lightweight MVP **presentation** guidance only. Screens, copy, and 
 
 **Creative North Star: "Ant Design operate UI"**
 
-Agent Core is a personal-chat operate surface. Ant Design v6 is the MVP component system; Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone.
+Agent Core is a personal-chat operate surface plus a shipped Admin configuration surface. Both use Ant Design v6. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.
 
 The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. Product CSS maps those roles from `:root` custom properties; it does not invert a former light palette or invent a second token catalog.
 
@@ -170,6 +170,7 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 - New chat empty: Identity + Speech locale in the intro stack (max 22rem). Model/Reasoning are not duplicated there.
 - Paused: Resume replaces the composer. Ended: quiet ended note only. Model selection lives only in the composer, so neither paused nor ended shows a header Model control.
 - Operational drawers are 400px wide when the host reports the wide layout and 320px otherwise. Their Ant Design List rows stay open rather than becoming nested cards; row and inset relationships use the same 8/12/16px rhythm. On narrow layouts, drawer action buttons have a 40px minimum height.
+- Admin: same header height, container background, and 8/12/16 rhythm as Chat. Inventory and definition panels are configuration layouts, not a chat column. Content stays within `56rem`. Below 768px, admin grids collapse to one column. Operator labels stay product words; do not copy Domain type names into the UI.
 
 **The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
 
@@ -257,6 +258,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** render Spoken only for assistant public `speechText` that differs after whitespace normalization; keep it first in the turn as the TTS projection, with Markdown as on-screen display below.
 - **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
 - **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
+- **Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
 - **Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
@@ -264,7 +266,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 ### Don't:
 - **Don't** reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.
 - **Don't** add generic wrappers, Ant Design Pro/ProComponents/X, or another CSS framework.
-- **Don't** use Layout.Sider `theme="dark"` (navy admin sider).
+- **Don't** use Layout.Sider `theme="dark"` (navy admin sider) or restyle Admin as a separate enterprise dashboard.
 - **Don't** treat this file as behavioral authority over `/docs`.
 - **Don't** use a blocking Modal or a second Select/button for model or effort; keep one Dropdown anchored to the Model chip, with effort in the overlay footer.
 - **Don't** render queued drafts as transcript turns or move pending attachments into a separate dock.

@@ -16,7 +16,7 @@ web
 
 ## Users
 
-Primary users are operators and demo participants having a live conversation with one AI identity in a personal-chat interface. Typical situations: examining, customer-support, tutoring, interviewing, or similar roles defined by a versioned Agent Definition. The job is to talk in text or voice, interrupt naturally, and stay in one continuous conversation.
+Primary users are operators and demo participants having a live conversation with one AI identity in a personal-chat interface. Typical situations: examining, customer-support, tutoring, interviewing, or similar roles defined by a versioned Agent Definition. The job is to talk in text or voice, interrupt naturally, and stay in one continuous conversation. The same operator opens Admin from Chat to review definitions, drafts, and instances. Admin is configuration for that harness, not a second conversation product.
 
 Other audiences (implementers, CI, Synthetic testers) use the same UI without hosted keys. They are not a second product.
 
@@ -51,10 +51,11 @@ Confirmed MVP UI/product facts (see `/docs`; do not extend here):
 - Visible status such as Listening, User speaking, Thinking, Agent speaking, Interrupted, Reconnecting (see [docs/13](../../docs/13-frontend-implementation-spec.md)). Assistant content renders as sanitized Markdown and blocks per docs/13; interrupted/failed entries keep a status label.
 - Session catalog rail, attachment picker, and authorized blob fetch for history chips are shipped MVP UI (see [docs/13](../../docs/13-frontend-implementation-spec.md)); artifact refs show fixture labels only.
 - Synthetic mode must not pretend to transcribe arbitrary speech; it is scripted and hardware-free by default.
+- Admin is a shipped route area on the same Ant Design dark UI (`/admin`, definition detail, instance detail). Behavior, including leaving Chat and returning, stays in [docs/13](../../docs/13-frontend-implementation-spec.md).
 
 Explicitly out of this UI foundation and out of MVP product UI:
 
-- a separate admin dashboard, multi-tenant inbox, or second UI framework;
+- a multi-tenant inbox, an enterprise admin theme separate from the shipped Admin, or a second UI framework;
 - unsanitized HTML injection, raw provider secrets in the UI, or a second component framework;
 - agent workspaces as a full product surface, unrestricted autonomous tooling, or post-MVP proactive policy changes beyond current docs;
 - authentication, WebRTC, native speech-to-speech, Ant Design Pro/ProComponents/X.
@@ -64,7 +65,7 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 ## Brand Commitments
 
 - Name: Agent Core.
-- Feel: personal messaging / live conversation, not an admin dashboard.
+- Feel: Chat is personal messaging. Admin uses the same dark operate system for configuration, not a separate enterprise dashboard.
 - Writing tone: direct, operator-facing, no invented marketing claims.
 - Synthetic profile must remain labeled in the developer/demo UI.
 - Do not fabricate testimonials, customers, or SLAs.
