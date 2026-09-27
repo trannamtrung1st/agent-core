@@ -45,28 +45,19 @@ Observer-durability closure (do not merge into Harness Admin):
 
 ## Current active phase
 
-**P7.5 — architecture consolidation and infrastructure readiness.**
+**P8 — harness/platform extensibility.**
 
-P8 must not begin until P7.5 closes.
+P7.5 is frozen on `b112198`. Hosted workflow `36348699304` is green on that SHA. Closure report: `docs/reports/p7.5-freeze-candidate.md`.
 
-P7.5 is a bounded refactoring/review phase:
-
-```text
-no new product features
-no speculative rewrite
-no premature production stack
-preserve P1–P7 behavior
-```
-
-The purpose is to use the completed P7 product surface as an architectural stress test before P8 turns internal seams into extension contracts.
+Start P8 from one concrete provider need. Do not add a universal provider interface.
 
 ---
 
 # Current roadmap
 
 1. **P0–P7 — closed/frozen.**
-2. **P7.5 — architecture consolidation and infrastructure readiness — ACTIVE.**
-3. **P8 — harness/platform extensibility.**
+2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `b112198`.**
+3. **P8 — harness/platform extensibility — ACTIVE.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
 
@@ -282,7 +273,7 @@ Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36348
 - Persistence audit kept SQLite, separate stores, explicit transactions, and the single-process scheduler. Recorded in `docs/15-persistence-and-configuration.md`.
 - Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
 - Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
-- Canonical handoff text no longer calls P8 next. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `/docs` still wins.
+- Canonical handoff names P8 next. P7.5 is frozen on `b112198`. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `/docs` still wins.
 - The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. Hosted workflow `36348699304` is green on `b112198`.
 
 ---
@@ -627,7 +618,7 @@ Production-shaped properties that **should** exist now:
 
 # P8 — Harness/platform extensibility
 
-P8 begins only after P7.5 closes.
+P7.5 is frozen on `b112198`. P8 may begin from one concrete provider need.
 
 ## Goal
 
