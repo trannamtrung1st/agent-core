@@ -545,8 +545,6 @@ describe("Conversation", () => {
   });
 
   it("preserves scrollTop when older history is prepended", () => {
-    const scrollIntoView = vi.fn();
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     const clientHeight = vi.spyOn(Element.prototype, "clientHeight", "get");
     clientHeight.mockImplementation(function clientHeightStub(this: Element) {
       if (this.classList.contains("conversation-scroll")) {
@@ -578,17 +576,54 @@ describe("Conversation", () => {
     ];
 
     const { rerender, container } = render(<ScrollShell entries={initial} />);
-    expect(scrollIntoView).toHaveBeenCalled();
     const scroller = container.querySelector(".conversation-scroll") as HTMLElement;
     let height = 800;
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => height });
-    scroller.scrollTop = 120;
     rerender(<ScrollShell entries={initial} />);
-    scrollIntoView.mockClear();
+    expect(scroller.scrollTop).toBe(400);
+    scroller.scrollTop = 120;
     height = 1400;
     rerender(<ScrollShell entries={hydrated} />);
-    expect(scrollIntoView).not.toHaveBeenCalled();
     expect(scroller.scrollTop).toBe(720);
+    clientHeight.mockRestore();
+  });
+
+  it("follows the bottom when transcript height grows after the first layout", () => {
+    const clientHeight = vi.spyOn(Element.prototype, "clientHeight", "get");
+    clientHeight.mockImplementation(function clientHeightStub(this: Element) {
+      if (this.classList.contains("conversation-scroll")) {
+        return 400;
+      }
+      return 0;
+    });
+
+    function ScrollShell({
+      entries: history
+    }: {
+      entries: HistoryEntry[];
+    }) {
+      return (
+        <div className="conversation-scroll">
+          <Conversation agentName="Alex" sessionId="s1" entries={history} activity={{ kind: "idle" }} />
+        </div>
+      );
+    }
+
+    const initial = [
+      entry({ entryId: "u1", role: "user", text: "Hello" }),
+      entry({ entryId: "a1", role: "assistant", text: "Hi." })
+    ];
+
+    const { rerender, container } = render(<ScrollShell entries={initial} />);
+    const scroller = container.querySelector(".conversation-scroll") as HTMLElement;
+    let height = 600;
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => height });
+    rerender(<ScrollShell entries={initial} />);
+    expect(scroller.scrollTop).toBe(200);
+
+    height = 900;
+    rerender(<ScrollShell entries={initial} />);
+    expect(scroller.scrollTop).toBe(500);
     clientHeight.mockRestore();
   });
 

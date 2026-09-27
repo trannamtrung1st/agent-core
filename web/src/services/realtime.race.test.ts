@@ -79,6 +79,58 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().error).toBeNull();
   });
 
+  it("reattaches instead of permanently dropping a forward text offset gap", async () => {
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const start = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      lastServerSequence: 2,
+      liveResponseId: "r1",
+      entries: [{
+        entryId: "assistant-1",
+        sequence: 2,
+        sourceEventId: null,
+        role: "assistant",
+        text: "Hello",
+        responseId: "r1",
+        status: "streaming",
+        deliveryMode: "text",
+        heardTextEndExclusive: 0,
+        receivedTextEndExclusive: 5,
+        createdAt: "2026-09-15T00:00:00.000Z"
+      }],
+      agents: [],
+      selectedAgentId: "examiner"
+    });
+
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "delta-gap",
+      sequence: 3,
+      timestamp: "2026-09-15T00:00:00.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: "r1",
+      type: "agent.text.delta",
+      payload: { textStart: 10, text: "world" }
+    });
+
+    await vi.waitFor(() => {
+      expect(stop).toHaveBeenCalled();
+      expect(start).toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith("Attach", expect.objectContaining({ type: "session.attach" }));
+    });
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Hello");
+    expect(useSessionStore.getState().connection).toBe("reconnecting");
+  });
+
   it("clears errorFatal when reconnect attach is rejected", async () => {
     const stop = vi.fn().mockResolvedValue(undefined);
     const start = vi.fn().mockResolvedValue(undefined);

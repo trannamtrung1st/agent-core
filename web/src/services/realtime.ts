@@ -2,7 +2,7 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionSt
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
 import { EARLY_AUDIO_MS, OutputAudioGate, type OutputAudioFrame } from "../audio/outputAdmission";
-import { applyServerEvent, emptySession, hasControlSequenceGap, isReadonlySession, isSessionModelBusy, modelFieldsFromSelection, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
+import { applyServerEvent, emptySession, hasControlSequenceGap, hasTextOffsetGap, isReadonlySession, isSessionModelBusy, modelFieldsFromSelection, useSessionStore, type HistoryAttachment, type HistoryEntry, type PendingSendItem, type ServerEvent } from "../state/sessionStore";
 import { sessionErrorFromMessage, sessionErrorFromWire, type WireError } from "../features/chat/sessionError";
 import { parseSessionIdFromPath, sameSessionId, syncBrowserSessionPath } from "../app/sessionRoute";
 import {
@@ -772,6 +772,10 @@ function handleEvent(raw: ServerEvent): void {
     void recoverFromSequenceGap();
     return;
   }
+  if (prior.connection === "ready" && hasTextOffsetGap(prior, raw)) {
+    void recoverFromSequenceGap();
+    return;
+  }
 
   const next = applyServerEvent(prior, raw);
   if (
@@ -805,6 +809,14 @@ function handleEvent(raw: ServerEvent): void {
     bindSpeechTransports();
     reconcilePendingUserText(next.entries);
     void hydrateBoundAttachments(next.sessionId);
+    if (next.liveResponseId) {
+      lastReceiptOffset = -1;
+      lastReceiptResponseId = next.liveResponseId;
+      lastReceiptBlockSignature = "";
+      startReceipts(next.liveResponseId);
+    } else {
+      stopReceipts();
+    }
     if (next.sessionId) {
       void loadNewestHistoryPage(next.sessionId, { replaceWindow: true });
     }

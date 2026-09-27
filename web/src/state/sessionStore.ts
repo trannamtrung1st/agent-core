@@ -489,6 +489,17 @@ export function hasControlSequenceGap(state: SessionView, event: ServerEvent): b
     && event.sequence > state.lastServerSequence + 1;
 }
 
+export function hasTextOffsetGap(state: SessionView, event: ServerEvent): boolean {
+  if (event.type !== "agent.text.delta"
+      || !event.responseId
+      || event.responseId !== state.liveResponseId) {
+    return false;
+  }
+
+  const live = state.entries.find((entry) => entry.responseId === event.responseId);
+  return live != null && asNumber(event.payload.textStart) > live.text.length;
+}
+
 export function applyServerEvent(state: SessionView, event: ServerEvent): SessionView {
   if (state.attachmentId && event.attachmentId && event.attachmentId !== state.attachmentId && event.type !== "session.ready") {
     return state;
@@ -689,7 +700,14 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const text = asString(event.payload.text);
       const start = asNumber(event.payload.textStart);
       const live = state.entries.find((entry) => entry.responseId === event.responseId);
-      const appended = Boolean(live && start === live.text.length && text.length > 0);
+      const overlap = live && start <= live.text.length
+        ? Math.min(live.text.length - start, text.length)
+        : 0;
+      const appended = Boolean(
+        live
+        && start <= live.text.length
+        && live.text.slice(start, start + overlap) === text.slice(0, overlap)
+        && text.length > overlap);
       return {
         ...state,
         lastServerSequence: event.sequence,
@@ -698,11 +716,16 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
             return entry;
           }
 
-          if (start !== entry.text.length) {
+          if (start > entry.text.length) {
             return entry;
           }
 
-          const nextText = entry.text + text;
+          const overlapLength = Math.min(entry.text.length - start, text.length);
+          if (entry.text.slice(start, start + overlapLength) !== text.slice(0, overlapLength)) {
+            return entry;
+          }
+
+          const nextText = entry.text + text.slice(overlapLength);
           return {
             ...entry,
             text: nextText

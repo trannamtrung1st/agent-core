@@ -381,10 +381,40 @@ public sealed partial class SessionRuntime
         }
     }
 
+    private PublicHistoryEntry ProjectHistoryEntry(ConversationEntry entry)
+    {
+        var projected = PublicHistory.FromEntry(entry);
+        if (_activeResponseId is null
+            || entry.ResponseId != _activeResponseId
+            || entry.Status != EntryStatus.Streaming)
+        {
+            return projected;
+        }
+
+        if (!VoiceDisplayPublicationAllowed())
+        {
+            return projected;
+        }
+
+        var display = DisplayText();
+        if (display.Length == 0 || _publishedDisplayLength <= 0)
+        {
+            return projected;
+        }
+
+        var publishedLength = Math.Min(_publishedDisplayLength, display.Length);
+        if (publishedLength <= projected.Text.Length)
+        {
+            return projected;
+        }
+
+        return projected with { Text = display[..publishedLength] };
+    }
+
     private SessionReadyProjection BuildReady()
     {
         var voice = _snapshot.Mode == SessionMode.Voice;
-        var history = _snapshot.Entries.TakeLast(50).Select(PublicHistory.FromEntry).ToArray();
+        var history = _snapshot.Entries.TakeLast(50).Select(ProjectHistoryEntry).ToArray();
         return new SessionReadyProjection(
             _snapshot.Mode,
             _snapshot.PendingMode,

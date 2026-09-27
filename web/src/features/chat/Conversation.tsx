@@ -7,6 +7,15 @@ import { ChatMessage } from "./ChatMessage";
 import { formatChatTime, statusLabel } from "./chatTime";
 
 const REPLY_SPACE_RATIO = 0.5;
+const SCROLL_BOTTOM_SLACK = 2;
+
+function distanceFromScrollBottom(scroll: Element): number {
+  return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight;
+}
+
+function isScrolledToBottom(scroll: Element): boolean {
+  return distanceFromScrollBottom(scroll) <= SCROLL_BOTTOM_SLACK;
+}
 
 export function Conversation({
   agentName,
@@ -54,7 +63,7 @@ export function Conversation({
   const oldestRef = useRef<string | null>(null);
   const lastEntryRef = useRef<string | null>(null);
   const scrollHeightRef = useRef(0);
-  const scrollTopRef = useRef(0);
+  const userAwayFromBottomRef = useRef(false);
 
   useLayoutEffect(() => {
     const root = windowRef.current;
@@ -62,6 +71,7 @@ export function Conversation({
     const scroll = root?.closest(".conversation-scroll");
     if (!root || !scroll || scrollAnchorKey == null) {
       scrolledFor.current = null;
+      userAwayFromBottomRef.current = false;
       setReplySpace(0);
       sessionRef.current = sessionId;
       oldestRef.current = oldestEntryId;
@@ -74,17 +84,15 @@ export function Conversation({
         return false;
       }
 
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const target = spacer ?? root;
-      target.scrollIntoView?.({
-        block: "end",
-        inline: "nearest",
-        behavior: reduceMotion ? "auto" : "smooth"
-      });
+      scroll.scrollTop = scroll.scrollHeight - scroll.clientHeight;
       return true;
     };
 
     const sessionChanged = sessionRef.current !== sessionId;
+    if (sessionChanged) {
+      userAwayFromBottomRef.current = false;
+      scrolledFor.current = null;
+    }
     const prepended = !sessionChanged
       && oldestEntryId != null
       && oldestEntryId !== oldestRef.current
@@ -93,16 +101,24 @@ export function Conversation({
 
     if (prepended) {
       const delta = scroll.scrollHeight - scrollHeightRef.current;
-      scroll.scrollTop = scrollTopRef.current + delta;
+      scroll.scrollTop = scroll.scrollTop + delta;
       scrolledFor.current = scrollAnchorKey;
+      userAwayFromBottomRef.current = true;
     } else {
       const maybeScrollToLatest = (): void => {
-        if (!sessionChanged && !appended && scrolledFor.current === scrollAnchorKey) {
+        const shouldFollow =
+          sessionChanged
+          || appended
+          || (!userAwayFromBottomRef.current && !isScrolledToBottom(scroll));
+
+        if (!shouldFollow) {
           return;
         }
 
         if (scrollToLatest()) {
-          scrolledFor.current = scrollAnchorKey;
+          if (isScrolledToBottom(scroll)) {
+            scrolledFor.current = scrollAnchorKey;
+          }
         }
       };
 
@@ -151,14 +167,18 @@ export function Conversation({
       observer?.observe(scroll);
       observer?.observe(root);
       window.addEventListener("resize", runMeasure);
+      const onScroll = (): void => {
+        userAwayFromBottomRef.current = !isScrolledToBottom(scroll);
+      };
+      scroll.addEventListener("scroll", onScroll, { passive: true });
       sessionRef.current = sessionId;
       oldestRef.current = oldestEntryId;
       lastEntryRef.current = lastEntryId;
       scrollHeightRef.current = scroll.scrollHeight;
-      scrollTopRef.current = scroll.scrollTop;
       return () => {
         observer?.disconnect();
         window.removeEventListener("resize", runMeasure);
+        scroll.removeEventListener("scroll", onScroll);
       };
     }
 
@@ -166,7 +186,6 @@ export function Conversation({
     oldestRef.current = oldestEntryId;
     lastEntryRef.current = lastEntryId;
     scrollHeightRef.current = scroll.scrollHeight;
-    scrollTopRef.current = scroll.scrollTop;
     return undefined;
   }, [activity, entries, lastUserId, lastEntryId, oldestEntryId, liveUserTranscript, scrollAnchorKey, sessionId]);
 

@@ -74,6 +74,14 @@ test("long session opens on the newest page and load-older keeps the anchor", as
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.getByText("History seed 500")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("History seed 1")).toHaveCount(0);
+  await expect
+    .poll(async () =>
+      page.locator(".conversation-scroll").evaluate((element) => {
+        const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+        return distance <= 2;
+      })
+    )
+    .toBe(true);
 
   const newest = historyUrls.filter((url) => {
     const parsed = new URL(url);

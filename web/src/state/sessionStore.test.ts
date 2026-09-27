@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyServerEvent, emptySession, historyFromPayload, isReadonlySession, type ServerEvent } from "./sessionStore";
+import { applyServerEvent, emptySession, hasTextOffsetGap, historyFromPayload, isReadonlySession, type ServerEvent } from "./sessionStore";
 
 function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "sequence">): ServerEvent {
   return {
@@ -42,9 +42,18 @@ describe("applyServerEvent", () => {
     expect(state.entries[0]?.text).toBe("Hello");
     state = applyServerEvent(
       state,
+      event({ type: "agent.text.delta", sequence: 4, responseId: "r1", payload: { text: "lo world", textStart: 3 } })
+    );
+    expect(state.entries[0]?.text).toBe("Hello world");
+    expect(hasTextOffsetGap(
+      state,
+      event({ type: "agent.text.delta", sequence: 5, responseId: "r1", payload: { text: "!", textStart: 12 } })
+    )).toBe(true);
+    state = applyServerEvent(
+      state,
       event({
         type: "agent.block.upsert",
-        sequence: 4,
+        sequence: 5,
         responseId: "r1",
         payload: { blockId: "b1", kind: "markdown", text: "**Hi**", fallbackText: "**Hi**" }
       })

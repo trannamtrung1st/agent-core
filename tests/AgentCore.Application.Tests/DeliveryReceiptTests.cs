@@ -1,5 +1,6 @@
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
+using AgentCore.Application.Models;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -42,6 +43,35 @@ public sealed class DeliveryReceiptTests
     }
 
     [Fact]
+    public async Task Reattach_ready_includes_published_stream_text_before_receipts_catch_up()
+    {
+        var output = new CapturingSessionOutput();
+        var model = new DetachHoldingLanguageModel();
+        await using var runtime = Create(output, new InMemoryMemoryStore(), model: model);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal("T1", assistant.Text);
+        Assert.Equal(0, assistant.ReceivedTextEndExclusive);
+
+        await runtime.TransportDetachAsync();
+        await runtime.WaitUntilMailboxDrainedAsync();
+
+        Assert.True(await runtime.AttachAsync());
+        await runtime.WaitUntilMailboxDrainedAsync();
+        var ready = Assert.IsType<ReadyOutput>(
+            output.Items.Last(item => item.Payload is ReadyOutput).Payload);
+        var streaming = Assert.Single(ready.Ready.History, entry => entry.ResponseId == assistant.ResponseId);
+        Assert.Equal(EntryStatus.Streaming, streaming.Status);
+        Assert.Equal("T1", streaming.Text);
+        Assert.Equal(0, streaming.ReceivedTextEndExclusive);
+
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+    }
+
+    [Fact]
     public async Task Duplicate_source_event_does_not_create_a_second_user_turn()
     {
         var output = new CapturingSessionOutput();
@@ -63,7 +93,11 @@ public sealed class DeliveryReceiptTests
         Assert.Equal(1, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.User));
     }
 
-    private static SessionRuntime Create(ISessionOutput output, InMemoryMemoryStore store, SessionSnapshot? snapshot = null)
+    private static SessionRuntime Create(
+        ISessionOutput output,
+        InMemoryMemoryStore store,
+        SessionSnapshot? snapshot = null,
+        ILanguageModel? model = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -92,12 +126,28 @@ public sealed class DeliveryReceiptTests
 
         return new SessionRuntime(
             snapshot,
-            new ScriptedLanguageModel(),
+            model ?? new ScriptedLanguageModel(),
             new DefaultAgentBrain(new PromptContextBuilder()),
             store,
             output,
             ids,
             time,
             NullLogger<SessionRuntime>.Instance);
+    }
+}
+
+file sealed class DetachHoldingLanguageModel : ILanguageModel
+{
+    public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public ModelCapabilities Capabilities { get; } = new(true, true);
+
+    public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+        ModelRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        yield return new ModelTextDelta("T1");
+        await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        yield return new ModelCompleted(ModelStopReason.Completed);
     }
 }

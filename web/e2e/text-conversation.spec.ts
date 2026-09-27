@@ -189,6 +189,12 @@ test("refresh mid-stream restores the same durable execution and continues witho
   expect(after?.executionId).toBe(before?.executionId);
   expect(after?.responseId).toBe(before?.responseId);
 
+  const body = assistant.first().locator(".assistant-body");
+  const lengthAfterReload = (await body.innerText()).length;
+  await expect
+    .poll(async () => (await body.innerText()).length, { timeout: 12_000 })
+    .toBeGreaterThan(lengthAfterReload);
+
   await expect(assistant.first()).toContainText("Hello from synthetic.", { timeout: 20_000 });
   await waitForResponseSettled(page);
   await expect(assistant).toHaveCount(1);
