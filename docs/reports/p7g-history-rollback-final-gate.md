@@ -1,6 +1,6 @@
 # P7G — Admin history, deprecation/rollback, and final P7 gate
 
-**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139). W08 local gate closed at `2b967cf` (review 0160). W09 closed at `5eea954` (review 0164). **P7 Harness Admin frozen** on follow-up tree **`2acb1a8`** (last harness behavior **`1090535`**; W08 canonical **`f4107d7`** / workflow `36239630112`). Session observer-durability bookkeeping (`93cb2ab`–`3e75934`) is scoped separately in [p7-freeze-candidate.md](p7-freeze-candidate.md).
+**Status:** W07 closed at `ae83bfcd6c89100cd1da2ee89789a6a1b1f8408f` (review 0139). W08 local gate closed at `2b967cf` (review 0160). W09 closed at `5eea954` (review 0164). **P7 Harness Admin frozen** on follow-up tree **`2acb1a8`** (last harness behavior **`1090535`**; W08 canonical **`f4107d7`** / workflow `36239630112`). Session observer-durability appendix closed on `2c4d46f` (behavior `93cb2ab`; workflow `36336971087` green), scoped separately in [p7-freeze-candidate.md](p7-freeze-candidate.md).
 
 **Baseline:** `03e350af1ec343c17d8486b4ffcc8fb6ecac8bb0` (W06 P7F closure)
 

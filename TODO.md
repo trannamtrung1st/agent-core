@@ -24,20 +24,24 @@ P6: 30adaeb / workflow 36085265506 green
 P7 Harness Admin: follow-up tree 2acb1a8
   last harness behavior: 1090535
   canonical W08 hosted gate: f4107d7 / workflow 36239630112 green
+P7 verified follow-up tree (incl. session appendix): 2c4d46f
+  last session behavior: 93cb2ab
+  final gate/test stabilization: 2c4d46f
+  hosted gate: workflow 36336971087 green on 2c4d46f
 ```
 
 P7 evidence: `docs/reports/p7-freeze-candidate.md`.
 
-P7 owns **Harness Admin W01–W08 only**. The later `ConversationTurnExecution` observer-durability correction is session/runtime work, not part of the P7 Admin contract.
+P7 owns **Harness Admin W01–W08 only**. The `ConversationTurnExecution` observer-durability correction is **closed** session/runtime bookkeeping (not part of the P7 Admin contract).
 
-Current observer-durability bookkeeping:
+Observer-durability closure (do not merge into Harness Admin):
 
 ```text
-93cb2ab → 3e75934 — runtime/streaming correction
+93cb2ab — last behavior-affecting
+3e75934 — gate evidence (tests + history merge)
+2c4d46f — final stabilization; workflow 36336971087 green
 2b3188f → f45ea27 — scope/evidence documentation
 ```
-
-Do not merge that correction conceptually into Harness Admin.
 
 ## Current active phase
 

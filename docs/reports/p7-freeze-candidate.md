@@ -18,7 +18,7 @@ P7 Harness Admin is **not** a generic run-control console, Workflow orchestratio
 
 **Harness Admin is frozen** on follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last harness behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). **Canonical W08 hosted exact-SHA gate:** workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`**. **Latest hosted precursor** before the test-only repair on **`2acb1a8`:** workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — Domain through Compose **green**, Synthetic Playwright **56/57** (selector failure fixed in **`2acb1a8`**). **Exact-SHA hosted verification on commit `2acb1a8` is not recorded in this report** — cite a workflow run whose checkout SHA is **`2acb1a8`** when available.
 
-**Session-runtime observer-durability bookkeeping** (appendix only) is on **`93cb2ab`** (refresh/live delta continuation) and **`3e75934`** (scheduler API test race fix, past-grace live-resume E2E, in-flight history merge guard). Confirm hosted **Synthetic + Compose green** on **`3e75934`** before treating that bookkeeping row as closed. Implementation history from **`94b65b8`** through **`b6f577d`** (migration stamp, queued execution ownership, detach/headless acceptance). **P8** is next for platform/harness extensibility; execution-control façade work is explicitly deferred (see below).
+**Session-runtime observer-durability bookkeeping** (appendix only) is **closed** on verified tree **`2c4d46f`** (2026-09-28). **Last behavior-affecting SHA** **`93cb2ab`** (refresh/live delta continuation, `session.ready` live prefix, client reattach). **Final gate/test stabilization** **`2c4d46f`** (clock-relative trigger restart API test, long-hold `[test:durable-stream-long]` past-grace live-resume E2E, poll timeouts). Prior appendix SHAs: **`3e75934`** (scheduler API test race, past-grace E2E, in-flight history merge), **`2b3188f`**–**`f45ea27`** (scope/evidence docs). **Hosted gate:** workflow [**`36336971087`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36336971087) — **green** on **`2c4d46f`** (Domain, Infrastructure, Application, API, frontend unit/build, Synthetic Playwright, Manual-A wall-clock, P7G Admin lifecycle, Compose smoke). Implementation history from **`94b65b8`** through **`b6f577d`** (migration stamp, queued execution ownership, detach/headless acceptance). **P8** is next for platform/harness extensibility; execution-control façade work is explicitly deferred (see below).
 
 ### Session durable streaming — precise claim (not autonomous execution)
 
@@ -29,6 +29,8 @@ This correction proves **observer durability** only:
 - **`session.ready`** and the durable session/history snapshot are **current authoritative state** for lifecycle, history rows, `conversationExecutionId`, and `activeResponseId`.
 - **`SessionEvent` sequence** (`lastServerSequence` on the client) orders **observation/progress** (deltas, terminal notifications, receipts). Reconnect applies a fresh ready snapshot, then continues sequenced events; the client store is a **projection**, not execution authority.
 - Reconnect does **not** claim closed-loop unattended autonomy (no self-directed next work item, no operator run console, no unified execution audit).
+
+Observed end-to-end contract (freeze-ready on **`2c4d46f`**): accepted user turn → durable execution ownership → browser may disappear → execution continues → refresh/reopen can reattach to the same running execution → partial response restores and continues streaming → terminal assistant response persists → return later loads complete history.
 
 This does **not** close unattended or autonomous execution generally.
 
@@ -73,18 +75,29 @@ Related runtime guarantees; they do **not** substitute for detach/refresh identi
 | **`9519a83`** | Gate repair: concurrent draft store contract (`NotFound` on losing update); focused-editor Playwright helpers and publish-gate copy. |
 | **`2acb1a8`** | Gate repair: P7E `Managed` tag assertion scoped to `Instance identity` (test-only). |
 
+### Session appendix closure chain (observer durability)
+
+| SHA | Role |
+| --- | --- |
+| **`93cb2ab`** | **Last behavior-affecting:** live stream prefix on `session.ready`, refresh/reopen reattach to same running execution. |
+| **`3e75934`** | Gate evidence: clock-relative trigger list test, past-grace live-resume Playwright, in-flight `sessionHistory` merge guard. |
+| **`2c4d46f`** | **Final stabilization + hosted closure:** sqlite-restart trigger test `TimeProvider` future due, `[test:durable-stream-long]` E2E timing; workflow **`36336971087`** green. |
+
 **Historical (superseded canonical):** execution-final tree **`53d439e`** — offline eval isolation (`DefinitionDraftSyntheticOfflineLanguageModel`); W09 bookkeeping **`5eea954`** (review **0164**). Earlier REVISE candidates **`349429d`**, **`d7dcf8f`**, and bookkeeping **`f0c9e19`** remain in slice reports only.
 
 | Item | Value |
 | --- | --- |
 | **Harness Admin follow-up tree** | **`2acb1a8`** |
 | **Last harness behavior-affecting SHA** | **`1090535`** |
-| **Session observer-durability (code)** | **`93cb2ab`** → **`3e75934`** (confirm hosted gate on **`3e75934`**) |
-| **Session observer-durability (scope/docs)** | **`2b3188f`** |
+| **P7 verified follow-up tree (Harness + session appendix)** | **`2c4d46f`** (`2c4d46f8a55b282d4b232046bd4dd728585da9f0`) |
+| **Session observer-durability (behavior)** | **`93cb2ab`** (last behavior-affecting) |
+| **Session observer-durability (gate/test stabilization)** | **`2c4d46f`** |
+| **Session observer-durability (scope/docs)** | **`2b3188f`** → **`f45ea27`** |
+| **Verified hosted gate (session appendix closure)** | workflow [**`36336971087`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36336971087) — **green** on **`2c4d46f`** |
 | **Verified hosted gate (canonical W08 Harness Admin)** | workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) — **green** on **`f4107d7`** |
 | **Latest hosted precursor (pre-`2acb1a8` test repair)** | workflow [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — Domain through Compose **green**, Synthetic Playwright **56/57** (repair in **`2acb1a8`**) |
 | **Hosted exact-SHA on `2acb1a8`** | **Not recorded** — pending a workflow run whose head SHA is **`2acb1a8`** |
-| **Hosted gate target (session appendix bookkeeping)** | Confirm **Synthetic + Compose green** on **`3e75934`** (or later docs-only descendants do not replace that code SHA) |
+| **Hosted gate (session appendix bookkeeping)** | **Closed** — [**`36336971087`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36336971087) on **`2c4d46f`** |
 | **Superseded P7 canonical tree** | **`53d439e`** / workflow **`36228090172`** |
 | **Closure repair (behavior)** | **`479b637`** → **`f4107d7`** |
 | **W08 documentation closure** | **`2b967cf`** (`2b967cf84d0086c46212cfd35b6c3dbd429a119a`, review 0160 PASS) |
@@ -191,7 +204,7 @@ Harness Admin W08 canonical evidence and follow-up precursor runs:
 | `.github/workflows/synthetic.yml` exact-SHA (canonical W08) | **Green** — [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) on **`f4107d7`** (Domain, Infrastructure, Application, API, frontend, 57 Playwright Synthetic, faithful Manual-A, Compose) |
 | Latest hosted precursor before `2acb1a8` repair | [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) on **`9519a83`** — **green** except Synthetic Playwright **56/57** (fixed test-only in **`2acb1a8`**) |
 | Exact-SHA hosted run on **`2acb1a8`** | **Not recorded** in this report |
-| Session appendix bookkeeping target | Confirm **green** on **`3e75934`** (Synthetic + Compose) when closing observer-durability evidence |
+| Session appendix closure (observer durability) | **Green** — [**`36336971087`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36336971087) on **`2c4d46f`** |
 | Superseded prior canonical gate | [**`36228090172`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36228090172) on **`53d439e`** |
 | Prior W09 bookkeeping tree | [**`36218518149`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36218518149) on **`f0c9e19`** |
 | Prior failed attempt (superseded) | [**`36217996308`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36217996308) on **`cb097f4`** — Vitest timeouts under CI load; fixed in `f0c9e19` |
