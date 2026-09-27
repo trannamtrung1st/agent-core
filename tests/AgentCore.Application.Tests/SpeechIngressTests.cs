@@ -154,12 +154,13 @@ public sealed class SpeechIngressTests
         await runtime.SetModeAsync(SessionMode.Voice);
         await output.WaitForAsync(item => item.Payload is StateChangedOutput state && state.PendingMode == SessionMode.Voice);
         await runtime.DetachAsync();
-        await runtime.WaitUntilIdleAsync();
         Assert.Equal(SessionMode.Text, runtime.Snapshot.Mode);
         Assert.Null(runtime.Snapshot.PendingMode);
         Assert.False(runtime.RecognitionActive);
         Assert.Null(runtime.StreamId);
         release.TrySetResult();
+        await runtime.WaitUntilAcceptedConversationWorkSettledAsync();
+        await runtime.WaitUntilIdleAsync();
     }
 
     [Fact]

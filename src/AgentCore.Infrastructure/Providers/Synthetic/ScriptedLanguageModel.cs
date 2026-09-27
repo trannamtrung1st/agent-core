@@ -163,6 +163,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 await Task.Delay(4000, cancellationToken).ConfigureAwait(false);
             }
 
+            if (index == 0 && lastUser.Contains(DurableStreamProbeMarker, StringComparison.OrdinalIgnoreCase))
+            {
+                await Task.Delay(8000, cancellationToken).ConfigureAwait(false);
+            }
+
             if (index == 0 && lastUser.Contains("hold the line", StringComparison.OrdinalIgnoreCase))
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
@@ -1121,6 +1126,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     }
 
     internal const string SteerProbeMarker = "[test:steer-probe]";
+    internal const string DurableStreamProbeMarker = "[test:durable-stream]";
 
     private static bool RequestsNativeJson(ModelRequest request) =>
         request.ResponseContract is not null

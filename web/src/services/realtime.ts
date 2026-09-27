@@ -61,6 +61,7 @@ import {
 
 let connection: HubConnection | null = null;
 let connectionEpoch = 0;
+let conversationConvergenceEpoch = 0;
 let commandSequence = 0;
 let clientSpeechPlayer: ClientSpeechPlayer | null = null;
 let transcriptLife: ClientTranscriptLifecycle | null = null;
@@ -807,6 +808,15 @@ function handleEvent(raw: ServerEvent): void {
     if (next.sessionId) {
       void loadNewestHistoryPage(next.sessionId, { replaceWindow: true });
     }
+    if (next.sessionId && next.attachmentId && next.liveResponseId) {
+      void convergeDurableConversation(
+        next.sessionId,
+        next.attachmentId,
+        next.liveResponseId
+      );
+    } else {
+      conversationConvergenceEpoch += 1;
+    }
     if (String(raw.payload?.mode ?? "") === "voice" && voiceReadyDowngradeOnNextReady) {
       downgradePassiveVoiceAttach();
     }
@@ -863,6 +873,29 @@ function handleEvent(raw: ServerEvent): void {
   }
 
   syncCapture();
+}
+
+async function convergeDurableConversation(
+  sessionId: string,
+  attachmentId: string,
+  responseId: string
+): Promise<void> {
+  const epoch = ++conversationConvergenceEpoch;
+  while (epoch === conversationConvergenceEpoch) {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+    const current = useSessionStore.getState();
+    if (!sameSessionId(current.sessionId, sessionId)
+        || current.attachmentId !== attachmentId
+        || current.liveResponseId !== responseId) {
+      return;
+    }
+
+    await loadNewestHistoryPage(sessionId, { replaceWindow: false });
+    const refreshed = useSessionStore.getState();
+    if (refreshed.liveResponseId !== responseId) {
+      return;
+    }
+  }
 }
 
 function asEventNumber(value: unknown): number {
@@ -3797,6 +3830,14 @@ if (typeof window !== "undefined") {
     },
     spokenClientSpeech: () => injectedSynthesizer?.spoken.map((item) => item.text) ?? [],
     clientSpeechActive: () => clientSpeechPlayer?.activeResponseId() ?? null,
+    conversationExecution: () => {
+      const snapshot = useSessionStore.getState();
+      return {
+        executionId: snapshot.conversationExecutionId,
+        responseId: snapshot.liveResponseId,
+        outputState: snapshot.outputState
+      };
+    },
     hubConnected: () => connection?.state === HubConnectionState.Connected,
     sessionConnection: () => useSessionStore.getState().connection,
     captureLiveState: () => useSessionStore.getState().captureLive

@@ -296,6 +296,18 @@ public sealed partial class SessionRuntime
         CancelBrainEvaluation();
         _proactiveBrainInFlight = false;
         _deactivated = false;
+        if (_activeResponseId is { } responseId
+            && snapshot.Entries.Any(entry =>
+                entry.ResponseId == responseId
+                && entry.Status is EntryStatus.Completed or EntryStatus.Failed or EntryStatus.Interrupted))
+        {
+            _responseCts?.Cancel();
+            _ttsCts?.Cancel();
+            ClearActive();
+            _responseTerminal = true;
+            _outputActivity = OutputActivity.Idle;
+        }
+
         _durableRevision = snapshot.Revision;
         _durableSnapshot = snapshot;
         _snapshot = snapshot;

@@ -84,7 +84,8 @@ export default defineConfig({
           ?? path.join(playwrightData, "workspaces"),
         Persistence__ArtifactRoot: process.env.Persistence__ArtifactRoot
           ?? path.join(playwrightData, "artifacts"),
-        // Detach grace is 30s, so sequential chats overlap in memory. The product cap of 10 is below that overlap.
+        // Keep the durability gate fast while still exercising grace expiry and headless continuation.
+        AgentCore__DetachGracePeriodSeconds: "2",
         AgentCore__MaxActiveSessions: "32"
       },
       url: `${apiUrl}/health`,

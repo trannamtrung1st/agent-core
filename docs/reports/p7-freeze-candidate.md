@@ -6,6 +6,8 @@ This report records the **P7 implementation freeze**. Do not reopen P7 without a
 
 **P7 is frozen** on verified follow-up tree **`2acb1a8`** (`2acb1a8` on `main`, 2026-09-26). **Last behavior-affecting SHA** is **`1090535`** (resource upload presentation + evaluation prompt textarea). Prior canonical W08 gate **`f4107d7`** / workflow [**`36239630112`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36239630112) remains historical evidence for the original closure. **Hosted exact-SHA gate on `2acb1a8`:** confirm workflow **green** on push (repair **`9519a83`**, run [**`36253536025`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36253536025) — Domain through Compose **green**, Synthetic Playwright **56/57** before P7E selector fix). **P8** is next.
 
+**Post-freeze session-durability correction:** `94b65b8` introduced `ConversationTurnExecution`, but workflow `36264158651` was red because legacy current-model `EnsureCreated()` databases did not stamp its migration. The follow-up working tree validates/stamps the complete table/index shape, gives queued accepted turns execution ownership, exposes stable execution identity on reattach, restores durable streaming/terminal history without duplicate prefixes, and covers refresh, close-past-grace, Stop-after-refresh, approval reattach, and Voice terminal text in Synthetic Playwright. This is not a new P7 freeze claim until the follow-up exact SHA is hosted green.
+
 ### Closure repair chain (2026-09-26)
 
 | SHA | Role |

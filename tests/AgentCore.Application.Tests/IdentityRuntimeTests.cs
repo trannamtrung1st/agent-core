@@ -173,8 +173,8 @@ public sealed class IdentityRuntimeTests
         Assert.Contains(examinerSnap.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "Hello");
         Assert.DoesNotContain(examinerSnap.Entries, entry => entry.Text == "thanks");
         Assert.Contains(supportSnap.Entries, entry => entry.Text == "thanks");
-        Assert.Equal(4, examinerSnap.Revision);
-        Assert.Equal(4, supportSnap.Revision);
+        Assert.Equal(5, examinerSnap.Revision);
+        Assert.Equal(5, supportSnap.Revision);
         Assert.Contains("Alex", examinerModel.LastRequest!.Messages[0].Text, StringComparison.Ordinal);
         Assert.Contains("Sam", supportModel.LastRequest!.Messages[0].Text, StringComparison.Ordinal);
         Assert.Equal(1, examinerModel.LastRequest.Messages.Count(message => message.Role == ModelRole.User));

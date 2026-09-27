@@ -72,6 +72,66 @@ describe("session history controller", () => {
     expect(merged.find((entry) => entry.sequence === 1)?.speechText).toBe("Spoken earlier");
   });
 
+  it("replaces a stale streaming partial with the durable terminal entry", () => {
+    const merged = mergeHistoryEntries(
+      [row(2, {
+        text: "Hello",
+        status: "streaming",
+        receivedTextEndExclusive: 5
+      })],
+      [row(2, {
+        text: "Hello from synthetic.",
+        status: "completed",
+        receivedTextEndExclusive: 21
+      })]
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.text).toBe("Hello from synthetic.");
+    expect(merged[0]?.status).toBe("completed");
+  });
+
+  it("clears live execution state when durable history is terminal", async () => {
+    const streaming = row(2, {
+      text: "Hello",
+      status: "streaming",
+      responseId: "r2",
+      receivedTextEndExclusive: 5
+    });
+    const completed = row(2, {
+      text: "Hello from synthetic.",
+      status: "completed",
+      responseId: "r2",
+      receivedTextEndExclusive: 21
+    });
+    useSessionStore.setState({
+      ...emptySession(),
+      sessionId: "s1",
+      attachmentId: "a1",
+      connection: "ready",
+      conversationExecutionId: "x1",
+      liveResponseId: "r2",
+      outputState: "agentGenerating",
+      entries: [streaming]
+    });
+    vi.mocked(listSessionMessages).mockResolvedValue({
+      items: [payload(completed)],
+      nextAfter: 2,
+      hasMore: false,
+      hasOlder: false,
+      nextBefore: null
+    });
+
+    await loadNewestHistoryPage("s1", { replaceWindow: true });
+
+    const state = useSessionStore.getState();
+    expect(state.entries[0]?.text).toBe("Hello from synthetic.");
+    expect(state.entries[0]?.status).toBe("completed");
+    expect(state.liveResponseId).toBeNull();
+    expect(state.conversationExecutionId).toBeNull();
+    expect(state.outputState).toBe("idle");
+  });
+
   it("opens a 500-entry transcript with one newest-page request", async () => {
     const newest = Array.from({ length: 50 }, (_, index) => payload(row(index + 451)));
     vi.mocked(listSessionMessages).mockResolvedValue({

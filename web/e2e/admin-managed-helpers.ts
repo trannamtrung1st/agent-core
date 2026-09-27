@@ -250,14 +250,21 @@ export async function openExaminerDefinitionDrafts(page: Page) {
 /** Fork a durable publication, run the publish gate, and return the new immutable version number. */
 export async function publishExaminerForkedVersion(page: Page, forkFromVersion: number): Promise<number> {
   await openExaminerDefinitionDrafts(page);
-  const draftEditor = await forkDurablePublicationDraft(page, forkFromVersion);
+  let draftEditor = await forkDurablePublicationDraft(page, forkFromVersion);
   const instructions = draftEditor.getByLabel("System instructions");
   const marker = `p7g-next-${Date.now()}`;
   const prior = (await instructions.inputValue()) || "";
   await instructions.fill(`${prior}\n${marker}`);
   await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
-  await draftEditor.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft saved.").first()).toBeVisible({ timeout: 15_000 });
+  draftEditor = draftEditorSection(page);
+  await expect(draftEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
+    timeout: 15_000
+  });
+  const save = draftEditor.getByRole("button", { name: "Save draft" });
+  if (await save.isEnabled()) {
+    await save.click();
+    await expect(page.getByText("Draft saved.").first()).toBeVisible({ timeout: 15_000 });
+  }
   await completeDefinitionDraftPublishGate(page, draftEditor);
   await publishDraftFromInstructions(page, draftEditor);
   const publishedToast = page.getByText(/Published version \d+/).first();

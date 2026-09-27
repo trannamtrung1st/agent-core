@@ -25,6 +25,39 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
       continue;
     }
 
+    const incomingTerminal =
+      entry.status === "completed" || entry.status === "failed" || entry.status === "interrupted";
+    const currentTerminal =
+      current.status === "completed" || current.status === "failed" || current.status === "interrupted";
+    if (incomingTerminal && !currentTerminal) {
+      byId.set(entry.entryId, {
+        ...entry,
+        speechText: entry.speechText || current.speechText
+      });
+      continue;
+    }
+
+    if (currentTerminal && !incomingTerminal) {
+      continue;
+    }
+
+    if (currentTerminal && incomingTerminal) {
+      byId.set(entry.entryId, {
+        ...current,
+        speechText: current.speechText || entry.speechText
+      });
+      continue;
+    }
+
+    if (entry.text.length > current.text.length
+        || entry.receivedTextEndExclusive > current.receivedTextEndExclusive) {
+      byId.set(entry.entryId, {
+        ...entry,
+        speechText: entry.speechText || current.speechText
+      });
+      continue;
+    }
+
     byId.set(entry.entryId, {
       ...current,
       speechText: current.speechText || entry.speechText
@@ -113,7 +146,25 @@ export async function loadNewestHistoryPage(
       ? mergeHistoryEntries(merged, latest.entries.filter((entry) => entry.sequence > pageMax))
       : merged;
 
-    useSessionStore.setState({ entries: withLive });
+    const durableTerminal = latest.liveResponseId == null
+      ? null
+      : incoming.find((entry) =>
+          entry.responseId === latest.liveResponseId
+          && (entry.status === "completed"
+            || entry.status === "failed"
+            || entry.status === "interrupted"));
+    useSessionStore.setState({
+      entries: withLive,
+      ...(durableTerminal
+        ? {
+            liveResponseId: null,
+            conversationExecutionId: null,
+            outputState: "idle",
+            activeProgress: null,
+            pendingApproval: null
+          }
+        : {})
+    });
     applyOlderMeta(page, incoming, withLive);
   } catch (error) {
     if (isAbortError(error) || epoch !== historyEpoch) {

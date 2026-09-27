@@ -47,6 +47,11 @@ interface Window {
     releaseFakeSpeechOutput?: () => void;
     spokenClientSpeech?: () => string[];
     clientSpeechActive?: () => string | null;
+    conversationExecution?: () => {
+      executionId: string | null;
+      responseId: string | null;
+      outputState: string;
+    };
     hubConnected?: () => boolean;
     sessionConnection?: () => string;
     captureLiveState?: () => boolean;

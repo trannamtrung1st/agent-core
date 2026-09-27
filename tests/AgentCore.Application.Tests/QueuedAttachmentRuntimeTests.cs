@@ -185,7 +185,7 @@ public sealed class QueuedAttachmentRuntimeTests
                         [uploaded.AttachmentId],
                         UserTextBehavior.Queue) is true);
                 await WaitForBoundAsync(attachments, runtime.SessionId, uploaded.AttachmentId);
-                await runtime.DetachAsync();
+                await runtime.FinalizeDetachedPauseAsync();
                 await WaitForStatusAsync(harness.Store, sessionId, SessionStatus.Paused);
             }
 

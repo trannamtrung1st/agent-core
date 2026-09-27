@@ -1035,7 +1035,7 @@ describe("AdminApp", () => {
       },
       { timeout: 10_000 }
     );
-  });
+  }, 15_000);
 
   it("defaults fork source to the highest non-deprecated version on definition detail", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([

@@ -105,6 +105,11 @@ public sealed record AcceptedConversationWorkQueryReceived(
     EventContext Context,
     TaskCompletionSource<bool> Result) : SessionInput(Context);
 
+public sealed record DurableConversationProjectionRefreshReceived(
+    EventContext Context,
+    SessionSnapshot Snapshot,
+    TaskCompletionSource Refreshed) : SessionInput(Context);
+
 public sealed record SetModeReceived(EventContext Context, SessionMode Mode) : SessionInput(Context);
 
 public sealed record ModelResultReceived(
@@ -300,7 +305,11 @@ public sealed record SessionReadyProjection(
 
 public sealed record ReadyOutput(SessionReadyProjection Ready) : OutputPayload;
 
-public sealed record ResponseStartedOutput(Guid EntryId, long EntrySequence, string Trigger) : OutputPayload;
+public sealed record ResponseStartedOutput(
+    Guid EntryId,
+    long EntrySequence,
+    string Trigger,
+    Guid? ConversationExecutionId = null) : OutputPayload;
 
 public sealed record TextDeltaOutput(int TextStart, string Text) : OutputPayload;
 
@@ -444,7 +453,9 @@ public static class PublicHistory
 {
     public static PublicHistoryEntry FromEntry(ConversationEntry entry)
     {
-        var text = entry.Role == ConversationRole.Assistant
+        var terminalAssistant = entry.Role == ConversationRole.Assistant
+            && entry.Status is EntryStatus.Completed or EntryStatus.Failed;
+        var text = entry.Role == ConversationRole.Assistant && !terminalAssistant
             ? entry.Text[..Math.Min(entry.ReceivedTextEndExclusive, entry.Text.Length)]
             : entry.Text;
         var heardLimit = entry.Envelope?.SpeechText?.Length ?? text.Length;

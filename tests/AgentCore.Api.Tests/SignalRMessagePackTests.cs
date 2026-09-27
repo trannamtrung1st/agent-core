@@ -26,7 +26,7 @@ public class KestrelHostFixture : IAsyncLifetime
         start.Environment["AgentCore__Profile"] = "Synthetic";
         start.Environment["Providers__Speech__Recognition__Adapter"] = "Synthetic";
         start.Environment["Providers__Speech__Synthesis__Adapter"] = "Synthetic";
-        start.Environment["AgentCore__MaxActiveSessions"] = "1";
+        start.Environment["AgentCore__MaxActiveSessions"] = "64";
         start.Environment["AgentCore__DetachGracePeriodSeconds"] = "0";
         start.Environment["AgentCore__AgentDirectory"] = Path.Combine(root, "agents");
         foreach (var pair in ExtraEnvironment)
@@ -140,7 +140,6 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("client-correlation")]
     [InlineData("second-connection")]
     [InlineData("stale-sequence")]
-    [InlineData("capacity")]
     [InlineData("exact-retry")]
     [InlineData("eventid-reuse")]
     [InlineData("missing-attachment")]
@@ -172,6 +171,25 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("approval-stale-respond")]
     [InlineData("approval-reject-respond")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
+}
+
+[CollectionDefinition("kestrel-capacity", DisableParallelization = true)]
+public sealed class CapacityKestrelCollection : ICollectionFixture<CapacityKestrelHostFixture>;
+
+public sealed class CapacityKestrelHostFixture : KestrelHostFixture
+{
+    protected override IReadOnlyDictionary<string, string?> ExtraEnvironment { get; } =
+        new Dictionary<string, string?>
+        {
+            ["AgentCore__MaxActiveSessions"] = "1"
+        };
+}
+
+[Collection("kestrel-capacity")]
+public sealed class CapacityMessagePackTests(CapacityKestrelHostFixture host)
+{
+    [Fact]
+    public Task JavaScript_capacity_scenario() => host.RunJsAsync("capacity");
 }
 
 [CollectionDefinition("kestrel-client-speech", DisableParallelization = true)]

@@ -1237,6 +1237,22 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await TableExistsAsync(connection, "ConversationTurnExecutions", cancellationToken).ConfigureAwait(false))
+        {
+            if (!await HasP7ConversationTurnExecutionSchemaAsync(connection, cancellationToken).ConfigureAwait(false))
+            {
+                throw AgentCoreErrors.Persistence(
+                    "ConversationTurnExecutions has an incomplete or incompatible schema.");
+            }
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260926175411_P7ConversationTurnExecution', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(
@@ -1447,6 +1463,34 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         new("Revision", "INTEGER", NotNull: false, Pk: false),
         new("Version", "INTEGER", NotNull: false, Pk: false),
         new("SummaryJson", "TEXT", NotNull: true, Pk: false)
+    ];
+
+    private static readonly ColumnSpec[] P7ConversationTurnExecutionColumns =
+    [
+        new("ExecutionId", "TEXT", NotNull: true, Pk: true),
+        new("SessionId", "TEXT", NotNull: true, Pk: false),
+        new("SourceUserEntryId", "TEXT", NotNull: true, Pk: false),
+        new("SourceEventId", "TEXT", NotNull: true, Pk: false),
+        new("ResponseId", "TEXT", NotNull: true, Pk: false),
+        new("AgentInstanceId", "TEXT", NotNull: false, Pk: false),
+        new("ProfileId", "TEXT", NotNull: false, Pk: false),
+        new("DefinitionId", "TEXT", NotNull: true, Pk: false),
+        new("DefinitionVersion", "INTEGER", NotNull: true, Pk: false),
+        new("PinnedPersonaJson", "TEXT", NotNull: false, Pk: false),
+        new("ModelCatalogKey", "TEXT", NotNull: true, Pk: false),
+        new("ModelProviderAlias", "TEXT", NotNull: true, Pk: false),
+        new("ModelId", "TEXT", NotNull: true, Pk: false),
+        new("ModelReasoningEffort", "TEXT", NotNull: false, Pk: false),
+        new("Status", "INTEGER", NotNull: true, Pk: false),
+        new("Revision", "INTEGER", NotNull: true, Pk: false),
+        new("ClaimGeneration", "TEXT", NotNull: false, Pk: false),
+        new("ClaimedAtUtc", "INTEGER", NotNull: false, Pk: false),
+        new("ClaimLeaseExpiresAtUtc", "INTEGER", NotNull: false, Pk: false),
+        new("AssistantEntryId", "TEXT", NotNull: false, Pk: false),
+        new("CancellationRequested", "INTEGER", NotNull: true, Pk: false),
+        new("CancellationRequestedAtUtc", "INTEGER", NotNull: false, Pk: false),
+        new("AcceptedAtUtc", "INTEGER", NotNull: true, Pk: false),
+        new("UpdatedAtUtc", "INTEGER", NotNull: true, Pk: false)
     ];
 
     private const string CreateAgentDefinitionDraftsTableSql =
@@ -1746,6 +1790,39 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && await IndexExistsAsync(connection, "IX_AdminEvents_TargetType_TargetId_OccurredAtUtc", cancellationToken)
             .ConfigureAwait(false);
 
+    private static async Task<bool> HasP7ConversationTurnExecutionSchemaAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken) =>
+        await HasP7TableColumnsAsync(
+            connection,
+            "ConversationTurnExecutions",
+            P7ConversationTurnExecutionColumns,
+            cancellationToken).ConfigureAwait(false)
+        && await HasIndexAsync(
+            connection,
+            "ConversationTurnExecutions",
+            ["SessionId", "SourceEventId"],
+            unique: true,
+            cancellationToken).ConfigureAwait(false)
+        && await HasIndexAsync(
+            connection,
+            "ConversationTurnExecutions",
+            ["SessionId", "Status"],
+            unique: false,
+            cancellationToken).ConfigureAwait(false)
+        && await HasIndexAsync(
+            connection,
+            "ConversationTurnExecutions",
+            ["Status", "ClaimLeaseExpiresAtUtc"],
+            unique: false,
+            cancellationToken).ConfigureAwait(false)
+        && await HasIndexAsync(
+            connection,
+            "ConversationTurnExecutions",
+            ["ResponseId"],
+            unique: false,
+            cancellationToken).ConfigureAwait(false);
+
     private static async Task<bool> ColumnMatchesSqliteSpecAsync(
         System.Data.Common.DbConnection connection,
         string table,
@@ -2007,6 +2084,44 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 continue;
             }
 
+            await using var info = connection.CreateCommand();
+            info.CommandText = $"PRAGMA index_info(\"{index.Name}\");";
+            var actual = new List<string>();
+            await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                actual.Add(reader.GetString(2));
+            }
+
+            if (actual.Count == columns.Length && actual.Zip(columns).All(pair => pair.First == pair.Second))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> HasIndexAsync(
+        System.Data.Common.DbConnection connection,
+        string table,
+        string[] columns,
+        bool unique,
+        CancellationToken cancellationToken)
+    {
+        await using var list = connection.CreateCommand();
+        list.CommandText = $"PRAGMA index_list(\"{table}\");";
+        var indexes = new List<(string Name, bool Unique)>();
+        await using (var reader = await list.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                indexes.Add((reader.GetString(1), reader.GetInt64(2) != 0));
+            }
+        }
+
+        foreach (var index in indexes.Where(item => item.Unique == unique))
+        {
             await using var info = connection.CreateCommand();
             info.CommandText = $"PRAGMA index_info(\"{index.Name}\");";
             var actual = new List<string>();

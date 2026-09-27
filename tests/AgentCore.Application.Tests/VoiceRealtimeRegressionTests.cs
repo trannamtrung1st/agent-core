@@ -353,7 +353,7 @@ public sealed class VoiceRealtimeRegressionTests
     }
 
     [Fact]
-    public async Task Tool_artifact_reconnect_hides_undelivered_blocks()
+    public async Task Tool_artifact_reconnect_shows_terminal_text_but_hides_undelivered_blocks()
     {
         var store = new InMemoryMemoryStore();
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
@@ -396,7 +396,9 @@ public sealed class VoiceRealtimeRegressionTests
         await restored.WaitUntilMailboxDrainedAsync();
         var ready = Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
         var history = ready.Ready.History.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(string.Empty, history.Text);
+        Assert.Equal(
+            paused.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text,
+            history.Text);
         Assert.Empty(history.Blocks);
         Assert.Equal(responseId, history.ResponseId);
         Assert.Equal(sessionId, restored.SessionId);

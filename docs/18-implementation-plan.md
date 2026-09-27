@@ -180,7 +180,7 @@ P0 stays closed only because its gates passed. This table records observed P1 be
 | Transports vs providers | `serverAudio` / `clientTranscript` / `clientSpeech`; Browser is not a backend port | docs 03/04/10; SessionRuntime has no vendor adapter names |
 | `voiceAvailable` | Voice.Enabled AND structurally resolvable STT AND TTS | Catalog + `session.ready`; missing hosted key → false |
 | Client transcript | Additive `client.speech.evidence`; one durable final; no PCM STT | ClientTranscriptAdmissionTests; MessagePack Kestrel fixtures |
-| Client speech | Shared SpeechSegmenter → `speech.output.segment`; playback ACK gates completion; Stop does not dequeue | ClientSpeechSegmentRuntimeTests; ClientSpeechMessagePackTests |
+| Client speech | Shared SpeechSegmenter → `speech.output.segment`; playback ACK gates completion; Stop leaves unaccepted first-party drafts local, while already server-accepted queued turns retain durable ownership and dispatch in order | ClientSpeechSegmentRuntimeTests; ClientSpeechMessagePackTests |
 | Fake Browser CI | Injected recognizer/synthesizer; no live Web Speech | Vitest speech/*; Playwright `browser-stt` + `browser-browser` |
 | Native Web Speech contracts | Interim/final mapping, pending speechend closure, capped idle native restart, serialized Browser TTS | Vitest `browserSpeechRecognizer` / `BrowserSpeechSynthesizer`; Playwright Voice-first Browser/Browser |
 | Hosted TTS | `OpenAiSpeechSynthesizer` when Adapter=OpenAI and key present | SpeechFactory; live HTTP skipped unless `AGENTCORE_LIVE_OPENAI_TTS=1` |

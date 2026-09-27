@@ -145,7 +145,7 @@ public sealed class UserTextQueueTests
 
         await store.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Null(runtime.ActiveResponseId);
-        Assert.Contains(
+        Assert.DoesNotContain(
             output.Items,
             item => item.ResponseId == r1
                 && item.Payload is ResponseCompletedOutput completed
@@ -155,6 +155,11 @@ public sealed class UserTextQueueTests
 
         persistGate.TrySetResult();
         Assert.True(await persistTask);
+        Assert.Contains(
+            output.Items,
+            item => item.ResponseId == r1
+                && item.Payload is ResponseCompletedOutput completed
+                && completed.InterruptReason == "userSteer");
         await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
         Assert.Equal(2, model.Calls);
 

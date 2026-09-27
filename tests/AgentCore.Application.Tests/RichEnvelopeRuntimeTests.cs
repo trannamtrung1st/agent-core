@@ -33,7 +33,7 @@ public sealed class RichEnvelopeRuntimeTests
         Assert.Equal(0, assistant.HeardTextEndExclusive);
         Assert.Equal(0, assistant.ReceivedTextEndExclusive);
         Assert.Empty(PublicHistory.FromEntry(assistant).Blocks);
-        Assert.Equal(string.Empty, PublicHistory.FromEntry(assistant).Text);
+        Assert.Equal("Hello", PublicHistory.FromEntry(assistant).Text);
 
         Assert.True(await runtime.SubmitReceiptAsync(assistant.ResponseId!.Value, assistant.Text.Length));
         await runtime.WaitUntilMailboxDrainedAsync();
@@ -70,7 +70,7 @@ public sealed class RichEnvelopeRuntimeTests
     }
 
     [Fact]
-    public async Task Disconnect_before_display_receipt_hides_generated_tail_on_reconnect()
+    public async Task Completed_response_is_visible_after_disconnect_without_display_receipt()
     {
         var store = new InMemoryMemoryStore();
         var first = new CapturingSessionOutput();
@@ -92,7 +92,9 @@ public sealed class RichEnvelopeRuntimeTests
         await restored.AttachAsync();
         await restored.WaitUntilMailboxDrainedAsync();
         var ready = Assert.IsType<ReadyOutput>(restoredOutput.Items.Single(item => item.Payload is ReadyOutput).Payload);
-        Assert.Equal(string.Empty, ready.Ready.History.Last(entry => entry.Role == ConversationRole.Assistant).Text);
+        Assert.Equal(
+            "Hello from synthetic.",
+            ready.Ready.History.Last(entry => entry.Role == ConversationRole.Assistant).Text);
     }
 
     [Fact]

@@ -9,6 +9,26 @@ namespace AgentCore.Api.Tests;
 
 public sealed class SessionEventMapperProgressTests
 {
+    [Fact]
+    public void Response_started_maps_stable_conversation_execution_identity()
+    {
+        var executionId = Guid.Parse("019944af-0000-7000-8000-000000000077");
+        var mapped = SessionEventMapper.Map(
+            new SessionOutput(
+                Context(),
+                Guid.Parse("019944af-0000-7000-8000-000000000078"),
+                new ResponseStartedOutput(
+                    Guid.Parse("019944af-0000-7000-8000-000000000079"),
+                    2,
+                    "UserTurn",
+                    executionId)),
+            Guid.NewGuid(),
+            1);
+
+        Assert.Equal("agent.response.started", mapped.Type);
+        Assert.Equal(executionId.ToString(), mapped.Payload["conversationExecutionId"]);
+    }
+
     [Theory]
     [InlineData(ResponseProgressKind.Preparing, "preparing")]
     [InlineData(ResponseProgressKind.ReadingAttachments, "readingAttachments")]

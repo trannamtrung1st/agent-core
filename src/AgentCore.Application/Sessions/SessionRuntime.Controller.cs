@@ -78,6 +78,7 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        await ReconcileDurableConversationBeforeAttachAsync(cancellationToken).ConfigureAwait(false);
         _deactivated = false;
         _headlessTransportDetached = false;
         PinModelSelectionIfMissing();
@@ -169,6 +170,16 @@ public sealed partial class SessionRuntime
 
         if (phase == DetachPhase.TransportOnly)
         {
+            if (_snapshot.PendingMode is not null)
+            {
+                _snapshot = _snapshot with
+                {
+                    PendingMode = null,
+                    UpdatedAt = _time.GetUtcNow()
+                };
+                RequestPersist(_snapshot);
+            }
+
             await StopTransportDeliveryAsync(cancelActiveSynthesis: false).ConfigureAwait(false);
             MarkVoicePlaybackSettledForHeadlessDetach();
             if (_modelDone)

@@ -98,10 +98,25 @@ public sealed class ConversationTurnExecutionDurabilityTests
             await Task.Delay(10);
         }
 
+        var queuedEventId = Guid.Parse("019944af-0000-7000-8000-000000000098");
         Assert.True(await runtime.SubmitPersistedUserTextAsync(
             "second",
-            Guid.Parse("019944af-0000-7000-8000-000000000098"),
+            queuedEventId,
             behavior: UserTextBehavior.Queue));
+        var thirdEventId = Guid.Parse("019944af-0000-7000-8000-000000000097");
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "third",
+            thirdEventId,
+            behavior: UserTextBehavior.Queue));
+        var accepted = await turns.ListOpenForSessionAsync(runtime.SessionId);
+        Assert.Equal(3, accepted.Count);
+        Assert.Contains(accepted, execution => execution.SourceEventId == queuedEventId);
+        Assert.Contains(accepted, execution => execution.SourceEventId == thirdEventId);
+        Assert.Single(
+            accepted
+                .Where(execution => execution.Status == ConversationTurnExecutionStatus.Queued)
+                .Select(execution => execution.ResponseId)
+                .Distinct());
         await runtime.DetachAsync();
         model.Release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
@@ -110,8 +125,9 @@ public sealed class ConversationTurnExecutionDurabilityTests
         Assert.Equal(2, assistants.Length);
         Assert.All(assistants, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Text)));
         Assert.Equal(
-            ["first", "second"],
+            ["first", "second", "third"],
             runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.User).Select(entry => entry.Text).ToArray());
+        Assert.Empty(await turns.ListOpenForSessionAsync(runtime.SessionId));
     }
 
     [Fact]

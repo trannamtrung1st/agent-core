@@ -217,7 +217,7 @@ public sealed class ToolApprovalTests
     }
 
     [Fact]
-    public async Task Detach_during_approval_prevents_sensitive_execution()
+    public async Task Detach_during_approval_preserves_wait_and_reattach_resumes_same_response()
     {
         DemoSensitiveActionStore.Reset();
         var output = new CapturingSessionOutput();
@@ -225,10 +225,28 @@ public sealed class ToolApprovalTests
         await runtime.Runtime.AttachAsync();
 
         Assert.True(await runtime.Runtime.SubmitUserTextAsync("Please run sensitive approval for the demo."));
-        await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
+        var approvalEvent = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
+        var requested = (ApprovalRequestedOutput)approvalEvent.Payload!;
+        var responseId = runtime.Runtime.ActiveResponseId!.Value;
         await runtime.Runtime.DetachAsync();
+        Assert.True(runtime.Runtime.HeadlessTransportDetached);
+
+        Assert.True(await runtime.Runtime.AttachAsync());
+        var ready = output.Items
+            .Select(item => item.Payload)
+            .OfType<ReadyOutput>()
+            .Last();
+        Assert.Equal(requested.ApprovalId, ready.Ready.PendingApproval?.ApprovalId);
+        Assert.Equal(responseId, ready.Ready.PendingApproval?.ResponseId);
+
+        Assert.Equal(
+            ResponseApprovalResult.Accepted,
+            await runtime.Runtime.RespondApprovalAsync(
+                responseId,
+                requested.ApprovalId,
+                ToolApprovalDecision.Approve));
         await runtime.Runtime.WaitUntilIdleAsync();
-        Assert.DoesNotContain(
+        Assert.Contains(
             runtime.Runtime.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant
                 && entry.Text.Contains("completed after approval", StringComparison.OrdinalIgnoreCase));

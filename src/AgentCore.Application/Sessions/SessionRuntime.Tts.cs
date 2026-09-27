@@ -546,6 +546,11 @@ public sealed partial class SessionRuntime
             userConversationTerminal: userTerminal,
             then: async ct =>
             {
+                if (userTerminal)
+                {
+                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                }
+
                 var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;
                 if (stillOwns)
                 {
@@ -572,10 +577,6 @@ public sealed partial class SessionRuntime
                     await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
                 }
 
-                if (userTerminal)
-                {
-                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
-                }
             });
     }
 

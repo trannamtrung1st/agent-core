@@ -376,6 +376,36 @@ public sealed class MemoryStoreContractTests
         var loaded = await reopened.Store.LoadAsync(First().SessionId);
         Assert.Equal("examiner", loaded!.Definition.Id);
         Assert.Equal(1, loaded.Revision);
+        await using var verify = await reopened.Factory.CreateDbContextAsync();
+        var applied = await verify.Database.GetAppliedMigrationsAsync();
+        Assert.Contains("20260926175411_P7ConversationTurnExecution", applied);
+    }
+
+    [Fact]
+    public async Task Sqlite_rejects_incomplete_ensurecreated_conversation_execution_schema()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-conversation-execution-{Guid.NewGuid():N}.db");
+        try
+        {
+            await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+            {
+                await using var db = await opened.Factory.CreateDbContextAsync();
+                await db.Database.EnsureCreatedAsync();
+                await db.Database.ExecuteSqlRawAsync(
+                    """DROP INDEX "IX_ConversationTurnExecutions_ResponseId";""");
+            }
+
+            await using var reopened = OpenSqlite(path, deleteOnDispose: false);
+            var error = await Assert.ThrowsAsync<AgentCoreException>(
+                () => reopened.Store.EnsureCreatedAsync().AsTask());
+            Assert.Equal("SessionPersistenceUnavailable", error.Code);
+            Assert.Contains("ConversationTurnExecutions", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            File.Delete(path);
+        }
     }
 
     [Fact]

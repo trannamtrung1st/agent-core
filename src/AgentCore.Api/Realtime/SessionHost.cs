@@ -86,6 +86,27 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     public Guid? ActiveResponseId(Guid sessionId) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.ActiveResponseId : null;
 
+    private static bool NeedsDurableConversationConvergence(
+        SessionSnapshot current,
+        SessionSnapshot durable)
+    {
+        foreach (var terminal in durable.Entries.Where(entry =>
+                     entry.Role == ConversationRole.Assistant
+                     && entry.Status is EntryStatus.Completed or EntryStatus.Failed or EntryStatus.Interrupted))
+        {
+            var visible = current.Entries.FirstOrDefault(entry => entry.EntryId == terminal.EntryId);
+            if (visible is null
+                || visible.Status != terminal.Status
+                || !string.Equals(visible.Text, terminal.Text, StringComparison.Ordinal)
+                || visible.Envelope != terminal.Envelope)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public SessionSnapshot? LiveSnapshot(Guid sessionId) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.Snapshot : null;
 
@@ -369,6 +390,20 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     return replayAck!;
                 }
 
+                var hasOpenConversationExecution = await live.Runtime
+                    .HasOpenConversationExecutionsAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (!hasOpenConversationExecution)
+                {
+                    var latest = await _sessions.LoadRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    if (latest.Revision > live.Runtime.Snapshot.Revision
+                        || NeedsDurableConversationConvergence(live.Runtime.Snapshot, latest))
+                    {
+                        await live.Runtime.ApplyTransportResumedSnapshotAsync(latest, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }
+
                 if (live.Runtime.Snapshot.Status == SessionStatus.Paused)
                 {
                     var durable = await _sessions.LoadRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -435,6 +470,15 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         && live.ConnectionId == connectionId)
                     {
                         live.LastAttachAck = accepted;
+                        if (hasOpenConversationExecution)
+                        {
+                            _ = ConvergeAttachedConversationAsync(
+                                sessionId,
+                                live,
+                                live.AttachmentId,
+                                connectionId);
+                        }
+
                         return accepted;
                     }
                 }
@@ -449,6 +493,38 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         catch (AgentCoreException ex)
         {
             return Reject(command.EventId, "Session", ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
+        }
+    }
+
+    private async Task ConvergeAttachedConversationAsync(
+        Guid sessionId,
+        Live live,
+        Guid attachmentId,
+        string connectionId)
+    {
+        try
+        {
+            while (_admitting
+                && _live.TryGetValue(sessionId, out var current)
+                && ReferenceEquals(current, live)
+                && current.AttachmentId == attachmentId
+                && string.Equals(current.ConnectionId, connectionId, StringComparison.Ordinal))
+            {
+                if (!await live.Runtime.HasOpenConversationExecutionsAsync().ConfigureAwait(false))
+                {
+                    await live.Runtime.RefreshDurableConversationProjectionAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100), _time).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Conversation projection convergence failed for {SessionId}.",
+                sessionId);
         }
     }
 
@@ -2369,7 +2445,8 @@ public static class SessionEventMapper
             {
                 ["entryId"] = started.EntryId.ToString(),
                 ["entrySequence"] = started.EntrySequence,
-                ["trigger"] = ToTrigger(started.Trigger)
+                ["trigger"] = ToTrigger(started.Trigger),
+                ["conversationExecutionId"] = started.ConversationExecutionId?.ToString()
             }),
             TextDeltaOutput delta => ("agent.text.delta", new Dictionary<string, object?>
             {

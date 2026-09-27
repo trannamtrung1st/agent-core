@@ -163,6 +163,114 @@ test("session path survives refresh", async ({ page }) => {
   await expectConversationScrolledToBottom(page);
 });
 
+test("refresh mid-stream restores the same durable execution and continues without duplicate text", async ({
+  page
+}) => {
+  test.setTimeout(60_000);
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("[test:durable-stream] Introduce yourself");
+  await page.getByRole("button", { name: "Send" }).click();
+  const assistant = page.locator(".chat-message-assistant");
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first()).toContainText("Hello", { timeout: 15_000 });
+
+  const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(before?.executionId).toBeTruthy();
+  expect(before?.responseId).toBeTruthy();
+  const url = page.url();
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page).toHaveURL(url);
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first()).toContainText("Hello");
+  const after = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(after?.executionId).toBe(before?.executionId);
+  expect(after?.responseId).toBe(before?.responseId);
+
+  await expect(assistant.first()).toContainText("Hello from synthetic.", { timeout: 20_000 });
+  await waitForResponseSettled(page);
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
+});
+
+test("closing the page past detach grace keeps the accepted execution and durable response", async ({
+  page
+}) => {
+  test.setTimeout(60_000);
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("[test:durable-stream] Continue after close");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".chat-message-assistant").first()).toContainText("Hello", {
+    timeout: 15_000
+  });
+  const identity = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(identity?.executionId).toBeTruthy();
+  const url = page.url();
+  const context = page.context();
+
+  await page.close();
+  // The Synthetic response finishes at eight seconds and the test detach grace is two seconds.
+  // Reopen after both so this exercises a released runtime and durable history, not only reattach.
+  await new Promise((resolve) => setTimeout(resolve, 10_000));
+  const reopened = await context.newPage();
+  await reopened.goto(url);
+  await expect(reopened.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  expect((await reopened.evaluate(() => window.__agentCore?.conversationExecution?.()))?.executionId).toBeNull();
+
+  const assistant = reopened.locator(".chat-message-assistant");
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first()).toContainText("Hello from synthetic.", { timeout: 20_000 });
+  await waitForResponseSettled(reopened);
+  await reopened.reload();
+  await expect(reopened.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first().locator(".assistant-body")).toHaveText("Hello from synthetic.");
+  await expect(reopened.locator(".chat-message-user")).toHaveCount(1);
+});
+
+test("Stop after refresh durably interrupts the same execution", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("Please hold the line");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".chat-message-assistant").first()).toContainText("Hello", {
+    timeout: 15_000
+  });
+  const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant").first()).toContainText("Hello", {
+    timeout: 15_000
+  });
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 15_000 });
+  const after = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(after?.responseId).toBe(before?.responseId);
+  if (after?.executionId != null) {
+    expect(after.executionId).toBe(before?.executionId);
+  }
+  await page.getByRole("button", { name: "Stop" }).click();
+  await waitForResponseSettled(page);
+
+  const assistant = page.locator(".chat-message-assistant");
+  await expect(assistant).toHaveCount(1);
+  await expect(assistant.first()).toContainText("Hello");
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(assistant).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  expect((await page.evaluate(() => window.__agentCore?.conversationExecution?.()))?.executionId).toBeNull();
+});
+
 test("synthetic text conversation, pending voice, and disconnect cleanup", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("navigation", { name: "Chats" })).toBeVisible();

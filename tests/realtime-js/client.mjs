@@ -853,6 +853,22 @@ async function run() {
       if (stillLive) {
         throw new Error("queue superseded the live response");
       }
+      const cancel = await connection.invoke(
+        "CancelResponse",
+        command(session.sessionId, 3, "agent.response.cancel", {}, {
+          attachmentId,
+          responseId: started.responseId
+        })
+      );
+      if (!cancel.accepted) {
+        throw new Error(JSON.stringify(cancel));
+      }
+      await waitForEvent(
+        (evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId
+      );
+      await waitForEvent(
+        (evt) => evt.type === "agent.response.completed" && evt.responseId !== started.responseId
+      );
       await connection.stop();
       break;
     }
@@ -1498,17 +1514,30 @@ async function run() {
         throw new Error(JSON.stringify(cancel));
       }
       await waitForEvent((evt) => evt.type === "agent.response.interrupted");
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      if (events.filter((evt) => evt.type === "agent.response.started").length !== 1) {
-        throw new Error("Stop must not dispatch queued text");
-      }
+      const queuedStarted = await waitForEvent(
+        (evt) => evt.type === "agent.response.started" && evt.responseId !== started.responseId
+      );
+      const queuedSpeech = await waitForEvent(
+        (evt) => evt.type === "speech.output.completed" && evt.responseId === queuedStarted.responseId
+      );
+      await ackClientSpeech(
+        connection,
+        session.sessionId,
+        5,
+        attachmentId,
+        queuedStarted.responseId,
+        queuedSpeech.payload.textEndExclusive
+      );
+      await waitForEvent(
+        (evt) => evt.type === "agent.response.completed" && evt.responseId === queuedStarted.responseId
+      );
       const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`, {
         headers: await ownerHeaders()
       });
       const history = await page.json();
       const users = history.items.filter((item) => item.role === "user").map((item) => item.text);
       const assistants = history.items.filter((item) => item.role === "assistant");
-      if (users[0] !== "Hello" || users[1] !== "queued later" || assistants.length !== 1) {
+      if (users[0] !== "Hello" || users[1] !== "queued later" || assistants.length !== 2) {
         throw new Error(`queue after stop: ${JSON.stringify(history.items)}`);
       }
       await connection.stop();

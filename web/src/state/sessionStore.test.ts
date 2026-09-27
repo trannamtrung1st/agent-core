@@ -871,6 +871,49 @@ describe("agent.progress", () => {
     });
   });
 
+  it("restores stable conversation execution identity and partial text on reattach", () => {
+    const restored = applyServerEvent(emptySession(), event({
+      type: "session.ready",
+      sequence: 1,
+      payload: {
+        mode: "text",
+        status: "attached",
+        outputState: "agentGenerating",
+        conversationExecutionId: "execution-1",
+        activeResponseId: "response-1",
+        history: [{
+          entryId: "assistant-1",
+          sequence: 2,
+          sourceEventId: null,
+          role: "assistant",
+          text: "Hello",
+          responseId: "response-1",
+          status: "streaming",
+          deliveryMode: "text",
+          heardTextEndExclusive: 0,
+          receivedTextEndExclusive: 5,
+          createdAt: "2026-09-15T00:00:00.000Z"
+        }]
+      }
+    }));
+
+    expect(restored.conversationExecutionId).toBe("execution-1");
+    expect(restored.liveResponseId).toBe("response-1");
+    expect(restored.outputState).toBe("agentGenerating");
+    expect(restored.entries[0]?.text).toBe("Hello");
+
+    const continued = applyServerEvent(
+      restored,
+      event({
+        type: "agent.text.delta",
+        sequence: 2,
+        responseId: "response-1",
+        payload: { textStart: 5, text: " world" }
+      })
+    );
+    expect(continued.entries[0]?.text).toBe("Hello world");
+  });
+
   it("clears progress on session.ready, paused state, and control-sequence reset", () => {
     const withProgress = {
       ...emptySession(),

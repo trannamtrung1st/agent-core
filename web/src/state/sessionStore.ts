@@ -127,6 +127,7 @@ export type SessionView = {
   inputState: string;
   outputState: string;
   entries: HistoryEntry[];
+  conversationExecutionId: string | null;
   liveResponseId: string | null;
   activeProgress: ResponseProgress | null;
   pendingApproval: PendingApproval | null;
@@ -182,6 +183,7 @@ export const emptySession = (): SessionView => ({
   inputState: "idle",
   outputState: "idle",
   entries: [],
+  conversationExecutionId: null,
   liveResponseId: null,
   activeProgress: null,
   pendingApproval: null,
@@ -521,6 +523,12 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
     case "session.ready": {
       const payload = event.payload;
       const agent = (payload.agent ?? {}) as Record<string, unknown>;
+      const history = historyFromPayload(payload.history);
+      const streaming = [...history].reverse().find((entry) =>
+        entry.role === "assistant" && entry.status === "streaming" && entry.responseId != null);
+      const activeResponseId = payload.activeResponseId == null
+        ? streaming?.responseId ?? null
+        : asString(payload.activeResponseId);
       return {
         ...state,
         connection: "ready",
@@ -539,12 +547,14 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         lifecycleStatus: asString(payload.lifecycleStatus) || null,
         inputState: asString(payload.inputState) || "idle",
         outputState: asString(payload.outputState) || "idle",
-        entries: historyFromPayload(payload.history),
-        liveResponseId: payload.activeResponseId == null ? null : asString(payload.activeResponseId),
+        entries: history,
+        conversationExecutionId:
+          payload.conversationExecutionId == null ? null : asString(payload.conversationExecutionId),
+        liveResponseId: activeResponseId,
         activeProgress: null,
         pendingApproval: pendingApprovalFromPayload(
           payload.pendingApproval,
-          payload.activeResponseId == null ? null : asString(payload.activeResponseId)
+          activeResponseId
         ),
         tombstones: {},
         lastServerSequence: event.sequence,
@@ -579,6 +589,10 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       };
       return {
         ...state,
+        conversationExecutionId:
+          event.payload.conversationExecutionId == null
+            ? state.conversationExecutionId
+            : asString(event.payload.conversationExecutionId),
         liveResponseId: event.responseId,
         entries: upsert(state.entries, entry),
         lastServerSequence: event.sequence
@@ -749,6 +763,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const liveResponseId = state.liveResponseId === event.responseId ? null : state.liveResponseId;
       return {
         ...state,
+        conversationExecutionId:
+          state.liveResponseId === event.responseId ? null : state.conversationExecutionId,
         liveResponseId,
         activeProgress: event.responseId && state.activeProgress?.responseId === event.responseId
           ? null

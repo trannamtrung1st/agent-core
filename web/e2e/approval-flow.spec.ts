@@ -20,6 +20,32 @@ test("sensitive approval modal approves synthetic action", async ({ page }) => {
   await expect(page.getByText("Sensitive action completed after approval.")).toBeVisible({ timeout: 20_000 });
 });
 
+test("approval survives refresh and resumes the same durable execution", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+  await selectLegacyIdentity(page, LEGACY_IDENTITY_LABELS.approvalHarness);
+  await page.getByLabel("Message").fill("Please run sensitive approval after refresh.");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const modal = page.getByRole("dialog", { name: "Approve sensitive action" });
+  await expect(modal).toBeVisible({ timeout: 30_000 });
+  const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(before?.executionId).toBeTruthy();
+
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(modal).toBeVisible({ timeout: 30_000 });
+  const after = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  expect(after?.executionId).toBe(before?.executionId);
+  expect(after?.responseId).toBe(before?.responseId);
+
+  await modal.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Sensitive action completed after approval.")).toBeVisible({
+    timeout: 20_000
+  });
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(1);
+});
+
 test("sensitive approval modal reject dismisses without executing", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
