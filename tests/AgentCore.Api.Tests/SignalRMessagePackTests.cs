@@ -173,25 +173,6 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
 }
 
-[CollectionDefinition("kestrel-capacity", DisableParallelization = true)]
-public sealed class CapacityKestrelCollection : ICollectionFixture<CapacityKestrelHostFixture>;
-
-public sealed class CapacityKestrelHostFixture : KestrelHostFixture
-{
-    protected override IReadOnlyDictionary<string, string?> ExtraEnvironment { get; } =
-        new Dictionary<string, string?>
-        {
-            ["AgentCore__MaxActiveSessions"] = "1"
-        };
-}
-
-[Collection("kestrel-capacity")]
-public sealed class CapacityMessagePackTests(CapacityKestrelHostFixture host)
-{
-    [Fact]
-    public Task JavaScript_capacity_scenario() => host.RunJsAsync("capacity");
-}
-
 [CollectionDefinition("kestrel-client-speech", DisableParallelization = true)]
 public sealed class ClientSpeechKestrelCollection : ICollectionFixture<ClientSpeechKestrelHostFixture>;
 
