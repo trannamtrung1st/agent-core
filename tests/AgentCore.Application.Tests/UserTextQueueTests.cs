@@ -334,7 +334,7 @@ public sealed class UserTextQueueTests
     }
 
     [Fact]
-    public async Task Stop_does_not_start_trailing_user_suffix()
+    public async Task Stop_terminalizes_active_then_starts_durably_accepted_trailing_suffix()
     {
         var time = Clock();
         var output = new CapturingSessionOutput();
@@ -353,11 +353,12 @@ public sealed class UserTextQueueTests
         await runtime.SubmitPersistedUserTextAsync("U2", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
         await runtime.SubmitPersistedUserTextAsync("U3", Guid.NewGuid(), CancellationToken.None, null, UserTextBehavior.Queue);
         Assert.Equal(ResponseCancelResult.Cancelled, await runtime.CancelResponseAsync(r1));
-        await Task.Delay(250);
-        Assert.Equal(1, model.Calls);
-        Assert.Null(runtime.ActiveResponseId);
+        await output.WaitForAsync(item => item.Payload is TextDeltaOutput delta && delta.Text == "T2");
+        Assert.Equal(2, model.Calls);
+        Assert.NotNull(runtime.ActiveResponseId);
         model.Release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
         await runtime.DisposeAsync();
     }
 

@@ -201,7 +201,7 @@ public sealed class ClientSpeechSegmentRuntimeTests
     }
 
     [Fact]
-    public async Task Successful_playback_dispatches_queued_text_but_stop_does_not()
+    public async Task Successful_playback_and_Stop_both_dispatch_durably_accepted_queued_text()
     {
         var output = new CapturingSessionOutput();
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -216,9 +216,12 @@ public sealed class ClientSpeechSegmentRuntimeTests
         var firstCompleted = await output.WaitForAsync(item => item.Payload is SpeechOutputCompletedOutput);
         Assert.True(await runtime.SubmitPlaybackAsync(firstCompleted.ResponseId!.Value, "stopped", 0, 0));
         Assert.Equal(ResponseCancelResult.Cancelled, await runtime.CancelResponseAsync(firstCompleted.ResponseId!.Value));
+        var stoppedQueued = await output.WaitForAsync(
+            item => item.Payload is SpeechOutputCompletedOutput && item.ResponseId != firstCompleted.ResponseId);
+        await AckClientSpeechAsync(runtime, stoppedQueued);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.User && entry.Text == "queued later"));
-        Assert.Equal(1, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
+        Assert.Equal(2, runtime.Snapshot.Entries.Count(entry => entry.Role == ConversationRole.Assistant));
 
         var output2 = new CapturingSessionOutput();
         var hold2 = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
