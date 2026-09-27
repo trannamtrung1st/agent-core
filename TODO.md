@@ -274,7 +274,7 @@ P7.5 may change implementation structure, names, internal APIs, dependency direc
 
 P7.5 must not intentionally change user-visible product behavior.
 
-Observed through `b0c2e09`, without a closure report or hosted SHA:
+Observed through the local closure report in `docs/reports/p7.5-freeze-candidate.md`. That report does not record a hosted SHA, so P7.5 is not closed:
 
 - Ownership map is in `docs/03-system-architecture.md`. Authoring, Runtime, and Operations are responsibilities, not new projects.
 - `EffectiveConfigurationComposer` owns the Admin projection and the shared memory-policy default. Session bind, detached work, and draft evaluation stay on their own use cases. No policy defect was found.
@@ -282,6 +282,8 @@ Observed through `b0c2e09`, without a closure report or hosted SHA:
 - Persistence audit kept SQLite, separate stores, explicit transactions, and the single-process scheduler. Recorded in `docs/15-persistence-and-configuration.md`.
 - Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
 - Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
+- Canonical handoff text no longer calls P8 next. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `/docs` still wins.
+- The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. The hosted workflow on the candidate SHA is still open.
 
 ---
 
@@ -524,9 +526,9 @@ The phase outcome is the A–E consolidation above, the shared Admin spacing sli
 
 - [x] Shared Admin spacing for draft status, publications, and instance identity uses the 8/12/16 tokens in `web/src/app.css` (`b0c2e09`).
 
-- [ ] Run the complete deterministic test suite after architectural changes.
+- [x] Run the complete deterministic test suite after architectural changes.
 
-- [ ] Run meaningful Synthetic Playwright journeys covering:
+- [x] Run meaningful Synthetic Playwright journeys covering:
 
   - chat;
   - reconnect/durable streaming;
@@ -536,7 +538,7 @@ The phase outcome is the A–E consolidation above, the shared Admin spacing sli
   - background WorkItems;
   - Admin draft/publish/instance lifecycle.
 
-- [ ] Keep behavior changes out of refactor commits where practical.
+- [x] Keep behavior changes out of refactor commits where practical.
 
 - [ ] Update:
 
@@ -547,7 +549,7 @@ The phase outcome is the A–E consolidation above, the shared Admin spacing sli
   - persistence/configuration docs;
   - relevant implementation-plan/report references.
 
-- [ ] Record a P7.5 closure report with:
+- [x] Record a P7.5 closure report with:
 
   - what architectural pressure was found;
   - what was refactored;
@@ -966,8 +968,8 @@ Keep this compact. It is orientation, not another roadmap.
 
 # Next implementation item
 
-**P7.5G — documentation and context synchronization** continues.
+**P7.5G — hosted Synthetic SHA** is still open.
 
-Canonical handoff text no longer calls P8 next. Still open: `.agents/context/PRODUCT.md` and `DESIGN.md`, the P7.5 closure report, and a hosted Synthetic run on the candidate SHA. P7.5 is not closed. P8 does not start.
+Canonical handoff text no longer calls P8 next. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `docs/reports/p7.5-freeze-candidate.md` records the local gate and Compose result and does not freeze P7.5. A green hosted run of `.github/workflows/synthetic.yml` on the candidate SHA is still required. P8 does not start.
 
 Do **not** begin by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
