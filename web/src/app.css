@@ -2194,6 +2194,29 @@ body,
   .admin-publish-actions .ant-btn {
     min-height: 40px;
   }
+
+  .admin-draft-tabs > .ant-tabs-nav,
+  .admin-draft-tabs > .ant-tabs-nav .ant-tabs-nav-wrap {
+    overflow: visible;
+  }
+
+  .admin-draft-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+    flex-wrap: wrap;
+    row-gap: var(--ac-space-compact);
+    transform: none !important;
+  }
+
+  .admin-draft-tabs > .ant-tabs-nav .ant-tabs-ink-bar {
+    display: none;
+  }
+
+  .admin-draft-tabs .ant-tabs-tab-active {
+    box-shadow: inset 0 -2px 0 var(--ac-color-primary);
+  }
+
+  .admin-draft-tabs > .ant-tabs-nav .ant-tabs-nav-operations {
+    display: none;
+  }
 }
 
 @media (max-width: 359px) {
