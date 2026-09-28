@@ -1686,6 +1686,61 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, both.StatusCode);
     }
 
+    [Fact]
+    public async Task Batch_resource_bind_is_one_revision_and_a_bad_item_leaves_rows()
+    {
+        var client = OwnerClient();
+        var draft = await CreateIsolatedDraftAsync(client, "p76-batch-resources");
+        var policy = await UploadDraftResourceContentAsync(client, draft.DraftId, "policy"u8.ToArray());
+        var notes = await UploadDraftResourceContentAsync(client, draft.DraftId, "notes"u8.ToArray());
+        var bind = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/batch",
+            new AdminBindDefinitionDraftResourcesRequest(
+                draft.Revision,
+                [
+                    new AdminBindDefinitionDraftResourceItemRequest(
+                        null, "knowledge/policy.md", "Knowledge", policy.MediaType, policy.ContentSha256, policy.ByteLength),
+                    new AdminBindDefinitionDraftResourceItemRequest(
+                        null, "references/notes.md", "Reference", notes.MediaType, notes.ContentSha256, notes.ByteLength)
+                ]));
+        bind.EnsureSuccessStatusCode();
+        var bound = await bind.Content.ReadFromJsonAsync<AdminBindDefinitionDraftResourcesResponse>(JsonOptions());
+        Assert.NotNull(bound);
+        Assert.Equal(draft.Revision + 1, bound!.Revision);
+        Assert.Equal(["knowledge/policy.md", "references/notes.md"], bound.Items.Select(item => item.LogicalPath).ToArray());
+
+        var stale = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/batch",
+            new AdminBindDefinitionDraftResourcesRequest(
+                draft.Revision,
+                [
+                    new AdminBindDefinitionDraftResourceItemRequest(
+                        null, "references/extra.md", "Reference", notes.MediaType, notes.ContentSha256, notes.ByteLength)
+                ]));
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, stale.StatusCode);
+
+        var invalid = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/batch",
+            new AdminBindDefinitionDraftResourcesRequest(
+                bound.Revision,
+                [
+                    new AdminBindDefinitionDraftResourceItemRequest(
+                        null, "references/ok.md", "Reference", notes.MediaType, notes.ContentSha256, notes.ByteLength),
+                    new AdminBindDefinitionDraftResourceItemRequest(
+                        null, "../secrets.txt", "Reference", notes.MediaType, notes.ContentSha256, notes.ByteLength)
+                ]));
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        var listed = await client.GetFromJsonAsync<AdminDefinitionDraftResourceListResponse>(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources",
+            JsonOptions());
+        var current = await client.GetFromJsonAsync<AdminDefinitionDraftResponse>(
+            $"/api/v2/admin/definition-drafts/{draft.DraftId}",
+            JsonOptions());
+        Assert.Equal(bound.Revision, current!.Revision);
+        Assert.Equal(["knowledge/policy.md", "references/notes.md"], listed!.Items.Select(item => item.LogicalPath).ToArray());
+    }
+
     private static async Task<AdminDefinitionDraftResponse> CreateIsolatedDraftAsync(
         HttpClient client,
         string definitionId)

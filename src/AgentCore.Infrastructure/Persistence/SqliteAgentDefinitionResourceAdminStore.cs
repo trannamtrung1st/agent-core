@@ -103,6 +103,73 @@ public sealed class SqliteAgentDefinitionResourceAdminStore(
         return resource;
     }
 
+    public async ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
+        AgentDefinitionDraftResourceBatchBind bind,
+        CancellationToken cancellationToken = default)
+    {
+        var prepared = await DefinitionResourceBatch.PrepareAsync(content, bind.Items, cancellationToken)
+            .ConfigureAwait(false);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var draftKey = bind.DraftId.ToString("D");
+        var rows = await db.AgentDefinitionDraftResources
+            .Where(row => row.DraftId == draftKey)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var existing = rows.Select(DefinitionResourcePersistence.MapDraftResource).ToArray();
+        DefinitionResourcePolicies.ValidateBatchManifest(existing, prepared);
+        var draftRow = await db.AgentDefinitionDrafts
+            .SingleOrDefaultAsync(item => item.DraftId == draftKey, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Draft was not found.");
+        if (draftRow.Revision != bind.ExpectedDraftRevision)
+        {
+            throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+
+        draftRow.Revision += 1;
+        draftRow.UpdatedAtUtc = bind.UpdatedAt.ToUnixTimeMilliseconds();
+        var byId = rows.ToDictionary(row => row.ResourceId, StringComparer.Ordinal);
+        var bound = new List<AgentDefinitionDraftResource>(prepared.Count);
+        foreach (var item in prepared)
+        {
+            var resourceId = item.ResourceId is Guid id && byId.ContainsKey(id.ToString("D"))
+                ? id
+                : item.ResourceId ?? ids.NewId();
+            var resource = new AgentDefinitionDraftResource(
+                resourceId,
+                bind.DraftId,
+                item.LogicalPath,
+                item.Kind,
+                item.MediaType,
+                item.ContentSha256,
+                item.ByteLength,
+                bind.UpdatedAt);
+            var mapped = DefinitionResourcePersistence.MapDraftResource(resource);
+            if (item.ResourceId is Guid existingId && byId.TryGetValue(existingId.ToString("D"), out var row))
+            {
+                row.LogicalPath = mapped.LogicalPath;
+                row.Kind = mapped.Kind;
+                row.MediaType = mapped.MediaType;
+                row.ContentSha256 = mapped.ContentSha256;
+                row.ByteLength = mapped.ByteLength;
+                row.UpdatedAtUtc = mapped.UpdatedAtUtc;
+            }
+            else
+            {
+                db.AgentDefinitionDraftResources.Add(mapped);
+            }
+
+            bound.Add(resource);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new AgentDefinitionDraftResourceBatchBound(
+            draftRow.Revision,
+            bound.OrderBy(item => item.LogicalPath, StringComparer.Ordinal).ToArray());
+    }
+
     public async ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
         AgentDefinitionDraftResourceRemove remove,
         CancellationToken cancellationToken = default)

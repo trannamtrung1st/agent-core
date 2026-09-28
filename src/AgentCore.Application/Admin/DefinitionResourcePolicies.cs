@@ -123,6 +123,81 @@ public static class DefinitionResourcePolicies
         }
     }
 
+    public static void ValidateBatchManifest(
+        IReadOnlyList<AgentDefinitionDraftResource> existing,
+        IReadOnlyList<PreparedBatchResource> incoming)
+    {
+        if (incoming.Count == 0)
+        {
+            throw AgentCoreErrors.Validation("Batch must include at least one resource.");
+        }
+
+        var incomingPaths = new HashSet<string>(StringComparer.Ordinal);
+        var incomingIds = new HashSet<Guid>();
+        foreach (var item in incoming)
+        {
+            ValidateContentSize(item.ByteLength);
+            if (!incomingPaths.Add(item.LogicalPath))
+            {
+                throw AgentCoreErrors.Conflict("logicalPath is duplicated in this batch.");
+            }
+
+            if (item.ResourceId is Guid resourceId && !incomingIds.Add(resourceId))
+            {
+                throw AgentCoreErrors.Conflict("resourceId is duplicated in this batch.");
+            }
+        }
+
+        var byId = existing.ToDictionary(row => row.ResourceId);
+        var occupied = existing.ToDictionary(row => row.LogicalPath, row => row.ResourceId, StringComparer.Ordinal);
+        foreach (var item in incoming)
+        {
+            if (item.ResourceId is not Guid resourceId || !byId.TryGetValue(resourceId, out var current))
+            {
+                continue;
+            }
+
+            if (occupied.TryGetValue(current.LogicalPath, out var owner) && owner == resourceId)
+            {
+                occupied.Remove(current.LogicalPath);
+            }
+        }
+
+        foreach (var item in incoming)
+        {
+            var replaces = item.ResourceId is Guid resourceId && byId.ContainsKey(resourceId);
+            if (occupied.TryGetValue(item.LogicalPath, out var owner)
+                && (!replaces || owner != item.ResourceId))
+            {
+                throw AgentCoreErrors.Conflict("logicalPath is already bound on this draft.");
+            }
+
+            occupied[item.LogicalPath] = replaces ? item.ResourceId!.Value : Guid.Empty;
+        }
+
+        var replacedCount = incoming.Count(item => item.ResourceId is Guid resourceId && byId.ContainsKey(resourceId));
+        var resultingCount = existing.Count - replacedCount + incoming.Count;
+        if (resultingCount > AgentResourceLimits.MaxItemsPerDraft)
+        {
+            throw AgentCoreErrors.Validation("Draft resource count exceeds the allowed limit.");
+        }
+
+        long replacedBytes = 0;
+        foreach (var item in incoming)
+        {
+            if (item.ResourceId is Guid resourceId && byId.TryGetValue(resourceId, out var current))
+            {
+                replacedBytes += current.ByteLength;
+            }
+        }
+
+        var resultingBytes = existing.Sum(row => row.ByteLength) - replacedBytes + incoming.Sum(item => item.ByteLength);
+        if (resultingBytes > AgentResourceLimits.MaxAggregateBytes)
+        {
+            throw AgentCoreErrors.Validation("Draft resource aggregate size exceeds the allowed limit.");
+        }
+    }
+
     public static void ValidateAggregateSize(long currentAggregateBytes, long nextItemBytes, int currentCount, bool replacingSameItem)
     {
         if (!replacingSameItem && currentCount >= AgentResourceLimits.MaxItemsPerDraft)

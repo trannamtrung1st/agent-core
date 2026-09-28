@@ -212,6 +212,22 @@ public sealed record AdminDefinitionResourceContentStoredResponse(
     long ByteLength,
     string MediaType);
 
+public sealed record AdminBindDefinitionDraftResourcesRequest(
+    long ExpectedRevision,
+    IReadOnlyList<AdminBindDefinitionDraftResourceItemRequest> Items);
+
+public sealed record AdminBindDefinitionDraftResourceItemRequest(
+    string? ResourceId,
+    string LogicalPath,
+    string Kind,
+    string MediaType,
+    string ContentSha256,
+    long ByteLength);
+
+public sealed record AdminBindDefinitionDraftResourcesResponse(
+    long Revision,
+    IReadOnlyList<AdminDefinitionDraftResourceResponse> Items);
+
 public sealed record AdminUpsertDefinitionDraftResourceRequest(
     long ExpectedRevision,
     string? ResourceId,

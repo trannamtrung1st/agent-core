@@ -137,6 +137,51 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         }
     }
 
+    public async ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
+        AgentDefinitionDraftResourceBatchBind bind,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = await DefinitionResourceBatch.PrepareAsync(content, bind.Items, cancellationToken)
+            .ConfigureAwait(false);
+        var gate = DefinitionDraftLockRegistry.For(bind.DraftId);
+        lock (gate)
+        {
+            var list = _draftResources.GetOrAdd(bind.DraftId, static _ => []);
+            DefinitionResourcePolicies.ValidateBatchManifest(list, prepared);
+            var draft = drafts.BumpDraftRevisionAsync(
+                    new AgentDefinitionDraftRevisionBump(bind.DraftId, bind.ExpectedDraftRevision, bind.UpdatedAt),
+                    cancellationToken)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            foreach (var item in prepared)
+            {
+                var replacing = item.ResourceId is Guid resourceId && list.Any(row => row.ResourceId == resourceId);
+                var resource = new AgentDefinitionDraftResource(
+                    replacing ? item.ResourceId!.Value : item.ResourceId ?? ids.NewId(),
+                    bind.DraftId,
+                    item.LogicalPath,
+                    item.Kind,
+                    item.MediaType,
+                    item.ContentSha256,
+                    item.ByteLength,
+                    bind.UpdatedAt);
+                if (replacing)
+                {
+                    var index = list.FindIndex(row => row.ResourceId == item.ResourceId);
+                    list[index] = resource;
+                }
+                else
+                {
+                    list.Add(resource);
+                }
+            }
+
+            return new AgentDefinitionDraftResourceBatchBound(draft.Revision, SnapshotDraftResources(bind.DraftId));
+        }
+    }
+
     public async ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
         AgentDefinitionDraftResourceRemove remove,
         CancellationToken cancellationToken = default)

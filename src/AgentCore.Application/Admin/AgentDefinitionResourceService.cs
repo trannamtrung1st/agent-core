@@ -65,6 +65,19 @@ public sealed class AgentDefinitionResourceService(
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
+        Guid draftId,
+        long expectedRevision,
+        IReadOnlyList<AgentDefinitionDraftResourceBatchItem> items,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        var now = time.GetUtcNow();
+        return await resources.BindDraftResourcesAsync(
+            new AgentDefinitionDraftResourceBatchBind(draftId, expectedRevision, items, now),
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
         Guid draftId,
         long expectedRevision,

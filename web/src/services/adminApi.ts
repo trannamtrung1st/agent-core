@@ -552,6 +552,30 @@ export async function uploadAdminDraftResourceContent(
   return (await response.json()) as AdminResourceContentStored;
 }
 
+export type AdminBindDraftResourceItem = {
+  logicalPath: string;
+  kind: string;
+  mediaType: string;
+  contentSha256: string;
+  byteLength: number;
+};
+
+export async function bindAdminDraftResources(
+  draftId: string,
+  expectedRevision: number,
+  items: AdminBindDraftResourceItem[]
+): Promise<{ revision: number; items: AdminDefinitionDraftResource[] }> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/resources/batch`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision, items })
+  });
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(response, `Admin resource bind failed (${response.status})`));
+  }
+  return (await response.json()) as { revision: number; items: AdminDefinitionDraftResource[] };
+}
+
 export async function upsertAdminDraftResource(
   draftId: string,
   expectedRevision: number,

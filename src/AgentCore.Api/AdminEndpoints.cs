@@ -780,6 +780,39 @@ internal static class AdminEndpoints
             }
         }).WithMetadata(new RequestSizeLimitAttribute(AgentResourceLimits.MaxItemBytes + (1024 * 1024)));
 
+        group.MapPut("/definition-drafts/{draftId:guid}/resources/batch", async (
+            Guid draftId,
+            AdminBindDefinitionDraftResourcesRequest request,
+            AgentDefinitionResourceService resources,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var items = (request.Items ?? [])
+                    .Select(item => new AgentDefinitionDraftResourceBatchItem(
+                        AdminDefinitionResourceHttp.ParseOptionalResourceId(item.ResourceId),
+                        item.LogicalPath,
+                        AdminDefinitionResourceHttp.ParseResourceKind(item.Kind),
+                        item.MediaType,
+                        item.ContentSha256,
+                        item.ByteLength))
+                    .ToArray();
+                var bound = await resources.BindDraftResourcesAsync(
+                        draftId,
+                        request.ExpectedRevision,
+                        items,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(new AdminBindDefinitionDraftResourcesResponse(
+                    bound.Revision,
+                    bound.Resources.Select(AdminHttpMapping.ToDraftResource).ToArray()));
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPut("/definition-drafts/{draftId:guid}/resources", async (
             Guid draftId,
             AdminUpsertDefinitionDraftResourceRequest request,

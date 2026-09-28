@@ -88,6 +88,7 @@ vi.mock("../../services/adminApi", () => ({
   listAdminToolNames: vi.fn().mockResolvedValue(["workspace.read"]),
   uploadAdminDraftResourceContent: vi.fn(),
   upsertAdminDraftResource: vi.fn(),
+  bindAdminDraftResources: vi.fn(),
   removeAdminDraftResource: vi.fn(),
   updateAdminAgentInstancePersona: vi.fn(),
   updateAdminAgentInstanceLifecycle: vi.fn(),

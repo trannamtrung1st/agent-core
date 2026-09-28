@@ -40,6 +40,7 @@ import {
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
+import { ResourceImportPanel } from "./resourceImportPanel";
 import {
   type AdminDefinitionDraft,
   type AdminDefinitionDraftResource,
@@ -1858,6 +1859,16 @@ function DraftEditor({
                     Upload &amp; bind
                   </Button>
                 </section>
+                <ResourceImportPanel
+                  draftId={activeDraft.draftId}
+                  expectedRevision={activeDraft.revision}
+                  existingPaths={resources.map((item) => item.logicalPath)}
+                  existingCount={resources.length}
+                  existingBytes={resources.reduce((sum, item) => sum + item.byteLength, 0)}
+                  disabled={busy}
+                  onBound={refreshDraft}
+                  onError={onError}
+                />
                 {resourcesLoading ? <Spin /> : null}
                 {!resourcesLoading && resources.length === 0 ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No resources bound to this draft." />

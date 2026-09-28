@@ -118,6 +118,11 @@ public sealed class AdminDefinitionDraftValidationServiceTests
             CancellationToken cancellationToken = default) =>
             inner.UpsertDraftResourceAsync(upsert, cancellationToken);
 
+        public ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
+            AgentDefinitionDraftResourceBatchBind bind,
+            CancellationToken cancellationToken = default) =>
+            inner.BindDraftResourcesAsync(bind, cancellationToken);
+
         public ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
             AgentDefinitionDraftResourceRemove remove,
             CancellationToken cancellationToken = default) =>

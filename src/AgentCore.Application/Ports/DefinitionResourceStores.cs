@@ -19,6 +19,10 @@ public interface IAgentDefinitionResourceAdminStore
         AgentDefinitionDraftResourceUpsert upsert,
         CancellationToken cancellationToken = default);
 
+    ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
+        AgentDefinitionDraftResourceBatchBind bind,
+        CancellationToken cancellationToken = default);
+
     ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
         AgentDefinitionDraftResourceRemove remove,
         CancellationToken cancellationToken = default);
@@ -50,6 +54,24 @@ public sealed record AgentDefinitionDraftResourceUpsert(
     string ContentSha256,
     long ByteLength,
     DateTimeOffset UpdatedAt);
+
+public sealed record AgentDefinitionDraftResourceBatchItem(
+    Guid? ResourceId,
+    string LogicalPath,
+    AgentDefinitionResourceKind Kind,
+    string MediaType,
+    string ContentSha256,
+    long ByteLength);
+
+public sealed record AgentDefinitionDraftResourceBatchBind(
+    Guid DraftId,
+    long ExpectedDraftRevision,
+    IReadOnlyList<AgentDefinitionDraftResourceBatchItem> Items,
+    DateTimeOffset UpdatedAt);
+
+public sealed record AgentDefinitionDraftResourceBatchBound(
+    long Revision,
+    IReadOnlyList<AgentDefinitionDraftResource> Resources);
 
 public sealed record AgentDefinitionDraftResourceRemove(
     Guid DraftId,

@@ -530,6 +530,197 @@ public abstract class AgentDefinitionResourceAdminStoreContractTests
         });
     }
 
+    [Fact]
+    public async Task Batch_bind_commits_every_item_in_one_revision()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T05:00:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var first = await StoredBatchItemAsync(fixture, "knowledge/policy.md", "policy", AgentDefinitionResourceKind.Knowledge, "text/markdown");
+            var second = await StoredBatchItemAsync(fixture, "references/notes.md", "notes", AgentDefinitionResourceKind.Reference, "text/plain");
+            var bound = await fixture.Resources.BindDraftResourcesAsync(
+                new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [first, second], now),
+                CancellationToken.None);
+            var again = await fixture.Admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+            var listed = await fixture.Resources.ListDraftResourcesAsync(draft.DraftId, CancellationToken.None);
+
+            Assert.Equal(draft.Revision + 1, bound.Revision);
+            Assert.Equal(bound.Revision, again!.Revision);
+            Assert.Equal(2, listed.Count);
+            Assert.Equal(["knowledge/policy.md", "references/notes.md"], listed.Select(item => item.LogicalPath).ToArray());
+            Assert.Equal(AgentDefinitionResourceKind.Knowledge, listed[0].Kind);
+            Assert.Equal(AgentDefinitionResourceKind.Reference, listed[1].Kind);
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_a_duplicate_path_without_writing_rows()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T05:10:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var left = await StoredBatchItemAsync(fixture, "references/notes.md", "left");
+            var right = await StoredBatchItemAsync(fixture, "references/notes.md", "right");
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [left, right], now),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("Conflict", ex.Code);
+            Assert.Contains("duplicated", ex.Message, StringComparison.Ordinal);
+            await AssertUnchangedAsync(fixture, draft.DraftId, draft.Revision);
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_traversal_without_a_partial_manifest()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T05:20:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var valid = await StoredBatchItemAsync(fixture, "references/notes.md", "notes");
+            var traversal = valid with { LogicalPath = "../secrets.txt" };
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [valid, traversal], now),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("ValidationError", ex.Code);
+            Assert.Contains("traversal", ex.Message, StringComparison.Ordinal);
+            await AssertUnchangedAsync(fixture, draft.DraftId, draft.Revision);
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_an_item_over_the_per_item_limit()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T05:30:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var valid = await StoredBatchItemAsync(fixture, "references/notes.md", "notes");
+            var oversized = valid with
+            {
+                LogicalPath = "references/large.txt",
+                ByteLength = AgentResourceLimits.MaxItemBytes + 1
+            };
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [valid, oversized], now),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("ValidationError", ex.Code);
+            Assert.Contains("per-item", ex.Message, StringComparison.Ordinal);
+            await AssertUnchangedAsync(fixture, draft.DraftId, draft.Revision);
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_more_than_the_item_count_limit()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T05:40:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var stored = await StoredBatchItemAsync(fixture, "references/shared.txt", "shared");
+            var items = Enumerable.Range(0, AgentResourceLimits.MaxItemsPerDraft + 1)
+                .Select(index => stored with { LogicalPath = $"references/item-{index}.txt" })
+                .ToArray();
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, items, now),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("ValidationError", ex.Code);
+            Assert.Contains("count", ex.Message, StringComparison.Ordinal);
+            await AssertUnchangedAsync(fixture, draft.DraftId, draft.Revision);
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_an_aggregate_over_the_draft_limit()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T05:50:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var large = new byte[AgentResourceLimits.MaxItemBytes];
+            large[0] = 1;
+            var largeItem = await StoredBatchItemAsync(fixture, "references/large.bin", large, mediaType: "application/pdf");
+            var extra = await StoredBatchItemAsync(fixture, "references/extra.txt", "x");
+            var items = Enumerable.Range(0, 8)
+                .Select(index => largeItem with { LogicalPath = $"references/large-{index}.pdf" })
+                .Append(extra)
+                .ToArray();
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, items, now),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("ValidationError", ex.Code);
+            Assert.Contains("aggregate", ex.Message, StringComparison.Ordinal);
+            await AssertUnchangedAsync(fixture, draft.DraftId, draft.Revision);
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_a_stale_revision_without_changing_rows()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T06:00:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var existing = await StoredBatchItemAsync(fixture, "references/kept.md", "kept");
+            var seeded = await fixture.Resources.BindDraftResourcesAsync(
+                new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [existing], now),
+                CancellationToken.None);
+            var extra = await StoredBatchItemAsync(fixture, "references/extra.md", "extra");
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [extra], now.AddMinutes(1)),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("Conflict", ex.Code);
+            Assert.Contains("stale", ex.Message, StringComparison.OrdinalIgnoreCase);
+            var listed = await fixture.Resources.ListDraftResourcesAsync(draft.DraftId, CancellationToken.None);
+            var current = await fixture.Admin.GetDraftAsync(draft.DraftId, CancellationToken.None);
+            Assert.Equal(seeded.Revision, current!.Revision);
+            Assert.Equal(["references/kept.md"], listed.Select(item => item.LogicalPath).ToArray());
+        });
+    }
+
+    [Fact]
+    public async Task Batch_bind_rejects_a_collision_with_an_existing_row()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T06:10:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var existing = await StoredBatchItemAsync(fixture, "references/kept.md", "kept");
+            var seeded = await fixture.Resources.BindDraftResourcesAsync(
+                new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [existing], now),
+                CancellationToken.None);
+            var collision = await StoredBatchItemAsync(fixture, "references/kept.md", "other");
+            var added = await StoredBatchItemAsync(fixture, "references/new.md", "new");
+            var ex = await Assert.ThrowsAsync<AgentCoreException>(() =>
+                fixture.Resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(
+                        draft.DraftId,
+                        seeded.Revision,
+                        [collision, added],
+                        now.AddMinutes(1)),
+                    CancellationToken.None).AsTask());
+
+            Assert.Equal("Conflict", ex.Code);
+            Assert.Contains("already bound", ex.Message, StringComparison.Ordinal);
+            var listed = await fixture.Resources.ListDraftResourcesAsync(draft.DraftId, CancellationToken.None);
+            Assert.Equal(["references/kept.md"], listed.Select(item => item.LogicalPath).ToArray());
+        });
+    }
+
     protected abstract Task ForEachStoresAsync(Func<ResourceStoreFixture, Task> exercise);
 
     protected sealed record ResourceStoreFixture(
@@ -550,4 +741,46 @@ public abstract class AgentDefinitionResourceAdminStoreContractTests
             new VoiceConfiguration(false, "alloy", 1.0),
             new ProviderPreferences("primary-llm", null, null),
             new Dictionary<string, string>());
+
+    private static async Task<AgentDefinitionDraft> CreateResourceDraftAsync(
+        ResourceStoreFixture fixture,
+        DateTimeOffset now)
+    {
+        return await fixture.Admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate(
+                "resource-agent",
+                SampleCandidate("resource-agent"),
+                DefinitionDraftSourceKind.New,
+                null,
+                now),
+            CancellationToken.None);
+    }
+
+    private static Task<AgentDefinitionDraftResourceBatchItem> StoredBatchItemAsync(
+        ResourceStoreFixture fixture,
+        string logicalPath,
+        string text,
+        AgentDefinitionResourceKind kind = AgentDefinitionResourceKind.Reference,
+        string mediaType = "text/plain") =>
+        StoredBatchItemAsync(fixture, logicalPath, System.Text.Encoding.UTF8.GetBytes(text), kind, mediaType);
+
+    private static async Task<AgentDefinitionDraftResourceBatchItem> StoredBatchItemAsync(
+        ResourceStoreFixture fixture,
+        string logicalPath,
+        byte[] bytes,
+        AgentDefinitionResourceKind kind = AgentDefinitionResourceKind.Reference,
+        string mediaType = "text/plain")
+    {
+        var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
+        await fixture.Content.StoreVerifiedAsync(hash, bytes, CancellationToken.None);
+        return new AgentDefinitionDraftResourceBatchItem(null, logicalPath, kind, mediaType, hash, bytes.Length);
+    }
+
+    private static async Task AssertUnchangedAsync(ResourceStoreFixture fixture, Guid draftId, long revision)
+    {
+        var current = await fixture.Admin.GetDraftAsync(draftId, CancellationToken.None);
+        var listed = await fixture.Resources.ListDraftResourcesAsync(draftId, CancellationToken.None);
+        Assert.Equal(revision, current!.Revision);
+        Assert.Empty(listed);
+    }
 }
