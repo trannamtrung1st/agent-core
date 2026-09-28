@@ -43,13 +43,17 @@ Observer-durability closure (do not merge into Harness Admin):
 2b3188f → f45ea27 — scope/evidence documentation
 ```
 
-## Current active phase
-
-**P8 — harness/platform extensibility.**
-
 P7.5 is frozen on `70a5720`. Hosted workflow `36368766449` is green on that SHA. Closure report: `docs/reports/p7.5-freeze-candidate.md`.
 
-Start P8 from one concrete provider need. Do not add a universal provider interface.
+## Current active phase
+
+**P7.6 — Admin usability closure.**
+
+P7.6 is a bounded post-freeze product requirement. It does **not** redefine what P7 or P7.5 previously meant or invalidate their closure evidence.
+
+Finish the existing Definition/Instance/Admin authoring experience before widening the platform extension surface in P8.
+
+P8 remains next after P7.6. When P8 begins, start from one concrete provider need and do not add a universal provider interface.
 
 ---
 
@@ -57,14 +61,17 @@ Start P8 from one concrete provider need. Do not add a universal provider interf
 
 1. **P0–P7 — closed/frozen.**
 2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `70a5720`.**
-3. **P8 — harness/platform extensibility — ACTIVE.**
-4. **P9 — sandbox evolution when requirements justify it.**
-5. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
+3. **P7.6 — Admin usability closure — ACTIVE.**
+4. **P8 — harness/platform extensibility — queued after P7.6.**
+5. **P9 — sandbox evolution when requirements justify it.**
+6. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
 - a reproducible regression; or
 - a concrete new product requirement that belongs there rather than in a later phase.
+
+P7.6 is such a new bounded product requirement. Keep its changes attributable to P7.6 rather than rewriting frozen P7/P7.5 history.
 
 ---
 
@@ -162,7 +169,7 @@ Do not add a general cross-session Agent Instance filesystem without a concrete 
 
 Always keep this section.
 
-- [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.5/P8 without a concrete requirement.
+- [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.6/P8 without a concrete requirement.
 
 - [ ] Admin assistant agent remains a future idea.
 
@@ -203,6 +210,8 @@ Always keep this section.
   Automation
   Test & Publish
   ```
+
+- [ ] Finish P7.6 Admin authoring usability before widening the P8 extension surface.
 
 - [ ] Keep infrastructure boring until product/hosting requirements justify more complexity.
 
@@ -275,7 +284,8 @@ Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36368
 - Persistence audit kept SQLite, separate stores, explicit transactions, and the single-process scheduler. Recorded in `docs/15-persistence-and-configuration.md`.
 - Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
 - Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
-- Canonical handoff names P8 next. P7.5 is frozen on `70a5720`. `docs/13` describes the shipped Admin surface through P7G. `.agents/context/PRODUCT.md` and `DESIGN.md` stay aligned with that surface and defer behavior to `/docs`.
+- At the P7.5 freeze, the canonical handoff named P8 next. The later P7.6 requirement below is a bounded product follow-up and does not rewrite the P7.5 closure.
+- `docs/13` describes the shipped Admin surface through P7G. `.agents/context/PRODUCT.md` and `DESIGN.md` stay aligned with that surface and defer behavior to `/docs`.
 - The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. Hosted workflow `36368766449` is green on `70a5720`.
 
 ---
@@ -539,6 +549,631 @@ P8 extension seams are evidence-based rather than speculative
 
 ---
 
+# P7.6 — Admin usability closure
+
+**Status: ACTIVE.**
+
+## Goal
+
+Finish the Admin authoring and lifecycle UX for the model that already exists before widening Agent Core with P8 extensions.
+
+P7.6 is intentionally bounded:
+
+```text
+complete Definition authoring
+explicit Definition / Instance creation
+clear Definition/version semantics
+clear Knowledge Source ↔ Resource binding
+multi-file + folder resource ingestion
+final Admin UX/test/documentation closure
+```
+
+P7.6 may make small model/API corrections where the current product surface exposes a real mismatch. It must not become an architecture redesign or a platform/plugin phase.
+
+## Current-state facts to preserve
+
+The current implementation already establishes:
+
+- `AgentDefinitionCandidate` as the mutable draft payload and immutable `AgentDefinition` as the published payload;
+- durable new-draft creation and forked-draft creation;
+- immutable published Definition versions;
+- managed Agent Instance creation against a published version;
+- typed Persona revision and Active/Archived lifecycle;
+- Definition resources with immutable content and draft/publication bindings;
+- validation, evaluation, diff, and publish gates tied to draft revision/fingerprint;
+- read-only Admin effective configuration;
+- resource limits of 8 MiB/item, 64 items/draft, and 64 MiB aggregate;
+- existing single-file resource upload;
+- Knowledge Sources as semantic identity/title/citation references;
+- current legacy knowledge resolution by implicit `knowledge/{identity}` logical path.
+
+Do not duplicate these concepts to implement the new UX.
+
+---
+
+## P7.6A — Complete Definition Form + Advanced JSON authoring
+
+- [ ] Expose structured editing for the complete supported `AgentDefinitionCandidate`.
+
+At minimum:
+
+```text
+Identity
+Goals
+System Instructions
+
+Behavior Policy
+Conversation Policy
+Initiative Policy
+
+Model Defaults
+Provider Preferences
+Voice
+
+Memory Policy
+Trigger / Automation Policy
+
+Environment / Capabilities
+Metadata
+```
+
+- [ ] Keep the existing product mental model understandable. Do not create one top-level tab for every low-level policy object.
+
+A suitable shape is:
+
+```text
+Definition
+  Form | Advanced JSON
+
+  Identity & goals
+  Instructions
+  Behavior & conversation
+  Initiative
+  Model & providers
+  Voice
+  Memory policy
+  Automation policy
+  Advanced / metadata
+
+Capabilities
+  Harness
+  Tools
+  Knowledge Sources
+  Workspace / attachments
+
+Resources
+
+Test & Publish
+```
+
+- [ ] Form and Advanced JSON must edit **one candidate draft**, not two parallel representations.
+
+Required behavior:
+
+```text
+Form edit
+  ↓
+same local candidate
+  ↓
+JSON view
+
+JSON edit
+  ↓ parse
+same local candidate
+  ↓
+Form view
+```
+
+- [ ] Switching Form/JSON views must not silently discard valid unsaved edits.
+
+- [ ] Invalid JSON must remain a local editor error. It must not mutate the saved draft or advance its revision.
+
+- [ ] Saving from either view must use the same draft `expectedRevision` conflict protection.
+
+- [ ] Both views must use the same server-side persistence validation, publication validation, evaluation, diff, and publish path.
+
+- [ ] The structured Form must not silently erase supported candidate fields merely because a particular section was not opened or edited.
+
+- [ ] Definition ID remains immutable after draft creation.
+
+- [ ] Keep secret detection and configured provider/tool validation authoritative on the server.
+
+- [ ] Do not turn the Admin candidate editor into an alternate effective-runtime-configuration editor.
+
+### P7.6A acceptance
+
+A maintainer can create/open one draft, change every supported candidate area through the Form or JSON, switch repeatedly between both views without loss, save once, validate/evaluate, review the resulting diff, and publish through the existing immutable publication flow.
+
+---
+
+## P7.6B — Explicit New Definition / New Instance flows
+
+### New Definition
+
+- [ ] Add **`+ New definition`** on Admin home.
+
+- [ ] Creating a new Definition must not require forking an existing version.
+
+- [ ] Preserve the current domain requirement that a persisted `AgentDefinitionCandidate` has a structurally valid required graph.
+
+Do **not** weaken published/domain invariants merely to store null-filled UI drafts.
+
+- [ ] Create a canonical server-owned starter candidate for a new Definition.
+
+Requirements:
+
+- the user supplies a valid new Definition ID;
+- the server owns starter defaults rather than the browser hardcoding provider/policy internals;
+- the starter is structurally persistence-valid;
+- it opens immediately as a normal `SourceKind.New` draft;
+- the user still passes the ordinary save/validate/evaluate/diff/publish flow;
+- future starter-default changes do not affect already-created drafts.
+
+### New Instance
+
+- [ ] Add **`+ New instance`** on Admin home.
+
+Flow:
+
+```text
+choose logical Definition
+→ choose published version
+→ choose Definition-default persona or Custom persona
+→ create durable managed Agent Instance
+→ open Instance Admin
+```
+
+- [ ] Default version selection should prefer the newest non-deprecated usable publication. Do not invent a stored `defaultVersion` pointer solely for this UI.
+
+- [ ] Deprecated versions may remain explicitly reachable where current lifecycle semantics require it, but must not be the normal/default target for new managed work. Show a warning when explicitly selected.
+
+- [ ] If Custom persona is supplied during creation, persist it **atomically with instance creation** rather than creating a default-persona instance and immediately patching it.
+
+- [ ] Record one coherent Admin lifecycle event/history outcome for custom-persona creation rather than an accidental create-then-edit sequence.
+
+- [ ] Keep `Start managed chat` as a convenience action:
+
+```text
+create managed instance
+→ create Session
+→ open Chat
+```
+
+It must not remain the only obvious managed-instance creation path.
+
+- [ ] Keep Instance hard-delete out of P7.6. Lifecycle remains Active/Archived.
+
+### P7.6B acceptance
+
+Admin home independently supports creating a reusable Definition draft and a durable managed Instance. Starting a managed chat remains a shortcut rather than a hidden CRUD mechanism.
+
+---
+
+## P7.6C — Definition/version UX semantics
+
+- [ ] Keep one inventory row per logical Definition.
+
+- [ ] Continue showing drafts/publications/versions hierarchically under that Definition rather than as separate logical Definitions.
+
+- [ ] Clearly distinguish factual version concepts:
+
+```text
+latest version
+latest active / usable version
+deprecated historical version
+instance-pinned active version
+```
+
+- [ ] Do **not** add a persistent “default version” concept unless an independent runtime/product requirement requires one.
+
+- [ ] When the numerically latest version is deprecated, the UI must not imply that it is the preferred version for new work.
+
+Example:
+
+```text
+Customer Support
+
+Latest         v6 · Deprecated
+Latest active  v5 · Active
+```
+
+- [ ] Deprecated versions remain visible and explicitly forkable.
+
+- [ ] Deprecated versions must not be the default fork source while a non-deprecated version exists.
+
+- [ ] Preserve exact historical version lookup and existing Session/Instance associations.
+
+- [ ] Keep built-in and durable source/status provenance visible where it helps explain lifecycle behavior without making each source a separate Definition.
+
+### P7.6C acceptance
+
+A maintainer can tell, without knowing persistence internals, which logical Definition they are viewing, which version is numerically latest, which version is suitable for new work, what an existing Instance is pinned to, and which historical versions are deprecated.
+
+---
+
+## P7.6D — Make Knowledge Source ↔ Resource binding explicit
+
+The current implicit relationship is:
+
+```text
+Knowledge Source identity
+  ↓ convention
+knowledge/{identity}
+```
+
+This becomes too opaque once Admin supports arbitrary file/folder resource ingestion.
+
+- [ ] Extend the Knowledge Source binding with an explicit optional logical resource path.
+
+Conceptually:
+
+```text
+Knowledge Source
+  identity: refund-policy
+  title: Refund Policy
+  citation: refund-policy@v3
+  resourcePath: knowledge/refund-policy.md
+```
+
+- [ ] Use normalized logical path as the Definition-level binding. Do not use draft `ResourceId` as the durable semantic reference.
+
+Rationale:
+
+```text
+ResourceId
+= storage/lifecycle identity
+
+Logical path
+= portable Definition/package reference
+```
+
+- [ ] Preserve backward compatibility for existing Definitions that omit `resourcePath`.
+
+Legacy fallback:
+
+```text
+resourcePath missing
+→ resolve knowledge/{identity}
+```
+
+- [ ] Put explicit path resolution/fallback behind one shared authoritative helper so runtime resolution and draft validation cannot drift.
+
+- [ ] Validation must require the resolved path to bind a resource of `Kind = Knowledge`.
+
+- [ ] Keep the existing textual Knowledge media-type rules.
+
+- [ ] Admin Knowledge Source UX should select from currently bound Knowledge resources instead of looking like an unrelated parallel system.
+
+Suggested interaction:
+
+```text
+Knowledge resource
+[ knowledge/refund-policy.md ▼ ]
+
+Identity
+refund-policy
+
+Title
+Refund Policy
+
+Citation
+refund-policy@v3
+```
+
+- [ ] Identity remains the stable semantic/tool-facing identity. Title remains human-readable metadata. Citation remains the citation label. `resourcePath` identifies packaged content.
+
+- [ ] Removing or changing a resource used by a Knowledge Source should produce an obvious draft validation blocker. Do not silently rewrite or delete the semantic Knowledge Source.
+
+- [ ] Published versions freeze the candidate binding and the matching immutable publication resource set together.
+
+### P7.6D acceptance
+
+A maintainer can inspect a Knowledge Source and immediately identify the packaged resource that backs it. Old Definitions using the implicit convention still behave the same.
+
+---
+
+## P7.6E — Multi-file and folder resource ingestion
+
+Keep the existing single-file upload.
+
+Add:
+
+- [ ] multi-file upload;
+- [ ] folder selection where the browser supports it;
+- [ ] folder drag-and-drop where supported;
+- [ ] preservation of safe relative logical paths.
+
+### Kind inference
+
+Infer `Kind` from conventional top-level folders:
+
+```text
+knowledge/*   → Knowledge
+templates/*   → Template
+references/*  → Reference
+assets/*      → StaticAsset
+eval/*        → EvalFixture
+```
+
+This is a convenience inference, not a new runtime storage architecture.
+
+- [ ] Allow per-file Kind correction before binding.
+
+- [ ] Allow per-file logical-path correction before binding.
+
+- [ ] Do not infer a dangerous or ambiguous path silently. Path normalization/traversal checks remain server-authoritative.
+
+### Bulk preview
+
+- [ ] Show a preview before draft mutation.
+
+Example:
+
+```text
+Path                              Kind
+knowledge/refund-policy.md        Knowledge
+templates/reply.md                Template
+assets/logo.png                   StaticAsset
+```
+
+The preview should surface at least:
+
+- duplicate/colliding logical paths;
+- unsupported/invalid paths;
+- inferred Kind;
+- file size;
+- media type when useful;
+- known item/aggregate-limit violations.
+
+### Revision and atomicity
+
+Do not implement folder import as many competing resource metadata writes using the same draft revision.
+
+Use a coherent batch-bind operation:
+
+```text
+select files/folder
+       ↓
+build + edit manifest
+       ↓
+upload/hash content
+       ↓
+single batch resource bind against expected draft revision
+       ↓
+one resulting draft revision
+```
+
+- [ ] Content payload upload may remain individually hashed/deduplicated.
+
+- [ ] The final draft resource-binding mutation must use one `expectedRevision`.
+
+- [ ] The final batch bind should be atomic for draft resource metadata: either the accepted manifest binds coherently or no metadata subset is committed.
+
+- [ ] One successful batch bind advances the draft revision coherently rather than once per file.
+
+- [ ] Server-side item, byte, aggregate, media-type, path, duplicate, and secret-content checks remain authoritative.
+
+### Failures
+
+- [ ] Report per-file content-upload failures clearly.
+
+- [ ] Allow safe retry of failed content uploads without duplicating already-addressed immutable content.
+
+- [ ] Distinguish content-upload failure from final draft-bind/revision failure.
+
+- [ ] A stale revision on final bind must not leave a half-bound draft manifest.
+
+- [ ] After a successful bind, refresh the draft/revision and resource list from the server.
+
+### P7.6E acceptance
+
+A maintainer can drop/select a small folder tree, see the exact paths and inferred kinds that will enter the Definition, correct mistakes, bind the manifest under one coherent revision, and understand any individual upload or final-bind failure.
+
+---
+
+## P7.6F — Instance Admin polish
+
+Preserve the existing conceptual split:
+
+```text
+Instance management
+  Persona Form | JSON
+  Active version
+  Lifecycle
+
+Memory & automation
+
+Effective configuration
+```
+
+- [ ] Keep Instance Persona Form and Persona JSON as two views over mutable **instance-owned persona data only**.
+
+- [ ] Do not expose the full persistence record as editable Instance JSON.
+
+- [ ] Keep revisions, timestamps, compatibility flags, memory, trigger registrations, WorkItems, and other lifecycle state outside Persona JSON.
+
+- [ ] Keep Effective Configuration read-only.
+
+- [ ] Effective Configuration remains a resolved, secret-safe projection. It must not become a universal editable runtime object.
+
+- [ ] Keep Active/Archived lifecycle and active-version reassociation explicit and revision-protected.
+
+- [ ] Continue distinguishing Definition identity/default persona from durable Instance persona revisions.
+
+### P7.6F acceptance
+
+Editing instance-owned state cannot accidentally mutate Definition configuration or runtime-derived Effective Configuration, and viewing Effective Configuration cannot grant or change runtime authority.
+
+---
+
+## P7.6G — UX, testing, documentation, and freeze
+
+### UX review
+
+- [ ] Perform a complete Admin UX review after behavior is implemented, using the established Impeccable workflow/skill.
+
+Review at least:
+
+```text
+Admin home
+new Definition flow
+Definition Form
+Advanced JSON
+Capabilities
+Knowledge Source binding
+single/multi/folder resource upload
+bulk preview
+Test & Publish
+new Instance flow
+Instance Persona Form/JSON
+version/lifecycle controls
+Memory & automation
+Effective Configuration
+```
+
+- [ ] Review desktop and narrow/mobile layout, including approximately 390 px width.
+
+- [ ] Review keyboard navigation and visible focus.
+
+- [ ] Review loading, empty, error, retry, stale-revision, invalid-JSON, validation-blocked, dirty-draft, destructive-confirmation, upload-failure, and partial-content-upload states.
+
+- [ ] Do not hide required lifecycle semantics behind hover-only UI.
+
+- [ ] Keep user-visible terminology aligned with the Definition → Version → Instance → Session model.
+
+### Automated verification
+
+- [ ] Add/extend Domain/Application/API tests for:
+
+  - complete candidate round-trip;
+  - canonical new-Definition starter;
+  - new managed Instance with default persona;
+  - new managed Instance with atomic custom persona;
+  - deprecated-version selection rules where enforced;
+  - explicit Knowledge Source `resourcePath`;
+  - legacy implicit Knowledge Source fallback;
+  - Knowledge Kind/media validation;
+  - batch resource bind atomicity;
+  - stale batch revision;
+  - duplicate/path/size/count/aggregate-limit rejection.
+
+- [ ] Add/extend frontend tests for:
+
+  - Form ↔ JSON round-trip without data loss;
+  - invalid JSON isolation;
+  - dirty-state behavior;
+  - new Definition flow;
+  - new Instance flow;
+  - Definition/version labels;
+  - Knowledge resource selection;
+  - Kind/path inference and correction;
+  - bulk preview;
+  - upload and bind failure reporting;
+  - Persona JSON scope;
+  - Effective Configuration read-only behavior.
+
+- [ ] Add meaningful Synthetic Playwright coverage for the whole P7.6 happy path:
+
+```text
+New Definition
+→ edit Form
+→ inspect/edit JSON
+→ bind resources from multi/folder flow
+→ bind Knowledge Source
+→ validate/evaluate/diff
+→ publish
+→ New Instance with custom persona
+→ inspect Effective Configuration
+→ create/open managed chat
+```
+
+- [ ] Add focused Synthetic E2E for stale/conflict/error states that are practical at the browser boundary.
+
+- [ ] Re-run the complete deterministic solution/frontend test suite.
+
+- [ ] Re-run Compose/SQLite smoke coverage because P7.6 touches durable Admin/resource lifecycle.
+
+- [ ] Keep hosted providers opt-in; P7.6 closure must not depend on a hosted model merely to prove Admin CRUD/resource semantics.
+
+### Documentation and design sync
+
+- [ ] Update `docs/13-frontend-implementation-spec.md` for the final Admin information architecture and interactions.
+
+- [ ] Update architecture/backend/persistence docs where the explicit Knowledge Source resource-path binding or batch resource mutation changes a contract.
+
+Likely owners include:
+
+```text
+docs/03-system-architecture.md
+docs/04-backend-interfaces.md
+docs/13-frontend-implementation-spec.md
+docs/15-persistence-and-configuration.md
+```
+
+Update `docs/10-technology-decisions.md` only if a real technology/architecture decision changed.
+
+- [ ] Sync `.agents/context/PRODUCT.md` and `.agents/context/DESIGN.md` after the observed UI is final. `/docs` remains authoritative for detailed behavior.
+
+- [ ] Sync the design system/tokens/components after the final Impeccable review rather than before observed interaction patterns settle.
+
+- [ ] Record a bounded `docs/reports/p7.6-freeze-candidate.md`.
+
+The report should identify:
+
+- behavior added;
+- small model/API corrections made;
+- compatibility behavior retained;
+- explicit non-goals/deferred work;
+- deterministic test evidence;
+- Synthetic E2E evidence;
+- Compose evidence;
+- hosted CI candidate SHA/workflow.
+
+### P7.6 stop condition
+
+P7.6 is complete when:
+
+```text
+the entire supported Definition candidate can be authored through Form or JSON
+Form and JSON operate on one revisioned draft without loss
+Admin exposes explicit New Definition and New Instance flows
+published versions remain immutable
+Definition/version semantics are understandable without a new default-version concept
+Knowledge Sources visibly and durably bind to Knowledge resources
+legacy implicit knowledge bindings still work
+single-file, multi-file, and folder resource ingestion share one safe resource model
+bulk resource binding is revision-safe and not half-applied
+Instance JSON remains persona-scoped
+Effective Configuration remains read-only
+Admin UX has been reviewed/polished and design context is synchronized
+deterministic tests + Synthetic E2E + Compose are green
+hosted CI is green on the recorded closure candidate
+```
+
+---
+
+## P7.6 non-goals / deferred platform work
+
+Do **not** pull these into P7.6:
+
+- plugins / external provider framework;
+- plugin marketplace;
+- persistent Agent Instance filesystem;
+- ZIP/package import/export format;
+- Git repository resource sync;
+- remote filesystem browsing;
+- remote object-storage browsing;
+- live folder sync/watch;
+- FTP/SFTP;
+- multi-agent communication/orchestration;
+- visual workflow builder;
+- distributed job/queue infrastructure;
+- production PostgreSQL/Redis/Kubernetes migration.
+
+These remain P8 or later and must be justified by a concrete requirement.
+
+---
+
 # Infrastructure stance before production
 
 Until a real external pilot/hosting requirement appears, prefer:
@@ -592,7 +1227,11 @@ Production-shaped properties that **should** exist now:
 
 # P8 — Harness/platform extensibility
 
-P7.5 is frozen on `70a5720`. P8 may begin from one concrete provider need.
+**Status: queued after P7.6.**
+
+P7.5 is frozen on `70a5720`. Finish the bounded P7.6 Admin usability closure first.
+
+When P8 begins, start from one concrete provider need.
 
 ## Goal
 
@@ -628,7 +1267,7 @@ Requirements:
 
 - [ ] Define extension identity/versioning/compatibility only to the degree required by actual extensions.
 
-- [ ] Extend P7 validation for provider/plugin-specific concerns:
+- [ ] Extend P7/P7.6 validation for provider/plugin-specific concerns when a real extension exists:
 
   - provider availability/capability mismatches;
   - missing provider references;
@@ -842,11 +1481,11 @@ microservices because modules exist
 
 # Deferred / optional provider work
 
-These items do not block P7.5.
+These items do not block P7.6.
 
 ## Real P3 provider verification
 
-- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from architecture work.
+- [ ] Revisit the known Real/OpenRouter historical-image reread gap separately from Admin/platform work.
 
 Keep it bounded, credential-gated, provider-specific, and outside default CI.
 
@@ -928,13 +1567,27 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable trigger registration/scheduler — P5 frozen on `4bbc0c1`.
 - [x] Durable triggered/background execution — P6 frozen on `30adaeb`.
 - [x] P7 Harness Admin: draft/version/publish, resources, instances/persona, memory/automation administration, validation/evaluation, history/rollback.
+- [x] P7.5 architecture/infrastructure-readiness consolidation frozen on `70a5720`.
 
 ---
 
 # Next implementation item
 
-**P8** is next.
+**P7.6 — Admin usability closure** is next.
 
-P7.5 is frozen on `70a5720`. Hosted workflow [`36368766449`](https://github.com/trannamtrung1st/agent-core/actions/runs/36368766449) is green on that SHA. The closure report is `docs/reports/p7.5-freeze-candidate.md`. Start P8 from one concrete provider need. Do not add a universal provider interface.
+Bound it to:
 
-Do **not** begin by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+```text
+1. complete Definition Form + Advanced JSON editing
+2. explicit New Definition / New Instance flows
+3. clearer Definition/version semantics
+4. explicit Knowledge Source ↔ Resource binding
+5. multi-file + folder resource ingestion with coherent batch revision semantics
+6. final Impeccable UX review, tests, docs/design sync, and freeze evidence
+```
+
+P7 and P7.5 remain frozen. Do not rewrite their closure evidence to make P7.6 look historical.
+
+After P7.6 is green and frozen, begin P8 from one concrete provider/extensibility need.
+
+Do **not** begin P7.6 or P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
