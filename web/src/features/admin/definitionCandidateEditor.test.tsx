@@ -392,7 +392,9 @@ describe("definition candidate editor", () => {
     });
     expect(vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2]).toEqual(parsed);
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
-  }, 60_000);
+    // Walking every field re-renders the Admin shell. A local run took about 46s.
+    // Hosted run 36424818606 killed this test at the previous 60s budget.
+  }, 180_000);
 
   it("round-trips form and JSON without dropping untouched fields", async () => {
     mockDraft();
