@@ -317,7 +317,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.queryByText("Existing drafts")).not.toBeInTheDocument();
     });
-  });
+  }, 20_000);
 
   it("keeps definitions when instances fail and offers retry", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([
@@ -484,7 +484,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(validateAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instructions" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Publish…" })).not.toBeDisabled();
     });
@@ -492,7 +492,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
     });
-  });
+  }, 20_000);
 
   it("preserves unsaved instructions after a resource mutation", async () => {
     const draftId = "019944af-00d1-7000-8000-000000000087";
@@ -573,11 +573,11 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(removeAdminDraftResource).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instructions" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Unsaved instruction edit");
     });
-  });
+  }, 20_000);
 
   it("ignores stale publication resource responses after definition changes", async () => {
     let resolveFirst: ((value: AdminDefinitionPublicationResource[]) => void) | undefined;

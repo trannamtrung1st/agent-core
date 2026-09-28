@@ -1881,8 +1881,33 @@ body,
 }
 
 .admin-draft-field > .ant-select,
-.admin-draft-field > .ant-input {
+.admin-draft-field > .ant-input,
+.admin-draft-field > .ant-input-number {
   width: 100%;
+}
+
+.admin-draft-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--ac-space-default);
+}
+
+.admin-draft-view-switch.ant-segmented {
+  align-self: flex-start;
+}
+
+.admin-draft-repeat-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--ac-space-compact);
+  align-items: end;
+}
+
+.admin-draft-metadata-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--ac-space-compact);
+  align-items: end;
 }
 
 .admin-draft-switch-row {

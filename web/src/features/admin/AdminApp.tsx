@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   App,
@@ -24,12 +24,19 @@ import {
 import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined, MessageOutlined, RightOutlined } from "@ant-design/icons";
 import {
   applyDraftEnvironmentToCandidate,
-  draftEnvironmentEquals,
-  emptyDraftEnvironment,
   readDraftEnvironment,
   type DraftEnvironment,
   type DraftKnowledgeSource
 } from "./draftEnvironment";
+import {
+  applyCandidateJson,
+  candidateForPersistence,
+  candidateToJson,
+  candidatesEqual,
+  cloneCandidate,
+  type DefinitionCandidate
+} from "./definitionCandidate";
+import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import {
   type AdminDefinitionDraft,
@@ -451,40 +458,31 @@ function DefinitionDetail({
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
   const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
   const [forkSourceVersion, setForkSourceVersion] = useState<number | null>(null);
-  const [instructions, setInstructions] = useState("");
-  const [capabilities, setCapabilities] = useState<DraftEnvironment>(emptyDraftEnvironment());
+  const [candidate, setCandidate] = useState<DefinitionCandidate>({});
+  const [jsonText, setJsonText] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [editorView, setEditorView] = useState<DefinitionEditorView>("form");
   const [busy, setBusy] = useState(false);
   const editorSurfaceRef = useRef<HTMLElement | null>(null);
 
-  const savedInstructions = useMemo(() => {
-    if (!activeDraft) {
-      return "";
-    }
-    return (activeDraft.candidate as { systemInstructions?: string }).systemInstructions ?? "";
-  }, [activeDraft]);
+  const dirtyCandidate = activeDraft !== null && !candidatesEqual(candidate, activeDraft.candidate);
+  const dirty = activeDraft !== null && (dirtyCandidate || jsonError !== null);
 
-  const savedCapabilities = useMemo(() => {
-    if (!activeDraft) {
-      return emptyDraftEnvironment();
-    }
-    return readDraftEnvironment(activeDraft.candidate);
-  }, [activeDraft]);
+  const loadCandidate = useCallback((next: DefinitionCandidate) => {
+    const cloned = cloneCandidate(next);
+    setCandidate(cloned);
+    setJsonText(candidateToJson(cloned));
+    setJsonError(null);
+    setEditorView("form");
+  }, []);
 
-  const dirtyInstructions = activeDraft !== null && instructions !== savedInstructions;
-  const dirtyCapabilities =
-    activeDraft !== null && !draftEnvironmentEquals(capabilities, savedCapabilities);
-  const dirty = dirtyInstructions || dirtyCapabilities;
-
-  const buildCandidate = useCallback(() => {
-    if (!activeDraft) {
-      return {};
+  const editCandidate = useCallback((next: DefinitionCandidate) => {
+    setCandidate(next);
+    setJsonError(null);
+    if (editorView === "json") {
+      setJsonText(candidateToJson(next));
     }
-    const base = {
-      ...(activeDraft.candidate as Record<string, unknown>),
-      systemInstructions: instructions
-    };
-    return applyDraftEnvironmentToCandidate(base, capabilities);
-  }, [activeDraft, capabilities, instructions]);
+  }, [editorView]);
 
   const deprecatePublication = async (item: AdminDefinitionPublicationSummary) => {
     setBusy(true);
@@ -555,8 +553,7 @@ function DefinitionDetail({
 
   const closeDraftEditor = () => {
     setActiveDraft(null);
-    setInstructions("");
-    setCapabilities(emptyDraftEnvironment());
+    loadCandidate({});
   };
 
   const selectDraft = useCallback(async (draftId: string) => {
@@ -565,15 +562,13 @@ function DefinitionDetail({
     try {
       const draft = await getAdminDefinitionDraft(draftId);
       setActiveDraft(draft);
-      const candidate = draft.candidate as { systemInstructions?: string };
-      setInstructions(candidate.systemInstructions ?? "");
-      setCapabilities(readDraftEnvironment(draft.candidate));
+      loadCandidate(draft.candidate);
     } catch (error) {
       setLifecycleError(error instanceof Error ? error.message : "Failed to load draft.");
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [loadCandidate]);
 
   const deleteDraft = async (draft: AdminDefinitionDraftSummary, expectedRevision: number) => {
     setBusy(true);
@@ -582,8 +577,7 @@ function DefinitionDetail({
       await deleteAdminDefinitionDraft(draft.draftId, expectedRevision);
       if (activeDraft?.draftId === draft.draftId) {
         setActiveDraft(null);
-        setInstructions("");
-        setCapabilities(emptyDraftEnvironment());
+        loadCandidate({});
       }
       message.success("Draft deleted.");
       await reloadLifecycle();
@@ -629,7 +623,7 @@ function DefinitionDetail({
   };
 
   const saveDraft = async () => {
-    if (!activeDraft) {
+    if (!activeDraft || jsonError) {
       return;
     }
     setBusy(true);
@@ -638,10 +632,9 @@ function DefinitionDetail({
       const updated = await updateAdminDefinitionDraft(
         activeDraft.draftId,
         activeDraft.revision,
-        buildCandidate());
+        candidateForPersistence(candidate));
       setActiveDraft(updated);
-      setInstructions((updated.candidate as { systemInstructions?: string }).systemInstructions ?? "");
-      setCapabilities(readDraftEnvironment(updated.candidate));
+      loadCandidate(updated.candidate);
       message.success("Draft saved.");
       await reloadLifecycle();
     } catch (error) {
@@ -651,6 +644,32 @@ function DefinitionDetail({
     } finally {
       setBusy(false);
     }
+  };
+
+  const changeEditorView = (next: DefinitionEditorView) => {
+    if (next === editorView) {
+      return;
+    }
+    if (editorView === "json" && next === "form" && jsonError) {
+      message.error("Fix Advanced JSON before returning to the form.");
+      return;
+    }
+    if (next === "json") {
+      setJsonText(candidateToJson(candidate));
+      setJsonError(null);
+    }
+    setEditorView(next);
+  };
+
+  const changeJsonText = (text: string) => {
+    setJsonText(text);
+    const applied = applyCandidateJson(text);
+    if (applied.ok) {
+      setCandidate(applied.candidate);
+      setJsonError(null);
+      return;
+    }
+    setJsonError(applied.error);
   };
 
   const confirmPublish = () => {
@@ -672,16 +691,22 @@ function DefinitionDetail({
         try {
           let draft = activeDraft;
           if (dirty) {
-            draft = await updateAdminDefinitionDraft(draft.draftId, draft.revision, buildCandidate());
+            if (jsonError) {
+              message.error("Fix Advanced JSON before publishing.");
+              return;
+            }
+            draft = await updateAdminDefinitionDraft(
+              draft.draftId,
+              draft.revision,
+              candidateForPersistence(candidate)
+            );
             setActiveDraft(draft);
-            setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
-            setCapabilities(readDraftEnvironment(draft.candidate));
+            loadCandidate(draft.candidate);
           }
           const publication = await publishAdminDefinitionDraft(draft.draftId, draft.revision);
           message.success(`Published version ${publication.version}.`);
           setActiveDraft(null);
-          setInstructions("");
-          setCapabilities(emptyDraftEnvironment());
+          loadCandidate({});
           await reloadLifecycle();
           await onRetryDefinitions();
         } catch (error) {
@@ -777,19 +802,21 @@ function DefinitionDetail({
           ) : null}
           <DraftEditor
             activeDraft={activeDraft}
-            instructions={instructions}
-            capabilities={capabilities}
+            candidate={candidate}
+            jsonText={jsonText}
+            jsonError={jsonError}
+            editorView={editorView}
             dirty={dirty}
             busy={busy}
-            onInstructionsChange={setInstructions}
-            onCapabilitiesChange={setCapabilities}
+            onCandidateChange={editCandidate}
+            onJsonTextChange={changeJsonText}
+            onEditorViewChange={changeEditorView}
             onSave={() => void saveDraft()}
             onPublish={() => void confirmPublish()}
             onDraftRevisionChange={(draft, options) => {
               setActiveDraft(draft);
               if (!options?.preserveLocalEdits) {
-                setInstructions((draft.candidate as { systemInstructions?: string }).systemInstructions ?? "");
-                setCapabilities(readDraftEnvironment(draft.candidate));
+                loadCandidate(draft.candidate);
               }
             }}
             onError={setLifecycleError}
@@ -976,24 +1003,30 @@ const RESOURCE_KINDS = ["Knowledge", "Reference", "Template", "StaticAsset", "Ev
 
 function DraftEditor({
   activeDraft,
-  instructions,
-  capabilities,
+  candidate,
+  jsonText,
+  jsonError,
+  editorView,
   dirty,
   busy,
-  onInstructionsChange,
-  onCapabilitiesChange,
+  onCandidateChange,
+  onJsonTextChange,
+  onEditorViewChange,
   onSave,
   onPublish,
   onDraftRevisionChange,
   onError
 }: {
   activeDraft: AdminDefinitionDraft;
-  instructions: string;
-  capabilities: DraftEnvironment;
+  candidate: DefinitionCandidate;
+  jsonText: string;
+  jsonError: string | null;
+  editorView: DefinitionEditorView;
   dirty: boolean;
   busy: boolean;
-  onInstructionsChange: (value: string) => void;
-  onCapabilitiesChange: (value: DraftEnvironment) => void;
+  onCandidateChange: (candidate: DefinitionCandidate) => void;
+  onJsonTextChange: (text: string) => void;
+  onEditorViewChange: (view: DefinitionEditorView) => void;
   onSave: () => void;
   onPublish: () => void;
   onDraftRevisionChange: (
@@ -1002,6 +1035,11 @@ function DraftEditor({
   ) => void;
   onError: (message: string | null) => void;
 }) {
+  const capabilities = readDraftEnvironment(candidate);
+  const onCapabilitiesChange = (next: DraftEnvironment) => {
+    onCandidateChange(applyDraftEnvironmentToCandidate(candidate, next));
+  };
+  const saveBlocked = jsonError !== null;
   const { message } = App.useApp();
   const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
   const [toolRegistryError, setToolRegistryError] = useState<string | null>(null);
@@ -1154,30 +1192,41 @@ function DraftEditor({
       </Flex>
       <Tabs
         className="admin-draft-tabs"
+        destroyOnHidden
         items={[
           {
-            key: "instructions",
-            label: "Instructions",
+            key: "definition",
+            label: "Definition",
             children: (
-              <section className="admin-draft-tab" aria-label="Draft instructions">
+              <section className="admin-draft-tab" aria-label="Definition candidate">
                 <div className="admin-draft-tab-intro">
-                  <Typography.Title level={5}>System instructions</Typography.Title>
+                  <Typography.Title level={5}>Definition</Typography.Title>
                   <Typography.Paragraph type="secondary">
-                    Define the durable behavior and boundaries inherited by sessions created from this definition.
+                    Form and Advanced JSON edit the same unsaved candidate. Saving from either view uses this draft revision.
                   </Typography.Paragraph>
                 </div>
-                <Input.TextArea
-                  aria-label="System instructions"
-                  rows={10}
-                  value={instructions}
-                  onChange={(event) => onInstructionsChange(event.target.value)}
-                  disabled={busy}
-                  className="admin-draft-instructions"
+                <DefinitionCandidateEditor
+                  candidate={candidate}
+                  view={editorView}
+                  jsonText={jsonText}
+                  busy={busy}
+                  onCandidateChange={onCandidateChange}
+                  onJsonTextChange={onJsonTextChange}
+                  onViewChange={onEditorViewChange}
                 />
+                {jsonError ? (
+                  <Alert
+                    type="error"
+                    showIcon
+                    title="Advanced JSON is invalid"
+                    description={`${jsonError} The draft revision is unchanged until the JSON is valid.`}
+                  />
+                ) : null}
                 <DraftEditorActions
                   dirty={dirty}
                   busy={busy}
                   publishEligible={publishEligible}
+                  saveBlocked={saveBlocked}
                   onSave={onSave}
                   onPublish={onPublish}
                 />
@@ -1352,6 +1401,7 @@ function DraftEditor({
                   dirty={dirty}
                   busy={busy}
                   publishEligible={publishEligible}
+                  saveBlocked={saveBlocked}
                   onSave={onSave}
                   onPublish={onPublish}
                 />
@@ -1494,19 +1544,21 @@ function DraftEditorActions({
   dirty,
   busy,
   publishEligible,
+  saveBlocked = false,
   onSave,
   onPublish
 }: {
   dirty: boolean;
   busy: boolean;
   publishEligible: boolean;
+  saveBlocked?: boolean;
   onSave: () => void;
   onPublish: () => void;
 }) {
   return (
     <div className="admin-draft-actions">
       <Flex gap={8} wrap="wrap">
-        <Button type={dirty ? "primary" : "default"} onClick={onSave} disabled={busy || !dirty}>
+        <Button type={dirty ? "primary" : "default"} onClick={onSave} disabled={busy || !dirty || saveBlocked}>
           Save draft
         </Button>
         <Button
@@ -1517,7 +1569,11 @@ function DraftEditorActions({
           Publish…
         </Button>
       </Flex>
-      {dirty ? (
+      {saveBlocked ? (
+        <Typography.Text type="danger">
+          Advanced JSON is invalid — fix it before saving. This does not change the draft revision.
+        </Typography.Text>
+      ) : dirty ? (
         <Typography.Text type="warning">
           Unsaved changes — save before using Test &amp; Publish.
         </Typography.Text>

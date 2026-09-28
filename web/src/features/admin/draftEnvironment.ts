@@ -46,9 +46,6 @@ function readKnowledgeSources(value: unknown): DraftKnowledgeSource[] {
     const identity = typeof row.identity === "string" ? row.identity : "";
     const title = typeof row.title === "string" ? row.title : "";
     const citation = typeof row.citation === "string" ? row.citation : "";
-    if (!identity.trim()) {
-      continue;
-    }
     items.push({ identity, title, citation });
   }
   return items;
@@ -103,13 +100,11 @@ export function applyDraftEnvironmentToCandidate(
       ? { templateId: environment.workspaceTemplateId.trim() }
       : {};
 
-  const knowledgeSources = environment.knowledgeSources
-    .filter((item) => item.identity.trim().length > 0)
-    .map((item) => ({
-      identity: item.identity.trim(),
-      title: item.title.trim(),
-      citation: item.citation.trim()
-    }));
+  const knowledgeSources = environment.knowledgeSources.map((item) => ({
+    identity: item.identity.trim(),
+    title: item.title.trim(),
+    citation: item.citation.trim()
+  }));
 
   return {
     ...candidate,
