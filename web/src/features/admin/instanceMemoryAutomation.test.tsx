@@ -227,10 +227,12 @@ describe("InstanceMemoryAutomationPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Load items" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Session learned memory is not enabled/i)).toBeInTheDocument()
-    );
-    expect(screen.getByRole("button", { name: "Load items" })).not.toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByText(/Session learned memory is not enabled/i)).toBeInTheDocument();
+      const loadItems = screen.getByRole("button", { name: "Load items" });
+      expect(loadItems).not.toBeDisabled();
+      expect(loadItems).not.toHaveClass("ant-btn-loading");
+    });
   });
 
   it("disables reset when User scope is policy-denied", async () => {
