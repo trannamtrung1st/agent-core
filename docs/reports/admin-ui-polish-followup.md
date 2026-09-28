@@ -81,12 +81,23 @@ Working directory `web/` unless noted. Product SHA `5ef08b0` (docs in this repor
 | `CI=1 PLAYWRIGHT_SQLITE_PATH=../data/playwright/admin-lifecycle-isolated.db pnpm exec playwright test --project=admin-lifecycle` | 1 passed (28.0s) |
 | `CI=1 PLAYWRIGHT_SQLITE_PATH=../data/playwright/ui-polish-chat.db pnpm exec playwright test e2e/text-conversation.spec.ts e2e/z-admin-managed-instance-journey.spec.ts` | 14 passed (1.9m) |
 | `CI=1 pnpm exec playwright test --project=synthetic` | First run: 55 passed, 1 failed. `e2e/text-conversation.spec.ts` progress test did not find `.markdown-message strong` "Delayed" within 30s after the assistant body already matched "Order 91 is delayed". The same test alone on `data/playwright/ui-polish-progress.db` passed (15.6s). Full project rerun: 56 passed (4.1m). |
+| `pnpm run test --run --maxWorkers=2` on `e2f2e04` | 69 files, 505 passed. This is the frontend command from workflow `synthetic`. |
+| `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo` on `e2f2e04` | Passed 240, twice. |
 
-Backend and Compose were not run. The hint change does not alter API or durable behavior.
+Backend and Compose were not part of the hint change. The API suite above was run locally after hosted run `36477563307` failed that step.
 
 ## Hosted CI
 
-Not run. `main` was ahead of `origin/main` at `5ef08b0`, and this follow-up does not push. The historical P7.6 workflow `36427670239` is not evidence for this SHA.
+Workflow `synthetic` on push to `main`. The historical P7.6 workflow `36427670239` is not evidence for these SHAs.
+
+| Run | SHA | Conclusion |
+| --- | --- | --- |
+| https://github.com/trannamtrung1st/agent-core/actions/runs/36475173201 | `5783ea820e2c0ee52f6cae9aa4a9b6f2eb4e1d0e` | failure |
+| https://github.com/trannamtrung1st/agent-core/actions/runs/36477563307 | `e2f2e04061ae9b517dc52c75cdf9980328dfa157` | failure |
+
+Run `36475173201`: Compose smoke succeeded. Offline gates failed in "Frontend install, unit tests, and build". `instanceMemoryAutomation.test.tsx` looked up the button name "Load items" while the session-denial text was already visible and the button was still loading, so its accessible name was "loading Load items". Commit `e2f2e04` waits until that denial is visible and Load items is enabled and not loading.
+
+Run `36477563307`: "Backend API tests" failed with exit code 1 (20:18:20Z–20:19:42Z). The same step on unchanged backend code succeeded in run `36475173201` (19:58:09Z–19:59:39Z). Public annotations do not name the test. Downloading job logs requires a signed-in repository admin (`gh` is not authenticated). Frontend and Playwright steps were skipped. Local API tests passed 240, as in the table above.
 
 ## Context sync
 
@@ -94,7 +105,7 @@ Not run. `main` was ahead of `origin/main` at `5ef08b0`, and this follow-up does
 
 ## Remaining limitations
 
-- Hosted Synthetic CI was not executed on this candidate.
+- Hosted Synthetic CI has no green run for this follow-up yet. The two runs above failed, and the second run's API failure has no public test name.
 - Real-profile browser use was not executed because `OPENROUTER_API_KEY` is unset.
 - The first full Synthetic Playwright run failed one Chat progress assertion that passed alone and on the immediate full rerun. That assertion is outside the Admin hint change.
 - Favicon 404 and the Ant Design `List` deprecation remain.
