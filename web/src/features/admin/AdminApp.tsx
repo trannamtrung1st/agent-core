@@ -851,12 +851,18 @@ function DefinitionDetail({
   }, [loadCandidate]);
 
   useEffect(() => {
-    if (group || openedUnpublishedDraftRef.current || activeDraft || draftSummaries.length !== 1) {
+    if (
+      definitions.kind !== "ready"
+      || group
+      || openedUnpublishedDraftRef.current
+      || activeDraft
+      || draftSummaries.length !== 1
+    ) {
       return;
     }
     openedUnpublishedDraftRef.current = true;
     void selectDraft(draftSummaries[0].draftId);
-  }, [group, activeDraft, draftSummaries, selectDraft]);
+  }, [definitions.kind, group, activeDraft, draftSummaries, selectDraft]);
 
   const deleteDraft = async (draft: AdminDefinitionDraftSummary, expectedRevision: number) => {
     setBusy(true);

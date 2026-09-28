@@ -98,7 +98,7 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
   const resourcePath = `knowledge/p7g-${Date.now()}.md`;
   await draftEditor.getByRole("tab", { name: "Resources" }).click();
   await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
-  await draftEditor.getByLabel("Resource file").setInputFiles({
+  await draftEditor.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({
     name: "p7g.md",
     mimeType: "text/plain",
     buffer: Buffer.from(resourceBody, "utf8")
@@ -257,6 +257,7 @@ export async function publishExaminerForkedVersion(page: Page, forkFromVersion: 
   await instructions.fill(`${prior}\n${marker}`);
   await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
   draftEditor = draftEditorSection(page);
+  await draftEditor.getByRole("tab", { name: "Definition" }).click();
   await expect(draftEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });

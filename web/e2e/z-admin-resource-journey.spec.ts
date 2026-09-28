@@ -70,7 +70,7 @@ test("admin resource publish managed chat exposes publication under agent", asyn
 
   await draftEditor.getByRole("tab", { name: "Resources" }).click();
   await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
-  await draftEditor.getByLabel("Resource file").setInputFiles({
+  await draftEditor.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({
     name: "e2e.md",
     mimeType: "text/plain",
     buffer: Buffer.from(resourceBody, "utf8")

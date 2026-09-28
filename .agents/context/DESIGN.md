@@ -170,7 +170,7 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 - New chat empty: Identity + Speech locale in the intro stack (max 22rem). Model/Reasoning are not duplicated there.
 - Paused: Resume replaces the composer. Ended: quiet ended note only. Model selection lives only in the composer, so neither paused nor ended shows a header Model control.
 - Operational drawers are 400px wide when the host reports the wide layout and 320px otherwise. Their Ant Design List rows stay open rather than becoming nested cards; row and inset relationships use the same 8/12/16px rhythm. On narrow layouts, drawer action buttons have a 40px minimum height.
-- Admin: same header height, container background, and 8/12/16 rhythm as Chat. Inventory and definition panels are configuration layouts, not a chat column. Content stays within `56rem`. Below 768px, admin grids collapse to one column. Operator labels stay product words; do not copy Domain type names into the UI.
+- Admin: same header height, container background, and 8/12/16 rhythm as Chat. Inventory and definition panels are configuration layouts, not a chat column. Content stays within `56rem`. Below 768px, admin grids collapse to one column, and the draft tabs wrap onto a second row with an underline on the active tab only. Operator labels stay product words; do not copy Domain type names into the UI.
 
 **The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
 
