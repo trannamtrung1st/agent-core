@@ -483,7 +483,13 @@ describe("AdminApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run validation" }));
     await waitFor(() => {
       expect(validateAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
+      expect(screen.getByText("Draft is ready for final publish.")).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
+    expect(screen.getByText("Validation snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Draft is ready for final publish.")).toBeInTheDocument();
+    expect(validateAdminDefinitionDraft).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Publish…" })).not.toBeDisabled();

@@ -442,9 +442,15 @@ describe("definition candidate editor", () => {
     expect(screen.getByRole("textbox", { name: "Advanced JSON" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "System instructions" })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    expect(screen.getByText(/Fix Advanced JSON on the Definition tab before changing capabilities/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add knowledge source" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Add knowledge source" }));
+
     fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
     fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
     expect(screen.getByRole("textbox", { name: "Advanced JSON" })).toHaveValue("{ ");
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
   });
 

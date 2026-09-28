@@ -477,12 +477,15 @@ function DefinitionDetail({
   }, []);
 
   const editCandidate = useCallback((next: DefinitionCandidate) => {
+    if (jsonError) {
+      return;
+    }
     setCandidate(next);
     setJsonError(null);
     if (editorView === "json") {
       setJsonText(candidateToJson(next));
     }
-  }, [editorView]);
+  }, [editorView, jsonError]);
 
   const deprecatePublication = async (item: AdminDefinitionPublicationSummary) => {
     setBusy(true);
@@ -1036,10 +1039,14 @@ function DraftEditor({
   onError: (message: string | null) => void;
 }) {
   const capabilities = readDraftEnvironment(candidate);
+  const candidateLocked = jsonError !== null;
   const onCapabilitiesChange = (next: DraftEnvironment) => {
+    if (candidateLocked) {
+      return;
+    }
     onCandidateChange(applyDraftEnvironmentToCandidate(candidate, next));
   };
-  const saveBlocked = jsonError !== null;
+  const saveBlocked = candidateLocked;
   const { message } = App.useApp();
   const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
   const [toolRegistryError, setToolRegistryError] = useState<string | null>(null);
@@ -1192,11 +1199,11 @@ function DraftEditor({
       </Flex>
       <Tabs
         className="admin-draft-tabs"
-        destroyOnHidden
         items={[
           {
             key: "definition",
             label: "Definition",
+            destroyOnHidden: true,
             children: (
               <section className="admin-draft-tab" aria-label="Definition candidate">
                 <div className="admin-draft-tab-intro">
@@ -1236,6 +1243,7 @@ function DraftEditor({
           {
             key: "capabilities",
             label: "Capabilities",
+            destroyOnHidden: true,
             children: (
               <section className="admin-draft-tab" aria-label="Draft capabilities">
                 <div className="admin-draft-tab-intro">
@@ -1244,6 +1252,14 @@ function DraftEditor({
                     Choose the tools, workspace behavior, and knowledge references available to this definition.
                   </Typography.Paragraph>
                 </div>
+                {candidateLocked ? (
+                  <Alert
+                    type="error"
+                    showIcon
+                    title="Advanced JSON is invalid"
+                    description="Fix Advanced JSON on the Definition tab before changing capabilities. The invalid text stays in place."
+                  />
+                ) : null}
                 <section className="admin-draft-form-section" aria-label="Harness and tools">
                   <Typography.Title level={5}>Harness &amp; tools</Typography.Title>
                   <Typography.Paragraph type="secondary">
@@ -1256,7 +1272,7 @@ function DraftEditor({
                       mode="tags"
                       value={capabilities.harness}
                       onChange={(values) => onCapabilitiesChange({ ...capabilities, harness: values })}
-                      disabled={busy}
+                      disabled={busy || candidateLocked}
                       placeholder="Add a harness label"
                     />
                   </label>
@@ -1290,7 +1306,7 @@ function DraftEditor({
                       onChange={(values) =>
                         onCapabilitiesChange({ ...capabilities, toolAllowlist: values })
                       }
-                      disabled={busy || toolRegistryLoading || toolRegistryError !== null}
+                      disabled={busy || candidateLocked || toolRegistryLoading || toolRegistryError !== null}
                       options={toolNames.map((name) => ({ value: name, label: name }))}
                       placeholder="Select registered tools"
                     />
@@ -1310,7 +1326,7 @@ function DraftEditor({
                           workspaceTemplateId: event.target.value
                         })
                       }
-                      disabled={busy}
+                      disabled={busy || candidateLocked}
                     />
                   </label>
                   <Flex align="start" gap={12} className="admin-draft-switch-row">
@@ -1323,7 +1339,7 @@ function DraftEditor({
                           allowUnreadUnsupportedAttachmentTypes: checked
                         })
                       }
-                      disabled={busy}
+                      disabled={busy || candidateLocked}
                     />
                     <div>
                       <Typography.Text strong>Allow unsupported attachments</Typography.Text>
@@ -1355,7 +1371,7 @@ function DraftEditor({
                               placeholder="policy"
                               value={source.identity}
                               onChange={(event) => updateKnowledgeSource(index, "identity", event.target.value)}
-                              disabled={busy}
+                              disabled={busy || candidateLocked}
                             />
                           </label>
                           <label className="admin-draft-field">
@@ -1365,7 +1381,7 @@ function DraftEditor({
                               placeholder="Support policy"
                               value={source.title}
                               onChange={(event) => updateKnowledgeSource(index, "title", event.target.value)}
-                              disabled={busy}
+                              disabled={busy || candidateLocked}
                             />
                           </label>
                           <label className="admin-draft-field">
@@ -1375,7 +1391,7 @@ function DraftEditor({
                               placeholder="policy@demo"
                               value={source.citation}
                               onChange={(event) => updateKnowledgeSource(index, "citation", event.target.value)}
-                              disabled={busy}
+                              disabled={busy || candidateLocked}
                             />
                           </label>
                           <Tooltip title="Remove source">
@@ -1385,7 +1401,7 @@ function DraftEditor({
                               icon={<DeleteOutlined />}
                               aria-label={`Remove knowledge source ${index + 1}`}
                               className="admin-knowledge-source-remove"
-                              disabled={busy}
+                              disabled={busy || candidateLocked}
                               onClick={() => removeKnowledgeSource(index)}
                             />
                           </Tooltip>
@@ -1393,7 +1409,7 @@ function DraftEditor({
                       </div>
                     ))}
                   </Flex>
-                  <Button onClick={addKnowledgeSource} disabled={busy}>
+                  <Button onClick={addKnowledgeSource} disabled={busy || candidateLocked}>
                     Add knowledge source
                   </Button>
                 </section>
@@ -1411,6 +1427,7 @@ function DraftEditor({
           {
             key: "resources",
             label: "Resources",
+            destroyOnHidden: true,
             children: (
               <section className="admin-draft-tab" aria-label="Draft resources">
                 <div className="admin-draft-tab-intro">
@@ -1521,6 +1538,7 @@ function DraftEditor({
           {
             key: "publish-gate",
             label: "Test & Publish",
+            destroyOnHidden: false,
             children: (
               <DefinitionDraftPublishGatePanel
                 key={activeDraft.draftId}
