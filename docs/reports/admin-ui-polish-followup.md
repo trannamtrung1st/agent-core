@@ -94,10 +94,13 @@ Workflow `synthetic` on push to `main`. The historical P7.6 workflow `3642767023
 | --- | --- | --- |
 | https://github.com/trannamtrung1st/agent-core/actions/runs/36475173201 | `5783ea820e2c0ee52f6cae9aa4a9b6f2eb4e1d0e` | failure |
 | https://github.com/trannamtrung1st/agent-core/actions/runs/36477563307 | `e2f2e04061ae9b517dc52c75cdf9980328dfa157` | failure |
+| https://github.com/trannamtrung1st/agent-core/actions/runs/36479010962 | `2edf832d25a3726ca360b8c0acf000b0565d0f18` | success |
 
 Run `36475173201`: Compose smoke succeeded. Offline gates failed in "Frontend install, unit tests, and build". `instanceMemoryAutomation.test.tsx` looked up the button name "Load items" while the session-denial text was already visible and the button was still loading, so its accessible name was "loading Load items". Commit `e2f2e04` waits until that denial is visible and Load items is enabled and not loading.
 
 Run `36477563307`: "Backend API tests" failed with exit code 1 (20:18:20Z–20:19:42Z). The same step on unchanged backend code succeeded in run `36475173201` (19:58:09Z–19:59:39Z). Public annotations do not name the test. Downloading job logs requires a signed-in repository admin (`gh` is not authenticated). Frontend and Playwright steps were skipped. Local API tests passed 240, as in the table above.
+
+Run `36479010962` completed with conclusion success on `2edf832d25a3726ca360b8c0acf000b0565d0f18`. That SHA contains the form hints, the Load items wait, and the two failure notes above. The GitHub Actions API confirmed `status=completed` and `conclusion=success`.
 
 ## Context sync
 
@@ -105,7 +108,7 @@ Run `36477563307`: "Backend API tests" failed with exit code 1 (20:18:20Z–20:1
 
 ## Remaining limitations
 
-- Hosted Synthetic CI has no green run for this follow-up yet. The two runs above failed, and the second run's API failure has no public test name.
+- Run `36477563307` failed Backend API tests without a public test name. The later run `36479010962` on `2edf832d25a3726ca360b8c0acf000b0565d0f18` succeeded. The failing test name from the earlier API step is still unknown.
 - Real-profile browser use was not executed because `OPENROUTER_API_KEY` is unset.
 - The first full Synthetic Playwright run failed one Chat progress assertion that passed alone and on the immediate full rerun. That assertion is outside the Admin hint change.
 - Favicon 404 and the Ant Design `List` deprecation remain.
