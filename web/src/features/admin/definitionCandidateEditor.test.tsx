@@ -203,6 +203,21 @@ describe("definition candidate editor", () => {
 
     expect(screen.getByLabelText("Definition ID")).toHaveTextContent("examiner");
     expect(screen.queryByRole("textbox", { name: "Definition ID" })).not.toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "Silence threshold" })).toHaveAccessibleDescription(
+      "Milliseconds. 1,000 to 120,000."
+    );
+    expect(screen.getByRole("spinbutton", { name: "Cooldown" })).toHaveAccessibleDescription(
+      "Milliseconds. 5,000 to 600,000."
+    );
+    expect(screen.getByRole("spinbutton", { name: "Max inactivity" })).toHaveAccessibleDescription(
+      "Milliseconds. Empty uses 900,000."
+    );
+    expect(screen.getByRole("spinbutton", { name: "Silence threshold" })).toHaveValue("3000");
+    expect(screen.getByLabelText("Conversation language")).toHaveAccessibleDescription(
+      "auto, or a BCP 47 tag such as en."
+    );
+    expect(screen.getByLabelText("Model catalog key")).toHaveValue("scripted-alpha");
+    expect(screen.getByText(/Speech aliases are required when voice is on/)).toBeInTheDocument();
 
     setText("Definition name", "Guide");
     setText("Definition role", "Coach");

@@ -1880,6 +1880,12 @@ body,
   min-width: 0;
 }
 
+.admin-draft-field-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .admin-draft-field > .ant-select,
 .admin-draft-field > .ant-input,
 .admin-draft-field > .ant-input-number {

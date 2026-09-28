@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Button, Flex, Input, InputNumber, Segmented, Select, Switch, Typography } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import {
@@ -206,6 +207,7 @@ function DefinitionCandidateForm({
           />
           <TextField
             label="Conversation language"
+            hint="auto, or a BCP 47 tag such as en."
             value={readString(candidate, ["conversationPolicy", "language"])}
             disabled={busy}
             onChange={(value) =>
@@ -266,6 +268,7 @@ function DefinitionCandidateForm({
         <div className="admin-draft-field-grid">
           <NumberField
             label="Silence threshold"
+            hint="Milliseconds. 1,000 to 120,000."
             value={readNumber(candidate, ["initiativePolicy", "silenceThresholdMs"])}
             disabled={busy}
             onChange={(value) =>
@@ -274,6 +277,7 @@ function DefinitionCandidateForm({
           />
           <NumberField
             label="Cooldown"
+            hint="Milliseconds. 5,000 to 600,000."
             value={readNumber(candidate, ["initiativePolicy", "cooldownMs"])}
             disabled={busy}
             onChange={(value) =>
@@ -290,6 +294,7 @@ function DefinitionCandidateForm({
           />
           <NumberField
             label="Max consecutive proactive turns"
+            hint="Empty uses 1."
             value={readNumber(candidate, ["initiativePolicy", "maxConsecutiveProactiveTurns"])}
             disabled={busy}
             onChange={(value) =>
@@ -300,6 +305,7 @@ function DefinitionCandidateForm({
           />
           <NumberField
             label="Max silent evaluations"
+            hint="Empty uses 8."
             value={readNumber(candidate, ["initiativePolicy", "maxSilentEvaluations"])}
             disabled={busy}
             onChange={(value) =>
@@ -308,6 +314,7 @@ function DefinitionCandidateForm({
           />
           <NumberField
             label="Max inactivity"
+            hint="Milliseconds. Empty uses 900,000."
             value={readNumber(candidate, ["initiativePolicy", "maxInactivityMs"])}
             disabled={busy}
             onChange={(value) =>
@@ -333,18 +340,23 @@ function DefinitionCandidateForm({
         <div className="admin-draft-field-grid">
           <TextField
             label="Model catalog key"
+            hint="Optional lowercase catalog key. Empty sets no model default."
             value={readString(candidate, ["modelDefaults", "catalogKey"])}
             disabled={busy}
             onChange={(value) => onCandidateChange(writeModelDefault(candidate, "catalogKey", value))}
           />
           <TextField
             label="Reasoning effort"
+            hint="Optional. Examples: low, medium, high."
             value={readString(candidate, ["modelDefaults", "reasoningEffort"])}
             disabled={busy}
             onChange={(value) => onCandidateChange(writeModelDefault(candidate, "reasoningEffort", value))}
           />
         </div>
         <Typography.Text strong>Provider preferences</Typography.Text>
+        <Typography.Text type="secondary" className="admin-draft-field-hint">
+          Language model is a required alias. Speech aliases are required when voice is on and must stay empty when voice is off.
+        </Typography.Text>
         <div className="admin-draft-field-grid">
           <TextField
             label="Language model"
@@ -400,6 +412,7 @@ function DefinitionCandidateForm({
           />
           <NumberField
             label="Speaking rate"
+            hint="1 is normal speed. 0.5 to 2."
             value={readNumber(candidate, ["voice", "speakingRate"])}
             disabled={busy}
             step={0.1}
@@ -587,46 +600,69 @@ function DefinitionCandidateForm({
 
 function TextField({
   label,
+  hint,
   value,
   disabled,
   onChange
 }: {
   label: string;
+  hint?: string;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const hintId = useId();
   return (
     <label className="admin-draft-field">
       <Typography.Text strong>{label}</Typography.Text>
-      <Input aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <Input
+        aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {hint ? (
+        <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
+          {hint}
+        </Typography.Text>
+      ) : null}
     </label>
   );
 }
 
 function NumberField({
   label,
+  hint,
   value,
   disabled,
   step,
   onChange
 }: {
   label: string;
+  hint?: string;
   value: number | null;
   disabled: boolean;
   step?: number;
   onChange: (value: number | null) => void;
 }) {
+  const hintId = useId();
   return (
     <label className="admin-draft-field">
       <Typography.Text strong>{label}</Typography.Text>
       <InputNumber
         aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
         value={value}
         disabled={disabled}
         step={step}
         onChange={(next) => onChange(typeof next === "number" ? next : null)}
       />
+      {hint ? (
+        <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
+          {hint}
+        </Typography.Text>
+      ) : null}
     </label>
   );
 }

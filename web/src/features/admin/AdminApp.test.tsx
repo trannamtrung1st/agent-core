@@ -1404,7 +1404,12 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "home" }} />);
     });
     fireEvent.click(screen.getByRole("button", { name: "New definition" }));
+    expect(screen.getByText("Lowercase letters, digits, and hyphens, up to 64 characters.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Definition ID"), { target: { value: "Field Guide" } });
+    expect(screen.getByRole("button", { name: "Create draft" })).toBeDisabled();
+    expect(screen.getByLabelText("Definition ID")).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(screen.getByLabelText("Definition ID"), { target: { value: "field-guide" } });
+    expect(screen.getByLabelText("Definition ID")).toHaveAttribute("aria-invalid", "false");
     fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
 
     await waitFor(() => {

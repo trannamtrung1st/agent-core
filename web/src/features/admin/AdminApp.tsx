@@ -398,6 +398,7 @@ function NewDefinitionButton() {
   const [definitionId, setDefinitionId] = useState("");
   const [busy, setBusy] = useState(false);
   const definitionIdPattern = /^[a-z0-9-]{1,64}$/;
+  const definitionIdInvalid = definitionId.trim().length > 0 && !definitionIdPattern.test(definitionId.trim());
 
   const createNewDefinition = async () => {
     const nextId = definitionId.trim();
@@ -441,11 +442,17 @@ function NewDefinitionButton() {
           <Typography.Text strong>Definition ID</Typography.Text>
           <Input
             aria-label="Definition ID"
+            aria-describedby="new-definition-id-hint"
+            aria-invalid={definitionIdInvalid}
+            status={definitionIdInvalid ? "error" : undefined}
             value={definitionId}
             onChange={(event) => setDefinitionId(event.target.value)}
             placeholder="field-guide"
             autoComplete="off"
           />
+          <Typography.Text id="new-definition-id-hint" type="secondary" className="admin-draft-field-hint">
+            Lowercase letters, digits, and hyphens, up to 64 characters.
+          </Typography.Text>
         </label>
       </Modal>
     </>
