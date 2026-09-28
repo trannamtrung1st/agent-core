@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` at `ce0d2e5` on **2026-09-29**.
+Reviewed against `main` at `76818a9` on **2026-09-29**.
 
 ---
 
@@ -177,6 +177,32 @@ Long-term product direction:
 
 The current conversation runtime remains valid. The long-term product should evolve from primarily hosting conversations toward hosting durable agent identities that can retain continuity and participate in more than one application.
 
+An ambitious but grounded product interpretation is:
+
+> Agent Core can evolve into a runtime for persistent AI workers / digital employees.
+
+“AI worker” is product language, not a new architecture layer. The metaphor becomes useful only when the underlying durable identity can increasingly combine:
+
+```text
+stable durable identity
+persona
+learned memory
+relationships/context
+knowledge/resources
+capabilities
+application bindings
+scoped authority
+working context/workspaces
+tasks/goals
+triggers/events
+execution history
+approvals
+```
+
+Such a worker may eventually participate in applications, hold different roles in different applications, receive work, perform authorized actions, wait for external events, resume later, ask for approval, complete goals, communicate or delegate to other identities, and retain appropriate continuity over time.
+
+Agent Core remains the identity/runtime layer. A conversational assistant, examiner, customer-service experience, operations tool, or another product is an application built on that layer. This is internal architectural positioning, not a claim that a general AI-worker product is implemented today.
+
 Conceptually:
 
 ```text
@@ -249,6 +275,115 @@ A future binding may include:
 
 Application Binding is not implemented today. Do not add it until a concrete multi-application workflow defines ownership, mutation, versioning, authorization, and portability requirements. It must not become a back door for rewriting the underlying Agent Definition, persona, or identity-wide state.
 
+Where an application binding is eventually required, preserve this composition without replacing today’s direct Instance → Session lifecycle:
+
+```text
+Definition
+→ immutable Version
+→ durable identity / Agent Instance
+→ Application Binding
+→ Session / Task / Event
+```
+
+## Product surface: create, teach, and hire — future
+
+The internal model should remain rigorous while the future product surface becomes simpler for nontechnical users. Ordinary users should not need to understand prompts, MCP, provider configuration, memory-scope identifiers, policy evaluators, WorkItems, or orchestration internals.
+
+Possible user-facing concepts include:
+
+```text
+Create your own worker
+Teach/configure the worker
+Start from a prepared worker
+Hire/add a prepared worker to an organization
+```
+
+“Teach” or “train” is primarily product language for configuring and improving a worker through:
+
+- instructions;
+- knowledge/resources;
+- examples and corrections;
+- policies and permissions;
+- tool/capability configuration;
+- learned memory;
+- evaluation cases;
+- recurring work/routines.
+
+It does not imply model fine-tuning. For example, a user might teach an Operations worker:
+
+```text
+"These are our SOPs."
+"This is how we process invoices."
+"These are the applications we use."
+"Ask before paying anything."
+"Check these systems every morning."
+```
+
+The product may translate that experience into separate Definition changes, resources, policy, memory, triggers, evaluations, and other existing or future primitives. A simpler UI must not collapse those lifecycles internally.
+
+A normal user should eventually be able to think:
+
+```text
+This is Sam.
+
+Sam works in Operations.
+
+Sam can use:
+- company chat
+- CRM
+- calendar
+- browser
+
+Sam remembers:
+- appropriate organization context
+- my working preferences
+
+Sam must ask before:
+- sending external messages
+- purchasing
+- deleting important data
+```
+
+The user should not need to reason directly about `AgentDefinitionVersion`, `ApplicationBinding`, `TriggerOccurrence`, `WorkItem`, MCP servers, provider adapters, memory-scope identifiers, or policy evaluators.
+
+## Prepared worker / hire model — future possibility
+
+A reusable worker offering must not share one customer’s persistent identity, memory, authority, browser state, or working history with another customer.
+
+Prefer:
+
+```text
+Prepared Worker / Role Package
+"Operations Assistant"
+        │
+        │ instantiate / hire
+        ▼
+New durable Agent Identity
+"Sam"
+        │
+        ├── organization-specific memory
+        ├── organization-specific permissions
+        ├── organization-specific application bindings
+        └── its own working history
+```
+
+Another organization hiring the same prepared worker receives another durable identity. It does not gain access to Sam’s learned state.
+
+A prepared package may eventually bundle:
+
+```text
+Agent Definition
+skills/capability requirements
+knowledge structure
+policies
+recommended application bindings
+evaluation cases
+workflow/routine templates
+UX/setup guidance
+```
+
+This is a future product/business possibility, not an implementation commitment. Do not create a marketplace or package/import/export architecture until a real product requirement defines portability, trust, versioning, provenance, installation, upgrade, and ownership semantics.
+
 ## Capabilities, tools, and authority — future direction
 
 A durable identity does not directly own arbitrary tool implementations or credentials.
@@ -278,6 +413,138 @@ Requirements:
 - provider-specific DTOs and secrets remain at Infrastructure edges.
 
 P8 may extend a real provider seam, but it must not implement this entire future binding model speculatively.
+
+## Browser / computer use — strategic capability direction
+
+Browser automation is a particularly attractive early extension because it can let a worker operate many existing web applications through interfaces users already know, before Agent Core has a dedicated integration for every application.
+
+Instead of requiring all of these first:
+
+```text
+App A plugin
+App B plugin
+App C plugin
+CRM plugin
+chat plugin
+ERP plugin
+internal-tool plugin
+```
+
+a bounded browser capability may provide broad initial reach:
+
+```text
+                 Agent Identity
+                       │
+                 capabilities
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+       Browser     Native tools     MCP/providers
+          │
+          ▼
+     Web applications
+```
+
+Potential browser-mediated work includes opening company chat, CRM, internal applications, or other web tools; reading information; navigating workflows; filling forms; preparing changes; and performing authorized actions.
+
+The strategic principle is:
+
+> Browser automation is the broad compatibility path; native integrations are the optimized path.
+
+```text
+Browser / computer use
+    broad application coverage
+    fast expansion
+    visible to the user
+          │
+          │ where usage justifies it
+          ▼
+Native integration / API / dedicated provider
+    more reliable
+    more efficient
+    easier to constrain
+```
+
+An early worker might use a browser for email. If email becomes a major recurring capability, a dedicated email provider may be preferable. Identity and task semantics should not depend on browser versus native execution when their normalized meaning is equivalent, but browser automation does not eliminate the need for native integrations.
+
+### Preferred first browser approach to evaluate
+
+Evaluate **Playwright**, potentially through Playwright MCP or a bounded native adapter around Playwright, as the first concrete browser approach. Do not decide in advance whether the final shape is a direct Playwright tool, Playwright MCP provider, browser capability adapter, or a combination. P8 should choose the narrowest shape that fits the existing architecture.
+
+Intended boundary:
+
+```text
+Playwright / Playwright MCP
+          ↓
+Agent Core capability/provider boundary
+          ↓
+Agent Core policy + authorization
+          ↓
+approval / scope / execution
+          ↓
+Agent
+```
+
+MCP is an optional adapter/protocol, not Agent Core’s semantic center:
+
+```text
+Agent Core semantics/policy
+        ↓
+provider/integration adapter
+        ↓
+MCP where useful
+        ↓
+external capability
+```
+
+Never treat “an MCP tool exists” as permission for unrestricted model execution. Native Agent Core tools remain first-class, and MCP-backed tools must obey the relevant ownership, policy, approval, credential, observability, cancellation, and failure boundaries.
+
+### Visible work and durable evidence
+
+A headed or otherwise observable browser is product UX as well as execution infrastructure:
+
+```text
+Sam is working…
+
+→ opened Support App
+→ opened customer record
+→ inspected order
+→ drafted response
+→ requested approval
+→ sent after approval
+```
+
+Visibility can improve trust, demonstrations, debugging, intervention, approval, and accountability. Do not persist every click, selector, DOM observation, or low-level browser action as product history. Distinguish transient execution detail from meaningful durable action receipts/evidence for important observations, approvals, and side effects.
+
+### Browser authority and isolation constraints
+
+Browser/computer use can be equivalent to access to logged-in applications, so it must remain behind strict Agent Core authority:
+
+- browser availability does not imply unrestricted authority;
+- provider/tool registration does not grant execution permission;
+- Application Bindings and policy should eventually constrain browser access;
+- credentials, cookies, tokens, and secrets remain outside model-visible context wherever possible;
+- do not expose raw passwords to the model merely to automate login;
+- sensitive actions remain eligible for exact-action approval;
+- interactive and background/unattended browser execution use the same authorization rules;
+- browser execution cannot bypass existing tool policy;
+- important side effects produce useful execution evidence/receipts;
+- cancellation, timeout, bounded execution, and failure recovery are required;
+- a compromised, failed, or non-cooperative browser provider must not corrupt durable Agent Identity, Session, or WorkItem state.
+
+Future designs must resolve, without assuming one global logged-in profile:
+
+```text
+browser profile ownership
+identity-scoped vs application-scoped browser state
+session-scoped browser state
+authenticated profile isolation
+domain/application allowlists
+cookie/session retention
+multi-user/tenant isolation
+```
+
+Do not make one shared authenticated browser profile available to every identity or application.
 
 ## Scoped workspace direction — future
 
@@ -366,6 +633,56 @@ Termination conditions may include:
 
 P5 Trigger registrations/occurrences and P6 durable WorkItems are the existing architectural foundation for this direction. Future work should extend those contracts where justified rather than introduce a competing execution model.
 
+One future destination example:
+
+```text
+Goal:
+"Find a venue for the company dinner next month.
+Check availability, request quotes, and prepare a recommendation.
+Do not book anything without approval."
+
+Durable Agent Identity
+        ↓
+WorkItem
+        ↓
+Browser → research venues
+Calendar → inspect availability
+Browser/email → request quotes
+        ↓
+wait
+        ↓
+external response/event resumes WorkItem
+        ↓
+compare results
+        ↓
+request human approval
+        ↓
+Browser/native integration → book
+        ↓
+goal complete
+```
+
+The architectural point is the composition of identity, capabilities, browser/native integrations, scoped memory, WorkItems, triggers/events, checkpoints, approvals, and stop conditions. No LLM call, process, or browser session should need to remain continuously running while waiting for real-world events.
+
+Future team behavior should use the same durable principals:
+
+```text
+Sam — Operations
+Alice — Research
+Bob — Support
+
+Sam
+  → delegates research WorkItem to Alice
+Alice
+  → returns result/event
+Sam
+  → continues goal
+Bob
+  → may communicate/request work
+```
+
+Communication and delegation should carry explicit identity, authority, provenance, and work ownership. Do not create a magical “agent swarm” disconnected from Identity, WorkItem, Trigger, Approval, and policy boundaries.
+
 The long-term runtime model therefore expands conceptually from only:
 
 ```text
@@ -385,6 +702,10 @@ toward:
 ```
 
 This is a product/architecture north star, not a claim that the current conversation runtime is obsolete or that these future capabilities are implemented.
+
+In summary:
+
+> Agent Core is a runtime for durable AI identities that can grow into persistent AI workers: identities that remember appropriately, participate in multiple applications, perform authorized work, resume tasks over time, and eventually collaborate with other identities.
 
 ---
 
@@ -1460,6 +1781,38 @@ When P8 begins, start from one concrete provider need.
 
 The Product / Architecture North Star above is not itself a P8 backlog. P8 must remain evidence-driven and narrowly scoped to real extension seams.
 
+**Strong first candidate to evaluate:** bounded browser automation through Playwright, Playwright MCP, or a narrow adapter around Playwright.
+
+Current repository evidence:
+
+- Playwright already exists as frontend E2E infrastructure, and Playwright MCP is configured for development/testing;
+- neither is currently an Agent Core runtime capability or evidence that product browser automation is implemented;
+- Agent Core already has a trusted tool registry, role allowlists, execution-time policy checks, exact-action approvals, cancellation/time limits, detached-execution restrictions, and durable WorkItem checkpoints;
+- runtime tool registration and dispatch remain static/in-process, so a real browser provider would exercise the “second tool host/provider” seam identified by P7.5;
+- browser profile ownership, authentication-state isolation, application/domain scope, durable receipts, and live versus detached execution remain unresolved design inputs.
+
+Candidate reasoning:
+
+```text
+real product requirement:
+agent needs to interact with arbitrary existing applications
+
+        ↓
+
+concrete second capability/provider:
+Playwright browser automation
+
+        ↓
+
+exercise only the extension seams actually required
+
+        ↓
+
+learn what the real provider/tool architecture needs
+```
+
+This is preferable to inventing a universal plugin or MCP framework first. It does not declare the P8 design or implementation complete.
+
 ## Goal
 
 Make the established Agent Core harness extensible without turning every implementation detail into a plugin API.
@@ -1474,6 +1827,7 @@ Potential boundaries:
 model providers
 tool providers
 integration providers
+browser/computer capability providers
 trigger/event sources
 sandbox providers
 ```
@@ -1488,6 +1842,7 @@ Requirements:
 
 - native Agent Core tools remain first-class;
 - external tools still pass through Agent Core policy/authorization;
+- MCP remains an adapter option rather than an authority source or universal internal protocol;
 - provider credentials remain outside model context;
 - provider-specific DTOs do not leak into Domain/Application contracts;
 - extension failure does not corrupt durable agent/session state.
@@ -1515,8 +1870,10 @@ Requirements:
 Do not automatically turn P8 into:
 
 - a plugin marketplace;
+- prepared-worker marketplace or package system;
 - visual workflow builder;
 - multi-agent orchestration engine;
+- unrestricted browser agent or globally shared authenticated browser profile;
 - generic distributed job platform;
 - enterprise tenant/RBAC implementation;
 - Kubernetes migration;
@@ -1808,11 +2165,11 @@ Keep this compact. It is orientation, not another roadmap.
 Bound it to:
 
 ```text
-1. begin from one concrete provider or integration need
-2. add only the narrow extension seam required by a real second implementation
+1. evaluate browser automation as the first concrete provider/integration need
+2. choose the narrowest viable Playwright, Playwright MCP, or adapter boundary
 3. preserve registry / policy / execution separation
-4. preserve provider DTO, credential, lifecycle, and ownership boundaries
-5. validate compatibility and failure behavior only to the degree the extension requires
+4. preserve approval, credential, profile-isolation, lifecycle, and ownership boundaries
+5. add only the extension seam and failure handling the concrete browser provider requires
 6. keep future identity/application/task/team concepts deferred
 ```
 
