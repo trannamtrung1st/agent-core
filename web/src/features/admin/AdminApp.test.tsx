@@ -397,6 +397,12 @@ describe("AdminApp", () => {
     expect(screen.getByText("heuristic")).toBeInTheDocument();
     expect(screen.getAllByText("scripted-alpha").length).toBeGreaterThan(0);
     expect(screen.getByText(/max registrations 4/)).toBeInTheDocument();
+    const config = screen.getByText("Runtime model").closest(".admin-effective-config-grid");
+    expect(config).toBeTruthy();
+    expect(within(config as HTMLElement).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(config as HTMLElement).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(config as HTMLElement).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(within(config as HTMLElement).queryByRole("switch")).not.toBeInTheDocument();
   });
 
   it("saves visible instructions before publishing a draft", async () => {
@@ -1072,6 +1078,50 @@ describe("AdminApp", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Form" }));
     expect(screen.getByLabelText("Persona role")).toHaveValue("Coach");
+  });
+
+  it("does not save persona JSON that includes non-persona fields", async () => {
+    const managedEffective = { ...sampleEffective, compatibility: false };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(getAdminEffectiveConfig).mockResolvedValue(managedEffective);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(updateAdminAgentInstancePersona).mockClear();
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "JSON" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
+    fireEvent.change(screen.getByLabelText("Persona JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            name: "Alex",
+            role: "Examiner",
+            description: "Practice speaking.",
+            tone: "Supportive",
+            lifecycle: "Archived",
+            activeVersion: 9,
+            memory: { sessionMemory: false },
+            triggers: [],
+            instanceRevision: 3,
+            effectiveConfiguration: { definitionId: "other" }
+          },
+          null,
+          2
+        )
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save persona" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/unknown fields/).length).toBeGreaterThan(0);
+    });
+    expect(updateAdminAgentInstancePersona).not.toHaveBeenCalled();
   });
 
   it("lists built-in and durable versions for active-version changes", async () => {

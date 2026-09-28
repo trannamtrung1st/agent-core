@@ -56,6 +56,23 @@ describe("instanceManagedControls persona sync", () => {
     const json = personaFieldsToJson(samplePersona);
     expect(parsePersonaJson(json)).toEqual(samplePersona);
   });
+
+  it("rejects lifecycle, version, memory, trigger, revision, and effective-config fields", () => {
+    const extras: Record<string, unknown> = {
+      lifecycle: "Archived",
+      activeVersion: 2,
+      memory: { sessionMemory: true },
+      triggers: [],
+      instanceRevision: 9,
+      personaRevision: 4,
+      effectiveConfiguration: { definitionId: "examiner" }
+    };
+    for (const [field, value] of Object.entries(extras)) {
+      expect(() => parsePersonaJson(JSON.stringify({ ...samplePersona, [field]: value }))).toThrow(
+        new RegExp(field)
+      );
+    }
+  });
 });
 
 describe("managedInstanceVersionActionLabel", () => {
