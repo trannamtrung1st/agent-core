@@ -47,13 +47,13 @@ P7.5 is frozen on `70a5720`. Hosted workflow `36368766449` is green on that SHA.
 
 ## Current active phase
 
-**P7.6 — Admin usability closure.**
+**P8 — harness/platform extensibility.**
 
-P7.6 is a bounded post-freeze product requirement. It does **not** redefine what P7 or P7.5 previously meant or invalidate their closure evidence.
+P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA. Closure report: `docs/reports/p7.6-freeze-candidate.md`.
 
-Finish the existing Definition/Instance/Admin authoring experience before widening the platform extension surface in P8.
+P7.6 does **not** redefine what P7 or P7.5 previously meant or invalidate their closure evidence.
 
-P8 remains next after P7.6. When P8 begins, start from one concrete provider need and do not add a universal provider interface.
+When P8 begins, start from one concrete provider need and do not add a universal provider interface. This record does not start P8 implementation.
 
 ---
 
@@ -61,8 +61,8 @@ P8 remains next after P7.6. When P8 begins, start from one concrete provider nee
 
 1. **P0–P7 — closed/frozen.**
 2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `70a5720`.**
-3. **P7.6 — Admin usability closure — ACTIVE.**
-4. **P8 — harness/platform extensibility — queued after P7.6.**
+3. **P7.6 — Admin usability closure — frozen on `17d89ae`.**
+4. **P8 — harness/platform extensibility — next.**
 5. **P9 — sandbox evolution when requirements justify it.**
 6. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
 
@@ -211,7 +211,7 @@ Always keep this section.
   Test & Publish
   ```
 
-- [ ] Finish P7.6 Admin authoring usability before widening the P8 extension surface.
+- [x] Finish P7.6 Admin authoring usability before widening the P8 extension surface. P7.6 is frozen on `17d89ae`.
 
 - [ ] Keep infrastructure boring until product/hosting requirements justify more complexity.
 
@@ -1150,6 +1150,8 @@ deterministic tests + Synthetic E2E + Compose are green
 hosted CI is green on the recorded closure candidate
 ```
 
+Observed: P7.6 is frozen on `17d89ae`. Hosted workflow [`36427670239`](https://github.com/trannamtrung1st/agent-core/actions/runs/36427670239) is green on that SHA. Synthetic offline gates and Compose smoke both succeeded. Closure report: `docs/reports/p7.6-freeze-candidate.md`. The commit that records this URL is documentation only.
+
 ---
 
 ## P7.6 non-goals / deferred platform work
@@ -1227,9 +1229,9 @@ Production-shaped properties that **should** exist now:
 
 # P8 — Harness/platform extensibility
 
-**Status: queued after P7.6.**
+**Status: next.**
 
-P7.5 is frozen on `70a5720`. Finish the bounded P7.6 Admin usability closure first.
+P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA.
 
 When P8 begins, start from one concrete provider need.
 
@@ -1588,6 +1590,6 @@ Bound it to:
 
 P7 and P7.5 remain frozen. Do not rewrite their closure evidence to make P7.6 look historical.
 
-After P7.6 is green and frozen, begin P8 from one concrete provider/extensibility need.
+P7.6 is frozen on `17d89ae`. Begin P8 from one concrete provider/extensibility need.
 
 Do **not** begin P7.6 or P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
