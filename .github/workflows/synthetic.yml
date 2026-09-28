@@ -84,6 +84,13 @@ jobs:
           PLAYWRIGHT_SQLITE_PATH=../data/playwright/admin-lifecycle-isolated.db \
             pnpm exec playwright test --project=admin-lifecycle
 
+      - name: P7.6 Admin journey Playwright
+        working-directory: web
+        run: |
+          rm -f ../data/playwright/p76-admin.db
+          PLAYWRIGHT_SQLITE_PATH=../data/playwright/p76-admin.db \
+            pnpm exec playwright test --project=p76-admin
+
       - name: Upload Playwright failure
         if: failure()
         uses: actions/upload-artifact@v4
