@@ -59,7 +59,11 @@ public sealed record AdminEffectiveModelResponse(
     string? ReasoningEffort,
     string? ModelId);
 
-public sealed record AdminKnowledgeSourceResponse(string Identity, string Title, string Citation);
+public sealed record AdminKnowledgeSourceResponse(
+    string Identity,
+    string Title,
+    string Citation,
+    string ResolvedResourcePath);
 
 public sealed record AdminMemoryPolicyResponse(
     bool SessionMemory,

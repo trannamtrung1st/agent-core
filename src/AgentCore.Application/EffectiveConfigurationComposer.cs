@@ -73,7 +73,11 @@ internal static class EffectiveConfigurationComposer
             HarnessReferences: environment.HarnessList.OrderBy(item => item, StringComparer.Ordinal).ToArray(),
             WorkspaceTemplateId: environment.WorkspacePolicy.TemplateId,
             KnowledgeSources: environment.KnowledgeList
-                .Select(item => new AdminKnowledgeSource(item.Identity, item.Title, item.Citation))
+                .Select(item => new AdminKnowledgeSource(
+                    item.Identity,
+                    item.Title,
+                    item.Citation,
+                    KnowledgeSourcePaths.ResolveBackingPath(item)))
                 .ToArray(),
             MemoryPolicy: MemoryPolicyOf(definition),
             TriggerPolicy: trigger,

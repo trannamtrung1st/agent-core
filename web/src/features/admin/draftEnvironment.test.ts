@@ -11,7 +11,7 @@ describe("draftEnvironment", () => {
       environment: {
         harness: ["examiner-turn-taking"],
         toolAllowlist: ["workspace.read"],
-        knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo" }],
+        knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo", resourcePath: "" }],
         workspace: { templateId: "examiner-default" },
         attachments: { allowUnreadUnsupportedTypes: true }
       }
@@ -21,7 +21,7 @@ describe("draftEnvironment", () => {
       harness: ["examiner-turn-taking"],
       toolAllowlist: ["workspace.read"],
       workspaceTemplateId: "examiner-default",
-      knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo" }],
+      knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo", resourcePath: "" }],
       allowUnreadUnsupportedAttachmentTypes: true
     });
   });
@@ -54,5 +54,23 @@ describe("draftEnvironment", () => {
       environment: { harness: ["a", "b"], toolAllowlist: ["workspace.read", "workspace.write"] }
     });
     expect(draftEnvironmentEquals(left, right)).toBe(true);
+  });
+
+  it("writes an explicit knowledge path and omits a blank one", () => {
+    const updated = applyDraftEnvironmentToCandidate({}, {
+      harness: [],
+      toolAllowlist: [],
+      workspaceTemplateId: "",
+      allowUnreadUnsupportedAttachmentTypes: false,
+      knowledgeSources: [
+        { identity: "policy", title: "Policy", citation: "cite", resourcePath: " knowledge/policy.md " },
+        { identity: "legacy", title: "Legacy", citation: "cite", resourcePath: " " }
+      ]
+    });
+
+    expect((updated.environment as { knowledgeSources: unknown }).knowledgeSources).toEqual([
+      { identity: "policy", title: "Policy", citation: "cite", resourcePath: "knowledge/policy.md" },
+      { identity: "legacy", title: "Legacy", citation: "cite" }
+    ]);
   });
 });

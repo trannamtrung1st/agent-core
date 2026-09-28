@@ -1927,6 +1927,9 @@ body,
 }
 
 .admin-knowledge-source {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-compact);
   padding: var(--ac-space-compact);
   border: 1px solid var(--ac-color-border);
   border-radius: 8px;

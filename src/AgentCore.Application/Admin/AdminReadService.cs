@@ -196,7 +196,11 @@ public sealed record AdminInstanceInventoryItem(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-public sealed record AdminKnowledgeSource(string Identity, string Title, string Citation);
+public sealed record AdminKnowledgeSource(
+    string Identity,
+    string Title,
+    string Citation,
+    string ResolvedResourcePath);
 
 public sealed record AdminEffectiveModel(
     string CatalogKey,

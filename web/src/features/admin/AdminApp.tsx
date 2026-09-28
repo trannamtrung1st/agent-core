@@ -1305,6 +1305,55 @@ function DefinitionDetail({
 
 const RESOURCE_KINDS = ["Knowledge", "Reference", "Template", "StaticAsset", "EvalFixture"] as const;
 
+function knowledgeBackingLabel(identity: string, resourcePath: string) {
+  const selected = resourcePath.trim();
+  if (selected.length > 0) {
+    return `Backing resource: ${selected}`;
+  }
+  const legacyIdentity = identity.trim() || "{identity}";
+  return `Legacy fallback: knowledge/${legacyIdentity}`;
+}
+
+function KnowledgeResourceBinding({
+  index,
+  source,
+  resources,
+  disabled,
+  onChange
+}: {
+  index: number;
+  source: DraftKnowledgeSource;
+  resources: AdminDefinitionDraftResource[];
+  disabled: boolean;
+  onChange: (resourcePath: string) => void;
+}) {
+  const knowledgePaths = resources
+    .filter((item) => item.kind === "Knowledge")
+    .map((item) => item.logicalPath);
+  const selected = source.resourcePath.trim();
+  const options = [
+    { value: "", label: knowledgeBackingLabel(source.identity, "") },
+    ...knowledgePaths.map((path) => ({ value: path, label: path })),
+    ...(selected.length > 0 && !knowledgePaths.includes(selected)
+      ? [{ value: selected, label: `${selected} (not in this draft)` }]
+      : [])
+  ];
+
+  return (
+    <label className="admin-draft-field">
+      <Typography.Text>Backing resource</Typography.Text>
+      <Select
+        aria-label={`Knowledge resource ${index + 1}`}
+        value={selected}
+        options={options}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <Typography.Text type="secondary">{knowledgeBackingLabel(source.identity, selected)}</Typography.Text>
+    </label>
+  );
+}
+
 function DraftEditor({
   activeDraft,
   candidate,
@@ -1422,7 +1471,7 @@ function DraftEditor({
       ...capabilities,
       knowledgeSources: [
         ...capabilities.knowledgeSources,
-        { identity: "", title: "", citation: "" }
+        { identity: "", title: "", citation: "", resourcePath: "" }
       ]
     });
   };
@@ -1707,6 +1756,13 @@ function DraftEditor({
                             />
                           </Tooltip>
                         </div>
+                        <KnowledgeResourceBinding
+                          index={index}
+                          source={source}
+                          resources={resources}
+                          disabled={busy || candidateLocked}
+                          onChange={(resourcePath) => updateKnowledgeSource(index, "resourcePath", resourcePath)}
+                        />
                       </div>
                     ))}
                   </Flex>
@@ -2529,7 +2585,13 @@ export function EffectiveConfigView({
           <Descriptions.Item label="Workspace template">{config.workspaceTemplateId ?? "None"}</Descriptions.Item>
           <Descriptions.Item label="Knowledge">
             {config.knowledgeSources.length > 0
-              ? config.knowledgeSources.map((item) => `${item.identity} (${item.title})`).join("; ")
+              ? config.knowledgeSources
+                  .map((item) =>
+                    item.resolvedResourcePath
+                      ? `${item.identity} (${item.title}) · ${item.resolvedResourcePath}`
+                      : `${item.identity} (${item.title})`
+                  )
+                  .join("; ")
               : "None"}
           </Descriptions.Item>
         </Descriptions>

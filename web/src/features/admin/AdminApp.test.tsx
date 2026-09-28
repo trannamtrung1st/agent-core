@@ -819,6 +819,104 @@ describe("AdminApp", () => {
     expect(candidate?.environment?.workspace?.templateId).toBe("examiner-default");
   });
 
+  it("binds a knowledge source to a Knowledge resource path", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000bc";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "examiner",
+        revision: 1,
+        sourceKind: "ForkBuiltIn",
+        sourceVersion: 1,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([
+      {
+        resourceId: "019944af-00d1-7000-8000-0000000000bd",
+        logicalPath: "knowledge/refund-policy.md",
+        kind: "Knowledge",
+        mediaType: "text/markdown",
+        contentSha256: "abc",
+        byteLength: 12,
+        updatedAt: "2026-01-01T00:00:00Z"
+      },
+      {
+        resourceId: "019944af-00d1-7000-8000-0000000000be",
+        logicalPath: "references/notes.md",
+        kind: "Reference",
+        mediaType: "text/plain",
+        contentSha256: "def",
+        byteLength: 8,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 1,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: {
+        systemInstructions: "Body",
+        definitionId: "examiner",
+        environment: {
+          knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo" }]
+        }
+      }
+    });
+    vi.mocked(updateAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "examiner",
+      revision: 2,
+      sourceKind: "ForkBuiltIn",
+      sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Draft rev 1/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Capabilities" }));
+    expect((await screen.findAllByText("Legacy fallback: knowledge/policy")).length).toBeGreaterThan(0);
+    fireEvent.mouseDown(screen.getByLabelText("Knowledge resource 1"));
+    const option = await waitFor(() => {
+      const match = document.querySelector(
+        '.ant-select-item-option[title="knowledge/refund-policy.md"]'
+      );
+      expect(match).toBeTruthy();
+      return match as HTMLElement;
+    });
+    expect(document.querySelector('.ant-select-item-option[title="references/notes.md"]')).toBeNull();
+    fireEvent.mouseDown(option);
+    fireEvent.click(option);
+    expect((await screen.findAllByText("Backing resource: knowledge/refund-policy.md")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => {
+      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
+    });
+    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
+      environment?: { knowledgeSources?: Array<{ resourcePath?: string }> };
+    };
+    expect(saved.environment?.knowledgeSources?.[0]?.resourcePath).toBe("knowledge/refund-policy.md");
+  });
+
   it("retries tool registry loading from the Capabilities tab", async () => {
     const draftId = "019944af-00d1-7000-8000-0000000000cc";
     vi.mocked(listAdminToolNames).mockReset();

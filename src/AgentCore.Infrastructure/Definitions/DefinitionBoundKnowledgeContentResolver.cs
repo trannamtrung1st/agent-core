@@ -24,7 +24,10 @@ public sealed class DefinitionBoundKnowledgeContentResolver(
             return await fileCatalog.ReadContentAsync(identity, cancellationToken).ConfigureAwait(false);
         }
 
-        var logicalPath = DefinitionPublicationResourceReader.NormalizeLogicalPath($"knowledge/{identity}");
+        var source = RoleEnvironments.Of(definition).KnowledgeList
+            .FirstOrDefault(item => string.Equals(item.Identity, identity, StringComparison.Ordinal));
+        var logicalPath = DefinitionPublicationResourceReader.NormalizeLogicalPath(
+            KnowledgeSourcePaths.ResolveBackingPath(identity, source?.ResourcePath));
         var resource = await publicationResources.FindByLogicalPathAsync(
                 definition.Id,
                 definition.Version,

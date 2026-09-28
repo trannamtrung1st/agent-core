@@ -117,6 +117,7 @@ public sealed class AdminReadServiceTests
         Assert.Equal("handbook", source.Identity);
         Assert.Equal("Handbook", source.Title);
         Assert.Equal("cite-handbook", source.Citation);
+        Assert.Equal("knowledge/handbook", source.ResolvedResourcePath);
         Assert.Equal(MemoryPolicy.Disabled, config.MemoryPolicy);
         Assert.Equal(preferences, config.ProviderPreferences);
         Assert.Equal([ToolCatalog.KnowledgeRetrieve], config.EffectiveToolAllowlist);

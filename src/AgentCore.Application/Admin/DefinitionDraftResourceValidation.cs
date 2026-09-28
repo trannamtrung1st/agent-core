@@ -22,14 +22,27 @@ internal static class DefinitionDraftResourceValidation
         for (var index = 0; index < environment.KnowledgeList.Count; index++)
         {
             var source = environment.KnowledgeList[index];
-            var expectedPath = DefinitionPublicationResourceReader.NormalizeLogicalPath($"knowledge/{source.Identity}");
-            if (!resourcesByPath.TryGetValue(expectedPath, out var resource)
-                || resource.Kind != AgentDefinitionResourceKind.Knowledge)
+            var expectedPath = DefinitionPublicationResourceReader.NormalizeLogicalPath(
+                KnowledgeSourcePaths.ResolveBackingPath(source));
+            var field = string.IsNullOrWhiteSpace(source.ResourcePath)
+                ? $"environment.knowledgeSources[{index}].identity"
+                : $"environment.knowledgeSources[{index}].resourcePath";
+            if (!resourcesByPath.TryGetValue(expectedPath, out var resource))
             {
                 yield return new DefinitionValidationFinding(
-                    $"environment.knowledgeSources[{index}].identity",
+                    field,
                     "missing_knowledge_resource",
                     $"Draft is missing a Knowledge resource at '{expectedPath}'.",
+                    DefinitionValidationSeverity.Blocking);
+                continue;
+            }
+
+            if (resource.Kind != AgentDefinitionResourceKind.Knowledge)
+            {
+                yield return new DefinitionValidationFinding(
+                    field,
+                    "wrong_knowledge_resource_kind",
+                    $"Resource at '{expectedPath}' must use Kind Knowledge.",
                     DefinitionValidationSeverity.Blocking);
                 continue;
             }
@@ -37,7 +50,7 @@ internal static class DefinitionDraftResourceValidation
             if (!DefinitionResourcePolicies.IsTextualKnowledgeMediaType(resource.MediaType))
             {
                 yield return new DefinitionValidationFinding(
-                    $"environment.knowledgeSources[{index}].identity",
+                    field,
                     "non_textual_knowledge_resource",
                     $"Knowledge resource at '{expectedPath}' must use text/plain, text/markdown, or application/json.",
                     DefinitionValidationSeverity.Blocking);

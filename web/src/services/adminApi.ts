@@ -46,7 +46,12 @@ export type AdminEffectiveConfiguration = {
   effectiveToolAllowlist: string[];
   harnessReferences: string[];
   workspaceTemplateId: string | null;
-  knowledgeSources: Array<{ identity: string; title: string; citation: string }>;
+  knowledgeSources: Array<{
+    identity: string;
+    title: string;
+    citation: string;
+    resolvedResourcePath?: string;
+  }>;
   memoryPolicy: {
     sessionMemory: boolean;
     identityUserPromotion: boolean;

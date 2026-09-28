@@ -2,6 +2,7 @@ export type DraftKnowledgeSource = {
   identity: string;
   title: string;
   citation: string;
+  resourcePath: string;
 };
 
 export type DraftEnvironment = {
@@ -46,7 +47,8 @@ function readKnowledgeSources(value: unknown): DraftKnowledgeSource[] {
     const identity = typeof row.identity === "string" ? row.identity : "";
     const title = typeof row.title === "string" ? row.title : "";
     const citation = typeof row.citation === "string" ? row.citation : "";
-    items.push({ identity, title, citation });
+    const resourcePath = typeof row.resourcePath === "string" ? row.resourcePath : "";
+    items.push({ identity, title, citation, resourcePath });
   }
   return items;
 }
@@ -85,7 +87,8 @@ function normalizeDraftEnvironment(env: DraftEnvironment): DraftEnvironment {
     knowledgeSources: env.knowledgeSources.map((item) => ({
       identity: item.identity,
       title: item.title,
-      citation: item.citation
+      citation: item.citation,
+      resourcePath: item.resourcePath.trim()
     })),
     allowUnreadUnsupportedAttachmentTypes: env.allowUnreadUnsupportedAttachmentTypes
   };
@@ -100,11 +103,18 @@ export function applyDraftEnvironmentToCandidate(
       ? { templateId: environment.workspaceTemplateId.trim() }
       : {};
 
-  const knowledgeSources = environment.knowledgeSources.map((item) => ({
-    identity: item.identity.trim(),
-    title: item.title.trim(),
-    citation: item.citation.trim()
-  }));
+  const knowledgeSources = environment.knowledgeSources.map((item) => {
+    const source: { identity: string; title: string; citation: string; resourcePath?: string } = {
+      identity: item.identity.trim(),
+      title: item.title.trim(),
+      citation: item.citation.trim()
+    };
+    const resourcePath = item.resourcePath.trim();
+    if (resourcePath.length > 0) {
+      source.resourcePath = resourcePath;
+    }
+    return source;
+  });
 
   return {
     ...candidate,

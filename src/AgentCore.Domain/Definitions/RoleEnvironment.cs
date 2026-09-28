@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Domain.Definitions;
 
 public sealed record RoleEnvironment(
@@ -20,7 +22,12 @@ public sealed record RoleEnvironment(
     public AttachmentStorePolicy AttachmentPolicy => Attachments ?? new AttachmentStorePolicy(false);
 }
 
-public sealed record KnowledgeSourceRef(string Identity, string Title, string Citation);
+public sealed record KnowledgeSourceRef(
+    string Identity,
+    string Title,
+    string Citation,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ResourcePath = null);
 
 public sealed record WorkspaceTemplatePolicy(string? TemplateId = null);
 

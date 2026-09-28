@@ -51,7 +51,11 @@ internal static class AdminHttpMapping
             config.HarnessReferences,
             config.WorkspaceTemplateId,
             config.KnowledgeSources
-                .Select(item => new AdminKnowledgeSourceResponse(item.Identity, item.Title, item.Citation))
+                .Select(item => new AdminKnowledgeSourceResponse(
+                    item.Identity,
+                    item.Title,
+                    item.Citation,
+                    item.ResolvedResourcePath))
                 .ToArray(),
             ToMemoryPolicy(config.MemoryPolicy),
             config.TriggerPolicy is null ? null : ToTriggerPolicy(config.TriggerPolicy),
