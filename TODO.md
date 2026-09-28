@@ -47,7 +47,7 @@ Observer-durability closure (do not merge into Harness Admin):
 
 **P8 — harness/platform extensibility.**
 
-P7.5 is frozen on `b112198`. Hosted workflow `36348699304` is green on that SHA. Closure report: `docs/reports/p7.5-freeze-candidate.md`.
+P7.5 is frozen on `70a5720`. Hosted workflow `36368766449` is green on that SHA. Closure report: `docs/reports/p7.5-freeze-candidate.md`.
 
 Start P8 from one concrete provider need. Do not add a universal provider interface.
 
@@ -56,7 +56,7 @@ Start P8 from one concrete provider need. Do not add a universal provider interf
 # Current roadmap
 
 1. **P0–P7 — closed/frozen.**
-2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `b112198`.**
+2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `70a5720`.**
 3. **P8 — harness/platform extensibility — ACTIVE.**
 4. **P9 — sandbox evolution when requirements justify it.**
 5. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
@@ -267,7 +267,7 @@ P7.5 must not intentionally change user-visible product behavior.
 
 Checklist items use an explicit status. **Completed** means the work is in the tree. **Verified, no change** means the audit found the existing behavior already satisfies the item. **Deferred** means it stays as it is on purpose and is not open P7.5 work. **Not applicable** means the literal wording does not match the accepted architecture.
 
-Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36348699304` is green on `b112198`:
+Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36368766449` is green on `70a5720`:
 
 - Ownership map is in `docs/03-system-architecture.md`. Authoring, Runtime, and Operations are responsibilities, not new projects.
 - Effective configuration is shared resolution primitives plus use-case-specific composition. `EffectiveConfigurationComposer` is the Admin projection and the shared memory-policy default, not a universal runtime object. The closure audit found no contradictory model, tool, resource, memory, or trigger default.
@@ -275,8 +275,8 @@ Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36348
 - Persistence audit kept SQLite, separate stores, explicit transactions, and the single-process scheduler. Recorded in `docs/15-persistence-and-configuration.md`.
 - Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
 - Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
-- Canonical handoff names P8 next. P7.5 is frozen on `b112198`. `docs/13` describes the shipped Admin surface through P7G. `.agents/context/PRODUCT.md` and `DESIGN.md` stay aligned with that surface and defer behavior to `/docs`.
-- The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. Hosted workflow `36348699304` is green on `b112198`.
+- Canonical handoff names P8 next. P7.5 is frozen on `70a5720`. `docs/13` describes the shipped Admin surface through P7G. `.agents/context/PRODUCT.md` and `DESIGN.md` stay aligned with that surface and defer behavior to `/docs`.
+- The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. Hosted workflow `36368766449` is green on `70a5720`.
 
 ---
 
@@ -592,7 +592,7 @@ Production-shaped properties that **should** exist now:
 
 # P8 — Harness/platform extensibility
 
-P7.5 is frozen on `b112198`. P8 may begin from one concrete provider need.
+P7.5 is frozen on `70a5720`. P8 may begin from one concrete provider need.
 
 ## Goal
 
@@ -935,6 +935,6 @@ Keep this compact. It is orientation, not another roadmap.
 
 **P8** is next.
 
-P7.5 is frozen on `b112198`. Hosted workflow [`36348699304`](https://github.com/trannamtrung1st/agent-core/actions/runs/36348699304) is green on that SHA. The closure report is `docs/reports/p7.5-freeze-candidate.md`. Start P8 from one concrete provider need. Do not add a universal provider interface.
+P7.5 is frozen on `70a5720`. Hosted workflow [`36368766449`](https://github.com/trannamtrung1st/agent-core/actions/runs/36368766449) is green on that SHA. The closure report is `docs/reports/p7.5-freeze-candidate.md`. Start P8 from one concrete provider need. Do not add a universal provider interface.
 
 Do **not** begin by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
