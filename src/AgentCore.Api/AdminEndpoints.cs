@@ -458,6 +458,23 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapPost("/definition-drafts/new", async (
+            AdminCreateNewDefinitionDraftRequest request,
+            AgentDefinitionLifecycleService lifecycle,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var draft = await lifecycle.CreateNewDraftAsync(request.DefinitionId, cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.Json(AdminHttpMapping.ToDraft(draft), statusCode: StatusCodes.Status201Created);
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+        });
+
         group.MapPost("/definition-drafts/fork", async (
             AdminForkDefinitionDraftRequest request,
             AgentDefinitionLifecycleService lifecycle,

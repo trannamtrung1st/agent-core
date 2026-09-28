@@ -6,6 +6,7 @@ import {
   EffectiveConfigView,
   PublicationResourcesSummary,
   defaultForkSourceVersion,
+  formatDefinitionVersionSummary,
   formatForkSourceOptionLabel
 } from "./AdminApp";
 import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
@@ -79,6 +80,7 @@ vi.mock("../../services/adminApi", () => ({
   deleteAdminDefinitionDraft: vi.fn(),
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
+  createNewAdminDefinitionDraft: vi.fn(),
   forkAdminDefinitionDraft: vi.fn(),
   listAdminDraftResources: vi.fn(),
   listAdminPublicationResources: vi.fn(),
@@ -98,6 +100,7 @@ vi.mock("../../services/adminApi", () => ({
 
 import * as antd from "antd";
 import {
+  createNewAdminDefinitionDraft,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
   deleteAdminDefinitionDraft,
@@ -186,6 +189,31 @@ describe("formatForkSourceOptionLabel", () => {
       })
     ).toBe("v3 · Durable · Deprecated");
   });
+
+  it("labels deprecated latest separately from latest active", () => {
+    const versions = [
+      {
+        definitionId: "examiner",
+        version: 6,
+        source: "durable",
+        status: "deprecated",
+        displayName: "Examiner v6"
+      },
+      {
+        definitionId: "examiner",
+        version: 5,
+        source: "durable",
+        status: "published",
+        displayName: "Examiner v5"
+      }
+    ];
+    expect(defaultForkSourceVersion(versions)).toBe(5);
+    expect(formatDefinitionVersionSummary({
+      latestVersion: 6,
+      latestStatus: "deprecated",
+      versions
+    })).toBe("Latest v6 · Deprecated · Latest active v5");
+  });
 });
 
 describe("AdminApp", () => {
@@ -219,7 +247,7 @@ describe("AdminApp", () => {
       expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
     });
     expect(within(screen.getByLabelText("Definitions")).getByText("examiner")).toBeInTheDocument();
-    expect(screen.getByText("Latest-version persona: Examiner · 1 version · latest v1")).toBeInTheDocument();
+    expect(screen.getByText("Latest-version persona: Examiner · 1 version · Latest v1 · Published")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Instances")).getByText("1 instance")).toBeInTheDocument();
     expect(screen.getByText("Pinned to v1")).toBeInTheDocument();
     expect(screen.getByText(/Compatibility \/ legacy instance/)).toBeInTheDocument();
@@ -254,7 +282,7 @@ describe("AdminApp", () => {
     });
     expect(within(definitions).getAllByRole("button")).toHaveLength(1);
     expect(within(definitions).getByText("customer-support")).toBeInTheDocument();
-    expect(within(definitions).getByText("Latest-version persona: Sam · 2 versions · latest v2")).toBeInTheDocument();
+    expect(within(definitions).getByText("Latest-version persona: Sam · 2 versions · Latest v2 · Published")).toBeInTheDocument();
     expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
   });
 
@@ -1135,7 +1163,8 @@ describe("AdminApp", () => {
       expect(deprecateAdminDefinitionPublication).toHaveBeenCalledWith("examiner", 2, 3);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Deprecated/)).toBeInTheDocument();
+      expect(screen.getByText("Latest v2 · Deprecated")).toBeInTheDocument();
+      expect(screen.getByText(/Deprecated · metadata rev 4/)).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(vi.mocked(listAdminDefinitions).mock.calls.length).toBeGreaterThan(inventoryCallsBefore);
@@ -1203,6 +1232,110 @@ describe("AdminApp", () => {
 
     await waitFor(() => {
       expect(updateAdminAgentInstanceActiveVersion).toHaveBeenCalledWith(managedEffective.instanceId, 1, 2);
+    });
+  });
+
+  it("creates a new definition through the starter endpoint", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(createNewAdminDefinitionDraft).mockResolvedValue({
+      draftId: "019944af-00d1-7000-8000-0000000000d1",
+      definitionId: "field-guide",
+      revision: 1,
+      sourceKind: "New",
+      sourceVersion: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: { definitionId: "field-guide", systemInstructions: "Server starter" }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "New definition" }));
+    fireEvent.change(screen.getByLabelText("Definition ID"), { target: { value: "field-guide" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+
+    await waitFor(() => {
+      expect(createNewAdminDefinitionDraft).toHaveBeenCalledWith("field-guide");
+    });
+    expect(createNewAdminDefinitionDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a stored starter draft when the definition has no published version", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000d2";
+    vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([
+      {
+        draftId,
+        definitionId: "field-guide",
+        revision: 1,
+        sourceKind: "New",
+        sourceVersion: null,
+        updatedAt: "2026-01-01T00:00:00Z"
+      }
+    ]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
+      draftId,
+      definitionId: "field-guide",
+      revision: 1,
+      sourceKind: "New",
+      sourceVersion: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      candidate: {
+        definitionId: "field-guide",
+        systemInstructions: "Stored starter instructions"
+      }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "field-guide" }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("System instructions")).toHaveValue("Stored starter instructions");
+    });
+    expect(getAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
+  });
+
+  it("shows latest and latest active when the newest publication is deprecated", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 6,
+        source: "durable",
+        status: "deprecated",
+        displayName: "Examiner v6"
+      },
+      {
+        definitionId: "examiner",
+        version: 5,
+        source: "durable",
+        status: "published",
+        displayName: "Examiner v5"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Latest v6 · Deprecated · Latest active v5")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Fork v5 (durable)" })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Latest active")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByLabelText("Base version"));
+    await waitFor(() => {
+      expect(screen.getByText("v6 · Durable · Deprecated")).toBeInTheDocument();
+      expect(screen.getByText("v5 · Durable · Published")).toBeInTheDocument();
     });
   });
 });

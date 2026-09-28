@@ -12,6 +12,7 @@ vi.mock("../../services/adminApi", () => ({
   deleteAdminDefinitionDraft: vi.fn(),
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
+  createNewAdminDefinitionDraft: vi.fn(),
   forkAdminDefinitionDraft: vi.fn(),
   listAdminDraftResources: vi.fn(),
   listAdminPublicationResources: vi.fn(),

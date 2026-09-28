@@ -152,6 +152,18 @@ export async function getAdminDefinitionDraft(draftId: string): Promise<AdminDef
   return (await response.json()) as AdminDefinitionDraft;
 }
 
+export async function createNewAdminDefinitionDraft(definitionId: string): Promise<AdminDefinitionDraft> {
+  const response = await ownerFetch("/api/v2/admin/definition-drafts/new", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ definitionId })
+  });
+  if (!response.ok) {
+    throw new Error(`Admin new definition failed (${response.status})`);
+  }
+  return (await response.json()) as AdminDefinitionDraft;
+}
+
 export async function forkAdminDefinitionDraft(
   definitionId: string,
   sourceVersion: number,

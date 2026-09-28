@@ -124,6 +124,8 @@ public sealed record AdminDefinitionPublicationSummaryResponse(
 
 public sealed record AdminCreateDefinitionDraftRequest(string DefinitionId, JsonElement Candidate);
 
+public sealed record AdminCreateNewDefinitionDraftRequest(string DefinitionId);
+
 public sealed record AdminForkDefinitionDraftRequest(string DefinitionId, int SourceVersion, string SourceKind);
 
 public sealed record AdminUpdateDefinitionDraftRequest(long ExpectedRevision, JsonElement Candidate);

@@ -10,6 +10,7 @@ import {
   Input,
   Layout,
   List,
+  Modal,
   Popconfirm,
   Result,
   Select,
@@ -49,6 +50,7 @@ import {
   type AdminInstanceInventoryItem,
   deprecateAdminDefinitionPublication,
   deleteAdminDefinitionDraft,
+  createNewAdminDefinitionDraft,
   forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
@@ -135,6 +137,36 @@ function formatInventoryStatus(status: string) {
   }
   const normalized = status.toLowerCase();
   return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+}
+
+function formatDraftSource(sourceKind: string) {
+  if (sourceKind === "ForkBuiltIn") {
+    return "Built-in source";
+  }
+  if (sourceKind === "New") {
+    return "New definition";
+  }
+  return "Durable source";
+}
+
+export function latestActiveVersion(versions: AdminDefinitionInventoryItem[]): number | null {
+  const active = [...versions]
+    .filter((row) => row.status.toLowerCase() !== "deprecated")
+    .sort((left, right) => right.version - left.version)[0];
+  return active?.version ?? null;
+}
+
+export function formatDefinitionVersionSummary(group: {
+  latestVersion: number;
+  latestStatus: string;
+  versions: AdminDefinitionInventoryItem[];
+}): string {
+  const active = latestActiveVersion(group.versions);
+  const latestStatus = formatInventoryStatus(group.latestStatus);
+  if (active !== null && active !== group.latestVersion) {
+    return `Latest v${group.latestVersion} · ${latestStatus} · Latest active v${active}`;
+  }
+  return `Latest v${group.latestVersion} · ${latestStatus}`;
 }
 
 export function defaultForkSourceVersion(versions: AdminDefinitionInventoryItem[]): number | null {
@@ -263,12 +295,15 @@ export function AdminApp({ route }: { route: AdminRoute }) {
       <Content className="admin-content">
         {route.view === "home" ? (
           <div className="admin-home">
-            <div className="admin-home-intro">
-              <Typography.Title level={2} className="admin-home-title">Agent inventory</Typography.Title>
-              <Typography.Paragraph type="secondary" className="admin-home-subtitle">
-                Inspect published definitions and the agent instances pinned to them.
-              </Typography.Paragraph>
-            </div>
+            <Flex align="start" justify="space-between" gap={12} wrap="wrap" className="admin-home-intro">
+              <div>
+                <Typography.Title level={2} className="admin-home-title">Agent inventory</Typography.Title>
+                <Typography.Paragraph type="secondary" className="admin-home-subtitle">
+                  Inspect published definitions and the agent instances pinned to them.
+                </Typography.Paragraph>
+              </div>
+              <NewDefinitionButton />
+            </Flex>
             <div className="admin-inventory-grid">
               <InventorySection
                 title="Definitions"
@@ -288,7 +323,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                         secondary: group.definitionId,
                         description: `Latest-version persona: ${group.defaultPersona} · ${group.versions.length} ${
                           group.versions.length === 1 ? "version" : "versions"
-                        } · latest v${group.latestVersion}`,
+                        } · ${formatDefinitionVersionSummary(group)}`,
                         tag: group.latestStatus,
                         onClick: () => navigateToAppPath(adminDefinitionPath(group.definitionId))
                       }))
@@ -347,6 +382,66 @@ export function AdminApp({ route }: { route: AdminRoute }) {
       </Content>
     </Layout>
     </App>
+  );
+}
+
+function NewDefinitionButton() {
+  const { message } = App.useApp();
+  const [open, setOpen] = useState(false);
+  const [definitionId, setDefinitionId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const definitionIdPattern = /^[a-z0-9-]{1,64}$/;
+
+  const createNewDefinition = async () => {
+    const nextId = definitionId.trim();
+    if (!definitionIdPattern.test(nextId)) {
+      message.error("Definition ID must be lowercase letters, digits, or hyphens.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const draft = await createNewAdminDefinitionDraft(nextId);
+      setOpen(false);
+      setDefinitionId("");
+      navigateToAppPath(adminDefinitionPath(draft.definitionId));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "New definition failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Button type="primary" onClick={() => setOpen(true)}>
+        New definition
+      </Button>
+      <Modal
+        title="New definition"
+        open={open}
+        okText="Create draft"
+        cancelText="Cancel"
+        confirmLoading={busy}
+        okButtonProps={{ disabled: !definitionIdPattern.test(definitionId.trim()) }}
+        onOk={() => void createNewDefinition()}
+        onCancel={() => {
+          if (!busy) {
+            setOpen(false);
+          }
+        }}
+      >
+        <label className="admin-draft-field">
+          <Typography.Text strong>Definition ID</Typography.Text>
+          <Input
+            aria-label="Definition ID"
+            value={definitionId}
+            onChange={(event) => setDefinitionId(event.target.value)}
+            placeholder="field-guide"
+            autoComplete="off"
+          />
+        </label>
+      </Modal>
+    </>
   );
 }
 
@@ -464,6 +559,7 @@ function DefinitionDetail({
   const [editorView, setEditorView] = useState<DefinitionEditorView>("form");
   const [busy, setBusy] = useState(false);
   const editorSurfaceRef = useRef<HTMLElement | null>(null);
+  const openedUnpublishedDraftRef = useRef(false);
 
   const dirtyCandidate = activeDraft !== null && !candidatesEqual(candidate, activeDraft.candidate);
   const dirty = activeDraft !== null && (dirtyCandidate || jsonError !== null);
@@ -527,10 +623,10 @@ function DefinitionDetail({
   }, [definitionId]);
 
   useEffect(() => {
-    if (definitions.kind === "ready" && rows.length > 0) {
+    if (definitions.kind === "ready") {
       void reloadLifecycle();
     }
-  }, [definitions.kind, rows.length, reloadLifecycle]);
+  }, [definitions.kind, reloadLifecycle]);
 
   useEffect(() => {
     if (!group) {
@@ -572,6 +668,14 @@ function DefinitionDetail({
       setBusy(false);
     }
   }, [loadCandidate]);
+
+  useEffect(() => {
+    if (group || openedUnpublishedDraftRef.current || activeDraft || draftSummaries.length !== 1) {
+      return;
+    }
+    openedUnpublishedDraftRef.current = true;
+    void selectDraft(draftSummaries[0].draftId);
+  }, [group, activeDraft, draftSummaries, selectDraft]);
 
   const deleteDraft = async (draft: AdminDefinitionDraftSummary, expectedRevision: number) => {
     setBusy(true);
@@ -749,9 +853,14 @@ function DefinitionDetail({
           <Typography.Title level={2}>{group.logicalName}</Typography.Title>
           <Typography.Text type="secondary">{group.definitionId}</Typography.Text>
           <Typography.Text>Latest-version persona: {group.defaultPersona}</Typography.Text>
+          <Typography.Text>{formatDefinitionVersionSummary(group)}</Typography.Text>
           <Flex gap={8} wrap="wrap">
             <Tag>{group.versions.length} {group.versions.length === 1 ? "version" : "versions"}</Tag>
-            <Tag color="blue">{group.latestStatus}</Tag>
+            <Tag>{formatInventoryStatus(group.latestStatus)}</Tag>
+            {latestActiveVersion(group.versions) !== null
+              && latestActiveVersion(group.versions) !== group.latestVersion ? (
+                <Tag color="blue">Latest active v{latestActiveVersion(group.versions)}</Tag>
+              ) : null}
           </Flex>
         </div>
       ) : (
@@ -766,10 +875,10 @@ function DefinitionDetail({
           action={<Button size="small" onClick={onRetryDefinitions}>Retry</Button>}
         />
       ) : null}
-      {definitions.kind === "ready" && rows.length === 0 ? (
+      {definitions.kind === "ready" && !group && !lifecycleLoading && draftSummaries.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
-      {group && activeDraft ? (
+      {(group || draftSummaries.length > 0) && activeDraft ? (
         <section ref={editorSurfaceRef} className="admin-draft-focused" aria-label="Draft editor">
           <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="admin-draft-focused-toolbar">
             {dirty ? (
@@ -825,8 +934,9 @@ function DefinitionDetail({
             onError={setLifecycleError}
           />
         </section>
-      ) : group ? (
+      ) : group || lifecycleLoading || draftSummaries.length > 0 ? (
         <div className="admin-definition-workspace">
+          {group ? (
           <section aria-label="Definition versions" className="admin-definition-panel admin-definition-versions">
             <Flex align="baseline" justify="space-between" gap={12} className="admin-definition-panel-heading">
               <Typography.Title level={4}>Versions</Typography.Title>
@@ -839,12 +949,17 @@ function DefinitionDetail({
                     <Flex gap={8} wrap="wrap" align="center">
                       <Typography.Text>{row.displayName} · {row.source} · {row.status}</Typography.Text>
                       {row.version === group.latestVersion ? <Tag color="blue">Latest</Tag> : null}
+                      {row.version === latestActiveVersion(group.versions)
+                        && row.version !== group.latestVersion ? (
+                          <Tag color="blue">Latest active</Tag>
+                        ) : null}
                     </Flex>
                   </Descriptions.Item>
                 ))}
               </Descriptions>
             </div>
           </section>
+          ) : null}
           <section aria-label="Definition drafts" className="admin-definition-panel admin-definition-drafts">
             <div className="admin-definition-panel-heading">
               <Typography.Title level={4}>Drafts &amp; publishing</Typography.Title>
@@ -853,6 +968,7 @@ function DefinitionDetail({
               </Typography.Text>
             </div>
             <div className="admin-definition-panel-body">
+              {group ? (
               <Flex gap={8} wrap="wrap" align="center" className="admin-draft-create">
                 <Select
                   aria-label="Base version"
@@ -880,6 +996,11 @@ function DefinitionDetail({
                   Create draft
                 </Button>
               </Flex>
+              ) : (
+                <Typography.Paragraph type="secondary">
+                  This definition has no published version yet. Edit the starter draft, then validate and publish it.
+                </Typography.Paragraph>
+              )}
           {lifecycleError ? (
             <Alert
               className="admin-draft-status"
@@ -920,7 +1041,7 @@ function DefinitionDetail({
                                 {item.sourceVersion != null ? `Draft from v${item.sourceVersion}` : "New draft"}
                               </Typography.Text>
                               <Typography.Text type="secondary" className="admin-draft-row-meta">
-                                {item.sourceKind === "ForkBuiltIn" ? "Built-in source" : "Durable source"} · Revision{" "}
+                                {formatDraftSource(item.sourceKind)} · Revision{" "}
                                 {item.revision} · Updated {formatAdminTimestamp(item.updatedAt)}
                               </Typography.Text>
                             </Flex>

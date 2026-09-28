@@ -51,6 +51,11 @@ public sealed class AgentDefinitionLifecycleService(
         return draft;
     }
 
+    public ValueTask<AgentDefinitionDraft> CreateNewDraftAsync(
+        string definitionId,
+        CancellationToken cancellationToken = default) =>
+        CreateDraftAsync(definitionId, AgentDefinitionStarter.Create(definitionId, aliases), cancellationToken);
+
     public async ValueTask<AgentDefinitionDraft> ForkDraftAsync(
         string definitionId,
         int sourceVersion,

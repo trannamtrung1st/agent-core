@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Api.Http;
 using Microsoft.AspNetCore.Builder;
 using AgentCore.Application.Admin;
@@ -345,6 +346,40 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var client = _factory.CreateClient();
         var response = await client.GetAsync("/api/v1/agents");
         response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Admin_definition_draft_new_stores_starter_without_a_fork_and_reopens_it()
+    {
+        var client = OwnerClient();
+        var createdResponse = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/new",
+            new AdminCreateNewDefinitionDraftRequest("p76-new-agent"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>(JsonOptions());
+        Assert.NotNull(created);
+        Assert.Equal("New", created!.SourceKind);
+        Assert.Null(created.SourceVersion);
+        Assert.Equal("p76-new-agent", created.DefinitionId);
+        var starterInstructions = created.Candidate.GetProperty("systemInstructions").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(starterInstructions));
+        var serialized = created.Candidate.GetRawText();
+        Assert.DoesNotContain("OPENROUTER_API_KEY", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-", serialized, StringComparison.Ordinal);
+
+        var edited = JsonNode.Parse(serialized)!.AsObject();
+        edited["systemInstructions"] = "Edited after create";
+        var update = await client.PutAsJsonAsync(
+            $"/api/v2/admin/definition-drafts/{created.DraftId}",
+            new AdminUpdateDefinitionDraftRequest(created.Revision, JsonSerializer.SerializeToElement(edited)));
+        update.EnsureSuccessStatusCode();
+
+        var reopened = await client.GetFromJsonAsync<AdminDefinitionDraftResponse>(
+            $"/api/v2/admin/definition-drafts/{created.DraftId}",
+            JsonOptions());
+        Assert.NotNull(reopened);
+        Assert.Equal("Edited after create", reopened!.Candidate.GetProperty("systemInstructions").GetString());
+        Assert.NotEqual(starterInstructions, reopened.Candidate.GetProperty("systemInstructions").GetString());
     }
 
     [Fact]
