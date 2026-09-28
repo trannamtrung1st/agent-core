@@ -130,7 +130,6 @@ public sealed class SqliteAgentDefinitionResourceAdminStore(
         draftRow.Revision += 1;
         draftRow.UpdatedAtUtc = bind.UpdatedAt.ToUnixTimeMilliseconds();
         var byId = rows.ToDictionary(row => row.ResourceId, StringComparer.Ordinal);
-        var bound = new List<AgentDefinitionDraftResource>(prepared.Count);
         foreach (var item in prepared)
         {
             var resourceId = item.ResourceId is Guid id && byId.ContainsKey(id.ToString("D"))
@@ -159,15 +158,18 @@ public sealed class SqliteAgentDefinitionResourceAdminStore(
             {
                 db.AgentDefinitionDraftResources.Add(mapped);
             }
-
-            bound.Add(resource);
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var stored = await db.AgentDefinitionDraftResources
+            .Where(row => row.DraftId == draftKey)
+            .OrderBy(row => row.LogicalPath)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new AgentDefinitionDraftResourceBatchBound(
             draftRow.Revision,
-            bound.OrderBy(item => item.LogicalPath, StringComparer.Ordinal).ToArray());
+            stored.Select(DefinitionResourcePersistence.MapDraftResource).ToArray());
     }
 
     public async ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(

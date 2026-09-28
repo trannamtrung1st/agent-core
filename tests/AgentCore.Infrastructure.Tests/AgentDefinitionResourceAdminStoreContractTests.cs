@@ -555,6 +555,34 @@ public abstract class AgentDefinitionResourceAdminStoreContractTests
     }
 
     [Fact]
+    public async Task Batch_bind_result_includes_resources_already_on_the_draft()
+    {
+        await ForEachStoresAsync(async fixture =>
+        {
+            var now = DateTimeOffset.Parse("2026-01-05T06:20:00Z");
+            var draft = await CreateResourceDraftAsync(fixture, now);
+            var existing = await StoredBatchItemAsync(fixture, "references/kept.md", "kept");
+            var seeded = await fixture.Resources.BindDraftResourcesAsync(
+                new AgentDefinitionDraftResourceBatchBind(draft.DraftId, draft.Revision, [existing], now),
+                CancellationToken.None);
+            var extra = await StoredBatchItemAsync(
+                fixture,
+                "knowledge/policy.md",
+                "policy",
+                AgentDefinitionResourceKind.Knowledge,
+                "text/markdown");
+            var bound = await fixture.Resources.BindDraftResourcesAsync(
+                new AgentDefinitionDraftResourceBatchBind(draft.DraftId, seeded.Revision, [extra], now.AddMinutes(1)),
+                CancellationToken.None);
+
+            Assert.Equal(seeded.Revision + 1, bound.Revision);
+            Assert.Equal(
+                ["knowledge/policy.md", "references/kept.md"],
+                bound.Resources.Select(item => item.LogicalPath).ToArray());
+        });
+    }
+
+    [Fact]
     public async Task Batch_bind_rejects_a_duplicate_path_without_writing_rows()
     {
         await ForEachStoresAsync(async fixture =>
