@@ -1489,6 +1489,10 @@ body,
   font-size: 12px;
 }
 
+.admin-inventory-row-description {
+  flex: 1 1 100%;
+}
+
 .admin-inventory-row-secondary {
   display: block;
   overflow: hidden;

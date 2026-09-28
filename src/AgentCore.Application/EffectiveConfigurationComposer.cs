@@ -9,6 +9,11 @@ using AgentCore.Domain.Triggers;
 
 namespace AgentCore.Application;
 
+/// <summary>
+/// Admin effective-configuration projection and the shared memory-policy default.
+/// This is not the universal runtime configuration object. Session bind, durable work,
+/// and draft evaluation compose their own state from the same resolution primitives.
+/// </summary>
 internal static class EffectiveConfigurationComposer
 {
     public static MemoryPolicy MemoryPolicyOf(AgentDefinition definition) =>

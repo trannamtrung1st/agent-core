@@ -265,15 +265,17 @@ P7.5 may change implementation structure, names, internal APIs, dependency direc
 
 P7.5 must not intentionally change user-visible product behavior.
 
+Checklist items use an explicit status. **Completed** means the work is in the tree. **Verified, no change** means the audit found the existing behavior already satisfies the item. **Deferred** means it stays as it is on purpose and is not open P7.5 work. **Not applicable** means the literal wording does not match the accepted architecture.
+
 Observed through `docs/reports/p7.5-freeze-candidate.md`. Hosted workflow `36348699304` is green on `b112198`:
 
 - Ownership map is in `docs/03-system-architecture.md`. Authoring, Runtime, and Operations are responsibilities, not new projects.
-- `EffectiveConfigurationComposer` owns the Admin projection and the shared memory-policy default. Session bind, detached work, and draft evaluation stay on their own use cases. No policy defect was found.
+- Effective configuration is shared resolution primitives plus use-case-specific composition. `EffectiveConfigurationComposer` is the Admin projection and the shared memory-policy default, not a universal runtime object. The closure audit found no contradictory model, tool, resource, memory, or trigger default.
 - Cohesion audit deferred splits of the large runtime files. History-free instance methods remain because tests still call them.
 - Persistence audit kept SQLite, separate stores, explicit transactions, and the single-process scheduler. Recorded in `docs/15-persistence-and-configuration.md`.
 - Observability audit kept existing counters and added bounded diagnostics for the silent lifecycle, approval, quota, and Admin paths. Recorded in `docs/17-observability-and-operations.md`.
 - Admin draft status, durable publications, and instance identity spacing live in `web/src/app.css`. Chat behavior was rechecked on a Synthetic turn.
-- Canonical handoff names P8 next. P7.5 is frozen on `b112198`. `.agents/context/PRODUCT.md` and `DESIGN.md` describe the shipped Admin surface. `/docs` still wins.
+- Canonical handoff names P8 next. P7.5 is frozen on `b112198`. `docs/13` describes the shipped Admin surface through P7G. `.agents/context/PRODUCT.md` and `DESIGN.md` stay aligned with that surface and defer behavior to `/docs`.
 - The local Synthetic gate and `./scripts/compose-sqlite-volume.sh` passed. Hosted workflow `36348699304` is green on `b112198`.
 
 ---
@@ -349,32 +351,17 @@ Architecture documents and code ownership describe the same system, and every ma
 
 ## P7.5B — Effective configuration and policy consolidation
 
-- [x] Establish one obvious server-side composition path for effective agent configuration.
+- [x] **Completed.** Shared resolution primitives are the composition authority. Inputs may include definition version, instance association, persona revision, model defaults, tool policy, knowledge/resources, memory policy, trigger policy, background-execution policy, and trusted caller/profile context. `EffectiveConfigurationComposer.ComposeAdmin` projects those for Admin. It is not a universal runtime configuration object.
 
-Inputs may include:
+- [x] **Verified, no change.** Chat bind, Admin projection, triggered work, and draft evaluation reuse `MemoryPolicyOf`, `SessionModelBinder.PinDefault`, `ToolCatalog.For`, `ToolPolicy.EvaluateExecution`, `OccurrenceCompatibility`, and `RoleEnvironments` where the semantics match. The closure audit found no contradictory model, tool, resource, memory, or trigger default.
 
-```text
-definition version
-instance association
-persona revision
-model/runtime defaults
-capability/tool policy
-knowledge/resources
-memory policy
-trigger policy
-background-execution policy
-trusted caller/profile context
-```
+- [x] **Not applicable as one object.** Session bind, durable work, and draft evaluation compose their own state from those primitives. They do not call `ComposeAdmin`. Forcing one configuration object would mix Admin projection, live selection, and detached execution.
 
-- [x] Ensure Chat, Admin preview/evaluation, Triggered Work, and future P8 integrations reuse the same authoritative resolution rules where semantics should match.
+- [x] **Verified, no change.** Tool execution stays on `ToolPolicy.EvaluateExecution`. Trigger eligibility stays on `OccurrenceCompatibility`. Memory default stays on `MemoryPolicyOf`. Resource bytes stay on the definition-resource owner. Admin reads project configuration. They do not authorize execution.
 
-- [ ] Do not let each execution surface reconstruct effective configuration independently.
+- [x] **Completed.** Shared policy decisions are centralized only where the contract is shared. Use-case composition stays at the caller.
 
-- [ ] Audit tool, trigger, background-work, Admin, memory, and resource authorization checks for duplicated or contradictory policy evaluation.
-
-- [x] Centralize shared policy decisions only where there is a genuinely shared contract.
-
-- [ ] Keep action-specific approval and ownership checks close enough to execution that stale configuration cannot bypass them.
+- [x] **Verified, no change.** Approval and ownership are rechecked at execution. Detached admission denies session-scoped tools. A stale Admin projection cannot grant a tool or an approval.
 
 ### P7.5B stop condition
 
@@ -384,27 +371,19 @@ Effective configuration and policy decisions have explicit ownership and no know
 
 ## P7.5C — Application complexity and domain cleanup
 
-- [x] Identify services/classes that became orchestration god objects during P4–P7.
+- [x] **Completed.** The cohesion audit identified the large runtime and Admin files. Splits were deferred where a split would not remove a second owner. Recorded in `docs/03-system-architecture.md`.
 
-Refactor only when responsibilities are clearly separable.
+- [x] **Deferred.** History-free `AgentInstanceService` managed methods remain because tests still call them. Production HTTP and `SessionManager` do not. Retiring them is not P7.5 work.
 
-- [ ] Remove transitional compatibility code that is no longer needed after the P7 freeze.
+- [x] **Verified, no change.** `AgentInstanceService` and `AdminAgentInstanceService` are different use cases. `EffectiveConfigurationComposer` and `AdminEffectiveConfigurationResolver` are the assembler and the projection return. Those names stay, and the composer is documented as Admin-specific plus the memory-policy default. No product concept was renamed in this closure.
 
-- [ ] Normalize naming where the same concept has accumulated multiple names.
+- [x] **Verified, no change.** Domain stayed on durable concepts and policies. P7.5 did not move provider or storage mechanics into Domain.
 
-- [ ] Keep Domain focused on durable business concepts/policies rather than provider/storage mechanics.
+- [x] **Verified, no change.** Application stayed on use cases, orchestration, and ports. HTTP mapping, EF, and provider DTOs stayed out of it.
 
-- [ ] Keep Application focused on use cases/orchestration/ports rather than HTTP, EF, file paths, provider DTOs, or frontend-specific details.
+- [x] **Verified, no change.** Infrastructure remains the SQLite, filesystem, Docker, and provider implementation.
 
-- [ ] Keep Infrastructure implementation-specific.
-
-- [ ] Avoid adding:
-
-  - a generic `Common` project;
-  - MediatR solely for indirection;
-  - generic repository-per-entity abstractions;
-  - a universal internal event bus;
-  - microservices merely to make boundaries look cleaner.
+- [x] **Verified, no change.** P7.5 did not add a `Common` project, MediatR, a generic repository, an internal event bus, or a microservice split.
 
 ### P7.5C stop condition
 
@@ -501,9 +480,9 @@ Do not deploy a large observability platform yet, but keep instrumentation produ
 
 - [x] Avoid sensitive content in operational telemetry unless explicitly required and protected.
 
-- [ ] Keep health/readiness checks meaningful.
+- [x] **Verified, no change.** `GET /health` returns `status`, `profile`, and `protocolVersion` after persistence initialization. That is the readiness response for native, Compose, and CI. No second health service was added.
 
-- [ ] Make it possible to export through OpenTelemetry later without requiring OpenTelemetry infrastructure as a local-development dependency now.
+- [x] **Verified, no change.** Instruments use the BCL `ActivitySource` and `Meter` named `AgentCore.Runtime`. No OpenTelemetry package is referenced. `Observability:OtlpEnabled` defaults false and, when true, requires an absolute endpoint without attaching an exporter. A later host can listen to the existing meter and activity source. Local and Synthetic runs do not need a collector.
 
 ### P7.5E stop condition
 
@@ -531,14 +510,9 @@ The phase outcome is the A–E consolidation above, the shared Admin spacing sli
 
 - [x] Keep behavior changes out of refactor commits where practical.
 
-- [ ] Update:
+- [x] **Completed** for the owners that changed: `docs/03-system-architecture.md`, `docs/04-backend-interfaces.md`, `docs/13-frontend-implementation-spec.md`, `docs/15-persistence-and-configuration.md`, `docs/17-observability-and-operations.md`, and the implementation-plan/report references. **Verified, no change** for `docs/10-technology-decisions.md` and `docs/11-repository-structure.md`: no technology or repository-boundary decision changed.
 
-  - `docs/03-system-architecture.md`;
-  - `docs/04-backend-interfaces.md`;
-  - `docs/10-technology-decisions.md`;
-  - `docs/11-repository-structure.md`;
-  - persistence/configuration docs;
-  - relevant implementation-plan/report references.
+- [x] **Completed.** The 2026-09-28 Admin visual audit reviewed home, the definition editor, and an instance error at desktop and 390px, including loading, error, validation, dirty draft, delete and discard confirmations, and keyboard focus. One shared inventory row placed the status tag beside a short description and below a longer one. `.admin-inventory-row-description` now takes the full row so the tag stays on the next line. Deprecate and archive confirmations use the same confirmed-dialog pattern; this disposable catalog had no durable publication or managed instance, so those two dialogs did not render.
 
 - [x] Record a P7.5 closure report with:
 
@@ -662,7 +636,7 @@ Requirements:
   - compatibility/versioning;
   - extension-specific validation/evaluation.
 
-- [ ] Preserve one authoritative effective-configuration path when extensions are enabled.
+- [ ] When an extension is added, reuse the shared resolution primitives for any decision whose semantics should match. Do not introduce a second policy for that decision, and do not fold the extension into one universal configuration object.
 
 - [ ] Revisit a durable mutable Agent Instance workspace only when a concrete cross-session file workflow requires it.
 

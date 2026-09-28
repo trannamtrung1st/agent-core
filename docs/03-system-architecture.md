@@ -96,9 +96,29 @@ Known boundaries that stay separate:
 - `ConversationTurnExecution` stays a session/runtime contract. Admin does not absorb it.
 - `DurableOrderEventIngress.PublishOrderStatusAsync` is the application-event admitter, registered as `IDurableApplicationEventIngress`. `TriggerRegistrationService.AdmitOccurrenceAsync` can insert an occurrence and has no production caller. That method is a test-only port leftover, not a second product owner.
 
+### Effective configuration
+
+Effective configuration is shared authoritative resolution primitives plus use-case-specific composition. It is not one runtime configuration object, and `EffectiveConfigurationComposer` is not that object.
+
+`ComposeAdmin` builds the secret-safe Admin projection. `AdminEffectiveConfigurationResolver` returns it. `MemoryPolicyOf` owns the shared default `definition.MemoryPolicy ?? MemoryPolicy.Disabled`. Session bind, `DurableWorkContextFactory`, and draft evaluation do not call `ComposeAdmin`.
+
+| Primitive | Rule | Where it is applied |
+| --- | --- | --- |
+| `MemoryPolicyOf` | A missing policy is `Disabled` | Admin projection, Admin memory allow checks, explicit user-memory admission |
+| `SessionModelBinder.PinDefault` | Catalog default for the definition | Admin projection, durable-work intake, session snapshot default, initiative |
+| Session model `Bind` | A live session may select a catalog key and reasoning effort | Live session only |
+| `ToolCatalog.For` | Offered tool names from the definition and context | Admin projection, prompt construction |
+| `ToolPolicy.EvaluateExecution` | Execution decision, including the action-specific approval grant and detached denial of session-scoped tools | Live tools, detached work, draft evaluation |
+| `OccurrenceCompatibility.Allows` | Trigger source eligibility | Admin durable-work eligibility, scheduler, routing, session delivery |
+| `RoleEnvironments` | Harness references, knowledge sources, workspace template, tool allowlist | Admin projection, prompt, tool policy, workspace |
+
+Definition-resource bytes stay on `AgentDefinitionResourceService` and `DefinitionPublicationResourceReader`. Admin reads project those bindings. They do not authorize a tool call. A stale Admin projection cannot grant execution, because approval and ownership are checked again at the execution site.
+
+The closure audit found no contradictory model, tool, resource, memory, or trigger default across those callers. No second composer was added.
+
 ### Consolidation audit
 
-`EffectiveConfigurationComposer` builds the Admin projection and the shared memory-policy default. Session model override, detached work, and evaluation stay at their callers. The file audit below does not move code. Line count is not a reason to split.
+The file audit below does not move code. Line count is not a reason to split.
 
 | File | Decision | Evidence |
 | --- | --- | --- |
@@ -185,7 +205,7 @@ Durable schedules and one allowlisted application event are not Session Runtime 
 
 ## P7A Admin read boundary (observed)
 
-P7 adds a distinct Admin product area in the same React SPA and owner-protected read APIs under `/api/v2/admin/...`. Application `AdminReadService` resolves built-in definition inventory, durable instance inventory, and secret-safe effective configuration (resolved catalog model, offered tools, harness references, workspace template id, memory/trigger policy, and durable-work eligibility) from exact pinned definition version and current persona. Admin UI navigation suspends the live SignalR hub and releases capture/playback resources before entering `/admin`; returning to Chat reconnects the remembered session without automatically resuming microphone capture. Authorization reuses trusted-local caller checks plus `OwnerCapabilityFilter`; hiding Admin navigation is not security. Resources, persona edits, and automation administration arrive in later P7 slices. See [Protocol](14-api-and-realtime-protocol.md#http) and [P7A report](reports/p7a-admin-shell-effective-config.md).
+P7 adds a distinct Admin product area in the same React SPA and owner-protected read APIs under `/api/v2/admin/...`. Application `AdminReadService` resolves built-in definition inventory, durable instance inventory, and secret-safe effective configuration (resolved catalog model, offered tools, harness references, workspace template id, memory/trigger policy, and durable-work eligibility) from exact pinned definition version and current persona. Admin UI navigation suspends the live SignalR hub and releases capture/playback resources before entering `/admin`; returning to Chat reconnects the remembered session without automatically resuming microphone capture. Authorization reuses trusted-local caller checks plus `OwnerCapabilityFilter`; hiding Admin navigation is not security. Resources, persona edits, memory and automation, the publish gate, and deprecation/rollback are the later observed slices below. See [Protocol](14-api-and-realtime-protocol.md#http) and [P7A report](reports/p7a-admin-shell-effective-config.md).
 
 ## P7B definition lifecycle (observed)
 
