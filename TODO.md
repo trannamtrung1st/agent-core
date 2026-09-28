@@ -172,6 +172,9 @@ Always keep this section.
 - [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.6/P8 without a concrete requirement.
 
 - [ ] Admin assistant agent remains a future idea.
+- [ ] Same identity but can be used in multiple applications, e.g: Sam can be a customer support in app A, but can also be a member in chat app B.
+- [ ] Workflow/orchestration remains a future idea.
+- [ ] Unattended loop remains a future idea.
 
 - [x] Add proprietary license.
 
