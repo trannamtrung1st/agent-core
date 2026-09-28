@@ -167,7 +167,18 @@ internal static class AdminEndpoints
                     throw AgentCoreErrors.Validation("version must be a positive publication version.");
                 }
 
-                var instance = await instances.CreateManagedAsync(request.DefinitionId, request.Version, cancellationToken)
+                AgentIdentity? persona = request.Persona is null
+                    ? null
+                    : new AgentIdentity(
+                        request.Persona.Name,
+                        request.Persona.Role,
+                        request.Persona.Description,
+                        request.Persona.Tone);
+                var instance = await instances.CreateManagedAsync(
+                        request.DefinitionId,
+                        request.Version,
+                        persona,
+                        cancellationToken)
                     .ConfigureAwait(false);
                 if (instance.Compatibility)
                 {

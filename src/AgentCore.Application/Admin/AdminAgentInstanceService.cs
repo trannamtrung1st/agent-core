@@ -15,9 +15,16 @@ public sealed class AdminAgentInstanceService(
     TimeProvider time,
     ITriggerInstancePolicyReconciliationService? policyReconciliation = null)
 {
+    public ValueTask<AgentInstance> CreateManagedAsync(
+        string definitionId,
+        int version,
+        CancellationToken cancellationToken = default) =>
+        CreateManagedAsync(definitionId, version, persona: null, cancellationToken);
+
     public async ValueTask<AgentInstance> CreateManagedAsync(
         string definitionId,
         int version,
+        AgentIdentity? persona,
         CancellationToken cancellationToken = default)
     {
         var started = Stopwatch.GetTimestamp();
@@ -47,12 +54,31 @@ public sealed class AdminAgentInstanceService(
                 "instanceCreate", "rejected", "notFound", started, definitionId, version, null, null);
             throw AgentCoreErrors.NotFound($"Agent '{definitionId}' was not found.");
         }
+        var storedPersona = definition.Identity;
+        var personaSource = "Default";
+        if (persona is not null)
+        {
+            try
+            {
+                AgentDefinitionValidator.ValidateIdentity(persona);
+            }
+            catch (ArgumentException ex)
+            {
+                OperationalDiagnostics.RecordAdmin(
+                    "instanceCreate", "rejected", "validation", started, definitionId, version, null, null);
+                throw AgentCoreErrors.Validation(ex.Message);
+            }
+
+            storedPersona = persona;
+            personaSource = "Custom";
+        }
+
         var now = time.GetUtcNow();
         var instance = new AgentInstance(
             ids.NewId(),
             definition.Id,
             definition.Version,
-            definition.Identity,
+            storedPersona,
             AgentInstanceLifecycle.Active,
             now,
             now,
@@ -62,7 +88,9 @@ public sealed class AdminAgentInstanceService(
             now,
             definition.Id,
             instance.InstanceId,
-            definition.Version);
+            definition.Version,
+            personaSource: personaSource,
+            personaFingerprint: AdminPersonaHistoryFingerprint.Compute(storedPersona));
         var created = await instances.InsertManagedWithHistoryAsync(instance, append, cancellationToken)
             .ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(

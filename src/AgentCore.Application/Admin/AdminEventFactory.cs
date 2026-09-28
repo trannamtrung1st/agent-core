@@ -68,8 +68,31 @@ public static class AdminEventFactory
         string definitionId,
         Guid instanceId,
         int version,
-        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner,
+        string? personaSource = null,
+        string? personaFingerprint = null)
     {
+        if ((personaSource is null) != (personaFingerprint is null))
+        {
+            throw AgentCoreErrors.Validation(
+                "Managed instance created summary requires persona source and fingerprint together.");
+        }
+
+        var summaryJson = personaSource is null
+            ? JsonSerializer.Serialize(new
+            {
+                definitionId,
+                instanceId = instanceId.ToString("D"),
+                version
+            })
+            : JsonSerializer.Serialize(new
+            {
+                definitionId,
+                instanceId = instanceId.ToString("D"),
+                version,
+                personaSource,
+                personaFingerprint
+            });
         var append = new AdminEventAppend(
             operationId,
             occurredAt,
@@ -79,12 +102,7 @@ public static class AdminEventFactory
             instanceId.ToString("D"),
             1,
             version,
-            JsonSerializer.Serialize(new
-            {
-                definitionId,
-                instanceId = instanceId.ToString("D"),
-                version
-            }));
+            summaryJson);
         AdminEventSummaryPolicy.ValidateAppend(append);
         return append;
     }

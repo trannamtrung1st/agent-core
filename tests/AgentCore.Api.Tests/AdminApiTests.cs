@@ -1301,7 +1301,40 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
                 && item.Summary.TryGetProperty("definitionId", out var definitionId)
                 && definitionId.GetString() == "examiner"
                 && item.Summary.TryGetProperty("version", out var version)
-                && version.GetInt32() == 1);
+                && version.GetInt32() == 1
+                && item.Summary.TryGetProperty("personaSource", out var personaSource)
+                && personaSource.GetString() == "Default");
+    }
+
+    [Fact]
+    public async Task Admin_create_instance_commits_custom_persona_in_one_history_event()
+    {
+        var client = OwnerClient();
+        var create = await client.PostAsJsonAsync(
+            "/api/v2/admin/agent-instances",
+            new AdminCreateAgentInstanceRequest(
+                "examiner",
+                1,
+                new AdminPersonaResponse("Casey", "Guide", "A field guide.", "Direct")));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var instance = await create.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        Assert.NotNull(instance);
+        Assert.Equal("Casey", instance!.Persona.Name);
+        Assert.Equal("Guide", instance.Persona.Role);
+        Assert.Equal("A field guide.", instance.Persona.Description);
+        Assert.Equal("Direct", instance.Persona.Tone);
+        Assert.Equal(1, instance.ActiveVersion);
+        Assert.Equal(1, instance.PersonaRevision);
+        Assert.Equal("Active", instance.Lifecycle);
+        Assert.False(instance.Compatibility);
+
+        var events = await client.GetFromJsonAsync<AdminEventListResponse>(
+            $"/api/v2/admin/events?targetType=agent.instance&targetId={instance.InstanceId}");
+        Assert.NotNull(events);
+        var created = Assert.Single(events!.Items);
+        Assert.Equal(nameof(AdminEventOperationKind.ManagedInstanceCreated), created.Operation);
+        Assert.Equal("Custom", created.Summary.GetProperty("personaSource").GetString());
+        Assert.Equal(64, created.Summary.GetProperty("personaFingerprint").GetString()!.Length);
     }
 
     [Fact]

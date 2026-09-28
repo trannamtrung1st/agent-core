@@ -72,6 +72,21 @@ public static class AdminEventSummaryPolicy
         "version"
     };
 
+    private static readonly HashSet<string> ManagedInstanceCreatedPersonaSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "instanceId",
+        "version",
+        "personaSource",
+        "personaFingerprint"
+    };
+
+    private static readonly HashSet<string> ManagedInstancePersonaSources = new(StringComparer.Ordinal)
+    {
+        "Default",
+        "Custom"
+    };
+
     private static readonly HashSet<string> InstanceDefinitionVersionChangedSummaryPropertyNames = new(StringComparer.Ordinal)
     {
         "definitionId",
@@ -246,12 +261,40 @@ public static class AdminEventSummaryPolicy
 
     private static void ValidateManagedInstanceCreatedSummary(JsonElement root)
     {
-        EnsureExactProperties(root, ManagedInstanceCreatedSummaryPropertyNames);
+        var recordsPersona = root.TryGetProperty("personaSource", out _)
+            || root.TryGetProperty("personaFingerprint", out _);
+        EnsureExactProperties(
+            root,
+            recordsPersona
+                ? ManagedInstanceCreatedPersonaSummaryPropertyNames
+                : ManagedInstanceCreatedSummaryPropertyNames);
         RequireString(root, "definitionId");
         RequireString(root, "instanceId");
         if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number)
         {
             throw AgentCoreErrors.Validation("Managed instance created event summary must include version.");
+        }
+
+        if (!recordsPersona)
+        {
+            return;
+        }
+
+        RequireString(root, "personaSource");
+        var personaSource = root.GetProperty("personaSource").GetString();
+        if (personaSource is null || !ManagedInstancePersonaSources.Contains(personaSource))
+        {
+            throw AgentCoreErrors.Validation("Managed instance created event summary contains an unknown personaSource.");
+        }
+
+        RequireString(root, "personaFingerprint");
+        var fingerprint = root.GetProperty("personaFingerprint").GetString();
+        if (string.IsNullOrEmpty(fingerprint)
+            || fingerprint.Length != 64
+            || !fingerprint.All(static c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+        {
+            throw AgentCoreErrors.Validation(
+                "Managed instance created event summary must include a lowercase SHA-256 persona fingerprint.");
         }
     }
 

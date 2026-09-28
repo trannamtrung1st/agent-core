@@ -12,6 +12,7 @@ import {
   List,
   Modal,
   Popconfirm,
+  Radio,
   Result,
   Select,
   Spin,
@@ -51,6 +52,8 @@ import {
   deprecateAdminDefinitionPublication,
   deleteAdminDefinitionDraft,
   createNewAdminDefinitionDraft,
+  createAdminAgentInstance,
+  type AdminCreateInstancePersona,
   forkAdminDefinitionDraft,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
@@ -302,7 +305,10 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                   Inspect published definitions and the agent instances pinned to them.
                 </Typography.Paragraph>
               </div>
-              <NewDefinitionButton />
+              <Flex gap={8} wrap="wrap">
+                <NewDefinitionButton />
+                <NewInstanceButton groups={definitionGroups} />
+              </Flex>
             </Flex>
             <div className="admin-inventory-grid">
               <InventorySection
@@ -335,7 +341,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 countLabel={instances.kind === "ready"
                   ? `${instances.data.length} ${instances.data.length === 1 ? "instance" : "instances"}`
                   : null}
-                emptyLabel="No instances yet. Start a chat to create compatibility instances."
+                emptyLabel="No instances yet."
                 loading={instances.kind === "loading"}
                 error={instances.kind === "error" ? instances.message : null}
                 unauthorized={instances.kind === "error" ? (instances.unauthorized ?? false) : false}
@@ -442,6 +448,180 @@ function NewDefinitionButton() {
         </label>
       </Modal>
     </>
+  );
+}
+
+function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
+  const { message } = App.useApp();
+  const [open, setOpen] = useState(false);
+  const [definitionId, setDefinitionId] = useState("");
+  const [version, setVersion] = useState<number | null>(null);
+  const [personaMode, setPersonaMode] = useState<"default" | "custom">("default");
+  const [persona, setPersona] = useState<AdminCreateInstancePersona>({
+    name: "",
+    role: "",
+    description: "",
+    tone: ""
+  });
+  const [busy, setBusy] = useState(false);
+  const selectedGroup = groups.find((group) => group.definitionId === definitionId) ?? null;
+  const selectedVersion = selectedGroup?.versions.find((row) => row.version === version) ?? null;
+  const customPersonaReady = personaFieldsReady(persona);
+  const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" || customPersonaReady);
+
+  const openModal = () => {
+    const first = groups[0];
+    if (first) {
+      setDefinitionId(first.definitionId);
+      setVersion(latestActiveVersion(first.versions) ?? first.latestVersion);
+    } else {
+      setDefinitionId("");
+      setVersion(null);
+    }
+    setPersonaMode("default");
+    setPersona({ name: "", role: "", description: "", tone: "" });
+    setOpen(true);
+  };
+
+  const createInstance = async () => {
+    if (!selectedGroup || selectedVersion === null || version === null) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const created = await createAdminAgentInstance(
+        selectedGroup.definitionId,
+        version,
+        personaMode === "custom" ? trimmedPersona(persona) : null
+      );
+      setOpen(false);
+      navigateToAppPath(adminInstancePath(created.instanceId));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "New instance failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Button onClick={openModal}>New instance</Button>
+      <Modal
+        title="New instance"
+        open={open}
+        okText="Create instance"
+        cancelText="Cancel"
+        confirmLoading={busy}
+        okButtonProps={{ disabled: !canCreate }}
+        onOk={() => void createInstance()}
+        onCancel={() => {
+          if (!busy) {
+            setOpen(false);
+          }
+        }}
+      >
+        {groups.length === 0 ? (
+          <Typography.Paragraph>No published definition is available.</Typography.Paragraph>
+        ) : (
+          <Flex vertical gap={12}>
+            <label className="admin-draft-field">
+              <Typography.Text strong>Definition</Typography.Text>
+              <Select
+                aria-label="Definition"
+                value={definitionId}
+                options={groups.map((group) => ({
+                  value: group.definitionId,
+                  label: `${group.logicalName} · ${group.definitionId}`
+                }))}
+                onChange={(nextId) => {
+                  setDefinitionId(nextId);
+                  const next = groups.find((group) => group.definitionId === nextId);
+                  if (next) {
+                    setVersion(latestActiveVersion(next.versions) ?? next.latestVersion);
+                  }
+                }}
+                disabled={busy}
+              />
+            </label>
+            <label className="admin-draft-field">
+              <Typography.Text strong>Published version</Typography.Text>
+              <Select
+                aria-label="Published version"
+                value={version ?? undefined}
+                options={(selectedGroup?.versions ?? []).map((row) => ({
+                  value: row.version,
+                  label: formatForkSourceOptionLabel(row)
+                }))}
+                onChange={(nextVersion) => setVersion(nextVersion)}
+                disabled={busy}
+              />
+            </label>
+            {selectedVersion && selectedVersion.status.toLowerCase() === "deprecated" ? (
+              <Alert
+                type="warning"
+                showIcon
+                message={`v${selectedVersion.version} is deprecated. New instances normally use the latest active publication.`}
+              />
+            ) : null}
+            <Radio.Group
+              aria-label="Persona"
+              value={personaMode}
+              onChange={(event) => setPersonaMode(event.target.value)}
+              disabled={busy}
+            >
+              <Radio value="default">Definition persona</Radio>
+              <Radio value="custom">Custom persona</Radio>
+            </Radio.Group>
+            {personaMode === "custom" ? (
+              <div className="admin-draft-field-grid">
+                <PersonaField label="Persona name" value={persona.name} disabled={busy} onChange={(name) => setPersona({ ...persona, name })} />
+                <PersonaField label="Persona role" value={persona.role} disabled={busy} onChange={(role) => setPersona({ ...persona, role })} />
+                <PersonaField label="Persona description" value={persona.description} disabled={busy} onChange={(description) => setPersona({ ...persona, description })} />
+                <PersonaField label="Persona tone" value={persona.tone} disabled={busy} onChange={(tone) => setPersona({ ...persona, tone })} />
+              </div>
+            ) : null}
+          </Flex>
+        )}
+      </Modal>
+    </>
+  );
+}
+
+function PersonaField({
+  label,
+  value,
+  disabled,
+  onChange
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="admin-draft-field">
+      <Typography.Text strong>{label}</Typography.Text>
+      <Input aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function trimmedPersona(persona: AdminCreateInstancePersona): AdminCreateInstancePersona {
+  return {
+    name: persona.name.trim(),
+    role: persona.role.trim(),
+    description: persona.description.trim(),
+    tone: persona.tone.trim()
+  };
+}
+
+function personaFieldsReady(persona: AdminCreateInstancePersona) {
+  const fields = trimmedPersona(persona);
+  return (
+    fields.name.length >= 1 && fields.name.length <= 256
+    && fields.role.length >= 1 && fields.role.length <= 256
+    && fields.tone.length >= 1 && fields.tone.length <= 256
+    && fields.description.length >= 1 && fields.description.length <= 1024
   );
 }
 

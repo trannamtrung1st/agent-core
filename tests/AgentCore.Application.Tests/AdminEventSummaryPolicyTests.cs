@@ -152,6 +152,24 @@ public sealed class AdminEventSummaryPolicyTests
             Guid.Parse("019944af-00d1-7000-8000-000000000098"),
             2);
         Assert.Contains("\"definitionId\":\"examiner\"", append.SummaryJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("personaSource", append.SummaryJson, StringComparison.Ordinal);
+        AdminEventSummaryPolicy.ValidateAppend(append);
+    }
+
+    [Fact]
+    public void ManagedInstanceCreated_summary_records_persona_source_and_fingerprint()
+    {
+        var persona = new AgentIdentity("Casey", "Guide", "A field guide.", "Direct");
+        var append = AdminEventFactory.ManagedInstanceCreated(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-25T12:00:00Z"),
+            "examiner",
+            Guid.Parse("019944af-00d1-7000-8000-000000000098"),
+            2,
+            personaSource: "Custom",
+            personaFingerprint: AdminPersonaHistoryFingerprint.Compute(persona));
+        Assert.Contains("\"personaSource\":\"Custom\"", append.SummaryJson, StringComparison.Ordinal);
+        Assert.Contains(AdminPersonaHistoryFingerprint.Compute(persona), append.SummaryJson, StringComparison.Ordinal);
         AdminEventSummaryPolicy.ValidateAppend(append);
     }
 

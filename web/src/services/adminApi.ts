@@ -431,6 +431,14 @@ export type AdminAgentInstance = {
   lifecycle: string;
   revision: number;
   personaRevision: number;
+  persona?: { name: string; role: string; description: string; tone: string };
+};
+
+export type AdminCreateInstancePersona = {
+  name: string;
+  role: string;
+  description: string;
+  tone: string;
 };
 
 export type AdminPersonaUpdate = {
@@ -596,12 +604,21 @@ export async function listAdminPublicationResources(
 
 export async function createAdminAgentInstance(
   definitionId: string,
-  version: number
+  version: number,
+  persona?: AdminCreateInstancePersona | null
 ): Promise<AdminAgentInstance> {
+  const body: {
+    definitionId: string;
+    version: number;
+    persona?: AdminCreateInstancePersona;
+  } = { definitionId, version };
+  if (persona) {
+    body.persona = persona;
+  }
   const response = await ownerFetch("/api/v2/admin/agent-instances", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ definitionId, version })
+    body: JSON.stringify(body)
   });
   if (!response.ok) {
     throw new Error(`Admin create instance failed (${response.status})`);

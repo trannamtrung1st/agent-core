@@ -13,6 +13,7 @@ vi.mock("../../services/adminApi", () => ({
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
   createNewAdminDefinitionDraft: vi.fn(),
+  createAdminAgentInstance: vi.fn(),
   forkAdminDefinitionDraft: vi.fn(),
   listAdminDraftResources: vi.fn(),
   listAdminPublicationResources: vi.fn(),

@@ -30,7 +30,8 @@ internal static class AdminHttpMapping
             instance.Compatibility,
             instance.Lifecycle.ToString(),
             instance.Revision,
-            instance.PersonaRevision);
+            instance.PersonaRevision,
+            ToPersona(instance.Persona));
 
     public static AdminEffectiveConfigurationResponse ToEffectiveConfiguration(AdminEffectiveConfiguration config) =>
         new(

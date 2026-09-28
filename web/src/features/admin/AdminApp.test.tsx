@@ -81,6 +81,7 @@ vi.mock("../../services/adminApi", () => ({
   updateAdminDefinitionDraft: vi.fn(),
   publishAdminDefinitionDraft: vi.fn(),
   createNewAdminDefinitionDraft: vi.fn(),
+  createAdminAgentInstance: vi.fn(),
   forkAdminDefinitionDraft: vi.fn(),
   listAdminDraftResources: vi.fn(),
   listAdminPublicationResources: vi.fn(),
@@ -101,6 +102,7 @@ vi.mock("../../services/adminApi", () => ({
 import * as antd from "antd";
 import {
   createNewAdminDefinitionDraft,
+  createAdminAgentInstance,
   getAdminDefinitionDraft,
   getAdminEffectiveConfig,
   deleteAdminDefinitionDraft,
@@ -369,7 +371,7 @@ describe("AdminApp", () => {
     expect(screen.getByText(/Instances unavailable/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByLabelText("Instances")).getByRole("button", { name: "Retry" }));
     await waitFor(() => {
-      expect(screen.getByText("No instances yet. Start a chat to create compatibility instances.")).toBeInTheDocument();
+      expect(screen.getByText("No instances yet.")).toBeInTheDocument();
     });
   });
 
@@ -1260,6 +1262,103 @@ describe("AdminApp", () => {
       expect(createNewAdminDefinitionDraft).toHaveBeenCalledWith("field-guide");
     });
     expect(createNewAdminDefinitionDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates a managed instance from the latest active version without a custom persona", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 6,
+        source: "durable",
+        status: "deprecated",
+        displayName: "Examiner v6"
+      },
+      {
+        definitionId: "examiner",
+        version: 5,
+        source: "durable",
+        status: "published",
+        displayName: "Examiner v5"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(createAdminAgentInstance).mockResolvedValue({
+      instanceId,
+      definitionId: "examiner",
+      activeVersion: 5,
+      compatibility: false,
+      lifecycle: "Active",
+      revision: 1,
+      personaRevision: 1
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    expect(screen.getByText("v5 · Durable · Published")).toBeInTheDocument();
+    expect(screen.queryByText(/is deprecated/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create instance" }));
+
+    await waitFor(() => {
+      expect(createAdminAgentInstance).toHaveBeenCalledWith("examiner", 5, null);
+    });
+    expect(createAdminAgentInstance).toHaveBeenCalledTimes(1);
+  });
+
+  it("warns on a deprecated version and sends a custom persona", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "examiner",
+        version: 6,
+        source: "durable",
+        status: "deprecated",
+        displayName: "Examiner v6"
+      },
+      {
+        definitionId: "examiner",
+        version: 5,
+        source: "durable",
+        status: "published",
+        displayName: "Examiner v5"
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(createAdminAgentInstance).mockResolvedValue({
+      instanceId,
+      definitionId: "examiner",
+      activeVersion: 6,
+      compatibility: false,
+      lifecycle: "Active",
+      revision: 1,
+      personaRevision: 1,
+      persona: { name: "Casey", role: "Guide", description: "A field guide.", tone: "Direct" }
+    });
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    fireEvent.mouseDown(screen.getByLabelText("Published version"));
+    fireEvent.click(await screen.findByText("v6 · Durable · Deprecated"));
+    expect(
+      screen.getByText("v6 is deprecated. New instances normally use the latest active publication.")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Custom persona" }));
+    fireEvent.change(screen.getByLabelText("Persona name"), { target: { value: "Casey" } });
+    fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Guide" } });
+    fireEvent.change(screen.getByLabelText("Persona description"), { target: { value: "A field guide." } });
+    fireEvent.change(screen.getByLabelText("Persona tone"), { target: { value: "Direct" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create instance" }));
+
+    await waitFor(() => {
+      expect(createAdminAgentInstance).toHaveBeenCalledWith("examiner", 6, {
+        name: "Casey",
+        role: "Guide",
+        description: "A field guide.",
+        tone: "Direct"
+      });
+    });
   });
 
   it("opens a stored starter draft when the definition has no published version", async () => {

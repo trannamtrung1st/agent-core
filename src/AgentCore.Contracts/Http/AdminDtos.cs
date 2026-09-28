@@ -230,7 +230,10 @@ public sealed record AdminDefinitionPublicationResourceResponse(
     string ContentSha256,
     long ByteLength);
 
-public sealed record AdminCreateAgentInstanceRequest(string DefinitionId, int Version);
+public sealed record AdminCreateAgentInstanceRequest(
+    string DefinitionId,
+    int Version,
+    AdminPersonaResponse? Persona = null);
 
 public sealed record AdminAgentInstanceResponse(
     string InstanceId,
@@ -239,7 +242,8 @@ public sealed record AdminAgentInstanceResponse(
     bool Compatibility,
     string Lifecycle,
     long Revision,
-    long PersonaRevision);
+    long PersonaRevision,
+    AdminPersonaResponse Persona);
 
 public sealed record AdminUpdateAgentInstancePersonaRequest(
     long ExpectedRevision,
