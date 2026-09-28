@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` on **2026-09-28**.
+Reviewed against `main` at `ce0d2e5` on **2026-09-29**.
 
 ---
 
@@ -165,16 +165,234 @@ Do not add a general cross-session Agent Instance filesystem without a concrete 
 
 ---
 
+# Product / Architecture North Star
+
+**Status: deferred/future guidance, not an active implementation phase.**
+
+This section records long-term product and architecture direction. It does not reopen P0–P7, P7.5, or P7.6; widen P8; or pull P9/P10 infrastructure forward. Keep the concepts unnumbered until concrete workflows establish their dependencies and implementation order.
+
+Long-term product direction:
+
+> Agent Core hosts durable AI identities that can participate in applications, conversations, tasks, and events with scoped memory, capabilities, authority, and working context.
+
+The current conversation runtime remains valid. The long-term product should evolve from primarily hosting conversations toward hosting durable agent identities that can retain continuity and participate in more than one application.
+
+Conceptually:
+
+```text
+Agent Definition
+      ↓
+Definition Version
+      ↓
+Durable Agent Identity / Agent Instance
+      │
+      ├── persona / trusted identity
+      ├── learned memory
+      ├── capability bindings
+      ├── workspace scopes
+      └── application bindings
+                │
+        ┌───────┼────────┐
+        ↓       ↓        ↓
+      App A    App B    App C
+        │       │        │
+      role    role     role
+      policy  policy   policy
+      tools   tools    tools
+        │       │        │
+      sessions / tasks / events
+```
+
+The existing durable `AgentInstance` is the closest current continuity anchor. Treat “durable agent identity” as a long-term product concept grounded in that lifecycle, not as permission to merge current entities into one mutable aggregate.
+
+Preserve these distinctions:
+
+```text
+Identity ≠ Definition
+Identity ≠ Role
+Identity ≠ Application
+Identity ≠ Session
+Identity ≠ Authority
+```
+
+Also preserve:
+
+- Agent Definition is reusable, versioned configuration;
+- Agent Definition Version is immutable published configuration;
+- durable identity / Agent Instance anchors continuity and ownership;
+- persona/trusted identity, learned memory, workspaces, capability bindings, application bindings, Sessions, Triggers, WorkItems, and tasks retain their own ownership and lifecycle;
+- changing a role, application binding, definition version, persona, memory scope, or authority grant must not silently become an identity reset;
+- current Definition fields named “identity” remain Definition configuration and are not by themselves the durable continuity record.
+
+## Application Binding — future concept
+
+An **Application Binding** should describe how the same durable identity participates in one host/application without redefining that identity.
+
+For example:
+
+```text
+Sam + Application A → customer-support role
+Sam + Application B → team-member role
+Sam + Application C → researcher role
+```
+
+A future binding may include:
+
+- role;
+- application-specific instructions/context;
+- knowledge/resources;
+- permitted capability/tool bindings;
+- authority and policy;
+- application-scoped memory where required;
+- application-scoped workspace where required;
+- trigger/event subscriptions.
+
+Application Binding is not implemented today. Do not add it until a concrete multi-application workflow defines ownership, mutation, versioning, authorization, and portability requirements. It must not become a back door for rewriting the underlying Agent Definition, persona, or identity-wide state.
+
+## Capabilities, tools, and authority — future direction
+
+A durable identity does not directly own arbitrary tool implementations or credentials.
+
+Preserve the conceptual flow:
+
+```text
+registered capability/provider
+        ↓
+identity/application capability binding
+        ↓
+policy/authorization
+        ↓
+execution
+```
+
+Requirements:
+
+- registry, policy, and execution remain separate;
+- capability/provider registration does not grant an identity permission to use it;
+- capability availability does not imply execution authority;
+- identity-wide and application/context-specific grants must be distinguishable and enforceable;
+- credentials remain outside model-visible context, definitions, bindings, Admin projections, and normal history/logs;
+- approvals remain action-specific where appropriate;
+- background or unattended execution cannot bypass authorization;
+- execution rechecks current ownership, scope, policy, and any exact-action approval;
+- provider-specific DTOs and secrets remain at Infrastructure edges.
+
+P8 may extend a real provider seam, but it must not implement this entire future binding model speculatively.
+
+## Scoped workspace direction — future
+
+Keep current `SessionWorkspace` semantics intact: it is mutable, isolated, and Session-owned. Do not turn P8 into a universal persistent Agent Instance filesystem.
+
+Persistent-worker workflows may eventually justify distinct scopes:
+
+```text
+Identity/Home Workspace
+Application Workspace
+Task Workspace
+Session Workspace
+```
+
+These are separate ownership, visibility, retention, authorization, and cleanup lifecycles—not directories in one giant shared filesystem. Introduce a scope only when a concrete workflow requires it, and preserve immutable Definition resources, Attachments, Artifacts, and mutable workspace data as distinct concepts.
+
+## Scoped memory direction — future
+
+Continue separating:
+
+```text
+trusted persona/profile
+instructions
+knowledge/resources
+learned memory
+runtime/session state
+```
+
+Identity portability may eventually require learned-memory scopes such as:
+
+```text
+Identity/general memory
+Relationship/user memory
+Application-scoped memory
+Task memory
+Session memory
+```
+
+Memory does not automatically propagate across applications. Admission, visibility, retrieval, mutation, reset, retention, and portability must follow explicit scope, policy, authority, and ownership. Learned memory must not silently override trusted persona/profile, instructions, or authoritative knowledge.
+
+## Tasks, teams, and durable execution — future
+
+Durable agent identities may eventually communicate, send/receive tasks, delegate work, coordinate, react to events/triggers, and participate in a team or organization. This is not authorization to start a speculative multi-agent framework or universal orchestration engine.
+
+Prefer extending existing primitives when concrete workflows require it:
+
+```text
+identity
+authorization
+triggers
+WorkItems
+approvals
+sessions
+memory
+durable execution
+```
+
+Unattended or goal-oriented execution must not be a permanent `while(true)` LLM loop. The target is resumable, bounded, durable work:
+
+```text
+Goal / Task
+    ↓
+WorkItem
+    ↓
+agent action
+    ↓
+checkpoint / observation
+    ↓
+continue
+or wait for event
+or wait for approval
+or complete
+```
+
+Execution may resume from a trigger, external application event, another agent, scheduled occurrence, human approval, or retry/recovery.
+
+Termination conditions may include:
+
+- goal satisfied;
+- explicit stop condition;
+- deadline/time limit;
+- budget/resource limit;
+- policy stop;
+- human cancellation;
+- unrecoverable failure.
+
+P5 Trigger registrations/occurrences and P6 durable WorkItems are the existing architectural foundation for this direction. Future work should extend those contracts where justified rather than introduce a competing execution model.
+
+The long-term runtime model therefore expands conceptually from only:
+
+```text
+Agent → Session → Conversation
+```
+
+toward:
+
+```text
+                Durable Agent Identity
+                         │
+          ┌──────────────┼──────────────┐
+          ↓              ↓              ↓
+     Conversation       Task           Event
+          │              │              │
+       Session        WorkItem       Trigger
+```
+
+This is a product/architecture north star, not a claim that the current conversation runtime is obsolete or that these future capabilities are implemented.
+
+---
+
 # Maintainer notes
 
 Always keep this section.
 
-- [ ] Agent communication, multi-agent orchestration/workflows, and related concepts remain future ideas. Do not pull them into P7.6/P8 without a concrete requirement.
-
 - [ ] Admin assistant agent remains a future idea.
-- [ ] Same identity but can be used in multiple applications, e.g: Sam can be a customer support in app A, but can also be a member in chat app B.
-- [ ] Workflow/orchestration remains a future idea.
-- [ ] Unattended loop remains a future idea.
 
 - [x] Add proprietary license.
 
@@ -554,7 +772,9 @@ P8 extension seams are evidence-based rather than speculative
 
 # P7.6 — Admin usability closure
 
-**Status: ACTIVE.**
+**Status: closed/frozen on `17d89ae`.**
+
+The unchecked acceptance items below are retained as the historical phase specification, not as open work. Observed closure evidence is recorded at the end of P7.6 and in `docs/reports/p7.6-freeze-candidate.md`.
 
 ## Goal
 
@@ -1175,7 +1395,7 @@ Do **not** pull these into P7.6:
 - distributed job/queue infrastructure;
 - production PostgreSQL/Redis/Kubernetes migration.
 
-These remain P8 or later and must be justified by a concrete requirement.
+These remain deferred future work. P8 may address only a concrete extensibility need that belongs to its bounded goal; the rest must wait for their own evidence and dependency order.
 
 ---
 
@@ -1238,6 +1458,8 @@ P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA.
 
 When P8 begins, start from one concrete provider need.
 
+The Product / Architecture North Star above is not itself a P8 backlog. P8 must remain evidence-driven and narrowly scoped to real extension seams.
+
 ## Goal
 
 Make the established Agent Core harness extensible without turning every implementation detail into a plugin API.
@@ -1283,6 +1505,8 @@ Requirements:
 - [ ] When an extension is added, reuse the shared resolution primitives for any decision whose semantics should match. Do not introduce a second policy for that decision, and do not fold the extension into one universal configuration object.
 
 - [ ] Revisit a durable mutable Agent Instance workspace only when a concrete cross-session file workflow requires it.
+
+  Any accepted design must name its scope and lifecycle explicitly; do not generalize `SessionWorkspace` into a universal identity filesystem.
 
 - [ ] Revisit richer reusable evaluation suites when multiple harness/provider implementations make them useful.
 
@@ -1486,7 +1710,7 @@ microservices because modules exist
 
 # Deferred / optional provider work
 
-These items do not block P7.6.
+These items do not block P8.
 
 ## Real P3 provider verification
 
@@ -1573,26 +1797,27 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] Durable triggered/background execution — P6 frozen on `30adaeb`.
 - [x] P7 Harness Admin: draft/version/publish, resources, instances/persona, memory/automation administration, validation/evaluation, history/rollback.
 - [x] P7.5 architecture/infrastructure-readiness consolidation frozen on `70a5720`.
+- [x] P7.6 Admin usability closure frozen on `17d89ae`.
 
 ---
 
 # Next implementation item
 
-**P7.6 — Admin usability closure** is next.
+**P8 — harness/platform extensibility** is next.
 
 Bound it to:
 
 ```text
-1. complete Definition Form + Advanced JSON editing
-2. explicit New Definition / New Instance flows
-3. clearer Definition/version semantics
-4. explicit Knowledge Source ↔ Resource binding
-5. multi-file + folder resource ingestion with coherent batch revision semantics
-6. final Impeccable UX review, tests, docs/design sync, and freeze evidence
+1. begin from one concrete provider or integration need
+2. add only the narrow extension seam required by a real second implementation
+3. preserve registry / policy / execution separation
+4. preserve provider DTO, credential, lifecycle, and ownership boundaries
+5. validate compatibility and failure behavior only to the degree the extension requires
+6. keep future identity/application/task/team concepts deferred
 ```
 
-P7 and P7.5 remain frozen. Do not rewrite their closure evidence to make P7.6 look historical.
+P0–P7, P7.5, and P7.6 remain frozen. Do not rewrite their closure evidence or treat the Product / Architecture North Star as implemented behavior.
 
-P7.6 is frozen on `17d89ae`. Begin P8 from one concrete provider/extensibility need.
+P7.6 is frozen on `17d89ae`. P9 and P10 remain requirement-triggered and must not be pulled forward to support speculative P8 work.
 
-Do **not** begin P7.6 or P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+Do **not** begin P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
