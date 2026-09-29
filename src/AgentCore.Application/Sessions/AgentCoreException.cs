@@ -49,6 +49,9 @@ public static class AgentCoreErrors
     public static AgentCoreException Persistence(string detail) =>
         new("SessionPersistenceUnavailable", detail, 503, fatal: false);
 
+    public static AgentCoreException Persistence(string detail, Guid diagnosticId) =>
+        new("SessionPersistenceUnavailable", detail, 503, fatal: false) { DiagnosticId = diagnosticId };
+
     public static AgentCoreException Conflict(string detail) =>
         new("Conflict", detail, 409, fatal: true);
 

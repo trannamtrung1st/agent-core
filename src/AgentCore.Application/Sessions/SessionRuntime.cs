@@ -70,6 +70,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly Channel<PersistJob> _persistJobs = Channel.CreateUnbounded<PersistJob>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly ConcurrentDictionary<long, PersistJob> _pendingPersist = new();
+    private readonly ConcurrentDictionary<TaskCompletionSource<bool>, Guid> _diagnosedPersistence = new();
     private readonly object _idleGate = new();
     private TaskCompletionSource _abandonPersist = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _persistToken;
@@ -313,10 +314,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds, behavior), urgent: false))
         {
             persisted.TrySetResult(false);
+            PersistenceFailureDiagnosticId = null;
             return null;
         }
 
-        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+        return await WaitForPersistenceAsync(persisted, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<bool> StageAttachmentsAsync(IReadOnlyList<Guid> attachmentIds, CancellationToken cancellationToken = default)
@@ -439,10 +441,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!Enqueue(new AttachReceived(context, attached), urgent: false))
         {
             attached.TrySetResult(false);
+            PersistenceFailureDiagnosticId = null;
             return false;
         }
 
-        return await WaitOrCancelAsync(attached, false, cancellationToken).ConfigureAwait(false);
+        return await WaitForPersistenceAsync(attached, cancellationToken).ConfigureAwait(false) == true;
     }
 
     public async Task<bool> RequestEndAsync(CancellationToken cancellationToken = default)
@@ -453,10 +456,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!Enqueue(new EndSessionReceived(context, persisted), urgent: true))
         {
             persisted.TrySetResult(false);
+            PersistenceFailureDiagnosticId = null;
             return false;
         }
 
-        return await WaitOrCancelAsync(persisted, false, cancellationToken).ConfigureAwait(false);
+        return await WaitForPersistenceAsync(persisted, cancellationToken).ConfigureAwait(false) == true;
     }
 
     public Task<bool> RequestDeactivateAsync(CancellationToken cancellationToken = default) =>
@@ -814,6 +818,27 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (OperationCanceledException)
         {
             return cancelled;
+        }
+    }
+
+    public Guid? PersistenceFailureDiagnosticId { get; private set; }
+
+    private async Task<bool?> WaitForPersistenceAsync(
+        TaskCompletionSource<bool> waiter,
+        CancellationToken cancellationToken)
+    {
+        var accepted = await WaitOrCancelAsync(waiter, false, cancellationToken).ConfigureAwait(false);
+        PersistenceFailureDiagnosticId = _diagnosedPersistence.TryRemove(waiter, out var diagnosticId)
+            ? diagnosticId
+            : null;
+        return accepted;
+    }
+
+    private void NotePersistenceDiagnostic(TaskCompletionSource<bool>? waiter, Guid diagnosticId)
+    {
+        if (waiter is not null)
+        {
+            _diagnosedPersistence[waiter] = diagnosticId;
         }
     }
 
@@ -4579,6 +4604,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     diagnosticId)),
                                 cancellationToken)
                         .ConfigureAwait(false);
+                    NotePersistenceDiagnostic(job.Ended, diagnosticId);
                     job.Ended?.TrySetResult(false);
                     return;
                 }
@@ -4589,6 +4615,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     await FailPersistenceAsync(cancellationToken, diagnosticId).ConfigureAwait(false);
                 }
 
+                NotePersistenceDiagnostic(job.Ended, diagnosticId);
                 job.Ended?.TrySetResult(false);
                 return;
             }

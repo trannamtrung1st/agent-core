@@ -295,6 +295,17 @@ public sealed class SqliteHostRecoveryTests
             .AddMessagePackProtocol()
             .Build();
         await hub.StartAsync();
+        string? eventDiagnosticId = null;
+        hub.On<ServerEvent>("SessionEvent", evt =>
+        {
+            if (evt.Type == "error"
+                && evt.Payload.TryGetValue("code", out var code)
+                && string.Equals(Convert.ToString(code), "SessionPersistenceUnavailable", StringComparison.Ordinal)
+                && evt.Payload.TryGetValue("diagnosticId", out var id))
+            {
+                eventDiagnosticId = Convert.ToString(id);
+            }
+        });
         var ready = ReadyWaiter(hub);
         var attached = await hub.InvokeAsync<CommandAck>("Attach", Attach(session.SessionId));
         Assert.True(attached.Accepted, attached.Error?.Message);
@@ -315,11 +326,13 @@ public sealed class SqliteHostRecoveryTests
         Assert.False(ended.Accepted);
         Assert.Equal("SessionPersistenceUnavailable", ended.Error?.Code);
         Assert.True(Guid.TryParse(ended.Error?.DiagnosticId, out var diagnosticId));
-        Assert.Contains(
-            factory.Logs,
-            line => line.Contains(diagnosticId.ToString("D"), StringComparison.Ordinal)
-                && line.Contains("Persistent save failed.", StringComparison.Ordinal)
-                && line.Contains("AgentCoreException", StringComparison.Ordinal));
+        Assert.Equal(diagnosticId.ToString("D"), eventDiagnosticId);
+        var logged = factory.Logs
+            .Where(line => line.Contains(diagnosticId.ToString("D"), StringComparison.Ordinal))
+            .ToArray();
+        var line = Assert.Single(logged);
+        Assert.Contains("Persistent save failed.", line, StringComparison.Ordinal);
+        Assert.Contains("AgentCoreException", line, StringComparison.Ordinal);
         var view = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v1/sessions/{session.SessionId}");
         Assert.NotEqual("ended", view!.Status);
     }
@@ -364,8 +377,20 @@ public sealed class SqliteHostRecoveryTests
         Assert.True(attached.Accepted, attached.Error?.Message);
         var attachment = await ready;
         var lease = host.LiveAttachmentId(sessionId);
-        _ = hub.InvokeAsync<CommandAck>("SendText", Text(session.SessionId, 1, attachment, "Hello", Guid.NewGuid().ToString()));
+        var failedTurn = await hub.InvokeAsync<CommandAck>(
+            "SendText",
+            Text(session.SessionId, 1, attachment, "Hello", Guid.NewGuid().ToString()))
+            .WaitAsync(TimeSpan.FromSeconds(20));
         await persisted.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.False(failedTurn.Accepted);
+        Assert.Equal("SessionPersistenceUnavailable", failedTurn.Error?.Code);
+        Assert.Equal(failedTurn.Error?.DiagnosticId, persistenceDiagnosticId);
+        Assert.True(Guid.TryParse(persistenceDiagnosticId, out var userDiagnosticId));
+        var userLogged = factory.Logs
+            .Where(line => line.Contains(userDiagnosticId.ToString("D"), StringComparison.Ordinal))
+            .ToArray();
+        var userLine = Assert.Single(userLogged);
+        Assert.Contains("Persistent save failed.", userLine, StringComparison.Ordinal);
         Assert.Equal(SessionStatus.Paused, host.LiveSnapshot(sessionId)?.Status);
         Assert.NotEqual(lease, host.LiveAttachmentId(sessionId));
         var followUp = await hub.InvokeAsync<CommandAck>(
@@ -1287,6 +1312,9 @@ internal sealed class FailingEndStore(IMemoryStore inner) : IMemoryStore
 internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Program>
 {
     private readonly string _db = Path.Combine(Path.GetTempPath(), $"agent-core-fail-user-{Guid.NewGuid():N}.db");
+    private readonly DiagnosticLineLoggerProvider _logs = new();
+
+    public IReadOnlyList<string> Logs => _logs.Lines;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -1335,6 +1363,7 @@ internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Progr
                 return new FailingUserTurnStore(inner);
             });
         });
+        builder.ConfigureLogging(logging => logging.AddProvider(_logs));
         TestHttpDefaults.UseLoopbackCaller(builder);
     }
 

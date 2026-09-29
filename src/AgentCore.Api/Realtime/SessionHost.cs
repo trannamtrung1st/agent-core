@@ -433,6 +433,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 }
 
                 var attached = await live.Runtime.AttachAsync(cancellationToken).ConfigureAwait(false);
+                var persistenceDiagnosticId = live.Runtime.PersistenceFailureDiagnosticId;
                 if (!attached || live.Evicted || !_live.TryGetValue(sessionId, out var stillAttached) || !ReferenceEquals(stillAttached, live) || live.ConnectionId != connectionId)
                 {
                     var extracted = ExtractLive(sessionId, connectionId);
@@ -450,7 +451,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     Guid? diagnosticId = null;
                     if (!attached)
                     {
-                        diagnosticId = DiagnosePersistence(sessionId, "Persistent save failed.", null);
+                        diagnosticId = persistenceDiagnosticId
+                            ?? DiagnosePersistence(sessionId, "Persistent save failed.", null);
                     }
 
                     return Reject(
@@ -947,9 +949,11 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             if (_live.TryGetValue(sessionId, out var live))
             {
                 var ended = false;
+                Guid? persistenceDiagnosticId = null;
                 try
                 {
                     ended = await live.Runtime.RequestEndAsync(cancellationToken).ConfigureAwait(false);
+                    persistenceDiagnosticId = live.Runtime.PersistenceFailureDiagnosticId;
                 }
                 catch (OperationCanceledException)
                 {
@@ -976,7 +980,9 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
                     if (current?.Status != SessionStatus.Ended && !cancellationToken.IsCancellationRequested)
                     {
-                        throw AgentCoreErrors.Persistence("Failed to persist session end.");
+                        throw persistenceDiagnosticId is { } known
+                            ? AgentCoreErrors.Persistence("Failed to persist session end.", known)
+                            : AgentCoreErrors.Persistence("Failed to persist session end.");
                     }
                 }
 
@@ -1294,7 +1300,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         "Failed to persist the user turn.",
                         false,
                         1000,
-                        DiagnosePersistence(live.Runtime.SessionId, "Failed to persist the user turn.", null));
+                        live.Runtime.PersistenceFailureDiagnosticId
+                            ?? DiagnosePersistence(live.Runtime.SessionId, "Failed to persist the user turn.", null));
                 }
 
                 if (AfterUserTextPersisted is not null)
@@ -2368,12 +2375,23 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         {
             LastSequence = 0;
             LastEventId = null;
-            foreach (var pending in InFlight.Values)
+            InFlightAdmit? active = null;
+            foreach (var pending in InFlight.ToArray())
             {
-                pending.Ack.TrySetResult(Reject("", "Session", "StaleCommand", "Attachment was replaced.", false, null));
+                if (string.Equals(pending.Key, ActiveCommandEventId, StringComparison.OrdinalIgnoreCase))
+                {
+                    active = pending.Value;
+                    continue;
+                }
+
+                pending.Value.Ack.TrySetResult(Reject("", "Session", "StaleCommand", "Attachment was replaced.", false, null));
             }
 
             InFlight.Clear();
+            if (ActiveCommandEventId is not null && active is { } kept)
+            {
+                InFlight[ActiveCommandEventId] = kept;
+            }
             Dedupe.Clear();
             _dedupeOrder.Clear();
             _serverSequence = 0;
