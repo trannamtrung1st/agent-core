@@ -140,7 +140,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private CancellationTokenSource? _compactionCts;
     private CompactionFlight? _compactionFlight;
     internal TaskCompletionSource? TestCompactionSettled { get; set; }
-    internal TaskCompletionSource? TestCompactionCommitGate { get; set; }
+    internal TaskCompletionSource? TestDeferredUserTurnEstablished { get; set; }
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private TimeSpan? _pendingPostResponseIdleDelay;
@@ -1960,7 +1960,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         UserTextQueueTelemetry.RecordPendingBatchStarted(suffix.Count);
         if (ShouldDeferUserTurnForCompaction())
         {
-            _deferredUserTurn = new DeferredUserTurn(batchCause, trigger, responseId, turn, attachmentIds);
+            AssignDeferredUserTurn(new DeferredUserTurn(batchCause, trigger, responseId, turn, attachmentIds));
             await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
             return true;
         }
@@ -1979,7 +1979,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (trigger.Kind == TriggerKind.UserTurn && ShouldDeferUserTurnForCompaction())
         {
-            _deferredUserTurn = new DeferredUserTurn(cause, trigger, responseId, turn, attachmentIds);
+            AssignDeferredUserTurn(new DeferredUserTurn(cause, trigger, responseId, turn, attachmentIds));
             return;
         }
 

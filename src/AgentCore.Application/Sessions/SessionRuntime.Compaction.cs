@@ -24,29 +24,29 @@ public sealed partial class SessionRuntime
 
     private DeferredUserTurn? _deferredUserTurn;
     private bool _drainingDeferredUserTurn;
-    private volatile bool _compactionCommitImminent;
 
     private bool ShouldDeferUserTurnForCompaction() =>
         !_drainingDeferredUserTurn
         && _compactionFlight is not null
-        && _compactionCommitImminent
         && _activeResponseId is null;
 
     private bool CanDrainDeferredUserTurn() =>
         _deferredUserTurn is not null
+        && _compactionFlight is null
         && _activeResponseId is null
         && !_deactivated
         && !LifecycleTransition.IsTerminal(_snapshot)
         && _snapshot.Status is not SessionStatus.Ending and not SessionStatus.Ended;
 
-    private void ScheduleDeferredUserTurnDrain(EventContext? cause = null, bool force = false)
+    private void AssignDeferredUserTurn(DeferredUserTurn turn)
     {
-        if (_deferredUserTurn is null)
-        {
-            return;
-        }
+        _deferredUserTurn = turn;
+        TestDeferredUserTurnEstablished?.TrySetResult();
+    }
 
-        if (!force && _compactionFlight is not null && _compactionCommitImminent)
+    private void ScheduleDeferredUserTurnDrain(EventContext? cause = null)
+    {
+        if (_compactionFlight is not null || _deferredUserTurn is null)
         {
             return;
         }
@@ -133,7 +133,6 @@ public sealed partial class SessionRuntime
                 var current = flight;
                 while (generation == Volatile.Read(ref _compactionGeneration))
                 {
-                    _compactionCommitImminent = false;
                     CompactionOutcome outcome;
                     try
                     {
@@ -157,17 +156,6 @@ public sealed partial class SessionRuntime
                     {
                         RuntimeTelemetry.RecordDropped("compaction_rejected");
                         return;
-                    }
-
-                    if (generation != Volatile.Read(ref _compactionGeneration))
-                    {
-                        return;
-                    }
-
-                    _compactionCommitImminent = true;
-                    if (TestCompactionCommitGate is { Task: { IsCompleted: false } } commitGate)
-                    {
-                        await commitGate.Task.WaitAsync(token).ConfigureAwait(false);
                     }
 
                     if (generation != Volatile.Read(ref _compactionGeneration))
@@ -224,7 +212,6 @@ public sealed partial class SessionRuntime
 
         if (input.Outcome is not CompactionAccepted accepted)
         {
-            _compactionCommitImminent = false;
             _compactionFlight = null;
             var reason = input.Outcome is CompactionRejected rejected
                 ? rejected.Reason
@@ -248,14 +235,12 @@ public sealed partial class SessionRuntime
             || candidate.ThroughEntrySequence <= flight.BaseThrough
             || candidate.ThroughEntrySequence > _snapshot.DurableLastEntrySequence)
         {
-            _compactionCommitImminent = false;
             _compactionFlight = null;
             RuntimeTelemetry.RecordDropped("compaction_stale");
             ScheduleDeferredUserTurnDrain(input.Context);
             return false;
         }
 
-        _compactionCommitImminent = false;
         _snapshot = _snapshot with
         {
             Summary = candidate.Summary,
@@ -273,7 +258,6 @@ public sealed partial class SessionRuntime
         };
         OperationalDiagnostics.RecordCompactionAccepted();
         RequestPersist(_snapshot);
-        ScheduleDeferredUserTurnDrain(input.Context);
         return true;
     }
 
@@ -286,7 +270,6 @@ public sealed partial class SessionRuntime
 
         if (_compactionFlight?.Generation == generation)
         {
-            _compactionCommitImminent = false;
             _compactionFlight = null;
         }
 
@@ -296,11 +279,11 @@ public sealed partial class SessionRuntime
     private void CancelCompaction()
     {
         _compactionGeneration++;
-        _compactionCommitImminent = false;
         _compactionFlight = null;
         var cts = _compactionCts;
         if (cts is null)
         {
+            ScheduleDeferredUserTurnDrain();
             return;
         }
 

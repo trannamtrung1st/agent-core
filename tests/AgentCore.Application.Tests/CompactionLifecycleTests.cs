@@ -119,42 +119,40 @@ public sealed class CompactionLifecycleTests
     public async Task Deferred_user_turn_waits_for_compaction_before_conversation_request()
     {
         const string fact = "P4A_LONG_FACT";
-        var entries = LongFactHistory(80, fact);
+        const int factSequence = 25;
+        var entries = LongFactHistory(80, fact, factSequence);
         var store = new InMemoryMemoryStore();
         var snapshot = Snapshot(entries);
         await store.SaveAsync(snapshot, 0);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deferred = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var recorder = new ConversationRecordingModel(new ScriptedLanguageModel(
             compactionFixture: CompactionFixture.Late,
             compactionRelease: release,
             compactionStarted: started));
         var output = new CapturingSessionOutput();
         await using var runtime = Runtime(snapshot, store, recorder, output);
+        runtime.TestDeferredUserTurnEstablished = deferred;
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitPersistedUserTextAsync(
             "continue",
             Guid.Parse("019944af-0006-7000-8000-0000000000f1")));
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(1, recorder.ConversationRequestCount);
-        var commitGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        runtime.TestCompactionCommitGate = commitGate;
-        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        runtime.TestCompactionSettled = settled;
-        release.TrySetResult();
-        await Task.Delay(100);
         Assert.True(await runtime.SubmitPersistedUserTextAsync(
             "What is the remembered code word?",
             Guid.Parse("019944af-0006-7000-8000-0000000000f2")));
-        await Task.Delay(200);
+        await deferred.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(1, recorder.ConversationRequestCount);
-        commitGate.TrySetResult();
-        await settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
+        Assert.True(recorder.CompactionCalls >= 2);
         Assert.Equal(2, recorder.ConversationRequestCount);
         var request = recorder.LastConversationRequest;
         Assert.NotNull(request);
         Assert.Contains(fact, runtime.Snapshot.Summary, StringComparison.Ordinal);
+        Assert.True(runtime.Snapshot.SummarizedThroughEntrySequence >= factSequence);
         var summaryMessage = Assert.Single(
             request.Messages,
             message => message.Role == ModelRole.System
@@ -174,19 +172,20 @@ public sealed class CompactionLifecycleTests
         await store.SaveAsync(snapshot, 0);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var model = new CountingModel(new ScriptedLanguageModel(
-            compactionFixture: CompactionFixture.Late,
-            compactionRelease: release,
-            compactionStarted: started));
+        var deferred = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new LateMalformedCompactionModel(release, started);
         var output = new CapturingSessionOutput();
         await using var runtime = Runtime(snapshot, store, model, output);
+        runtime.TestDeferredUserTurnEstablished = deferred;
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitPersistedUserTextAsync("first", Guid.Parse("019944af-0006-7000-8000-0000000000f3")));
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        model.FailNextCompaction = true;
         Assert.True(await runtime.SubmitPersistedUserTextAsync("second", Guid.Parse("019944af-0006-7000-8000-0000000000f4")));
+        await deferred.Task.WaitAsync(TimeSpan.FromSeconds(5));
         release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
+        Assert.Equal(Legacy, runtime.Snapshot.Summary);
+        Assert.Equal(0, runtime.Snapshot.SummarizedThroughEntrySequence);
         Assert.Contains(runtime.Snapshot.Entries, entry => entry.Text == "second");
         Assert.Equal(
             2,
@@ -249,16 +248,18 @@ public sealed class CompactionLifecycleTests
         await approvalRuntime.AttachAsync();
         Assert.True(await approvalRuntime.SubmitPersistedUserTextAsync("first", Guid.Parse("019944af-0006-7000-8000-0000000000d7")));
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(await approvalRuntime.SubmitPersistedUserTextAsync("approve this", Guid.Parse("019944af-0006-7000-8000-0000000000d8")));
-        var approval = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
-        var requested = (ApprovalRequestedOutput)approval.Payload!;
-        Assert.NotNull(approvalRuntime.BuildPublicPendingApproval());
         var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         approvalRuntime.TestCompactionSettled = settled;
         release.TrySetResult();
         await settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(Legacy, approvalRuntime.Snapshot.Summary);
-        Assert.Equal(0, approvalRuntime.Snapshot.SummarizedThroughEntrySequence);
+        await approvalRuntime.WaitUntilIdleAsync();
+        Assert.Contains(Goal, approvalRuntime.Snapshot.Summary, StringComparison.Ordinal);
+        Assert.True(await approvalRuntime.SubmitPersistedUserTextAsync("approve this", Guid.Parse("019944af-0006-7000-8000-0000000000d8")));
+        var approval = await output.WaitForAsync(item => item.Payload is ApprovalRequestedOutput);
+        var requested = (ApprovalRequestedOutput)approval.Payload!;
+        Assert.NotNull(approvalRuntime.BuildPublicPendingApproval());
+        Assert.Equal(1, model.CompactionCalls);
+        Assert.Contains(Goal, approvalRuntime.Snapshot.Summary, StringComparison.Ordinal);
 
         Assert.Equal(
             ResponseApprovalResult.Accepted,
@@ -349,12 +350,12 @@ public sealed class CompactionLifecycleTests
             Now,
             LastEntrySequence: entries.Max(entry => entry.Sequence));
 
-    private static List<ConversationEntry> LongFactHistory(int count, string fact)
+    private static List<ConversationEntry> LongFactHistory(int count, string fact, int factSequence = 1)
     {
         var entries = new List<ConversationEntry>(count);
         for (var sequence = 1; sequence <= count; sequence++)
         {
-            var text = sequence == 1
+            var text = sequence == factSequence
                 ? $"Please remember {fact} for later."
                 : $"turn-{sequence}";
             entries.Add(new ConversationEntry(
@@ -425,8 +426,6 @@ public sealed class CompactionLifecycleTests
     {
         public int CompactionCalls { get; private set; }
 
-        public bool FailNextCompaction { get; set; }
-
         public ModelCapabilities Capabilities => inner.Capabilities;
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
@@ -436,13 +435,6 @@ public sealed class CompactionLifecycleTests
             if (request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
             {
                 CompactionCalls++;
-                if (FailNextCompaction)
-                {
-                    FailNextCompaction = false;
-                    yield return new ModelTextDelta("not-json");
-                    yield return new ModelCompleted(ModelStopReason.Completed);
-                    yield break;
-                }
             }
 
             await foreach (var item in inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
@@ -456,6 +448,8 @@ public sealed class CompactionLifecycleTests
     {
         public int ConversationRequestCount { get; private set; }
 
+        public int CompactionCalls { get; private set; }
+
         public ModelRequest? LastConversationRequest { get; private set; }
 
         public ModelCapabilities Capabilities => inner.Capabilities;
@@ -464,7 +458,11 @@ public sealed class CompactionLifecycleTests
             ModelRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            if (!request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
+            if (request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
+            {
+                CompactionCalls++;
+            }
+            else
             {
                 ConversationRequestCount++;
                 LastConversationRequest = request;
@@ -477,10 +475,39 @@ public sealed class CompactionLifecycleTests
         }
     }
 
+    private sealed class LateMalformedCompactionModel(
+        TaskCompletionSource release,
+        TaskCompletionSource started) : ILanguageModel
+    {
+        private readonly ScriptedLanguageModel _conversation = new();
+
+        public ModelCapabilities Capabilities => _conversation.Capabilities;
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
+            {
+                started.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                yield return new ModelTextDelta(ConversationCompactor.Marker + " not a summary");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+                yield break;
+            }
+
+            await foreach (var item in _conversation.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
+        }
+    }
+
     private sealed class ApprovalHoldModel(TaskCompletionSource release, TaskCompletionSource started) : ILanguageModel
     {
         private int _turns;
-        private int _compactions;
+
+        public int CompactionCalls { get; private set; }
 
         public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
 
@@ -490,8 +517,8 @@ public sealed class CompactionLifecycleTests
         {
             if (request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
             {
-                _compactions++;
-                if (_compactions == 1)
+                CompactionCalls++;
+                if (CompactionCalls == 1)
                 {
                     started.TrySetResult();
                     await release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
