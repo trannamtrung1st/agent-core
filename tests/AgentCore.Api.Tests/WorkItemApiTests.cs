@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class WorkItemApiTests : IClassFixture<AgentCoreApiFactory>
+public sealed class WorkItemApiTests
 {
     private const string Evidence = "{\"secret\":\"SECRET_EVIDENCE\"}";
     private const string Checkpoint = "{\"phase\":\"SECRET_CHECKPOINT\"}";
@@ -19,26 +19,28 @@ public sealed class WorkItemApiTests : IClassFixture<AgentCoreApiFactory>
     private const string Preview = "POST https://example.com/items";
     private const string Hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-    private readonly AgentCoreApiFactory _factory;
-
-    public WorkItemApiTests(AgentCoreApiFactory factory) => _factory = factory;
-
     [Fact]
     public async Task Owner_can_list_inspect_cancel_decide_and_read_result_without_private_payloads()
     {
-        var client = TestOwnerCapability.CreateOwnerClient(_factory);
-        var anonymous = _factory.CreateClient();
-        var session = await CreateAsync(client, "examiner", 1);
-        var other = await CreateAsync(client, "general-assistant", null);
-        var sessionId = Guid.Parse(session.SessionId);
-        var paused = await client.PostAsJsonAsync(
-            $"/api/v2/sessions/{session.SessionId}/lifecycle",
-            new TransitionLifecycleRequest("paused"));
-        paused.EnsureSuccessStatusCode();
+        // Seeded queued WorkItems must stay queued through stale-revision cancel assertions;
+        // disable DurableWorkHostedService so the scheduler cannot claim and complete them first.
+        var db = Path.Combine(Path.GetTempPath(), $"agent-core-work-api-{Guid.NewGuid():N}.db");
+        try
+        {
+            await using var host = new DurableSqliteHostFactory(db, runScheduler: false);
+            var client = TestOwnerCapability.CreateOwnerClient(host);
+            var anonymous = host.CreateClient();
+            var session = await CreateAsync(client, "examiner", 1);
+            var other = await CreateAsync(client, "general-assistant", null);
+            var sessionId = Guid.Parse(session.SessionId);
+            var paused = await client.PostAsJsonAsync(
+                $"/api/v2/sessions/{session.SessionId}/lifecycle",
+                new TransitionLifecycleRequest("paused"));
+            paused.EnsureSuccessStatusCode();
 
-        var now = _factory.Services.GetRequiredService<TimeProvider>().GetUtcNow();
-        var store = _factory.Services.GetRequiredService<IWorkItemStore>();
-        var owner = await OwnerAsync(_factory.Services, sessionId);
+            var now = host.Services.GetRequiredService<TimeProvider>().GetUtcNow();
+            var store = host.Services.GetRequiredService<IWorkItemStore>();
+            var owner = await OwnerAsync(host.Services, sessionId);
         var completed = await CompleteAsync(store, owner, sessionId, now.AddMinutes(-1), ResultText);
         var queued = await SeedAsync(store, owner, sessionId, now.AddMinutes(-2));
         var approval = await WaitForApprovalAsync(store, owner, sessionId, now.AddMinutes(-3));
@@ -166,10 +168,17 @@ public sealed class WorkItemApiTests : IClassFixture<AgentCoreApiFactory>
             new CancelWorkItemRequest(queuedView.Revision));
         cancelAgain.EnsureSuccessStatusCode();
         Assert.Equal(cancelledItem.Revision, (await cancelAgain.Content.ReadFromJsonAsync<WorkItemResponse>())!.Revision);
-        var terminalCancel = await client.PostAsJsonAsync(
-            $"/api/v2/sessions/{session.SessionId}/work-items/{completed.WorkItemId}/cancel",
-            new CancelWorkItemRequest(completed.Revision));
-        Assert.Equal(HttpStatusCode.BadRequest, terminalCancel.StatusCode);
+            var terminalCancel = await client.PostAsJsonAsync(
+                $"/api/v2/sessions/{session.SessionId}/work-items/{completed.WorkItemId}/cancel",
+                new CancelWorkItemRequest(completed.Revision));
+            Assert.Equal(HttpStatusCode.BadRequest, terminalCancel.StatusCode);
+        }
+        finally
+        {
+            using var primary = new SqliteConnection($"Data Source={db}");
+            SqliteConnection.ClearPool(primary);
+            File.Delete(db);
+        }
     }
 
     [Fact]

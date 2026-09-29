@@ -29,7 +29,11 @@ After `9aae0aa`, the definition lifecycle gate now also covers legacy compatibil
 
 Hosted Synthetic workflow [`36517595888`](https://github.com/trannamtrung1st/agent-core/actions/runs/36517595888) failed on `2db053b`. Domain, Infrastructure, Application, API, and Compose smoke passed. The frontend step failed on two stale resource-import tests and the Admin publish journey timing out at 20 seconds. Those repairs landed in `9aae0aa` and `2e1cb58` (New Instance filtering, package-root import tests, publish-journey timing, and the full single-process Admin lifecycle gate).
 
-**Hosted closure (this follow-up):** Synthetic workflow [`36531463014`](https://github.com/trannamtrung1st/agent-core/actions/runs/36531463014) is green on `2e1cb58` (~22m). Synthetic offline gates and Compose smoke both succeeded. This follow-up stops here unless a later regression appears. The historical P7.6 freeze remains `17d89ae`.
+**Hosted closure (this follow-up):** Synthetic workflow [`36531463014`](https://github.com/trannamtrung1st/agent-core/actions/runs/36531463014) is green on behavior SHA `2e1cb58` (~22m). Synthetic offline gates and Compose smoke both succeeded.
+
+Docs-only commit `6226202` triggered [`36534124772`](https://github.com/trannamtrung1st/agent-core/actions/runs/36534124772), which failed one API test (`WorkItemApiTests.Owner_can_list_inspect_cancel_decide_and_read_result_without_private_payloads`): a pre-existing race where `DurableWorkHostedService` could terminalize a seeded queued WorkItem before the stale-revision cancel assertion (expected `409`, observed `400`). The repair isolates that contract test with `DurableSqliteHostFactory(runScheduler: false)`; record the next green Synthetic run here as final closure evidence.
+
+This follow-up stops after that green run unless a later regression appears. The historical P7.6 freeze remains `17d89ae`.
 
 ## Not in this follow-up
 
