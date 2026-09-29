@@ -126,9 +126,18 @@ public sealed class DurableReminderExecutor(
             {
                 context = await contexts.CreateAsync(running, linked.Token).ConfigureAwait(false);
             }
-            catch (AgentCoreException)
+            catch (AgentCoreException exception)
             {
-                await FailAsync(running, generation, asOfUtc, "context-unavailable", "Pinned context is unavailable.", false, null, CancellationToken.None)
+                await FailAsync(
+                        running,
+                        generation,
+                        asOfUtc,
+                        "context-unavailable",
+                        "Pinned context is unavailable.",
+                        false,
+                        null,
+                        CancellationToken.None,
+                        exception)
                     .ConfigureAwait(false);
                 return true;
             }
@@ -192,7 +201,7 @@ public sealed class DurableReminderExecutor(
                     }
                 }
             }
-            catch (OperationCanceledException) when (!linked.Token.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (!linked.Token.IsCancellationRequested)
             {
                 var failedAtUtc = time.GetUtcNow();
                 await FailAsync(
@@ -203,7 +212,8 @@ public sealed class DurableReminderExecutor(
                     "The model did not finish within the reminder budget.",
                     true,
                     failedAtUtc.Add(RetryDelay(running.AttemptCount)),
-                    CancellationToken.None).ConfigureAwait(false);
+                    CancellationToken.None,
+                    exception).ConfigureAwait(false);
                 return true;
             }
 
@@ -366,7 +376,8 @@ public sealed class DurableReminderExecutor(
         string summary,
         bool replaySafe,
         DateTimeOffset? nextRetryAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Exception? error = null)
     {
         var failed = await work.FailAsync(
             running.WorkItemId,
@@ -384,7 +395,7 @@ public sealed class DurableReminderExecutor(
         {
             DiagnosticLog.Error(
                 logger,
-                null,
+                error,
                 diagnosticId,
                 "Work item failed.",
                 new DiagnosticContext(

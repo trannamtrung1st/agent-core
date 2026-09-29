@@ -350,6 +350,38 @@ public sealed class DurableReminderTests
     }
 
     [Fact]
+    public async Task Terminal_model_timeout_logs_the_caught_exception_with_the_stored_id()
+    {
+        var logs = new DiagnosticLogCapture<DurableReminderExecutor>();
+        await ForEachInMemoryOnly(async (harness, _) =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            await AcceptScheduledAsync(harness, scheduled, 1);
+            var gate = (TimeoutReminderModel)harness.Model.Inner;
+            var execute = harness.Executor.ExecuteDueAsync(Now, 10).AsTask();
+            await gate.Started.Task;
+            harness.Time.Advance(ToolLimits.Overall.Add(TimeSpan.FromSeconds(1)));
+            Assert.Equal(1, await execute);
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("model-timeout", failed.Failure!.Code);
+            Assert.Equal("The model did not finish within the reminder budget.", failed.Failure.Summary);
+            var diagnosticId = failed.Failure.DiagnosticId;
+            Assert.NotNull(diagnosticId);
+            var matches = logs.Entries
+                .Where(entry => entry.Level == LogLevel.Error
+                    && entry.Properties.TryGetValue("DiagnosticId", out var logged)
+                    && logged is Guid loggedId
+                    && loggedId == diagnosticId)
+                .ToArray();
+            var match = Assert.Single(matches);
+            Assert.IsAssignableFrom<OperationCanceledException>(match.Exception);
+            Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
+        }, () => new TimeoutReminderModel(), logs);
+    }
+
+    [Fact]
     public async Task Expired_last_attempt_is_not_run_again()
     {
         await ForEachAsync(async harness =>
