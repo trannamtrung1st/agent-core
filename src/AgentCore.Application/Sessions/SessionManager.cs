@@ -66,7 +66,7 @@ public sealed class SessionManager
         _lifecycleGate = lifecycleGate;
     }
 
-    public async Task<SessionSnapshot> CreateAsync(
+    public Task<SessionSnapshot> CreateAsync(
         string agentId,
         int? agentVersion,
         SessionMode mode,
@@ -84,6 +84,52 @@ public sealed class SessionManager
             throw AgentCoreErrors.Validation("agentId is required.");
         }
 
+        if (_lifecycleGate is null)
+        {
+            return CreateByDefinitionCoreAsync(
+                agentId,
+                agentVersion,
+                mode,
+                cancellationToken,
+                purpose,
+                policy,
+                maxDuration,
+                speechLocaleOverride,
+                modelKey,
+                reasoningEffort,
+                modelSource);
+        }
+
+        return _lifecycleGate.WithDefinitionAsync(
+            agentId,
+            ct => new ValueTask<SessionSnapshot>(CreateByDefinitionCoreAsync(
+                agentId,
+                agentVersion,
+                mode,
+                ct,
+                purpose,
+                policy,
+                maxDuration,
+                speechLocaleOverride,
+                modelKey,
+                reasoningEffort,
+                modelSource)),
+            cancellationToken).AsTask();
+    }
+
+    private async Task<SessionSnapshot> CreateByDefinitionCoreAsync(
+        string agentId,
+        int? agentVersion,
+        SessionMode mode,
+        CancellationToken cancellationToken,
+        SessionPurpose? purpose,
+        SessionCompletionPolicy? policy,
+        TimeSpan? maxDuration,
+        string? speechLocaleOverride,
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource modelSource)
+    {
         var definition = await _definitions.GetAsync(agentId, agentVersion, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound($"Agent '{agentId}' was not found.");
         Guid? instanceId = null;

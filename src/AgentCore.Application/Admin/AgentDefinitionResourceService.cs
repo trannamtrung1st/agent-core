@@ -8,7 +8,8 @@ public sealed class AgentDefinitionResourceService(
     IAgentDefinitionAdminStore drafts,
     IAgentDefinitionResourceAdminStore resources,
     IDefinitionResourceContentStore content,
-    TimeProvider time)
+    TimeProvider time,
+    AgentDefinitionLifecycleService lifecycle)
 {
     public async ValueTask<IReadOnlyList<AgentDefinitionDraftResource>> ListDraftResourcesAsync(
         Guid draftId,
@@ -38,7 +39,7 @@ public sealed class AgentDefinitionResourceService(
         return new DefinitionResourceContentStored(hash, payload.Length, normalizedMediaType);
     }
 
-    public async ValueTask<AgentDefinitionDraftResource> UpsertDraftResourceAsync(
+    public ValueTask<AgentDefinitionDraftResource> UpsertDraftResourceAsync(
         Guid draftId,
         long expectedRevision,
         Guid? resourceId,
@@ -47,49 +48,73 @@ public sealed class AgentDefinitionResourceService(
         string mediaType,
         string contentSha256,
         long byteLength,
-        CancellationToken cancellationToken = default)
-    {
-        await RequireDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        var now = time.GetUtcNow();
-        return await resources.UpsertDraftResourceAsync(
-            new AgentDefinitionDraftResourceUpsert(
-                draftId,
-                expectedRevision,
-                resourceId,
-                logicalPath,
-                kind,
-                mediaType,
-                contentSha256,
-                byteLength,
-                now),
-            cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        lifecycle.WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                if (draft.Revision != expectedRevision)
+                {
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
 
-    public async ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
+                var now = time.GetUtcNow();
+                return await resources.UpsertDraftResourceAsync(
+                    new AgentDefinitionDraftResourceUpsert(
+                        draftId,
+                        expectedRevision,
+                        resourceId,
+                        logicalPath,
+                        kind,
+                        mediaType,
+                        contentSha256,
+                        byteLength,
+                        now),
+                    innerToken).ConfigureAwait(false);
+            },
+            cancellationToken);
+
+    public ValueTask<AgentDefinitionDraftResourceBatchBound> BindDraftResourcesAsync(
         Guid draftId,
         long expectedRevision,
         IReadOnlyList<AgentDefinitionDraftResourceBatchItem> items,
-        CancellationToken cancellationToken = default)
-    {
-        await RequireDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        var now = time.GetUtcNow();
-        return await resources.BindDraftResourcesAsync(
-            new AgentDefinitionDraftResourceBatchBind(draftId, expectedRevision, items, now),
-            cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        lifecycle.WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                if (draft.Revision != expectedRevision)
+                {
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
 
-    public async ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
+                var now = time.GetUtcNow();
+                return await resources.BindDraftResourcesAsync(
+                    new AgentDefinitionDraftResourceBatchBind(draftId, expectedRevision, items, now),
+                    innerToken).ConfigureAwait(false);
+            },
+            cancellationToken);
+
+    public ValueTask<AgentDefinitionDraftResource> RemoveDraftResourceAsync(
         Guid draftId,
         long expectedRevision,
         Guid resourceId,
-        CancellationToken cancellationToken = default)
-    {
-        await RequireDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        var now = time.GetUtcNow();
-        return await resources.RemoveDraftResourceAsync(
-            new AgentDefinitionDraftResourceRemove(draftId, expectedRevision, resourceId, now),
-            cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        lifecycle.WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                if (draft.Revision != expectedRevision)
+                {
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
+
+                var now = time.GetUtcNow();
+                return await resources.RemoveDraftResourceAsync(
+                    new AgentDefinitionDraftResourceRemove(draftId, expectedRevision, resourceId, now),
+                    innerToken).ConfigureAwait(false);
+            },
+            cancellationToken);
 
     public async ValueTask<byte[]?> ReadDraftResourceContentAsync(
         Guid draftId,

@@ -112,7 +112,7 @@ public sealed class AdminKnowledgeBindingTests
             ids);
         var validation = new AgentDefinitionDraftValidationService(
             lifecycle,
-            new AgentDefinitionResourceService(admin, resources, content, clock),
+            new AgentDefinitionResourceService(admin, resources, content, clock, lifecycle),
             SyntheticProviderAliases.Default,
             TestModelCatalogs.Synthetic(),
             ToolConfigurationGates.AllowAll);

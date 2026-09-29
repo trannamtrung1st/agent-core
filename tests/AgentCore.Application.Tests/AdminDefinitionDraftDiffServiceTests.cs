@@ -131,7 +131,7 @@ public sealed class AdminDefinitionDraftDiffServiceTests
             SyntheticProviderAliases.Default,
             clock,
             new SystemIdGenerator(clock));
-        var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
+        var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock, lifecycle);
         return new AgentDefinitionDraftDiffService(lifecycle, resources, builtIns, admin);
     }
 

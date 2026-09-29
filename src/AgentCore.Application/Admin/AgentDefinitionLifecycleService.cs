@@ -123,45 +123,69 @@ public sealed class AgentDefinitionLifecycleService(
         return draft;
     }
 
-    public async ValueTask<AgentDefinitionDraft> UpdateDraftAsync(
+    public ValueTask<AgentDefinitionDraft> UpdateDraftAsync(
         Guid draftId,
         long expectedRevision,
         AgentDefinitionCandidate candidate,
-        CancellationToken cancellationToken = default)
-    {
-        var started = Stopwatch.GetTimestamp();
-        var existing = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(existing.DefinitionId, candidate.DefinitionId, StringComparison.Ordinal))
-        {
-            OperationalDiagnostics.RecordAdmin(
-                "draftUpdate", "rejected", "validation", started, existing.DefinitionId, null, null, null);
-            throw AgentCoreErrors.Validation("definitionId cannot change on update.");
-        }
+        CancellationToken cancellationToken = default) =>
+        WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                var started = Stopwatch.GetTimestamp();
+                if (draft.Revision != expectedRevision)
+                {
+                    OperationalDiagnostics.RecordAdmin(
+                        "draftUpdate", "rejected", "conflict", started, draft.DefinitionId, null, null, null);
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
 
-        AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
-        var draft = await admin.UpdateDraftAsync(
-            new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
-        OperationalDiagnostics.RecordAdmin(
-            "draftUpdate", "completed", "completed", started, draft.DefinitionId, null, null, "none");
-        return draft;
-    }
+                if (!string.Equals(draft.DefinitionId, candidate.DefinitionId, StringComparison.Ordinal))
+                {
+                    OperationalDiagnostics.RecordAdmin(
+                        "draftUpdate", "rejected", "validation", started, draft.DefinitionId, null, null, null);
+                    throw AgentCoreErrors.Validation("definitionId cannot change on update.");
+                }
+
+                AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
+                var updated = await admin.UpdateDraftAsync(
+                    new AgentDefinitionDraftUpdate(draftId, expectedRevision, candidate, time.GetUtcNow()),
+                    innerToken).ConfigureAwait(false);
+                OperationalDiagnostics.RecordAdmin(
+                    "draftUpdate", "completed", "completed", started, updated.DefinitionId, null, null, "none");
+                return updated;
+            },
+            cancellationToken);
 
     public async ValueTask DeleteDraftAsync(
         Guid draftId,
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
-        var started = Stopwatch.GetTimestamp();
-        await admin.DeleteDraftAsync(
-            new AgentDefinitionDraftDelete(
-                draftId,
-                expectedRevision,
-                time.GetUtcNow(),
-                ids.NewId()),
+        _ = await WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                var started = Stopwatch.GetTimestamp();
+                if (draft.Revision != expectedRevision)
+                {
+                    OperationalDiagnostics.RecordAdmin(
+                        "draftDelete", "rejected", "conflict", started, draft.DefinitionId, null, null, null);
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
+
+                await admin.DeleteDraftAsync(
+                    new AgentDefinitionDraftDelete(
+                        draftId,
+                        expectedRevision,
+                        time.GetUtcNow(),
+                        ids.NewId()),
+                    innerToken).ConfigureAwait(false);
+                OperationalDiagnostics.RecordAdmin(
+                    "draftDelete", "completed", "completed", started, draft.DefinitionId, null, null, "none");
+                return 0;
+            },
             cancellationToken).ConfigureAwait(false);
-        OperationalDiagnostics.RecordAdmin(
-            "draftDelete", "completed", "completed", started, null, null, null, "none");
     }
 
     public ValueTask DeleteLogicalDefinitionAsync(
@@ -210,6 +234,34 @@ public sealed class AgentDefinitionLifecycleService(
 
         OperationalDiagnostics.RecordAdmin(
             "definitionDelete", "completed", "completed", started, command.DefinitionId, null, null, "deleted");
+    }
+
+    internal ValueTask<T> WithDraftDefinitionGateAsync<T>(
+        Guid draftId,
+        Func<AgentDefinitionDraft, CancellationToken, ValueTask<T>> action,
+        CancellationToken cancellationToken = default)
+    {
+        var preview = admin.GetDraftAsync(draftId, cancellationToken);
+        return WithDraftDefinitionGateCoreAsync(preview, draftId, action, cancellationToken);
+    }
+
+    private async ValueTask<T> WithDraftDefinitionGateCoreAsync<T>(
+        ValueTask<AgentDefinitionDraft?> previewTask,
+        Guid draftId,
+        Func<AgentDefinitionDraft, CancellationToken, ValueTask<T>> action,
+        CancellationToken cancellationToken)
+    {
+        var preview = await previewTask.ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Definition draft was not found.");
+        return await WithDefinitionGateAsync(
+            preview.DefinitionId,
+            async innerToken =>
+            {
+                var draft = await admin.GetDraftAsync(draftId, innerToken).ConfigureAwait(false)
+                    ?? throw AgentCoreErrors.NotFound("Definition draft was not found.");
+                return await action(draft, innerToken).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<T> WithDefinitionGateAsync<T>(
@@ -335,7 +387,17 @@ public sealed class AgentDefinitionLifecycleService(
         CancellationToken cancellationToken = default) =>
         admin.ListPublicationsAsync(definitionId, cancellationToken);
 
-    public async ValueTask<AgentDefinitionPublication> DeprecatePublicationAsync(
+    public ValueTask<AgentDefinitionPublication> DeprecatePublicationAsync(
+        string definitionId,
+        int version,
+        long expectedMetadataRevision,
+        CancellationToken cancellationToken = default) =>
+        WithDefinitionGateAsync(
+            definitionId,
+            ct => DeprecatePublicationCoreAsync(definitionId, version, expectedMetadataRevision, ct),
+            cancellationToken);
+
+    private async ValueTask<AgentDefinitionPublication> DeprecatePublicationCoreAsync(
         string definitionId,
         int version,
         long expectedMetadataRevision,
@@ -356,6 +418,13 @@ public sealed class AgentDefinitionLifecycleService(
             OperationalDiagnostics.RecordAdmin(
                 "deprecate", "rejected", "notFound", started, definitionId, version, null, null);
             throw AgentCoreErrors.NotFound("Publication was not found.");
+        }
+
+        if (durable.MetadataRevision != expectedMetadataRevision)
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "deprecate", "rejected", "conflict", started, definitionId, version, null, null);
+            throw AgentCoreErrors.Conflict("Publication metadata revision is stale.");
         }
 
         var publication = await admin.DeprecatePublicationAsync(

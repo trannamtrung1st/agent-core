@@ -111,7 +111,7 @@ public sealed class AdminDefinitionDraftValidationServiceTests
             SyntheticProviderAliases.Default,
             clock,
             new SystemIdGenerator(clock));
-        var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock);
+        var resources = new AgentDefinitionResourceService(admin, resourcesStore, content, clock, lifecycle);
         return new AgentDefinitionDraftValidationService(
             lifecycle,
             resources,

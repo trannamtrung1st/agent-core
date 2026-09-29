@@ -20,18 +20,28 @@ public sealed class AgentDefinitionDraftEvaluationService(
         return await store.ListScenariosAsync(draftId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask<DefinitionEvaluationScenario> UpsertScenarioAsync(
+    public ValueTask<DefinitionEvaluationScenario> UpsertScenarioAsync(
         long expectedRevision,
         DefinitionEvaluationScenarioUpsert upsert,
         CancellationToken cancellationToken = default)
     {
         DefinitionEvaluationScenarioValidator.Validate(upsert);
-        _ = await lifecycle.GetDraftAsync(upsert.DraftId, cancellationToken).ConfigureAwait(false);
-        return await store.UpsertScenarioWithRevisionBumpAsync(
+        return lifecycle.WithDraftDefinitionGateAsync(
             upsert.DraftId,
-            expectedRevision,
-            upsert,
-            cancellationToken).ConfigureAwait(false);
+            async (draft, innerToken) =>
+            {
+                if (draft.Revision != expectedRevision)
+                {
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
+
+                return await store.UpsertScenarioWithRevisionBumpAsync(
+                    upsert.DraftId,
+                    expectedRevision,
+                    upsert,
+                    innerToken).ConfigureAwait(false);
+            },
+            cancellationToken);
     }
 
     public async ValueTask RemoveScenarioAsync(
@@ -40,9 +50,20 @@ public sealed class AgentDefinitionDraftEvaluationService(
         string scenarioId,
         CancellationToken cancellationToken = default)
     {
-        _ = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        await store.RemoveScenarioWithRevisionBumpAsync(draftId, expectedRevision, scenarioId, cancellationToken)
-            .ConfigureAwait(false);
+        _ = await lifecycle.WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                if (draft.Revision != expectedRevision)
+                {
+                    throw AgentCoreErrors.Conflict("Draft revision is stale.");
+                }
+
+                await store.RemoveScenarioWithRevisionBumpAsync(draftId, expectedRevision, scenarioId, innerToken)
+                    .ConfigureAwait(false);
+                return 0;
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<DefinitionEvaluationResult>> ListResultsAsync(
@@ -53,43 +74,46 @@ public sealed class AgentDefinitionDraftEvaluationService(
         return await store.ListResultsAsync(draftId, cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask<DefinitionEvaluationResult> RunScenarioAsync(
+    public ValueTask<DefinitionEvaluationResult> RunScenarioAsync(
         Guid draftId,
         string scenarioId,
-        CancellationToken cancellationToken = default)
-    {
-        var draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        var revisionSnapshot = draft.Revision;
-        var scenarios = await store.ListScenariosAsync(draftId, cancellationToken).ConfigureAwait(false);
-        var scenario = scenarios.SingleOrDefault(item =>
-            string.Equals(item.ScenarioId, scenarioId, StringComparison.Ordinal))
-            ?? throw AgentCoreErrors.NotFound("Evaluation scenario was not found.");
+        CancellationToken cancellationToken = default) =>
+        lifecycle.WithDraftDefinitionGateAsync(
+            draftId,
+            async (draft, innerToken) =>
+            {
+                var revisionSnapshot = draft.Revision;
+                var scenarios = await store.ListScenariosAsync(draftId, innerToken).ConfigureAwait(false);
+                var scenario = scenarios.SingleOrDefault(item =>
+                    string.Equals(item.ScenarioId, scenarioId, StringComparison.Ordinal))
+                    ?? throw AgentCoreErrors.NotFound("Evaluation scenario was not found.");
 
-        var draftResources = await resources.ListDraftResourcesAsync(draftId, cancellationToken).ConfigureAwait(false);
-        draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
-        if (draft.Revision != revisionSnapshot)
-        {
-            throw AgentCoreErrors.Conflict("Draft changed during evaluation; retry evaluation.");
-        }
+                var draftResources = await resources.ListDraftResourcesAsync(draftId, innerToken).ConfigureAwait(false);
+                draft = await lifecycle.GetDraftAsync(draftId, innerToken).ConfigureAwait(false);
+                if (draft.Revision != revisionSnapshot)
+                {
+                    throw AgentCoreErrors.Conflict("Draft changed during evaluation; retry evaluation.");
+                }
 
-        var fingerprint = DefinitionDraftConfigurationFingerprint.Compute(draft.Candidate, draftResources);
-        var snapshots = await LoadResourceSnapshotsAsync(draftId, draftResources, cancellationToken)
-            .ConfigureAwait(false);
-        var (passed, findings) = await evaluationRunner
-            .RunAsync(draft.Candidate, snapshots, scenario, cancellationToken)
-            .ConfigureAwait(false);
-        var result = new DefinitionEvaluationResult(
-            draft.DraftId,
-            draft.Revision,
-            fingerprint,
-            scenario.ScenarioId,
-            scenario.ScenarioVersion,
-            "synthetic-offline",
-            passed,
-            findings,
-            time.GetUtcNow());
-        return await store.SaveResultAsync(result, cancellationToken).ConfigureAwait(false);
-    }
+                var fingerprint = DefinitionDraftConfigurationFingerprint.Compute(draft.Candidate, draftResources);
+                var snapshots = await LoadResourceSnapshotsAsync(draftId, draftResources, innerToken)
+                    .ConfigureAwait(false);
+                var (passed, findings) = await evaluationRunner
+                    .RunAsync(draft.Candidate, snapshots, scenario, innerToken)
+                    .ConfigureAwait(false);
+                var result = new DefinitionEvaluationResult(
+                    draft.DraftId,
+                    draft.Revision,
+                    fingerprint,
+                    scenario.ScenarioId,
+                    scenario.ScenarioVersion,
+                    "synthetic-offline",
+                    passed,
+                    findings,
+                    time.GetUtcNow());
+                return await store.SaveResultAsync(result, innerToken).ConfigureAwait(false);
+            },
+            cancellationToken);
 
     internal async ValueTask EnsureRequiredEvidenceAsync(
         Guid draftId,
