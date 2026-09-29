@@ -720,6 +720,8 @@ Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
 
+- [ ] Progress report via tools call [TBD].
+
 - [x] Add proprietary license.
 
 - [x] Establish trusted user/session-context baseline.
