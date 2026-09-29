@@ -2333,15 +2333,15 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] P7 Harness Admin: draft/version/publish, resources, instances/persona, memory/automation administration, validation/evaluation, history/rollback.
 - [x] P7.5 architecture/infrastructure-readiness consolidation frozen on `70a5720`.
 - [x] P7.6 Admin usability closure frozen on `17d89ae`.
-- [ ] P7.7 operational diagnosability & realtime debuggability.
+- [x] P7.7 operational diagnosability frozen on `40a1d92` (workflow `36594702224` green).
 
 ---
 
 # Next implementation item
 
-**P7.7 — Operational Diagnosability & Realtime Debuggability** is current.
+**P7.7 — Operational Diagnosability & Realtime Debuggability** is frozen on `40a1d92` ([workflow `36594702224`](https://github.com/trannamtrung1st/agent-core/actions/runs/36594702224) green). See [P7.7 closure report](docs/reports/p7.7-freeze-candidate.md).
 
-Bound it to:
+Closed scope:
 
 ```text
 1. server-owned DiagnosticId / CorrelationId / TraceId semantics and safe user-facing diagnostics
@@ -2352,10 +2352,10 @@ Bound it to:
 6. deterministic + frontend tests, closure report, then hand off to P8
 ```
 
-**P8 — harness/platform extensibility** is next after P7.7 (browser/provider seam; see P8 section).
+**P8 — harness/platform extensibility** is next (browser/provider seam; see P8 section).
 
-P0–P7, P7.5, and P7.6 remain frozen. Do not rewrite their closure evidence or treat the Product / Architecture North Star as implemented behavior.
+P0–P7.7 remain frozen. Do not rewrite their closure evidence or treat the Product / Architecture North Star as implemented behavior.
 
-P7.6 is frozen on `17d89ae`. P9 and P10 remain requirement-triggered and must not be pulled forward to support speculative P7.7 or P8 work.
+P7.7 is frozen on `40a1d92`. P9 and P10 remain requirement-triggered and must not be pulled forward to support speculative P8 work.
 
-Do **not** begin P7.7 or P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+Do **not** begin P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
