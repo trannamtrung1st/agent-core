@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Models;
@@ -29,6 +30,7 @@ public sealed class SessionManager
     private readonly IStructuredMemoryStore? _structuredMemory;
     private readonly IAgentInstanceService? _instances;
     private readonly ITriggerPolicyRecoveryService? _triggerPolicyRecovery;
+    private readonly AdminLifecycleCoordinator? _lifecycleGate;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -44,7 +46,8 @@ public sealed class SessionManager
         ILocalUserProfileService? localProfiles = null,
         IStructuredMemoryStore? structuredMemory = null,
         IAgentInstanceService? instances = null,
-        ITriggerPolicyRecoveryService? triggerPolicyRecovery = null)
+        ITriggerPolicyRecoveryService? triggerPolicyRecovery = null,
+        AdminLifecycleCoordinator? lifecycleGate = null)
     {
         _definitions = definitions;
         _store = store;
@@ -60,6 +63,7 @@ public sealed class SessionManager
         _structuredMemory = structuredMemory;
         _instances = instances;
         _triggerPolicyRecovery = triggerPolicyRecovery;
+        _lifecycleGate = lifecycleGate;
     }
 
     public async Task<SessionSnapshot> CreateAsync(
@@ -106,7 +110,7 @@ public sealed class SessionManager
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<SessionSnapshot> CreateForInstanceAsync(
+    public Task<SessionSnapshot> CreateForInstanceAsync(
         Guid instanceId,
         SessionMode mode,
         CancellationToken cancellationToken = default,
@@ -117,6 +121,49 @@ public sealed class SessionManager
         string? modelKey = null,
         string? reasoningEffort = null,
         ModelSelectionSource modelSource = ModelSelectionSource.SystemDefault)
+    {
+        if (_lifecycleGate is null)
+        {
+            return CreateForInstanceCoreAsync(
+                instanceId,
+                mode,
+                cancellationToken,
+                purpose,
+                policy,
+                maxDuration,
+                speechLocaleOverride,
+                modelKey,
+                reasoningEffort,
+                modelSource);
+        }
+
+        return _lifecycleGate.WithInstanceAsync(
+            instanceId,
+            ct => new ValueTask<SessionSnapshot>(CreateForInstanceCoreAsync(
+                instanceId,
+                mode,
+                ct,
+                purpose,
+                policy,
+                maxDuration,
+                speechLocaleOverride,
+                modelKey,
+                reasoningEffort,
+                modelSource)),
+            cancellationToken).AsTask();
+    }
+
+    private async Task<SessionSnapshot> CreateForInstanceCoreAsync(
+        Guid instanceId,
+        SessionMode mode,
+        CancellationToken cancellationToken,
+        SessionPurpose? purpose,
+        SessionCompletionPolicy? policy,
+        TimeSpan? maxDuration,
+        string? speechLocaleOverride,
+        string? modelKey,
+        string? reasoningEffort,
+        ModelSelectionSource modelSource)
     {
         if (_instances is null)
         {

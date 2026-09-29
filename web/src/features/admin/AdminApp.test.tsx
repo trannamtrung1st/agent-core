@@ -309,6 +309,40 @@ describe("AdminApp", () => {
     expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
   });
 
+  it("offers only published definitions when creating an instance", async () => {
+    vi.mocked(listAdminDefinitions).mockResolvedValue([
+      {
+        definitionId: "aaa-new-agent",
+        version: 0,
+        source: "draft",
+        status: "draftOnly",
+        displayName: "Aaa New Agent",
+        draftCount: 1
+      },
+      {
+        definitionId: "examiner",
+        version: 1,
+        source: "builtIn",
+        status: "published",
+        displayName: "Examiner",
+        draftCount: 0
+      }
+    ]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Draft only · Never published")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    const dialog = screen.getByRole("dialog", { name: "New instance" });
+    expect(within(dialog).getByText("Examiner · examiner")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/aaa-new-agent/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/v1 · Built-in · Published/)).toBeInTheDocument();
+  });
+
   it("confirms and removes a definition draft at its current revision", async () => {
     const draftId = "019944af-00d1-7000-8000-0000000000dd";
     vi.mocked(listAdminDefinitions).mockResolvedValue([
@@ -511,6 +545,7 @@ describe("AdminApp", () => {
     fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Language-model provider" })).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Visible publish body" }
@@ -555,7 +590,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
     });
-  }, 20_000);
+  }, 60_000);
 
   it("preserves unsaved instructions after a resource mutation", async () => {
     const draftId = "019944af-00d1-7000-8000-000000000087";

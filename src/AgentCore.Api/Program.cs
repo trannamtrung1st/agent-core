@@ -55,6 +55,7 @@ builder.Services.AddOptions<HostingOptions>()
     .ValidateOnStart();
 var observability = builder.Configuration.GetSection("Observability").Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 RuntimeTelemetry.Configure(observability.TimelineCapacity, observability.LogConversationContent);
+builder.Services.AddSingleton<AdminLifecycleCoordinator>();
 builder.Services.AddSingleton<AdminReadService>();
 builder.Services.AddSingleton<AdminAuthoringOptionsService>();
 builder.Services.AddSingleton<AdminHistoryService>();

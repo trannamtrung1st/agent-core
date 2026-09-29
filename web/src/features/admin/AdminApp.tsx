@@ -346,7 +346,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               </div>
               <Flex gap={8} wrap="wrap">
                 <NewDefinitionButton groups={definitionGroups} />
-                <NewInstanceButton groups={definitionGroups} />
+                <NewInstanceButton groups={definitionGroups.filter((group) => group.versions.length > 0)} />
               </Flex>
             </Flex>
             <div className="admin-inventory-grid">

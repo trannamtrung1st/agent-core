@@ -18,6 +18,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryAgentDefinitionAdminStore definitions,
     InMemoryAdminEventStore events) : IAdminLifecycleDeletion
 {
+    internal Func<CancellationToken, ValueTask>? BeforeCommit { get; set; }
+
     public async ValueTask DeleteInstanceAsync(
         AdminInstanceDeleteCommand command,
         CancellationToken cancellationToken = default)
@@ -35,6 +37,11 @@ public sealed class InMemoryAdminLifecycleDeletion(
         if (counts.HasReferences)
         {
             throw AgentCoreErrors.Conflict(AdminDeletionMessages.InstanceBlocked(counts));
+        }
+
+        if (BeforeCommit is not null)
+        {
+            await BeforeCommit(cancellationToken).ConfigureAwait(false);
         }
 
         var removed = instances.RemoveForDeletion(command.InstanceId, command.ExpectedRevision);
@@ -69,6 +76,11 @@ public sealed class InMemoryAdminLifecycleDeletion(
         if (counts.HasReferences)
         {
             throw AgentCoreErrors.Conflict(AdminDeletionMessages.DefinitionBlocked(counts));
+        }
+
+        if (BeforeCommit is not null)
+        {
+            await BeforeCommit(cancellationToken).ConfigureAwait(false);
         }
 
         definitions.PurgeLogicalDefinition(command);

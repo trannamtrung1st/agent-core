@@ -51,13 +51,13 @@ describe("resourcePreview", () => {
     expect(resourceBatchLimitProblem([{ byteLength: 1 }], 0, MAX_RESOURCE_AGGREGATE_BYTES)).toMatch(/64 MiB/);
   });
 
-  it("reads a dropped folder entry with its relative path", async () => {
-    const file = new File(["policy"], "policy.md", { type: "text/markdown" });
+  it("reads a dropped package folder and strips the package root", async () => {
+    const file = new File(["hello"], "a.txt", { type: "text/plain" });
     const entry = {
       isFile: true,
       isDirectory: false,
-      name: "policy.md",
-      fullPath: "/pack/knowledge/policy.md",
+      name: "a.txt",
+      fullPath: "/root/templates/a.txt",
       file: (success: (value: File) => void) => success(file)
     };
     const dropped = await readDroppedResourceFiles({
@@ -65,7 +65,15 @@ describe("resourcePreview", () => {
       files: []
     } as unknown as DataTransfer);
     expect(dropped).toHaveLength(1);
-    expect((dropped[0] as File & { webkitRelativePath?: string }).webkitRelativePath).toBe("pack/knowledge/policy.md");
-    expect(inferResourceKind(packageLogicalPath("pack/knowledge/policy.md"))).toBe("Knowledge");
+    const item = createPreviewItem(dropped[0]);
+    expect(item.logicalPath).toBe("templates/a.txt");
+    expect(item.kind).toBe("Template");
+  });
+
+  it("leaves individually chosen files on their own names", () => {
+    const file = new File(["policy"], "policy.md", { type: "text/markdown" });
+    const item = createPreviewItem(file);
+    expect(item.logicalPath).toBe("policy.md");
+    expect(item.kind).toBe("");
   });
 });

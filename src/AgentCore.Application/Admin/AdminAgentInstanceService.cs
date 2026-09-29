@@ -14,7 +14,8 @@ public sealed class AdminAgentInstanceService(
     IIdGenerator ids,
     TimeProvider time,
     ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
-    IAdminLifecycleDeletion? deletion = null)
+    IAdminLifecycleDeletion? deletion = null,
+    AdminLifecycleCoordinator? lifecycleGate = null)
 {
     public ValueTask<AgentInstance> CreateManagedAsync(
         string definitionId,
@@ -22,11 +23,21 @@ public sealed class AdminAgentInstanceService(
         CancellationToken cancellationToken = default) =>
         CreateManagedAsync(definitionId, version, persona: null, cancellationToken);
 
-    public async ValueTask<AgentInstance> CreateManagedAsync(
+    public ValueTask<AgentInstance> CreateManagedAsync(
         string definitionId,
         int version,
         AgentIdentity? persona,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        WithDefinitionGateAsync(
+            definitionId,
+            ct => CreateManagedCoreAsync(definitionId, version, persona, ct),
+            cancellationToken);
+
+    private async ValueTask<AgentInstance> CreateManagedCoreAsync(
+        string definitionId,
+        int version,
+        AgentIdentity? persona,
+        CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
         var operationId = ids.NewId();
@@ -245,7 +256,17 @@ public sealed class AdminAgentInstanceService(
         return updatedPersona;
     }
 
-    public async ValueTask<AgentInstance> SetLifecycleAsync(
+    public ValueTask<AgentInstance> SetLifecycleAsync(
+        Guid instanceId,
+        AgentInstanceLifecycle lifecycle,
+        long expectedRevision,
+        CancellationToken cancellationToken = default) =>
+        WithInstanceGateAsync(
+            instanceId,
+            ct => SetLifecycleCoreAsync(instanceId, lifecycle, expectedRevision, ct),
+            cancellationToken);
+
+    private async ValueTask<AgentInstance> SetLifecycleCoreAsync(
         Guid instanceId,
         AgentInstanceLifecycle lifecycle,
         long expectedRevision,
@@ -324,7 +345,10 @@ public sealed class AdminAgentInstanceService(
 
         try
         {
-            await deletion.DeleteInstanceAsync(command, cancellationToken).ConfigureAwait(false);
+            await WithInstanceGateAsync(
+                command.InstanceId,
+                ct => deletion.DeleteInstanceAsync(command, ct),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (AgentCoreException ex) when (ex.Code is "Conflict" or "NotFound" or "ValidationError")
         {
@@ -360,6 +384,47 @@ public sealed class AdminAgentInstanceService(
 
         return await instances.FindAsync(instanceId, cancellationToken).ConfigureAwait(false)
             ?? throw AgentCoreErrors.Conflict("Managed instance history references a missing instance.");
+    }
+
+    private async ValueTask<T> WithInstanceGateAsync<T>(
+        Guid instanceId,
+        Func<CancellationToken, ValueTask<T>> action,
+        CancellationToken cancellationToken)
+    {
+        if (lifecycleGate is null)
+        {
+            return await action(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await lifecycleGate.WithInstanceAsync(instanceId, action, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask WithInstanceGateAsync(
+        Guid instanceId,
+        Func<CancellationToken, ValueTask> action,
+        CancellationToken cancellationToken)
+    {
+        _ = await WithInstanceGateAsync(
+            instanceId,
+            async ct =>
+            {
+                await action(ct).ConfigureAwait(false);
+                return 0;
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<T> WithDefinitionGateAsync<T>(
+        string definitionId,
+        Func<CancellationToken, ValueTask<T>> action,
+        CancellationToken cancellationToken)
+    {
+        if (lifecycleGate is null)
+        {
+            return await action(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await lifecycleGate.WithDefinitionAsync(definitionId, action, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<AgentInstance> RequireManagedAsync(

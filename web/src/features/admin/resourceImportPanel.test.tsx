@@ -27,12 +27,26 @@ function renderPanel(onBound = vi.fn()) {
   return onBound;
 }
 
-function chooseFiles(files: File[]) {
-  const input = [...document.querySelectorAll('input[type="file"]')].find(
-    (candidate) => !candidate.hasAttribute("webkitdirectory") && !candidate.hasAttribute("directory")
-  );
+function fileInput(directory: boolean) {
+  const input = [...document.querySelectorAll('input[type="file"]')].find((candidate) => {
+    const isDirectory = candidate.hasAttribute("webkitdirectory") || candidate.hasAttribute("directory");
+    return directory ? isDirectory : !isDirectory;
+  });
   expect(input).toBeTruthy();
-  fireEvent.change(input!, { target: { files } });
+  return input as HTMLInputElement;
+}
+
+function chooseFiles(files: File[]) {
+  fireEvent.change(fileInput(false), { target: { files } });
+}
+
+function chooseFolder(files: File[]) {
+  fireEvent.change(fileInput(true), { target: { files } });
+}
+
+function withRelativePath(file: File, relativePath: string) {
+  Object.defineProperty(file, "webkitRelativePath", { value: relativePath });
+  return file;
 }
 
 describe("ResourceImportPanel", () => {
@@ -41,7 +55,7 @@ describe("ResourceImportPanel", () => {
     vi.mocked(bindAdminDraftResources).mockReset();
   });
 
-  it("previews multiple files, keeps a corrected kind, and binds them once", async () => {
+  it("previews chosen files without a package root and binds them once", async () => {
     const onBound = renderPanel();
     vi.mocked(uploadAdminDraftResourceContent)
       .mockResolvedValueOnce({ contentSha256: "hash-policy", byteLength: 6, mediaType: "text/markdown" })
@@ -49,22 +63,19 @@ describe("ResourceImportPanel", () => {
     vi.mocked(bindAdminDraftResources).mockResolvedValue({ revision: 5, items: [] });
     const policy = new File(["policy"], "policy.md", { type: "text/markdown" });
     const notes = new File(["notes"], "notes.txt", { type: "text/plain" });
-    Object.defineProperty(policy, "webkitRelativePath", { value: "knowledge/policy.md" });
-    Object.defineProperty(notes, "webkitRelativePath", { value: "misc/notes.txt" });
 
     chooseFiles([policy, notes]);
 
-    expect(await screen.findByLabelText("Imported resource path 1")).toHaveValue("knowledge/policy.md");
-    expect(screen.getByLabelText("Imported resource path 2")).toHaveValue("misc/notes.txt");
-    expect(screen.getByText("Choose a kind.")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByLabelText("Imported resource kind 2"));
-    const option = await waitFor(() => {
-      const match = document.querySelector('.ant-select-item-option[title="Reference"]');
-      expect(match).toBeTruthy();
-      return match as HTMLElement;
+    expect(await screen.findByLabelText("Imported resource path 1")).toHaveValue("policy.md");
+    expect(screen.getByLabelText("Imported resource path 2")).toHaveValue("notes.txt");
+    expect(screen.getAllByText("Choose a kind.")).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText("Imported resource path 1"), {
+      target: { value: "knowledge/policy.md" }
     });
-    fireEvent.mouseDown(option);
-    fireEvent.click(option);
+    fireEvent.change(screen.getByLabelText("Imported resource path 2"), {
+      target: { value: "references/notes.txt" }
+    });
+    expect(screen.queryByText("Choose a kind.")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Bind imported resources" }));
     await waitFor(() => {
@@ -77,7 +88,7 @@ describe("ResourceImportPanel", () => {
           byteLength: 6
         },
         {
-          logicalPath: "misc/notes.txt",
+          logicalPath: "references/notes.txt",
           kind: "Reference",
           mediaType: "text/plain",
           contentSha256: "hash-notes",
@@ -89,17 +100,46 @@ describe("ResourceImportPanel", () => {
     expect(onBound).toHaveBeenCalled();
   });
 
+  it("strips the selected folder root and infers kind from the top-level directory", async () => {
+    renderPanel();
+    vi.mocked(uploadAdminDraftResourceContent).mockResolvedValue({
+      contentSha256: "hash-policy",
+      byteLength: 6,
+      mediaType: "text/markdown"
+    });
+    vi.mocked(bindAdminDraftResources).mockResolvedValue({ revision: 5, items: [] });
+    const policy = withRelativePath(
+      new File(["policy"], "policy.md", { type: "text/markdown" }),
+      "my-agent/knowledge/policy.md"
+    );
+
+    chooseFolder([policy]);
+
+    expect(await screen.findByLabelText("Imported resource path 1")).toHaveValue("knowledge/policy.md");
+    expect(screen.queryByText("Choose a kind.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bind imported resources" }));
+    await waitFor(() => {
+      expect(bindAdminDraftResources).toHaveBeenCalledWith("draft-1", 4, [
+        expect.objectContaining({ logicalPath: "knowledge/policy.md", kind: "Knowledge" })
+      ]);
+    });
+  });
+
   it("does not bind when one content upload fails", async () => {
     renderPanel();
     vi.mocked(uploadAdminDraftResourceContent)
       .mockResolvedValueOnce({ contentSha256: "hash-policy", byteLength: 6, mediaType: "text/markdown" })
       .mockRejectedValueOnce(new Error("content store unavailable"));
-    const policy = new File(["policy"], "policy.md");
-    const notes = new File(["notes"], "notes.txt");
-    Object.defineProperty(policy, "webkitRelativePath", { value: "knowledge/policy.md" });
-    Object.defineProperty(notes, "webkitRelativePath", { value: "references/notes.txt" });
+    const policy = withRelativePath(
+      new File(["policy"], "policy.md", { type: "text/markdown" }),
+      "my-agent/knowledge/policy.md"
+    );
+    const notes = withRelativePath(
+      new File(["notes"], "notes.txt", { type: "text/plain" }),
+      "my-agent/references/notes.txt"
+    );
 
-    chooseFiles([policy, notes]);
+    chooseFolder([policy, notes]);
     fireEvent.click(await screen.findByRole("button", { name: "Bind imported resources" }));
 
     await waitFor(() => {

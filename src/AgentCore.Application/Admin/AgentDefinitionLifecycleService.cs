@@ -14,7 +14,8 @@ public sealed class AgentDefinitionLifecycleService(
     ProviderAliasSet aliases,
     TimeProvider time,
     IIdGenerator ids,
-    IAdminLifecycleDeletion? deletion = null)
+    IAdminLifecycleDeletion? deletion = null,
+    AdminLifecycleCoordinator? lifecycleGate = null)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _newDefinitionGates = new(StringComparer.Ordinal);
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
@@ -39,33 +40,32 @@ public sealed class AgentDefinitionLifecycleService(
         }
 
         AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
-        var gate = _newDefinitionGates.GetOrAdd(definitionId, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        AgentDefinitionDraft draft;
-        try
-        {
-            await EnsureNewDefinitionIdIsAvailableAsync(definitionId, cancellationToken).ConfigureAwait(false);
-            var now = time.GetUtcNow();
-            draft = await admin.CreateDraftAsync(
-                new AgentDefinitionDraftCreate(
-                    definitionId,
-                    candidate,
-                    DefinitionDraftSourceKind.New,
-                    null,
-                    now,
-                    ids.NewId()),
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (AgentCoreException ex) when (ex.Code == "Conflict")
-        {
-            OperationalDiagnostics.RecordAdmin(
-                "draftCreate", "rejected", "conflict", started, definitionId, null, null, null);
-            throw;
-        }
-        finally
-        {
-            gate.Release();
-        }
+        var draft = await WithDefinitionGateAsync(
+            definitionId,
+            async innerToken =>
+            {
+                try
+                {
+                    await EnsureNewDefinitionIdIsAvailableAsync(definitionId, innerToken).ConfigureAwait(false);
+                    var now = time.GetUtcNow();
+                    return await admin.CreateDraftAsync(
+                        new AgentDefinitionDraftCreate(
+                            definitionId,
+                            candidate,
+                            DefinitionDraftSourceKind.New,
+                            null,
+                            now,
+                            ids.NewId()),
+                        innerToken).ConfigureAwait(false);
+                }
+                catch (AgentCoreException ex) when (ex.Code == "Conflict")
+                {
+                    OperationalDiagnostics.RecordAdmin(
+                        "draftCreate", "rejected", "conflict", started, definitionId, null, null, null);
+                    throw;
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "draftCreate", "completed", "completed", started, draft.DefinitionId, null, null, "none");
         return draft;
@@ -76,7 +76,17 @@ public sealed class AgentDefinitionLifecycleService(
         CancellationToken cancellationToken = default) =>
         CreateDraftAsync(definitionId, AgentDefinitionStarter.Create(definitionId, aliases), cancellationToken);
 
-    public async ValueTask<AgentDefinitionDraft> ForkDraftAsync(
+    public ValueTask<AgentDefinitionDraft> ForkDraftAsync(
+        string definitionId,
+        int sourceVersion,
+        DefinitionDraftSourceKind sourceKind,
+        CancellationToken cancellationToken = default) =>
+        WithDefinitionGateAsync(
+            definitionId,
+            ct => ForkDraftCoreAsync(definitionId, sourceVersion, sourceKind, ct),
+            cancellationToken);
+
+    private async ValueTask<AgentDefinitionDraft> ForkDraftCoreAsync(
         string definitionId,
         int sourceVersion,
         DefinitionDraftSourceKind sourceKind,
@@ -154,7 +164,15 @@ public sealed class AgentDefinitionLifecycleService(
             "draftDelete", "completed", "completed", started, null, null, null, "none");
     }
 
-    public async ValueTask DeleteLogicalDefinitionAsync(
+    public ValueTask DeleteLogicalDefinitionAsync(
+        AdminDefinitionDeleteCommand command,
+        CancellationToken cancellationToken = default) =>
+        WithDefinitionGateAsync(
+            command.DefinitionId,
+            ct => DeleteLogicalDefinitionCoreAsync(command, ct),
+            cancellationToken);
+
+    private async ValueTask DeleteLogicalDefinitionCoreAsync(
         AdminDefinitionDeleteCommand command,
         CancellationToken cancellationToken = default)
     {
@@ -194,6 +212,44 @@ public sealed class AgentDefinitionLifecycleService(
             "definitionDelete", "completed", "completed", started, command.DefinitionId, null, null, "deleted");
     }
 
+    private async ValueTask<T> WithDefinitionGateAsync<T>(
+        string definitionId,
+        Func<CancellationToken, ValueTask<T>> action,
+        CancellationToken cancellationToken)
+    {
+        if (lifecycleGate is not null)
+        {
+            return await lifecycleGate.WithDefinitionAsync(definitionId, action, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var gate = _newDefinitionGates.GetOrAdd(definitionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await action(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async ValueTask WithDefinitionGateAsync(
+        string definitionId,
+        Func<CancellationToken, ValueTask> action,
+        CancellationToken cancellationToken)
+    {
+        _ = await WithDefinitionGateAsync(
+            definitionId,
+            async ct =>
+            {
+                await action(ct).ConfigureAwait(false);
+                return 0;
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private async ValueTask EnsureNewDefinitionIdIsAvailableAsync(
         string definitionId,
         CancellationToken cancellationToken)
@@ -218,6 +274,25 @@ public sealed class AgentDefinitionLifecycleService(
     }
 
     internal async ValueTask<AgentDefinitionPublication> CommitDraftPublicationAsync(
+        Guid draftId,
+        long expectedRevision,
+        Guid operationId,
+        IReadOnlyList<string> changedSectionIds,
+        CancellationToken cancellationToken = default)
+    {
+        var draft = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        return await WithDefinitionGateAsync(
+            draft.DefinitionId,
+            ct => CommitDraftPublicationCoreAsync(
+                draftId,
+                expectedRevision,
+                operationId,
+                changedSectionIds,
+                ct),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<AgentDefinitionPublication> CommitDraftPublicationCoreAsync(
         Guid draftId,
         long expectedRevision,
         Guid operationId,
