@@ -24,6 +24,7 @@ public sealed class TriggerScheduler
     private readonly ITriggerStore _store;
     private readonly ILogger<TriggerScheduler> _logger;
     private readonly ITriggerAdmissionGuard? _guard;
+    private readonly IDiagnosticIdSource _diagnostics;
     private readonly int _batchSize;
 
     public TriggerScheduler(ITriggerStore store, ILogger<TriggerScheduler> logger)
@@ -41,15 +42,36 @@ public sealed class TriggerScheduler
     {
     }
 
+    public TriggerScheduler(
+        ITriggerStore store,
+        ILogger<TriggerScheduler> logger,
+        ITriggerAdmissionGuard guard,
+        IDiagnosticIdSource diagnostics)
+        : this(store, logger, DefaultBatchSize, guard, diagnostics)
+    {
+    }
+
+    internal TriggerScheduler(
+        ITriggerStore store,
+        ILogger<TriggerScheduler> logger,
+        IDiagnosticIdSource diagnostics)
+        : this(store, logger, DefaultBatchSize, null, diagnostics)
+    {
+    }
+
+    internal IDiagnosticIdSource DiagnosticIds => _diagnostics;
+
     private TriggerScheduler(
         ITriggerStore store,
         ILogger<TriggerScheduler> logger,
         int batchSize,
-        ITriggerAdmissionGuard? guard)
+        ITriggerAdmissionGuard? guard,
+        IDiagnosticIdSource? diagnostics = null)
     {
         _store = store;
         _logger = logger;
         _guard = guard;
+        _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _batchSize = Math.Clamp(batchSize, 1, DefaultBatchSize);
     }
 
@@ -151,10 +173,12 @@ public sealed class TriggerScheduler
             {
                 failed++;
                 RuntimeTelemetry.RecordTriggerScheduler("Failed");
-                _logger.LogWarning(
-                    "Trigger scan failed for registration {RegistrationId} ({ExceptionType}).",
-                    registration.RegistrationId,
-                    exception.GetType().Name);
+                DiagnosticLog.Warning(
+                    _logger,
+                    exception,
+                    _diagnostics.NewId(),
+                    "Trigger scan failed for registration.",
+                    new DiagnosticContext(TriggerRegistrationId: registration.RegistrationId));
             }
         }
 

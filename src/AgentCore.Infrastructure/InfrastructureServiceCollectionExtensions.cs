@@ -94,6 +94,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<DurableWorkIntake>();
         services.TryAddSingleton<IInterruptionClassifier, HeuristicInterruptionClassifier>();
         services.TryAddSingleton<IIdGenerator, SystemIdGenerator>();
+        services.TryAddSingleton<IDiagnosticIdSource, SystemDiagnosticIdSource>();
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton(new SqlitePragmaInterceptor(Math.Max(1, persistence.BusyTimeoutMs)));

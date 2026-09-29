@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using AgentCore.Application.Admin;
+using AgentCore.Application.Observability;
+using AgentCore.Application.Testing;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -22,6 +25,7 @@ using AgentCore.Infrastructure.Email;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -1418,6 +1422,63 @@ public sealed class DurableReminderTests
         }, () => new FailingModel());
     }
 
+    [Fact]
+    public async Task Intake_occurrence_failure_logs_one_diagnostic_id_and_the_exception()
+    {
+        await ForEachAsync(async harness =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var occurrence = await AwaitDurableAsync(harness.Triggers, owner, Now, "secret-intake-sentinel");
+            var diagnosticId = Guid.Parse("019944af-00d7-7000-8000-0000000000d1");
+            var businessId = Guid.Parse("019944af-00d7-7000-8000-0000000000b1");
+            var sessionId = Guid.Parse("019944af-00d7-7000-8000-0000000000a1");
+            var business = new DeterministicIdGenerator([businessId], [sessionId]);
+            var failure = new InvalidOperationException("api_key=intake-secret");
+            var logs = new DiagnosticLogCapture<DurableWorkIntake>();
+            var intake = new DurableWorkIntake(
+                harness.Triggers,
+                harness.Handoff,
+                new ThrowingAgentInstanceStore(failure),
+                harness.Definitions,
+                harness.Catalog,
+                business,
+                harness.Time,
+                logs,
+                new QueueDiagnosticIdSource([diagnosticId]));
+            using var metrics = RuntimeMetricProbe.Start();
+            using var listener = DiagnosticActivity.Listen();
+            using var activity = RuntimeTelemetry.Activity.StartActivity("intake-occurrence-failure");
+            Assert.NotNull(activity);
+
+            var pass = await intake.AcceptAwaitingAsync();
+
+            Assert.Equal(0, pass.Accepted);
+            Assert.Equal(1, pass.Skipped);
+            var entry = Assert.Single(logs.Entries);
+            Assert.Equal(LogLevel.Warning, entry.Level);
+            Assert.Same(failure, entry.Exception);
+            Assert.Equal(diagnosticId, entry.Properties["DiagnosticId"]);
+            Assert.Equal(diagnosticId, entry.Scope["DiagnosticId"]);
+            Assert.Equal(occurrence.OccurrenceId, entry.Scope["TriggerOccurrenceId"]);
+            Assert.Equal(InstanceId, entry.Scope["AgentInstanceId"]);
+            Assert.False(entry.Scope.ContainsKey("TriggerRegistrationId"));
+            Assert.Equal(activity.TraceId.ToHexString(), entry.Scope["TraceId"]);
+            Assert.Contains("Durable intake skipped an occurrence.", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-intake-sentinel", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("api_key", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("intake-secret", entry.Message, StringComparison.Ordinal);
+            Assert.Equal(ActivityStatusCode.Error, activity.Status);
+            Assert.DoesNotContain(activity.TagObjects, tag => Equals(tag.Value, diagnosticId));
+            Assert.Equal(businessId, business.NewId());
+            Assert.Contains(metrics.Tags, tag => tag.Key == "outcome" && Equals(tag.Value, "skipped"));
+            foreach (var tag in metrics.Tags)
+            {
+                Assert.DoesNotContain(tag.Key, RuntimeMetricProbe.IdentityTagNames);
+                Assert.NotEqual(diagnosticId, tag.Value);
+            }
+        });
+    }
+
     private static Task<WorkItem> AcceptObservedAsync(Harness harness, TriggerOccurrence occurrence) 
     {
         var selection = SessionModelBinder.PinDefault(harness.Catalog, harness.Definition);
@@ -2254,5 +2315,60 @@ public sealed class DurableReminderTests
                 scope,
                 InstanceId,
                 ProfileId);
+    }
+
+    private sealed class ThrowingAgentInstanceStore(Exception failure) : IAgentInstanceStore
+    {
+        public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
+            throw failure;
+
+        public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentInstance?> FindCompatibilityAsync(string definitionId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentInstance> InsertManagedWithHistoryAsync(
+            AgentInstance instance,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentInstance> UpdateActiveVersionWithHistoryAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentInstance> UpdatePersonaWithHistoryAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentInstance> UpdateLifecycleWithHistoryAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            AdminEventAppend historyAppend,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask UpdateActiveVersionAsync(
+            Guid instanceId,
+            int activeVersion,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+            AgentInstanceRevisionUpdate update,
+            DateTimeOffset updatedAt,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

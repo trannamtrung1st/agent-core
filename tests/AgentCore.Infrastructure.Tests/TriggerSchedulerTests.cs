@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Testing;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Identity;
@@ -293,6 +295,51 @@ public sealed class TriggerSchedulerTests
     }
 
     [Fact]
+    public async Task Registration_failure_logs_one_diagnostic_id_and_the_exception()
+    {
+        await ForEachStore(async store =>
+        {
+            var owner = new TriggerOwner(InstanceA, ProfileA);
+            var registration = await CreateAsync(
+                store,
+                owner,
+                new OneShotSchedule(Due.AddDays(3), "UTC"),
+                Due.AddDays(3),
+                "secret-intent-sentinel");
+            var diagnosticId = Guid.Parse("019944af-00d7-7000-8000-0000000000d1");
+            var businessId = Guid.Parse("019944af-00d7-7000-8000-0000000000b1");
+            var sessionId = Guid.Parse("019944af-00d7-7000-8000-0000000000a1");
+            var business = new DeterministicIdGenerator([businessId], [sessionId]);
+            var logs = new DiagnosticLogCapture<TriggerScheduler>();
+            using var metrics = RuntimeMetricProbe.Start();
+            using var listener = DiagnosticActivity.Listen();
+            using var activity = RuntimeTelemetry.Activity.StartActivity("scheduler-registration-failure");
+            Assert.NotNull(activity);
+
+            var pass = await new TriggerScheduler(new FlakyStore(store), logs, new QueueDiagnosticIdSource([diagnosticId]))
+                .RunOnceAsync(Due.AddDays(3));
+
+            Assert.Equal(1, pass.Failed);
+            var entry = Assert.Single(logs.Entries, candidate => candidate.Level == LogLevel.Warning);
+            Assert.Equal(LogLevel.Warning, entry.Level);
+            var failure = Assert.IsType<IOException>(entry.Exception);
+            Assert.Equal("transient", failure.Message);
+            Assert.Same(failure, entry.Exception);
+            Assert.Equal(diagnosticId, entry.Properties["DiagnosticId"]);
+            Assert.Equal(diagnosticId, entry.Scope["DiagnosticId"]);
+            Assert.Equal(registration.RegistrationId, entry.Scope["TriggerRegistrationId"]);
+            Assert.Equal(activity.TraceId.ToHexString(), entry.Scope["TraceId"]);
+            Assert.Contains("Trigger scan failed for registration.", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-intent-sentinel", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("transient", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("IOException", entry.Message, StringComparison.Ordinal);
+            Assert.Equal(ActivityStatusCode.Error, activity.Status);
+            Assert.Equal(businessId, business.NewId());
+            AssertBoundedMetrics(metrics, diagnosticId);
+        });
+    }
+
+    [Fact]
     public async Task Overlapping_scans_and_a_bounded_batch_admit_each_slot_once()
     {
         await ForEachStore(async store =>
@@ -426,6 +473,18 @@ public sealed class TriggerSchedulerTests
             null));
         Assert.Equal(next, created.NextOccurrenceAtUtc);
         return created;
+    }
+
+    private static void AssertBoundedMetrics(RuntimeMetricProbe metrics, Guid diagnosticId)
+    {
+        var tags = metrics.Tags;
+        Assert.Contains(tags, tag => tag.Key == "outcome" && Equals(tag.Value, "Failed"));
+        foreach (var tag in tags)
+        {
+            Assert.DoesNotContain(tag.Key, RuntimeMetricProbe.IdentityTagNames);
+            Assert.NotEqual(diagnosticId, tag.Value);
+            Assert.DoesNotContain(diagnosticId.ToString(), tag.Value?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static FakeTimeProvider Clock() => new(Created);

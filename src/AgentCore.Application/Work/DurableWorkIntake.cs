@@ -18,8 +18,12 @@ public sealed class DurableWorkIntake(
     IModelCatalog catalog,
     IIdGenerator ids,
     TimeProvider time,
-    ILogger<DurableWorkIntake> logger)
+    ILogger<DurableWorkIntake> logger,
+    IDiagnosticIdSource? diagnostics = null)
 {
+    private readonly IDiagnosticIdSource _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
+
+    internal IDiagnosticIdSource DiagnosticIds => _diagnostics;
     public async ValueTask<DurableIntakePass> AcceptAwaitingAsync(CancellationToken cancellationToken = default)
     {
         var now = time.GetUtcNow();
@@ -64,9 +68,15 @@ public sealed class DurableWorkIntake(
             {
                 skipped++;
                 RuntimeTelemetry.RecordWork("skipped");
-                logger.LogWarning(
-                    "Durable intake skipped an occurrence ({ExceptionType}).",
-                    exception.GetType().Name);
+                DiagnosticLog.Warning(
+                    logger,
+                    exception,
+                    _diagnostics.NewId(),
+                    "Durable intake skipped an occurrence.",
+                    new DiagnosticContext(
+                        AgentInstanceId: occurrence.Owner.AgentInstanceId,
+                        TriggerRegistrationId: occurrence.RegistrationId,
+                        TriggerOccurrenceId: occurrence.OccurrenceId));
             }
         }
 

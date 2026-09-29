@@ -9,6 +9,11 @@ public sealed class SystemIdGenerator(TimeProvider time) : IIdGenerator
     public Guid NewSessionId() => Guid.NewGuid();
 }
 
+public sealed class SystemDiagnosticIdSource : IDiagnosticIdSource
+{
+    public Guid NewId() => Guid.NewGuid();
+}
+
 public sealed class DeterministicIdGenerator : IIdGenerator
 {
     private readonly object _gate = new();
