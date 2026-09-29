@@ -372,7 +372,8 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IModelCatalog>(),
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
                 provider.GetRequiredService<IStructuredMemoryService>(),
-                provider.GetRequiredService<IConversationTurnExecutionStore>());
+                provider.GetRequiredService<IConversationTurnExecutionStore>(),
+                provider.GetRequiredService<IDiagnosticIdSource>());
         });
         services.TryAddSingleton<ConversationExecutionCoordinator>();
         return services;

@@ -1,4 +1,5 @@
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Diagnostics;
 
 namespace AgentCore.Domain.Conversation;
 
@@ -32,7 +33,8 @@ public sealed record ConversationEntry(
     string? SourceAdmissionFingerprint = null,
     string? FinishReason = null,
     string? InterruptReason = null,
-    ModelGenerationProvenance? ModelProvenance = null);
+    ModelGenerationProvenance? ModelProvenance = null,
+    FailureReference? Failure = null);
 
 public sealed record UserProfile(
     Guid ProfileId,

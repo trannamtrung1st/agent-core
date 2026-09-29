@@ -140,7 +140,14 @@ public static partial class HttpMapping
                 item.DisplayName,
                 item.ContentType)).ToArray(),
             projected.SpeechText,
-            projected.InterruptReason);
+            projected.InterruptReason,
+            projected.Failure is { } failure
+                ? new HistoryFailureResponse(
+                    failure.DiagnosticId.ToString("D"),
+                    failure.CorrelationId?.ToString("D"),
+                    failure.Category,
+                    failure.Code)
+                : null);
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

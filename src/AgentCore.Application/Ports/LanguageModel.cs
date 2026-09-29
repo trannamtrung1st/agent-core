@@ -110,7 +110,7 @@ public sealed record ModelCompleted(
     int? InputTokens = null,
     int? OutputTokens = null) : ModelGenerationEvent;
 
-public sealed record ModelFailed(ProviderFailure Failure) : ModelGenerationEvent;
+public sealed record ModelFailed(ProviderFailure Failure, Guid? DiagnosticId = null) : ModelGenerationEvent;
 
 public interface ILanguageModel
 {

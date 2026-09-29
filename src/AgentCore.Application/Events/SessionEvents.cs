@@ -79,7 +79,8 @@ public sealed record BrainFailed(
     AgentTrigger Trigger,
     bool Recoverable,
     string? Message,
-    TaskCompletionSource Processed) : SessionInput(Context);
+    TaskCompletionSource Processed,
+    Guid? DiagnosticId = null) : SessionInput(Context);
 
 public sealed record TimerElapsedReceived(
     EventContext Context,
@@ -271,7 +272,14 @@ public sealed record PublicHistoryEntry(
     IReadOnlyList<PublicHistoryAttachment>? Attachments = null,
     string? FinishReason = null,
     string? InterruptReason = null,
-    string? SpeechText = null);
+    string? SpeechText = null,
+    PublicFailureReference? Failure = null);
+
+public sealed record PublicFailureReference(
+    Guid DiagnosticId,
+    Guid? CorrelationId,
+    string Category,
+    string Code);
 
 public sealed record PublicPendingApproval(
     Guid ApprovalId,
@@ -378,7 +386,8 @@ public sealed record ErrorOutput(
     string Code,
     string SafeMessage,
     bool Fatal,
-    TimeSpan? RetryAfter) : OutputPayload;
+    TimeSpan? RetryAfter,
+    Guid? DiagnosticId = null) : OutputPayload;
 
 public enum ResponseProgressKind
 {
@@ -493,7 +502,10 @@ public static class PublicHistory
             attachments,
             entry.FinishReason,
             entry.InterruptReason,
-            speechText);
+            speechText,
+            entry.Status == EntryStatus.Failed && entry.Failure is { } failure
+                ? new PublicFailureReference(failure.DiagnosticId, failure.CorrelationId, failure.Category, failure.Code)
+                : null);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Contracts.Http;
 
 public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion);
@@ -149,7 +151,15 @@ public sealed record HistoryItemResponse(
     string? FinishReason = null,
     IReadOnlyList<HistoryAttachmentResponse>? Attachments = null,
     string? SpeechText = null,
-    string? InterruptReason = null);
+    string? InterruptReason = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    HistoryFailureResponse? Failure = null);
+
+public sealed record HistoryFailureResponse(
+    string DiagnosticId,
+    string? CorrelationId,
+    string Category,
+    string Code);
 
 public sealed record HistoryPageResponse(
     IReadOnlyList<HistoryItemResponse> Items,

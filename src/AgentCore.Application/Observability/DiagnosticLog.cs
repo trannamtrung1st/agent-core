@@ -73,6 +73,14 @@ public static class DiagnosticLog
         DiagnosticContext context = default) =>
         Write(logger, LogLevel.Warning, exception, diagnosticId, message, context);
 
+    public static void Error(
+        ILogger logger,
+        Exception? exception,
+        Guid diagnosticId,
+        string message,
+        DiagnosticContext context = default) =>
+        Write(logger, LogLevel.Error, exception, diagnosticId, message, context);
+
     private static void Write(
         ILogger logger,
         LogLevel level,

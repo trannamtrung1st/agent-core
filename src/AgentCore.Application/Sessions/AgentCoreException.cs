@@ -14,6 +14,7 @@ public sealed class AgentCoreException : Exception
     public int StatusCode { get; }
     public bool Fatal { get; }
     public int? RetryAfterMs { get; init; }
+    public Guid? DiagnosticId { get; init; }
 }
 
 public static class AgentCoreErrors

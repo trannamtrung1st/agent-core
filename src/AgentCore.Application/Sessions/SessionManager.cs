@@ -1027,7 +1027,8 @@ public sealed class SessionRuntimeFactory(
     IModelCatalog? catalog = null,
     IUserTurnCapabilityValidator? turnCapabilities = null,
     IStructuredMemoryService? structuredMemory = null,
-    IConversationTurnExecutionStore? turnExecutions = null)
+    IConversationTurnExecutionStore? turnExecutions = null,
+    IDiagnosticIdSource? diagnostics = null)
 {
     public SessionRuntime Create(SessionSnapshot snapshot, ISessionOutput output) =>
         new(
@@ -1055,5 +1056,6 @@ public sealed class SessionRuntimeFactory(
             catalog: catalog,
             turnCapabilities: turnCapabilities,
             structuredMemory: structuredMemory,
-            turnExecutions: turnExecutions);
+            turnExecutions: turnExecutions,
+            diagnostics: diagnostics);
 }

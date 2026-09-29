@@ -180,6 +180,7 @@ public sealed class CommandAdmissionTests : IClassFixture<AgentCoreApiFactory>
                 attachment));
         Assert.False(denied.Accepted);
         Assert.Equal("ValidationError", denied.Error?.Code);
+        Assert.Null(denied.Error?.DiagnosticId);
     }
 
     [Fact]

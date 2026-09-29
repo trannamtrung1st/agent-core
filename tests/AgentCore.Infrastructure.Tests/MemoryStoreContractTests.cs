@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Diagnostics;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -864,6 +865,47 @@ public sealed class MemoryStoreContractTests
             null,
             new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero));
+
+    [Fact]
+    public async Task Failure_reference_reopens_and_a_null_column_stays_null()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-failure-{Guid.NewGuid():N}.db");
+        var diagnosticId = Guid.Parse("019944af-00d7-7000-8000-0000000000d1");
+        var correlationId = Guid.Parse("019944af-00d7-7000-8000-0000000000c1");
+        var reference = new FailureReference(diagnosticId, "provider", "Unavailable", correlationId);
+        var failedId = Guid.Parse("019944af-00d7-7000-8000-0000000000e1");
+        var legacyId = Guid.Parse("019944af-00d7-7000-8000-0000000000e2");
+        var failed = Entry(failedId, 1, EntryStatus.Failed, "failed") with { Failure = reference };
+        var legacy = Entry(legacyId, 2, EntryStatus.Failed, "legacy");
+        var first = First() with { Entries = [failed, legacy] };
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(first, 0);
+            var changed = first with
+            {
+                Revision = 2,
+                Entries = [failed, legacy with { Failure = reference }]
+            };
+            await opened.Store.SaveAsync(changed, 1);
+            var detected = await opened.Store.LoadAsync(first.SessionId);
+            Assert.Equal(reference, detected!.Entries.Single(entry => entry.EntryId == legacyId).Failure);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        var loaded = await reopened.Store.LoadAsync(first.SessionId);
+        Assert.Equal(reference, loaded!.Entries.Single(entry => entry.EntryId == failedId).Failure);
+        Assert.Equal(reference, loaded.Entries.Single(entry => entry.EntryId == legacyId).Failure);
+
+        await using var db = await reopened.Factory.CreateDbContextAsync();
+        var row = db.Set<EntryRecord>().Single(item => item.EntryId == legacyId.ToString("D"));
+        row.FailureReferenceJson = null;
+        await db.SaveChangesAsync();
+        var cleared = await reopened.Store.LoadAsync(first.SessionId);
+        Assert.Null(cleared!.Entries.Single(entry => entry.EntryId == legacyId).Failure);
+        Assert.Equal(EntryStatus.Failed, cleared.Entries.Single(entry => entry.EntryId == legacyId).Status);
+    }
 
     [Fact]
     public async Task Envelope_and_block_delivery_round_trip_sqlite()

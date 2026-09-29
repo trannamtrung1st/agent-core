@@ -26,6 +26,33 @@ public sealed class ShutdownHostTests
         var created = await client.PostAsJsonAsync("/api/v1/sessions", new CreateSessionRequest("examiner", 1, "text"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, created.StatusCode);
         Assert.False(host.Admitting);
+        await using var hub = new HubConnectionBuilder()
+            .WithUrl(
+                new Uri(factory.Server.BaseAddress!, "/hubs/session"),
+                options =>
+                {
+                    options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                    options.Transports = HttpTransportType.LongPolling;
+                    TestOwnerCapability.Apply(options, factory.Services);
+                })
+            .AddMessagePackProtocol()
+            .Build();
+        await hub.StartAsync();
+        var rejected = await hub.InvokeAsync<CommandAck>(
+            "Attach",
+            new ClientCommand<AttachPayload>
+            {
+                ProtocolVersion = 1,
+                SessionId = Guid.NewGuid().ToString(),
+                EventId = Guid.NewGuid().ToString(),
+                Sequence = 0,
+                Timestamp = DateTimeOffset.UtcNow.ToString("o"),
+                Type = "session.attach",
+                Payload = new AttachPayload()
+            });
+        Assert.False(rejected.Accepted);
+        Assert.Equal("ServiceUnavailable", rejected.Error?.Code);
+        Assert.Null(rejected.Error?.DiagnosticId);
     }
 
     [Fact]

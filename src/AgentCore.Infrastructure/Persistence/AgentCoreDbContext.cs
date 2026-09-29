@@ -80,6 +80,7 @@ public sealed class EntryRecord
     public int HeardTextEndExclusive { get; set; }
     public int ReceivedTextEndExclusive { get; set; }
     public string? EnvelopeJson { get; set; }
+    public string? FailureReferenceJson { get; set; }
     public string? AttachmentRefsJson { get; set; }
     public string? SourceAdmissionFingerprint { get; set; }
     public string? FinishReason { get; set; }

@@ -258,7 +258,15 @@ public sealed partial class SessionRuntime
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "TTS pump failed for {ResponseId} segment {Segment}", responseId, segment.SegmentIndex);
+                var diagnosticId = _diagnostics.NewId();
+                LogConversationFailure(
+                    cause,
+                    responseId,
+                    diagnosticId,
+                    "provider",
+                    nameof(ProviderErrorCode.Unknown),
+                    "TTS pump failed.",
+                    ex);
                 var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 BeginWork();
                 if (!TryMailbox(
@@ -266,7 +274,7 @@ public sealed partial class SessionRuntime
                             NewContext(cause.EventId),
                             responseId,
                             segment.SegmentIndex,
-                            new SpeechSynthesisFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Synthesis failed.")),
+                            new SpeechSynthesisFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Synthesis failed."), diagnosticId),
                             processed)))
                 {
                     EndWork();
@@ -334,7 +342,15 @@ public sealed partial class SessionRuntime
             case SpeechSynthesisFailed failed:
                 _ttsBusy = false;
                 SpeechTelemetry.RecordError(failed.Failure.Code.ToString());
-                await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken).ConfigureAwait(false);
+                var speechFailure = ReferenceForProvider(input.Context, input.ResponseId, failed.Failure, failed.DiagnosticId);
+                await CompleteAsync(
+                        input.Context,
+                        input.ResponseId,
+                        failed: true,
+                        cancellationToken,
+                        speechFailure,
+                        failed.Failure.SafeMessage)
+                    .ConfigureAwait(false);
                 break;
         }
 

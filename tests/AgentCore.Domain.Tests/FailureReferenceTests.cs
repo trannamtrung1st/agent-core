@@ -42,6 +42,27 @@ public sealed class FailureReferenceTests
         Assert.Equal("correlationId", error.ParamName);
     }
 
+    [Fact]
+    public void Json_round_trips_only_the_four_safe_fields()
+    {
+        var reference = new FailureReference(DiagnosticId, "provider", "Unavailable", CorrelationId);
+        var json = FailureReferenceJson.Serialize(reference);
+        Assert.Contains("\"diagnosticId\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("stack", json, StringComparison.OrdinalIgnoreCase);
+        var restored = FailureReferenceJson.Deserialize(json);
+        Assert.Equal(reference, restored);
+        Assert.Null(FailureReferenceJson.Deserialize(null));
+        Assert.Null(FailureReferenceJson.Deserialize("  "));
+    }
+
+    [Fact]
+    public void Json_rejects_unknown_fields()
+    {
+        var json = $$"""{"diagnosticId":"{{DiagnosticId}}","category":"provider","code":"Unavailable","stack":"secret"}""";
+        var error = Assert.Throws<ArgumentException>(() => FailureReferenceJson.Deserialize(json));
+        Assert.Contains("unknown field", error.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]

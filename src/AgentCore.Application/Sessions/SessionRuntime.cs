@@ -15,6 +15,7 @@ using AgentCore.Application.Speech;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Diagnostics;
 using AgentCore.Domain.Triggers;
 using Microsoft.Extensions.Logging;
 
@@ -43,6 +44,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IIdGenerator _ids;
     private readonly TimeProvider _time;
     private readonly ILogger _logger;
+    private readonly IDiagnosticIdSource _diagnostics;
     private readonly RecognitionCapabilities _recognition;
     private readonly ISpeechRecognizer? _recognizer;
     private readonly ISpeechSynthesizer? _synthesizer;
@@ -192,8 +194,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IModelCatalog? catalog = null,
         IUserTurnCapabilityValidator? turnCapabilities = null,
         IStructuredMemoryService? structuredMemory = null,
-        IConversationTurnExecutionStore? turnExecutions = null)
+        IConversationTurnExecutionStore? turnExecutions = null,
+        IDiagnosticIdSource? diagnostics = null)
     {
+        _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
         _catalog = catalog;
@@ -1614,6 +1618,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await PublishOutputIdleAsync(input.Context, cancellationToken).ConfigureAwait(false);
             if (input.Recoverable)
             {
+                var diagnosticId = input.DiagnosticId ?? _diagnostics.NewId();
+                if (input.DiagnosticId is null)
+                {
+                    LogConversationFailure(
+                        input.Context,
+                        input.ResponseId,
+                        diagnosticId,
+                        "Session",
+                        "BrainFailed",
+                        "The agent could not prepare a response.",
+                        null);
+                }
+
                 await PublishAsync(
                         new SessionOutput(
                             input.Context,
@@ -1623,7 +1640,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 "BrainFailed",
                                 "The agent could not prepare a response.",
                                 false,
-                                null)),
+                                null,
+                                diagnosticId)),
                         cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -2255,6 +2273,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
+                    var diagnosticId = _diagnostics.NewId();
+                    LogConversationFailure(
+                        NewContext(cause.EventId),
+                        responseId,
+                        diagnosticId,
+                        "Session",
+                        "BrainFailed",
+                        "The agent could not prepare a response.",
+                        ex);
                     failure = new BrainFailed(
                         NewContext(cause.EventId),
                         turn,
@@ -2262,7 +2289,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         trigger,
                         Recoverable: true,
                         Message: ex.Message,
-                        new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+                        new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
+                        diagnosticId);
                 }
 
                 RuntimeTelemetry.Record("brain", RuntimeTelemetry.ElapsedMs(brainStarted));
@@ -2278,7 +2306,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         failure.Trigger,
                         failure.Recoverable,
                         failure.Message,
-                        processed);
+                        processed,
+                        failure.DiagnosticId);
                     if (!TryMailbox(failed))
                     {
                         EndWork();
@@ -2659,13 +2688,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Language model pump failed for {ResponseId}", request.ResponseId);
+            var diagnosticId = _diagnostics.NewId();
+            LogConversationFailure(
+                cause,
+                request.ResponseId,
+                diagnosticId,
+                "provider",
+                nameof(ProviderErrorCode.Unknown),
+                "Language model pump failed.",
+                ex);
             await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, CancellationToken.None, request.ResponseId)
                 .ConfigureAwait(false);
             await MailboxModelAsync(
                     cause,
                     request.ResponseId,
-                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Generation failed.")),
+                    new ModelFailed(new ProviderFailure(ProviderErrorCode.Unknown, "Generation failed."), diagnosticId),
                     CancellationToken.None)
                 .ConfigureAwait(false);
         }
@@ -2837,7 +2874,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 };
                 if (_usesResponseContract && !_semanticReady)
                 {
-                    await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken)
+                    var reference = ReferenceForResponse(
+                        input.Context,
+                        input.ResponseId,
+                        "IncompleteResponse",
+                        null);
+                    await CompleteAsync(
+                            input.Context,
+                            input.ResponseId,
+                            failed: true,
+                            cancellationToken,
+                            reference,
+                            "The response could not be completed.")
                         .ConfigureAwait(false);
                     break;
                 }
@@ -2873,7 +2921,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     _accumulator.Reset();
                 }
 
-                await CompleteAsync(input.Context, input.ResponseId, failed: true, cancellationToken).ConfigureAwait(false);
+                var modelFailure = ReferenceForProvider(input.Context, input.ResponseId, failed.Failure, failed.DiagnosticId);
+                await CompleteAsync(
+                        input.Context,
+                        input.ResponseId,
+                        failed: true,
+                        cancellationToken,
+                        modelFailure,
+                        failed.Failure.SafeMessage)
+                    .ConfigureAwait(false);
                 break;
         }
 
@@ -3124,13 +3180,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ClearPendingPostResponseIdleDelay();
     }
 
-    private async Task CompleteAsync(EventContext context, Guid responseId, bool failed, CancellationToken cancellationToken)
+    private async Task CompleteAsync(
+        EventContext context,
+        Guid responseId,
+        bool failed,
+        CancellationToken cancellationToken,
+        FailureReference? failure = null,
+        string? safeMessage = null)
     {
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _initiativeHeld = false;
         var status = failed ? EntryStatus.Failed : EntryStatus.Completed;
-        UpdateAssistant(status);
+        var storedFailure = failed ? failure : null;
+        UpdateAssistant(status, failure: storedFailure);
         await FinishOwnedProgressAsync(
                 context,
                 failed ? ResponseProgressState.Failed : ResponseProgressState.Completed,
@@ -3165,6 +3228,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         await PublishAsync(
                                 new SessionOutput(context, capturedResponseId, new TextCompletedOutput(textLength)),
+                                ct)
+                            .ConfigureAwait(false);
+                    }
+                    else if (storedFailure is not null)
+                    {
+                        await PublishAsync(
+                                new SessionOutput(
+                                    context,
+                                    capturedResponseId,
+                                    new ErrorOutput(
+                                        storedFailure.Category,
+                                        storedFailure.Code,
+                                        string.IsNullOrWhiteSpace(safeMessage) ? "The response failed." : safeMessage,
+                                        false,
+                                        null,
+                                        storedFailure.DiagnosticId)),
                                 ct)
                             .ConfigureAwait(false);
                     }
@@ -3303,7 +3382,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void UpdateStreamingAssistant() => UpdateAssistant(EntryStatus.Streaming);
 
-    private void UpdateAssistant(EntryStatus status, string? interruptReason = null)
+    private void UpdateAssistant(EntryStatus status, string? interruptReason = null, FailureReference? failure = null)
     {
         if (_activeEntryId is not { } entryId)
         {
@@ -3325,12 +3404,90 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             EntryStatus.Interrupted => interruptReason ?? entry.InterruptReason,
                             EntryStatus.Completed or EntryStatus.Failed => null,
                             _ => entry.InterruptReason
-                        }
+                        },
+                        Failure = status == EntryStatus.Failed ? failure : null
                     }
                     : entry)
             .ToArray();
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
     }
+
+    private static bool RequiresDiagnosticId(ProviderErrorCode code) =>
+        code is ProviderErrorCode.Unavailable
+            or ProviderErrorCode.Unknown
+            or ProviderErrorCode.Timeout
+            or ProviderErrorCode.InvalidResponse
+            or ProviderErrorCode.Authentication
+            or ProviderErrorCode.RateLimited;
+
+    private FailureReference? ReferenceForProvider(
+        EventContext context,
+        Guid responseId,
+        ProviderFailure failure,
+        Guid? existingId)
+    {
+        if (!RequiresDiagnosticId(failure.Code))
+        {
+            return null;
+        }
+
+        if (existingId is { } supplied && supplied != Guid.Empty)
+        {
+            return new FailureReference(supplied, "provider", failure.Code.ToString(), CorrelationOrNull(context));
+        }
+
+        var diagnosticId = _diagnostics.NewId();
+        LogConversationFailure(
+            context,
+            responseId,
+            diagnosticId,
+            "provider",
+            failure.Code.ToString(),
+            "Assistant response failed.",
+            null);
+        return new FailureReference(diagnosticId, "provider", failure.Code.ToString(), CorrelationOrNull(context));
+    }
+
+    private FailureReference ReferenceForResponse(
+        EventContext context,
+        Guid responseId,
+        string code,
+        Exception? exception)
+    {
+        var diagnosticId = _diagnostics.NewId();
+        LogConversationFailure(
+            context,
+            responseId,
+            diagnosticId,
+            "response",
+            code,
+            "Assistant response failed.",
+            exception);
+        return new FailureReference(diagnosticId, "response", code, CorrelationOrNull(context));
+    }
+
+    private void LogConversationFailure(
+        EventContext context,
+        Guid? responseId,
+        Guid diagnosticId,
+        string category,
+        string code,
+        string message,
+        Exception? exception) =>
+        DiagnosticLog.Error(
+            _logger,
+            exception,
+            diagnosticId,
+            message,
+            new DiagnosticContext(
+                CorrelationId: CorrelationOrNull(context),
+                SessionId: SessionId,
+                ResponseId: responseId,
+                ErrorCategory: category,
+                ErrorCode: code));
+
+    private static Guid? CorrelationOrNull(EventContext context) =>
+        context.CorrelationId == Guid.Empty ? null : context.CorrelationId;
 
     private int CurrentHeard()
     {
@@ -3462,7 +3619,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 _artifacts,
                 AttachmentAllowed);
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
             if (finalizingOperationId is { } failedOp)
             {
@@ -3479,7 +3636,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             _envelope = null;
             _accumulator.Reset();
-            await CompleteAsync(context, responseId, failed: true, cancellationToken).ConfigureAwait(false);
+            var reference = ReferenceForResponse(context, responseId, "InvalidEnvelope", ex);
+            await CompleteAsync(
+                    context,
+                    responseId,
+                    failed: true,
+                    cancellationToken,
+                    reference,
+                    "The response could not be completed.")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -4384,6 +4549,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
             if (input.Error is not null)
             {
+                var diagnosticId = _diagnostics.NewId();
+                LogConversationFailure(
+                    input.Context,
+                    null,
+                    diagnosticId,
+                    "Session",
+                    "SessionPersistenceUnavailable",
+                    "Persistent save failed.",
+                    input.Error);
                 if (job.Kind is PersistKind.TerminalEnd)
                 {
                     _snapshot = _snapshot with
@@ -4401,7 +4575,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     "SessionPersistenceUnavailable",
                                     input.Error.Message,
                                     false,
-                                    TimeSpan.FromSeconds(1))),
+                                    TimeSpan.FromSeconds(1),
+                                    diagnosticId)),
                                 cancellationToken)
                         .ConfigureAwait(false);
                     job.Ended?.TrySetResult(false);
@@ -4411,7 +4586,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (_snapshot.Status is not SessionStatus.Ended and not SessionStatus.Ending
                     && job.Kind is not PersistKind.Pause and not PersistKind.ModelSelection)
                 {
-                    await FailPersistenceAsync(cancellationToken).ConfigureAwait(false);
+                    await FailPersistenceAsync(cancellationToken, diagnosticId).ConfigureAwait(false);
                 }
 
                 job.Ended?.TrySetResult(false);
@@ -4476,7 +4651,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _ => _snapshot.Status is SessionStatus.Attached or SessionStatus.Created
         };
 
-    private async Task FailPersistenceAsync(CancellationToken cancellationToken)
+    private async Task FailPersistenceAsync(CancellationToken cancellationToken, Guid diagnosticId)
     {
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
@@ -4526,7 +4701,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         "SessionPersistenceUnavailable",
                         "Persistent save failed.",
                         false,
-                        TimeSpan.FromSeconds(1))),
+                        TimeSpan.FromSeconds(1),
+                        diagnosticId)),
                 cancellationToken)
             .ConfigureAwait(false);
         await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);

@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -834,6 +835,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.SourceAdmissionFingerprint == entry.SourceAdmissionFingerprint
         && row.FinishReason == entry.FinishReason
         && row.InterruptReason == entry.InterruptReason
+        && row.FailureReferenceJson == FailureReferenceJson.Serialize(entry.Failure)
         && row.Role == entry.Role.ToString()
         && row.DeliveryMode == entry.DeliveryMode.ToString()
         && row.ResponseId == entry.ResponseId?.ToString("D")
@@ -929,6 +931,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.SourceAdmissionFingerprint = entry.SourceAdmissionFingerprint;
         row.FinishReason = entry.FinishReason;
         row.InterruptReason = entry.InterruptReason;
+        row.FailureReferenceJson = FailureReferenceJson.Serialize(entry.Failure);
         ApplyModelProvenance(row, entry.ModelProvenance);
         row.CreatedAtUtc = entry.CreatedAt.ToUnixTimeMilliseconds();
     }
@@ -998,7 +1001,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.SourceAdmissionFingerprint,
             row.FinishReason,
             row.InterruptReason,
-            ReadModelProvenance(row));
+            ReadModelProvenance(row),
+            FailureReferenceJson.Deserialize(row.FailureReferenceJson));
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }
@@ -1253,7 +1257,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
-    }
+
+        if (await ColumnExistsAsync(connection, "ConversationEntries", "FailureReferenceJson", cancellationToken).ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260929121048_P7FailureReference', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+        }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(
         AgentCoreDbContext db,

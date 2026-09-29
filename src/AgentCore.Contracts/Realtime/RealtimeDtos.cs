@@ -33,6 +33,9 @@ public sealed class CommandError
     [Key("retryAfterMs")]
     public int? RetryAfterMs { get; set; }
 
+    [Key("diagnosticId")]
+    public string? DiagnosticId { get; set; }
+
     [Key("extensions")]
     public Dictionary<string, object?>? Extensions { get; set; }
 }

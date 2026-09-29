@@ -80,7 +80,7 @@ public sealed record SpeechTimingMark(int TextEndExclusive, long SampleOffset) :
 
 public sealed record SpeechSynthesisCompleted(long TotalSamples) : SpeechSynthesisEvent;
 
-public sealed record SpeechSynthesisFailed(ProviderFailure Failure) : SpeechSynthesisEvent;
+public sealed record SpeechSynthesisFailed(ProviderFailure Failure, Guid? DiagnosticId = null) : SpeechSynthesisEvent;
 
 public interface ISpeechSynthesizer
 {

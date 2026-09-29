@@ -7,10 +7,14 @@ namespace AgentCore.Application.Tests;
 
 internal static class SemanticTestHook
 {
+    internal static readonly AsyncLocal<bool> Bypass = new();
+
     [ModuleInitializer]
     internal static void Register()
     {
         SessionRuntime.TestDecorateLanguageModel = static model =>
-            model is SemanticResponseLanguageModel ? model : new SemanticResponseLanguageModel(model);
+            Bypass.Value || model is SemanticResponseLanguageModel
+                ? model
+                : new SemanticResponseLanguageModel(model);
     }
 }

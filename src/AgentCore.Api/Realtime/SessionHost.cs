@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Events;
 using AgentCore.Application.Models;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
@@ -37,6 +38,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     private readonly AgentCoreOptions _options;
     private readonly IOwnerCapabilityService _capabilities;
     private readonly ILogger<SessionHost> _logger;
+    private readonly IDiagnosticIdSource _diagnostics;
     private readonly IModelCatalog? _catalog;
     private readonly IUserTurnCapabilityValidator? _turnCapabilities;
     private readonly ConcurrentDictionary<Guid, Live> _live = new();
@@ -70,7 +72,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         IOwnerCapabilityService capabilities,
         ILogger<SessionHost> logger,
         IModelCatalog? catalog = null,
-        IUserTurnCapabilityValidator? turnCapabilities = null)
+        IUserTurnCapabilityValidator? turnCapabilities = null,
+        IDiagnosticIdSource? diagnostics = null)
     {
         _sessions = sessions;
         _factory = factory;
@@ -81,6 +84,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         _logger = logger;
         _catalog = catalog;
         _turnCapabilities = turnCapabilities;
+        _diagnostics = diagnostics ?? throw new InvalidOperationException("A diagnostic id source is required.");
     }
 
     public Guid? ActiveResponseId(Guid sessionId) =>
@@ -443,13 +447,20 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                             .ConfigureAwait(false);
                     }
 
+                    Guid? diagnosticId = null;
+                    if (!attached)
+                    {
+                        diagnosticId = DiagnosePersistence(sessionId, "Persistent save failed.", null);
+                    }
+
                     return Reject(
                         command.EventId,
                         "Session",
                         attached ? "NotFound" : "SessionPersistenceUnavailable",
                         attached ? "Session is not attached." : "Persistent save failed.",
                         false,
-                        attached ? null : 1000);
+                        attached ? null : 1000,
+                        diagnosticId);
                 }
 
                 var accepted = Accept(command.EventId);
@@ -492,7 +503,13 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
         catch (AgentCoreException ex)
         {
-            return Reject(command.EventId, "Session", ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs);
+            Guid? diagnosticId = null;
+            if (ex.Code == "SessionPersistenceUnavailable")
+            {
+                diagnosticId = ex.DiagnosticId ?? DiagnosePersistence(sessionId, "Persistent save failed.", ex);
+            }
+
+            return Reject(command.EventId, "Session", ex.Code, ex.Message, ex.Fatal, ex.RetryAfterMs, diagnosticId);
         }
     }
 
@@ -1276,7 +1293,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         "SessionPersistenceUnavailable",
                         "Failed to persist the user turn.",
                         false,
-                        1000);
+                        1000,
+                        DiagnosePersistence(live.Runtime.SessionId, "Failed to persist the user turn.", null));
                 }
 
                 if (AfterUserTextPersisted is not null)
@@ -1474,7 +1492,8 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             }
             catch (AgentCoreException ex) when (ex.Code == "SessionPersistenceUnavailable")
             {
-                return Reject(command.EventId, "Session", ex.Code, ex.Message, false, ex.RetryAfterMs ?? 1000);
+                var diagnosticId = ex.DiagnosticId ?? DiagnosePersistence(sessionId, "Persistent save failed.", ex);
+                return Reject(command.EventId, "Session", ex.Code, ex.Message, false, ex.RetryAfterMs ?? 1000, diagnosticId);
             }
         }, cancellationToken).ConfigureAwait(false);
 
@@ -2145,7 +2164,14 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     private static CommandAck Accept(string eventId) => new() { EventId = eventId, Accepted = true };
 
-    private static CommandAck Reject(string eventId, string category, string code, string message, bool fatal, int? retry) =>
+    private static CommandAck Reject(
+        string eventId,
+        string category,
+        string code,
+        string message,
+        bool fatal,
+        int? retry,
+        Guid? diagnosticId = null) =>
         new()
         {
             EventId = eventId,
@@ -2156,9 +2182,25 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 Code = code,
                 Message = message,
                 Fatal = fatal,
-                RetryAfterMs = retry
+                RetryAfterMs = retry,
+                DiagnosticId = diagnosticId?.ToString("D")
             }
         };
+
+    private Guid DiagnosePersistence(Guid sessionId, string message, Exception? exception)
+    {
+        var diagnosticId = _diagnostics.NewId();
+        DiagnosticLog.Error(
+            _logger,
+            exception,
+            diagnosticId,
+            message,
+            new DiagnosticContext(
+                SessionId: sessionId,
+                ErrorCategory: "Session",
+                ErrorCode: "SessionPersistenceUnavailable"));
+        return diagnosticId;
+    }
 
     private sealed class Live
     {
@@ -2552,7 +2594,8 @@ public static class SessionEventMapper
                 ["code"] = error.Code,
                 ["message"] = error.SafeMessage,
                 ["fatal"] = error.Fatal,
-                ["retryAfterMs"] = error.RetryAfter is { } retry ? (int)retry.TotalMilliseconds : null
+                ["retryAfterMs"] = error.RetryAfter is { } retry ? (int)retry.TotalMilliseconds : null,
+                ["diagnosticId"] = error.DiagnosticId?.ToString("D")
             }),
             SpeechOutputSegmentOutput segment => ("speech.output.segment", new Dictionary<string, object?>
             {
@@ -2625,7 +2668,16 @@ public static class SessionEventMapper
             }).ToArray(),
             ["finishReason"] = entry.FinishReason,
             ["interruptReason"] = entry.InterruptReason,
-            ["speechText"] = entry.SpeechText
+            ["speechText"] = entry.SpeechText,
+            ["failure"] = entry.Failure is { } failure
+                ? new Dictionary<string, object?>
+                {
+                    ["diagnosticId"] = failure.DiagnosticId.ToString("D"),
+                    ["correlationId"] = failure.CorrelationId?.ToString("D"),
+                    ["category"] = failure.Category,
+                    ["code"] = failure.Code
+                }
+                : null
         }).ToArray();
 
         return new Dictionary<string, object?>

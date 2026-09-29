@@ -16,6 +16,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Tests;
 
@@ -64,9 +65,10 @@ public sealed class SqliteHostRecoveryTests
             var retry = await retryHub.InvokeAsync<CommandAck>(
                 "SendText",
                 Text(sessionId, 1, retryAttachment, "Different", eventId));
-            Assert.False(retry.Accepted);
-            Assert.Equal("ProtocolError", retry.Error?.Code);
-            Assert.True(retry.Error?.Fatal);
+        Assert.False(retry.Accepted);
+        Assert.Equal("ProtocolError", retry.Error?.Code);
+        Assert.Null(retry.Error?.DiagnosticId);
+        Assert.True(retry.Error?.Fatal);
             var history = await retryClient.GetFromJsonAsync<HistoryPageResponse>($"/api/v1/sessions/{sessionId}/messages?after=0");
             Assert.Equal("Hello", history!.Items.Single(item => item.Role == "user").Text);
         }
@@ -312,6 +314,12 @@ public sealed class SqliteHostRecoveryTests
             }).WaitAsync(TimeSpan.FromSeconds(15));
         Assert.False(ended.Accepted);
         Assert.Equal("SessionPersistenceUnavailable", ended.Error?.Code);
+        Assert.True(Guid.TryParse(ended.Error?.DiagnosticId, out var diagnosticId));
+        Assert.Contains(
+            factory.Logs,
+            line => line.Contains(diagnosticId.ToString("D"), StringComparison.Ordinal)
+                && line.Contains("Persistent save failed.", StringComparison.Ordinal)
+                && line.Contains("AgentCoreException", StringComparison.Ordinal));
         var view = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v1/sessions/{session.SessionId}");
         Assert.NotEqual("ended", view!.Status);
     }
@@ -339,6 +347,7 @@ public sealed class SqliteHostRecoveryTests
             .AddMessagePackProtocol()
             .Build();
         await hub.StartAsync();
+        string? persistenceDiagnosticId = null;
         var persisted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         hub.On<ServerEvent>("SessionEvent", evt =>
         {
@@ -346,6 +355,7 @@ public sealed class SqliteHostRecoveryTests
                 && evt.Payload.TryGetValue("code", out var code)
                 && string.Equals(Convert.ToString(code), "SessionPersistenceUnavailable", StringComparison.Ordinal))
             {
+                persistenceDiagnosticId = evt.Payload.TryGetValue("diagnosticId", out var id) ? Convert.ToString(id) : null;
                 persisted.TrySetResult();
             }
         });
@@ -363,6 +373,8 @@ public sealed class SqliteHostRecoveryTests
             Text(session.SessionId, 2, attachment, "Again", Guid.NewGuid().ToString()));
         Assert.False(followUp.Accepted);
         Assert.Equal("NotFound", followUp.Error?.Code);
+        Assert.Null(followUp.Error?.DiagnosticId);
+        Assert.True(Guid.TryParse(persistenceDiagnosticId, out _));
         await WaitForCatalogStatusAsync(client, session.SessionId, "paused", TimeSpan.FromSeconds(10));
         await ReopenIfPausedAsync(client, session.SessionId);
         var reconnectReady = ReadyWaiter(hub);
@@ -1147,6 +1159,9 @@ internal sealed class PauseAfterEndStore(IMemoryStore inner) : IMemoryStore
 internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
 {
     private readonly string _db = Path.Combine(Path.GetTempPath(), $"agent-core-fail-{Guid.NewGuid():N}.db");
+    private readonly DiagnosticLineLoggerProvider _logs = new();
+
+    public IReadOnlyList<string> Logs => _logs.Lines;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -1195,6 +1210,7 @@ internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
                 return new FailingEndStore(inner);
             });
         });
+        builder.ConfigureLogging(logging => logging.AddProvider(_logs));
         TestHttpDefaults.UseLoopbackCaller(builder);
     }
 
@@ -1523,5 +1539,50 @@ internal sealed class SqliteKestrelProcess : IAsyncDisposable
         }
 
         throw new DirectoryNotFoundException();
+    }
+}
+
+internal sealed class DiagnosticLineLoggerProvider : ILoggerProvider
+{
+    public List<string> Lines { get; } = [];
+
+    public ILogger CreateLogger(string categoryName) => new DiagnosticLineLogger(Lines);
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class DiagnosticLineLogger(List<string> lines) : ILogger
+    {
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel < LogLevel.Error)
+            {
+                return;
+            }
+
+            lock (lines)
+            {
+                lines.Add(formatter(state, exception) + " " + exception?.GetType().Name);
+            }
+        }
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+
+        public void Dispose()
+        {
+        }
     }
 }
