@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -12,8 +13,10 @@ public sealed class AgentDefinitionLifecycleService(
     IAgentDefinitionAdminStore admin,
     ProviderAliasSet aliases,
     TimeProvider time,
-    IIdGenerator ids)
+    IIdGenerator ids,
+    IAdminLifecycleDeletion? deletion = null)
 {
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _newDefinitionGates = new(StringComparer.Ordinal);
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
         CancellationToken cancellationToken = default) =>
         admin.ListDraftsAsync(cancellationToken);
@@ -36,16 +39,33 @@ public sealed class AgentDefinitionLifecycleService(
         }
 
         AgentDefinitionCandidateValidator.ValidateForPersistence(candidate, aliases);
-        var now = time.GetUtcNow();
-        var draft = await admin.CreateDraftAsync(
-            new AgentDefinitionDraftCreate(
-                definitionId,
-                candidate,
-                DefinitionDraftSourceKind.New,
-                null,
-                now,
-                ids.NewId()),
-            cancellationToken).ConfigureAwait(false);
+        var gate = _newDefinitionGates.GetOrAdd(definitionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        AgentDefinitionDraft draft;
+        try
+        {
+            await EnsureNewDefinitionIdIsAvailableAsync(definitionId, cancellationToken).ConfigureAwait(false);
+            var now = time.GetUtcNow();
+            draft = await admin.CreateDraftAsync(
+                new AgentDefinitionDraftCreate(
+                    definitionId,
+                    candidate,
+                    DefinitionDraftSourceKind.New,
+                    null,
+                    now,
+                    ids.NewId()),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (AgentCoreException ex) when (ex.Code == "Conflict")
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "draftCreate", "rejected", "conflict", started, definitionId, null, null, null);
+            throw;
+        }
+        finally
+        {
+            gate.Release();
+        }
         OperationalDiagnostics.RecordAdmin(
             "draftCreate", "completed", "completed", started, draft.DefinitionId, null, null, "none");
         return draft;
@@ -132,6 +152,69 @@ public sealed class AgentDefinitionLifecycleService(
             cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "draftDelete", "completed", "completed", started, null, null, null, "none");
+    }
+
+    public async ValueTask DeleteLogicalDefinitionAsync(
+        AdminDefinitionDeleteCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var started = Stopwatch.GetTimestamp();
+        if (deletion is null)
+        {
+            throw AgentCoreErrors.Validation("Definition deletion is not available.");
+        }
+
+        var builtIn = await builtIns.ListAsync(cancellationToken).ConfigureAwait(false);
+        if (builtIn.Any(item => string.Equals(item.Id, command.DefinitionId, StringComparison.Ordinal)))
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "definitionDelete", "rejected", "validation", started, command.DefinitionId, null, null, null);
+            throw AgentCoreErrors.Validation("Built-in definitions cannot be deleted.");
+        }
+
+        try
+        {
+            await deletion.DeleteDefinitionAsync(command, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AgentCoreException ex) when (ex.Code is "Conflict" or "NotFound" or "ValidationError")
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "definitionDelete",
+                "rejected",
+                ex.Code == "NotFound" ? "notFound" : ex.Code == "Conflict" ? "conflict" : "validation",
+                started,
+                command.DefinitionId,
+                null,
+                null,
+                null);
+            throw;
+        }
+
+        OperationalDiagnostics.RecordAdmin(
+            "definitionDelete", "completed", "completed", started, command.DefinitionId, null, null, "deleted");
+    }
+
+    private async ValueTask EnsureNewDefinitionIdIsAvailableAsync(
+        string definitionId,
+        CancellationToken cancellationToken)
+    {
+        var builtIn = await builtIns.ListAsync(cancellationToken).ConfigureAwait(false);
+        if (builtIn.Any(item => string.Equals(item.Id, definitionId, StringComparison.Ordinal)))
+        {
+            throw AgentCoreErrors.Conflict(AdminDeletionMessages.DefinitionAlreadyExists(definitionId));
+        }
+
+        var publications = await admin.ListPublicationsAsync(definitionId, cancellationToken).ConfigureAwait(false);
+        if (publications.Count > 0)
+        {
+            throw AgentCoreErrors.Conflict(AdminDeletionMessages.DefinitionAlreadyExists(definitionId));
+        }
+
+        var drafts = await admin.ListDraftsAsync(cancellationToken).ConfigureAwait(false);
+        if (drafts.Any(item => string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal)))
+        {
+            throw AgentCoreErrors.Conflict(AdminDeletionMessages.DefinitionAlreadyExists(definitionId));
+        }
     }
 
     internal async ValueTask<AgentDefinitionPublication> CommitDraftPublicationAsync(

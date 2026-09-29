@@ -14,6 +14,23 @@ public sealed class InMemoryConversationTurnExecutionStore : IConversationTurnEx
     {
     }
 
+    internal int CountForInstance(Guid agentInstanceId)
+    {
+        lock (_state.Gate)
+        {
+            return _state.TurnExecutions.Values.Count(item => item.AgentInstanceId == agentInstanceId);
+        }
+    }
+
+    internal int CountForDefinition(string definitionId)
+    {
+        lock (_state.Gate)
+        {
+            return _state.TurnExecutions.Values.Count(item =>
+                string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal));
+        }
+    }
+
     internal InMemoryConversationTurnExecutionStore(InMemoryDurableState state)
     {
         ArgumentNullException.ThrowIfNull(state);

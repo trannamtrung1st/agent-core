@@ -13,7 +13,8 @@ public sealed class AdminAgentInstanceService(
     IAdminEventStore events,
     IIdGenerator ids,
     TimeProvider time,
-    ITriggerInstancePolicyReconciliationService? policyReconciliation = null)
+    ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
+    IAdminLifecycleDeletion? deletion = null)
 {
     public ValueTask<AgentInstance> CreateManagedAsync(
         string definitionId,
@@ -309,6 +310,38 @@ public sealed class AdminAgentInstanceService(
             updated.InstanceId,
             lifecycle == AgentInstanceLifecycle.Archived ? "archived" : "active");
         return updated;
+    }
+
+    public async ValueTask DeleteAsync(
+        AdminInstanceDeleteCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var started = Stopwatch.GetTimestamp();
+        if (deletion is null)
+        {
+            throw AgentCoreErrors.Validation("Instance deletion is not available.");
+        }
+
+        try
+        {
+            await deletion.DeleteInstanceAsync(command, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AgentCoreException ex) when (ex.Code is "Conflict" or "NotFound" or "ValidationError")
+        {
+            OperationalDiagnostics.RecordAdmin(
+                "instanceDelete",
+                "rejected",
+                ex.Code == "NotFound" ? "notFound" : ex.Code == "Conflict" ? "conflict" : "validation",
+                started,
+                null,
+                null,
+                command.InstanceId,
+                null);
+            throw;
+        }
+
+        OperationalDiagnostics.RecordAdmin(
+            "instanceDelete", "completed", "completed", started, null, null, command.InstanceId, "deleted");
     }
 
     private async ValueTask<AgentInstance> ResolveManagedInstanceFromEventAsync(

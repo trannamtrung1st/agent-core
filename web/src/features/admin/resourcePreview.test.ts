@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPreviewItem,
   inferResourceKind,
+  packageLogicalPath,
   readDroppedResourceFiles,
   resourceBatchLimitProblem,
   resourcePreviewProblem,
@@ -19,7 +20,9 @@ function fileWithPath(name: string, relativePath: string, contents = "hello", ty
 describe("resourcePreview", () => {
   it("infers kind from a folder name and keeps other paths unset", () => {
     expect(inferResourceKind("knowledge/policy.md")).toBe("Knowledge");
-    expect(inferResourceKind("pack/templates/welcome.txt")).toBe("Template");
+    expect(packageLogicalPath("my-agent/knowledge/refund.md")).toBe("knowledge/refund.md");
+    expect(inferResourceKind(packageLogicalPath("my-agent/templates/welcome.txt"))).toBe("Template");
+    expect(inferResourceKind("pack/templates/welcome.txt")).toBeNull();
     expect(inferResourceKind("references/notes.md")).toBe("Reference");
     expect(inferResourceKind("assets/logo.png")).toBe("StaticAsset");
     expect(inferResourceKind("eval/case.json")).toBe("EvalFixture");
@@ -27,7 +30,7 @@ describe("resourcePreview", () => {
   });
 
   it("preserves a folder-relative path and reports local problems", () => {
-    const item = createPreviewItem(fileWithPath("policy.md", "knowledge/policy.md", "hello", "text/markdown"));
+    const item = createPreviewItem(fileWithPath("policy.md", "my-agent/knowledge/policy.md", "hello", "text/markdown"));
     expect(item.logicalPath).toBe("knowledge/policy.md");
     expect(item.kind).toBe("Knowledge");
     expect(item.mediaType).toBe("text/markdown");
@@ -63,6 +66,6 @@ describe("resourcePreview", () => {
     } as unknown as DataTransfer);
     expect(dropped).toHaveLength(1);
     expect((dropped[0] as File & { webkitRelativePath?: string }).webkitRelativePath).toBe("pack/knowledge/policy.md");
-    expect(inferResourceKind("pack/knowledge/policy.md")).toBe("Knowledge");
+    expect(inferResourceKind(packageLogicalPath("pack/knowledge/policy.md"))).toBe("Knowledge");
   });
 });

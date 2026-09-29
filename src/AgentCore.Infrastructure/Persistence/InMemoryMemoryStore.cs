@@ -12,6 +12,25 @@ public sealed class InMemoryMemoryStore : IMemoryStore
     private readonly Dictionary<Guid, List<ConversationEntry>> _entries = [];
     private readonly Dictionary<Guid, UserProfile> _profiles = [];
 
+    internal int CountLiveByInstance(Guid instanceId)
+    {
+        lock (_gate)
+        {
+            return _sessions.Values.Count(snapshot =>
+                snapshot.DurablyDeletedAt is null && snapshot.AgentInstanceId == instanceId);
+        }
+    }
+
+    internal int CountLiveByDefinition(string definitionId)
+    {
+        lock (_gate)
+        {
+            return _sessions.Values.Count(snapshot =>
+                snapshot.DurablyDeletedAt is null
+                && string.Equals(snapshot.Definition.Id, definitionId, StringComparison.Ordinal));
+        }
+    }
+
     public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

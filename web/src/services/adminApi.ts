@@ -6,6 +6,26 @@ export type AdminDefinitionInventoryItem = {
   source: string;
   status: string;
   displayName: string;
+  draftCount?: number;
+};
+
+export type AdminAuthoringModelOption = {
+  key: string;
+  displayName: string;
+  supportedReasoningEfforts: string[];
+  defaultReasoningEffort: string | null;
+};
+
+export type AdminAuthoringOptions = {
+  languageModelAliases: string[];
+  speechRecognizerAliases: string[];
+  speechSynthesizerAliases: string[];
+  defaultLanguageModelAlias: string | null;
+  defaultSpeechRecognizerAlias: string | null;
+  defaultSpeechSynthesizerAlias: string | null;
+  defaultModelKey: string;
+  models: AdminAuthoringModelOption[];
+  interruptionClassifiers: string[];
 };
 
 export type AdminInstanceInventoryItem = {
@@ -99,6 +119,48 @@ export async function listAdminInstances(): Promise<AdminInstanceInventoryItem[]
   }
   const payload = (await response.json()) as { items: AdminInstanceInventoryItem[] };
   return payload.items;
+}
+
+export async function listAdminAuthoringOptions(): Promise<AdminAuthoringOptions> {
+  const response = await ownerFetch("/api/v2/admin/authoring-options");
+  if (!response.ok) {
+    throw new Error(`Admin authoring options failed (${response.status})`);
+  }
+  return (await response.json()) as AdminAuthoringOptions;
+}
+
+export async function deleteAdminAgentInstance(instanceId: string, expectedRevision: number): Promise<void> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedRevision })
+  });
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(
+      response,
+      "This instance could not be deleted. Archive it first, or remove the references listed by the server."
+    ));
+  }
+}
+
+export async function deleteAdminDefinition(
+  definitionId: string,
+  witness: {
+    drafts: Array<{ draftId: string; revision: number }>;
+    publications: Array<{ version: number; metadataRevision: number }>;
+  }
+): Promise<void> {
+  const response = await ownerFetch(`/api/v2/admin/definitions/${encodeURIComponent(definitionId)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(witness)
+  });
+  if (!response.ok) {
+    throw new Error(await adminProblemMessage(
+      response,
+      "This definition could not be deleted. It may still be referenced, or it changed since this page loaded."
+    ));
+  }
 }
 
 export async function listAdminToolNames(): Promise<string[]> {

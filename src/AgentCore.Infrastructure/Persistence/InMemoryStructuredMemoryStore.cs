@@ -11,6 +11,17 @@ public sealed class InMemoryStructuredMemoryStore : IStructuredMemoryStore
 
     internal object SyncRoot => _gate;
 
+    internal int CountActiveIdentityUser(Guid instanceId)
+    {
+        lock (_gate)
+        {
+            return _items.Values.Count(item =>
+                item.Scope == MemoryScope.IdentityUser
+                && item.Status == MemoryItemStatus.Active
+                && item.OwnerInstanceId == instanceId);
+        }
+    }
+
     internal StructuredMemoryItem? TryGetCopy(Guid memoryId)
     {
         lock (_gate)

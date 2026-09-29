@@ -9,7 +9,8 @@ public sealed record AdminDefinitionInventoryItemResponse(
     int Version,
     string Source,
     string Status,
-    string DisplayName);
+    string DisplayName,
+    int DraftCount);
 
 public sealed record AdminInstanceInventoryResponse(IReadOnlyList<AdminInstanceInventoryItemResponse> Items);
 
@@ -129,6 +130,33 @@ public sealed record AdminDefinitionPublicationSummaryResponse(
 public sealed record AdminCreateDefinitionDraftRequest(string DefinitionId, JsonElement Candidate);
 
 public sealed record AdminCreateNewDefinitionDraftRequest(string DefinitionId);
+
+public sealed record AdminInstanceDeleteRequest(long ExpectedRevision);
+
+public sealed record AdminDefinitionDeleteRequest(
+    IReadOnlyList<AdminDefinitionDraftRevisionRequest> Drafts,
+    IReadOnlyList<AdminDefinitionPublicationRevisionRequest> Publications);
+
+public sealed record AdminDefinitionDraftRevisionRequest(string DraftId, long Revision);
+
+public sealed record AdminDefinitionPublicationRevisionRequest(int Version, long MetadataRevision);
+
+public sealed record AdminAuthoringOptionsResponse(
+    IReadOnlyList<string> LanguageModelAliases,
+    IReadOnlyList<string> SpeechRecognizerAliases,
+    IReadOnlyList<string> SpeechSynthesizerAliases,
+    string? DefaultLanguageModelAlias,
+    string? DefaultSpeechRecognizerAlias,
+    string? DefaultSpeechSynthesizerAlias,
+    string DefaultModelKey,
+    IReadOnlyList<AdminAuthoringModelOptionResponse> Models,
+    IReadOnlyList<string> InterruptionClassifiers);
+
+public sealed record AdminAuthoringModelOptionResponse(
+    string Key,
+    string DisplayName,
+    IReadOnlyList<string> SupportedReasoningEfforts,
+    string? DefaultReasoningEffort);
 
 public sealed record AdminForkDefinitionDraftRequest(string DefinitionId, int SourceVersion, string SourceKind);
 

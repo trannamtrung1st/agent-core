@@ -114,6 +114,54 @@ internal static class AdminEndpoints
             return Results.Json(new AdminInstanceInventoryResponse(items.Select(AdminHttpMapping.ToInstanceItem).ToArray()));
         });
 
+        group.MapGet("/authoring-options", (AdminAuthoringOptionsService authoring) =>
+            Results.Json(AdminHttpMapping.ToAuthoringOptions(authoring.Get())));
+
+        group.MapDelete("/definitions/{definitionId}", async (
+            string definitionId,
+            [FromBody] AdminDefinitionDeleteRequest? request,
+            AgentDefinitionLifecycleService lifecycle,
+            TimeProvider time,
+            IIdGenerator ids,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null)
+                {
+                    throw AgentCoreErrors.Validation("Definition delete witness is required.");
+                }
+
+                var command = new AdminDefinitionDeleteCommand(
+                    definitionId,
+                    new AdminDefinitionDeleteWitness(
+                        (request.Drafts ?? [])
+                            .Select(item => new AdminDraftRevisionWitness(ParseDraftId(item.DraftId), item.Revision))
+                            .ToArray(),
+                        (request.Publications ?? [])
+                            .Select(item => new AdminPublicationRevisionWitness(item.Version, item.MetadataRevision))
+                            .ToArray()),
+                    ids.NewId(),
+                    time.GetUtcNow());
+                await lifecycle.DeleteLogicalDefinitionAsync(command, cancellationToken).ConfigureAwait(false);
+                return Results.NoContent();
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
+            }
+
+            static Guid ParseDraftId(string? draftId)
+            {
+                if (!Guid.TryParse(draftId, out var parsed) || parsed == Guid.Empty)
+                {
+                    throw AgentCoreErrors.Validation("draftId is invalid.");
+                }
+
+                return parsed;
+            }
+        });
+
         group.MapGet("/tools", () =>
         {
             var names = ToolCatalog.AllKnownNames().OrderBy(name => name, StringComparer.Ordinal).ToArray();
@@ -219,6 +267,37 @@ internal static class AdminEndpoints
             catch (JsonException ex)
             {
                 return ProblemResults.From(AgentCoreErrors.Validation(ex.Message));
+            }
+        });
+
+        group.MapDelete("/agent-instances/{instanceId:guid}", async (
+            Guid instanceId,
+            [FromBody] AdminInstanceDeleteRequest? request,
+            AdminAgentInstanceService instances,
+            TimeProvider time,
+            IIdGenerator ids,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                if (request is null || request.ExpectedRevision < 1)
+                {
+                    throw AgentCoreErrors.Validation("expectedRevision must be positive.");
+                }
+
+                await instances.DeleteAsync(
+                        new AdminInstanceDeleteCommand(
+                            instanceId,
+                            request.ExpectedRevision,
+                            ids.NewId(),
+                            time.GetUtcNow()),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return Results.NoContent();
+            }
+            catch (AgentCoreException ex)
+            {
+                return ProblemResults.From(ex);
             }
         });
 

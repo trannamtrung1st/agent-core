@@ -20,10 +20,14 @@ public sealed class AdminReadService(
     public async ValueTask<IReadOnlyList<AdminDefinitionInventoryItem>> ListDefinitionsAsync(
         CancellationToken cancellationToken = default)
     {
+        var drafts = await adminStore.ListDraftsAsync(cancellationToken).ConfigureAwait(false);
+        var draftCounts = drafts
+            .GroupBy(item => item.DefinitionId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         var items = new List<AdminDefinitionInventoryItem>();
         foreach (var definition in await builtIns.ListAsync(cancellationToken).ConfigureAwait(false))
         {
-            items.Add(MapBuiltIn(definition));
+            items.Add(MapBuiltIn(definition, CountFor(draftCounts, definition.Id)));
         }
 
         foreach (var summary in await adminStore.ListPublicationsAsync(cancellationToken: cancellationToken)
@@ -37,7 +41,26 @@ public sealed class AdminReadService(
                 continue;
             }
 
-            items.Add(MapDurable(publication));
+            items.Add(MapDurable(publication, CountFor(draftCounts, publication.DefinitionId)));
+        }
+
+        var represented = new HashSet<string>(items.Select(item => item.DefinitionId), StringComparer.Ordinal);
+        foreach (var group in drafts.GroupBy(item => item.DefinitionId, StringComparer.Ordinal))
+        {
+            if (represented.Contains(group.Key))
+            {
+                continue;
+            }
+
+            var latest = group.OrderByDescending(item => item.UpdatedAt).ThenBy(item => item.DraftId).First();
+            var draft = await adminStore.GetDraftAsync(latest.DraftId, cancellationToken).ConfigureAwait(false);
+            items.Add(new AdminDefinitionInventoryItem(
+                group.Key,
+                Version: 0,
+                AdminDefinitionSources.Draft,
+                AdminDefinitionStatuses.DraftOnly,
+                draft?.Candidate.Identity.Name ?? group.Key,
+                group.Count()));
         }
 
         return items
@@ -137,15 +160,19 @@ public sealed class AdminReadService(
         return (AdminDefinitionSources.BuiltIn, AdminDefinitionStatuses.Published);
     }
 
-    private static AdminDefinitionInventoryItem MapBuiltIn(AgentDefinition definition) =>
+    private static int CountFor(IReadOnlyDictionary<string, int> draftCounts, string definitionId) =>
+        draftCounts.TryGetValue(definitionId, out var count) ? count : 0;
+
+    private static AdminDefinitionInventoryItem MapBuiltIn(AgentDefinition definition, int draftCount) =>
         new(
             definition.Id,
             definition.Version,
             AdminDefinitionSources.BuiltIn,
             AdminDefinitionStatuses.Published,
-            definition.Identity.Name);
+            definition.Identity.Name,
+            draftCount);
 
-    private static AdminDefinitionInventoryItem MapDurable(AgentDefinitionPublication publication) =>
+    private static AdminDefinitionInventoryItem MapDurable(AgentDefinitionPublication publication, int draftCount) =>
         new(
             publication.DefinitionId,
             publication.Version,
@@ -153,7 +180,8 @@ public sealed class AdminReadService(
             publication.Status == DefinitionPublicationStatus.Deprecated
                 ? AdminDefinitionStatuses.Deprecated
                 : AdminDefinitionStatuses.Published,
-            publication.Payload.Identity.Name);
+            publication.Payload.Identity.Name,
+            draftCount);
 
     private static AdminInstanceInventoryItem MapInstance(AgentInstance instance) =>
         new(
@@ -171,12 +199,14 @@ public static class AdminDefinitionSources
 {
     public const string BuiltIn = "builtIn";
     public const string Durable = "durable";
+    public const string Draft = "draft";
 }
 
 public static class AdminDefinitionStatuses
 {
     public const string Published = "published";
     public const string Deprecated = "deprecated";
+    public const string DraftOnly = "draftOnly";
 }
 
 public sealed record AdminDefinitionInventoryItem(
@@ -184,7 +214,8 @@ public sealed record AdminDefinitionInventoryItem(
     int Version,
     string Source,
     string Status,
-    string DisplayName);
+    string DisplayName,
+    int DraftCount = 0);
 
 public sealed record AdminInstanceInventoryItem(
     Guid InstanceId,

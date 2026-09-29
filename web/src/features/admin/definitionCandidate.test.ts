@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyCandidateJson,
+  applyVoiceEnabled,
   candidateForPersistence,
   candidateToJson,
   candidatesEqual,
-  normalizeVoiceProviders,
   patchRecord,
   writeModelDefault,
   writePath
@@ -69,7 +69,7 @@ describe("definitionCandidate", () => {
     });
   });
 
-  it("fills default speech aliases when voice is on and clears them when voice is off", () => {
+  it("selects configured speech aliases when voice turns on and clears them when voice turns off", () => {
     const textOnly = {
       ...sample,
       providerPreferences: {
@@ -79,9 +79,10 @@ describe("definitionCandidate", () => {
         interruptionClassifier: "heuristic"
       }
     };
-    const voiced = normalizeVoiceProviders(
-      patchRecord(textOnly, ["voice"], { enabled: true })
-    );
+    const voiced = applyVoiceEnabled(textOnly, true, {
+      speechRecognizer: "primary-stt",
+      speechSynthesizer: "primary-tts"
+    });
     expect(voiced.providerPreferences).toEqual({
       languageModel: "primary-llm",
       speechRecognizer: "primary-stt",
@@ -91,10 +92,23 @@ describe("definitionCandidate", () => {
     expect(candidateForPersistence(voiced).providerPreferences).toEqual(
       (voiced.providerPreferences as Record<string, unknown>)
     );
+    const withoutDefaults = applyVoiceEnabled(textOnly, true, {
+      speechRecognizer: null,
+      speechSynthesizer: null
+    });
+    expect(withoutDefaults.providerPreferences).toMatchObject({
+      speechRecognizer: null,
+      speechSynthesizer: null
+    });
+    expect(candidateForPersistence(withoutDefaults).providerPreferences).toMatchObject({
+      speechRecognizer: null,
+      speechSynthesizer: null
+    });
 
-    const silenced = normalizeVoiceProviders(
-      patchRecord(voiced, ["voice"], { enabled: false })
-    );
+    const silenced = applyVoiceEnabled(voiced, false, {
+      speechRecognizer: "primary-stt",
+      speechSynthesizer: "primary-tts"
+    });
     expect(silenced.providerPreferences).toMatchObject({
       languageModel: "primary-llm",
       speechRecognizer: null,

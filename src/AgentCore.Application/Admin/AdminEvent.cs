@@ -19,7 +19,9 @@ public enum AdminEventOperationKind
     MemoryScopeReset,
     TriggerRegistrationRevoked,
     InstanceArchived,
-    InstanceUnarchived
+    InstanceUnarchived,
+    InstanceDeleted,
+    DefinitionDeleted
 }
 
 public sealed record AdminEvent(

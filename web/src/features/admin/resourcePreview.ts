@@ -52,20 +52,25 @@ type DirectoryEntry = {
 
 export function inferResourceKind(logicalPath: string): ResourceKindName | null {
   const segments = logicalPath.split("/").filter((segment) => segment.length > 0);
-  const folders = segments.slice(0, -1);
-  for (const folder of folders) {
-    const kind = FOLDER_KINDS[folder.toLowerCase()];
-    if (kind) {
-      return kind;
-    }
+  if (segments.length < 2) {
+    return null;
   }
-  return null;
+  return FOLDER_KINDS[segments[0].toLowerCase()] ?? null;
+}
+
+export function packageLogicalPath(relativePath: string): string {
+  const normalized = relativePath.replaceAll("\\", "/").replace(/^\/+/, "");
+  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+  if (segments.length <= 1) {
+    return segments[0] ?? "";
+  }
+  return segments.slice(1).join("/");
 }
 
 export function resourceRelativePath(file: File): string {
   const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.trim() ?? "";
   if (relative.length > 0) {
-    return relative.replaceAll("\\", "/").replace(/^\/+/, "");
+    return packageLogicalPath(relative);
   }
   return file.name;
 }

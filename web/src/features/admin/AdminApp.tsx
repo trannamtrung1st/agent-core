@@ -51,6 +51,8 @@ import {
   type AdminEffectiveConfiguration,
   type AdminInstanceInventoryItem,
   deprecateAdminDefinitionPublication,
+  deleteAdminAgentInstance,
+  deleteAdminDefinition,
   deleteAdminDefinitionDraft,
   createNewAdminDefinitionDraft,
   createAdminAgentInstance,
@@ -110,6 +112,8 @@ type DefinitionInventoryGroup = {
   latestVersion: number;
   latestStatus: string;
   versions: AdminDefinitionInventoryItem[];
+  draftCount: number;
+  draftOnly: boolean;
 };
 
 function logicalDefinitionName(definitionId: string) {
@@ -164,13 +168,30 @@ export function formatDefinitionVersionSummary(group: {
   latestVersion: number;
   latestStatus: string;
   versions: AdminDefinitionInventoryItem[];
+  draftOnly?: boolean;
 }): string {
+  if (group.draftOnly) {
+    return "Draft only · Never published";
+  }
   const active = latestActiveVersion(group.versions);
   const latestStatus = formatInventoryStatus(group.latestStatus);
   if (active !== null && active !== group.latestVersion) {
     return `Latest v${group.latestVersion} · ${latestStatus} · Latest active v${active}`;
   }
   return `Latest v${group.latestVersion} · ${latestStatus}`;
+}
+
+export function formatDefinitionInventoryCounts(group: {
+  versions: AdminDefinitionInventoryItem[];
+  draftCount: number;
+  draftOnly?: boolean;
+}): string {
+  const drafts = `${group.draftCount} ${group.draftCount === 1 ? "draft" : "drafts"}`;
+  if (group.draftOnly) {
+    return drafts;
+  }
+  const versions = `${group.versions.length} ${group.versions.length === 1 ? "version" : "versions"}`;
+  return group.draftCount > 0 ? `${drafts} · ${versions}` : versions;
 }
 
 export function defaultForkSourceVersion(versions: AdminDefinitionInventoryItem[]): number | null {
@@ -198,14 +219,31 @@ export function groupDefinitionInventory(
 
   return Array.from(groups, ([definitionId, versions]) => {
     const orderedVersions = [...versions].sort((left, right) => right.version - left.version);
-    const latest = orderedVersions[0];
+    const published = orderedVersions.filter((row) => row.status.toLowerCase() !== "draftonly");
+    const draftCount = orderedVersions.reduce((count, row) => Math.max(count, row.draftCount ?? 0), 0);
+    if (published.length === 0) {
+      const draftRow = orderedVersions[0];
+      return {
+        definitionId,
+        logicalName: logicalDefinitionName(definitionId),
+        defaultPersona: draftRow?.displayName ?? logicalDefinitionName(definitionId),
+        latestVersion: 0,
+        latestStatus: "draftOnly",
+        versions: [],
+        draftCount,
+        draftOnly: true
+      };
+    }
+    const latest = published[0];
     return {
       definitionId,
       logicalName: logicalDefinitionName(definitionId),
       defaultPersona: latest.displayName,
       latestVersion: latest.version,
       latestStatus: latest.status,
-      versions: orderedVersions
+      versions: published,
+      draftCount,
+      draftOnly: false
     };
   });
 }
@@ -303,11 +341,11 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               <div>
                 <Typography.Title level={2} className="admin-home-title">Agent inventory</Typography.Title>
                 <Typography.Paragraph type="secondary" className="admin-home-subtitle">
-                  Inspect published definitions and the agent instances pinned to them.
+                  Inspect definitions, including drafts that have not been published, and the instances pinned to them.
                 </Typography.Paragraph>
               </div>
               <Flex gap={8} wrap="wrap">
-                <NewDefinitionButton />
+                <NewDefinitionButton groups={definitionGroups} />
                 <NewInstanceButton groups={definitionGroups} />
               </Flex>
             </Flex>
@@ -328,10 +366,9 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                         key: group.definitionId,
                         title: group.logicalName,
                         secondary: group.definitionId,
-                        description: `Latest-version persona: ${group.defaultPersona} · ${group.versions.length} ${
-                          group.versions.length === 1 ? "version" : "versions"
-                        } · ${formatDefinitionVersionSummary(group)}`,
-                        tag: group.latestStatus,
+                        description: formatDefinitionVersionSummary(group),
+                        detail: formatDefinitionInventoryCounts(group),
+                        tag: group.draftOnly ? "Draft" : formatInventoryStatus(group.latestStatus),
                         onClick: () => navigateToAppPath(adminDefinitionPath(group.definitionId))
                       }))
                     : []
@@ -370,6 +407,10 @@ export function AdminApp({ route }: { route: AdminRoute }) {
             definitions={definitions}
             onBack={() => navigateToAppPath(adminHomePath())}
             onRetryDefinitions={reloadDefinitions}
+            onDeleted={() => {
+              void reloadDefinitions();
+              navigateToAppPath(adminHomePath());
+            }}
           />
         ) : null}
 
@@ -384,6 +425,10 @@ export function AdminApp({ route }: { route: AdminRoute }) {
               void reloadEffectiveConfig(route.instanceId);
               void reloadInstances();
             }}
+            onInstanceDeleted={() => {
+              void reloadInstances();
+              navigateToAppPath(adminHomePath());
+            }}
           />
         ) : null}
       </Content>
@@ -392,7 +437,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
   );
 }
 
-function NewDefinitionButton() {
+function NewDefinitionButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
   const [definitionId, setDefinitionId] = useState("");
@@ -404,6 +449,10 @@ function NewDefinitionButton() {
     const nextId = definitionId.trim();
     if (!definitionIdPattern.test(nextId)) {
       message.error("Definition ID must be lowercase letters, digits, or hyphens.");
+      return;
+    }
+    if (groups.some((group) => group.definitionId === nextId)) {
+      message.error(`Definition '${nextId}' already exists. Open it to create or edit a draft.`);
       return;
     }
     setBusy(true);
@@ -655,6 +704,7 @@ function InventorySection({
     title: string;
     secondary?: string;
     description: string;
+    detail?: string;
     tag?: string;
     onClick: () => void;
   }>;
@@ -705,6 +755,11 @@ function InventorySection({
                       <Typography.Text type="secondary" className="admin-inventory-row-description">
                         {item.description}
                       </Typography.Text>
+                      {item.detail ? (
+                        <Typography.Text type="secondary" className="admin-inventory-row-description">
+                          {item.detail}
+                        </Typography.Text>
+                      ) : null}
                       {item.tag ? <Tag>{item.tag}</Tag> : null}
                     </Flex>
                   </Flex>
@@ -723,12 +778,14 @@ function DefinitionDetail({
   definitionId,
   definitions,
   onBack,
-  onRetryDefinitions
+  onRetryDefinitions,
+  onDeleted
 }: {
   definitionId: string;
   definitions: LoadState<AdminDefinitionInventoryItem[]>;
   onBack: () => void;
   onRetryDefinitions: () => Promise<void>;
+  onDeleted: () => void;
 }) {
   const { message, modal } = App.useApp();
   const rows = definitions.kind === "ready"
@@ -860,7 +917,7 @@ function DefinitionDetail({
   useEffect(() => {
     if (
       definitions.kind !== "ready"
-      || group
+      || (group !== null && !group.draftOnly)
       || openedUnpublishedDraftRef.current
       || activeDraft
       || draftSummaries.length !== 1
@@ -870,6 +927,46 @@ function DefinitionDetail({
     openedUnpublishedDraftRef.current = true;
     void selectDraft(draftSummaries[0].draftId);
   }, [definitions.kind, group, activeDraft, draftSummaries, selectDraft]);
+
+  const deleteLogicalDefinition = async () => {
+    setBusy(true);
+    setLifecycleError(null);
+    try {
+      await deleteAdminDefinition(definitionId, {
+        drafts: draftSummaries.map((item) => ({
+          draftId: item.draftId,
+          revision: activeDraft?.draftId === item.draftId ? activeDraft.revision : item.revision
+        })),
+        publications: publications.map((item) => ({
+          version: item.version,
+          metadataRevision: item.metadataRevision
+        }))
+      });
+      message.success("Definition deleted.");
+      onDeleted();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Definition could not be deleted.";
+      setLifecycleError(text);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmDeleteDefinition = () => {
+    modal.confirm({
+      title: "Delete this definition?",
+      content: "This permanently removes its drafts, draft resources, evaluation evidence, and durable publications. Admin history is kept. Instances and sessions are not deleted. If anything still references this definition, deletion is refused.",
+      okText: "Delete definition",
+      cancelText: "Keep definition",
+      okButtonProps: { danger: true },
+      onOk: () => deleteLogicalDefinition()
+    });
+  };
+
+  const canDeleteDefinition = definitions.kind === "ready"
+    && !lifecycleLoading
+    && !(group?.versions.some((row) => row.source === "builtIn") ?? false)
+    && ((group?.versions.length ?? 0) > 0 || group?.draftOnly === true || draftSummaries.length > 0 || publications.length > 0);
 
   const deleteDraft = async (draft: AdminDefinitionDraftSummary, expectedRevision: number) => {
     setBusy(true);
@@ -882,6 +979,7 @@ function DefinitionDetail({
       }
       message.success("Draft deleted.");
       await reloadLifecycle();
+      await onRetryDefinitions();
     } catch (error) {
       const text = error instanceof Error ? error.message : "Draft could not be deleted.";
       setLifecycleError(text);
@@ -1044,14 +1142,25 @@ function DefinitionDetail({
       </Button>
       {group ? (
         <div className="admin-definition-heading">
-          <Typography.Title level={2}>{group.logicalName}</Typography.Title>
-          <Typography.Text type="secondary">{group.definitionId}</Typography.Text>
-          <Typography.Text>Latest-version persona: {group.defaultPersona}</Typography.Text>
-          <Typography.Text>{formatDefinitionVersionSummary(group)}</Typography.Text>
+          <Flex align="start" justify="space-between" gap={12} wrap="wrap">
+            <div>
+              <Typography.Title level={2}>{group.logicalName}</Typography.Title>
+              <Typography.Text type="secondary">{group.definitionId}</Typography.Text>
+              {group.draftOnly ? null : (
+                <Typography.Text>Latest-version persona: {group.defaultPersona}</Typography.Text>
+              )}
+              <Typography.Text>{formatDefinitionVersionSummary(group)}</Typography.Text>
+            </div>
+            {canDeleteDefinition ? (
+              <Button danger disabled={busy} onClick={confirmDeleteDefinition}>
+                Delete definition
+              </Button>
+            ) : null}
+          </Flex>
           <Flex gap={8} wrap="wrap">
-            <Tag>{group.versions.length} {group.versions.length === 1 ? "version" : "versions"}</Tag>
-            <Tag>{formatInventoryStatus(group.latestStatus)}</Tag>
-            {latestActiveVersion(group.versions) !== null
+            <Tag>{formatDefinitionInventoryCounts(group)}</Tag>
+            <Tag>{group.draftOnly ? "Draft" : formatInventoryStatus(group.latestStatus)}</Tag>
+            {!group.draftOnly && latestActiveVersion(group.versions) !== null
               && latestActiveVersion(group.versions) !== group.latestVersion ? (
                 <Tag color="blue">Latest active v{latestActiveVersion(group.versions)}</Tag>
               ) : null}
@@ -1130,7 +1239,7 @@ function DefinitionDetail({
         </section>
       ) : group || lifecycleLoading || draftSummaries.length > 0 ? (
         <div className="admin-definition-workspace">
-          {group ? (
+          {group && !group.draftOnly ? (
           <section aria-label="Definition versions" className="admin-definition-panel admin-definition-versions">
             <Flex align="baseline" justify="space-between" gap={12} className="admin-definition-panel-heading">
               <Typography.Title level={4}>Versions</Typography.Title>
@@ -1162,7 +1271,7 @@ function DefinitionDetail({
               </Typography.Text>
             </div>
             <div className="admin-definition-panel-body">
-              {group ? (
+              {group && !group.draftOnly ? (
               <Flex gap={8} wrap="wrap" align="center" className="admin-draft-create">
                 <Select
                   aria-label="Base version"
@@ -2094,7 +2203,8 @@ function InstanceDetail({
   effective,
   onBack,
   onRetryEffective,
-  onInstanceChanged
+  onInstanceChanged,
+  onInstanceDeleted
 }: {
   instanceId: string;
   instances: LoadState<AdminInstanceInventoryItem[]>;
@@ -2102,6 +2212,7 @@ function InstanceDetail({
   onBack: () => void;
   onRetryEffective: () => void;
   onInstanceChanged: () => void;
+  onInstanceDeleted: () => void;
 }) {
   const row = instances.kind === "ready"
     ? instances.data.find((item) => item.instanceId.toLowerCase() === instanceId.toLowerCase())
@@ -2156,7 +2267,11 @@ function InstanceDetail({
         />
       ) : null}
       {effective.kind === "ready" && !effective.data.compatibility ? (
-        <InstanceManagedControls config={effective.data} onUpdated={onInstanceChanged} />
+        <InstanceManagedControls
+          config={effective.data}
+          onUpdated={onInstanceChanged}
+          onDeleted={onInstanceDeleted}
+        />
       ) : null}
       {effective.kind === "ready" && !effective.data.compatibility ? (
         <section className="admin-definition-panel" aria-label="Memory and automation">
@@ -2190,13 +2305,16 @@ function InstanceDetail({
 
 export function InstanceManagedControls({
   config,
-  onUpdated
+  onUpdated,
+  onDeleted
 }: {
   config: AdminEffectiveConfiguration;
   onUpdated: () => void;
+  onDeleted: () => void;
 }) {
   const { message } = App.useApp();
   const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [personaTab, setPersonaTab] = useState("form");
   const [persona, setPersona] = useState<PersonaFields>(() => ({ ...config.persona }));
   const [personaJsonDraft, setPersonaJsonDraft] = useState(() =>
@@ -2311,6 +2429,20 @@ export function InstanceManagedControls({
       onUpdated();
     } catch (error) {
       handleMutationError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteInstance = async () => {
+    setBusy(true);
+    setDeleteError(null);
+    try {
+      await deleteAdminAgentInstance(config.instanceId, config.instanceRevision);
+      message.success("Instance deleted.");
+      onDeleted();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Instance could not be deleted.");
     } finally {
       setBusy(false);
     }
@@ -2488,8 +2620,16 @@ export function InstanceManagedControls({
               </Tag>
             </Flex>
             <Typography.Paragraph type="secondary">
-              Archived instances keep history but cannot start new chats or triggered work.
+              Archived instances keep history but cannot start new chats or triggered work. Delete is available after archive, and only when nothing still references this instance.
             </Typography.Paragraph>
+            {deleteError ? (
+              <Alert
+                type="error"
+                showIcon
+                className="admin-destructive-detail"
+                title={deleteError}
+              />
+            ) : null}
             <Flex gap={8} wrap="wrap">
               {config.instanceLifecycle === "Active" ? (
                 <Popconfirm
@@ -2522,6 +2662,20 @@ export function InstanceManagedControls({
                   Unarchive instance
                 </Button>
               )}
+              {config.instanceLifecycle === "Archived" ? (
+                <Popconfirm
+                  title="Delete this archived instance?"
+                  description="This permanently removes the managed instance. Sessions, learned memory, triggers, and background work stay in place. If any of those still reference this instance, deletion is refused."
+                  onConfirm={() => void deleteInstance()}
+                  okText="Delete instance"
+                  cancelText="Keep instance"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button danger disabled={busy}>
+                    Delete instance
+                  </Button>
+                </Popconfirm>
+              ) : null}
             </Flex>
           </section>
           <Typography.Text type="secondary" className="admin-instance-revision">

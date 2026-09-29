@@ -97,7 +97,25 @@ vi.mock("../../services/adminApi", () => ({
   validateAdminDefinitionDraft: vi.fn(),
   getAdminDefinitionDraftDiff: vi.fn(),
   listAdminDefinitionEvaluationScenarios: vi.fn(),
-  listAdminDefinitionEvaluationResults: vi.fn()
+  listAdminDefinitionEvaluationResults: vi.fn(),
+  listAdminAuthoringOptions: vi.fn().mockResolvedValue({
+    languageModelAliases: ["primary-llm"],
+    speechRecognizerAliases: ["primary-stt"],
+    speechSynthesizerAliases: ["primary-tts"],
+    defaultLanguageModelAlias: "primary-llm",
+    defaultSpeechRecognizerAlias: "primary-stt",
+    defaultSpeechSynthesizerAlias: "primary-tts",
+    defaultModelKey: "scripted-alpha",
+    models: [{
+      key: "scripted-alpha",
+      displayName: "Scripted Alpha",
+      supportedReasoningEfforts: ["low", "medium", "high"],
+      defaultReasoningEffort: "medium"
+    }],
+    interruptionClassifiers: ["heuristic"]
+  }),
+  deleteAdminAgentInstance: vi.fn(),
+  deleteAdminDefinition: vi.fn()
 }));
 
 import * as antd from "antd";
@@ -250,7 +268,8 @@ describe("AdminApp", () => {
       expect(within(screen.getByLabelText("Definitions")).getByText("Examiner")).toBeInTheDocument();
     });
     expect(within(screen.getByLabelText("Definitions")).getByText("examiner")).toBeInTheDocument();
-    expect(screen.getByText("Latest-version persona: Examiner · 1 version · Latest v1 · Published")).toBeInTheDocument();
+    expect(screen.getByText("Latest v1 · Published")).toBeInTheDocument();
+    expect(screen.getByText("1 version")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Instances")).getByText("1 instance")).toBeInTheDocument();
     expect(screen.getByText("Pinned to v1")).toBeInTheDocument();
     expect(screen.getByText(/Compatibility \/ legacy instance/)).toBeInTheDocument();
@@ -285,7 +304,8 @@ describe("AdminApp", () => {
     });
     expect(within(definitions).getAllByRole("button")).toHaveLength(1);
     expect(within(definitions).getByText("customer-support")).toBeInTheDocument();
-    expect(within(definitions).getByText("Latest-version persona: Sam · 2 versions · Latest v2 · Published")).toBeInTheDocument();
+    expect(within(definitions).getByText("Latest v2 · Published")).toBeInTheDocument();
+    expect(within(definitions).getByText("2 versions")).toBeInTheDocument();
     expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
   });
 

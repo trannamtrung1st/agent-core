@@ -383,6 +383,65 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Admin_authoring_options_and_draft_only_definition_lifecycle_are_server_owned()
+    {
+        var client = OwnerClient();
+        var options = await client.GetAsync("/api/v2/admin/authoring-options");
+        options.EnsureSuccessStatusCode();
+        var authoring = await options.Content.ReadFromJsonAsync<AdminAuthoringOptionsResponse>(JsonOptions());
+        Assert.NotNull(authoring);
+        Assert.Contains("primary-llm", authoring!.LanguageModelAliases);
+        Assert.Contains("primary-stt", authoring.SpeechRecognizerAliases);
+        Assert.Contains(authoring.Models, item => item.Key == "scripted-alpha");
+
+        var createdResponse = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/new",
+            new AdminCreateNewDefinitionDraftRequest("field-guide-lifecycle"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>(JsonOptions());
+        Assert.NotNull(created);
+
+        var inventoryResponse = await client.GetFromJsonAsync<AdminDefinitionInventoryResponse>(
+            "/api/v2/admin/definitions",
+            JsonOptions());
+        var draftOnly = Assert.Single(
+            inventoryResponse!.Items,
+            item => item.DefinitionId == "field-guide-lifecycle");
+        Assert.Equal("draftOnly", draftOnly.Status);
+        Assert.Equal(1, draftOnly.DraftCount);
+
+        var duplicate = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/new",
+            new AdminCreateNewDefinitionDraftRequest("field-guide-lifecycle"));
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+
+        var builtin = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/new",
+            new AdminCreateNewDefinitionDraftRequest("examiner"));
+        Assert.Equal(HttpStatusCode.Conflict, builtin.StatusCode);
+
+        var deleted = await client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Delete,
+            "/api/v2/admin/definitions/field-guide-lifecycle")
+        {
+            Content = JsonContent.Create(new AdminDefinitionDeleteRequest(
+                [new AdminDefinitionDraftRevisionRequest(created!.DraftId, created.Revision)],
+                []))
+        });
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+
+        var afterDelete = await client.GetFromJsonAsync<AdminDefinitionInventoryResponse>(
+            "/api/v2/admin/definitions",
+            JsonOptions());
+        Assert.DoesNotContain(afterDelete!.Items, item => item.DefinitionId == "field-guide-lifecycle");
+
+        var reused = await client.PostAsJsonAsync(
+            "/api/v2/admin/definition-drafts/new",
+            new AdminCreateNewDefinitionDraftRequest("field-guide-lifecycle"));
+        Assert.Equal(HttpStatusCode.Created, reused.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_create_returns_created_status()
     {
         var client = OwnerClient();

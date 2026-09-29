@@ -61,6 +61,49 @@ public sealed class AdminDefinitionNewDraftTests
         Assert.Empty(await admin.ListDraftsAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CreateNewDraftAsync_rejects_an_existing_logical_definition()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-28T00:00:00Z"));
+        var ids = new SystemIdGenerator(clock);
+        var admin = new InMemoryAgentDefinitionAdminStore(ids) { EventStore = new InMemoryAdminEventStore(ids) };
+        var lifecycle = new AgentDefinitionLifecycleService(
+            new EmptyBuiltInStore(),
+            admin,
+            SyntheticProviderAliases.Default,
+            clock,
+            ids);
+
+        await lifecycle.CreateNewDraftAsync("field-guide", CancellationToken.None);
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            lifecycle.CreateNewDraftAsync("field-guide", CancellationToken.None).AsTask());
+
+        Assert.Equal("Conflict", error.Code);
+        Assert.Equal(409, error.StatusCode);
+        Assert.Contains("field-guide", error.Message, StringComparison.Ordinal);
+        Assert.Single(await admin.ListDraftsAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateNewDraftAsync_rejects_a_built_in_definition_id()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-28T00:00:00Z"));
+        var ids = new SystemIdGenerator(clock);
+        var admin = new InMemoryAgentDefinitionAdminStore(ids) { EventStore = new InMemoryAdminEventStore(ids) };
+        var lifecycle = new AgentDefinitionLifecycleService(
+            new BuiltInStore(SampleDefinitions.Examiner),
+            admin,
+            SyntheticProviderAliases.Default,
+            clock,
+            ids);
+
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() =>
+            lifecycle.CreateNewDraftAsync("examiner", CancellationToken.None).AsTask());
+
+        Assert.Equal("Conflict", error.Code);
+        Assert.Empty(await admin.ListDraftsAsync(CancellationToken.None));
+    }
+
     private sealed class EmptyBuiltInStore : IBuiltInAgentDefinitionStore
     {
         public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) =>
@@ -71,5 +114,21 @@ public sealed class AdminDefinitionNewDraftTests
             int? version = null,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<AgentDefinition?>(null);
+    }
+
+    private sealed class BuiltInStore(AgentDefinition definition) : IBuiltInAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<AgentDefinition>>([definition]);
+
+        public ValueTask<AgentDefinition?> GetAsync(
+            string id,
+            int? version = null,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AgentDefinition?>(
+                string.Equals(id, definition.Id, StringComparison.Ordinal)
+                && (version is null || version == definition.Version)
+                    ? definition
+                    : null);
     }
 }

@@ -21,6 +21,28 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
 
     internal bool CrashOnNextClearSideEffect { get; set; }
 
+    internal (int Items, int Approvals) CountForInstance(Guid agentInstanceId)
+    {
+        lock (_state.Gate)
+        {
+            var items = _state.WorkItems.Values
+                .Where(item => item.Owner.AgentInstanceId == agentInstanceId)
+                .ToArray();
+            return (items.Length, items.Count(item => item.Approval is not null));
+        }
+    }
+
+    internal (int Items, int Approvals) CountForDefinition(string definitionId)
+    {
+        lock (_state.Gate)
+        {
+            var items = _state.WorkItems.Values
+                .Where(item => string.Equals(item.Provenance.DefinitionId, definitionId, StringComparison.Ordinal))
+                .ToArray();
+            return (items.Length, items.Count(item => item.Approval is not null));
+        }
+    }
+
     public ValueTask<WorkItemCreateResult> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);

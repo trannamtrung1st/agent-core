@@ -136,6 +136,9 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>()));
+            services.AddSingleton<IAdminLifecycleDeletion>(provider => new SqliteAdminLifecycleDeletion(
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<IIdGenerator>()));
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new SqliteAdminP7eHistoryMutator(
                     provider.GetRequiredService<AdminMemoryService>(),
@@ -162,12 +165,16 @@ public static class InfrastructureServiceCollectionExtensions
                 return instances;
             });
             services.TryAddSingleton<InMemoryDurableState>();
-            services.TryAddSingleton<ITriggerStore>(provider =>
+            services.TryAddSingleton(provider =>
                 new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>()));
-            services.TryAddSingleton<IWorkItemStore>(provider =>
+            services.TryAddSingleton<ITriggerStore>(provider => provider.GetRequiredService<InMemoryTriggerStore>());
+            services.TryAddSingleton(provider =>
                 new InMemoryWorkItemStore(provider.GetRequiredService<InMemoryDurableState>()));
-            services.TryAddSingleton<IConversationTurnExecutionStore>(provider =>
+            services.TryAddSingleton<IWorkItemStore>(provider => provider.GetRequiredService<InMemoryWorkItemStore>());
+            services.TryAddSingleton(provider =>
                 new InMemoryConversationTurnExecutionStore(provider.GetRequiredService<InMemoryDurableState>()));
+            services.TryAddSingleton<IConversationTurnExecutionStore>(provider =>
+                provider.GetRequiredService<InMemoryConversationTurnExecutionStore>());
             services.TryAddSingleton<IDurableWorkHandoff>(provider =>
                 new InMemoryDurableWorkHandoff(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<IOwnerCapabilityStore, InMemoryOwnerCapabilityStore>();
@@ -192,6 +199,20 @@ public static class InfrastructureServiceCollectionExtensions
             });
             services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>
                 new InMemoryDefinitionDraftEvaluationStore(provider.GetRequiredService<IAgentDefinitionAdminStore>()));
+            services.AddSingleton<IAdminLifecycleDeletion>(provider =>
+            {
+                _ = provider.GetRequiredService<IAgentDefinitionAdminStore>();
+                _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
+                return new InMemoryAdminLifecycleDeletion(
+                    provider.GetRequiredService<InMemoryAgentInstanceStore>(),
+                    (InMemoryMemoryStore)provider.GetRequiredService<IMemoryStore>(),
+                    (InMemoryStructuredMemoryStore)provider.GetRequiredService<IStructuredMemoryStore>(),
+                    provider.GetRequiredService<InMemoryTriggerStore>(),
+                    provider.GetRequiredService<InMemoryWorkItemStore>(),
+                    provider.GetRequiredService<InMemoryConversationTurnExecutionStore>(),
+                    provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
+                    provider.GetRequiredService<InMemoryAdminEventStore>());
+            });
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new InMemoryAdminP7eHistoryMutator(
                     provider.GetRequiredService<AdminMemoryService>(),

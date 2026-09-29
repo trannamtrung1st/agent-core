@@ -5,11 +5,49 @@ export type MetadataRow = {
   value: string;
 };
 
-const defaultSpeechRecognizer = "primary-stt";
-const defaultSpeechSynthesizer = "primary-tts";
+export type VoiceAliasDefaults = {
+  speechRecognizer: string | null;
+  speechSynthesizer: string | null;
+};
 
 export function candidateForPersistence(candidate: DefinitionCandidate): DefinitionCandidate {
-  return normalizeVoiceProviders(omitBlankKnowledgeSources(candidate));
+  return clearSpeechAliasesWhenVoiceOff(omitBlankKnowledgeSources(candidate));
+}
+
+function clearSpeechAliasesWhenVoiceOff(candidate: DefinitionCandidate): DefinitionCandidate {
+  if (readBoolean(candidate, ["voice", "enabled"])) {
+    return candidate;
+  }
+  const rawRecognizer = readPath(candidate, ["providerPreferences", "speechRecognizer"]);
+  const rawSynthesizer = readPath(candidate, ["providerPreferences", "speechSynthesizer"]);
+  if (rawRecognizer == null && rawSynthesizer == null) {
+    return candidate;
+  }
+  return patchRecord(candidate, ["providerPreferences"], {
+    speechRecognizer: null,
+    speechSynthesizer: null
+  });
+}
+
+export function applyVoiceEnabled(
+  candidate: DefinitionCandidate,
+  enabled: boolean,
+  defaults: VoiceAliasDefaults
+): DefinitionCandidate {
+  const next = patchRecord(candidate, ["voice"], { enabled });
+  if (!enabled) {
+    return patchRecord(next, ["providerPreferences"], {
+      speechRecognizer: null,
+      speechSynthesizer: null
+    });
+  }
+
+  const recognizer = readString(next, ["providerPreferences", "speechRecognizer"]).trim();
+  const synthesizer = readString(next, ["providerPreferences", "speechSynthesizer"]).trim();
+  return patchRecord(next, ["providerPreferences"], {
+    speechRecognizer: recognizer || defaults.speechRecognizer,
+    speechSynthesizer: synthesizer || defaults.speechSynthesizer
+  });
 }
 
 function omitBlankKnowledgeSources(candidate: DefinitionCandidate): DefinitionCandidate {
@@ -30,31 +68,6 @@ function omitBlankKnowledgeSources(candidate: DefinitionCandidate): DefinitionCa
     return candidate;
   }
   return writePath(candidate, ["environment", "knowledgeSources"], kept);
-}
-
-export function normalizeVoiceProviders(candidate: DefinitionCandidate): DefinitionCandidate {
-  const voiceOn = readBoolean(candidate, ["voice", "enabled"]);
-  const recognizer = readString(candidate, ["providerPreferences", "speechRecognizer"]).trim();
-  const synthesizer = readString(candidate, ["providerPreferences", "speechSynthesizer"]).trim();
-  if (voiceOn) {
-    if (recognizer.length > 0 && synthesizer.length > 0) {
-      return candidate;
-    }
-    return patchRecord(candidate, ["providerPreferences"], {
-      speechRecognizer: recognizer || defaultSpeechRecognizer,
-      speechSynthesizer: synthesizer || defaultSpeechSynthesizer
-    });
-  }
-
-  const rawRecognizer = readPath(candidate, ["providerPreferences", "speechRecognizer"]);
-  const rawSynthesizer = readPath(candidate, ["providerPreferences", "speechSynthesizer"]);
-  if (rawRecognizer == null && rawSynthesizer == null) {
-    return candidate;
-  }
-  return patchRecord(candidate, ["providerPreferences"], {
-    speechRecognizer: null,
-    speechSynthesizer: null
-  });
 }
 
 export function cloneCandidate(candidate: DefinitionCandidate): DefinitionCandidate {

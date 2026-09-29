@@ -469,6 +469,142 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         }
     }
 
+    internal void PurgeLogicalDefinition(AdminDefinitionDeleteCommand command)
+    {
+        var definitionId = command.DefinitionId;
+        var drafts = _drafts.Values
+            .Where(item => string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal))
+            .ToArray();
+        var publications = _publications
+            .Where(item => string.Equals(item.Key.DefinitionId, definitionId, StringComparison.Ordinal))
+            .Select(item => item.Value)
+            .ToArray();
+        if (drafts.Length == 0 && publications.Length == 0)
+        {
+            throw AgentCoreErrors.NotFound("Definition was not found.");
+        }
+
+        if (!WitnessMatches(command.Witness, drafts, publications))
+        {
+            throw AgentCoreErrors.Conflict(AdminDeletionMessages.DefinitionChanged);
+        }
+
+        var heldEvaluations = drafts
+            .Select(item => EvaluationStore?.Detach(item.DraftId))
+            .ToArray();
+        var heldDraftResources = drafts
+            .Select(item => (item.DraftId, Resources: ResourceStore?.CopyDraftResources(item.DraftId)))
+            .ToArray();
+        var heldPublicationResources = publications
+            .Select(item => (
+                item.DefinitionId,
+                item.Version,
+                Resources: ResourceStore?.CopyPublicationResources(item.DefinitionId, item.Version)))
+            .ToArray();
+
+        foreach (var draft in drafts)
+        {
+            _drafts.TryRemove(draft.DraftId, out _);
+        }
+
+        foreach (var publication in publications)
+        {
+            _publications.TryRemove((publication.DefinitionId, publication.Version), out _);
+        }
+
+        ResourceStore?.PurgeDefinition(definitionId, drafts.Select(item => item.DraftId).ToArray());
+        try
+        {
+            if (EventStore is null)
+            {
+                throw AgentCoreErrors.Validation("Admin definition history is not available.");
+            }
+
+            EventStore.AppendWithinLock(AdminEventFactory.DefinitionDeleted(
+                command.OperationId,
+                command.OccurredAt,
+                definitionId,
+                drafts.Length,
+                publications.Length,
+                command.ActorKind));
+        }
+        catch
+        {
+            foreach (var draft in drafts)
+            {
+                _drafts[draft.DraftId] = draft;
+            }
+
+            foreach (var publication in publications)
+            {
+                _publications[(publication.DefinitionId, publication.Version)] = publication;
+            }
+
+            if (ResourceStore is not null)
+            {
+                foreach (var held in heldDraftResources)
+                {
+                    ResourceStore.RestoreDraftResources(held.DraftId, held.Resources);
+                }
+
+                foreach (var held in heldPublicationResources)
+                {
+                    ResourceStore.RestorePublicationResources(held.DefinitionId, held.Version, held.Resources);
+                }
+            }
+
+            if (EvaluationStore is not null)
+            {
+                foreach (var held in heldEvaluations)
+                {
+                    EvaluationStore.Restore(held);
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private static bool WitnessMatches(
+        AdminDefinitionDeleteWitness witness,
+        IReadOnlyList<AgentDefinitionDraft> drafts,
+        IReadOnlyList<AgentDefinitionPublication> publications)
+    {
+        var expectedDrafts = witness.Drafts.OrderBy(item => item.DraftId).ToArray();
+        var actualDrafts = drafts.OrderBy(item => item.DraftId).ToArray();
+        if (expectedDrafts.Length != actualDrafts.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < actualDrafts.Length; index++)
+        {
+            if (expectedDrafts[index].DraftId != actualDrafts[index].DraftId
+                || expectedDrafts[index].Revision != actualDrafts[index].Revision)
+            {
+                return false;
+            }
+        }
+
+        var expectedPublications = witness.Publications.OrderBy(item => item.Version).ToArray();
+        var actualPublications = publications.OrderBy(item => item.Version).ToArray();
+        if (expectedPublications.Length != actualPublications.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < actualPublications.Length; index++)
+        {
+            if (expectedPublications[index].Version != actualPublications[index].Version
+                || expectedPublications[index].MetadataRevision != actualPublications[index].MetadataRevision)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     internal InMemoryAgentDefinitionResourceAdminStore? ResourceStore { get; set; }
 
     internal InMemoryDefinitionDraftEvaluationStore? EvaluationStore { get; set; }

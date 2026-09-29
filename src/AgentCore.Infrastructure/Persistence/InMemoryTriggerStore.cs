@@ -14,6 +14,16 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
     }
 
+    internal (int Registrations, int Occurrences) CountForInstance(Guid agentInstanceId)
+    {
+        lock (_state.Gate)
+        {
+            var registrations = _state.Registrations.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId);
+            var occurrences = _state.Occurrences.Values.Count(item => item.Owner.AgentInstanceId == agentInstanceId);
+            return (registrations, occurrences);
+        }
+    }
+
     internal InMemoryTriggerStore(InMemoryDurableState state)
     {
         ArgumentNullException.ThrowIfNull(state);

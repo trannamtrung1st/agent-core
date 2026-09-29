@@ -154,6 +154,9 @@ export function ResourceImportPanel({
           </Button>
         </Upload>
       </Flex>
+      <Typography.Text type="secondary" className="admin-draft-field-hint">
+        The selected folder is the package root. Kind comes from the top-level directory inside it, such as knowledge or templates.
+      </Typography.Text>
       <div
         className="admin-resource-drop"
         aria-label="Drop resource files"

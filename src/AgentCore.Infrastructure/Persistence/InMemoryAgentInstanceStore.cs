@@ -14,6 +14,53 @@ public sealed class InMemoryAgentInstanceStore : IAgentInstanceStore
 
     internal InMemoryAdminEventStore? EventStore { get; set; }
 
+    internal int CountByDefinition(string definitionId)
+    {
+        lock (_gate)
+        {
+            return _instances.Values.Count(item =>
+                string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal));
+        }
+    }
+
+    internal AgentInstance RemoveForDeletion(Guid instanceId, long expectedRevision)
+    {
+        lock (_gate)
+        {
+            if (!_instances.TryGetValue(instanceId, out var instance))
+            {
+                throw AgentCoreErrors.NotFound("Agent instance was not found.");
+            }
+
+            if (instance.Compatibility)
+            {
+                throw AgentCoreErrors.Validation(
+                    "Compatibility instances cannot be deleted through the managed Admin path.");
+            }
+
+            if (instance.Lifecycle != AgentInstanceLifecycle.Archived)
+            {
+                throw AgentCoreErrors.Validation("Archive this instance before deleting it.");
+            }
+
+            if (instance.Revision != expectedRevision)
+            {
+                throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+            }
+
+            _instances.Remove(instanceId);
+            return instance;
+        }
+    }
+
+    internal void Restore(AgentInstance instance)
+    {
+        lock (_gate)
+        {
+            _instances[instance.InstanceId] = instance;
+        }
+    }
+
     public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

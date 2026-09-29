@@ -22,6 +22,30 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
     internal void DeleteDraftEvaluation(Guid draftId) =>
         _drafts.TryRemove(draftId, out _);
 
+    internal HeldDraftEvaluation? Detach(Guid draftId)
+    {
+        return _drafts.TryRemove(draftId, out var state)
+            ? new HeldDraftEvaluation(draftId, state)
+            : null;
+    }
+
+    internal void Restore(HeldDraftEvaluation? held)
+    {
+        if (held is null)
+        {
+            return;
+        }
+
+        _drafts[held.DraftId] = held.State;
+    }
+
+    internal sealed class HeldDraftEvaluation(Guid draftId, DraftEvaluationState state)
+    {
+        internal Guid DraftId { get; } = draftId;
+
+        internal DraftEvaluationState State { get; } = state;
+    }
+
     public ValueTask<IReadOnlyList<DefinitionEvaluationScenario>> ListScenariosAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)
@@ -187,7 +211,7 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         }
     }
 
-    private sealed class DraftEvaluationState
+    internal sealed class DraftEvaluationState
     {
         internal object Gate { get; } = new();
 

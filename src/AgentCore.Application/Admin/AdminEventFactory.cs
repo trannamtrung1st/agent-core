@@ -356,4 +356,57 @@ public static class AdminEventFactory
         AdminEventSummaryPolicy.ValidateAppend(append);
         return append;
     }
+
+    public static AdminEventAppend InstanceDeleted(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        Guid instanceId,
+        long revision,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.InstanceDeleted,
+            "agent.instance",
+            instanceId.ToString("D"),
+            revision,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                instanceId = instanceId.ToString("D")
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
+
+    public static AdminEventAppend DefinitionDeleted(
+        Guid operationId,
+        DateTimeOffset occurredAt,
+        string definitionId,
+        int draftCount,
+        int publicationCount,
+        AdminEventActorKind actorKind = AdminEventActorKind.LocalOwner)
+    {
+        var append = new AdminEventAppend(
+            operationId,
+            occurredAt,
+            actorKind,
+            AdminEventOperationKind.DefinitionDeleted,
+            "definition",
+            definitionId,
+            null,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                definitionId,
+                draftCount,
+                publicationCount
+            }));
+        AdminEventSummaryPolicy.ValidateAppend(append);
+        return append;
+    }
 }

@@ -1,7 +1,8 @@
-import { useId } from "react";
-import { Button, Flex, Input, InputNumber, Segmented, Select, Switch, Typography } from "antd";
+import { useEffect, useId, useState } from "react";
+import { Alert, Button, Flex, Input, InputNumber, Segmented, Select, Switch, Typography } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import {
+  applyVoiceEnabled,
   memoryPolicyDefaults,
   patchRecord,
   readBoolean,
@@ -10,13 +11,13 @@ import {
   readNumber,
   readString,
   triggerPolicyDefaults,
-  normalizeVoiceProviders,
   writeMetadataRows,
   writeModelDefault,
   writeNullableString,
   writePath,
   type DefinitionCandidate
 } from "./definitionCandidate";
+import { listAdminAuthoringOptions, type AdminAuthoringOptions } from "../../services/adminApi";
 
 export type DefinitionEditorView = "form" | "json";
 
@@ -58,6 +59,26 @@ export function DefinitionCandidateEditor({
   onJsonTextChange: (text: string) => void;
   onViewChange: (view: DefinitionEditorView) => void;
 }) {
+  const [authoring, setAuthoring] = useState<AdminAuthoringOptions | null>(null);
+  const [authoringError, setAuthoringError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void listAdminAuthoringOptions()
+      .then((options) => {
+        if (!cancelled) {
+          setAuthoring(options);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthoringError("Authoring options could not be loaded. Advanced JSON can still name a configured value.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <Flex vertical gap={12}>
       <Segmented
@@ -82,7 +103,13 @@ export function DefinitionCandidateEditor({
           onChange={(event) => onJsonTextChange(event.target.value)}
         />
       ) : (
-        <DefinitionCandidateForm candidate={candidate} busy={busy} onCandidateChange={onCandidateChange} />
+        <DefinitionCandidateForm
+          candidate={candidate}
+          busy={busy}
+          authoring={authoring}
+          authoringError={authoringError}
+          onCandidateChange={onCandidateChange}
+        />
       )}
     </Flex>
   );
@@ -91,13 +118,29 @@ export function DefinitionCandidateEditor({
 function DefinitionCandidateForm({
   candidate,
   busy,
+  authoring,
+  authoringError,
   onCandidateChange
 }: {
   candidate: DefinitionCandidate;
   busy: boolean;
+  authoring: AdminAuthoringOptions | null;
+  authoringError: string | null;
   onCandidateChange: (candidate: DefinitionCandidate) => void;
 }) {
   const goals = readCandidateStringList(candidate, ["goals"]);
+  const modelKey = readString(candidate, ["modelDefaults", "catalogKey"]);
+  const reasoningEffort = readString(candidate, ["modelDefaults", "reasoningEffort"]);
+  const languageModel = readString(candidate, ["providerPreferences", "languageModel"]);
+  const speechRecognizer = readString(candidate, ["providerPreferences", "speechRecognizer"]);
+  const speechSynthesizer = readString(candidate, ["providerPreferences", "speechSynthesizer"]);
+  const interruptionClassifier = readString(candidate, ["providerPreferences", "interruptionClassifier"]);
+  const voiceOn = readBoolean(candidate, ["voice", "enabled"]);
+  const selectedModel = authoring?.models.find((item) => item.key === modelKey) ?? null;
+  const reasoningChoices = selectedModel
+    ? selectedModel.supportedReasoningEfforts
+    : [...new Set(authoring?.models.flatMap((item) => item.supportedReasoningEfforts) ?? [])];
+  const speechMissing = voiceOn && (speechRecognizer.trim().length === 0 || speechSynthesizer.trim().length === 0);
   const goalRows = goals.length > 0 ? goals : [""];
   const metadataRows = readMetadataRows(candidate);
 
@@ -337,63 +380,119 @@ function DefinitionCandidateForm({
 
       <section className="admin-draft-form-section" aria-label="Model and providers">
         <Typography.Title level={5}>Model &amp; providers</Typography.Title>
+        {authoringError ? <Alert type="warning" showIcon title={authoringError} /> : null}
         <Typography.Text strong>Model defaults</Typography.Text>
         <div className="admin-draft-field-grid">
-          <TextField
-            label="Model catalog key"
-            hint="Optional lowercase catalog key. Empty sets no model default."
-            value={readString(candidate, ["modelDefaults", "catalogKey"])}
+          <SelectField
+            label="Model"
+            hint="Optional catalog model. Empty sets no model default."
+            allowClear
+            value={modelKey}
+            options={labeledOptions(
+              (authoring?.models ?? []).map((item) => ({ value: item.key, label: item.displayName })),
+              modelKey
+            )}
             disabled={busy}
-            onChange={(value) => onCandidateChange(writeModelDefault(candidate, "catalogKey", value))}
+            onChange={(value) => {
+              const key = typeof value === "string" ? value : "";
+              let next = writeModelDefault(candidate, "catalogKey", key);
+              const model = authoring?.models.find((item) => item.key === key);
+              const allowed = model?.supportedReasoningEfforts ?? [];
+              const currentEffort = readString(next, ["modelDefaults", "reasoningEffort"]);
+              if (currentEffort.length > 0 && !allowed.includes(currentEffort)) {
+                next = writeModelDefault(next, "reasoningEffort", "");
+              }
+              onCandidateChange(next);
+            }}
           />
-          <TextField
-            label="Reasoning effort"
-            hint="Optional. Examples: low, medium, high."
-            value={readString(candidate, ["modelDefaults", "reasoningEffort"])}
-            disabled={busy}
-            onChange={(value) => onCandidateChange(writeModelDefault(candidate, "reasoningEffort", value))}
+          <SelectField
+            label="Reasoning"
+            hint={selectedModel && selectedModel.supportedReasoningEfforts.length === 0
+              ? "This model has no reasoning effort."
+              : "Optional effort supported by the selected model."}
+            allowClear
+            value={reasoningEffort}
+            options={labeledOptions(
+              reasoningChoices.map((item) => ({ value: item, label: effortLabel(item) })),
+              reasoningEffort
+            )}
+            disabled={busy || (selectedModel !== null && selectedModel.supportedReasoningEfforts.length === 0)}
+            onChange={(value) =>
+              onCandidateChange(writeModelDefault(candidate, "reasoningEffort", typeof value === "string" ? value : ""))
+            }
           />
         </div>
         <Typography.Text strong>Provider preferences</Typography.Text>
         <Typography.Text type="secondary" className="admin-draft-field-hint">
-          Language model is a required alias. Speech aliases are required when voice is on and must stay empty when voice is off. Turning voice on fills primary-stt and primary-tts when those fields are empty. Turning voice off clears them.
+          Language-model provider is required. Speech aliases are required when voice is on and must stay empty when voice is off. If this server has one speech recognizer and one synthesizer, turning voice on selects them. Otherwise, select both. Advanced JSON does not gain aliases on save.
         </Typography.Text>
         <div className="admin-draft-field-grid">
-          <TextField
-            label="Language model"
-            value={readString(candidate, ["providerPreferences", "languageModel"])}
+          <SelectField
+            label="Language-model provider"
+            value={languageModel}
+            options={labeledOptions(
+              (authoring?.languageModelAliases ?? []).map((item) => ({ value: item, label: item })),
+              languageModel
+            )}
             disabled={busy}
             onChange={(value) =>
-              onCandidateChange(patchRecord(candidate, ["providerPreferences"], { languageModel: value }))
+              onCandidateChange(patchRecord(candidate, ["providerPreferences"], {
+                languageModel: typeof value === "string" ? value : ""
+              }))
             }
           />
-          <TextField
+          <SelectField
             label="Speech recognizer"
-            value={readString(candidate, ["providerPreferences", "speechRecognizer"])}
-            disabled={busy}
+            allowClear
+            value={speechRecognizer}
+            options={labeledOptions(
+              (authoring?.speechRecognizerAliases ?? []).map((item) => ({ value: item, label: item })),
+              speechRecognizer
+            )}
+            disabled={busy || !voiceOn}
             onChange={(value) =>
-              onCandidateChange(writeNullableString(candidate, ["providerPreferences", "speechRecognizer"], value))
+              onCandidateChange(writeNullableString(
+                candidate,
+                ["providerPreferences", "speechRecognizer"],
+                typeof value === "string" ? value : ""
+              ))
             }
           />
-          <TextField
+          <SelectField
             label="Speech synthesizer"
-            value={readString(candidate, ["providerPreferences", "speechSynthesizer"])}
-            disabled={busy}
+            allowClear
+            value={speechSynthesizer}
+            options={labeledOptions(
+              (authoring?.speechSynthesizerAliases ?? []).map((item) => ({ value: item, label: item })),
+              speechSynthesizer
+            )}
+            disabled={busy || !voiceOn}
             onChange={(value) =>
-              onCandidateChange(writeNullableString(candidate, ["providerPreferences", "speechSynthesizer"], value))
+              onCandidateChange(writeNullableString(
+                candidate,
+                ["providerPreferences", "speechSynthesizer"],
+                typeof value === "string" ? value : ""
+              ))
             }
           />
-          <TextField
+          <SelectField
             label="Interruption classifier"
-            value={readString(candidate, ["providerPreferences", "interruptionClassifier"])}
+            value={interruptionClassifier}
+            options={labeledOptions(
+              (authoring?.interruptionClassifiers ?? []).map((item) => ({ value: item, label: item })),
+              interruptionClassifier
+            )}
             disabled={busy}
             onChange={(value) =>
-              onCandidateChange(
-                patchRecord(candidate, ["providerPreferences"], { interruptionClassifier: value })
-              )
+              onCandidateChange(patchRecord(candidate, ["providerPreferences"], {
+                interruptionClassifier: typeof value === "string" ? value : ""
+              }))
             }
           />
         </div>
+        {speechMissing ? (
+          <Alert type="info" showIcon title="Select a speech recognizer and synthesizer." />
+        ) : null}
       </section>
 
       <section className="admin-draft-form-section" aria-label="Voice">
@@ -403,7 +502,10 @@ function DefinitionCandidateForm({
           checked={readBoolean(candidate, ["voice", "enabled"])}
           disabled={busy}
           onChange={(checked) =>
-            onCandidateChange(normalizeVoiceProviders(patchRecord(candidate, ["voice"], { enabled: checked })))
+            onCandidateChange(applyVoiceEnabled(candidate, checked, {
+              speechRecognizer: authoring?.defaultSpeechRecognizerAlias ?? null,
+              speechSynthesizer: authoring?.defaultSpeechSynthesizerAlias ?? null
+            }))
           }
         />
         <div className="admin-draft-field-grid">
@@ -670,12 +772,28 @@ function NumberField({
   );
 }
 
+function effortLabel(value: string) {
+  return value.length === 0 ? value : `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function labeledOptions(
+  options: Array<{ value: string; label: string }>,
+  current: string
+) {
+  if (current.trim().length === 0 || options.some((item) => item.value === current)) {
+    return options;
+  }
+  return [...options, { value: current, label: current }];
+}
+
 function SelectField({
   label,
   value,
   options,
   disabled,
   mode,
+  allowClear,
+  hint,
   onChange
 }: {
   label: string;
@@ -683,20 +801,36 @@ function SelectField({
   options: Array<{ value: string; label: string }>;
   disabled: boolean;
   mode?: "multiple";
+  allowClear?: boolean;
+  hint?: string;
   onChange: (value: string | string[]) => void;
 }) {
+  const hintId = useId();
   const empty = mode === "multiple" ? (value as string[]).length === 0 : value === "";
   return (
     <label className="admin-draft-field">
       <Typography.Text strong>{label}</Typography.Text>
       <Select
         aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
         mode={mode}
+        allowClear={allowClear}
         value={empty ? undefined : value}
         options={options}
         disabled={disabled}
-        onChange={(next) => onChange(next)}
+        onChange={(next) => {
+          if (mode === "multiple") {
+            onChange(Array.isArray(next) ? next : []);
+            return;
+          }
+          onChange(typeof next === "string" ? next : "");
+        }}
       />
+      {hint ? (
+        <Typography.Text id={hintId} type="secondary" className="admin-draft-field-hint">
+          {hint}
+        </Typography.Text>
+      ) : null}
     </label>
   );
 }

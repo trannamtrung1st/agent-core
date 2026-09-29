@@ -1493,6 +1493,10 @@ body,
   flex: 1 1 100%;
 }
 
+.admin-destructive-detail {
+  white-space: pre-line;
+}
+
 .admin-inventory-row-secondary {
   display: block;
   overflow: hidden;

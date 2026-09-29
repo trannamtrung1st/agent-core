@@ -66,6 +66,64 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
     internal void DeleteDraftResources(Guid draftId) =>
         _draftResources.TryRemove(draftId, out _);
 
+    internal void PurgeDefinition(string definitionId, IReadOnlyCollection<Guid> draftIds)
+    {
+        foreach (var draftId in draftIds)
+        {
+            _draftResources.TryRemove(draftId, out _);
+        }
+
+        foreach (var key in _publicationResources.Keys.Where(item => item.DefinitionId == definitionId).ToArray())
+        {
+            _publicationResources.TryRemove(key, out _);
+        }
+    }
+
+    internal void RestoreDraftResources(Guid draftId, List<AgentDefinitionDraftResource>? resources)
+    {
+        if (resources is null)
+        {
+            _draftResources.TryRemove(draftId, out _);
+            return;
+        }
+
+        _draftResources[draftId] = resources;
+    }
+
+    internal void RestorePublicationResources(
+        string definitionId,
+        int version,
+        List<AgentDefinitionPublicationResource>? resources)
+    {
+        if (resources is null)
+        {
+            _publicationResources.TryRemove((definitionId, version), out _);
+            return;
+        }
+
+        _publicationResources[(definitionId, version)] = resources;
+    }
+
+    internal List<AgentDefinitionDraftResource>? CopyDraftResources(Guid draftId)
+    {
+        if (!_draftResources.TryGetValue(draftId, out var resources))
+        {
+            return null;
+        }
+
+        return resources.ToList();
+    }
+
+    internal List<AgentDefinitionPublicationResource>? CopyPublicationResources(string definitionId, int version)
+    {
+        if (!_publicationResources.TryGetValue((definitionId, version), out var resources))
+        {
+            return null;
+        }
+
+        return resources.ToList();
+    }
+
     public ValueTask<IReadOnlyList<AgentDefinitionDraftResource>> ListDraftResourcesAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)

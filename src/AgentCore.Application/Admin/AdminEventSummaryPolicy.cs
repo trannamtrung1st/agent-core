@@ -65,6 +65,19 @@ public static class AdminEventSummaryPolicy
         "revision"
     };
 
+    private static readonly HashSet<string> InstanceDeletedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "instanceId"
+    };
+
+    private static readonly HashSet<string> DefinitionDeletedSummaryPropertyNames = new(StringComparer.Ordinal)
+    {
+        "definitionId",
+        "draftCount",
+        "publicationCount"
+    };
+
     private static readonly HashSet<string> ManagedInstanceCreatedSummaryPropertyNames = new(StringComparer.Ordinal)
     {
         "definitionId",
@@ -231,6 +244,18 @@ public static class AdminEventSummaryPolicy
             if (append.Operation is AdminEventOperationKind.InstanceArchived or AdminEventOperationKind.InstanceUnarchived)
             {
                 ValidateInstanceLifecycleChangedSummary(document.RootElement);
+                return;
+            }
+
+            if (append.Operation == AdminEventOperationKind.InstanceDeleted)
+            {
+                ValidateInstanceDeletedSummary(document.RootElement);
+                return;
+            }
+
+            if (append.Operation == AdminEventOperationKind.DefinitionDeleted)
+            {
+                ValidateDefinitionDeletedSummary(document.RootElement);
                 return;
             }
 
@@ -439,6 +464,32 @@ public static class AdminEventSummaryPolicy
         }
 
         return value;
+    }
+
+    private static void ValidateInstanceDeletedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, InstanceDeletedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireString(root, "instanceId");
+    }
+
+    private static void ValidateDefinitionDeletedSummary(JsonElement root)
+    {
+        EnsureExactProperties(root, DefinitionDeletedSummaryPropertyNames);
+        RequireString(root, "definitionId");
+        RequireCount(root, "draftCount");
+        RequireCount(root, "publicationCount");
+    }
+
+    private static void RequireCount(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt32(out var count)
+            || count < 0)
+        {
+            throw AgentCoreErrors.Validation($"Definition deleted event summary must include a non-negative {propertyName}.");
+        }
     }
 
     private static void ValidateDraftCreatedSummary(JsonElement root)

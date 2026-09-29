@@ -29,7 +29,8 @@ vi.mock("../../services/adminApi", () => ({
   validateAdminDefinitionDraft: vi.fn(),
   getAdminDefinitionDraftDiff: vi.fn(),
   listAdminDefinitionEvaluationScenarios: vi.fn(),
-  listAdminDefinitionEvaluationResults: vi.fn()
+  listAdminDefinitionEvaluationResults: vi.fn(),
+  listAdminAuthoringOptions: vi.fn()
 }));
 
 import {
@@ -39,10 +40,36 @@ import {
   listAdminDefinitions,
   listAdminDraftResources,
   listAdminInstances,
+  listAdminAuthoringOptions,
   listAdminToolNames,
   publishAdminDefinitionDraft,
   updateAdminDefinitionDraft
 } from "../../services/adminApi";
+
+const authoringOptions = {
+  languageModelAliases: ["backup-llm", "primary-llm"],
+  speechRecognizerAliases: ["primary-stt"],
+  speechSynthesizerAliases: ["primary-tts"],
+  defaultLanguageModelAlias: "primary-llm",
+  defaultSpeechRecognizerAlias: "primary-stt",
+  defaultSpeechSynthesizerAlias: "primary-tts",
+  defaultModelKey: "scripted-alpha",
+  models: [
+    {
+      key: "scripted-alpha",
+      displayName: "Scripted Alpha",
+      supportedReasoningEfforts: ["low", "medium", "high"],
+      defaultReasoningEffort: "medium"
+    },
+    {
+      key: "scripted-beta",
+      displayName: "Scripted Beta",
+      supportedReasoningEfforts: [],
+      defaultReasoningEffort: null
+    }
+  ],
+  interruptionClassifiers: ["heuristic"]
+};
 
 const draftId = "019944af-00d1-7000-8000-0000000000c1";
 
@@ -137,6 +164,7 @@ function mockDraft(candidate: Record<string, unknown> = storedCandidate) {
   vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
   vi.mocked(listAdminDraftResources).mockResolvedValue([]);
   vi.mocked(listAdminToolNames).mockResolvedValue(["workspace.read", "knowledge.retrieve"]);
+  vi.mocked(listAdminAuthoringOptions).mockResolvedValue(authoringOptions);
   vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
     draftId,
     definitionId: "examiner",
@@ -176,6 +204,7 @@ async function openDraft() {
   fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
   await waitFor(() => {
     expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
+    expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
   });
 }
 
@@ -216,7 +245,7 @@ describe("definition candidate editor", () => {
     expect(screen.getByLabelText("Conversation language")).toHaveAccessibleDescription(
       "auto, or a BCP 47 tag such as en."
     );
-    expect(screen.getByLabelText("Model catalog key")).toHaveValue("scripted-alpha");
+    expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
     expect(screen.getByText(/Speech aliases are required when voice is on/)).toBeInTheDocument();
 
     setText("Definition name", "Guide");
@@ -242,12 +271,9 @@ describe("definition candidate editor", () => {
     setSpin("Max silent evaluations", "9");
     setSpin("Max inactivity", "120000");
     await chooseOption("Initiative triggers", "Environment update");
-    setText("Model catalog key", "scripted-beta");
-    setText("Reasoning effort", "medium");
-    setText("Language model", "backup-llm");
-    setText("Speech recognizer", "primary-stt");
-    setText("Speech synthesizer", "primary-tts");
-    setText("Interruption classifier", "manual");
+    await chooseOption("Reasoning", "Medium");
+    await chooseOption("Model", "Scripted Beta");
+    await chooseOption("Language-model provider", "backup-llm");
     fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
     setText("Voice id", "alloy");
     setSpin("Speaking rate", "1.2");
@@ -360,12 +386,12 @@ describe("definition candidate editor", () => {
       maxInactivityMs: 120000
     });
     expect(parsed.initiativePolicy.triggers).toEqual(expect.arrayContaining(["longSilence", "environmentUpdate"]));
-    expect(parsed.modelDefaults).toEqual({ catalogKey: "scripted-beta", reasoningEffort: "medium" });
+    expect(parsed.modelDefaults).toEqual({ catalogKey: "scripted-beta", reasoningEffort: null });
     expect(parsed.providerPreferences).toEqual({
       languageModel: "backup-llm",
       speechRecognizer: "primary-stt",
       speechSynthesizer: "primary-tts",
-      interruptionClassifier: "manual"
+      interruptionClassifier: "heuristic"
     });
     expect(parsed.voice).toMatchObject({ enabled: true, voiceId: "alloy", speakingRate: 1.2 });
     expect(parsed.memoryPolicy).toMatchObject({
@@ -416,8 +442,8 @@ describe("definition candidate editor", () => {
     await openDraft();
 
     fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
-    expect(screen.getByLabelText("Speech recognizer")).toHaveValue("primary-stt");
-    expect(screen.getByLabelText("Speech synthesizer")).toHaveValue("primary-tts");
+    expect(screen.getByTitle("primary-stt")).toBeInTheDocument();
+    expect(screen.getByTitle("primary-tts")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => {
@@ -448,8 +474,8 @@ describe("definition candidate editor", () => {
     await openDraft();
 
     fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
-    expect(screen.getByLabelText("Speech recognizer")).toHaveValue("");
-    expect(screen.getByLabelText("Speech synthesizer")).toHaveValue("");
+    expect(screen.queryByTitle("primary-stt")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("primary-tts")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => {
@@ -491,7 +517,7 @@ describe("definition candidate editor", () => {
     expect(screen.getByLabelText("Definition role")).toHaveValue("Coach");
     expect(screen.getByLabelText("Definition tone")).toHaveValue("Calm");
     expect(screen.getByLabelText("Voice id")).toHaveValue("verse");
-    expect(screen.getByLabelText("Model catalog key")).toHaveValue("scripted-alpha");
+    expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes — save before using Test & Publish.")).toBeInTheDocument();
   });
 

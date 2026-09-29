@@ -9,7 +9,25 @@ namespace AgentCore.Api.Mapping;
 internal static class AdminHttpMapping
 {
     public static AdminDefinitionInventoryItemResponse ToDefinitionItem(AdminDefinitionInventoryItem item) =>
-        new(item.DefinitionId, item.Version, item.Source, item.Status, item.DisplayName);
+        new(item.DefinitionId, item.Version, item.Source, item.Status, item.DisplayName, item.DraftCount);
+
+    public static AdminAuthoringOptionsResponse ToAuthoringOptions(AdminAuthoringOptions options) =>
+        new(
+            options.LanguageModelAliases,
+            options.SpeechRecognizerAliases,
+            options.SpeechSynthesizerAliases,
+            options.DefaultLanguageModelAlias,
+            options.DefaultSpeechRecognizerAlias,
+            options.DefaultSpeechSynthesizerAlias,
+            options.DefaultModelKey,
+            options.Models
+                .Select(item => new AdminAuthoringModelOptionResponse(
+                    item.Key,
+                    item.DisplayName,
+                    item.SupportedReasoningEfforts,
+                    item.DefaultReasoningEffort))
+                .ToArray(),
+            options.InterruptionClassifiers);
 
     public static AdminInstanceInventoryItemResponse ToInstanceItem(AdminInstanceInventoryItem item) =>
         new(

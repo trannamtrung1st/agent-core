@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` at `76818a9` on **2026-09-29**.
+Reviewed against `main` at `76818a9` on **2026-09-29**, then updated for the post-P7.6 Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md`. That follow-up is not a new freeze and is not hosted-green. P7.6 remains frozen on `17d89ae`.
 
 ---
 
@@ -50,6 +50,8 @@ P7.5 is frozen on `70a5720`. Hosted workflow `36368766449` is green on that SHA.
 **P8 — harness/platform extensibility.**
 
 P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA. Closure report: `docs/reports/p7.6-freeze-candidate.md`.
+
+A later Admin lifecycle follow-up is specified in `docs/reports/p76-admin-lifecycle-followup.md`. It does not move the P7.6 freeze SHA and does not start P8.
 
 P7.6 does **not** redefine what P7 or P7.5 previously meant or invalidate their closure evidence.
 
