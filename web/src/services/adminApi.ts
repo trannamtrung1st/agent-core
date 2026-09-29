@@ -164,7 +164,7 @@ export async function createNewAdminDefinitionDraft(definitionId: string): Promi
     body: JSON.stringify({ definitionId })
   });
   if (!response.ok) {
-    throw new Error(`Admin new definition failed (${response.status})`);
+    throw new Error(await adminProblemMessage(response, "The definition could not be created. Check the ID and try again."));
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -180,7 +180,7 @@ export async function forkAdminDefinitionDraft(
     body: JSON.stringify({ definitionId, sourceVersion, sourceKind })
   });
   if (!response.ok) {
-    throw new Error(`Admin fork draft failed (${response.status})`);
+    throw new Error(await adminProblemMessage(response, "The draft could not be created from that version. Try again."));
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -196,8 +196,12 @@ export async function updateAdminDefinitionDraft(
     body: JSON.stringify({ expectedRevision, candidate })
   });
   if (!response.ok) {
-    const conflict = response.status === 409;
-    throw new Error(conflict ? "Draft revision conflict — reload and try again." : `Admin update draft failed (${response.status})`);
+    throw new Error(await adminProblemMessage(
+      response,
+      response.status === 409
+        ? "This draft changed somewhere else. Reload it, then try again."
+        : "The draft could not be saved. Check the form and try again."
+    ));
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -459,10 +463,71 @@ function instanceMutationConflictMessage(status: number): string | null {
   return status === 409 ? "Instance revision conflict — reload and try again." : null;
 }
 
+const adminDetailMessages: Record<string, string> = {
+  "Voice.Enabled requires speechRecognizer and speechSynthesizer aliases.":
+    "Add a speech recognizer and a speech synthesizer before saving a voice-enabled draft.",
+  "Text-only definitions must omit speech provider aliases.":
+    "Remove the speech recognizer and speech synthesizer when voice is off.",
+  "definitionId cannot change on update.":
+    "The definition ID cannot be changed after the draft is created.",
+  "definitionId must match the candidate definitionId.":
+    "The definition ID does not match this draft.",
+  "definitionId is required.":
+    "Enter a definition ID using lowercase letters, digits, and hyphens.",
+  "goals must be 1..10 nonempty strings of at most 500 characters.":
+    "Add between 1 and 10 goals. Each goal needs text and can be at most 500 characters.",
+  "identity field lengths are invalid.":
+    "Check the name, role, tone, and description lengths, then try again.",
+  "identity is required.":
+    "Add a name, role, description, and tone.",
+  "identity fields are required.":
+    "Add a name, role, description, and tone.",
+  "systemInstructions is required.":
+    "Add system instructions.",
+  "systemInstructions must be 1..8000 characters.":
+    "System instructions must be between 1 and 8000 characters.",
+  "language is required.":
+    "Set the conversation language to auto or a tag such as en.",
+  "maxOutputTokens must be 1..4096.":
+    "Max output tokens must be between 1 and 4096.",
+  "silenceThresholdMs is out of range.":
+    "Silence threshold must be between 1,000 and 120,000 milliseconds.",
+  "cooldownMs is out of range.":
+    "Cooldown must be between 5,000 and 600,000 milliseconds.",
+  "speakingRate must be 0.5..2.0.":
+    "Speaking rate must be between 0.5 and 2.",
+  "Draft revision is stale.":
+    "This draft changed somewhere else. Reload it, then try again."
+};
+
+export function friendlyAdminDetail(detail: string | undefined, fallback: string): string {
+  const text = detail?.trim() ?? "";
+  if (text.length === 0) {
+    return fallback;
+  }
+  const known = adminDetailMessages[text];
+  if (known) {
+    return known;
+  }
+  if (text.startsWith("Definition candidate body is invalid")) {
+    return "A field in this draft could not be read. Check numbers and Advanced JSON, then try again.";
+  }
+  const alias = text.match(/^(languageModel|speechRecognizer|speechSynthesizer) alias '([^']+)' is not configured\.$/);
+  if (alias) {
+    const label = alias[1] === "languageModel"
+      ? "language model"
+      : alias[1] === "speechRecognizer"
+        ? "speech recognizer"
+        : "speech synthesizer";
+    return `The ${label} “${alias[2]}” is not available on this server. Choose one that is configured.`;
+  }
+  return text;
+}
+
 async function adminProblemMessage(response: Response, fallback: string): Promise<string> {
   try {
     const problem = (await response.json()) as { title?: string; detail?: string };
-    return problem.detail?.trim() || problem.title?.trim() || fallback;
+    return friendlyAdminDetail(problem.detail ?? problem.title, fallback);
   } catch {
     return fallback;
   }

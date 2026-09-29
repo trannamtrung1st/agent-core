@@ -411,6 +411,62 @@ describe("definition candidate editor", () => {
     // Hosted run 36424818606 killed this test at the previous 60s budget.
   }, 180_000);
 
+  it("saves a voice-enabled draft with default speech aliases", async () => {
+    mockDraft();
+    await openDraft();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
+    expect(screen.getByLabelText("Speech recognizer")).toHaveValue("primary-stt");
+    expect(screen.getByLabelText("Speech synthesizer")).toHaveValue("primary-tts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => {
+      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
+    });
+    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
+      voice?: { enabled?: boolean };
+      providerPreferences?: { speechRecognizer?: string; speechSynthesizer?: string };
+    };
+    expect(saved.voice?.enabled).toBe(true);
+    expect(saved.providerPreferences).toMatchObject({
+      speechRecognizer: "primary-stt",
+      speechSynthesizer: "primary-tts"
+    });
+  });
+
+  it("clears speech aliases when voice is turned off so the draft can be saved", async () => {
+    mockDraft({
+      ...storedCandidate,
+      voice: { enabled: true, voiceId: "verse", speakingRate: 1 },
+      providerPreferences: {
+        languageModel: "primary-llm",
+        speechRecognizer: "primary-stt",
+        speechSynthesizer: "primary-tts",
+        interruptionClassifier: "heuristic"
+      }
+    });
+    await openDraft();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Voice enabled" }));
+    expect(screen.getByLabelText("Speech recognizer")).toHaveValue("");
+    expect(screen.getByLabelText("Speech synthesizer")).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => {
+      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
+    });
+    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
+      voice?: { enabled?: boolean };
+      providerPreferences?: { speechRecognizer?: string | null; speechSynthesizer?: string | null };
+    };
+    expect(saved.voice?.enabled).toBe(false);
+    expect(saved.providerPreferences).toMatchObject({
+      speechRecognizer: null,
+      speechSynthesizer: null,
+      languageModel: "primary-llm"
+    });
+  });
+
   it("round-trips form and JSON without dropping untouched fields", async () => {
     mockDraft();
     await openDraft();

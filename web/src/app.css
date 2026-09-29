@@ -1855,6 +1855,13 @@ body,
   flex-direction: column;
   gap: var(--ac-space-default);
   min-width: 0;
+}
+
+.admin-draft-form-stack {
+  min-width: 0;
+}
+
+.admin-draft-form-section:not(:first-child) {
   padding-block-start: var(--ac-space-section);
   border-block-start: 1px solid var(--ac-color-border);
 }
@@ -2047,6 +2054,7 @@ body,
 }
 
 .admin-resource-list {
+  padding-block-start: var(--ac-space-section);
   border-block-start: 1px solid var(--ac-color-border);
 }
 

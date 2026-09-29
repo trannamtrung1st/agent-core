@@ -188,13 +188,14 @@ internal static class AgentDefinitionCandidateValidator
                 continue;
             }
 
-            var offered = descriptor.OfferRule switch
+            var publishable = descriptor.OfferRule switch
             {
                 ToolOfferRule.RoleAllowlist => true,
+                ToolOfferRule.SessionAttachmentsWhenRoleAllows => true,
                 ToolOfferRule.ConfigurationWhenRoleAllows => configurationGate.IsConfigured(toolName),
                 _ => false
             };
-            if (!offered)
+            if (!publishable)
             {
                 yield return Blocking(
                     "environment.toolAllowlist",

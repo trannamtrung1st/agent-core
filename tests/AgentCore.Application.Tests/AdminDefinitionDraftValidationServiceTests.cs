@@ -63,6 +63,41 @@ public sealed class AdminDefinitionDraftValidationServiceTests
         Assert.False(result.HasBlockingFindings);
     }
 
+    [Fact]
+    public async Task ValidateDraftAsync_allows_attachments_read_on_tool_allowlist()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-25T12:00:00Z"));
+        var ids = new SystemIdGenerator(clock);
+        var admin = new InMemoryAgentDefinitionAdminStore(ids);
+        var content = new InMemoryDefinitionResourceContentStore();
+        var resourcesStore = new InMemoryAgentDefinitionResourceAdminStore(admin, content, ids);
+        var validation = CreateValidationService(admin, resourcesStore, clock);
+
+        var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Support) with
+        {
+            Environment = RoleEnvironment.Empty with
+            {
+                ToolAllowlist = [ToolCatalog.AttachmentsRead]
+            }
+        };
+        var draft = await admin.CreateDraftAsync(
+            new AgentDefinitionDraftCreate(
+                "customer-support",
+                candidate,
+                DefinitionDraftSourceKind.New,
+                null,
+                clock.GetUtcNow()),
+            CancellationToken.None);
+
+        var result = await validation.ValidateDraftAsync(draft.DraftId, CancellationToken.None);
+
+        Assert.False(result.HasBlockingFindings);
+        Assert.DoesNotContain(
+            result.Findings,
+            finding => finding.Code == "unconfigured_tool"
+                && finding.Message.Contains(ToolCatalog.AttachmentsRead, StringComparison.Ordinal));
+    }
+
     private static AgentDefinitionDraftValidationService CreateValidationService(
         IAgentDefinitionAdminStore admin,
         IAgentDefinitionResourceAdminStore resourcesStore,

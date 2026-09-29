@@ -10,6 +10,7 @@ import {
   readNumber,
   readString,
   triggerPolicyDefaults,
+  normalizeVoiceProviders,
   writeMetadataRows,
   writeModelDefault,
   writeNullableString,
@@ -105,7 +106,7 @@ function DefinitionCandidateForm({
   };
 
   return (
-    <Flex vertical gap={0}>
+    <Flex vertical gap={16} className="admin-draft-form-stack">
       <section className="admin-draft-form-section" aria-label="Identity and goals">
         <Typography.Title level={5}>Identity &amp; goals</Typography.Title>
         <div className="admin-draft-field">
@@ -355,7 +356,7 @@ function DefinitionCandidateForm({
         </div>
         <Typography.Text strong>Provider preferences</Typography.Text>
         <Typography.Text type="secondary" className="admin-draft-field-hint">
-          Language model is a required alias. Speech aliases are required when voice is on and must stay empty when voice is off.
+          Language model is a required alias. Speech aliases are required when voice is on and must stay empty when voice is off. Turning voice on fills primary-stt and primary-tts when those fields are empty. Turning voice off clears them.
         </Typography.Text>
         <div className="admin-draft-field-grid">
           <TextField
@@ -401,7 +402,9 @@ function DefinitionCandidateForm({
           label="Voice enabled"
           checked={readBoolean(candidate, ["voice", "enabled"])}
           disabled={busy}
-          onChange={(checked) => onCandidateChange(patchRecord(candidate, ["voice"], { enabled: checked }))}
+          onChange={(checked) =>
+            onCandidateChange(normalizeVoiceProviders(patchRecord(candidate, ["voice"], { enabled: checked })))
+          }
         />
         <div className="admin-draft-field-grid">
           <TextField

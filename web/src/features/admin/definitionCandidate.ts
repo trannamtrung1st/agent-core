@@ -5,7 +5,14 @@ export type MetadataRow = {
   value: string;
 };
 
+const defaultSpeechRecognizer = "primary-stt";
+const defaultSpeechSynthesizer = "primary-tts";
+
 export function candidateForPersistence(candidate: DefinitionCandidate): DefinitionCandidate {
+  return normalizeVoiceProviders(omitBlankKnowledgeSources(candidate));
+}
+
+function omitBlankKnowledgeSources(candidate: DefinitionCandidate): DefinitionCandidate {
   const environment = readRecord(candidate, ["environment"]);
   const sources = environment?.knowledgeSources;
   if (!Array.isArray(sources)) {
@@ -23,6 +30,31 @@ export function candidateForPersistence(candidate: DefinitionCandidate): Definit
     return candidate;
   }
   return writePath(candidate, ["environment", "knowledgeSources"], kept);
+}
+
+export function normalizeVoiceProviders(candidate: DefinitionCandidate): DefinitionCandidate {
+  const voiceOn = readBoolean(candidate, ["voice", "enabled"]);
+  const recognizer = readString(candidate, ["providerPreferences", "speechRecognizer"]).trim();
+  const synthesizer = readString(candidate, ["providerPreferences", "speechSynthesizer"]).trim();
+  if (voiceOn) {
+    if (recognizer.length > 0 && synthesizer.length > 0) {
+      return candidate;
+    }
+    return patchRecord(candidate, ["providerPreferences"], {
+      speechRecognizer: recognizer || defaultSpeechRecognizer,
+      speechSynthesizer: synthesizer || defaultSpeechSynthesizer
+    });
+  }
+
+  const rawRecognizer = readPath(candidate, ["providerPreferences", "speechRecognizer"]);
+  const rawSynthesizer = readPath(candidate, ["providerPreferences", "speechSynthesizer"]);
+  if (rawRecognizer == null && rawSynthesizer == null) {
+    return candidate;
+  }
+  return patchRecord(candidate, ["providerPreferences"], {
+    speechRecognizer: null,
+    speechSynthesizer: null
+  });
 }
 
 export function cloneCandidate(candidate: DefinitionCandidate): DefinitionCandidate {

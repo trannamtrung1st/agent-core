@@ -4,6 +4,7 @@ import {
   candidateForPersistence,
   candidateToJson,
   candidatesEqual,
+  normalizeVoiceProviders,
   patchRecord,
   writeModelDefault,
   writePath
@@ -66,6 +67,64 @@ describe("definitionCandidate", () => {
     expect(candidateForPersistence(candidate).environment).toEqual({
       knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo" }]
     });
+  });
+
+  it("fills default speech aliases when voice is on and clears them when voice is off", () => {
+    const textOnly = {
+      ...sample,
+      providerPreferences: {
+        languageModel: "primary-llm",
+        speechRecognizer: null,
+        speechSynthesizer: null,
+        interruptionClassifier: "heuristic"
+      }
+    };
+    const voiced = normalizeVoiceProviders(
+      patchRecord(textOnly, ["voice"], { enabled: true })
+    );
+    expect(voiced.providerPreferences).toEqual({
+      languageModel: "primary-llm",
+      speechRecognizer: "primary-stt",
+      speechSynthesizer: "primary-tts",
+      interruptionClassifier: "heuristic"
+    });
+    expect(candidateForPersistence(voiced).providerPreferences).toEqual(
+      (voiced.providerPreferences as Record<string, unknown>)
+    );
+
+    const silenced = normalizeVoiceProviders(
+      patchRecord(voiced, ["voice"], { enabled: false })
+    );
+    expect(silenced.providerPreferences).toMatchObject({
+      languageModel: "primary-llm",
+      speechRecognizer: null,
+      speechSynthesizer: null
+    });
+    expect(candidateForPersistence(silenced)).toBe(silenced);
+    expect(candidateForPersistence({
+      ...silenced,
+      providerPreferences: {
+        languageModel: "primary-llm",
+        speechRecognizer: "  ",
+        speechSynthesizer: ""
+      }
+    }).providerPreferences).toMatchObject({
+      speechRecognizer: null,
+      speechSynthesizer: null
+    });
+  });
+
+  it("keeps custom speech aliases when voice stays on", () => {
+    const voiced = {
+      ...sample,
+      voice: { enabled: true, voiceId: "verse", speakingRate: 1 },
+      providerPreferences: {
+        languageModel: "primary-llm",
+        speechRecognizer: "custom-stt",
+        speechSynthesizer: "custom-tts"
+      }
+    };
+    expect(candidateForPersistence(voiced)).toBe(voiced);
   });
 
   it("clears model defaults only when both fields are blank", () => {
