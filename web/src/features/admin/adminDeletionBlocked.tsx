@@ -1,22 +1,31 @@
 import { Alert, Flex, Typography, theme } from "antd";
 import type { ReactNode } from "react";
+import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { parseAdminDeletionBlockedMessage } from "./adminErrors";
 
 export function AdminDeletionBlockedAlert({
   message,
   className,
-  action
+  action,
+  diagnosticId
 }: {
   message: string;
   className?: string;
   action?: ReactNode;
+  diagnosticId?: string | null;
 }) {
   const { token } = theme.useToken();
   const parsed = parseAdminDeletionBlockedMessage(message);
+  const actions = diagnosticId ? (
+    <Flex gap={token.paddingXS} wrap="wrap" align="center">
+      <DiagnosticDetails fields={{ diagnosticId }} />
+      {action}
+    </Flex>
+  ) : action;
 
   if (!parsed) {
     return (
-      <Alert type="error" showIcon className={className} title={message} action={action} />
+      <Alert type="error" showIcon className={className} title={message} action={actions} />
     );
   }
 
@@ -26,7 +35,7 @@ export function AdminDeletionBlockedAlert({
       showIcon
       className={className}
       title={parsed.headline}
-      action={action}
+      action={actions}
       description={
         <Flex vertical gap={token.paddingXS} className="admin-deletion-blocked-body">
           <Typography.Text>It is still referenced by:</Typography.Text>

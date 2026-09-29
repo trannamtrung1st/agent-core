@@ -13,6 +13,7 @@ import {
 import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { WorkItem, WorkItemResult } from "../../services/api";
+import { DiagnosticDetails } from "./DiagnosticDetails";
 
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
   queued: { label: "Queued", icon: <ClockCircleOutlined /> },
@@ -223,6 +224,18 @@ export function BackgroundWorkDrawer({
               title="Work failed"
               description={item.failureSummary ?? "This work failed."}
               className="background-work-alert"
+              action={item.diagnosticId ? (
+                <DiagnosticDetails
+                  fields={{
+                    diagnosticId: item.diagnosticId,
+                    sessionId,
+                    workItemId: item.workItemId,
+                    code: item.failureCode,
+                    triggerRegistrationId: item.triggerRegistrationId,
+                    triggerOccurrenceId: item.sourceOccurrenceId
+                  }}
+                />
+              ) : undefined}
             />
           ) : null}
 

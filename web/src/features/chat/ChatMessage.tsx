@@ -1,7 +1,8 @@
-import { Button, Flex, Tag, Typography } from "antd";
+import { Button, Flex, Tag, Typography, theme } from "antd";
 import type { HistoryBlock, HistoryEntry } from "../../state/sessionStore";
 import { HistoryAttachmentView } from "./AttachmentPreview";
 import { formatChatTime, statusLabel } from "./chatTime";
+import { DiagnosticDetails } from "./DiagnosticDetails";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { shouldShowSpeechText, SpokenText } from "./SpokenText";
 
@@ -16,6 +17,7 @@ export function ChatMessage({
   sessionId: string | null;
   turnAnchor?: boolean;
 }) {
+  const { token } = theme.useToken();
   const isUser = entry.role === "user";
   const speaker = isUser ? "You" : agentName || "Agent";
   const status = statusLabel(entry.status, entry.finishReason, entry.interruptReason);
@@ -78,14 +80,28 @@ export function ChatMessage({
         </div>
       ) : null}
       {status ? (
-        <Tag
-          color={entry.status === "failed" ? "red" : "gold"}
-          variant="solid"
-          className="chat-message-status"
-          title={entry.interruptReason ?? undefined}
-        >
-          {status}
-        </Tag>
+        <Flex align="center" gap={token.paddingXS} className="chat-message-status-row">
+          <Tag
+            color={entry.status === "failed" ? "red" : "gold"}
+            variant="solid"
+            className="chat-message-status"
+            title={entry.interruptReason ?? undefined}
+          >
+            {status}
+          </Tag>
+          {entry.status === "failed" && entry.failure?.diagnosticId ? (
+            <DiagnosticDetails
+              fields={{
+                diagnosticId: entry.failure.diagnosticId,
+                correlationId: entry.failure.correlationId,
+                sessionId,
+                responseId: entry.responseId,
+                category: entry.failure.category,
+                code: entry.failure.code
+              }}
+            />
+          ) : null}
+        </Flex>
       ) : null}
     </li>
   );

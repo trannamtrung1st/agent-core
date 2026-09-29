@@ -74,6 +74,9 @@ export type WorkItem = {
   failureCode: string | null;
   failureSummary: string | null;
   knownEffect: string | null;
+  diagnosticId?: string | null;
+  sourceOccurrenceId?: string | null;
+  triggerRegistrationId?: string | null;
   createdAt: string;
   updatedAt: string;
 };

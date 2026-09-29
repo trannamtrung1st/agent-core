@@ -355,6 +355,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                   <SessionFailureAlert
                     error={sessionFailure ?? failedAlertTitle}
                     fatal={state.errorFatal}
+                    sessionId={state.sessionId}
                     className="connection-alert"
                     action={
                       <Button size="small" aria-label="Retry" onClick={() => void retryConnection()}>
@@ -456,6 +457,7 @@ export function ChatApp({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
                           ? (state.sessionError ?? state.error)
                           : null
                       }
+                      sessionId={state.sessionId}
                       pendingAttachments={state.pendingAttachments}
                       voiceAvailable={voiceAvailable}
                       pendingVoice={pendingVoice}

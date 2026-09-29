@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Alert, Button, Descriptions, Flex, Popover, Typography } from "antd";
+import { DiagnosticDetails } from "./DiagnosticDetails";
 import {
   classLabel,
   resolveSessionError,
@@ -10,12 +11,14 @@ export function SessionFailureAlert({
   error,
   fatal = false,
   className,
-  action
+  action,
+  sessionId = null
 }: {
   error: SessionErrorView | string | null;
   fatal?: boolean;
   className?: string;
   action?: ReactNode;
+  sessionId?: string | null;
 }) {
   const view = resolveSessionError(error, fatal);
   if (!view) {
@@ -74,6 +77,16 @@ export function SessionFailureAlert({
       }
       action={
         <Flex wrap gap={8} className="session-failure-actions">
+          <DiagnosticDetails
+            fields={{
+              diagnosticId: view.diagnosticId,
+              correlationId: view.correlationId,
+              sessionId,
+              responseId: view.responseId,
+              category: view.category,
+              code: view.code
+            }}
+          />
           {details}
           {action}
         </Flex>

@@ -67,6 +67,7 @@ import {
   listAdminPublicationResources,
   listAdminToolNames,
   publishAdminDefinitionDraft,
+  AdminRequestError,
   removeAdminDraftResource,
   updateAdminDefinitionDraft,
   updateAdminAgentInstanceActiveVersion,
@@ -794,7 +795,20 @@ function DefinitionDetail({
     : [];
   const group = rows.length > 0 ? groupDefinitionInventory(rows)[0] : null;
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
-  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [lifecycleError, setLifecycleErrorValue] = useState<string | null>(null);
+  const [lifecycleDiagnosticId, setLifecycleDiagnosticId] = useState<string | null>(null);
+  const setLifecycleError = (message: string | null, diagnosticId?: string | null) => {
+    setLifecycleErrorValue(message);
+    setLifecycleDiagnosticId(message ? diagnosticId ?? null : null);
+  };
+  const reportLifecycleError = (error: unknown, fallback: string) => {
+    if (error instanceof AdminRequestError) {
+      setLifecycleError(error.message, error.diagnosticId ?? null);
+      return;
+    }
+
+    setLifecycleError(error instanceof Error ? error.message : fallback);
+  };
   const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
   const [activeDraft, setActiveDraft] = useState<AdminDefinitionDraft | null>(null);
@@ -845,7 +859,7 @@ function DefinitionDetail({
       await reloadLifecycle();
       await onRetryDefinitions();
     } catch (error) {
-      setLifecycleError(error instanceof Error ? error.message : "Failed to deprecate publication.");
+      reportLifecycleError(error, "Failed to deprecate publication.");
     } finally {
       setBusy(false);
     }
@@ -862,7 +876,7 @@ function DefinitionDetail({
       setDraftSummaries(drafts.filter((item) => item.definitionId === definitionId));
       setPublications(pubs);
     } catch (error) {
-      setLifecycleError(error instanceof Error ? error.message : "Failed to load drafts.");
+      reportLifecycleError(error, "Failed to load drafts.");
     } finally {
       setLifecycleLoading(false);
     }
@@ -909,7 +923,7 @@ function DefinitionDetail({
       setActiveDraft(draft);
       loadCandidate(draft.candidate);
     } catch (error) {
-      setLifecycleError(error instanceof Error ? error.message : "Failed to load draft.");
+      reportLifecycleError(error, "Failed to load draft.");
     } finally {
       setBusy(false);
     }
@@ -946,8 +960,7 @@ function DefinitionDetail({
       message.success("Definition deleted.");
       onDeleted();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Definition could not be deleted.";
-      setLifecycleError(text);
+      reportLifecycleError(error, "Definition could not be deleted.");
     } finally {
       setBusy(false);
     }
@@ -984,7 +997,7 @@ function DefinitionDetail({
       await onRetryDefinitions();
     } catch (error) {
       const text = error instanceof Error ? error.message : "Draft could not be deleted.";
-      setLifecycleError(text);
+      reportLifecycleError(error, "Draft could not be deleted.");
       message.error(text);
     } finally {
       setBusy(false);
@@ -1018,7 +1031,7 @@ function DefinitionDetail({
       await selectDraft(draft.draftId);
       await reloadLifecycle();
     } catch (error) {
-      setLifecycleError(error instanceof Error ? error.message : "Fork failed.");
+      reportLifecycleError(error, "Fork failed.");
     } finally {
       setBusy(false);
     }
@@ -1041,7 +1054,7 @@ function DefinitionDetail({
       await reloadLifecycle();
     } catch (error) {
       const text = error instanceof Error ? error.message : "Save failed.";
-      setLifecycleError(text);
+      reportLifecycleError(error, "Save failed.");
       message.error(text);
     } finally {
       setBusy(false);
@@ -1113,7 +1126,7 @@ function DefinitionDetail({
           await onRetryDefinitions();
         } catch (error) {
           const text = error instanceof Error ? error.message : "Publish failed.";
-          setLifecycleError(text);
+          reportLifecycleError(error, "Publish failed.");
           message.error(text);
         } finally {
           setBusy(false);
@@ -1129,7 +1142,7 @@ function DefinitionDetail({
       await startManagedPublicationChat(publicationDefinitionId, version);
     } catch (error) {
       const text = error instanceof Error ? error.message : "Managed chat could not be started.";
-      setLifecycleError(text);
+      reportLifecycleError(error, "Managed chat could not be started.");
       message.error(text);
       setBusy(false);
     }
@@ -1229,6 +1242,7 @@ function DefinitionDetail({
             <AdminDeletionBlockedAlert
               className="admin-destructive-detail"
               message={lifecycleError}
+              diagnosticId={lifecycleDiagnosticId}
               action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
             />
           ) : null}
@@ -1325,6 +1339,7 @@ function DefinitionDetail({
             <AdminDeletionBlockedAlert
               className="admin-draft-status admin-destructive-detail"
               message={lifecycleError}
+              diagnosticId={lifecycleDiagnosticId}
               action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
             />
           ) : null}

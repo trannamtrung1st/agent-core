@@ -19,6 +19,9 @@ export type SessionErrorView = {
   fatal: boolean;
   retryAfterMs: number | null;
   classId: SessionErrorClass;
+  diagnosticId?: string;
+  correlationId?: string | null;
+  responseId?: string | null;
   extensions?: Record<string, string | number | boolean>;
 };
 
@@ -28,6 +31,9 @@ export type WireError = {
   message?: string;
   fatal?: boolean;
   retryAfterMs?: number | null;
+  diagnosticId?: unknown;
+  correlationId?: unknown;
+  responseId?: unknown;
   extensions?: Record<string, unknown> | null;
 };
 
@@ -112,7 +118,7 @@ export function sanitizeExtensions(raw: Record<string, unknown> | null | undefin
 
   const next: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (SECRET_KEY.test(key)) {
+    if (key === "diagnosticId" || key === "correlationId" || key === "responseId" || SECRET_KEY.test(key)) {
       continue;
     }
 
@@ -151,8 +157,15 @@ export function sessionErrorFromMessage(
     fatal: extras.fatal ?? false,
     retryAfterMs: extras.retryAfterMs ?? null,
     classId: extras.classId ?? sessionErrorClass(category, code),
+    diagnosticId: presentId(extras.diagnosticId),
+    correlationId: presentId(extras.correlationId) ?? null,
+    responseId: presentId(extras.responseId) ?? null,
     extensions: extras.extensions
   };
+}
+
+function presentId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 export function sessionErrorFromWire(error: WireError | null | undefined, fallbackMessage: string): SessionErrorView {
@@ -168,6 +181,9 @@ export function sessionErrorFromWire(error: WireError | null | undefined, fallba
       ? error.retryAfterMs
       : null,
     classId: sessionErrorClass(category, code),
+    diagnosticId: presentId(error?.diagnosticId),
+    correlationId: presentId(error?.correlationId) ?? null,
+    responseId: presentId(error?.responseId) ?? null,
     extensions: sanitizeExtensions(error?.extensions ?? undefined)
   };
 }

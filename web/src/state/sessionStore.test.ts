@@ -763,6 +763,68 @@ describe("applyServerEvent", () => {
     expect(next.sessionError?.retryAfterMs).toBe(250);
     expect(next.sessionError?.extensions).toEqual({ retryable: true });
   });
+
+  it("binds a diagnostic error to its response and ignores a superseded one", () => {
+    const started = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r-active",
+        payload: { entryId: "e-active", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    const diagnosed = applyServerEvent(
+      started,
+      event({
+        type: "error",
+        sequence: 2,
+        responseId: "r-active",
+        correlationId: "corr-active",
+        payload: {
+          category: "Provider",
+          code: "Unavailable",
+          message: "Active failed.",
+          diagnosticId: "diag-active",
+          fatal: false
+        }
+      })
+    );
+    expect(diagnosed.sessionError?.diagnosticId).toBe("diag-active");
+    expect(diagnosed.sessionError?.responseId).toBe("r-active");
+    expect(diagnosed.entries[0]?.failure?.diagnosticId).toBe("diag-active");
+    const withOld = {
+      ...diagnosed,
+      entries: [
+        ...diagnosed.entries,
+        {
+          ...diagnosed.entries[0]!,
+          entryId: "e-old",
+          responseId: "r-old",
+          failure: null
+        }
+      ]
+    };
+    const superseded = applyServerEvent(
+      withOld,
+      event({
+        type: "error",
+        sequence: 3,
+        responseId: "r-old",
+        correlationId: "corr-old",
+        payload: {
+          category: "Provider",
+          code: "Unavailable",
+          message: "Old failed.",
+          diagnosticId: "diag-old",
+          fatal: false
+        }
+      })
+    );
+    expect(superseded.sessionError?.diagnosticId).toBe("diag-active");
+    expect(superseded.entries.find((entry) => entry.responseId === "r-old")?.failure?.diagnosticId).toBe("diag-old");
+    expect(superseded.entries.find((entry) => entry.responseId === "r-active")?.failure?.diagnosticId).toBe("diag-active");
+  });
 });
 
 describe("agent.progress", () => {
@@ -1024,6 +1086,50 @@ describe("historyFromPayload", () => {
       }
     ]);
     expect(entries[0]?.finishReason).toBe("lengthLimit");
+    expect(entries[0]?.failure).toBeNull();
+  });
+
+  it("maps a stored failure reference and leaves a legacy row without one", () => {
+    const entries = historyFromPayload([
+      {
+        entryId: "e1",
+        sequence: 1,
+        role: "assistant",
+        text: "",
+        responseId: "r1",
+        status: "failed",
+        deliveryMode: "text",
+        heardTextEndExclusive: 0,
+        receivedTextEndExclusive: 0,
+        createdAt: "2026-09-18T00:00:00.000Z",
+        failure: {
+          diagnosticId: "diag-history",
+          correlationId: "corr-history",
+          category: "Provider",
+          code: "Unavailable"
+        }
+      },
+      {
+        entryId: "e2",
+        sequence: 2,
+        role: "assistant",
+        text: "",
+        responseId: "r2",
+        status: "failed",
+        deliveryMode: "text",
+        heardTextEndExclusive: 0,
+        receivedTextEndExclusive: 0,
+        createdAt: "2026-09-18T00:00:00.000Z",
+        failure: null
+      }
+    ]);
+    expect(entries[0]?.failure).toEqual({
+      diagnosticId: "diag-history",
+      correlationId: "corr-history",
+      category: "Provider",
+      code: "Unavailable"
+    });
+    expect(entries[1]?.failure).toBeNull();
   });
 
   it("keeps display receipts independent of heard offsets and omits thinking rows", () => {

@@ -54,6 +54,13 @@ export type PendingApproval = {
   expiresAt: string;
 };
 
+export type HistoryFailure = {
+  diagnosticId: string;
+  correlationId: string | null;
+  category: string;
+  code: string;
+};
+
 export type HistoryEntry = {
   entryId: string;
   sequence: number;
@@ -71,6 +78,7 @@ export type HistoryEntry = {
   finishReason?: string | null;
   interruptReason?: string | null;
   speechText?: string | null;
+  failure?: HistoryFailure | null;
 };
 
 export type ServerEvent = {
@@ -396,9 +404,52 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       blocks: asBlocks(row.blocks),
       finishReason: row.finishReason == null ? null : asString(row.finishReason),
       interruptReason: row.interruptReason == null ? null : asString(row.interruptReason),
-      speechText: asSpeechText(row.speechText)
+      speechText: asSpeechText(row.speechText),
+      failure: asHistoryFailure(row.failure)
     };
   });
+}
+
+function asHistoryFailure(raw: unknown): HistoryFailure | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const diagnosticId = asString(row.diagnosticId).trim();
+  if (!diagnosticId) {
+    return null;
+  }
+
+  const correlationId = asString(row.correlationId).trim();
+  return {
+    diagnosticId,
+    correlationId: correlationId || null,
+    category: asString(row.category),
+    code: asString(row.code)
+  };
+}
+
+function failureForResponse(error: SessionErrorView | null, responseId: string | null): HistoryFailure | null {
+  if (!error?.diagnosticId || !responseId || error.responseId !== responseId) {
+    return null;
+  }
+
+  return {
+    diagnosticId: error.diagnosticId,
+    correlationId: error.correlationId ?? null,
+    category: error.category,
+    code: error.code
+  };
+}
+
+function stampEntryFailure(entries: HistoryEntry[], error: SessionErrorView): HistoryEntry[] {
+  const failure = failureForResponse(error, error.responseId ?? null);
+  if (!failure) {
+    return entries;
+  }
+
+  return entries.map((entry) => (entry.responseId === error.responseId ? { ...entry, failure } : entry));
 }
 
 export function pendingApprovalFromPayload(raw: unknown, activeResponseId: string | null): PendingApproval | null {
@@ -805,7 +856,8 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
                 status,
                 finishReason: finishReason ?? entry.finishReason ?? null,
                 interruptReason: interruptReason ?? entry.interruptReason ?? null,
-                speechText: asSpeechText(event.payload.speechText) ?? entry.speechText
+                speechText: asSpeechText(event.payload.speechText) ?? entry.speechText,
+                failure: entry.failure ?? failureForResponse(state.sessionError, event.responseId)
               }
             : entry)
       };
@@ -888,10 +940,41 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       return { ...state, lastServerSequence: event.sequence, liveUserTranscript: null };
     }
     case "error": {
-      const sessionError = sessionErrorFromWire(event.payload, asString(event.payload.message) || "The session reported a failure.");
+      const payload = event.payload;
+      const sessionError = sessionErrorFromWire(
+        {
+          category: typeof payload.category === "string" ? payload.category : undefined,
+          code: typeof payload.code === "string" ? payload.code : undefined,
+          message: typeof payload.message === "string" ? payload.message : undefined,
+          fatal: payload.fatal === true,
+          retryAfterMs: typeof payload.retryAfterMs === "number" ? payload.retryAfterMs : null,
+          diagnosticId: typeof payload.diagnosticId === "string" ? payload.diagnosticId : undefined,
+          correlationId: event.correlationId || (typeof payload.correlationId === "string" ? payload.correlationId : undefined),
+          responseId: event.responseId ?? (typeof payload.responseId === "string" ? payload.responseId : undefined),
+          extensions: payload.extensions && typeof payload.extensions === "object" && !Array.isArray(payload.extensions)
+            ? payload.extensions as Record<string, unknown>
+            : undefined
+        },
+        asString(payload.message) || "The session reported a failure."
+      );
+      const entries = stampEntryFailure(state.entries, sessionError);
+      const stale = Boolean(
+        sessionError.responseId
+        && state.liveResponseId
+        && sessionError.responseId !== state.liveResponseId
+      );
+      if (stale) {
+        return {
+          ...state,
+          lastServerSequence: event.sequence,
+          entries
+        };
+      }
+
       return {
         ...state,
         lastServerSequence: event.sequence,
+        entries,
         error: sessionError.message,
         sessionError,
         errorFatal: sessionError.fatal,

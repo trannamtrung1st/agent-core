@@ -183,6 +183,7 @@ export function Composer({
   pendingSendQueue,
   ready,
   error,
+  sessionId = null,
   pendingAttachments,
   voiceAvailable,
   pendingVoice,
@@ -210,6 +211,7 @@ export function Composer({
   pendingSendQueue: PendingSendItem[];
   ready: boolean;
   error: SessionErrorView | string | null;
+  sessionId?: string | null;
   pendingAttachments: PendingAttachment[];
   voiceAvailable: boolean;
   pendingVoice: boolean;
@@ -273,7 +275,7 @@ export function Composer({
 
   return (
     <Flex vertical gap={8} className="dock">
-      {error ? <SessionFailureAlert error={error} /> : null}
+      {error ? <SessionFailureAlert error={error} sessionId={sessionId} /> : null}
       {imageIncompatibilityMessage ? (
         <Alert type="warning" showIcon message={imageIncompatibilityMessage} />
       ) : null}

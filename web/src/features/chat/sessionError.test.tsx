@@ -32,6 +32,36 @@ describe("sessionError", () => {
     ]);
   });
 
+  it("stores diagnostic identity on the view and still drops secrets", () => {
+    const view = sessionErrorFromWire(
+      {
+        category: "Provider",
+        code: "Unavailable",
+        message: "Synthetic turn failure.",
+        diagnosticId: "019944af-0008-7000-8000-0000000000d5",
+        correlationId: "corr-1",
+        responseId: "response-1",
+        extensions: {
+          stack: "at secret",
+          trace: "span",
+          path: "/tmp/provider",
+          body: "raw-body",
+          payload: "raw-payload",
+          raw: "raw",
+          apiKey: "sk-secret",
+          diagnosticId: "extension-id"
+        }
+      },
+      "failed"
+    );
+    expect(view.diagnosticId).toBe("019944af-0008-7000-8000-0000000000d5");
+    expect(view.correlationId).toBe("corr-1");
+    expect(view.responseId).toBe("response-1");
+    expect(view.extensions).toBeUndefined();
+    expect(JSON.stringify(view)).not.toContain("sk-secret");
+    expect(JSON.stringify(view)).not.toContain("extension-id");
+  });
+
   it("drops secrets, stacks, and vendor bodies from extensions", () => {
     expect(
       sanitizeExtensions({
