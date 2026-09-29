@@ -227,6 +227,8 @@ public sealed record CompactionReturned(
     CompactionOutcome Outcome,
     TaskCompletionSource<bool> Processed) : SessionInput(Context);
 
+public sealed record DeferredUserTurnDrainRequested(EventContext Context) : SessionInput(Context);
+
 public sealed record SessionOutput(EventContext Context, Guid? ResponseId, OutputPayload Payload);
 
 public abstract record OutputPayload;

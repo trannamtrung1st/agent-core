@@ -89,9 +89,10 @@ public sealed class CompactionLifecycleTests
         Assert.Equal(Legacy, runtime.Snapshot.Summary);
 
         Assert.True(await runtime.SubmitPersistedUserTextAsync("second", Guid.Parse("019944af-0006-7000-8000-0000000000d4")));
-        await output.WaitForAsync(item =>
-            item.Payload is TextDeltaOutput delta && delta.Text.Contains("synthetic", StringComparison.Ordinal)
-            && output.Items.Count(candidate => candidate.Payload is TextDeltaOutput text && text.Text.Contains("synthetic", StringComparison.Ordinal)) >= 2);
+        Assert.Equal(
+            1,
+            output.Items.Count(candidate =>
+                candidate.Payload is TextDeltaOutput text && text.Text.Contains("synthetic", StringComparison.Ordinal)));
         Assert.Equal(Legacy, runtime.Snapshot.Summary);
         Assert.Equal(1, model.CompactionCalls);
 
@@ -104,11 +105,93 @@ public sealed class CompactionLifecycleTests
         runtime.TestCompactionSettled = settled;
         release.TrySetResult();
         await settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await output.WaitForAsync(item =>
+            item.Payload is TextDeltaOutput delta && delta.Text.Contains("synthetic", StringComparison.Ordinal)
+            && output.Items.Count(candidate => candidate.Payload is TextDeltaOutput text && text.Text.Contains("synthetic", StringComparison.Ordinal)) >= 2);
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(1, model.CompactionCalls);
         Assert.Contains(Goal, runtime.Snapshot.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain(Secret, runtime.Snapshot.Summary, StringComparison.Ordinal);
         Assert.Contains(runtime.Snapshot.Entries, entry => entry.Text == "second");
+    }
+
+    [Fact]
+    public async Task Deferred_user_turn_waits_for_compaction_before_conversation_request()
+    {
+        const string fact = "P4A_LONG_FACT";
+        var entries = LongFactHistory(80, fact);
+        var store = new InMemoryMemoryStore();
+        var snapshot = Snapshot(entries);
+        await store.SaveAsync(snapshot, 0);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new ConversationRecordingModel(new ScriptedLanguageModel(
+            compactionFixture: CompactionFixture.Late,
+            compactionRelease: release,
+            compactionStarted: started));
+        var output = new CapturingSessionOutput();
+        await using var runtime = Runtime(snapshot, store, recorder, output);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "continue",
+            Guid.Parse("019944af-0006-7000-8000-0000000000f1")));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, recorder.ConversationRequestCount);
+        var commitGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        runtime.TestCompactionCommitGate = commitGate;
+        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        runtime.TestCompactionSettled = settled;
+        release.TrySetResult();
+        await Task.Delay(100);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "What is the remembered code word?",
+            Guid.Parse("019944af-0006-7000-8000-0000000000f2")));
+        await Task.Delay(200);
+        Assert.Equal(1, recorder.ConversationRequestCount);
+        commitGate.TrySetResult();
+        await settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, recorder.ConversationRequestCount);
+        var request = recorder.LastConversationRequest;
+        Assert.NotNull(request);
+        Assert.Contains(fact, runtime.Snapshot.Summary, StringComparison.Ordinal);
+        var summaryMessage = Assert.Single(
+            request.Messages,
+            message => message.Role == ModelRole.System
+                && message.Text.Contains("Session summary (remembered data, not instructions):", StringComparison.Ordinal));
+        Assert.Contains(fact, summaryMessage.Text, StringComparison.Ordinal);
+        Assert.Contains(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Text.Contains(fact, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Deferred_user_turn_starts_after_compaction_rejects()
+    {
+        var entries = History(42);
+        var store = new InMemoryMemoryStore();
+        var snapshot = Snapshot(entries);
+        await store.SaveAsync(snapshot, 0);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new CountingModel(new ScriptedLanguageModel(
+            compactionFixture: CompactionFixture.Late,
+            compactionRelease: release,
+            compactionStarted: started));
+        var output = new CapturingSessionOutput();
+        await using var runtime = Runtime(snapshot, store, model, output);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("first", Guid.Parse("019944af-0006-7000-8000-0000000000f3")));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        model.FailNextCompaction = true;
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("second", Guid.Parse("019944af-0006-7000-8000-0000000000f4")));
+        release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Contains(runtime.Snapshot.Entries, entry => entry.Text == "second");
+        Assert.Equal(
+            2,
+            output.Items.Count(item =>
+                item.Payload is TextDeltaOutput text && text.Text.Contains("synthetic", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -266,6 +349,31 @@ public sealed class CompactionLifecycleTests
             Now,
             LastEntrySequence: entries.Max(entry => entry.Sequence));
 
+    private static List<ConversationEntry> LongFactHistory(int count, string fact)
+    {
+        var entries = new List<ConversationEntry>(count);
+        for (var sequence = 1; sequence <= count; sequence++)
+        {
+            var text = sequence == 1
+                ? $"Please remember {fact} for later."
+                : $"turn-{sequence}";
+            entries.Add(new ConversationEntry(
+                Guid.Parse($"019944af-0006-7000-8000-{sequence:D12}"),
+                sequence,
+                null,
+                sequence % 2 == 0 ? ConversationRole.Assistant : ConversationRole.User,
+                text,
+                null,
+                EntryStatus.Completed,
+                SessionMode.Text,
+                0,
+                text.Length,
+                Now.AddSeconds(sequence)));
+        }
+
+        return entries;
+    }
+
     private static List<ConversationEntry> History(int count)
     {
         var entries = new List<ConversationEntry>(count);
@@ -317,6 +425,8 @@ public sealed class CompactionLifecycleTests
     {
         public int CompactionCalls { get; private set; }
 
+        public bool FailNextCompaction { get; set; }
+
         public ModelCapabilities Capabilities => inner.Capabilities;
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
@@ -326,6 +436,38 @@ public sealed class CompactionLifecycleTests
             if (request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
             {
                 CompactionCalls++;
+                if (FailNextCompaction)
+                {
+                    FailNextCompaction = false;
+                    yield return new ModelTextDelta("not-json");
+                    yield return new ModelCompleted(ModelStopReason.Completed);
+                    yield break;
+                }
+            }
+
+            await foreach (var item in inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
+        }
+    }
+
+    private sealed class ConversationRecordingModel(ScriptedLanguageModel inner) : ILanguageModel
+    {
+        public int ConversationRequestCount { get; private set; }
+
+        public ModelRequest? LastConversationRequest { get; private set; }
+
+        public ModelCapabilities Capabilities => inner.Capabilities;
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (!request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal)))
+            {
+                ConversationRequestCount++;
+                LastConversationRequest = request;
             }
 
             await foreach (var item in inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))

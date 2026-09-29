@@ -35,9 +35,11 @@ Docs-only commit `6226202` triggered [`36534124772`](https://github.com/trannamt
 
 Admin modal confirmations and structured blocked-delete presentation shipped in `b0f3b0a` (shared `confirmAction`); design context documents the reusable confirmation rule in `.agents/context/DESIGN.md`.
 
-**Final hosted evidence:** Synthetic workflow [`36537455844`](https://github.com/trannamtrung1st/agent-core/actions/runs/36537455844) on `6eb0686` — update this line when the run completes (Compose smoke was green early; offline gates were still running when last checked).
+**Hosted regression (not WorkItem isolation):** Synthetic workflow [`36537455844`](https://github.com/trannamtrung1st/agent-core/actions/runs/36537455844) on `6eb0686` failed `e2e/long-session-compaction.spec.ts` (expected `P4A_LONG_FACT`, observed “I do not have a code word.”). Domain, Infrastructure, Application, API, frontend unit/build, and Compose had already passed. Root cause: a compaction → next-turn handoff race — Chat can show Ready while `LaunchCompaction()` is still in flight, so a fast user turn can build its prompt after an early fact has left `PromptContextBuilder.MaxHistoryEntries` but before the compacted summary commits. Repair defers model/brain launch until the compaction commit window settles (`_compactionCommitImminent`), without blocking visible Ready during normal idle compaction.
 
-This follow-up stops after `36537455844` is green unless a later regression appears. The historical P7.6 freeze remains `17d89ae`.
+**Final hosted evidence:** pending a green Synthetic run on the compaction handoff fix — do not record final P7.6 follow-up closure until that run succeeds.
+
+This follow-up stops after that green hosted run unless a later regression appears. The historical P7.6 freeze remains `17d89ae`.
 
 ## Not in this follow-up
 

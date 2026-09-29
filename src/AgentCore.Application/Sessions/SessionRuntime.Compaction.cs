@@ -15,6 +15,81 @@ public sealed partial class SessionRuntime
         long BaseThrough,
         int BaseFormat);
 
+    private sealed record DeferredUserTurn(
+        EventContext Cause,
+        AgentTrigger Trigger,
+        Guid ResponseId,
+        int Turn,
+        IReadOnlyList<Guid> AttachmentIds);
+
+    private DeferredUserTurn? _deferredUserTurn;
+    private bool _drainingDeferredUserTurn;
+    private volatile bool _compactionCommitImminent;
+
+    private bool ShouldDeferUserTurnForCompaction() =>
+        !_drainingDeferredUserTurn
+        && _compactionFlight is not null
+        && _compactionCommitImminent
+        && _activeResponseId is null;
+
+    private bool CanDrainDeferredUserTurn() =>
+        _deferredUserTurn is not null
+        && _activeResponseId is null
+        && !_deactivated
+        && !LifecycleTransition.IsTerminal(_snapshot)
+        && _snapshot.Status is not SessionStatus.Ending and not SessionStatus.Ended;
+
+    private void ScheduleDeferredUserTurnDrain(EventContext? cause = null, bool force = false)
+    {
+        if (_deferredUserTurn is null)
+        {
+            return;
+        }
+
+        if (!force && _compactionFlight is not null && _compactionCommitImminent)
+        {
+            return;
+        }
+
+        if (!CanDrainDeferredUserTurn())
+        {
+            return;
+        }
+
+        BeginWork();
+        if (!TryMailbox(new DeferredUserTurnDrainRequested(cause ?? NewContext())))
+        {
+            EndWork();
+        }
+    }
+
+    private async Task TryDrainDeferredUserTurnAsync(EventContext cause, CancellationToken cancellationToken)
+    {
+        if (!CanDrainDeferredUserTurn() || _deferredUserTurn is not { } deferred)
+        {
+            return;
+        }
+
+        _deferredUserTurn = null;
+        _drainingDeferredUserTurn = true;
+        try
+        {
+            await LaunchPreparedTurnAsync(
+                    deferred.Cause,
+                    deferred.Trigger,
+                    deferred.ResponseId,
+                    deferred.Turn,
+                    deferred.AttachmentIds)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _drainingDeferredUserTurn = false;
+        }
+    }
+
+    private void ClearDeferredUserTurn() => _deferredUserTurn = null;
+
     private void LaunchCompaction(EventContext cause)
     {
         if (_compactionFlight is not null
@@ -58,6 +133,7 @@ public sealed partial class SessionRuntime
                 var current = flight;
                 while (generation == Volatile.Read(ref _compactionGeneration))
                 {
+                    _compactionCommitImminent = false;
                     CompactionOutcome outcome;
                     try
                     {
@@ -81,6 +157,17 @@ public sealed partial class SessionRuntime
                     {
                         RuntimeTelemetry.RecordDropped("compaction_rejected");
                         return;
+                    }
+
+                    if (generation != Volatile.Read(ref _compactionGeneration))
+                    {
+                        return;
+                    }
+
+                    _compactionCommitImminent = true;
+                    if (TestCompactionCommitGate is { Task: { IsCompleted: false } } commitGate)
+                    {
+                        await commitGate.Task.WaitAsync(token).ConfigureAwait(false);
                     }
 
                     if (generation != Volatile.Read(ref _compactionGeneration))
@@ -137,12 +224,14 @@ public sealed partial class SessionRuntime
 
         if (input.Outcome is not CompactionAccepted accepted)
         {
+            _compactionCommitImminent = false;
             _compactionFlight = null;
             var reason = input.Outcome is CompactionRejected rejected
                 ? rejected.Reason
                 : CompactionRejection.ProviderFailure;
             RuntimeTelemetry.RecordDropped(
                 reason == CompactionRejection.Cancelled ? "compaction_cancelled" : "compaction_rejected");
+            ScheduleDeferredUserTurnDrain(input.Context);
             return false;
         }
 
@@ -159,11 +248,14 @@ public sealed partial class SessionRuntime
             || candidate.ThroughEntrySequence <= flight.BaseThrough
             || candidate.ThroughEntrySequence > _snapshot.DurableLastEntrySequence)
         {
+            _compactionCommitImminent = false;
             _compactionFlight = null;
             RuntimeTelemetry.RecordDropped("compaction_stale");
+            ScheduleDeferredUserTurnDrain(input.Context);
             return false;
         }
 
+        _compactionCommitImminent = false;
         _snapshot = _snapshot with
         {
             Summary = candidate.Summary,
@@ -181,20 +273,30 @@ public sealed partial class SessionRuntime
         };
         OperationalDiagnostics.RecordCompactionAccepted();
         RequestPersist(_snapshot);
+        ScheduleDeferredUserTurnDrain(input.Context);
         return true;
     }
 
     private void AbandonCompactionFlight(int generation)
     {
-        if (_compactionGeneration == generation && _compactionFlight?.Generation == generation)
+        if (_compactionGeneration != generation)
         {
+            return;
+        }
+
+        if (_compactionFlight?.Generation == generation)
+        {
+            _compactionCommitImminent = false;
             _compactionFlight = null;
         }
+
+        ScheduleDeferredUserTurnDrain();
     }
 
     private void CancelCompaction()
     {
         _compactionGeneration++;
+        _compactionCommitImminent = false;
         _compactionFlight = null;
         var cts = _compactionCts;
         if (cts is null)
@@ -212,5 +314,6 @@ public sealed partial class SessionRuntime
         }
 
         cts.Dispose();
+        ScheduleDeferredUserTurnDrain();
     }
 }

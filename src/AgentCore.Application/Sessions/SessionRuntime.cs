@@ -140,6 +140,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private CancellationTokenSource? _compactionCts;
     private CompactionFlight? _compactionFlight;
     internal TaskCompletionSource? TestCompactionSettled { get; set; }
+    internal TaskCompletionSource? TestCompactionCommitGate { get; set; }
     private DateTimeOffset? _lastInitiativeAt;
     private DateTimeOffset? _pendingInitiativeExpiresAt;
     private TimeSpan? _pendingPostResponseIdleDelay;
@@ -814,6 +815,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        ClearDeferredUserTurn();
         CancelCompaction();
         _persistJobs.Writer.TryComplete();
         foreach (var pair in _pendingPersist)
@@ -1009,6 +1011,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         TestCompactionSettled?.TrySetResult();
                     }
 
+                    break;
+                case DeferredUserTurnDrainRequested drain:
+                    await TryDrainDeferredUserTurnAsync(drain.Context, cancellationToken).ConfigureAwait(false);
                     break;
                 case AttachReceived attach:
                     await HandleAttachAsync(attach, cancellationToken).ConfigureAwait(false);
@@ -1953,6 +1958,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _environmentQueue.Clear();
         _outputActivity = OutputActivity.WaitingForAgent;
         UserTextQueueTelemetry.RecordPendingBatchStarted(suffix.Count);
+        if (ShouldDeferUserTurnForCompaction())
+        {
+            _deferredUserTurn = new DeferredUserTurn(batchCause, trigger, responseId, turn, attachmentIds);
+            await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
+            return true;
+        }
+
         await LaunchPreparedTurnAsync(batchCause, trigger, responseId, turn, attachmentIds).ConfigureAwait(false);
         await PublishWaitingOutputAsync(batchCause).ConfigureAwait(false);
         return true;
@@ -1965,6 +1977,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         int turn,
         IReadOnlyList<Guid> attachmentIds)
     {
+        if (trigger.Kind == TriggerKind.UserTurn && ShouldDeferUserTurnForCompaction())
+        {
+            _deferredUserTurn = new DeferredUserTurn(cause, trigger, responseId, turn, attachmentIds);
+            return;
+        }
+
         await FinishOwnedProgressAsync(cause, ResponseProgressState.Failed, CancellationToken.None)
             .ConfigureAwait(false);
         _progressOwnerResponseId = responseId;
@@ -4061,6 +4079,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Interlocked.Increment(ref _terminalFence);
         _pendingTriggerProposal = null;
         _deadlineTimerGeneration++;
+        ClearDeferredUserTurn();
         CancelCompletionEvaluation();
         CancelCompaction();
         _deactivated = true;
