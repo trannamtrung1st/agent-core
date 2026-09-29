@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,7 @@ public readonly record struct DiagnosticContext(
     string? ErrorCode = null,
     string? ProviderAlias = null)
 {
-    public IReadOnlyList<KeyValuePair<string, object?>> ToScope(Guid diagnosticId, string? traceId)
+    public IReadOnlyList<KeyValuePair<string, object?>> ToFields(Guid diagnosticId, string? traceId)
     {
         var items = new List<KeyValuePair<string, object?>>(12)
         {
@@ -82,18 +83,11 @@ public static class DiagnosticLog
     {
         ArgumentNullException.ThrowIfNull(logger);
         MarkActivity(context);
-        if (diagnosticId == Guid.Empty)
-        {
-            logger.Log(level, exception, "{DiagnosticMessage}", SafeMessage(message));
-            return;
-        }
-
-        var traceId = CurrentTraceId();
-        var diagnosticMessage = SafeMessage(message);
-        using (logger.BeginScope(context.ToScope(diagnosticId, traceId)))
-        {
-            logger.Log(level, exception, "{DiagnosticMessage} {DiagnosticId}", diagnosticMessage, diagnosticId);
-        }
+        IReadOnlyList<KeyValuePair<string, object?>> fields = diagnosticId == Guid.Empty
+            ? []
+            : context.ToFields(diagnosticId, CurrentTraceId());
+        var record = DiagnosticLogRecord.Create(SafeMessage(message), fields);
+        logger.Log(level, default, record, exception, static (state, _) => state.ToString());
     }
 
     private static void MarkActivity(DiagnosticContext context)
@@ -143,5 +137,53 @@ public static class DiagnosticLog
         }
 
         return message;
+    }
+
+    private sealed class DiagnosticLogRecord : IReadOnlyList<KeyValuePair<string, object?>>
+    {
+        private readonly KeyValuePair<string, object?>[] _items;
+        private readonly string _text;
+
+        private DiagnosticLogRecord(KeyValuePair<string, object?>[] items, string text)
+        {
+            _items = items;
+            _text = text;
+        }
+
+        public static DiagnosticLogRecord Create(string message, IReadOnlyList<KeyValuePair<string, object?>> fields)
+        {
+            var items = new KeyValuePair<string, object?>[fields.Count + 1];
+            var text = new StringBuilder(message.Length + (fields.Count * 48));
+            text.Append(message);
+            for (var index = 0; index < fields.Count; index++)
+            {
+                var field = fields[index];
+                items[index] = field;
+                text.Append(' ');
+                text.Append(field.Key);
+                text.Append('=');
+                text.Append(field.Value);
+            }
+
+            var rendered = text.ToString();
+            items[^1] = new KeyValuePair<string, object?>("{OriginalFormat}", rendered);
+            return new DiagnosticLogRecord(items, rendered);
+        }
+
+        public int Count => _items.Length;
+
+        public KeyValuePair<string, object?> this[int index] => _items[index];
+
+        public override string ToString() => _text;
+
+        public IEnumerator<KeyValuePair<string, object?>> GetEnumerator()
+        {
+            foreach (var item in _items)
+            {
+                yield return item;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

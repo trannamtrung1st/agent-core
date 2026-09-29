@@ -96,8 +96,9 @@ public sealed class DiagnosticLoggingTests
         Assert.Equal(LogLevel.Warning, entry.Level);
         Assert.Same(failure, entry.Exception);
         Assert.Equal(DiagnosticId, entry.Properties["DiagnosticId"]);
-        Assert.Equal(DiagnosticId, entry.Scope["DiagnosticId"]);
-        Assert.Equal(activity.TraceId.ToHexString(), entry.Scope["TraceId"]);
+        Assert.Equal(activity.TraceId.ToHexString(), entry.Properties["TraceId"]);
+        Assert.Contains(DiagnosticId.ToString(), entry.Message, StringComparison.Ordinal);
+        Assert.Contains(activity.TraceId.ToHexString(), entry.Message, StringComparison.Ordinal);
         Assert.Contains(message, entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("api_key", entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("hosted-secret", entry.Message, StringComparison.Ordinal);

@@ -326,9 +326,11 @@ public sealed class TriggerSchedulerTests
             Assert.Equal("transient", failure.Message);
             Assert.Same(failure, entry.Exception);
             Assert.Equal(diagnosticId, entry.Properties["DiagnosticId"]);
-            Assert.Equal(diagnosticId, entry.Scope["DiagnosticId"]);
-            Assert.Equal(registration.RegistrationId, entry.Scope["TriggerRegistrationId"]);
-            Assert.Equal(activity.TraceId.ToHexString(), entry.Scope["TraceId"]);
+            Assert.Equal(registration.RegistrationId, entry.Properties["TriggerRegistrationId"]);
+            Assert.Equal(activity.TraceId.ToHexString(), entry.Properties["TraceId"]);
+            Assert.Contains(diagnosticId.ToString(), entry.Message, StringComparison.Ordinal);
+            Assert.Contains(registration.RegistrationId.ToString(), entry.Message, StringComparison.Ordinal);
+            Assert.Contains(activity.TraceId.ToHexString(), entry.Message, StringComparison.Ordinal);
             Assert.Contains("Trigger scan failed for registration.", entry.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("secret-intent-sentinel", entry.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("transient", entry.Message, StringComparison.Ordinal);
@@ -337,6 +339,55 @@ public sealed class TriggerSchedulerTests
             Assert.Equal(businessId, business.NewId());
             AssertBoundedMetrics(metrics, diagnosticId);
         });
+    }
+
+    [Fact]
+    public async Task Registration_failure_simple_console_prints_ids_and_the_exception()
+    {
+        var store = new InMemoryTriggerStore();
+        var owner = new TriggerOwner(InstanceA, ProfileA);
+        var registration = await CreateAsync(
+            store,
+            owner,
+            new OneShotSchedule(Due.AddDays(6), "UTC"),
+            Due.AddDays(6),
+            "secret-intent-sentinel");
+        var diagnosticId = Guid.Parse("019944af-00d7-7000-8000-0000000000d1");
+        using var listener = DiagnosticActivity.Listen();
+        using var activity = RuntimeTelemetry.Activity.StartActivity("registration-console");
+        Assert.NotNull(activity);
+        var traceId = activity.TraceId.ToHexString();
+        var stdout = new StringWriter();
+        var originalOut = Console.Out;
+        Console.SetOut(stdout);
+        try
+        {
+            using var factory = LoggerFactory.Create(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Warning);
+                builder.AddSimpleConsole();
+            });
+            var logger = factory.CreateLogger<TriggerScheduler>();
+            var pass = await new TriggerScheduler(
+                    new FlakyStore(store),
+                    logger,
+                    new QueueDiagnosticIdSource([diagnosticId]))
+                .RunOnceAsync(Due.AddDays(6));
+            Assert.Equal(1, pass.Failed);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+
+        var printed = stdout.ToString();
+        Assert.Contains("Trigger scan failed for registration.", printed, StringComparison.Ordinal);
+        Assert.Contains(diagnosticId.ToString(), printed, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(traceId, printed, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(registration.RegistrationId.ToString(), printed, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("IOException", printed, StringComparison.Ordinal);
+        Assert.Contains("transient", printed, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-intent-sentinel", printed, StringComparison.Ordinal);
     }
 
     [Fact]

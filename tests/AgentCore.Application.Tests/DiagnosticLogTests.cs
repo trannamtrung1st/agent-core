@@ -35,17 +35,19 @@ public sealed class DiagnosticLogTests
         Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Warning, entry.Level);
         Assert.Same(failure, entry.Exception);
         Assert.Equal(DiagnosticId, entry.Properties["DiagnosticId"]);
-        Assert.Equal(DiagnosticId, entry.Scope["DiagnosticId"]);
-        Assert.Equal(CorrelationId, entry.Scope["CorrelationId"]);
-        Assert.Equal(SessionId, entry.Scope["SessionId"]);
-        Assert.Equal(activity.TraceId.ToHexString(), entry.Scope["TraceId"]);
-        Assert.Equal("provider", entry.Scope["ErrorCategory"]);
-        Assert.Equal("unavailable", entry.Scope["ErrorCode"]);
-        Assert.False(entry.Scope.ContainsKey("ProviderAlias"));
-        Assert.False(entry.Scope.ContainsKey("ResponseId"));
+        Assert.Equal(CorrelationId, entry.Properties["CorrelationId"]);
+        Assert.Equal(SessionId, entry.Properties["SessionId"]);
+        Assert.Equal(activity.TraceId.ToHexString(), entry.Properties["TraceId"]);
+        Assert.Equal("provider", entry.Properties["ErrorCategory"]);
+        Assert.Equal("unavailable", entry.Properties["ErrorCode"]);
+        Assert.False(entry.Properties.ContainsKey("ProviderAlias"));
+        Assert.False(entry.Properties.ContainsKey("ResponseId"));
         Assert.DoesNotContain("api_key", entry.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("log-secret", entry.Message, StringComparison.Ordinal);
         Assert.Contains("Model execution failed.", entry.Message, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticId.ToString(), entry.Message, StringComparison.Ordinal);
+        Assert.Contains(activity.TraceId.ToHexString(), entry.Message, StringComparison.Ordinal);
+        Assert.Contains(SessionId.ToString(), entry.Message, StringComparison.Ordinal);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal("provider", activity.GetTagItem("error.category"));
         Assert.Equal("unavailable", activity.GetTagItem("error.code"));
@@ -68,8 +70,8 @@ public sealed class DiagnosticLogTests
             new DiagnosticContext(ErrorCategory: "{\"injected\":true}", ErrorCode: "a/b"));
 
         var entry = Assert.Single(logs.Entries);
-        Assert.False(entry.Scope.ContainsKey("ErrorCategory"));
-        Assert.False(entry.Scope.ContainsKey("ErrorCode"));
+        Assert.False(entry.Properties.ContainsKey("ErrorCategory"));
+        Assert.False(entry.Properties.ContainsKey("ErrorCode"));
         Assert.Null(activity.GetTagItem("error.category"));
         Assert.Null(activity.GetTagItem("error.code"));
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
@@ -88,7 +90,7 @@ public sealed class DiagnosticLogTests
             "Execution failed.");
 
         var entry = Assert.Single(logs.Entries);
-        Assert.False(entry.Scope.ContainsKey("TraceId"));
+        Assert.False(entry.Properties.ContainsKey("TraceId"));
         Assert.DoesNotContain("hidden", entry.Message, StringComparison.Ordinal);
     }
 }
