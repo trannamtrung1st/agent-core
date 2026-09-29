@@ -6,6 +6,8 @@ import {
   uploadAdminDraftResourceContent,
   type AdminBindDraftResourceItem
 } from "../../services/adminApi";
+import { describeAdminError } from "./adminErrors";
+import { showAdminFailure } from "./adminFailure";
 import {
   RESOURCE_KINDS,
   createPreviewItem,
@@ -35,7 +37,7 @@ export function ResourceImportPanel({
   existingBytes: number;
   disabled: boolean;
   onBound: () => Promise<void> | void;
-  onError: (message: string | null) => void;
+  onError: (message: string | null, diagnosticId?: string | null) => void;
 }) {
   const { message } = App.useApp();
   const [items, setItems] = useState<ResourcePreviewItem[]>([]);
@@ -69,6 +71,7 @@ export function ResourceImportPanel({
     onError(null);
     const next = [...items];
     let uploadFailed = false;
+    let uploadFailure: { message: string; diagnosticId?: string } | null = null;
     for (let index = 0; index < next.length; index += 1) {
       const item = next[index];
       if (item.contentSha256 || !item.mediaType) {
@@ -85,15 +88,19 @@ export function ResourceImportPanel({
         };
       } catch (error) {
         uploadFailed = true;
+        uploadFailure = describeAdminError(error, "Resource upload failed.");
         next[index] = {
           ...item,
-          uploadError: error instanceof Error ? error.message : "Resource upload failed."
+          uploadError: uploadFailure.message
         };
       }
     }
     setItems(next);
     if (uploadFailed) {
       message.error("One or more files failed to upload. Fix those items and bind again.");
+      if (uploadFailure?.diagnosticId) {
+        onError(uploadFailure.message, uploadFailure.diagnosticId);
+      }
       setBinding(false);
       return;
     }
@@ -111,9 +118,8 @@ export function ResourceImportPanel({
       message.success("Resources bound.");
       await onBound();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Resource bind failed.";
-      onError(text);
-      message.error(text);
+      const notice = showAdminFailure(message, error, "Resource bind failed.");
+      onError(notice.message, notice.diagnosticId ?? null);
     } finally {
       setBinding(false);
     }

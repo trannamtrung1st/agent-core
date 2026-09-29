@@ -1,5 +1,39 @@
 import { OwnerCapabilityError } from "../../services/api";
 
+export type AdminFailureNotice = {
+  message: string;
+  diagnosticId?: string;
+};
+
+export type AdminErrorReporter = (message: string | null, diagnosticId?: string | null) => void;
+
+function adminRequestNotice(error: unknown): AdminFailureNotice | null {
+  if (!(error instanceof Error) || error.name !== "AdminRequestError") {
+    return null;
+  }
+
+  const diagnosticId = "diagnosticId" in error && typeof error.diagnosticId === "string" && error.diagnosticId.length > 0
+    ? error.diagnosticId
+    : undefined;
+  const message = error.message;
+  return diagnosticId ? { message, diagnosticId } : { message };
+}
+
+/** Keeps a server diagnostic id when the failure is an admin request error. */
+export function describeAdminError(error: unknown, fallback: string): AdminFailureNotice {
+  const adminRequest = adminRequestNotice(error);
+  if (adminRequest) {
+    return adminRequest.message ? adminRequest : { ...adminRequest, message: fallback };
+  }
+
+  return { message: error instanceof Error && error.message ? error.message : fallback };
+}
+
+export function reportAdminError(onError: AdminErrorReporter, error: unknown, fallback: string) {
+  const notice = describeAdminError(error, fallback);
+  onError(notice.message, notice.diagnosticId ?? null);
+}
+
 export interface AdminDeletionBlockedMessage {
   headline: string;
   bullets: string[];
@@ -48,7 +82,9 @@ export function parseAdminDeletionBlockedMessage(message: string): AdminDeletion
   return { headline, bullets, footer };
 }
 
-export function formatAdminLoadError(error: unknown): { message: string; unauthorized: boolean } {
+export function formatAdminLoadError(
+  error: unknown
+): AdminFailureNotice & { unauthorized: boolean } {
   if (error instanceof OwnerCapabilityError) {
     return {
       message: "Owner capability is missing or invalid. Refresh the page or reopen Chat to re-authorize.",
@@ -56,8 +92,5 @@ export function formatAdminLoadError(error: unknown): { message: string; unautho
     };
   }
 
-  return {
-    message: error instanceof Error ? error.message : "Request failed.",
-    unauthorized: false
-  };
+  return { ...describeAdminError(error, "Request failed."), unauthorized: false };
 }

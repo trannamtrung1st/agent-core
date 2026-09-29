@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseAdminDeletionBlockedMessage } from "./adminErrors";
+import { AdminRequestError } from "../../services/adminApi";
+import { OwnerCapabilityError } from "../../services/api";
+import { describeAdminError, formatAdminLoadError, parseAdminDeletionBlockedMessage } from "./adminErrors";
 
 describe("parseAdminDeletionBlockedMessage", () => {
   it("parses instance deletion refusals", () => {
@@ -39,5 +41,27 @@ describe("parseAdminDeletionBlockedMessage", () => {
 
   it("returns null for unrelated errors", () => {
     expect(parseAdminDeletionBlockedMessage("Instance could not be deleted.")).toBeNull();
+  });
+});
+
+describe("formatAdminLoadError", () => {
+  it("keeps a diagnostic id from an admin request error", () => {
+    const formatted = formatAdminLoadError(
+      new AdminRequestError("The request could not be completed.", "019944af-0008-7000-8000-0000000000e1")
+    );
+
+    expect(formatted).toEqual({
+      message: "The request could not be completed.",
+      diagnosticId: "019944af-0008-7000-8000-0000000000e1",
+      unauthorized: false
+    });
+  });
+
+  it("omits the diagnostic id when the failure has none", () => {
+    expect(describeAdminError(new Error("Request failed."), "Request failed.")).toEqual({
+      message: "Request failed."
+    });
+    expect(formatAdminLoadError(new Error("Admin definitions failed (500)")).diagnosticId).toBeUndefined();
+    expect(formatAdminLoadError(new OwnerCapabilityError("missing")).diagnosticId).toBeUndefined();
   });
 });

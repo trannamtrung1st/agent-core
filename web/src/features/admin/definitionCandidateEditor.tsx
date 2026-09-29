@@ -18,6 +18,8 @@ import {
   type DefinitionCandidate
 } from "./definitionCandidate";
 import { listAdminAuthoringOptions, type AdminAuthoringOptions } from "../../services/adminApi";
+import { describeAdminError } from "./adminErrors";
+import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
 export type DefinitionEditorView = "form" | "json";
 
@@ -61,17 +63,21 @@ export function DefinitionCandidateEditor({
 }) {
   const [authoring, setAuthoring] = useState<AdminAuthoringOptions | null>(null);
   const [authoringError, setAuthoringError] = useState<string | null>(null);
+  const [authoringDiagnosticId, setAuthoringDiagnosticId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void listAdminAuthoringOptions()
       .then((options) => {
         if (!cancelled) {
           setAuthoring(options);
+          setAuthoringError(null);
+          setAuthoringDiagnosticId(null);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setAuthoringError("Authoring options could not be loaded. Advanced JSON can still name a configured value.");
+          setAuthoringDiagnosticId(describeAdminError(error, "").diagnosticId ?? null);
         }
       });
     return () => {
@@ -108,6 +114,7 @@ export function DefinitionCandidateEditor({
           busy={busy}
           authoring={authoring}
           authoringError={authoringError}
+          authoringDiagnosticId={authoringDiagnosticId}
           onCandidateChange={onCandidateChange}
         />
       )}
@@ -120,12 +127,14 @@ function DefinitionCandidateForm({
   busy,
   authoring,
   authoringError,
+  authoringDiagnosticId,
   onCandidateChange
 }: {
   candidate: DefinitionCandidate;
   busy: boolean;
   authoring: AdminAuthoringOptions | null;
   authoringError: string | null;
+  authoringDiagnosticId: string | null;
   onCandidateChange: (candidate: DefinitionCandidate) => void;
 }) {
   const goals = readCandidateStringList(candidate, ["goals"]);
@@ -380,7 +389,16 @@ function DefinitionCandidateForm({
 
       <section className="admin-draft-form-section" aria-label="Model and providers">
         <Typography.Title level={5}>Model &amp; providers</Typography.Title>
-        {authoringError ? <Alert type="warning" showIcon title={authoringError} /> : null}
+        {authoringError ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={authoringError}
+            action={authoringDiagnosticId
+              ? <DiagnosticDetails fields={{ diagnosticId: authoringDiagnosticId }} />
+              : undefined}
+          />
+        ) : null}
         <Typography.Text strong>Model defaults</Typography.Text>
         <div className="admin-draft-field-grid">
           <SelectField

@@ -72,3 +72,80 @@ test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await expect(details).not.toContainText("Trigger ID");
   await expect(details).not.toContainText("Occurrence ID");
 });
+
+test("admin inventory keeps a server diagnostic id", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.route("**/api/v2/admin/definitions", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        title: "Internal Server Error",
+        status: 500,
+        detail: "The request could not be completed.",
+        diagnosticId: "019944af-0008-7000-8000-0000000000e1"
+      })
+    });
+  });
+  await page.getByRole("button", { name: "Open Admin" }).click();
+  const definitions = page.locator('section[aria-label="Definitions"]');
+  await expect(definitions.getByText("The request could not be completed.")).toBeVisible({ timeout: 15_000 });
+  await definitions.getByRole("button", { name: "Error details" }).click();
+  await expect(page.getByTestId("diagnostic-id")).toHaveText(
+    "Diagnostic ID: 019944af-0008-7000-8000-0000000000e1"
+  );
+});
+
+async function openNewDraftForm(page: import("@playwright/test").Page, definitionId: string) {
+  await page.goto("/");
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("button", { name: "New definition" }).click();
+  await page.getByRole("textbox", { name: "Definition ID" }).fill(definitionId);
+  await page.getByRole("button", { name: "Create draft" }).click();
+  await expect(page.getByRole("dialog", { name: "New definition" })).toBeHidden({ timeout: 15_000 });
+  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+}
+
+test("authoring options warning keeps a server diagnostic id", async ({ page }) => {
+  const definitionId = `diag-opt-${Date.now().toString(36)}`;
+  await page.route("**/api/v2/admin/authoring-options", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        title: "Internal Server Error",
+        status: 500,
+        detail: "The request could not be completed.",
+        diagnosticId: "019944af-0008-7000-8000-0000000000e2"
+      })
+    });
+  });
+  await openNewDraftForm(page, definitionId);
+  const form = page.locator("section[aria-label='Model and providers']");
+  await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
+  await form.getByRole("button", { name: "Error details" }).click();
+  await expect(page.getByTestId("diagnostic-id")).toHaveText(
+    "Diagnostic ID: 019944af-0008-7000-8000-0000000000e2"
+  );
+});
+
+test("authoring options warning hides details when the response has no id", async ({ page }) => {
+  const definitionId = `diag-plain-${Date.now().toString(36)}`;
+  await page.route("**/api/v2/admin/authoring-options", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        title: "Internal Server Error",
+        status: 500,
+        detail: "The request could not be completed."
+      })
+    });
+  });
+  await openNewDraftForm(page, definitionId);
+  const form = page.locator("section[aria-label='Model and providers']");
+  await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
+  await expect(form.getByRole("button", { name: "Error details" })).toHaveCount(0);
+});

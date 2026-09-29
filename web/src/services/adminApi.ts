@@ -106,7 +106,7 @@ export type AdminEffectiveConfiguration = {
 export async function listAdminDefinitions(): Promise<AdminDefinitionInventoryItem[]> {
   const response = await ownerFetch("/api/v2/admin/definitions");
   if (!response.ok) {
-    throw new Error(`Admin definitions failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin definitions failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminDefinitionInventoryItem[] };
   return payload.items;
@@ -115,7 +115,7 @@ export async function listAdminDefinitions(): Promise<AdminDefinitionInventoryIt
 export async function listAdminInstances(): Promise<AdminInstanceInventoryItem[]> {
   const response = await ownerFetch("/api/v2/admin/instances");
   if (!response.ok) {
-    throw new Error(`Admin instances failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin instances failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminInstanceInventoryItem[] };
   return payload.items;
@@ -124,7 +124,7 @@ export async function listAdminInstances(): Promise<AdminInstanceInventoryItem[]
 export async function listAdminAuthoringOptions(): Promise<AdminAuthoringOptions> {
   const response = await ownerFetch("/api/v2/admin/authoring-options");
   if (!response.ok) {
-    throw new Error(`Admin authoring options failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin authoring options failed (${response.status})`);
   }
   return (await response.json()) as AdminAuthoringOptions;
 }
@@ -166,7 +166,7 @@ export async function deleteAdminDefinition(
 export async function listAdminToolNames(): Promise<string[]> {
   const response = await ownerFetch("/api/v2/admin/tools");
   if (!response.ok) {
-    throw new Error(`Admin tool registry failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin tool registry failed (${response.status})`);
   }
   const payload = (await response.json()) as { toolNames: string[] };
   return payload.toolNames;
@@ -175,7 +175,7 @@ export async function listAdminToolNames(): Promise<string[]> {
 export async function getAdminEffectiveConfig(instanceId: string): Promise<AdminEffectiveConfiguration> {
   const response = await ownerFetch(`/api/v2/admin/instances/${instanceId}/effective-config`);
   if (!response.ok) {
-    throw new Error(`Admin effective config failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin effective config failed (${response.status})`);
   }
   return (await response.json()) as AdminEffectiveConfiguration;
 }
@@ -205,7 +205,7 @@ export type AdminDefinitionPublicationSummary = {
 export async function listAdminDefinitionDrafts(): Promise<AdminDefinitionDraftSummary[]> {
   const response = await ownerFetch("/api/v2/admin/definition-drafts");
   if (!response.ok) {
-    throw new Error(`Admin definition drafts failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin definition drafts failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminDefinitionDraftSummary[] };
   return payload.items;
@@ -214,7 +214,7 @@ export async function listAdminDefinitionDrafts(): Promise<AdminDefinitionDraftS
 export async function getAdminDefinitionDraft(draftId: string): Promise<AdminDefinitionDraft> {
   const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}`);
   if (!response.ok) {
-    throw new Error(`Admin definition draft failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin definition draft failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -451,7 +451,7 @@ export async function listAdminDefinitionPublications(
 ): Promise<AdminDefinitionPublicationSummary[]> {
   const response = await ownerFetch(`/api/v2/admin/definitions/${encodeURIComponent(definitionId)}/publications`);
   if (!response.ok) {
-    throw new Error(`Admin publications failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin publications failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminDefinitionPublicationSummary[] };
   return payload.items;
@@ -631,7 +631,7 @@ export async function updateAdminAgentInstancePersona(
     throw new Error(conflict);
   }
   if (!response.ok) {
-    throw new Error(`Admin persona update failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin persona update failed (${response.status})`);
   }
   return (await response.json()) as AdminAgentInstance;
 }
@@ -651,7 +651,7 @@ export async function updateAdminAgentInstanceLifecycle(
     throw new Error(conflict);
   }
   if (!response.ok) {
-    throw new Error(`Admin lifecycle update failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin lifecycle update failed (${response.status})`);
   }
   return (await response.json()) as AdminAgentInstance;
 }
@@ -671,7 +671,7 @@ export async function updateAdminAgentInstanceActiveVersion(
     throw new Error(conflict);
   }
   if (!response.ok) {
-    throw new Error(`Admin version update failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin version update failed (${response.status})`);
   }
   return (await response.json()) as AdminAgentInstance;
 }
@@ -679,7 +679,7 @@ export async function updateAdminAgentInstanceActiveVersion(
 export async function listAdminDraftResources(draftId: string): Promise<AdminDefinitionDraftResource[]> {
   const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/resources`);
   if (!response.ok) {
-    throw new Error(`Admin draft resources failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin draft resources failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminDefinitionDraftResource[] };
   return payload.items;
@@ -696,7 +696,7 @@ export async function uploadAdminDraftResourceContent(
     body: bytes
   });
   if (!response.ok) {
-    throw new Error(`Admin resource upload failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin resource upload failed (${response.status})`);
   }
   return (await response.json()) as AdminResourceContentStored;
 }
@@ -747,7 +747,7 @@ export async function upsertAdminDraftResource(
     })
   });
   if (!response.ok) {
-    throw new Error(`Admin resource bind failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin resource bind failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionDraftResource;
 }
@@ -762,7 +762,7 @@ export async function removeAdminDraftResource(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw new Error(`Admin resource remove failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin resource remove failed (${response.status})`);
   }
 }
 
@@ -774,7 +774,7 @@ export async function listAdminPublicationResources(
     `/api/v2/admin/definitions/${encodeURIComponent(definitionId)}/publications/${version}/resources`
   );
   if (!response.ok) {
-    throw new Error(`Admin publication resources failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin publication resources failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminDefinitionPublicationResource[] };
   return payload.items;
@@ -799,7 +799,7 @@ export async function createAdminAgentInstance(
     body: JSON.stringify(body)
   });
   if (!response.ok) {
-    throw new Error(`Admin create instance failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin create instance failed (${response.status})`);
   }
   return (await response.json()) as AdminAgentInstance;
 }
@@ -898,7 +898,7 @@ export async function listAdminAutomationRegistrations(
 ): Promise<AdminAutomationRegistration[]> {
   const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/automation/registrations`);
   if (!response.ok) {
-    throw new Error(`Admin automation list failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin automation list failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminAutomationRegistration[] };
   return payload.items;
@@ -924,7 +924,7 @@ export async function cancelAdminAutomationRegistration(
     );
   }
   if (!response.ok) {
-    throw new Error(`Admin automation cancel failed (${response.status})`);
+    throw await adminProblemMessage(response, `Admin automation cancel failed (${response.status})`);
   }
   return (await response.json()) as AdminAutomationRegistration;
 }

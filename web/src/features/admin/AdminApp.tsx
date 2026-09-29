@@ -67,7 +67,6 @@ import {
   listAdminPublicationResources,
   listAdminToolNames,
   publishAdminDefinitionDraft,
-  AdminRequestError,
   removeAdminDraftResource,
   updateAdminDefinitionDraft,
   updateAdminAgentInstanceActiveVersion,
@@ -96,7 +95,9 @@ import {
 } from "../../app/appRoute";
 import { confirmAction } from "../../app/confirmAction";
 import { AdminDeletionBlockedAlert } from "./adminDeletionBlocked";
-import { formatAdminLoadError } from "./adminErrors";
+import { describeAdminError, formatAdminLoadError, reportAdminError, type AdminFailureNotice } from "./adminErrors";
+import { AdminRetryAction, showAdminFailure } from "./adminFailure";
+import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
 
@@ -104,7 +105,7 @@ const { Header, Content } = Layout;
 
 type LoadState<T> =
   | { kind: "loading" }
-  | { kind: "error"; message: string; unauthorized?: boolean }
+  | { kind: "error"; message: string; unauthorized?: boolean; diagnosticId?: string }
   | { kind: "ready"; data: T };
 
 type DefinitionInventoryGroup = {
@@ -262,7 +263,12 @@ export function AdminApp({ route }: { route: AdminRoute }) {
       setDefinitions({ kind: "ready", data: definitionItems });
     } catch (error) {
       const formatted = formatAdminLoadError(error);
-      setDefinitions({ kind: "error", message: formatted.message, unauthorized: formatted.unauthorized });
+      setDefinitions({
+        kind: "error",
+        message: formatted.message,
+        unauthorized: formatted.unauthorized,
+        diagnosticId: formatted.diagnosticId
+      });
     }
   }, []);
 
@@ -273,7 +279,12 @@ export function AdminApp({ route }: { route: AdminRoute }) {
       setInstances({ kind: "ready", data: instanceItems });
     } catch (error) {
       const formatted = formatAdminLoadError(error);
-      setInstances({ kind: "error", message: formatted.message, unauthorized: formatted.unauthorized });
+      setInstances({
+        kind: "error",
+        message: formatted.message,
+        unauthorized: formatted.unauthorized,
+        diagnosticId: formatted.diagnosticId
+      });
     }
   }, []);
 
@@ -288,7 +299,12 @@ export function AdminApp({ route }: { route: AdminRoute }) {
       setEffectiveConfig({ kind: "ready", data });
     } catch (error) {
       const formatted = formatAdminLoadError(error);
-      setEffectiveConfig({ kind: "error", message: formatted.message, unauthorized: formatted.unauthorized });
+      setEffectiveConfig({
+        kind: "error",
+        message: formatted.message,
+        unauthorized: formatted.unauthorized,
+        diagnosticId: formatted.diagnosticId
+      });
     }
   }, []);
 
@@ -360,6 +376,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 emptyLabel="No definitions found."
                 loading={definitions.kind === "loading"}
                 error={definitions.kind === "error" ? definitions.message : null}
+                diagnosticId={definitions.kind === "error" ? definitions.diagnosticId : null}
                 unauthorized={definitions.kind === "error" ? (definitions.unauthorized ?? false) : false}
                 onRetry={() => void reloadDefinitions()}
                 items={
@@ -384,6 +401,7 @@ export function AdminApp({ route }: { route: AdminRoute }) {
                 emptyLabel="No instances yet."
                 loading={instances.kind === "loading"}
                 error={instances.kind === "error" ? instances.message : null}
+                diagnosticId={instances.kind === "error" ? instances.diagnosticId : null}
                 unauthorized={instances.kind === "error" ? (instances.unauthorized ?? false) : false}
                 onRetry={() => void reloadInstances()}
                 items={
@@ -464,7 +482,7 @@ function NewDefinitionButton({ groups }: { groups: DefinitionInventoryGroup[] })
       setDefinitionId("");
       navigateToAppPath(adminDefinitionPath(draft.definitionId));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "New definition failed.");
+      showAdminFailure(message, error, "New definition failed.");
     } finally {
       setBusy(false);
     }
@@ -556,7 +574,7 @@ function NewInstanceButton({ groups }: { groups: DefinitionInventoryGroup[] }) {
       setOpen(false);
       navigateToAppPath(adminInstancePath(created.instanceId));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "New instance failed.");
+      showAdminFailure(message, error, "New instance failed.");
     } finally {
       setBusy(false);
     }
@@ -690,6 +708,7 @@ function InventorySection({
   emptyLabel,
   loading,
   error,
+  diagnosticId,
   unauthorized,
   onRetry,
   items
@@ -699,6 +718,7 @@ function InventorySection({
   emptyLabel: string;
   loading: boolean;
   error: string | null;
+  diagnosticId?: string | null;
   unauthorized: boolean;
   onRetry: () => void;
   items: Array<{
@@ -722,11 +742,7 @@ function InventorySection({
           type={unauthorized ? "warning" : "error"}
           showIcon
           message={error}
-          action={
-            <Button size="small" onClick={onRetry}>
-              Retry
-            </Button>
-          }
+          action={<AdminRetryAction onRetry={onRetry} diagnosticId={diagnosticId} />}
           className="admin-inventory-alert"
         />
       ) : null}
@@ -802,12 +818,8 @@ function DefinitionDetail({
     setLifecycleDiagnosticId(message ? diagnosticId ?? null : null);
   };
   const reportLifecycleError = (error: unknown, fallback: string) => {
-    if (error instanceof AdminRequestError) {
-      setLifecycleError(error.message, error.diagnosticId ?? null);
-      return;
-    }
-
-    setLifecycleError(error instanceof Error ? error.message : fallback);
+    const notice = describeAdminError(error, fallback);
+    setLifecycleError(notice.message, notice.diagnosticId ?? null);
   };
   const [draftSummaries, setDraftSummaries] = useState<AdminDefinitionDraftSummary[]>([]);
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
@@ -996,9 +1008,8 @@ function DefinitionDetail({
       await reloadLifecycle();
       await onRetryDefinitions();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Draft could not be deleted.";
       reportLifecycleError(error, "Draft could not be deleted.");
-      message.error(text);
+      showAdminFailure(message, error, "Draft could not be deleted.");
     } finally {
       setBusy(false);
     }
@@ -1053,9 +1064,8 @@ function DefinitionDetail({
       message.success("Draft saved.");
       await reloadLifecycle();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Save failed.";
       reportLifecycleError(error, "Save failed.");
-      message.error(text);
+      showAdminFailure(message, error, "Save failed.");
     } finally {
       setBusy(false);
     }
@@ -1125,9 +1135,8 @@ function DefinitionDetail({
           await reloadLifecycle();
           await onRetryDefinitions();
         } catch (error) {
-          const text = error instanceof Error ? error.message : "Publish failed.";
           reportLifecycleError(error, "Publish failed.");
-          message.error(text);
+          showAdminFailure(message, error, "Publish failed.");
         } finally {
           setBusy(false);
         }
@@ -1141,9 +1150,8 @@ function DefinitionDetail({
     try {
       await startManagedPublicationChat(publicationDefinitionId, version);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Managed chat could not be started.";
       reportLifecycleError(error, "Managed chat could not be started.");
-      message.error(text);
+      showAdminFailure(message, error, "Managed chat could not be started.");
       setBusy(false);
     }
   };
@@ -1197,7 +1205,12 @@ function DefinitionDetail({
           type="error"
           showIcon
           message={definitions.message}
-          action={<Button size="small" onClick={onRetryDefinitions}>Retry</Button>}
+          action={
+            <AdminRetryAction
+              onRetry={onRetryDefinitions}
+              diagnosticId={definitions.diagnosticId}
+            />
+          }
         />
       ) : null}
       {definitions.kind === "ready" && !group && !lifecycleLoading && draftSummaries.length === 0 ? (
@@ -1547,7 +1560,7 @@ function DraftEditor({
     draft: AdminDefinitionDraft,
     options?: { preserveLocalEdits?: boolean }
   ) => void;
-  onError: (message: string | null) => void;
+  onError: (message: string | null, diagnosticId?: string | null) => void;
 }) {
   const capabilities = readDraftEnvironment(candidate);
   const candidateLocked = jsonError !== null;
@@ -1560,7 +1573,7 @@ function DraftEditor({
   const saveBlocked = candidateLocked;
   const { message } = App.useApp();
   const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
-  const [toolRegistryError, setToolRegistryError] = useState<string | null>(null);
+  const [toolRegistryError, setToolRegistryError] = useState<AdminFailureNotice | null>(null);
   const [toolNames, setToolNames] = useState<string[]>([]);
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
@@ -1580,7 +1593,7 @@ function DraftEditor({
       const items = await listAdminDraftResources(activeDraft.draftId);
       setResources(items);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Failed to load resources.");
+      reportAdminError(onError, error, "Failed to load resources.");
     } finally {
       setResourcesLoading(false);
     }
@@ -1598,9 +1611,7 @@ function DraftEditor({
       setToolNames(names);
     } catch (error) {
       setToolNames([]);
-      setToolRegistryError(
-        error instanceof Error ? error.message : "Failed to load tool registry."
-      );
+      setToolRegistryError(describeAdminError(error, "Failed to load tool registry."));
     } finally {
       setToolRegistryLoading(false);
     }
@@ -1668,9 +1679,8 @@ function DraftEditor({
       setLogicalPath("");
       await refreshDraft();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Resource upload failed.";
-      onError(text);
-      message.error(text);
+      const notice = showAdminFailure(message, error, "Resource upload failed.");
+      onError(notice.message, notice.diagnosticId ?? null);
     }
   };
 
@@ -1681,9 +1691,8 @@ function DraftEditor({
       message.success("Resource removed.");
       await refreshDraft();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Remove failed.";
-      onError(text);
-      message.error(text);
+      const notice = showAdminFailure(message, error, "Remove failed.");
+      onError(notice.message, notice.diagnosticId ?? null);
     }
   };
 
@@ -1791,16 +1800,13 @@ function DraftEditor({
                   <Alert
                     type="error"
                     showIcon
-                    message={toolRegistryError}
+                    message={toolRegistryError.message}
                     action={
-                      <Button
-                        size="small"
-                        aria-label="Retry tool registry"
-                        onClick={() => void reloadToolRegistry()}
-                        disabled={toolRegistryLoading}
-                      >
-                        Retry
-                      </Button>
+                      <AdminRetryAction
+                        onRetry={() => void reloadToolRegistry()}
+                        diagnosticId={toolRegistryError.diagnosticId}
+                        retryLabel="Retry tool registry"
+                      />
                     }
                   />
                 ) : null}
@@ -2145,7 +2151,7 @@ export function PublicationResourcesSummary({
 }) {
   const [items, setItems] = useState<AdminDefinitionPublicationResource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; diagnosticId?: string } | null>(null);
   const requestGenerationRef = useRef(0);
 
   const load = useCallback(
@@ -2165,7 +2171,7 @@ export function PublicationResourcesSummary({
         }
 
         setItems([]);
-        setError(loadError instanceof Error ? loadError.message : "Failed to load publication resources.");
+        setError(formatAdminLoadError(loadError));
       } finally {
         if (generation === requestGenerationRef.current) {
           setLoading(false);
@@ -2192,12 +2198,8 @@ export function PublicationResourcesSummary({
       <Alert
         type="error"
         showIcon
-        title={error}
-        action={
-          <Button size="small" onClick={reload}>
-            Retry
-          </Button>
-        }
+        title={error.message}
+        action={<AdminRetryAction onRetry={reload} diagnosticId={error.diagnosticId} />}
       />
     );
   }
@@ -2301,7 +2303,7 @@ function InstanceDetail({
           type={effective.unauthorized ? "warning" : "error"}
           showIcon
           title={effective.message}
-          action={<Button size="small" onClick={onRetryEffective}>Retry</Button>}
+          action={<AdminRetryAction onRetry={onRetryEffective} diagnosticId={effective.diagnosticId} />}
         />
       ) : null}
       {effective.kind === "ready" && !effective.data.compatibility ? (
@@ -2352,7 +2354,7 @@ export function InstanceManagedControls({
 }) {
   const { message, modal } = App.useApp();
   const [busy, setBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<AdminFailureNotice | null>(null);
   const [personaTab, setPersonaTab] = useState("form");
   const [persona, setPersona] = useState<PersonaFields>(() => ({ ...config.persona }));
   const [personaJsonDraft, setPersonaJsonDraft] = useState(() =>
@@ -2360,9 +2362,9 @@ export function InstanceManagedControls({
   );
   const [personaJsonError, setPersonaJsonError] = useState<string | null>(null);
   const [definitionInventory, setDefinitionInventory] = useState<AdminDefinitionInventoryItem[]>([]);
-  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [inventoryError, setInventoryError] = useState<AdminFailureNotice | null>(null);
   const [publications, setPublications] = useState<AdminDefinitionPublicationSummary[]>([]);
-  const [publicationsError, setPublicationsError] = useState<string | null>(null);
+  const [publicationsError, setPublicationsError] = useState<AdminFailureNotice | null>(null);
   const [targetVersion, setTargetVersion] = useState(config.definitionVersion);
 
   useEffect(() => {
@@ -2387,7 +2389,7 @@ export function InstanceManagedControls({
       .then((items) => setDefinitionInventory(items))
       .catch((error) => {
         setDefinitionInventory([]);
-        setInventoryError(error instanceof Error ? error.message : "Definition inventory unavailable.");
+        setInventoryError(describeAdminError(error, "Definition inventory unavailable."));
       });
   }, []);
 
@@ -2397,7 +2399,7 @@ export function InstanceManagedControls({
       .then((items) => setPublications(items))
       .catch((error) => {
         setPublications([]);
-        setPublicationsError(error instanceof Error ? error.message : "Publications unavailable.");
+        setPublicationsError(describeAdminError(error, "Publications unavailable."));
       });
   }, [config.definitionId]);
 
@@ -2432,9 +2434,8 @@ export function InstanceManagedControls({
   };
 
   const handleMutationError = (error: unknown) => {
-    const text = error instanceof Error ? error.message : "Update failed.";
-    message.error(text);
-    if (text.includes("reload")) {
+    const notice = showAdminFailure(message, error, "Update failed.");
+    if (notice.message.includes("reload")) {
       onUpdated();
     }
   };
@@ -2481,7 +2482,7 @@ export function InstanceManagedControls({
       message.success("Instance deleted.");
       onDeleted();
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "Instance could not be deleted.");
+      setDeleteError(describeAdminError(error, "Instance could not be deleted."));
     } finally {
       setBusy(false);
     }
@@ -2621,8 +2622,26 @@ export function InstanceManagedControls({
             <Typography.Paragraph type="secondary">
               Choose the immutable definition version used by new sessions.
             </Typography.Paragraph>
-            {inventoryError ? <Alert type="warning" showIcon title={inventoryError} /> : null}
-            {publicationsError ? <Alert type="warning" showIcon title={publicationsError} /> : null}
+            {inventoryError ? (
+              <Alert
+                type="warning"
+                showIcon
+                title={inventoryError.message}
+                action={inventoryError.diagnosticId
+                  ? <DiagnosticDetails fields={{ diagnosticId: inventoryError.diagnosticId }} />
+                  : undefined}
+              />
+            ) : null}
+            {publicationsError ? (
+              <Alert
+                type="warning"
+                showIcon
+                title={publicationsError.message}
+                action={publicationsError.diagnosticId
+                  ? <DiagnosticDetails fields={{ diagnosticId: publicationsError.diagnosticId }} />
+                  : undefined}
+              />
+            ) : null}
             <Flex gap={8} wrap="wrap" align="center" className="admin-instance-version-actions">
               <Select
                 aria-label="Target definition version"
@@ -2666,7 +2685,11 @@ export function InstanceManagedControls({
               Archived instances keep history but cannot start new chats or triggered work. Delete is available after archive, and only when nothing still references this instance.
             </Typography.Paragraph>
             {deleteError ? (
-              <AdminDeletionBlockedAlert className="admin-destructive-detail" message={deleteError} />
+              <AdminDeletionBlockedAlert
+                className="admin-destructive-detail"
+                message={deleteError.message}
+                diagnosticId={deleteError.diagnosticId}
+              />
             ) : null}
             <Flex gap={8} wrap="wrap">
               {config.instanceLifecycle === "Active" ? (

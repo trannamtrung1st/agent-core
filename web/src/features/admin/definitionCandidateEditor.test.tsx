@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApp } from "./AdminApp";
+import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
 
 vi.mock("../../services/adminApi", () => ({
   listAdminDefinitions: vi.fn(),
@@ -575,5 +576,46 @@ describe("definition candidate editor", () => {
         })
       );
     });
+  });
+});
+
+describe("authoring options failure", () => {
+  function renderEditor() {
+    render(
+      <DefinitionCandidateEditor
+        candidate={storedCandidate}
+        view="form"
+        jsonText="{}"
+        busy={false}
+        onCandidateChange={() => undefined}
+        onJsonTextChange={() => undefined}
+        onViewChange={() => undefined}
+      />
+    );
+  }
+
+  it("shows error details on the fixed warning when the response includes an id", async () => {
+    const failure = new Error("Admin authoring options failed (500)");
+    failure.name = "AdminRequestError";
+    Object.assign(failure, { diagnosticId: "019944af-0008-7000-8000-0000000000e2" });
+    vi.mocked(listAdminAuthoringOptions).mockRejectedValueOnce(failure);
+
+    renderEditor();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Authoring options could not be loaded/)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Error details" })).toBeInTheDocument();
+  });
+
+  it("keeps the warning without error details when the failure has no id", async () => {
+    vi.mocked(listAdminAuthoringOptions).mockRejectedValueOnce(new Error("offline"));
+
+    renderEditor();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Authoring options could not be loaded/)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Error details" })).not.toBeInTheDocument();
   });
 });

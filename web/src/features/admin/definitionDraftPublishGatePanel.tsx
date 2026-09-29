@@ -15,6 +15,7 @@ import {
   type AdminDefinitionEvaluationScenario
 } from "../../services/adminApi";
 import { computePublishEligibility, type EvidenceLoadStatus } from "./definitionDraftPublishGate";
+import { reportAdminError } from "./adminErrors";
 
 type Props = {
   activeDraft: AdminDefinitionDraft;
@@ -22,7 +23,7 @@ type Props = {
   busy: boolean;
   toolNames: string[];
   onDraftRevisionChange: (draft: AdminDefinitionDraft) => void;
-  onError: (message: string | null) => void;
+  onError: (message: string | null, diagnosticId?: string | null) => void;
   onEligibilityChange: (eligible: boolean) => void;
 };
 
@@ -102,7 +103,7 @@ export function DefinitionDraftPublishGatePanel({
       setScenarios([]);
       setResults([]);
       setEvidenceLoadStatus("failed");
-      onError(error instanceof Error ? error.message : "Failed to load evaluation state.");
+      reportAdminError(onError, error, "Failed to load evaluation state.");
     } finally {
       if (generation === requestGenerationRef.current) {
         setLoading(false);
@@ -203,7 +204,7 @@ export function DefinitionDraftPublishGatePanel({
 
       setValidation(null);
       setDiff(null);
-      onError(error instanceof Error ? error.message : "Validation failed.");
+      reportAdminError(onError, error, "Validation failed.");
     } finally {
       if (generation === requestGenerationRef.current) {
         setLoading(false);
@@ -233,7 +234,7 @@ export function DefinitionDraftPublishGatePanel({
       setDiff(null);
       await reloadEvidence();
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Scenario save failed.");
+      reportAdminError(onError, error, "Scenario save failed.");
     } finally {
       setLoading(false);
     }
@@ -246,7 +247,7 @@ export function DefinitionDraftPublishGatePanel({
       await runAdminDefinitionEvaluationScenario(activeDraft.draftId, id);
       await reloadEvidence();
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Evaluation run failed.");
+      reportAdminError(onError, error, "Evaluation run failed.");
     } finally {
       setLoading(false);
     }

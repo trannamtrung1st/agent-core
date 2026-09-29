@@ -13,6 +13,8 @@ import {
   listAdminLearnedMemory,
   resetAdminLearnedMemoryScope
 } from "../../services/adminApi";
+import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
+import { AdminErrorNotice, showAdminFailure } from "./adminFailure";
 import {
   formatAutomationNextRun,
   isMemoryScopePermitted,
@@ -45,11 +47,11 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
   const [memoryScope, setMemoryScope] = useState<AdminLearnedMemoryScope>("IdentityUser");
   const [sessionId, setSessionId] = useState("");
   const [memoryItems, setMemoryItems] = useState<AdminLearnedMemoryItem[] | null>(null);
-  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [memoryError, setMemoryError] = useState<AdminFailureNotice | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryMutating, setMemoryMutating] = useState(false);
   const [automationItems, setAutomationItems] = useState<AdminAutomationRegistration[] | null>(null);
-  const [automationError, setAutomationError] = useState<string | null>(null);
+  const [automationError, setAutomationError] = useState<AdminFailureNotice | null>(null);
   const [automationBusy, setAutomationBusy] = useState(false);
   const memoryLoadGenRef = useRef(0);
 
@@ -88,11 +90,11 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
 
   const loadMemory = useCallback(async () => {
     if (!scopePermitted) {
-      setMemoryError("Effective memory policy does not allow this scope.");
+      setMemoryError({ message: "Effective memory policy does not allow this scope." });
       return;
     }
     if (!selectionReady) {
-      setMemoryError("Session scope requires a session id.");
+      setMemoryError({ message: "Session scope requires a session id." });
       return;
     }
     const gen = ++memoryLoadGenRef.current;
@@ -106,7 +108,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
         return;
       }
       setMemoryItems([]);
-      setMemoryError(error instanceof Error ? error.message : "Unable to load learned memory.");
+      setMemoryError(describeAdminError(error, "Unable to load learned memory."));
     } finally {
       if (gen === memoryLoadGenRef.current) {
         setMemoryLoading(false);
@@ -122,7 +124,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
       setAutomationItems(items);
     } catch (error) {
       setAutomationItems([]);
-      setAutomationError(error instanceof Error ? error.message : "Unable to load automation.");
+      setAutomationError(describeAdminError(error, "Unable to load automation."));
     } finally {
       setAutomationBusy(false);
     }
@@ -150,11 +152,11 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
           await fetchMemoryItems(scopeAtStart, sessionAtStart, refreshGen);
         } catch (error) {
           setMemoryItems([]);
-          setMemoryError(error instanceof Error ? error.message : "Unable to reload learned memory.");
+          setMemoryError(describeAdminError(error, "Unable to reload learned memory."));
         }
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "Delete failed.");
+      showAdminFailure(message, error, "Delete failed.");
     } finally {
       setMemoryMutating(false);
     }
@@ -181,11 +183,11 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
           await fetchMemoryItems(scopeAtStart, sessionAtStart, refreshGen);
         } catch (error) {
           setMemoryItems([]);
-          setMemoryError(error instanceof Error ? error.message : "Unable to reload learned memory.");
+          setMemoryError(describeAdminError(error, "Unable to reload learned memory."));
         }
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "Reset failed.");
+      showAdminFailure(message, error, "Reset failed.");
     } finally {
       setMemoryMutating(false);
     }
@@ -198,7 +200,7 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
       message.success("Registration cancelled.");
       await loadAutomation();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "Cancel failed.");
+      showAdminFailure(message, error, "Cancel failed.");
     } finally {
       setAutomationBusy(false);
     }
@@ -354,7 +356,9 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
                   Reset scope
                 </Button>
               </Flex>
-              {memoryError ? <Typography.Text type="danger">{memoryError}</Typography.Text> : null}
+              {memoryError ? (
+                <AdminErrorNotice message={memoryError.message} diagnosticId={memoryError.diagnosticId} tone="danger" />
+              ) : null}
               {memoryItems ? (
                 <Table
                   size="small"
@@ -379,7 +383,13 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
               <Button onClick={() => void loadAutomation()} loading={automationBusy}>
                 Load registrations
               </Button>
-              {automationError ? <Typography.Text type="danger">{automationError}</Typography.Text> : null}
+              {automationError ? (
+                <AdminErrorNotice
+                  message={automationError.message}
+                  diagnosticId={automationError.diagnosticId}
+                  tone="danger"
+                />
+              ) : null}
               {automationItems ? (
                 <Table
                   size="small"

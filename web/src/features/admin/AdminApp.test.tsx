@@ -745,10 +745,24 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText(/Admin publication resources failed \(503\)/)).toBeInTheDocument();
     });
+    expect(screen.queryByRole("button", { name: "Error details" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => {
       expect(screen.getByText(/knowledge\/policy\.md/)).toBeInTheDocument();
     });
+  });
+
+  it("shows the diagnostic id on a publication resource server failure", async () => {
+    const failure = new Error("The request could not be completed.");
+    failure.name = "AdminRequestError";
+    Object.assign(failure, { diagnosticId: "019944af-0008-7000-8000-0000000000e1" });
+    vi.mocked(listAdminPublicationResources).mockRejectedValueOnce(failure);
+
+    render(<PublicationResourcesSummary definitionId="examiner" version={2} />);
+    await waitFor(() => {
+      expect(screen.getByText("The request could not be completed.")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Error details" })).toBeInTheDocument();
   });
 
   it("shows draft resources tab when a draft is open", async () => {
