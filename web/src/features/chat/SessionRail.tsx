@@ -12,6 +12,7 @@ import {
   setIncludeArchived,
   unarchiveCatalogItem
 } from "../../services/catalog";
+import { confirmAction } from "../../app/confirmAction";
 import { sameSessionId } from "../../app/sessionRoute";
 import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
 import { formatChatTime } from "./chatTime";
@@ -164,16 +165,13 @@ export function SessionRail({
   }
 
   function confirmDeleteAll(): void {
-    modal.confirm({
+    confirmAction(modal, {
       title: "Delete all chats?",
       content: includeArchived
         ? "This removes every session in your catalog, including archived chats. This cannot be undone."
         : "This removes every visible chat in your catalog. Archived chats are kept unless you show archived first. This cannot be undone.",
       okText: "Delete all",
-      cancelText: "Cancel",
-      okType: "danger",
-      centered: true,
-      mask: { closable: true },
+      danger: true,
       onOk: async () => {
         const activeInScope = activeSessionInBulkDeleteScope();
         const deletedCount = await deleteAllCatalogItems();
@@ -196,14 +194,11 @@ export function SessionRail({
   }
 
   function confirmDelete(item: CatalogItem): void {
-    modal.confirm({
+    confirmAction(modal, {
       title: `Delete “${item.title}”?`,
       content: "This removes the session from the catalog. This cannot be undone.",
       okText: "Delete",
-      cancelText: "Cancel",
-      okType: "danger",
-      centered: true,
-      mask: { closable: true },
+      danger: true,
       onOk: async () => {
         const deletingActive = sameSessionId(item.sessionId, activeSessionId);
         const ok = await deleteCatalogItem(latestItem(item.sessionId, item));

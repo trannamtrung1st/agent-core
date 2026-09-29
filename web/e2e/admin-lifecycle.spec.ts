@@ -192,7 +192,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await memoryAutomation.getByRole("button", { name: "Load items" }).click();
   await expect(memoryAutomation.getByText(memoryContent)).toBeVisible({ timeout: 15_000 });
   await memoryAutomation.getByRole("button", { name: "Reset scope" }).click();
-  await page.locator(".ant-popconfirm-buttons").getByRole("button", { name: "Reset scope" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Reset scope" }).click();
   await expect(memoryAutomation.getByText("No active learned-memory items in this scope.")).toBeVisible({
     timeout: 15_000
   });
@@ -201,7 +201,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await memoryAutomation.getByRole("button", { name: "Load registrations" }).click();
   await expect(memoryAutomation.getByText(scheduleIntent)).toBeVisible({ timeout: 15_000 });
   await memoryAutomation.getByRole("button", { name: "Revoke" }).click();
-  await page.locator(".ant-popconfirm-buttons").getByRole("button", { name: "Cancel registration" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel registration" }).click();
   await expect(memoryAutomation.getByText("No active or suspended registrations.")).toBeVisible({
     timeout: 15_000
   });
@@ -247,12 +247,12 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
 
   await page.goto("/admin/definitions/examiner");
   await page.getByRole("button", { name: `Deprecate publication v${versionTwo}` }).click();
-  await page.getByRole("button", { name: "Deprecate", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Deprecate", exact: true }).click();
   await expect(page.getByText(`Publication v${versionTwo} deprecated.`)).toBeVisible({ timeout: 15_000 });
 
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await page.getByRole("button", { name: "Archive instance" }).click();
-  await page.getByRole("button", { name: "Archive", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });
 
   expect((await fetchEffectiveConfig(request, page, instance.instanceId)).durableExecutionEligibility

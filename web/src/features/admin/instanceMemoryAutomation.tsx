@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { App, Button, Descriptions, Flex, Input, Popconfirm, Select, Table, Tabs, Typography } from "antd";
+import { App, Button, Descriptions, Flex, Input, Select, Table, Tabs, Typography } from "antd";
+import { confirmAction } from "../../app/confirmAction";
 import type { ColumnsType } from "antd/es/table";
 import {
   type AdminAutomationRegistration,
@@ -40,7 +41,7 @@ function triggerPolicySummary(config: AdminEffectiveConfiguration): string {
 }
 
 export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffectiveConfiguration }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [memoryScope, setMemoryScope] = useState<AdminLearnedMemoryScope>("IdentityUser");
   const [sessionId, setSessionId] = useState("");
   const [memoryItems, setMemoryItems] = useState<AdminLearnedMemoryItem[] | null>(null);
@@ -217,15 +218,21 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
       key: "actions",
       width: 100,
       render: (_, row) => (
-        <Popconfirm
-          title="Delete this learned-memory item?"
-          onConfirm={() => void deleteMemoryItem(row.memoryId)}
-          okText="Delete"
+        <Button
+          size="small"
+          danger
+          disabled={!memoryActionsEnabled}
+          onClick={() =>
+            confirmAction(modal, {
+              title: "Delete this learned-memory item?",
+              okText: "Delete",
+              danger: true,
+              onOk: () => void deleteMemoryItem(row.memoryId)
+            })
+          }
         >
-          <Button size="small" danger disabled={!memoryActionsEnabled}>
-            Delete
-          </Button>
-        </Popconfirm>
+          Delete
+        </Button>
       )
     }
   ];
@@ -255,15 +262,21 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
       width: 100,
       render: (_, row) =>
         row.status === "cancelled" || row.status === "completed" ? null : (
-          <Popconfirm
-            title="Cancel this registration?"
-            onConfirm={() => void cancelRegistration(row)}
-            okText="Cancel registration"
+          <Button
+            size="small"
+            danger
+            disabled={automationBusy}
+            onClick={() =>
+              confirmAction(modal, {
+                title: "Cancel this registration?",
+                okText: "Cancel registration",
+                danger: true,
+                onOk: () => void cancelRegistration(row)
+              })
+            }
           >
-            <Button size="small" danger disabled={automationBusy}>
-              Revoke
-            </Button>
-          </Popconfirm>
+            Revoke
+          </Button>
         )
     }
   ];
@@ -326,11 +339,20 @@ export function InstanceMemoryAutomationPanel({ config }: { config: AdminEffecti
                 >
                   Load items
                 </Button>
-                <Popconfirm title={resetTitle} onConfirm={() => void resetMemoryScope()} okText="Reset scope">
-                  <Button danger disabled={!memoryActionsEnabled}>
-                    Reset scope
-                  </Button>
-                </Popconfirm>
+                <Button
+                  danger
+                  disabled={!memoryActionsEnabled}
+                  onClick={() =>
+                    confirmAction(modal, {
+                      title: resetTitle,
+                      okText: "Reset scope",
+                      danger: true,
+                      onOk: () => void resetMemoryScope()
+                    })
+                  }
+                >
+                  Reset scope
+                </Button>
               </Flex>
               {memoryError ? <Typography.Text type="danger">{memoryError}</Typography.Text> : null}
               {memoryItems ? (

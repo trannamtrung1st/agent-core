@@ -11,7 +11,6 @@ import {
   Layout,
   List,
   Modal,
-  Popconfirm,
   Radio,
   Result,
   Select,
@@ -94,6 +93,8 @@ import {
   rememberChatUrl,
   type AdminRoute
 } from "../../app/appRoute";
+import { confirmAction } from "../../app/confirmAction";
+import { AdminDeletionBlockedAlert } from "./adminDeletionBlocked";
 import { formatAdminLoadError } from "./adminErrors";
 import { startManagedPublicationChat } from "./adminManagedChat";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
@@ -953,12 +954,13 @@ function DefinitionDetail({
   };
 
   const confirmDeleteDefinition = () => {
-    modal.confirm({
+    confirmAction(modal, {
       title: "Delete this definition?",
-      content: "This permanently removes its drafts, draft resources, evaluation evidence, and durable publications. Admin history is kept. Instances and sessions are not deleted. If anything still references this definition, deletion is refused.",
+      content:
+        "This permanently removes its drafts, draft resources, evaluation evidence, and durable publications. Admin history is kept. Instances and sessions are not deleted. If anything still references this definition, deletion is refused.",
       okText: "Delete definition",
       cancelText: "Keep definition",
-      okButtonProps: { danger: true },
+      danger: true,
       onOk: () => deleteLogicalDefinition()
     });
   };
@@ -996,12 +998,13 @@ function DefinitionDetail({
     const draftLabel = draft.sourceVersion != null
       ? `draft from v${draft.sourceVersion}`
       : "draft";
-    modal.confirm({
+    confirmAction(modal, {
       title: `Delete ${draftLabel}?`,
-      content: "This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged.",
+      content:
+        "This permanently removes the draft, its unpublished resources, and evaluation evidence. Published versions are unchanged.",
       okText: "Delete draft",
       cancelText: "Keep draft",
-      okButtonProps: { danger: true },
+      danger: true,
       onOk: () => deleteDraft(draft, expectedRevision)
     });
   };
@@ -1079,7 +1082,7 @@ function DefinitionDetail({
       message.warning("Save draft edits before publishing.");
       return;
     }
-    modal.confirm({
+    confirmAction(modal, {
       title: "Publish this draft?",
       content: dirty
         ? "Unsaved editor changes will be saved, then published as an immutable version."
@@ -1143,14 +1146,20 @@ function DefinitionDetail({
       {group ? (
         <div className="admin-definition-heading">
           <Flex align="start" justify="space-between" gap={12} wrap="wrap">
-            <div>
+            <Flex vertical gap={8} className="admin-inventory-row-copy">
               <Typography.Title level={2}>{group.logicalName}</Typography.Title>
-              <Typography.Text type="secondary">{group.definitionId}</Typography.Text>
+              <Typography.Text type="secondary" className="admin-inventory-row-secondary">
+                {group.definitionId}
+              </Typography.Text>
               {group.draftOnly ? null : (
-                <Typography.Text>Latest-version persona: {group.defaultPersona}</Typography.Text>
+                <Typography.Text type="secondary" className="admin-inventory-row-description">
+                  Latest-version persona: {group.defaultPersona}
+                </Typography.Text>
               )}
-              <Typography.Text>{formatDefinitionVersionSummary(group)}</Typography.Text>
-            </div>
+              <Typography.Text type="secondary" className="admin-inventory-row-description">
+                {formatDefinitionVersionSummary(group)}
+              </Typography.Text>
+            </Flex>
             {canDeleteDefinition ? (
               <Button danger disabled={busy} onClick={confirmDeleteDefinition}>
                 Delete definition
@@ -1185,17 +1194,26 @@ function DefinitionDetail({
         <section ref={editorSurfaceRef} className="admin-draft-focused" aria-label="Draft editor">
           <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="admin-draft-focused-toolbar">
             {dirty ? (
-              <Popconfirm
-                title="Discard unsaved changes?"
-                description="Your saved draft remains available. Only unsaved edits in this editor will be discarded."
-                okText="Discard changes"
-                cancelText="Keep editing"
-                onConfirm={closeDraftEditor}
+              <Button
+                icon={<ArrowLeftOutlined />}
+                aria-label="Back to drafts"
+                onClick={() =>
+                  confirmAction(modal, {
+                    title: "Discard unsaved changes?",
+                    content:
+                      "Your saved draft remains available. Only unsaved edits in this editor will be discarded.",
+                    okText: "Discard changes",
+                    cancelText: "Keep editing",
+                    onOk: closeDraftEditor
+                  })
+                }
               >
-                <Button icon={<ArrowLeftOutlined />} aria-label="Back to drafts">Back to drafts</Button>
-              </Popconfirm>
+                Back to drafts
+              </Button>
             ) : (
-              <Button icon={<ArrowLeftOutlined />} aria-label="Back to drafts" onClick={closeDraftEditor}>Back to drafts</Button>
+              <Button icon={<ArrowLeftOutlined />} aria-label="Back to drafts" onClick={closeDraftEditor}>
+                Back to drafts
+              </Button>
             )}
             <Button
               danger
@@ -1208,10 +1226,9 @@ function DefinitionDetail({
             </Button>
           </Flex>
           {lifecycleError ? (
-            <Alert
-              type="error"
-              showIcon
-              title={lifecycleError}
+            <AdminDeletionBlockedAlert
+              className="admin-destructive-detail"
+              message={lifecycleError}
               action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
             />
           ) : null}
@@ -1305,10 +1322,8 @@ function DefinitionDetail({
                 </Typography.Paragraph>
               )}
           {lifecycleError ? (
-            <Alert
-              className="admin-draft-status"
-              type="error"
-              showIcon
+            <AdminDeletionBlockedAlert
+              className="admin-draft-status admin-destructive-detail"
               message={lifecycleError}
               action={<Button size="small" onClick={() => void reloadLifecycle()}>Retry</Button>}
             />
@@ -1387,32 +1402,40 @@ function DefinitionDetail({
                       {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
                     </span>
                     <PublicationResourcesSummary definitionId={definitionId} version={item.version} />
-                    <Button
-                      size="small"
-                      aria-label={`Start managed chat for v${item.version}`}
-                      disabled={busy || item.status !== "Active"}
-                      onClick={() => void startManagedChat(definitionId, item.version)}
-                    >
-                      Start managed chat
-                    </Button>
-                    {item.status === "Active" ? (
-                      <Popconfirm
-                        title={`Deprecate publication v${item.version}?`}
-                        description="Metadata-only change. Exact version lookup and existing sessions stay intact; avoid selecting this version for new managed work."
-                        onConfirm={() => void deprecatePublication(item)}
-                        okText="Deprecate"
-                        cancelText="Cancel"
+                    <Flex gap={8} wrap="wrap" align="center">
+                      <Tooltip
+                        title="Creates a managed instance for this version and opens Chat."
+                        trigger={["hover", "focus"]}
                       >
+                        <Button
+                          size="small"
+                          aria-label={`Start managed chat for v${item.version}`}
+                          disabled={busy || item.status !== "Active"}
+                          onClick={() => void startManagedChat(definitionId, item.version)}
+                        >
+                          Chat
+                        </Button>
+                      </Tooltip>
+                      {item.status === "Active" ? (
                         <Button
                           size="small"
                           danger
                           disabled={busy}
                           aria-label={`Deprecate publication v${item.version}`}
+                          onClick={() =>
+                            confirmAction(modal, {
+                              title: `Deprecate publication v${item.version}?`,
+                              content:
+                                "Metadata-only change. Exact version lookup and existing sessions stay intact; avoid selecting this version for new managed work.",
+                              okText: "Deprecate",
+                              onOk: () => void deprecatePublication(item)
+                            })
+                          }
                         >
                           Deprecate publication
                         </Button>
-                      </Popconfirm>
-                    ) : null}
+                      ) : null}
+                    </Flex>
                   </Flex>
                 </Descriptions.Item>
               ))}
@@ -2312,7 +2335,7 @@ export function InstanceManagedControls({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [personaTab, setPersonaTab] = useState("form");
@@ -2332,6 +2355,7 @@ export function InstanceManagedControls({
     setPersonaJsonDraft(JSON.stringify(config.persona, null, 2));
     setPersonaJsonError(null);
     setTargetVersion(config.definitionVersion);
+    setDeleteError(null);
   }, [
     config.instanceRevision,
     config.personaRevision,
@@ -2593,15 +2617,19 @@ export function InstanceManagedControls({
                 disabled={busy}
               />
               {personaDirty ? (
-                <Popconfirm
-                  title="Apply version with unsaved persona?"
-                  description={UNSAVED_PERSONA_DISCARD_MESSAGE}
-                  onConfirm={() => void applyVersion()}
-                  okText="Apply anyway"
-                  cancelText="Cancel"
+                <Button
+                  disabled={busy || targetVersion === config.definitionVersion}
+                  onClick={() =>
+                    confirmAction(modal, {
+                      title: "Apply version with unsaved persona?",
+                      content: UNSAVED_PERSONA_DISCARD_MESSAGE,
+                      okText: "Apply anyway",
+                      onOk: () => void applyVersion()
+                    })
+                  }
                 >
-                  <Button disabled={busy || targetVersion === config.definitionVersion}>{versionActionLabel}</Button>
-                </Popconfirm>
+                  {versionActionLabel}
+                </Button>
               ) : (
                 <Button
                   onClick={() => void applyVersion()}
@@ -2623,58 +2651,64 @@ export function InstanceManagedControls({
               Archived instances keep history but cannot start new chats or triggered work. Delete is available after archive, and only when nothing still references this instance.
             </Typography.Paragraph>
             {deleteError ? (
-              <Alert
-                type="error"
-                showIcon
-                className="admin-destructive-detail"
-                title={deleteError}
-              />
+              <AdminDeletionBlockedAlert className="admin-destructive-detail" message={deleteError} />
             ) : null}
             <Flex gap={8} wrap="wrap">
               {config.instanceLifecycle === "Active" ? (
-                <Popconfirm
-                  title="Archive this managed instance?"
-                  description={
-                    personaDirty
-                      ? `New chats and triggered work will stop until you unarchive. ${UNSAVED_PERSONA_DISCARD_MESSAGE}`
-                      : "New chats and triggered work will stop until you unarchive."
+                <Button
+                  danger
+                  disabled={busy}
+                  onClick={() =>
+                    confirmAction(modal, {
+                      title: "Archive this managed instance?",
+                      content: personaDirty
+                        ? `New chats and triggered work will stop until you unarchive. ${UNSAVED_PERSONA_DISCARD_MESSAGE}`
+                        : "New chats and triggered work will stop until you unarchive.",
+                      okText: "Archive",
+                      danger: true,
+                      onOk: () => void setLifecycle("Archived")
+                    })
                   }
-                  onConfirm={() => void setLifecycle("Archived")}
-                  okText="Archive"
-                  cancelText="Cancel"
                 >
-                  <Button danger disabled={busy}>
-                    Archive instance
-                  </Button>
-                </Popconfirm>
+                  Archive instance
+                </Button>
               ) : personaDirty ? (
-                <Popconfirm
-                  title="Unarchive with unsaved persona?"
-                  description={UNSAVED_PERSONA_DISCARD_MESSAGE}
-                  onConfirm={() => void setLifecycle("Active")}
-                  okText="Unarchive anyway"
-                  cancelText="Cancel"
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    confirmAction(modal, {
+                      title: "Unarchive with unsaved persona?",
+                      content: UNSAVED_PERSONA_DISCARD_MESSAGE,
+                      okText: "Unarchive anyway",
+                      onOk: () => void setLifecycle("Active")
+                    })
+                  }
                 >
-                  <Button disabled={busy}>Unarchive instance</Button>
-                </Popconfirm>
+                  Unarchive instance
+                </Button>
               ) : (
                 <Button disabled={busy} onClick={() => void setLifecycle("Active")}>
                   Unarchive instance
                 </Button>
               )}
               {config.instanceLifecycle === "Archived" ? (
-                <Popconfirm
-                  title="Delete this archived instance?"
-                  description="This permanently removes the managed instance. Sessions, learned memory, triggers, and background work stay in place. If any of those still reference this instance, deletion is refused."
-                  onConfirm={() => void deleteInstance()}
-                  okText="Delete instance"
-                  cancelText="Keep instance"
-                  okButtonProps={{ danger: true }}
+                <Button
+                  danger
+                  disabled={busy}
+                  onClick={() =>
+                    confirmAction(modal, {
+                      title: "Delete this archived instance?",
+                      content:
+                        "This permanently removes the managed instance. Sessions, learned memory, triggers, and background work stay in place. If any of those still reference this instance, deletion is refused.",
+                      okText: "Delete instance",
+                      cancelText: "Keep instance",
+                      danger: true,
+                      onOk: () => void deleteInstance()
+                    })
+                  }
                 >
-                  <Button danger disabled={busy}>
-                    Delete instance
-                  </Button>
-                </Popconfirm>
+                  Delete instance
+                </Button>
               ) : null}
             </Flex>
           </section>

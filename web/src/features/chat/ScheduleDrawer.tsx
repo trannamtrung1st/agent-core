@@ -9,7 +9,8 @@ import {
   PauseCircleOutlined,
   StopOutlined
 } from "@ant-design/icons";
-import { Alert, Button, Drawer, Empty, Flex, List, Popconfirm, Spin, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
+import { confirmAction } from "../../app/confirmAction";
 import type { SessionTrigger } from "../../services/api";
 
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
@@ -55,6 +56,7 @@ export function ScheduleDrawer({
   cancel: (sessionId: string, registrationId: string, expectedRevision: number) => Promise<SessionTrigger>;
 }) {
   const { token } = theme.useToken();
+  const { modal } = App.useApp();
   const [items, setItems] = useState<SessionTrigger[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,18 +160,23 @@ export function ScheduleDrawer({
 
           {item.status === "active" ? (
             <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="schedule-actions">
-              <Popconfirm
-                title="Cancel this schedule?"
-                description="Future occurrences will not run."
-                okText="Cancel schedule"
-                cancelText="Keep"
-                okButtonProps={{ danger: true, loading: busy }}
-                onConfirm={() => confirmCancel(item)}
+              <Button
+                danger
+                disabled={busy}
+                aria-label={`Cancel ${item.intent}`}
+                onClick={() =>
+                  confirmAction(modal, {
+                    title: "Cancel this schedule?",
+                    content: "Future occurrences will not run.",
+                    okText: "Cancel schedule",
+                    cancelText: "Keep",
+                    danger: true,
+                    onOk: () => confirmCancel(item)
+                  })
+                }
               >
-                <Button danger disabled={busy} aria-label={`Cancel ${item.intent}`}>
-                  Cancel schedule
-                </Button>
-              </Popconfirm>
+                Cancel schedule
+              </Button>
             </Flex>
           ) : null}
         </Flex>

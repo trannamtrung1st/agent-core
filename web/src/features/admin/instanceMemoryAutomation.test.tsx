@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "antd";
 import { describe, expect, it, vi } from "vitest";
 import type { AdminEffectiveConfiguration } from "../../services/adminApi";
@@ -94,12 +94,8 @@ const memoryRow = {
 
 async function confirmDeleteOnRow() {
   fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-  const confirmButtons = await screen.findAllByRole("button", { name: "Delete" });
-  const confirm = confirmButtons.find((button) => button.classList.contains("ant-btn-primary"));
-  if (!confirm) {
-    throw new Error("Popconfirm Delete button not found.");
-  }
-  fireEvent.click(confirm);
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
 }
 
 function renderPanel() {

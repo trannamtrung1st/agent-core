@@ -148,7 +148,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
   await expect(lifecycle.getByText("Active", { exact: true })).toBeVisible();
   await lifecycle.getByRole("button", { name: "Archive instance" }).click();
-  await page.getByRole("tooltip").getByRole("button", { name: "Archive", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });
   await expect(lifecycle.getByText("Archived", { exact: true })).toBeVisible();
   await lifecycle.getByRole("button", { name: "Unarchive instance" }).click();

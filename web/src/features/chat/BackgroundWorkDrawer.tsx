@@ -10,7 +10,8 @@ import {
   RedoOutlined,
   StopOutlined
 } from "@ant-design/icons";
-import { Alert, Button, Drawer, Empty, Flex, List, Popconfirm, Spin, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Drawer, Empty, Flex, List, Spin, Tag, Typography, theme } from "antd";
+import { confirmAction } from "../../app/confirmAction";
 import type { WorkItem, WorkItemResult } from "../../services/api";
 
 const statusPresentation: Record<string, { label: string; color?: string; icon: ReactNode }> = {
@@ -63,6 +64,7 @@ export function BackgroundWorkDrawer({
   ) => Promise<WorkItem>;
 }) {
   const { token } = theme.useToken();
+  const { modal } = App.useApp();
   const [items, setItems] = useState<WorkItem[]>([]);
   const [results, setResults] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -253,45 +255,58 @@ export function BackgroundWorkDrawer({
             <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="background-work-actions">
               {item.needsApproval && item.approvalId && item.actionHash ? (
                 <>
-                  <Popconfirm
-                    title="Approve this action?"
-                    description="The action will continue immediately."
-                    okText="Approve action"
-                    cancelText="Keep waiting"
-                    okButtonProps={{ loading: busy }}
-                    onConfirm={() => confirmDecision(item, "approve")}
+                  <Button
+                    type="primary"
+                    disabled={busy}
+                    aria-label={`Approve ${item.origin}`}
+                    onClick={() =>
+                      confirmAction(modal, {
+                        title: "Approve this action?",
+                        content: "The action will continue immediately.",
+                        okText: "Approve action",
+                        cancelText: "Keep waiting",
+                        onOk: () => confirmDecision(item, "approve")
+                      })
+                    }
                   >
-                    <Button type="primary" disabled={busy} aria-label={`Approve ${item.origin}`}>
-                      Approve
-                    </Button>
-                  </Popconfirm>
-                  <Popconfirm
-                    title="Reject this action?"
-                    description="The background work will continue without this action."
-                    okText="Reject action"
-                    cancelText="Keep waiting"
-                    okButtonProps={{ danger: true, loading: busy }}
-                    onConfirm={() => confirmDecision(item, "reject")}
+                    Approve
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    aria-label={`Reject ${item.origin}`}
+                    onClick={() =>
+                      confirmAction(modal, {
+                        title: "Reject this action?",
+                        content: "The background work will continue without this action.",
+                        okText: "Reject action",
+                        cancelText: "Keep waiting",
+                        danger: true,
+                        onOk: () => confirmDecision(item, "reject")
+                      })
+                    }
                   >
-                    <Button disabled={busy} aria-label={`Reject ${item.origin}`}>
-                      Reject
-                    </Button>
-                  </Popconfirm>
+                    Reject
+                  </Button>
                 </>
               ) : null}
               {item.cancellationAvailable ? (
-                <Popconfirm
-                  title="Cancel this work?"
-                  description="Any external action that already completed cannot be undone."
-                  okText="Cancel work"
-                  cancelText="Keep"
-                  okButtonProps={{ danger: true, loading: busy }}
-                  onConfirm={() => confirmCancel(item)}
+                <Button
+                  danger
+                  disabled={busy}
+                  aria-label={`Cancel ${item.origin}`}
+                  onClick={() =>
+                    confirmAction(modal, {
+                      title: "Cancel this work?",
+                      content: "Any external action that already completed cannot be undone.",
+                      okText: "Cancel work",
+                      cancelText: "Keep",
+                      danger: true,
+                      onOk: () => confirmCancel(item)
+                    })
+                  }
                 >
-                  <Button danger disabled={busy} aria-label={`Cancel ${item.origin}`}>
-                    Cancel
-                  </Button>
-                </Popconfirm>
+                  Cancel
+                </Button>
               ) : null}
             </Flex>
           ) : null}

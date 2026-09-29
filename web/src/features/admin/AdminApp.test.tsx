@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnerCapabilityError } from "../../services/api";
 import {
   AdminApp,
@@ -238,6 +238,12 @@ describe("formatForkSourceOptionLabel", () => {
 });
 
 describe("AdminApp", () => {
+  let useAppSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+  afterEach(() => {
+    useAppSpy?.mockRestore();
+    useAppSpy = undefined;
+  });
   it("renders definition and instance inventory", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([
       {
@@ -526,7 +532,7 @@ describe("AdminApp", () => {
     });
     vi.mocked(listAdminDefinitionEvaluationScenarios).mockResolvedValue([]);
     vi.mocked(listAdminDefinitionEvaluationResults).mockResolvedValue([]);
-    vi.spyOn(antd.App, "useApp").mockReturnValue({
+    useAppSpy = vi.spyOn(antd.App, "useApp").mockReturnValue({
       message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
       modal: {
         confirm: (options: { onOk?: () => void | Promise<void> }) => {
@@ -1356,14 +1362,14 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Deprecate publication v2" })).toBeInTheDocument();
     });
+    expect(screen.getByRole("button", { name: "Start managed chat for v2" })).toHaveTextContent("Chat");
     expect(screen.getByText(/durable · published/)).toBeInTheDocument();
 
     const inventoryCallsBefore = vi.mocked(listAdminDefinitions).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Deprecate publication v2" }));
-    await waitFor(() => {
-      expect(screen.getByText("Deprecate publication v2?")).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Deprecate" }));
+    const deprecateDialog = await screen.findByRole("dialog");
+    expect(deprecateDialog).toHaveTextContent("Deprecate publication v2?");
+    fireEvent.click(within(deprecateDialog).getByRole("button", { name: /^Deprecate$/ }));
 
     await waitFor(() => {
       expect(deprecateAdminDefinitionPublication).toHaveBeenCalledWith("examiner", 2, 3);
@@ -1371,6 +1377,8 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText("Latest v2 · Deprecated")).toBeInTheDocument();
       expect(screen.getByText(/Deprecated · metadata rev 4/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Start managed chat for v2" })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Deprecate publication v2" })).not.toBeInTheDocument();
     });
     await waitFor(() => {
       expect(vi.mocked(listAdminDefinitions).mock.calls.length).toBeGreaterThan(inventoryCallsBefore);
