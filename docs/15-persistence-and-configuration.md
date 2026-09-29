@@ -7,7 +7,7 @@ EF Core 10 with SQLite is the MVP durable store, implemented behind IMemoryStore
 | Entity | Key and fields | Rules |
 | --- | --- | --- |
 | Session | SessionId UUID string PK; AgentId, AgentVersion, DefinitionJson, Mode, PendingMode nullable, Status, PauseReason nullable, CreatedAtUtc, UpdatedAtUtc, Revision | Store pinned validated definition; terminal Ended is irreversible; PauseReason set when Status is Paused |
-| ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text (display); ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive (speech coordinate); ReceivedTextEndExclusive (display); EnvelopeJson nullable; AttachmentRefsJson nullable; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry |
+| ConversationEntry | EntryId UUID PK; SessionId FK; EntrySequence; SourceEventId nullable; Role; Text (display); ResponseId nullable; Status; DeliveryMode; HeardTextEndExclusive (speech coordinate); ReceivedTextEndExclusive (display); EnvelopeJson nullable; AttachmentRefsJson nullable; FailureReferenceJson nullable; CreatedAtUtc | Unique (SessionId,EntrySequence); unique (SessionId,SourceEventId) when not null; response ID unique per assistant entry. `FailureReferenceJson` (`20260929121048_P7FailureReference`) stores one safe failure reference on a failed assistant row and stays null otherwise, including legacy failed rows |
 | SessionSnapshot | SessionId PK/FK; SchemaVersion=1; Summary; SummarizedThroughEntrySequence; SummaryFormatVersion; SummaryGeneratedAtUtc nullable; SummaryModelCatalogKey/ProviderAlias/ModelId/ReasoningEffort nullable; PendingTopic nullable; ProfileId nullable; LastEntrySequence; LastUserActivityAtUtc nullable; UpdatedAtUtc; additive LifecycleStatus/PurposeKind/PurposeDescription/DeadlineAtUtc/PurposeMetadataJson/AgentCompletion/UserCompletionAllowed/UserCancellationAllowed/LifecycleReason/LifecycleSource/LifecycleChangedAtUtc nullable | Persist coarse semantic continuity and last meaningful user activity for inactivity policy, never tasks/timers/active provider streams. Purpose metadata and completion policy are private. Protocol-v1 Session.Status stays compatible. Summary text and through-sequence stay canonical; missing summary metadata loads as format 0 and is not rewritten. |
 | UserProfile | ProfileId UUID PK; PreferencesJson; Revision; UpdatedAtUtc | <=16 allowlisted preferences, <=2,000 total characters; MVP uses one local profile |
 
@@ -95,7 +95,7 @@ Migration adds append-only `AdminEvents` with unique `OperationId`, actor kind, 
 
 ## Post-MVP planned until verified
 
-Observed A–H persistence/layout. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` do not continue after `RequestDeactivate`. P6 durable work is a separate schema. Migration `20260924060915_WorkItemContracts` adds `WorkItems` and `WorkApprovals`. Migration `20260924065742_OccurrenceDurableWorkLink` links an accepted occurrence to one work item. Owner is Agent Instance plus profile. `SourceOccurrenceId` is unique. `Revision` is the concurrency token. Waiting and terminal rows hold no claim. Public reads omit evidence, checkpoint payload, and prepared action JSON. MVP Session.Status `Ended` remains irreversible terminal-end.
+Observed A–H persistence/layout. Phase I remains not-applicable: Support, Compliance, and `sandbox.run` do not continue after `RequestDeactivate`. P6 durable work is a separate schema. Migration `20260924060915_WorkItemContracts` adds `WorkItems` and `WorkApprovals`. Migration `20260924065742_OccurrenceDurableWorkLink` links an accepted occurrence to one work item. Owner is Agent Instance plus profile. `SourceOccurrenceId` is unique. `Revision` is the concurrency token. Waiting and terminal rows hold no claim. Public reads omit evidence, checkpoint payload, and prepared action JSON. Migration `20260929125852_P7WorkFailureDiagnosticId` adds nullable `FailureDiagnosticId` on `WorkItems` for a terminal failure only. Retry and cancellation leave it null. MVP Session.Status `Ended` remains irreversible terminal-end.
 
 - **Owner capability grant:** hashed trusted-local token in SQLite; validate HTTP/hub callers; survive process restart.
 - **Catalog fields:** Title, ArchivedAt, DeletedAt/pending-cleanup, WorkspaceOwnership (SessionId key), pinned AgentId+AgentVersion. Rename/archive/deactivate/delete take the same revision-checked save path as snapshots so they cannot be overwritten by a concurrent runtime checkpoint. Deactivate persists `Paused` and increments `RuntimeEpoch` without setting `ArchivedAt` or clearing history.
@@ -237,6 +237,8 @@ Complete conceptual appsettings.json example, **Markdown only**:
   "Hosting": {"BindUrl": "http://localhost:5080", "AllowedOrigins": ["http://localhost:5173"], "UseViteProxy": true, "TrustPublishedPortGateway": false}
 }
 ```
+
+The browser realtime protocol is not a server option. `VITE_AGENTCORE_REALTIME_PROTOCOL=json` selects SignalR JSON for that frontend process; unset or any other value stays MessagePack. It does not change `protocolVersion` or persistence.
 
 The shipped Synthetic catalog also includes `scripted-beta` with `StructuredOutput: true` (native envelope JSON) while `scripted-alpha` remains unstructured compatibility (`StructuredOutput: false`).
 
