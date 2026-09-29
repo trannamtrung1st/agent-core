@@ -259,6 +259,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Do** honor `prefers-reduced-motion`; keep labeled errors, visible focus, and testids `connection` and `profile`.
 - **Do** keep the labeled composer available while voice is live until `/docs` and tests change together.
 - **Do** treat Admin as the same dark product: shared spacing tokens, configuration panels, and operator copy. Behavior stays in `/docs`.
+- **Do** use the shared centered Ant Design confirmation dialog (`confirmAction` in `web/src/app/confirmAction.ts`) for destructive or consequential actions across Chat, Admin, Background Work, and Schedules (session delete, Admin definition/instance delete, deprecation, work cancel, approval decisions, memory reset, automation revoke, and similar). Prefer a stable `dialog` surface for tests and keyboard focus.
 - **Do** keep ended history on the same reading column with a quiet ended note, not a disabled input.
 - **Do** reuse the operational drawer language for Background Work and Schedules: two-line headers, open List rows, semantic filled icon-and-text status chips, elevated 8px detail insets, and trailing actions only where the row exposes an operation.
 - **Do** format schedule occurrences for the viewer locale in the schedule’s named time zone; keep the zone identifier visible beside the readable time.
@@ -274,3 +275,4 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - **Don't** show Spoken as another conversational turn or from internal generated tails.
 - **Don't** wrap every operational List row in a card or generalize drawer actions to rows that do not expose an operation.
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
+- **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
