@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` at `76818a9` on **2026-09-29**, then updated for the post-P7.6 Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` and to insert **P7.7 — Operational Diagnosability & Realtime Debuggability** as the current implementation slice before P8. The Admin lifecycle follow-up is not a new freeze and is not hosted-green. P7.6 remains frozen on `17d89ae`. P7.7 does not reopen P7.6.
+Reviewed against `main` at `76818a9` on **2026-09-29**, then updated for the post-P7.6 Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` and for **P7.7 — Operational Diagnosability & Realtime Debuggability**, now frozen on `40a1d92` (workflow `36594702224` green) before P8. The Admin lifecycle follow-up is not a new freeze and is not hosted-green. P7.6 remains frozen on `17d89ae`. P7.7 does not reopen P7.6.
 
 ---
 
@@ -47,17 +47,17 @@ P7.5 is frozen on `70a5720`. Hosted workflow `36368766449` is green on that SHA.
 
 ## Current active phase
 
-**P7.7 — Operational Diagnosability & Realtime Debuggability.**
+**P7.7 — Operational Diagnosability & Realtime Debuggability — frozen on `40a1d92`.** Hosted workflow `36594702224` is green on that SHA. Closure report: `docs/reports/p7.7-freeze-candidate.md`.
 
 P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA. Closure report: `docs/reports/p7.6-freeze-candidate.md`.
 
-P7.7 is a new bounded product/operational requirement discovered after P7.6. It is not a reopening of P7.6.
+P7.7 is a bounded product/operational requirement discovered after P7.6. It does not reopen P7.6.
 
-A later Admin lifecycle follow-up is specified in `docs/reports/p76-admin-lifecycle-followup.md`. It remains a bounded follow-up, does not redefine P7.6, does not move the P7.6 freeze SHA, and does not start P7.7 or P8.
+A later Admin lifecycle follow-up is specified in `docs/reports/p76-admin-lifecycle-followup.md`. It remains a bounded follow-up, does not redefine P7.6, does not move the P7.6 freeze SHA, and does not start P8.
 
 P7.6 does **not** redefine what P7 or P7.5 previously meant or invalidate their closure evidence.
 
-**P8 — harness/platform extensibility** is next after P7.7. When P8 begins, start from one concrete provider need and do not add a universal provider interface. This record does not start P7.7 or P8 implementation.
+**P8 — harness/platform extensibility** is next. When P8 begins, start from one concrete provider need and do not add a universal provider interface. This record does not start P8 implementation.
 
 ---
 
@@ -66,7 +66,7 @@ P7.6 does **not** redefine what P7 or P7.5 previously meant or invalidate their 
 1. **P0–P7 — closed/frozen.**
 2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `70a5720`.**
 3. **P7.6 — Admin usability closure — frozen on `17d89ae`.**
-4. **P7.7 — Operational Diagnosability & Realtime Debuggability — current.**
+4. **P7.7 — Operational Diagnosability & Realtime Debuggability — frozen on `40a1d92` (workflow `36594702224` green).**
 5. **P8 — harness/platform extensibility — next after P7.7.**
 6. **P9 — sandbox evolution when requirements justify it.**
 7. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
@@ -1780,7 +1780,7 @@ Production-shaped properties that **should** exist now:
 
 # P7.7 — Operational Diagnosability & Realtime Debuggability
 
-**Status: current.**
+**Status: closed/frozen on `40a1d92` (workflow `36594702224` green).** Closure report: `docs/reports/p7.7-freeze-candidate.md`.
 
 Make failures and runtime activity diagnosable across conversation execution, realtime transport, background work, triggers, tools/providers, and HTTP/Admin operations without leaking sensitive internals or introducing production infrastructure prematurely.
 
@@ -1930,16 +1930,18 @@ Introduce only when a concrete workflow requires more than current coalescing be
 
 ## P7.7 verification / acceptance
 
-- [ ] A failed agent response can provide a safe diagnostic reference; copied diagnostics are sufficient to locate the corresponding structured server failure.
-- [ ] Correlation remains server-owned; clients cannot supply trusted diagnostic/correlation identity.
-- [ ] Unexpected hosted-service failures preserve exception details server-side (not only exception type).
-- [ ] Sensitive data is not exposed in user-facing diagnostics or unsafe `ProblemDetails` fields.
-- [ ] HTTP/Admin errors can carry equivalent safe diagnostic identity where appropriate.
-- [ ] MessagePack remains the default realtime transport; configurable JSON realtime mode works for the essential conversation flow with equivalent semantic contracts.
-- [ ] Deterministic automated tests cover new diagnostic contracts and redaction behavior; frontend tests cover failure-detail/copy behavior.
-- [ ] Meaningful Synthetic E2E covers user-visible failure → diagnostics when practical.
-- [ ] Full existing deterministic gates remain green; Compose/SQLite smoke remains green if durable error metadata/storage changes.
-- [ ] Docs/design context synchronized after implementation; bounded P7.7 closure report produced before P8 begins.
+Observed closure evidence is in `docs/reports/p7.7-freeze-candidate.md`. Hosted workflow `36594702224` is green on `40a1d92`.
+
+- [x] A failed agent response can provide a safe diagnostic reference; copied diagnostics are sufficient to locate the corresponding structured server failure.
+- [x] Correlation remains server-owned; clients cannot supply trusted diagnostic/correlation identity.
+- [x] Unexpected hosted-service failures preserve exception details server-side (not only exception type).
+- [x] Sensitive data is not exposed in user-facing diagnostics or unsafe `ProblemDetails` fields.
+- [x] HTTP/Admin errors can carry equivalent safe diagnostic identity where appropriate.
+- [x] MessagePack remains the default realtime transport; configurable JSON realtime mode works for the essential conversation flow with equivalent semantic contracts.
+- [x] Deterministic automated tests cover new diagnostic contracts and redaction behavior; frontend tests cover failure-detail/copy behavior.
+- [x] Meaningful Synthetic E2E covers user-visible failure → diagnostics when practical.
+- [x] Full existing deterministic gates remain green; Compose/SQLite smoke remains green if durable error metadata/storage changes.
+- [x] Docs/design context synchronized after implementation; bounded P7.7 closure report produced before P8 begins.
 
 ## P7.7 stop condition
 
