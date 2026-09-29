@@ -69,7 +69,7 @@ public sealed class CompactionLifecycleTests
     }
 
     [Fact]
-    public async Task User_turn_proceeds_while_compaction_is_running_and_reattach_does_not_duplicate_it()
+    public async Task Deferred_user_turn_waits_through_detach_and_reattach_without_duplicate_compaction()
     {
         var entries = History(42);
         var store = new InMemoryMemoryStore();
@@ -161,6 +161,49 @@ public sealed class CompactionLifecycleTests
         Assert.Contains(
             runtime.Snapshot.Entries,
             entry => entry.Role == ConversationRole.Assistant && entry.Text.Contains(fact, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Paused_session_clears_deferred_turn_and_resumes_exactly_once_after_compaction()
+    {
+        var entries = History(42);
+        var store = new InMemoryMemoryStore();
+        var snapshot = Snapshot(entries);
+        await store.SaveAsync(snapshot, 0);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deferred = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recorder = new ConversationRecordingModel(new ScriptedLanguageModel(
+            compactionFixture: CompactionFixture.Late,
+            compactionRelease: release,
+            compactionStarted: started));
+        var output = new CapturingSessionOutput();
+        await using var runtime = Runtime(snapshot, store, recorder, output);
+        runtime.TestDeferredUserTurnEstablished = deferred;
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("first", Guid.Parse("019944af-0006-7000-8000-0000000000f5")));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, recorder.ConversationRequestCount);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("second", Guid.Parse("019944af-0006-7000-8000-0000000000f6")));
+        await deferred.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, recorder.ConversationRequestCount);
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Paused,
+            LifecycleTransitionSource.User,
+            "manual"));
+        release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(1, recorder.ConversationRequestCount);
+        Assert.True(await runtime.RequestLifecycleTransitionAsync(
+            SessionLifecycleStatus.Active,
+            LifecycleTransitionSource.User,
+            "resume"));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, recorder.ConversationRequestCount);
+        Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "second");
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("third", Guid.Parse("019944af-0006-7000-8000-0000000000f7")));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(3, recorder.ConversationRequestCount);
     }
 
     [Fact]

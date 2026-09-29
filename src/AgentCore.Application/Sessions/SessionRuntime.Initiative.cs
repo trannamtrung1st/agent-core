@@ -419,6 +419,7 @@ public sealed partial class SessionRuntime
 
         CancelBrainEvaluation();
         CancelCompletionEvaluation();
+        ClearDeferredUserTurn();
         _deactivated = true;
         _timerGeneration++;
         _turnGeneration++;
