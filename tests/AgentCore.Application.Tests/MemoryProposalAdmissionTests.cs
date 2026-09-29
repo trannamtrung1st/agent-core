@@ -183,11 +183,21 @@ public sealed class MemoryProposalAdmissionTests
     {
         var memories = Service();
         var proposal = Proposal(MemoryKind.Fact, "token", "sk-abcdefghijklmnopqrst", MemoryProposalSource.UserExplicit);
-        Assert.Equal(
-            MemoryAdmissionStatus.Rejected,
-            await MemoryAdmission.AdmitOneAsync(memories, Enabled(), SessionA, InstanceA, Profile(), [], Guid.NewGuid(), proposal, NullLogger.Instance));
+        await using var runtime = await RuntimeAsync(
+            memories,
+            Enabled(),
+            new ScriptedLanguageModel(
+                ["I'll remember that."],
+                memoryTurns: [[proposal]]));
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "Keep this token: sk-abcdefghijklmnopqrst",
+            Guid.Parse("019944af-0030-7000-8000-000000000016")));
+        await runtime.WaitUntilIdleAsync();
+
         Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit")));
-        Assert.Equal("Memory was not saved: token.", MemoryAdmissionPrompt.Render(MemoryAdmissionStatus.Rejected, "token"));
+        var text = AssistantText(runtime);
+        Assert.Contains("Memory was not saved: token.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory saved", text, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -55,6 +55,8 @@ TraceId         = infrastructure trace id only when a real Activity exists
 
 Clients cannot supply trusted diagnostic, correlation, or causation identity. JSON realtime is a diagnostic transport on the same hub and the same event contract. It is not a second protocol. A missed recurrence still coalesces to the latest due occurrence. `SkipMissed` and `CatchUp` are not implemented.
 
+**Pre-P8 memory admission.** Conversation memory is agent-proposed and Core-admitted. A memory policy enables scope; it does not store every proposal. Phrase matching is not the write authority. This does not start P8.
+
 ## Active phase
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is the active next implementation phase.
