@@ -2,7 +2,7 @@
 
 Ordered by current dependency and product value.
 
-Reviewed against `main` at `76818a9` on **2026-09-29**, then updated for the post-P7.6 Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md`. That follow-up is not a new freeze and is not hosted-green. P7.6 remains frozen on `17d89ae`.
+Reviewed against `main` at `76818a9` on **2026-09-29**, then updated for the post-P7.6 Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` and to insert **P7.7 — Operational Diagnosability & Realtime Debuggability** as the current implementation slice before P8. The Admin lifecycle follow-up is not a new freeze and is not hosted-green. P7.6 remains frozen on `17d89ae`. P7.7 does not reopen P7.6.
 
 ---
 
@@ -47,15 +47,17 @@ P7.5 is frozen on `70a5720`. Hosted workflow `36368766449` is green on that SHA.
 
 ## Current active phase
 
-**P8 — harness/platform extensibility.**
+**P7.7 — Operational Diagnosability & Realtime Debuggability.**
 
 P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA. Closure report: `docs/reports/p7.6-freeze-candidate.md`.
 
-A later Admin lifecycle follow-up is specified in `docs/reports/p76-admin-lifecycle-followup.md`. It does not move the P7.6 freeze SHA and does not start P8.
+P7.7 is a new bounded product/operational requirement discovered after P7.6. It is not a reopening of P7.6.
+
+A later Admin lifecycle follow-up is specified in `docs/reports/p76-admin-lifecycle-followup.md`. It remains a bounded follow-up, does not redefine P7.6, does not move the P7.6 freeze SHA, and does not start P7.7 or P8.
 
 P7.6 does **not** redefine what P7 or P7.5 previously meant or invalidate their closure evidence.
 
-When P8 begins, start from one concrete provider need and do not add a universal provider interface. This record does not start P8 implementation.
+**P8 — harness/platform extensibility** is next after P7.7. When P8 begins, start from one concrete provider need and do not add a universal provider interface. This record does not start P7.7 or P8 implementation.
 
 ---
 
@@ -64,16 +66,17 @@ When P8 begins, start from one concrete provider need and do not add a universal
 1. **P0–P7 — closed/frozen.**
 2. **P7.5 — architecture consolidation and infrastructure readiness — frozen on `70a5720`.**
 3. **P7.6 — Admin usability closure — frozen on `17d89ae`.**
-4. **P8 — harness/platform extensibility — next.**
-5. **P9 — sandbox evolution when requirements justify it.**
-6. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
+4. **P7.7 — Operational Diagnosability & Realtime Debuggability — current.**
+5. **P8 — harness/platform extensibility — next after P7.7.**
+6. **P9 — sandbox evolution when requirements justify it.**
+7. **P10 — multi-user + production infrastructure when real hosting/pilot requirements justify it.**
 
 Do not reopen a frozen phase without either:
 
 - a reproducible regression; or
 - a concrete new product requirement that belongs there rather than in a later phase.
 
-P7.6 is such a new bounded product requirement. Keep its changes attributable to P7.6 rather than rewriting frozen P7/P7.5 history.
+P7.6 and P7.7 are examples of new bounded requirements after frozen phases. Keep their changes attributable to the correct phase rather than rewriting frozen P7/P7.5/P7.6 history.
 
 ---
 
@@ -1773,13 +1776,184 @@ Production-shaped properties that **should** exist now:
 
 ---
 
+# P7.7 — Operational Diagnosability & Realtime Debuggability
+
+**Status: current.**
+
+Make failures and runtime activity diagnosable across conversation execution, realtime transport, background work, triggers, tools/providers, and HTTP/Admin operations without leaking sensitive internals or introducing production infrastructure prematurely.
+
+Desired flow:
+
+```text
+user-visible failure
+        ↓
+safe DiagnosticId / CorrelationId
+        ↓
+structured server logs / Activity trace
+        ↓
+Session / Response / Trigger / WorkItem / Agent Instance context
+        ↓
+developer can locate the real failure quickly
+```
+
+## Failure identity and correlation
+
+Intended semantics:
+
+```text
+DiagnosticId
+= one specific failure occurrence that can safely be shown/copied
+
+CorrelationId
+= existing logical operation / turn / causal-flow correlation
+
+TraceId
+= infrastructure/distributed trace identifier when a real Activity exists
+```
+
+Requirements:
+
+- server-owned IDs;
+- preserve the existing server-owned correlation authority boundary;
+- clients must not invent trusted correlation/diagnostic identity;
+- do not fabricate a TraceId when no Activity/trace exists;
+- relate IDs where useful without treating them as interchangeable.
+
+A safe diagnostic reference should be available for meaningful failures across conversation/model response execution, realtime errors, trigger/background execution, WorkItem execution, tool/provider execution, and relevant HTTP/Admin failures.
+
+Prefer a first-class safe diagnostic field where appropriate rather than hiding identity inside arbitrary extension metadata.
+
+## Structured failure logging
+
+- [ ] Normalize meaningful unexpected-failure logging so server-side failure logs retain the actual exception object/stack trace internally and include relevant stable identifiers when available, such as:
+  ```text
+  DiagnosticId
+  CorrelationId
+  TraceId
+  SessionId
+  ResponseId
+  AgentInstanceId
+  TriggerRegistrationId / TriggerOccurrenceId
+  WorkItemId
+  ErrorCategory
+  ErrorCode
+  ```
+- [ ] Do not require every log event to contain every ID.
+- [ ] Close the observed inconsistency: some hosted/background services log only exception type while conversation execution preserves the exception object.
+- [ ] Preserve existing safe redaction/content-logging rules.
+
+## Safe failure UX
+
+- [ ] For a failed agent response or other user-visible runtime failure, provide a subtle diagnostic affordance rather than exposing raw internals (for example: response failed, user-safe category/message, optional **Error details** / copy diagnostics).
+- [ ] Copy/details may expose only safe fields such as DiagnosticId, CorrelationId, SessionId, ResponseId, error category/code, and relevant WorkItem/Trigger identifiers when useful.
+- [ ] Never expose through normal UI: stack traces; raw provider responses/bodies; prompts or hidden reasoning; credentials/tokens/cookies/API keys; filesystem/internal host paths; unrestricted request/response payloads; other sensitive implementation details.
+- [ ] Where consistent with the durable response/error model, safe diagnostic metadata remains inspectable after reload/history without turning raw exceptions into durable conversation content.
+- [ ] Apply equivalent safe diagnostic behavior to HTTP/Admin `ProblemDetails` where appropriate.
+- [ ] After UI behavior settles: review/polish via the existing Impeccable workflow; update frontend implementation/design documentation if interaction rules changed; sync design context/system only after observed UI is final.
+
+## Realtime JSON diagnostic mode
+
+- [ ] Keep SignalR/MessagePack as the canonical/default production-like realtime path.
+- [ ] Add development/debug configuration so the frontend connection may use SignalR JSON instead of MessagePack for WebSocket inspection in browser DevTools.
+- [ ] Rules: MessagePack = canonical/default; JSON = optional diagnostic transport only.
+- [ ] JSON must not become a second semantic protocol, separate hub, separate event contract, or separate lifecycle/reconnect implementation.
+- [ ] Both transports must preserve the same DTO/event semantics, protocol version, sequencing, correlation/causation behavior, reconnect/replay behavior, and error model.
+- [ ] Keep comprehensive realtime coverage on MessagePack; add a smaller JSON parity/smoke gate for the essential conversation path only (no full duplicate JSON+MessagePack CI matrix).
+
+## Observability foundation
+
+- [ ] Build on existing `RuntimeTelemetry`, `ActivitySource`, `Meter`, `OperationalDiagnostics`, redaction rules, and Observability configuration — no parallel telemetry subsystem.
+- [ ] Wire or complete internal tracing/metrics/logging behavior required for diagnostics; production observability infrastructure (Grafana/Tempo/Jaeger/etc., general logging platform) remains deferred.
+
+## Scheduling / background-service stance (unchanged)
+
+P7.7 does **not** replace the current Trigger/Occurrence/WorkItem scheduling architecture:
+
+```text
+TriggerRegistration
+    ↓
+TriggerOccurrence
+    ↓
+routing
+    ↓
+WorkItem
+    ↓
+Agent execution
+```
+
+Hosted services remain infrastructure wake-up/execution mechanisms. Do not add Hangfire, Quartz.NET, a distributed scheduler, Redis, a queue broker, or another background-job framework in P7.7.
+
+Architecture direction:
+
+```text
+Agent Core owns:
+- trigger semantics
+- ownership
+- authorization/policy
+- recurrence meaning
+- occurrence admission/dedupe
+- WorkItem lifecycle
+- approvals
+- agent execution semantics
+
+Infrastructure may later own:
+- wake-up mechanics
+- distributed trigger acquisition
+- worker dispatch
+- clustering/failover
+```
+
+A future Hangfire/Quartz/distributed implementation, if justified, should sit underneath an appropriate infrastructure seam rather than replace Agent Core's Trigger/Occurrence/WorkItem domain model.
+
+Deferred scheduling work (not P7.7):
+
+```text
+MisfirePolicy:
+- CoalesceLatest (current effective behavior)
+- SkipMissed
+- CatchUp
+```
+
+Introduce only when a concrete workflow requires more than current coalescing behavior.
+
+## P7.7 non-goals
+
+- Hangfire, Quartz.NET, distributed scheduler/workers, Redis/message broker;
+- production Grafana/Tempo/Jaeger/etc. deployment or general production logging platform;
+- PostgreSQL migration;
+- P8 provider/plugin/browser implementation, universal provider abstraction;
+- changes to Trigger/Occurrence/WorkItem semantic ownership;
+- exposing raw internal exceptions to users;
+- full duplicate JSON+MessagePack CI matrix.
+
+## P7.7 verification / acceptance
+
+- [ ] A failed agent response can provide a safe diagnostic reference; copied diagnostics are sufficient to locate the corresponding structured server failure.
+- [ ] Correlation remains server-owned; clients cannot supply trusted diagnostic/correlation identity.
+- [ ] Unexpected hosted-service failures preserve exception details server-side (not only exception type).
+- [ ] Sensitive data is not exposed in user-facing diagnostics or unsafe `ProblemDetails` fields.
+- [ ] HTTP/Admin errors can carry equivalent safe diagnostic identity where appropriate.
+- [ ] MessagePack remains the default realtime transport; configurable JSON realtime mode works for the essential conversation flow with equivalent semantic contracts.
+- [ ] Deterministic automated tests cover new diagnostic contracts and redaction behavior; frontend tests cover failure-detail/copy behavior.
+- [ ] Meaningful Synthetic E2E covers user-visible failure → diagnostics when practical.
+- [ ] Full existing deterministic gates remain green; Compose/SQLite smoke remains green if durable error metadata/storage changes.
+- [ ] Docs/design context synchronized after implementation; bounded P7.7 closure report produced before P8 begins.
+
+## P7.7 stop condition
+
+P7.7 is complete when a developer can start from a user-visible failure and reliably trace it through safe IDs into structured server diagnostics, realtime JSON can be enabled for debugging without changing realtime semantics, sensitive internals remain protected, existing architecture is preserved, and deterministic/hosted closure gates are green.
+
+After P7.7 is frozen, **P8 — harness/platform extensibility** becomes active again with the existing browser/provider-extensibility direction.
+
+---
+
 # P8 — Harness/platform extensibility
 
-**Status: next.**
+**Status: next after P7.7.**
 
 P7.6 is frozen on `17d89ae`. Hosted workflow `36427670239` is green on that SHA.
 
-When P8 begins, start from one concrete provider need.
+When P8 begins (after P7.7), start from one concrete provider need.
 
 The Product / Architecture North Star above is not itself a P8 backlog. P8 must remain evidence-driven and narrowly scoped to real extension seams.
 
@@ -2069,7 +2243,7 @@ microservices because modules exist
 
 # Deferred / optional provider work
 
-These items do not block P8.
+These items do not block P7.7 or P8.
 
 ## Real P3 provider verification
 
@@ -2157,26 +2331,29 @@ Keep this compact. It is orientation, not another roadmap.
 - [x] P7 Harness Admin: draft/version/publish, resources, instances/persona, memory/automation administration, validation/evaluation, history/rollback.
 - [x] P7.5 architecture/infrastructure-readiness consolidation frozen on `70a5720`.
 - [x] P7.6 Admin usability closure frozen on `17d89ae`.
+- [ ] P7.7 operational diagnosability & realtime debuggability.
 
 ---
 
 # Next implementation item
 
-**P8 — harness/platform extensibility** is next.
+**P7.7 — Operational Diagnosability & Realtime Debuggability** is current.
 
 Bound it to:
 
 ```text
-1. evaluate browser automation as the first concrete provider/integration need
-2. choose the narrowest viable Playwright, Playwright MCP, or adapter boundary
-3. preserve registry / policy / execution separation
-4. preserve approval, credential, profile-isolation, lifecycle, and ownership boundaries
-5. add only the extension seam and failure handling the concrete browser provider requires
-6. keep future identity/application/task/team concepts deferred
+1. server-owned DiagnosticId / CorrelationId / TraceId semantics and safe user-facing diagnostics
+2. structured failure logging with stable IDs and preserved exception detail server-side
+3. optional SignalR JSON diagnostic transport with MessagePack remaining canonical
+4. observability wiring on existing RuntimeTelemetry/Activity/redaction — no production stack
+5. preserve Trigger/Occurrence/WorkItem ownership and current hosted-service scheduling
+6. deterministic + frontend tests, closure report, then hand off to P8
 ```
+
+**P8 — harness/platform extensibility** is next after P7.7 (browser/provider seam; see P8 section).
 
 P0–P7, P7.5, and P7.6 remain frozen. Do not rewrite their closure evidence or treat the Product / Architecture North Star as implemented behavior.
 
-P7.6 is frozen on `17d89ae`. P9 and P10 remain requirement-triggered and must not be pulled forward to support speculative P8 work.
+P7.6 is frozen on `17d89ae`. P9 and P10 remain requirement-triggered and must not be pulled forward to support speculative P7.7 or P8 work.
 
-Do **not** begin P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+Do **not** begin P7.7 or P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
