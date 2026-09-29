@@ -1,33 +1,32 @@
 using AgentCore.Application.Memory;
+using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
-    private ExplicitUserMemoryCaptureOutcome _explicitMemoryCaptureOutcome = ExplicitUserMemoryCaptureOutcome.None;
-
-    private async Task TryCaptureExplicitUserMemoryAsync(
-        ConversationEntry userEntry,
-        string text,
+    private async Task<string?> ApplyMemoryProposalsAsync(
+        IReadOnlyList<MemoryProposal>? proposals,
         CancellationToken cancellationToken)
     {
-        _explicitMemoryCaptureOutcome = ExplicitUserMemoryCaptureOutcome.None;
-        if (_structuredMemory is null)
+        if (_structuredMemory is null || proposals is not { Count: > 0 })
         {
-            return;
+            return null;
         }
 
-        _explicitMemoryCaptureOutcome = await ExplicitUserMemoryAdmission.TryAdmitAsync(
+        var sourceEntry = _snapshot.Entries.LastOrDefault(entry => entry.Role == ConversationRole.User);
+        var results = await MemoryAdmission.AdmitAsync(
             _structuredMemory,
             _snapshot.Definition,
             SessionId,
             _snapshot.AgentInstanceId,
             _profile,
             _snapshot.Entries,
-            userEntry.EntryId,
-            text,
+            sourceEntry?.EntryId ?? Guid.Empty,
+            proposals,
             _logger,
             cancellationToken).ConfigureAwait(false);
+        return MemoryAdmissionPrompt.Render(results);
     }
 }

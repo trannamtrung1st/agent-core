@@ -6,6 +6,10 @@ using AgentCore.Domain.Memory;
 
 namespace AgentCore.Application.Memory;
 
+/// <summary>
+/// Retired phrase matcher. Durable memory is not created from these patterns.
+/// MemoryAdmission admits agent or application proposals instead.
+/// </summary>
 public static partial class ExplicitUserMemoryRequests
 {
     public sealed record Parsed(MemoryKind Kind, string Subject, string Content);

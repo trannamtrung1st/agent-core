@@ -1,4 +1,3 @@
-using AgentCore.Application.Memory;
 using AgentCore.Application.Triggers;
 using AgentCore.Domain.Definitions;
 
@@ -48,7 +47,6 @@ public sealed record AgentContext(
     long LastEntrySequence = 0,
     IReadOnlyList<Domain.Memory.StructuredMemoryItem>? LearnedMemories = null,
     AgentIdentity? Persona = null,
-    ExplicitUserMemoryCaptureOutcome ExplicitMemoryCapture = ExplicitUserMemoryCaptureOutcome.None,
     ScheduleConversationContext? ScheduleConversation = null,
     ScheduleDraftContext? ScheduleDraft = null,
     bool DetachedExecution = false)

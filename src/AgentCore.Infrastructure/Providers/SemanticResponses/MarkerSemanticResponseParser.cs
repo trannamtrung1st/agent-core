@@ -1,4 +1,5 @@
 using System.Text;
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.Providers.SemanticResponses;
@@ -104,6 +105,7 @@ internal sealed class MarkerSemanticResponseParser
 
         var display = new StringBuilder();
         var blocks = new List<ModelResponseBlock>();
+        var memory = new List<MemoryProposal>();
         string? speech = null;
         var speechLocked = false;
         var speechNone = false;
@@ -165,6 +167,10 @@ internal sealed class MarkerSemanticResponseParser
             {
                 blocks.Add(new ModelResponseBlock(ModelResponseBlockKind.ArtifactReference, payload, ArtifactId: payload));
             }
+            else if (kind.Equals("memory", StringComparison.OrdinalIgnoreCase))
+            {
+                memory.AddRange(MemoryProposalCodec.ParseMarkerPayload(payload));
+            }
             else
             {
                 blocks.Add(new ModelResponseBlock(ModelResponseBlockKind.Unknown));
@@ -175,14 +181,14 @@ internal sealed class MarkerSemanticResponseParser
 
         if (speechNone)
         {
-            return new ModelSemanticResponse(display.ToString(), new ModelSpeechProjection(ModelSpeechMode.None, null), blocks);
+            return new ModelSemanticResponse(display.ToString(), new ModelSpeechProjection(ModelSpeechMode.None, null), blocks, memory);
         }
 
         var spoken = string.IsNullOrEmpty(speech) ? null : speech;
         var projection = spoken is null
             ? new ModelSpeechProjection(ModelSpeechMode.Same, null)
             : new ModelSpeechProjection(ModelSpeechMode.Custom, spoken);
-        return new ModelSemanticResponse(display.ToString(), projection, blocks);
+        return new ModelSemanticResponse(display.ToString(), projection, blocks, memory);
     }
 
     private static bool HasUnclosedMarker(string work)

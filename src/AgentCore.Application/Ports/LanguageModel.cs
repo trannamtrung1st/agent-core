@@ -1,3 +1,5 @@
+using AgentCore.Application.Memory;
+
 namespace AgentCore.Application.Ports;
 
 public enum ProviderErrorCode
@@ -85,7 +87,8 @@ public sealed record ModelResponseBlock(
 public sealed record ModelSemanticResponse(
     string DisplayText,
     ModelSpeechProjection Speech,
-    IReadOnlyList<ModelResponseBlock> Blocks);
+    IReadOnlyList<ModelResponseBlock> Blocks,
+    IReadOnlyList<MemoryProposal>? Memory = null);
 
 /// <summary>
 /// Incremental visible conversational text for a request that carries <see cref="ModelResponseContract"/>.

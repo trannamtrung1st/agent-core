@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.Providers.SemanticResponses;
@@ -53,10 +54,43 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
-            response = new ModelSemanticResponse(display, speech, blocks);
+            if (!TryMemory(root, out var memory))
+            {
+                return false;
+            }
+
+            response = new ModelSemanticResponse(display, speech, blocks, memory);
             safeFailure = string.Empty;
             return true;
         }
+    }
+
+    private static bool TryMemory(JsonElement root, out IReadOnlyList<MemoryProposal> memory)
+    {
+        memory = [];
+        if (!root.TryGetProperty("memory", out var memoryEl))
+        {
+            return true;
+        }
+
+        if (memoryEl.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var proposals = new List<MemoryProposal>();
+        foreach (var item in memoryEl.EnumerateArray())
+        {
+            if (!MemoryProposalCodec.TryRead(item, out var proposal) || proposal is null)
+            {
+                return false;
+            }
+
+            proposals.Add(proposal);
+        }
+
+        memory = proposals;
+        return true;
     }
 
     private static bool TrySpeech(JsonElement root, out ModelSpeechProjection speech)

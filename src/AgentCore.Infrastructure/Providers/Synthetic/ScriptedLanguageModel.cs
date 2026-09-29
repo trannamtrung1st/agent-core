@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
@@ -33,6 +34,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly CompactionFixture _compactionFixture;
     private readonly TaskCompletionSource? _compactionRelease;
     private readonly TaskCompletionSource? _compactionStarted;
+    private readonly Queue<IReadOnlyList<MemoryProposal>> _memoryTurns;
     private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
     private static readonly ITriggerCommandAuthorizer ScheduleAuthorizer = new HeuristicTriggerCommandAuthorizer();
     private const string DiagnosticFailureMarker = "synthetic-fail-turn";
@@ -57,7 +59,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         bool completionProviderFailed = false,
         CompactionFixture compactionFixture = CompactionFixture.Echo,
         TaskCompletionSource? compactionRelease = null,
-        TaskCompletionSource? compactionStarted = null)
+        TaskCompletionSource? compactionStarted = null,
+        IReadOnlyList<IReadOnlyList<MemoryProposal>>? memoryTurns = null)
     {
         _chunks = chunks ?? DefaultChunks;
         _release = releaseAfterFirstChunk;
@@ -68,6 +71,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         _compactionFixture = compactionFixture;
         _compactionRelease = compactionRelease;
         _compactionStarted = compactionStarted;
+        _memoryTurns = new Queue<IReadOnlyList<MemoryProposal>>(memoryTurns ?? []);
     }
 
     public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: true);
@@ -140,13 +144,19 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         var chunks = Select(request, lastUser);
+        var proposals = TakeMemoryTurn();
         if (RequestsNativeJson(request))
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(400, cancellationToken).ConfigureAwait(false);
-            yield return new ModelTextDelta(ToNativeJson(lastUser, chunks));
+            yield return new ModelTextDelta(ToNativeJson(lastUser, chunks, proposals));
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
+        }
+
+        if (proposals.Count > 0)
+        {
+            chunks = [..chunks, MemoryProposalCodec.Marker(proposals)];
         }
 
         for (var index = 0; index < chunks.Count; index++)
@@ -1148,7 +1158,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             message.Role != ModelRole.System
             || !message.Text.Contains(AssistantResponseSchema.CompatibilityInstructionPrefix, StringComparison.Ordinal));
 
-    private static string ToNativeJson(string lastUser, IReadOnlyList<string> chunks)
+    private IReadOnlyList<MemoryProposal> TakeMemoryTurn() =>
+        _memoryTurns.Count == 0 ? [] : _memoryTurns.Dequeue();
+
+    private static string ToNativeJson(string lastUser, IReadOnlyList<string> chunks, IReadOnlyList<MemoryProposal> proposals)
     {
         if (lastUser.Contains("[test:speech-none]", StringComparison.OrdinalIgnoreCase))
         {
@@ -1161,7 +1174,18 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         var display = string.Concat(chunks);
-        return "{\"displayText\":" + JsonSerializer.Serialize(display) + ",\"speech\":{\"mode\":\"same\",\"text\":null},\"blocks\":[]}";
+        var memory = proposals.Count == 0
+            ? "[]"
+            : JsonSerializer.Serialize(proposals.Select(proposal => new
+            {
+                operation = proposal.Operation.ToString(),
+                kind = proposal.Kind.ToString(),
+                subject = proposal.Subject,
+                content = proposal.Content,
+                scopeHint = proposal.ScopeHint?.ToString(),
+                source = proposal.Source.ToString()
+            }));
+        return "{\"displayText\":" + JsonSerializer.Serialize(display) + ",\"speech\":{\"mode\":\"same\",\"text\":null},\"blocks\":[],\"memory\":" + memory + "}";
     }
 
     private IReadOnlyList<string> Select(ModelRequest request, string lastUser)

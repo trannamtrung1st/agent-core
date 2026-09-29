@@ -24,7 +24,8 @@ internal static class AssistantResponseSchema
             + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
             + "Use [[speech:none]] when the answer must stay visual-only. "
             + "Optional rich blocks use [[md:...]], [[attachment:<id>]], or [[artifact:<id>]]. "
-            + "Do not include hidden reasoning. Do not emit JSON.";
+            + "Do not include hidden reasoning. Do not emit JSON. "
+            + "Do not claim that memory was saved. Propose durable memory only with [[memory:[...]]] using operation, kind, subject, content, and source. ";
     }
 
     public const string SchemaName = "agent_core_assistant_response";
@@ -33,7 +34,7 @@ internal static class AssistantResponseSchema
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["displayText", "speech", "blocks"],
+          "required": ["displayText", "speech", "blocks", "memory"],
           "properties": {
             "displayText": {
               "type": "string",
@@ -52,6 +53,23 @@ internal static class AssistantResponseSchema
                 "text": {
                   "type": ["string", "null"],
                   "description": "Required concise spoken wording when mode is custom; otherwise null."
+                }
+              }
+            },
+            "memory": {
+              "type": "array",
+              "description": "Optional learned-memory proposals. Empty when nothing should be remembered. The runtime admits or rejects each item; display text must not claim a save.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["operation", "kind", "subject", "content", "scopeHint", "source"],
+                "properties": {
+                  "operation": { "type": "string", "enum": ["upsert", "delete"] },
+                  "kind": { "type": "string", "enum": ["fact", "preference", "goal", "decision", "openLoop"] },
+                  "subject": { "type": "string" },
+                  "content": { "type": "string" },
+                  "scopeHint": { "type": ["string", "null"], "enum": ["session", "identityUser", "user", null] },
+                  "source": { "type": "string", "enum": ["userExplicit", "agentInferred", "application", "admin"] }
                 }
               }
             },

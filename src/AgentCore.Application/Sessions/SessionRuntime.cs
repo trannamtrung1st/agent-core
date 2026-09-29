@@ -1511,7 +1511,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             return;
                         }
 
-                        await TryCaptureExplicitUserMemoryAsync(userEntry, text, ct).ConfigureAwait(false);
                         await TryStartPendingUserBatchAsync(cause, ct).ConfigureAwait(false);
                     }
                     catch (Exception)
@@ -2259,7 +2258,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LastEntrySequence: _snapshot.DurableLastEntrySequence,
                     LearnedMemories: learned,
                     Persona: _snapshot.PinnedPersona,
-                    ExplicitMemoryCapture: _explicitMemoryCaptureOutcome,
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext);
                 var brainStarted = Stopwatch.GetTimestamp();
@@ -3635,6 +3633,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ResponseProgressMessages.Finalizing,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        var memoryNote = await ApplyMemoryProposalsAsync(semantic.Memory, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(memoryNote))
+        {
+            semantic = semantic with
+            {
+                DisplayText = semantic.DisplayText.TrimEnd() + "\n" + memoryNote
+            };
         }
 
         ResponseEnvelope mapped;

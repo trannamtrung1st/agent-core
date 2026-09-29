@@ -82,8 +82,8 @@ public sealed class ExplicitUserMemoryTests
         }
 
         Assert.Equal(
-            ExplicitUserMemoryCaptureOutcome.Stored,
-            await ExplicitUserMemoryAdmission.TryAdmitAsync(
+            MemoryAdmissionStatus.Stored,
+            await MemoryAdmission.AdmitOneAsync(
                 memories,
                 definition,
                 SessionOne,
@@ -91,11 +91,11 @@ public sealed class ExplicitUserMemoryTests
                 Profile(),
                 [],
                 Guid.Parse("019944af-0020-7000-8000-0000000000a8"),
-                "Please remember that my project codename is Atlas.",
+                Proposal("project codename", CodenameFact),
                 logger));
         Assert.Equal(
-            ExplicitUserMemoryCaptureOutcome.Updated,
-            await ExplicitUserMemoryAdmission.TryAdmitAsync(
+            MemoryAdmissionStatus.Updated,
+            await MemoryAdmission.AdmitOneAsync(
                 memories,
                 definition,
                 SessionOne,
@@ -103,7 +103,7 @@ public sealed class ExplicitUserMemoryTests
                 Profile(),
                 [],
                 Guid.Parse("019944af-0020-7000-8000-0000000000a9"),
-                "Please remember that my project codename is Borealis.",
+                Proposal("project codename", "Borealis"),
                 logger));
 
         var identityItems = await memories.SearchIdentityUserAsync(
@@ -131,7 +131,11 @@ public sealed class ExplicitUserMemoryTests
             var definition = Enabled();
             await sessions.SaveAsync(Snapshot(SessionOne, definition), 0);
             var memories = Service(memoryStore, clock, 24);
-            var model = new ScriptedLanguageModel();
+            var model = new ScriptedLanguageModel(memoryTurns:
+            [
+                [Proposal("ALPHA_SENTINEL", "ALPHA_SENTINEL")],
+                [Proposal("BETA_SENTINEL", "BETA_SENTINEL")]
+            ]);
 
             await using (var runtime = Runtime(
                 (await sessions.LoadAsync(SessionOne))!,
@@ -194,7 +198,11 @@ public sealed class ExplicitUserMemoryTests
             await sessions.SaveAsync(Snapshot(SessionOne, definition), 0);
             await sessions.SaveAsync(Snapshot(SessionTwo, definition), 0);
             var memories = Service(memoryStore, clock, 24);
-            var model = new ScriptedLanguageModel();
+            var model = new ScriptedLanguageModel(memoryTurns:
+            [
+                [Proposal("project codename", CodenameFact)],
+                [Proposal("project codename", corrected)]
+            ]);
 
             await using (var runtime = Runtime(
                 (await sessions.LoadAsync(SessionOne))!,
@@ -273,7 +281,10 @@ public sealed class ExplicitUserMemoryTests
             await sessions.SaveAsync(Snapshot(SessionOne, definition), 0);
             await sessions.SaveAsync(Snapshot(SessionTwo, definition), 0);
             var memories = Service(memoryStore, clock, 24);
-            var captureModel = new RecordingLanguageModel(new ScriptedLanguageModel());
+            var captureModel = new RecordingLanguageModel(new ScriptedLanguageModel(memoryTurns:
+            [
+                [Proposal("project codename", CodenameFact)]
+            ]));
 
             await using (var runtime = Runtime(
                 (await sessions.LoadAsync(SessionOne))!,
@@ -289,12 +300,11 @@ public sealed class ExplicitUserMemoryTests
                 await runtime.WaitUntilIdleAsync();
                 var captureRequest = captureModel.LastRequest;
                 Assert.NotNull(captureRequest);
-                Assert.Contains(
-                    ExplicitUserMemoryCapturePrompt.Render(ExplicitUserMemoryCaptureOutcome.Stored)!,
-                    captureRequest.Messages.Select(message => message.Text),
-                    StringComparer.Ordinal);
-                Assert.Contains("cross-session", captureRequest.Messages.Single(message =>
-                    message.Text.StartsWith("Explicit memory capture", StringComparison.Ordinal)).Text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(
+                    captureRequest.Messages,
+                    message => message.Text.Contains("Explicit memory capture", StringComparison.Ordinal));
+                var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+                Assert.Contains("Memory saved for later sessions: project codename.", assistant.Text, StringComparison.Ordinal);
             }
 
             var admission = Admission();
@@ -436,6 +446,15 @@ public sealed class ExplicitUserMemoryTests
             Now,
             Now,
             AgentInstanceId: Instance);
+
+    private static MemoryProposal Proposal(string subject, string content) =>
+        new(
+            MemoryProposalOperation.Upsert,
+            MemoryKind.Fact,
+            subject,
+            content,
+            null,
+            MemoryProposalSource.AgentInferred);
 
     private static MemoryAdmissionContext Admission() =>
         new("application", [], new HashSet<string>(StringComparer.Ordinal));
