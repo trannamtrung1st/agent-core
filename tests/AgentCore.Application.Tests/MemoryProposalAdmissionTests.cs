@@ -201,6 +201,27 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
+    public async Task Custom_speech_carries_the_same_memory_result_as_the_display()
+    {
+        var memories = Service();
+        await using var runtime = await RuntimeAsync(
+            memories,
+            Enabled(),
+            new ScriptedLanguageModel(
+                ["Noted.[[speech:I'll remember that.]]"],
+                memoryTurns: [[Proposal(MemoryKind.Fact, "token", "sk-abcdefghijklmnopqrst", MemoryProposalSource.UserExplicit)]]));
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "Store the token.",
+            Guid.Parse("019944af-0030-7000-8000-000000000017")));
+        await runtime.WaitUntilIdleAsync();
+
+        var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Contains("Memory was not saved: token.", assistant.Text, StringComparison.Ordinal);
+        Assert.Contains("Memory was not saved: token.", assistant.Envelope?.SpeechText, StringComparison.Ordinal);
+        Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit")));
+    }
+
+    [Fact]
     public async Task Another_instance_or_profile_cannot_read_the_promoted_memory()
     {
         var memories = Service();

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.Providers.SemanticResponses;
@@ -198,7 +199,28 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         string.Equals(peeked.DisplayText, final.DisplayText, StringComparison.Ordinal)
         && peeked.Blocks.Count == final.Blocks.Count
         && peeked.Speech.Mode == final.Speech.Mode
-        && string.Equals(peeked.Speech.Text, final.Speech.Text, StringComparison.Ordinal);
+        && string.Equals(peeked.Speech.Text, final.Speech.Text, StringComparison.Ordinal)
+        && MemoryMatches(peeked.Memory, final.Memory);
+
+    private static bool MemoryMatches(IReadOnlyList<MemoryProposal>? left, IReadOnlyList<MemoryProposal>? right)
+    {
+        var first = left ?? [];
+        var second = right ?? [];
+        if (first.Count != second.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < first.Count; index++)
+        {
+            if (first[index] != second[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static ModelFailed Fail() =>
         new(new ProviderFailure(ProviderErrorCode.InvalidResponse, "Malformed assistant envelope."));

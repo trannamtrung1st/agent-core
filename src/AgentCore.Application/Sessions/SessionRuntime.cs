@@ -3638,9 +3638,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var memoryNote = await ApplyMemoryProposalsAsync(semantic.Memory, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(memoryNote))
         {
+            var speech = semantic.Speech;
+            if (speech is { Mode: ModelSpeechMode.Custom, Text: { Length: > 0 } spoken })
+            {
+                speech = speech with { Text = spoken.TrimEnd() + "\n" + memoryNote };
+            }
+
             semantic = semantic with
             {
-                DisplayText = semantic.DisplayText.TrimEnd() + "\n" + memoryNote
+                DisplayText = semantic.DisplayText.TrimEnd() + "\n" + memoryNote,
+                Speech = speech
             };
         }
 
