@@ -29,17 +29,26 @@ After `9aae0aa`, the definition lifecycle gate now also covers legacy compatibil
 
 Hosted Synthetic workflow [`36517595888`](https://github.com/trannamtrung1st/agent-core/actions/runs/36517595888) failed on `2db053b`. Domain, Infrastructure, Application, API, and Compose smoke passed. The frontend step failed on two stale resource-import tests and the Admin publish journey timing out at 20 seconds. Those repairs landed in `9aae0aa` and `2e1cb58` (New Instance filtering, package-root import tests, publish-journey timing, and the full single-process Admin lifecycle gate).
 
-**Hosted closure (this follow-up):** Synthetic workflow [`36531463014`](https://github.com/trannamtrung1st/agent-core/actions/runs/36531463014) is green on behavior SHA `2e1cb58` (~22m). Synthetic offline gates and Compose smoke both succeeded.
-
-Docs-only commit `6226202` triggered [`36534124772`](https://github.com/trannamtrung1st/agent-core/actions/runs/36534124772), which failed one API test (`WorkItemApiTests.Owner_can_list_inspect_cancel_decide_and_read_result_without_private_payloads`): a pre-existing race where `DurableWorkHostedService` could terminalize a seeded queued WorkItem before the stale-revision cancel assertion (expected `409`, observed `400`). Repair `6eb0686` isolates that contract test with `DurableSqliteHostFactory(runScheduler: false)` (local: 30× single-test repeat, full `AgentCore.Api.Tests` 243/243).
-
 Admin modal confirmations and structured blocked-delete presentation shipped in `b0f3b0a` (shared `confirmAction`); design context documents the reusable confirmation rule in `.agents/context/DESIGN.md`.
 
-**Hosted regression (not WorkItem isolation):** Synthetic workflow [`36537455844`](https://github.com/trannamtrung1st/agent-core/actions/runs/36537455844) on `6eb0686` failed `e2e/long-session-compaction.spec.ts` (expected `P4A_LONG_FACT`, observed “I do not have a code word.”). Domain, Infrastructure, Application, API, frontend unit/build, and Compose had already passed. Root cause: a compaction → next-turn handoff race — Chat can show Ready while `LaunchCompaction()` is still in flight, so a fast user turn can build its prompt after an early fact has left `PromptContextBuilder.MaxHistoryEntries` but before the compacted summary commits. Repair defers model/brain launch for the whole active compaction flight (including incremental catch-up passes), without blocking visible Ready during normal idle compaction. Follow-up on `11c6047` tightened defer/drain to flight lifetime rather than only the post-provider commit window.
+## Hosted evidence chain
 
-**Final hosted evidence:** pending a green Synthetic run on the compaction handoff fix — do not record final P7.6 follow-up closure until that run succeeds.
+This follow-up is **closed**. The historical P7.6 freeze remains `17d89ae`; the rows below are post-freeze repairs and hosted verification, not a new freeze SHA.
 
-This follow-up stops after that green hosted run unless a later regression appears. The historical P7.6 freeze remains `17d89ae`.
+| Workflow run | SHA / repair | Outcome |
+| --- | --- | --- |
+| [`36531463014`](https://github.com/trannamtrung1st/agent-core/actions/runs/36531463014) | `2e1cb58` | **Green** — Admin lifecycle behavior baseline (offline Synthetic gates + Compose smoke). |
+| [`36534124772`](https://github.com/trannamtrung1st/agent-core/actions/runs/36534124772) | docs on `6226202` | **Failed** — `WorkItemApiTests` race: `DurableWorkHostedService` could terminalize a seeded queued WorkItem before the stale-revision cancel assertion (`409` expected, `400` observed). |
+| — | `6eb0686` | **Repair** — isolate WorkItem API contract test with `DurableSqliteHostFactory(runScheduler: false)`. |
+| [`36537455844`](https://github.com/trannamtrung1st/agent-core/actions/runs/36537455844) | `6eb0686` | **Failed** — `e2e/long-session-compaction.spec.ts` (compaction → next-turn handoff race; not WorkItem isolation). |
+| — | `11c6047` | **Repair** — defer user brain/model launch during compaction commit window. |
+| — | `85b31c4` | **Repair** — defer for the whole compaction flight through incremental catch-up; drain only when the flight ends. |
+| — | `51bb832` | **Repair** — `ClearDeferredUserTurn()` on pause/deactivate; durable trailing-user recovery owns resume. |
+| [`36546190363`](https://github.com/trannamtrung1st/agent-core/actions/runs/36546190363) | `51bb832` | **Green** — final hosted Synthetic closure for this follow-up. |
+
+Compaction continuity repairs preserve asynchronous idle compaction, persist fast user turns while deferring brain launch until the active compaction flight settles, and clear transient defer state on pause/terminal lifecycle while durable history and conversation execution remain authoritative.
+
+**Status:** finished. Further work on Admin lifecycle or compaction handoff in this thread is out of scope unless a new regression reproduces on `main`. Next milestone: **P8** (provider framework per implementation plan).
 
 ## Not in this follow-up
 
