@@ -229,7 +229,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
         CancellationToken cancellationToken = default) =>
         Mutate(workItemId, item => item.CommitCancellation(expectedRevision, generation, knownEffectSummary, cancelledAtUtc));
 
-    public ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
+    public ValueTask<ExpiredClaimRecovery> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
     {
         lock (_state.Gate)
         {
@@ -238,11 +238,17 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
                     && item.Claim is not null
                     && item.Claim.LeaseExpiresAtUtc <= asOfUtc)
                 .ToArray();
+            var terminal = new List<WorkItem>();
             foreach (var item in expired)
             {
                 try
                 {
-                    _state.WorkItems[item.WorkItemId] = item.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
+                    var updated = item.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
+                    _state.WorkItems[item.WorkItemId] = updated;
+                    if (updated.Status == WorkItemStatus.Failed)
+                    {
+                        terminal.Add(updated);
+                    }
                 }
                 catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
                 {
@@ -250,7 +256,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
                 }
             }
 
-            return ValueTask.FromResult(expired.Length);
+            return ValueTask.FromResult(new ExpiredClaimRecovery(expired.Length, terminal));
         }
     }
 

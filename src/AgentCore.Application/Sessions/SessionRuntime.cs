@@ -3508,8 +3508,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 CorrelationId: CorrelationOrNull(context),
                 SessionId: SessionId,
                 ResponseId: responseId,
+                AgentInstanceId: _snapshot.AgentInstanceId,
                 ErrorCategory: category,
-                ErrorCode: code));
+                ErrorCode: code,
+                ProviderAlias: _snapshot.ModelSelection?.ProviderAlias));
 
     private static Guid? CorrelationOrNull(EventContext context) =>
         context.CorrelationId == Guid.Empty ? null : context.CorrelationId;
@@ -4598,7 +4600,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 new ErrorOutput(
                                     "Session",
                                     "SessionPersistenceUnavailable",
-                                    input.Error.Message,
+                                    "Persistent save failed.",
                                     false,
                                     TimeSpan.FromSeconds(1),
                                     diagnosticId)),

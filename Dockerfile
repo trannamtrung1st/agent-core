@@ -6,6 +6,10 @@ RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
+# Vite reads this at image build time. Unset stays MessagePack. A later container
+# environment variable does not switch the already-built SPA.
+ARG VITE_AGENTCORE_REALTIME_PROTOCOL
+ENV VITE_AGENTCORE_REALTIME_PROTOCOL=$VITE_AGENTCORE_REALTIME_PROTOCOL
 RUN pnpm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

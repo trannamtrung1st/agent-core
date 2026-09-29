@@ -213,7 +213,7 @@ public sealed class SqliteWorkItemStore(
             item => item.CommitCancellation(expectedRevision, generation, knownEffectSummary, cancelledAtUtc),
             cancellationToken));
 
-    public async ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
+    public async ValueTask<ExpiredClaimRecovery> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -223,6 +223,7 @@ public sealed class SqliteWorkItemStore(
             .Where(item => item.Status == running && item.ClaimLeaseExpiresAtUtc <= asOf)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var terminal = new List<WorkItem>();
         foreach (var row in rows)
         {
             var approval = await LoadApprovalAsync(db, row, cancellationToken).ConfigureAwait(false);
@@ -235,6 +236,11 @@ public sealed class SqliteWorkItemStore(
             catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
             {
                 throw WorkStoreMapping.Map(exception);
+            }
+
+            if (updated.Status == WorkItemStatus.Failed)
+            {
+                terminal.Add(updated);
             }
 
             WorkStoreMapping.Apply(row, updated);
@@ -251,7 +257,7 @@ public sealed class SqliteWorkItemStore(
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return rows.Count;
+        return new ExpiredClaimRecovery(rows.Count, terminal);
     }
 
     public async ValueTask<int> ExpireDueApprovalsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default)

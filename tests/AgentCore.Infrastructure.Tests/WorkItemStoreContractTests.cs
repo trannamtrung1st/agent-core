@@ -118,7 +118,9 @@ public sealed class WorkItemStoreContractTests
             var generation = Id(23);
             var claimed = await store.TryClaimAsync(created.Item.WorkItemId, generation, Now, Now.AddMinutes(1));
             Assert.NotNull(claimed);
-            Assert.Equal(1, await store.RecoverExpiredClaimsAsync(Now.AddMinutes(1)));
+            var retried = await store.RecoverExpiredClaimsAsync(Now.AddMinutes(1));
+            Assert.Equal(1, retried.RecoveredCount);
+            Assert.Empty(retried.TerminalFailures);
             var recovered = await store.GetAsync(owner, created.Item.WorkItemId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, recovered!.Status);
             Assert.Null(recovered.Claim);
@@ -134,10 +136,15 @@ public sealed class WorkItemStoreContractTests
             var next = await store.TryClaimAsync(recovered.WorkItemId, Id(24), Now.AddMinutes(1), Now.AddMinutes(2));
             Assert.NotNull(next);
             Assert.Equal(2, next.AttemptCount);
-            Assert.Equal(1, await store.RecoverExpiredClaimsAsync(Now.AddMinutes(2)));
+            var terminal = await store.RecoverExpiredClaimsAsync(Now.AddMinutes(2));
+            Assert.Equal(1, terminal.RecoveredCount);
             var exhausted = await store.GetAsync(owner, created.Item.WorkItemId);
             Assert.Equal(WorkItemStatus.Failed, exhausted!.Status);
             Assert.Equal("attempts-exhausted", exhausted.Failure!.Code);
+            var reported = Assert.Single(terminal.TerminalFailures);
+            Assert.Equal(exhausted.WorkItemId, reported.WorkItemId);
+            Assert.Equal(exhausted.Failure.DiagnosticId, reported.Failure!.DiagnosticId);
+            Assert.NotEqual(Guid.Empty, exhausted.Failure.DiagnosticId);
             Assert.Null(await store.TryClaimAsync(exhausted.WorkItemId, Id(25), Now.AddMinutes(3), Now.AddMinutes(4)));
             Assert.Empty(await store.ListRunnableAsync(Now.AddMinutes(3), 10));
         });
@@ -574,10 +581,15 @@ public sealed class WorkItemStoreContractTests
                 ToolCallId,
                 ActionHash,
                 Now.AddSeconds(2));
-            Assert.Equal(1, await store.RecoverExpiredClaimsAsync(Now.AddMinutes(1)));
+            var terminal = await store.RecoverExpiredClaimsAsync(Now.AddMinutes(1));
+            Assert.Equal(1, terminal.RecoveredCount);
             var failed = await store.GetAsync(owner, created.Item.WorkItemId);
             Assert.Equal(WorkItemStatus.Failed, failed!.Status);
+            Assert.Equal("side-effect-indeterminate", failed.Failure!.Code);
             Assert.Equal(WorkSideEffectDisposition.Indeterminate, failed.SideEffect.Disposition);
+            var reported = Assert.Single(terminal.TerminalFailures);
+            Assert.Equal(failed.Failure.DiagnosticId, reported.Failure!.DiagnosticId);
+            Assert.NotEqual(Guid.Empty, failed.Failure.DiagnosticId);
             Assert.Empty(await store.ListRunnableAsync(Now.AddMinutes(2), 10));
         });
     }

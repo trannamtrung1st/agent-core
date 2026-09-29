@@ -217,6 +217,79 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.Equal(SecondDiagnosticId, diagnostics.NewId());
     }
 
+    [Fact]
+    public async Task Conversation_failure_log_includes_the_pinned_instance_and_provider_alias()
+    {
+        var instanceId = Guid.Parse("019944af-00d7-7000-8000-0000000000e1");
+        var logs = new DiagnosticLogCapture<SessionRuntime>();
+        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId]);
+        await using var runtime = CreateRuntime(
+            new ScriptedEventsModel(
+            [
+                new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "synthetic failure"))
+            ]),
+            logs,
+            diagnostics,
+            agentInstanceId: instanceId,
+            modelSelection: new SessionModelSelection(
+                "scripted-alpha",
+                "primary-llm",
+                "scripted-alpha",
+                ModelSelectionSource.SystemDefault,
+                null));
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("fail", Guid.Parse("019944af-00d7-7000-8000-000000000081")));
+        await runtime.WaitUntilIdleAsync();
+
+        var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
+        Assert.Equal(instanceId, logged.Properties["AgentInstanceId"]);
+        Assert.Equal("primary-llm", logged.Properties["ProviderAlias"]);
+        Assert.DoesNotContain("scripted-alpha", logged.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Terminal_end_persistence_failure_keeps_the_exception_off_the_client_error()
+    {
+        const string secret = "/private/database/path api_key=secret provider-body-secret";
+        var logs = new DiagnosticLogCapture<SessionRuntime>();
+        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId, SecondDiagnosticId]);
+        var store = new TerminalEndFailingStore(secret);
+        await using var runtime = CreateRuntime(
+            new ScriptedEventsModel(),
+            logs,
+            diagnostics,
+            memory: store);
+        Assert.True(await runtime.AttachAsync());
+        Assert.False(await runtime.RequestEndAsync());
+        await runtime.WaitUntilMailboxDrainedAsync();
+
+        Assert.Equal(SessionStatus.Ending, runtime.Snapshot.Status);
+        Assert.Equal(DiagnosticId, runtime.PersistenceFailureDiagnosticId);
+        var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
+        Assert.Equal("Session", error.Category);
+        Assert.Equal("SessionPersistenceUnavailable", error.Code);
+        Assert.Equal("Persistent save failed.", error.SafeMessage);
+        Assert.Equal(DiagnosticId, error.DiagnosticId);
+        Assert.DoesNotContain("/private/database/path", error.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("api_key=secret", error.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-body-secret", error.SafeMessage, StringComparison.Ordinal);
+
+        var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
+        var failure = Assert.IsType<InvalidOperationException>(logged.Exception);
+        Assert.Contains("/private/database/path", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("api_key=secret", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("provider-body-secret", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
+        Assert.Equal(runtime.SessionId, logged.Properties["SessionId"]);
+        Assert.DoesNotContain("/private/database/path", logged.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("api_key=secret", logged.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-body-secret", logged.Message, StringComparison.Ordinal);
+
+        var durable = await store.Inner.LoadAsync(runtime.SessionId);
+        Assert.NotEqual(SessionStatus.Ended, durable!.Status);
+        Assert.Equal(SecondDiagnosticId, diagnostics.NewId());
+    }
+
     private static IReadOnlyList<SessionOutput> Items(SessionRuntime runtime) => Runtimes[runtime].Items;
 
     private static ModelSemanticResponseReady Ready(string text) =>
@@ -231,14 +304,17 @@ public sealed class ConversationFailureDiagnosticTests
         QueueDiagnosticIdSource diagnostics,
         CapturingSessionOutput? output = null,
         SessionMode mode = SessionMode.Text,
-        ISpeechSynthesizer? synthesizer = null)
+        ISpeechSynthesizer? synthesizer = null,
+        IMemoryStore? memory = null,
+        Guid? agentInstanceId = null,
+        SessionModelSelection? modelSelection = null)
     {
         output ??= new CapturingSessionOutput();
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-00d7-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 29, 0, 0, 0, TimeSpan.Zero));
-        var memory = new InMemoryMemoryStore();
+        memory ??= new InMemoryMemoryStore();
         var now = time.GetUtcNow();
         var snapshot = new SessionSnapshot(
             1,
@@ -254,7 +330,9 @@ public sealed class ConversationFailureDiagnosticTests
             null,
             null,
             now,
-            now);
+            now,
+            ModelSelection: modelSelection,
+            AgentInstanceId: agentInstanceId);
         memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         var runtime = new SessionRuntime(
             snapshot,
@@ -272,6 +350,40 @@ public sealed class ConversationFailureDiagnosticTests
     }
 
     private static readonly Dictionary<SessionRuntime, CapturingSessionOutput> Runtimes = [];
+}
+
+file sealed class TerminalEndFailingStore(string secret) : IMemoryStore
+{
+    public InMemoryMemoryStore Inner { get; } = new();
+
+    public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        Inner.LoadAsync(sessionId, cancellationToken);
+
+    public ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
+    {
+        if (snapshot.Status == SessionStatus.Ended)
+        {
+            throw new InvalidOperationException(secret);
+        }
+
+        return Inner.SaveAsync(snapshot, expectedRevision, cancellationToken);
+    }
+
+    public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
+        Guid sessionId,
+        long afterEntrySequence,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        Inner.ReadHistoryAsync(sessionId, afterEntrySequence, limit, cancellationToken);
+
+    public ValueTask<UserProfile?> LoadProfileAsync(Guid profileId, CancellationToken cancellationToken = default) =>
+        Inner.LoadProfileAsync(profileId, cancellationToken);
+
+    public ValueTask SaveProfileAsync(UserProfile profile, long expectedRevision, CancellationToken cancellationToken = default) =>
+        Inner.SaveProfileAsync(profile, expectedRevision, cancellationToken);
+
+    public ValueTask RecoverCrashedSessionsAsync(CancellationToken cancellationToken = default) =>
+        Inner.RecoverCrashedSessionsAsync(cancellationToken);
 }
 
 file sealed class ScriptedEventsModel(params ModelGenerationEvent[][] scripts) : ILanguageModel

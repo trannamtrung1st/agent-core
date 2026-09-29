@@ -24,7 +24,8 @@ public sealed class DurableReminderExecutor(
 
     public async ValueTask<int> ExecuteDueAsync(DateTimeOffset asOfUtc, int limit, CancellationToken cancellationToken = default)
     {
-        await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
+        var recovery = await work.RecoverExpiredClaimsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
+        LogRecoveredTerminalFailures(recovery);
         await work.ExpireDueApprovalsAsync(asOfUtc, cancellationToken).ConfigureAwait(false);
         var due = await work.ListRunnableAsync(asOfUtc, limit, cancellationToken).ConfigureAwait(false);
         var runnable = due
@@ -409,5 +410,36 @@ public sealed class DurableReminderExecutor(
 
         RuntimeTelemetry.RecordWork(failed.Status == WorkItemStatus.WaitingToRetry ? "retry" : "failed");
         return failed;
+    }
+
+    private void LogRecoveredTerminalFailures(ExpiredClaimRecovery recovery)
+    {
+        if (logger is null)
+        {
+            return;
+        }
+
+        foreach (var failed in recovery.TerminalFailures)
+        {
+            if (failed.Status != WorkItemStatus.Failed
+                || failed.Failure?.DiagnosticId is not Guid diagnosticId
+                || diagnosticId == Guid.Empty)
+            {
+                continue;
+            }
+
+            DiagnosticLog.Error(
+                logger,
+                null,
+                diagnosticId,
+                "Work item failed.",
+                new DiagnosticContext(
+                    SessionId: failed.Provenance.SourceSessionId,
+                    TriggerRegistrationId: failed.Provenance.RegistrationId,
+                    TriggerOccurrenceId: failed.Provenance.SourceOccurrenceId,
+                    WorkItemId: failed.WorkItemId,
+                    ErrorCategory: "work",
+                    ErrorCode: failed.Failure.Code));
+        }
     }
 }

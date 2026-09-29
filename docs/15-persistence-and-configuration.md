@@ -238,7 +238,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
 }
 ```
 
-The browser realtime protocol is not a server option. `VITE_AGENTCORE_REALTIME_PROTOCOL=json` selects SignalR JSON for that frontend process; unset or any other value stays MessagePack. It does not change `protocolVersion` or persistence.
+The browser realtime protocol is not a server option. `VITE_AGENTCORE_REALTIME_PROTOCOL=json` selects SignalR JSON for that frontend process; unset or any other value stays MessagePack. Vite reads it when the SPA starts or is built (`cd web` and `VITE_AGENTCORE_REALTIME_PROTOCOL=json pnpm dev`, or gitignored `web/.env.local`). Setting the same name on the ASP.NET process or a running container after the SPA is built does not switch the transport. A JSON diagnostic image requires the variable as a Docker build arg. It does not change `protocolVersion` or persistence.
 
 The shipped Synthetic catalog also includes `scripted-beta` with `StructuredOutput: true` (native envelope JSON) while `scripted-alpha` remains unstructured compatibility (`StructuredOutput: false`).
 

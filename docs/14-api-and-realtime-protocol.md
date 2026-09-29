@@ -120,7 +120,14 @@ errors is optional and contains only safe field-level messages. Never include pr
 
 ## Hub and encoding
 
-Endpoint `/hubs/session`; MessagePack Hub Protocol v1 is the canonical application encoding (distinct from SignalR's own protocol version). `protocolVersion` stays 1. One connection attaches one session and a session has one owning connection. The hub validates, associates the connection lease, and forwards to application services. Runtime logic stays outside hub methods. Audio DTOs use `byte[]`/Uint8Array encoded as MessagePack binary. A development or build setting `VITE_AGENTCORE_REALTIME_PROTOCOL=json` uses SignalR's built-in JSON protocol on the same hub, handlers, and lifecycle; JSON byte arrays arrive as base64 and are decoded at the client boundary. Unset or any other value stays MessagePack. The browser cannot set `diagnosticId`, `correlationId`, or `causationId`; the server rejects client-supplied correlation and causation.
+Endpoint `/hubs/session`; MessagePack Hub Protocol v1 is the canonical application encoding (distinct from SignalR's own protocol version). `protocolVersion` stays 1. One connection attaches one session and a session has one owning connection. The hub validates, associates the connection lease, and forwards to application services. Runtime logic stays outside hub methods. Audio DTOs use `byte[]`/Uint8Array encoded as MessagePack binary. MessagePack is the default. `VITE_AGENTCORE_REALTIME_PROTOCOL=json` is a diagnostic transport on the same hub, handlers, and lifecycle; JSON byte arrays arrive as base64 and are decoded at the client boundary. Unset or any other value stays MessagePack. Vite reads the variable when the SPA is started or built. Changing an ASP.NET or container environment variable after that build does not switch the transport. There is no `/hubs/session-json` hub and no second lifecycle. Local JSON inspection:
+
+```bash
+cd web
+VITE_AGENTCORE_REALTIME_PROTOCOL=json pnpm dev
+```
+
+The same value may be placed in gitignored `web/.env.local`. A JSON diagnostic image passes the variable as a Docker build arg (`VITE_AGENTCORE_REALTIME_PROTOCOL=json`); the default image build leaves it unset. The browser cannot set `diagnosticId`, `correlationId`, or `causationId`; the server rejects client-supplied correlation and causation.
 
 ```csharp
 // AgentCore.Contracts representative boundary signatures, not runtime ports.

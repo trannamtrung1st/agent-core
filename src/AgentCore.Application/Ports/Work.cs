@@ -10,6 +10,8 @@ public enum WorkItemCreateKind
 
 public sealed record WorkItemCreateResult(WorkItemCreateKind Kind, WorkItem Item);
 
+public sealed record ExpiredClaimRecovery(int RecoveredCount, IReadOnlyList<WorkItem> TerminalFailures);
+
 public interface IWorkItemStore
 {
     ValueTask<WorkItemCreateResult> CreateAsync(WorkItem item, CancellationToken cancellationToken = default);
@@ -81,7 +83,7 @@ public interface IWorkItemStore
         DateTimeOffset cancelledAtUtc,
         CancellationToken cancellationToken = default);
 
-    ValueTask<int> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default);
+    ValueTask<ExpiredClaimRecovery> RecoverExpiredClaimsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default);
 
     ValueTask<int> ExpireDueApprovalsAsync(DateTimeOffset asOfUtc, CancellationToken cancellationToken = default);
 

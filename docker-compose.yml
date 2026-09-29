@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # MessagePack stays the default. JSON inspection is a frontend build arg:
+      # docker compose build --build-arg VITE_AGENTCORE_REALTIME_PROTOCOL=json
     image: agent-core:synthetic
     ports:
       - "127.0.0.1:5080:8080"

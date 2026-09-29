@@ -193,7 +193,7 @@ public sealed class DurableReminderTests
 
             var later = Now.AddMinutes(1);
             harness.Time.SetUtcNow(later);
-            Assert.Equal(1, await harness.Work.RecoverExpiredClaimsAsync(later));
+            Assert.Equal(1, (await harness.Work.RecoverExpiredClaimsAsync(later)).RecoveredCount);
             var recovered = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, recovered!.Status);
             Assert.Null(recovered.Claim);
@@ -379,6 +379,71 @@ public sealed class DurableReminderTests
             Assert.IsAssignableFrom<OperationCanceledException>(match.Exception);
             Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
         }, () => new TimeoutReminderModel(), logs);
+    }
+
+    [Fact]
+    public async Task Expired_claim_terminal_failures_are_logged_with_the_stored_diagnostic_id()
+    {
+        var logs = new DiagnosticLogCapture<DurableReminderExecutor>();
+        await ForEachAsync(async harness =>
+        {
+            logs.Entries.Clear();
+            var triggerOwner = new TriggerOwner(InstanceId, ProfileId);
+            var exhaustedOccurrence = await AwaitDurableAsync(harness.Triggers, triggerOwner, Now, "exhausted reminder");
+            var exhausted = await AcceptScheduledAsync(harness, exhaustedOccurrence, 1);
+            var exhaustedGeneration = Guid.NewGuid();
+            Assert.NotNull(await harness.Work.TryClaimAsync(
+                exhausted.WorkItemId,
+                exhaustedGeneration,
+                Now,
+                Now.AddMinutes(1)));
+
+            var effectOccurrence = await AwaitDurableAsync(harness.Triggers, triggerOwner, Now, "effect reminder");
+            var effect = await AcceptScheduledAsync(harness, effectOccurrence, 3);
+            var effectGeneration = Guid.NewGuid();
+            var effectClaimed = await harness.Work.TryClaimAsync(effect.WorkItemId, effectGeneration, Now, Now.AddMinutes(1));
+            const string actionHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+            var prepared = await harness.Work.MarkSideEffectAsync(
+                effect.WorkItemId,
+                effectClaimed!.Revision,
+                effectGeneration,
+                WorkSideEffectDisposition.Prepared,
+                "tool-call-a",
+                actionHash,
+                Now.AddSeconds(1));
+            await harness.Work.MarkSideEffectAsync(
+                effect.WorkItemId,
+                prepared.Revision,
+                effectGeneration,
+                WorkSideEffectDisposition.InFlight,
+                "tool-call-a",
+                actionHash,
+                Now.AddSeconds(2));
+
+            var later = Now.AddMinutes(1);
+            harness.Time.SetUtcNow(later);
+            Assert.Equal(0, await harness.Executor.ExecuteDueAsync(later, 10));
+
+            var exhaustedFailed = await harness.Work.GetBySourceOccurrenceAsync(exhaustedOccurrence.OccurrenceId);
+            var effectFailed = await harness.Work.GetBySourceOccurrenceAsync(effectOccurrence.OccurrenceId);
+            Assert.Equal(WorkItemStatus.Failed, exhaustedFailed!.Status);
+            Assert.Equal("attempts-exhausted", exhaustedFailed.Failure!.Code);
+            Assert.Equal(WorkItemStatus.Failed, effectFailed!.Status);
+            Assert.Equal("side-effect-indeterminate", effectFailed.Failure!.Code);
+            Assert.NotEqual(exhaustedFailed.Failure.DiagnosticId, effectFailed.Failure.DiagnosticId);
+
+            AssertRecoveryLog(logs, exhaustedFailed, exhaustedOccurrence.OccurrenceId, "attempts-exhausted");
+            AssertRecoveryLog(logs, effectFailed, effectOccurrence.OccurrenceId, "side-effect-indeterminate");
+            Assert.Equal(2, logs.Entries.Count(entry => entry.Level == LogLevel.Error));
+
+            var reopened = await harness.Reopen();
+            Assert.Equal(
+                exhaustedFailed.Failure.DiagnosticId,
+                (await reopened.Work.GetBySourceOccurrenceAsync(exhaustedOccurrence.OccurrenceId))!.Failure!.DiagnosticId);
+            Assert.Equal(
+                effectFailed.Failure.DiagnosticId,
+                (await reopened.Work.GetBySourceOccurrenceAsync(effectOccurrence.OccurrenceId))!.Failure!.DiagnosticId);
+        }, null, logs);
     }
 
     [Fact]
@@ -1548,6 +1613,33 @@ public sealed class DurableReminderTests
         });
     }
 
+    private static void AssertRecoveryLog(
+        DiagnosticLogCapture<DurableReminderExecutor> logs,
+        WorkItem failed,
+        Guid occurrenceId,
+        string code)
+    {
+        var diagnosticId = failed.Failure!.DiagnosticId;
+        Assert.NotNull(diagnosticId);
+        var matches = logs.Entries
+            .Where(entry => entry.Level == LogLevel.Error
+                && entry.Properties.TryGetValue("DiagnosticId", out var logged)
+                && logged is Guid loggedId
+                && loggedId == diagnosticId)
+            .ToArray();
+        var match = Assert.Single(matches);
+        Assert.Null(match.Exception);
+        Assert.Equal(failed.WorkItemId, match.Properties["WorkItemId"]);
+        Assert.Equal(SourceSessionId, match.Properties["SessionId"]);
+        Assert.Equal(occurrenceId, match.Properties["TriggerOccurrenceId"]);
+        Assert.Equal("work", match.Properties["ErrorCategory"]);
+        Assert.Equal(code, match.Properties["ErrorCode"]);
+        Assert.False(match.Properties.ContainsKey("TriggerRegistrationId"));
+        Assert.False(match.Properties.ContainsKey("TraceId"));
+        Assert.Contains(diagnosticId.Value.ToString("D"), match.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static Task<WorkItem> AcceptObservedAsync(Harness harness, TriggerOccurrence occurrence) 
     {
         var selection = SessionModelBinder.PinDefault(harness.Catalog, harness.Definition);
@@ -1688,7 +1780,10 @@ public sealed class DurableReminderTests
             work);
     }
 
-    private static async Task ForEachAsync(Func<Harness, Task> exercise, Func<ILanguageModel>? modelFactory)
+    private static async Task ForEachAsync(
+        Func<Harness, Task> exercise,
+        Func<ILanguageModel>? modelFactory,
+        ILogger<DurableReminderExecutor>? logger = null)
     {
         var definition = await LoadDefinitionAsync();
         var state = new InMemoryDurableState();
@@ -1698,7 +1793,8 @@ public sealed class DurableReminderTests
             new InMemoryWorkItemStore(state),
             new InMemoryDurableWorkHandoff(state),
             static (triggers, work, handoff) => Task.FromResult(new StoreSet(triggers, work, handoff)),
-            modelFactory));
+            modelFactory,
+            logger));
 
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-reminder-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>()
@@ -1718,7 +1814,8 @@ public sealed class DurableReminderTests
                     new SqliteTriggerStore(contexts),
                     new SqliteWorkItemStore(contexts),
                     new SqliteDurableWorkHandoff(contexts))),
-                modelFactory));
+                modelFactory,
+                logger));
         }
         finally
         {
