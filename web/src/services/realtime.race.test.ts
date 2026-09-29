@@ -1523,6 +1523,32 @@ describe("realtime race handling", () => {
     });
     expect(useSessionStore.getState().mode).toBe("text");
     expect(useSessionStore.getState().streamId).toBeNull();
+    hooks.handleEvent({
+      protocolVersion: 1,
+      sessionId: "s1",
+      attachmentId: "a1",
+      eventId: "ready-2",
+      sequence: 2,
+      timestamp: "2026-09-15T00:00:01.000Z",
+      correlationId: "c1",
+      causationId: null,
+      responseId: null,
+      type: "session.ready",
+      payload: {
+        mode: "voice",
+        pendingMode: null,
+        status: "attached",
+        streamId: "stream-2",
+        agent: { name: "Alex", role: "Examiner", voiceAvailable: true },
+        history: [],
+        capabilities: {
+          stt: { transport: "clientTranscript" },
+          tts: { transport: "serverAudio" }
+        }
+      }
+    });
+    expect(useSessionStore.getState().mode).toBe("text");
+    expect(useSessionStore.getState().streamId).toBeNull();
     await vi.waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("SetMode", expect.objectContaining({ payload: { mode: "text" } }));
     });

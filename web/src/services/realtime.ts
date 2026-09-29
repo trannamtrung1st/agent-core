@@ -528,6 +528,7 @@ const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000];
 let reconnectBudgetStarted = 0;
 let attachLoop = 0;
 let voiceReadyDowngradeOnNextReady = false;
+let passiveVoiceSuppressed = false;
 let awaitingAgentResponseStart = false;
 
 function clearAwaitingAgentResponseStart(): void {
@@ -829,8 +830,10 @@ function handleEvent(raw: ServerEvent): void {
     } else {
       conversationConvergenceEpoch += 1;
     }
-    if (String(raw.payload?.mode ?? "") === "voice" && voiceReadyDowngradeOnNextReady) {
+    const serverVoice = String(raw.payload?.mode ?? "") === "voice";
+    if (serverVoice && !voiceModeRequested && (voiceReadyDowngradeOnNextReady || passiveVoiceSuppressed)) {
       downgradePassiveVoiceAttach();
+      passiveVoiceSuppressed = true;
     }
     voiceReadyDowngradeOnNextReady = false;
   }
@@ -1693,6 +1696,7 @@ export const realtimeTestHooks =
           attachLoop += 1;
           reconnectBudgetStarted = 0;
           voiceReadyDowngradeOnNextReady = false;
+          passiveVoiceSuppressed = false;
           voiceModeRequested = false;
           clearAwaitingAgentResponseStart();
           pendingUserText = null;
@@ -3569,6 +3573,7 @@ export async function requestVoice(): Promise<void> {
 
   voiceRequest = (async () => {
     voiceModeRequested = true;
+    passiveVoiceSuppressed = false;
     const epoch = ++voiceEpoch;
     try {
       useSessionStore.setState({ preflightReady: true, ...clearSessionFailure() });
