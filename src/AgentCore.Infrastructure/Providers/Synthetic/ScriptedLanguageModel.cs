@@ -132,7 +132,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
-        if (request.Tools is { Count: > 0 } && (_alwaysToolCall || ShouldScriptTools(request)))
+        if (HasSessionTools(request) && (_alwaysToolCall || ShouldScriptTools(request)))
         {
             await foreach (var item in GenerateToolScriptAsync(request, cancellationToken).ConfigureAwait(false))
             {
@@ -843,6 +843,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             ? "Scheduled the Monday call."
             : "Scheduled Call John.";
     }
+
+    private static bool HasSessionTools(ModelRequest request) =>
+        request.Tools?.Any(tool => tool.Name != AssistantResponseSchema.ResponseFunctionName) == true;
 
     private bool ShouldScriptTools(ModelRequest request)
     {

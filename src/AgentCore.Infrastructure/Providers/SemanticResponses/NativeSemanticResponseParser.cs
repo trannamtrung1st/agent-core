@@ -86,6 +86,11 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
+            if (!MemoryProposalCodec.IsConversationalSource(proposal.Source))
+            {
+                continue;
+            }
+
             proposals.Add(proposal);
         }
 

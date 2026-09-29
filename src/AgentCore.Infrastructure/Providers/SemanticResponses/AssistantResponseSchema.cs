@@ -14,23 +14,33 @@ internal static class AssistantResponseSchema
     public const string CompatibilityInstructionPrefix =
         "Infrastructure output format: write the visible answer as ordinary text. ";
 
-    public static string CompatibilityInstruction(ModelResponseContract contract)
+    public static string CompatibilityInstruction(ModelResponseContract contract, bool responseFunction = false)
     {
         var speech = contract.SpeechWillBeUsed
             ? "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
             : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
+        var memory = responseFunction
+            ? $"Call {ResponseFunctionName} with the structured answer. That call is the reliable memory proposal channel. [[memory:...]] alone is best effort. "
+            : "[[memory:...]] is best effort only. Do not claim that memory was saved. ";
         return CompatibilityInstructionPrefix
             + speech
             + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
             + "Use [[speech:none]] when the answer must stay visual-only. "
             + "Optional rich blocks use [[md:...]], [[attachment:<id>]], or [[artifact:<id>]]. "
             + "Do not include hidden reasoning. Do not emit JSON. "
-            + "Do not claim that memory was saved. Propose durable memory only with [[memory:[...]]] using operation, kind, subject, content, and source. ";
+            + memory;
     }
+
+    public const string ResponseFunctionName = "agent_core_respond";
+
+    public static ModelToolDefinition ResponseFunction { get; } = new(
+        ResponseFunctionName,
+        "Submit the assistant response. Memory entries are proposals. This call does not save memory.",
+        JsonSchemaJson);
 
     public const string SchemaName = "agent_core_assistant_response";
 
-    private const string JsonSchemaJson = """
+    internal const string JsonSchemaJson = """
         {
           "type": "object",
           "additionalProperties": false,
@@ -69,7 +79,7 @@ internal static class AssistantResponseSchema
                   "subject": { "type": "string" },
                   "content": { "type": "string" },
                   "scopeHint": { "type": ["string", "null"], "enum": ["session", "identityUser", "user", null] },
-                  "source": { "type": "string", "enum": ["userExplicit", "agentInferred", "application", "admin"] }
+                  "source": { "type": "string", "enum": ["userExplicit", "agentInferred"] }
                 }
               }
             },

@@ -1,3 +1,4 @@
+using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
@@ -309,6 +310,54 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     [Fact]
+    public async Task Function_channel_normalizes_the_response_tool_and_hides_it()
+    {
+        var json = """
+            {"displayText":"Noted.","speech":{"mode":"same","text":null},"blocks":[],"memory":[{"operation":"upsert","kind":"fact","subject":"editor","content":"Rider","scopeHint":null,"source":"userExplicit"}]}
+            """;
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Rider", Assert.Single(ready.Memory!).Content);
+        Assert.DoesNotContain(events, item => item is ModelToolCallEvent);
+        Assert.Equal(ModelStopReason.Completed, Assert.Single(events.OfType<ModelCompleted>()).Reason);
+        Assert.Contains(inner.LastRequest!.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
+        Assert.Equal(ModelToolChoice.Named, inner.LastRequest.ToolChoice);
+        Assert.Equal(AssistantResponseSchema.ResponseFunctionName, inner.LastRequest.ToolChoiceName);
+    }
+
+    [Fact]
+    public async Task Plain_text_model_does_not_receive_the_response_function()
+    {
+        var inner = new ScriptedInner(
+            [new ModelTextDelta("OK."), new ModelCompleted(ModelStopReason.Completed)],
+            tools: false);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        Assert.Equal("OK.", Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response.DisplayText);
+        Assert.Null(inner.LastRequest!.Tools);
+        Assert.Equal(ModelToolChoice.Auto, inner.LastRequest.ToolChoice);
+    }
+
+    [Fact]
+    public async Task Model_output_drops_application_and_admin_memory_sources()
+    {
+        var marker = """
+            Noted. [[memory:[{"operation":"upsert","kind":"fact","subject":"rank","content":"hidden","source":"admin"},{"operation":"upsert","kind":"fact","subject":"tone","content":"warm","source":"userExplicit"}] ]]
+            """;
+        var inner = new ScriptedInner(
+            [new ModelTextDelta(marker), new ModelCompleted(ModelStopReason.Completed)]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        var proposal = Assert.Single(ready.Memory!);
+        Assert.Equal(MemoryProposalSource.UserExplicit, proposal.Source);
+        Assert.Equal("tone", proposal.Subject);
+    }
+
+    [Fact]
     public async Task Synthetic_scripted_path_uses_the_decorator()
     {
         var model = new SemanticResponseLanguageModel(new ScriptedLanguageModel(ScriptedLanguageModel.ShortChunks));
@@ -361,12 +410,15 @@ public sealed class SemanticResponseLanguageModelTests
         return listed;
     }
 
-    private sealed class ScriptedInner(IReadOnlyList<ModelGenerationEvent> events, bool structured = false) : ILanguageModel
+    private sealed class ScriptedInner(
+        IReadOnlyList<ModelGenerationEvent> events,
+        bool structured = false,
+        bool tools = true) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(
             StreamingText: true,
             Cancellation: true,
-            Tools: true,
+            Tools: tools,
             StructuredOutput: structured);
 
         public ModelRequest? LastRequest { get; private set; }

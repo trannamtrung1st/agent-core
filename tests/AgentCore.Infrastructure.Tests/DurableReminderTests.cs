@@ -97,8 +97,9 @@ public sealed class DurableReminderTests
             var ran = await harness.Executor.ExecuteDueAsync(Now, 10);
             Assert.Equal(2, ran);
             Assert.Equal(2, harness.Model.Calls);
-            var request = harness.Model.Requests.Single(item => item.Tools is null);
-            Assert.Null(request.Tools);
+            var request = harness.Model.Requests.Single(item =>
+                item.Messages.Any(message => message.Text.Contains("Scheduled reminder delivery mode.", StringComparison.Ordinal)));
+            Assert.DoesNotContain(request.Tools ?? [], tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
             Assert.Equal(selection.ReasoningEffort, request.ReasoningEffort);
             var prompt = string.Join('\n', request.Messages.Select(message => message.Text));
             Assert.Contains("Riley", prompt, StringComparison.Ordinal);
@@ -129,7 +130,8 @@ public sealed class DurableReminderTests
             Assert.Equal(WorkItemStatus.Completed, observed!.Status);
             Assert.Equal(WorkSourceKind.ApplicationEvent, observed.Provenance.SourceKind);
             Assert.Equal("Oven is ready.", observed.Result!.Text);
-            var eventRequest = harness.Model.Requests.Single(item => item.Tools is not null);
+            var eventRequest = harness.Model.Requests.Single(item =>
+                item.Tools?.Any(tool => tool.Name == ToolCatalog.KnowledgeRetrieve) == true);
             var eventPrompt = string.Join('\n', eventRequest.Messages.Select(message => message.Text));
             Assert.Contains("Observed occurrence data", eventPrompt, StringComparison.Ordinal);
             Assert.DoesNotContain("Scheduled reminder delivery mode.", eventPrompt, StringComparison.Ordinal);
@@ -166,7 +168,9 @@ public sealed class DurableReminderTests
             Assert.Equal(WorkItemStatus.Completed, completed!.Status);
             Assert.Equal("Oven is ready.", completed.Result!.Text);
             Assert.DoesNotContain("REASONING_CHANNEL_SENTINEL", completed.Result.Text, StringComparison.Ordinal);
-            Assert.Null(harness.Model.Request!.Tools);
+            Assert.DoesNotContain(
+                harness.Model.Request!.Tools ?? [],
+                tool => tool.Name == ToolCatalog.KnowledgeRetrieve);
         }, () => new ReasoningThenTextModel());
     }
 
@@ -2459,6 +2463,7 @@ public sealed class DurableReminderTests
         public ValueTask<StructuredMemoryItem?> GetAsync(TrustedMemoryOwner owner, Guid memoryId, MemoryAdmissionContext admission, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem?> FindActiveBySubjectAsync(TrustedMemoryOwner owner, MemoryKind kind, string subject, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem?> FindActiveIdentityUserBySubjectAsync(TrustedIdentityUserOwner owner, MemoryKind kind, string subject, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<StructuredMemoryItem?> FindActiveUserBySubjectAsync(TrustedUserOwner owner, MemoryKind kind, string subject, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem> PromoteToIdentityUserAsync(TrustedMemoryOwner session, Guid memoryId, TrustedIdentityUserOwner destination, bool promotionAllowed, MemoryAdmissionContext admission, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem> UpdateIdentityUserAsync(TrustedIdentityUserOwner owner, MemoryUpdateProposal proposal, bool retrievalAllowed, MemoryAdmissionContext admission, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<StructuredMemoryItem> DeleteIdentityUserAsync(TrustedIdentityUserOwner owner, Guid memoryId, bool retrievalAllowed, CancellationToken cancellationToken = default) => throw new NotSupportedException();

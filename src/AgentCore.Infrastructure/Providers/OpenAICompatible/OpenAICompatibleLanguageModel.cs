@@ -347,7 +347,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         if (request.Tools is { Count: > 0 })
         {
             body["tools"] = request.Tools.Select(MapTool).ToArray();
-            body["tool_choice"] = "auto";
+            body["tool_choice"] = MapToolChoice(request);
         }
 
         if (request.ResponseContract is not null && Capabilities.StructuredOutput)
@@ -500,6 +500,20 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             ["content"] = message.Text
         };
     }
+
+    private static object MapToolChoice(ModelRequest request) => request.ToolChoice switch
+    {
+        ModelToolChoice.Required => "required",
+        ModelToolChoice.Named => new Dictionary<string, object?>
+        {
+            ["type"] = "function",
+            ["function"] = new Dictionary<string, object?>
+            {
+                ["name"] = OpenAiCompatibleToolNames.ToWireName(request.ToolChoiceName ?? string.Empty)
+            }
+        },
+        _ => "auto"
+    };
 
     private static Dictionary<string, object?> MapTool(ModelToolDefinition tool)
     {

@@ -97,7 +97,9 @@ public sealed class SessionAttachmentRecallTests
         await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput, cts.Token);
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Null(model.LastRequest!.Tools);
+        Assert.DoesNotContain(
+            model.LastRequest!.Tools ?? [],
+            tool => tool.Name == ToolCatalog.AttachmentsRead);
     }
 
     [Fact]

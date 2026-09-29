@@ -92,6 +92,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _usesResponseContract;
     private bool _structuredOutput;
     private bool _semanticReady;
+    private IReadOnlyList<MemoryProposal>? _stagedMemoryProposals;
+    private bool _memoryCommitSettled;
     private int _publishedDisplayLength;
     private string? _publishedSpeechProjection;
     private bool _voiceSpeechResolved;
@@ -1730,6 +1732,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _envelope = null;
         _usesResponseContract = true;
         _semanticReady = false;
+        _stagedMemoryProposals = null;
+        _memoryCommitSettled = false;
         _structuredOutput = false;
         _publishedDisplayLength = 0;
         _publishedSpeechProjection = null;
@@ -3138,6 +3142,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         await PublishStateAsync(context, cancellationToken).ConfigureAwait(false);
         if (!_responseTerminal)
         {
+            DiscardStagedMemory();
             _responseTerminal = true;
             UpdateAssistant(EntryStatus.Interrupted, reason);
             await PublishAsync(
@@ -3211,6 +3216,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         FailureReference? failure = null,
         string? safeMessage = null)
     {
+        if (failed)
+        {
+            DiscardStagedMemory();
+        }
+        else
+        {
+            await CommitStagedMemoryAsync(context, responseId, cancellationToken).ConfigureAwait(false);
+        }
+
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _initiativeHeld = false;
@@ -3635,22 +3649,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
-        var memoryNote = await ApplyMemoryProposalsAsync(semantic.Memory, cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(memoryNote))
-        {
-            var speech = semantic.Speech;
-            if (speech is { Mode: ModelSpeechMode.Custom, Text: { Length: > 0 } spoken })
-            {
-                speech = speech with { Text = spoken.TrimEnd() + "\n" + memoryNote };
-            }
-
-            semantic = semantic with
-            {
-                DisplayText = semantic.DisplayText.TrimEnd() + "\n" + memoryNote,
-                Speech = speech
-            };
-        }
-
         ResponseEnvelope mapped;
         try
         {
@@ -3691,6 +3689,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _semanticReady = true;
         _envelope = mapped;
+        StageMemoryProposals(semantic.Memory);
         _accumulator.Replace(mapped.DisplayText);
         if (finalizingOperationId is { } completedOp)
         {
@@ -4110,6 +4109,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _progressStartedTimestamp = 0;
         _usesResponseContract = false;
         _semanticReady = false;
+        _stagedMemoryProposals = null;
+        _memoryCommitSettled = false;
         _structuredOutput = false;
         _responseCts?.Dispose();
         _responseCts = null;

@@ -48,6 +48,13 @@ public sealed record ModelCapabilities(
 /// </summary>
 public sealed record ModelResponseContract(bool SpeechWillBeUsed);
 
+public enum ModelToolChoice
+{
+    Auto = 0,
+    Required = 1,
+    Named = 2
+}
+
 public sealed record ModelRequest(
     Guid ResponseId,
     IReadOnlyList<ModelMessage> Messages,
@@ -55,7 +62,9 @@ public sealed record ModelRequest(
     double? Temperature = null,
     IReadOnlyList<ModelToolDefinition>? Tools = null,
     string? ReasoningEffort = null,
-    ModelResponseContract? ResponseContract = null);
+    ModelResponseContract? ResponseContract = null,
+    ModelToolChoice ToolChoice = ModelToolChoice.Auto,
+    string? ToolChoiceName = null);
 
 public abstract record ModelGenerationEvent;
 

@@ -33,7 +33,7 @@ Reopen a frozen phase only for a reproducible regression, or for a new product r
 
 P7 owns Harness Admin W01–W08 only. Observer durability for `ConversationTurnExecution` is closed session bookkeeping, not part of the Admin contract: last behavior `93cb2ab`, stabilization `2c4d46f`, workflow `36336971087` green. Do not merge that appendix into Harness Admin.
 
-P7.6 does not redefine P7 or P7.5. P7.7 does not reopen P7.6. The Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` is finished follow-up evidence. It is not a new freeze, it is not hosted-green, and it does not move the P7.6 SHA.
+P7.6 does not redefine P7 or P7.5. P7.7 does not reopen P7.6. The Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` is finished follow-up evidence. It is not a new freeze, it is not hosted-green, and it does not move the P7.6 SHA. Diagnostic corrections after `40a1d92` are recorded in `docs/reports/p7.7-diagnostic-followup.md`. That follow-up does not move the P7.7 SHA. The hosted green gate on `40a1d92` does not cover those corrections.
 
 ### What the frozen phases still mean
 
@@ -43,7 +43,7 @@ P7.6 does not redefine P7 or P7.5. P7.7 does not reopen P7.6. The Admin lifecycl
 
 **P7.6 — Admin usability.** The existing Definition can be authored through Form or Advanced JSON on one revisioned draft. New Definition and New Instance flows are explicit. Knowledge Sources bind to Knowledge resources. Published versions stay immutable. Evidence: `docs/reports/p7.6-freeze-candidate.md`.
 
-**P7.7 — Operational diagnosability.** Delivered a server-owned safe `DiagnosticId`, structured server-side failure logging, optional same-hub JSON realtime mode, and unchanged scheduling ownership. MessagePack stays canonical. Evidence: `docs/reports/p7.7-freeze-candidate.md`.
+**P7.7 — Operational diagnosability.** Delivered a server-owned safe `DiagnosticId`, structured server-side failure logging, optional same-hub JSON realtime mode, and unchanged scheduling ownership. MessagePack stays canonical. Evidence: `docs/reports/p7.7-freeze-candidate.md`. Later diagnostic corrections are follow-up evidence in `docs/reports/p7.7-diagnostic-followup.md`, not a new freeze.
 
 Retained diagnostic rules, because later phases must reuse them:
 
@@ -55,7 +55,7 @@ TraceId         = infrastructure trace id only when a real Activity exists
 
 Clients cannot supply trusted diagnostic, correlation, or causation identity. JSON realtime is a diagnostic transport on the same hub and the same event contract. It is not a second protocol. A missed recurrence still coalesces to the latest due occurrence. `SkipMissed` and `CatchUp` are not implemented.
 
-**Pre-P8 memory admission.** Conversation memory is agent-proposed and Core-admitted. A memory policy enables scope; it does not store every proposal. Phrase matching is not the write authority. This does not start P8.
+**Pre-P8 memory admission.** Conversation memory is agent-proposed and Core-admitted. Proposals are staged with semantic output and admitted once when that response completes successfully. A memory policy enables scope; it does not store every proposal. Phrase matching is not the write authority. A reliable proposal channel is native structured output or the adapter response function. `[[memory:...]]` is best effort. Without that channel, recall still works and autonomous creation is unavailable. Model source is `userExplicit` or `agentInferred`. The admission receipt is controller-owned. Admission rejects credentials and blob-like content. It does not yet classify sensitive personal attributes; that taxonomy is still an open product decision. This does not start P8.
 
 ## Active phase
 

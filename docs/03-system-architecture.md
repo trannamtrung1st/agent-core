@@ -104,7 +104,7 @@ Effective configuration is shared authoritative resolution primitives plus use-c
 
 | Primitive | Rule | Where it is applied |
 | --- | --- | --- |
-| `MemoryPolicyOf` | A missing policy is `Disabled` | Admin projection, Admin memory allow checks, explicit user-memory admission |
+| `MemoryPolicyOf` | A missing policy is `Disabled` | Admin projection, Admin memory allow checks, memory admission |
 | `SessionModelBinder.PinDefault` | Catalog default for the definition | Admin projection, durable-work intake, session snapshot default, initiative |
 | Session model `Bind` | A live session may select a catalog key and reasoning effort | Live session only |
 | `ToolCatalog.For` | Offered tool names from the definition and context | Admin projection, prompt construction |

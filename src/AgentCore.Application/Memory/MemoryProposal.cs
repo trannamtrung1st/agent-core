@@ -79,10 +79,12 @@ public static class MemoryProposalCodec
             var proposals = new List<MemoryProposal>();
             foreach (var item in document.RootElement.EnumerateArray())
             {
-                if (TryRead(item, out var proposal) && proposal is not null)
-                {
-                    proposals.Add(proposal);
-                }
+            if (TryRead(item, out var proposal)
+                && proposal is not null
+                && IsConversationalSource(proposal.Source))
+            {
+                proposals.Add(proposal);
+            }
             }
 
             return proposals;
@@ -132,6 +134,9 @@ public static class MemoryProposalCodec
         return true;
     }
 
+    public static bool IsConversationalSource(MemoryProposalSource source) =>
+        source is MemoryProposalSource.UserExplicit or MemoryProposalSource.AgentInferred;
+
     private static bool TryEnum<TEnum>(JsonElement item, string name, out TEnum value)
         where TEnum : struct, Enum
     {
@@ -162,7 +167,7 @@ public static class MemoryProposalCodec
 public static class MemoryAdmissionPrompt
 {
     public const string SelectivityGuidance = """
-        Memory proposals are optional structured intents, not a claim that something was saved. Propose durable memory only when it is reasonably useful beyond this turn: stable preferences, durable facts, user goals, decisions, open loops, or working context likely to recur. Do not propose incidental small talk, ephemeral current state, duplicates, guesses stated as fact, assistant-invented details, secrets, or information the memory policy disallows. Do not say that information was saved, remembered, or forgotten. The runtime states the real outcome after admission.
+        Memory proposals are optional structured intents. Propose durable memory only when it is reasonably useful beyond this turn: stable preferences, durable facts, user goals, decisions, open loops, or working context likely to recur. Do not propose incidental small talk, ephemeral current state, duplicates, guesses stated as fact, assistant-invented details, secrets, or information the memory policy disallows. Do not say that information was saved, remembered, or forgotten. That wording rule is guidance. After a response completes successfully, the runtime appends its own admission receipt. The receipt is the authoritative outcome. The runtime does not rewrite earlier sentences.
         """;
 
     public static string? Render(IReadOnlyList<MemoryAdmissionResult> results)

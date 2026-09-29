@@ -334,7 +334,7 @@ public sealed class ExplicitUserMemoryTests
             var request = recallModel.LastRequest;
             Assert.NotNull(request);
             Assert.Contains(
-                PromptContextBuilder.BuildMemoryCapability(definition.MemoryPolicy),
+                PromptContextBuilder.BuildMemoryCapability(definition.MemoryPolicy, reliableProposalChannel: true),
                 request.Messages[2].Text,
                 StringComparison.Ordinal);
             var learned = request.Messages.Single(message =>

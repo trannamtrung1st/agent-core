@@ -8,6 +8,7 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -51,6 +52,8 @@ public sealed class MemoryProposalAdmissionTests
         Assert.Equal(MemoryKind.Preference, item.Kind);
         Assert.Equal("concise", item.Content);
         Assert.Equal("agent_inferred", item.Provenance.Source);
+        var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
+        Assert.Equal(user.EntryId, Assert.Single(item.Provenance.SourceEntryIds));
         Assert.Contains("Memory saved for later sessions: answer length.", AssistantText(runtime), StringComparison.Ordinal);
     }
 
@@ -179,7 +182,7 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
-    public async Task Sensitive_content_is_rejected_and_not_described_as_saved()
+    public async Task Sensitive_content_is_rejected_and_the_receipt_is_the_outcome()
     {
         var memories = Service();
         var proposal = Proposal(MemoryKind.Fact, "token", "sk-abcdefghijklmnopqrst", MemoryProposalSource.UserExplicit);
@@ -187,7 +190,7 @@ public sealed class MemoryProposalAdmissionTests
             memories,
             Enabled(),
             new ScriptedLanguageModel(
-                ["I'll remember that."],
+                ["Understood."],
                 memoryTurns: [[proposal]]));
         Assert.True(await runtime.SubmitPersistedUserTextAsync(
             "Keep this token: sk-abcdefghijklmnopqrst",
@@ -196,6 +199,7 @@ public sealed class MemoryProposalAdmissionTests
 
         Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit")));
         var text = AssistantText(runtime);
+        Assert.StartsWith("Understood.", text, StringComparison.Ordinal);
         Assert.Contains("Memory was not saved: token.", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Memory saved", text, StringComparison.Ordinal);
     }
@@ -208,7 +212,7 @@ public sealed class MemoryProposalAdmissionTests
             memories,
             Enabled(),
             new ScriptedLanguageModel(
-                ["Noted.[[speech:I'll remember that.]]"],
+                ["Noted.[[speech:Here is the result.]]"],
                 memoryTurns: [[Proposal(MemoryKind.Fact, "token", "sk-abcdefghijklmnopqrst", MemoryProposalSource.UserExplicit)]]));
         Assert.True(await runtime.SubmitPersistedUserTextAsync(
             "Store the token.",
@@ -216,9 +220,264 @@ public sealed class MemoryProposalAdmissionTests
         await runtime.WaitUntilIdleAsync();
 
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
+        Assert.Contains("Here is the result.", assistant.Envelope?.SpeechText, StringComparison.Ordinal);
         Assert.Contains("Memory was not saved: token.", assistant.Text, StringComparison.Ordinal);
         Assert.Contains("Memory was not saved: token.", assistant.Envelope?.SpeechText, StringComparison.Ordinal);
         Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit")));
+    }
+
+    [Fact]
+    public async Task Failed_response_does_not_admit_staged_memory()
+    {
+        var memories = Service();
+        await using var runtime = await RuntimeAsync(memories, Enabled(), new FailingAfterReadyModel());
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "Remember the project codename Atlas.",
+            Guid.Parse("019944af-0030-7000-8000-000000000018")));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred")));
+        Assert.DoesNotContain("Memory saved", AssistantText(runtime), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cancelled_response_discards_staged_memory()
+    {
+        var memories = Service();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new GatedReadyModel(gate);
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "Remember the project codename Atlas.",
+            Guid.Parse("019944af-0030-7000-8000-000000000019")));
+        await model.Parked.WaitAsync(TimeSpan.FromSeconds(5));
+        await runtime.CancelActiveResponseAsync();
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred")));
+    }
+
+    [Fact]
+    public async Task Later_semantic_response_replaces_the_staged_proposal()
+    {
+        var memories = Service();
+        await using var runtime = await RuntimeAsync(memories, Enabled(), new ReplacingSemanticModel());
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "The project codename changed.",
+            Guid.Parse("019944af-0030-7000-8000-00000000001a")));
+        await runtime.WaitUntilIdleAsync();
+
+        var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
+        var item = Assert.Single(stored);
+        Assert.Equal("Borealis", item.Content);
+        Assert.Contains("Memory saved for later sessions: project codename.", AssistantText(runtime), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Repeated_semantic_output_admits_the_proposal_once()
+    {
+        var memories = Service();
+        await using var runtime = await RuntimeAsync(memories, Enabled(), new RepeatedSemanticModel());
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "My editor is Rider.",
+            Guid.Parse("019944af-0030-7000-8000-00000000001b")));
+        await runtime.WaitUntilIdleAsync();
+
+        var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
+        Assert.Equal("Rider", Assert.Single(stored).Content);
+        Assert.Contains("Memory saved for later sessions: editor.", AssistantText(runtime), StringComparison.Ordinal);
+        Assert.DoesNotContain("already saved", AssistantText(runtime), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Delete_from_a_new_session_removes_promoted_memory()
+    {
+        var memories = Service();
+        var definition = Enabled();
+        Assert.Equal(
+            MemoryAdmissionStatus.Stored,
+            await MemoryAdmission.AdmitOneAsync(
+                memories,
+                definition,
+                SessionA,
+                InstanceA,
+                Profile(),
+                [],
+                Guid.NewGuid(),
+                Proposal(MemoryKind.Fact, "project codename", "Atlas", MemoryProposalSource.AgentInferred),
+                NullLogger.Instance));
+        var status = await MemoryAdmission.AdmitOneAsync(
+            memories,
+            definition,
+            SessionB,
+            InstanceA,
+            Profile(),
+            [],
+            Guid.NewGuid(),
+            new MemoryProposal(
+                MemoryProposalOperation.Delete,
+                MemoryKind.Fact,
+                "project codename",
+                string.Empty,
+                null,
+                MemoryProposalSource.UserExplicit),
+            NullLogger.Instance);
+        Assert.Equal(MemoryAdmissionStatus.Deleted, status);
+        Assert.Empty(await memories.SearchIdentityUserAsync(
+            new TrustedIdentityUserOwner(InstanceA, ProfileId),
+            new MemorySearchQuery("codename", null),
+            retrievalAllowed: true,
+            Admission("agent_inferred")));
+    }
+
+    [Fact]
+    public async Task User_scope_correction_updates_the_existing_user_item()
+    {
+        var memories = Service();
+        var definition = SampleDefinitions.Support with
+        {
+            MemoryPolicy = new MemoryPolicy(SessionMemory: true, UserPromotion: true, UserRetrieval: true)
+        };
+        var logger = NullLogger.Instance;
+        Assert.Equal(
+            MemoryAdmissionStatus.Stored,
+            await MemoryAdmission.AdmitOneAsync(
+                memories,
+                definition,
+                SessionA,
+                InstanceA,
+                Profile(),
+                [],
+                Guid.NewGuid(),
+                new MemoryProposal(MemoryProposalOperation.Upsert, MemoryKind.Fact, "project codename", "Atlas", MemoryScopeHint.User, MemoryProposalSource.AgentInferred),
+                logger));
+        Assert.Equal(
+            MemoryAdmissionStatus.Updated,
+            await MemoryAdmission.AdmitOneAsync(
+                memories,
+                definition,
+                SessionA,
+                InstanceA,
+                Profile(),
+                [],
+                Guid.NewGuid(),
+                new MemoryProposal(MemoryProposalOperation.Upsert, MemoryKind.Fact, "project codename", "Borealis", MemoryScopeHint.User, MemoryProposalSource.AgentInferred),
+                logger));
+        var user = await memories.SearchUserAsync(
+            new TrustedUserOwner(ProfileId),
+            new MemorySearchQuery("codename", null),
+            retrievalAllowed: true,
+            Admission("agent_inferred"));
+        Assert.Equal("Borealis", Assert.Single(user).Content);
+    }
+
+    [Fact]
+    public async Task Proactive_response_does_not_attach_an_older_user_entry()
+    {
+        var memories = Service();
+        var proposal = Proposal(MemoryKind.Fact, "shipment note", "left the dock", MemoryProposalSource.AgentInferred);
+        await using var runtime = await RuntimeAsync(
+            memories,
+            Enabled(),
+            new ScriptedLanguageModel(memoryTurns: [[], [proposal]]),
+            new SpeakBrain());
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "Where is the order?",
+            Guid.Parse("019944af-0030-7000-8000-00000000001c")));
+        await runtime.WaitUntilIdleAsync();
+        await runtime.SubmitEnvironmentAsync(new EnvironmentEvent(
+            Guid.Parse("019944af-0030-7000-8000-00000000001d"),
+            "order_status_changed",
+            new Dictionary<string, string> { ["orderReference"] = "1001", ["status"] = "shipped" }));
+        await runtime.WaitUntilIdleAsync();
+
+        var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
+        var item = Assert.Single(stored);
+        Assert.Equal("left the dock", item.Content);
+        Assert.Empty(item.Provenance.SourceEntryIds);
+    }
+
+    [Fact]
+    public async Task Native_structured_output_saves_the_proposal()
+    {
+        var memories = Service();
+        var proposal = Proposal(MemoryKind.Fact, "project codename", "Atlas", MemoryProposalSource.AgentInferred);
+        var model = new FixedCapabilitiesModel(
+            new ScriptedLanguageModel(memoryTurns: [[proposal]]),
+            new ModelCapabilities(true, true, Tools: true, StructuredOutput: true));
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "The project codename is Atlas.",
+            Guid.Parse("019944af-0030-7000-8000-000000000021")));
+        await runtime.WaitUntilIdleAsync();
+        var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
+        Assert.Equal("Atlas", Assert.Single(stored).Content);
+        Assert.Contains("Memory saved for later sessions: project codename.", AssistantText(runtime), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Function_channel_normalizes_a_proposal_and_saves_it()
+    {
+        var memories = Service();
+        var model = new ResponseFunctionModel();
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "The project codename is Atlas.",
+            Guid.Parse("019944af-0030-7000-8000-000000000022")));
+        await runtime.WaitUntilIdleAsync();
+        var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
+        Assert.Equal("Atlas", Assert.Single(stored).Content);
+        Assert.Contains("Memory saved for later sessions: project codename.", AssistantText(runtime), StringComparison.Ordinal);
+        Assert.Contains("can propose new learned memory", model.LastRequest!.Messages.Single(message => message.Text.Contains("Memory capability:", StringComparison.Ordinal)).Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Plain_text_marker_still_saves_without_a_reliable_channel()
+    {
+        var memories = Service();
+        var model = new FixedCapabilitiesModel(
+            new ScriptedLanguageModel(memoryTurns: [[Proposal(MemoryKind.Fact, "editor", "Rider", MemoryProposalSource.AgentInferred)]]),
+            new ModelCapabilities(true, true, Tools: false, StructuredOutput: false));
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "My editor is Rider.",
+            Guid.Parse("019944af-0030-7000-8000-000000000023")));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal("Rider", Assert.Single(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"))).Content);
+        Assert.Contains("Memory saved for later sessions: editor.", AssistantText(runtime), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Plain_text_without_a_marker_does_not_imply_a_save()
+    {
+        var memories = Service();
+        var recorded = new RecordingModel(new ScriptedLanguageModel(["Sure, I'll remember that."]));
+        var model = new FixedCapabilitiesModel(
+            recorded,
+            new ModelCapabilities(true, true, Tools: false, StructuredOutput: false));
+        await using var runtime = await RuntimeAsync(memories, Enabled(), model);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "Remember that I prefer tea.",
+            Guid.Parse("019944af-0030-7000-8000-000000000024")));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred")));
+        var text = AssistantText(runtime);
+        Assert.Contains("Sure, I'll remember that.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory saved", text, StringComparison.Ordinal);
+        var capability = recorded.LastRequest!.Messages.Single(message => message.Text.Contains("Memory capability:", StringComparison.Ordinal)).Text;
+        Assert.Contains("no reliable channel", capability, StringComparison.Ordinal);
+        Assert.Contains("Do not claim that information was saved", capability, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Model_marker_drops_application_and_admin_sources()
+    {
+        var parsed = MemoryProposalCodec.ParseMarkerPayload(
+            """
+            [{"operation":"upsert","kind":"fact","subject":"rank","content":"hidden","source":"admin"},{"operation":"upsert","kind":"fact","subject":"tone","content":"warm","source":"userExplicit"},{"operation":"upsert","kind":"fact","subject":"channel","content":"app","source":"application"}]
+            """);
+        var kept = Assert.Single(parsed);
+        Assert.Equal("tone", kept.Subject);
+        Assert.Equal(MemoryProposalSource.UserExplicit, kept.Source);
     }
 
     [Fact]
@@ -296,12 +555,13 @@ public sealed class MemoryProposalAdmissionTests
     private static async Task<SessionRuntime> RuntimeAsync(
         StructuredMemoryService memories,
         AgentDefinition definition,
-        ILanguageModel model)
+        ILanguageModel model,
+        IAgentBrain? brain = null)
     {
         var sessions = new InMemoryMemoryStore();
         await sessions.SaveProfileAsync(Profile(), 0);
         await sessions.SaveAsync(Snapshot(SessionA, definition), 0);
-        var runtime = Runtime((await sessions.LoadAsync(SessionA))!, sessions, memories, model);
+        var runtime = Runtime((await sessions.LoadAsync(SessionA))!, sessions, memories, model, brain);
         await runtime.AttachAsync();
         return runtime;
     }
@@ -310,11 +570,12 @@ public sealed class MemoryProposalAdmissionTests
         SessionSnapshot snapshot,
         IMemoryStore sessions,
         IStructuredMemoryService memories,
-        ILanguageModel model) =>
+        ILanguageModel model,
+        IAgentBrain? brain = null) =>
         new(
             snapshot,
             model,
-            new DefaultAgentBrain(new PromptContextBuilder()),
+            brain ?? new DefaultAgentBrain(new PromptContextBuilder()),
             sessions,
             new CapturingSessionOutput(),
             new DeterministicIdGenerator(
@@ -353,6 +614,124 @@ public sealed class MemoryProposalAdmissionTests
             Now,
             Now,
             AgentInstanceId: sessionId == SessionB ? InstanceA : InstanceA);
+
+    private sealed class FixedCapabilitiesModel(ILanguageModel inner, ModelCapabilities capabilities) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities => capabilities;
+
+        public IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            CancellationToken cancellationToken = default) =>
+            inner.GenerateAsync(request, cancellationToken);
+    }
+
+    private sealed class ResponseFunctionModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: false);
+
+        public ModelRequest? LastRequest { get; private set; }
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            await Task.Yield();
+            var json = """
+                {"displayText":"Noted.","speech":{"mode":"same","text":null},"blocks":[],"memory":[{"operation":"upsert","kind":"fact","subject":"project codename","content":"Atlas","scopeHint":null,"source":"agentInferred"}]}
+                """;
+            yield return new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+
+    private sealed class SpeakBrain : IAgentBrain
+    {
+        public ValueTask<AgentDecision> DecideAsync(
+            AgentContext context,
+            Guid responseId,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<AgentDecision>(new Speak(new PromptContextBuilder().Build(context, responseId)));
+    }
+
+    private sealed class FailingAfterReadyModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            yield return Ready("Noted.", Proposal(MemoryKind.Fact, "project codename", "Atlas", MemoryProposalSource.AgentInferred));
+            yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Synthetic failure."));
+        }
+    }
+
+    private sealed class GatedReadyModel(TaskCompletionSource gate) : ILanguageModel
+    {
+        private readonly TaskCompletionSource _parked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Parked => _parked.Task;
+
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            yield return Ready("Noted.", Proposal(MemoryKind.Fact, "project codename", "Atlas", MemoryProposalSource.AgentInferred));
+            _parked.TrySetResult();
+            try
+            {
+                await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                yield break;
+            }
+
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class ReplacingSemanticModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            yield return Ready("First.", Proposal(MemoryKind.Fact, "project codename", "Atlas", MemoryProposalSource.AgentInferred));
+            yield return Ready("Second.", Proposal(MemoryKind.Fact, "project codename", "Borealis", MemoryProposalSource.AgentInferred));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class RepeatedSemanticModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var proposal = Proposal(MemoryKind.Fact, "editor", "Rider", MemoryProposalSource.AgentInferred);
+            yield return Ready("Noted.", proposal);
+            yield return Ready("Noted.", proposal);
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private static ModelSemanticResponseReady Ready(string text, MemoryProposal proposal) =>
+        new(new ModelSemanticResponse(
+            text,
+            new ModelSpeechProjection(ModelSpeechMode.Same, null),
+            [],
+            [proposal]));
 
     private sealed class RecordingModel(ILanguageModel inner) : ILanguageModel
     {

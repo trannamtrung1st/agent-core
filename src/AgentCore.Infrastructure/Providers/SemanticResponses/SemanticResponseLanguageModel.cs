@@ -25,21 +25,78 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
             yield break;
         }
 
-        var forwarded = Capabilities.StructuredOutput
-            ? request
-            : WithCompatibilityInstruction(request, request.ResponseContract);
         if (Capabilities.StructuredOutput)
         {
-            await foreach (var item in GenerateNativeAsync(forwarded, cancellationToken).ConfigureAwait(false))
+            await foreach (var item in GenerateNativeAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 yield return item;
             }
+
+            yield break;
         }
-        else
+
+        if (Capabilities.Tools)
         {
-            await foreach (var item in GenerateCompatibilityAsync(forwarded, cancellationToken).ConfigureAwait(false))
+            await foreach (var item in GenerateFunctionAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 yield return item;
+            }
+
+            yield break;
+        }
+
+        var forwarded = WithCompatibilityInstruction(request, request.ResponseContract, responseFunction: false);
+        await foreach (var item in GenerateCompatibilityAsync(forwarded, cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
+    }
+
+    private async IAsyncEnumerable<ModelGenerationEvent> GenerateFunctionAsync(
+        ModelRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var forwarded = WithResponseFunction(request);
+        var responseCalls = new List<ModelToolCall>();
+        var otherCalls = new List<ModelToolCall>();
+        await foreach (var item in GenerateCompatibilityAsync(forwarded, cancellationToken).ConfigureAwait(false))
+        {
+            switch (item)
+            {
+                case ModelToolCallEvent call when call.Call.Name == AssistantResponseSchema.ResponseFunctionName:
+                    responseCalls.Add(call.Call);
+                    continue;
+                case ModelToolCallEvent call:
+                    otherCalls.Add(call.Call);
+                    continue;
+                case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls && otherCalls.Count > 0:
+                    foreach (var other in otherCalls)
+                    {
+                        yield return new ModelToolCallEvent(other);
+                    }
+
+                    otherCalls.Clear();
+                    responseCalls.Clear();
+                    yield return completed;
+                    continue;
+                case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls && responseCalls.Count > 0:
+                    var arguments = responseCalls[^1].ArgumentsJson;
+                    responseCalls.Clear();
+                    if (!NativeSemanticResponseParser.TryParse(arguments, out var parsed, out _))
+                    {
+                        yield return Fail();
+                        yield break;
+                    }
+
+                    yield return new ModelSemanticResponseReady(parsed!);
+                    yield return new ModelCompleted(
+                        ModelStopReason.Completed,
+                        completed.InputTokens,
+                        completed.OutputTokens);
+                    yield break;
+                default:
+                    yield return item;
+                    continue;
             }
         }
     }
@@ -187,9 +244,30 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         }
     }
 
-    private static ModelRequest WithCompatibilityInstruction(ModelRequest request, ModelResponseContract contract)
+    private static ModelRequest WithResponseFunction(ModelRequest request)
     {
-        var instruction = AssistantResponseSchema.CompatibilityInstruction(contract);
+        var instructed = WithCompatibilityInstruction(request, request.ResponseContract!, responseFunction: true);
+        var tools = instructed.Tools?.ToList() ?? [];
+        if (!tools.Any(tool => tool.Name == AssistantResponseSchema.ResponseFunctionName))
+        {
+            tools.Add(AssistantResponseSchema.ResponseFunction);
+        }
+
+        var sessionTools = request.Tools is { Count: > 0 };
+        return instructed with
+        {
+            Tools = tools,
+            ToolChoice = sessionTools ? ModelToolChoice.Required : ModelToolChoice.Named,
+            ToolChoiceName = sessionTools ? null : AssistantResponseSchema.ResponseFunctionName
+        };
+    }
+
+    private static ModelRequest WithCompatibilityInstruction(
+        ModelRequest request,
+        ModelResponseContract contract,
+        bool responseFunction)
+    {
+        var instruction = AssistantResponseSchema.CompatibilityInstruction(contract, responseFunction);
         var messages = request.Messages.ToList();
         messages.Add(new ModelMessage(ModelRole.System, instruction));
         return request with { Messages = messages };

@@ -253,27 +253,27 @@ public static class MemoryAdmission
         Guid sessionId,
         CancellationToken cancellationToken)
     {
+        var deleted = false;
         var existing = await memories.FindActiveBySubjectAsync(owner, proposal.Kind, proposal.Subject, cancellationToken)
             .ConfigureAwait(false);
-        if (existing is null)
+        if (existing is not null)
         {
-            return MemoryAdmissionStatus.Rejected;
-        }
-
-        try
-        {
-            await memories.DeleteAsync(owner, existing.MemoryId, cancellationToken).ConfigureAwait(false);
-        }
-        catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "NotFound")
-        {
-            logger.LogDebug(ex, "Memory delete rejected for session {SessionId}", sessionId);
-            return MemoryAdmissionStatus.Rejected;
+            try
+            {
+                await memories.DeleteAsync(owner, existing.MemoryId, cancellationToken).ConfigureAwait(false);
+                deleted = true;
+            }
+            catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "NotFound")
+            {
+                logger.LogDebug(ex, "Memory delete rejected for session {SessionId}", sessionId);
+            }
         }
 
         if (allowIdentity && profile is not null)
         {
+            var identityOwner = new TrustedIdentityUserOwner(instanceId, profile.ProfileId);
             var identity = await memories.FindActiveIdentityUserBySubjectAsync(
-                new TrustedIdentityUserOwner(instanceId, profile.ProfileId),
+                identityOwner,
                 proposal.Kind,
                 proposal.Subject,
                 cancellationToken).ConfigureAwait(false);
@@ -282,10 +282,11 @@ public static class MemoryAdmission
                 try
                 {
                     await memories.DeleteIdentityUserAsync(
-                        new TrustedIdentityUserOwner(instanceId, profile.ProfileId),
+                        identityOwner,
                         identity.MemoryId,
                         retrievalAllowed: true,
                         cancellationToken).ConfigureAwait(false);
+                    deleted = true;
                 }
                 catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected" or "NotFound")
                 {
@@ -296,23 +297,22 @@ public static class MemoryAdmission
 
         if (allowUser && profile is not null)
         {
-            var userItems = await memories.SearchUserAsync(
-                new TrustedUserOwner(profile.ProfileId),
-                new MemorySearchQuery(proposal.Subject, proposal.Kind),
-                retrievalAllowed: true,
-                admission,
+            var userOwner = new TrustedUserOwner(profile.ProfileId);
+            var match = await memories.FindActiveUserBySubjectAsync(
+                userOwner,
+                proposal.Kind,
+                proposal.Subject,
                 cancellationToken).ConfigureAwait(false);
-            var match = userItems.FirstOrDefault(item =>
-                string.Equals(item.Subject, existing.Subject, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
             {
                 try
                 {
                     await memories.DeleteUserAsync(
-                        new TrustedUserOwner(profile.ProfileId),
+                        userOwner,
                         match.MemoryId,
                         retrievalAllowed: true,
                         cancellationToken).ConfigureAwait(false);
+                    deleted = true;
                 }
                 catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected" or "NotFound")
                 {
@@ -321,7 +321,8 @@ public static class MemoryAdmission
             }
         }
 
-        return MemoryAdmissionStatus.Deleted;
+        _ = admission;
+        return deleted ? MemoryAdmissionStatus.Deleted : MemoryAdmissionStatus.Rejected;
     }
 
     private static async ValueTask<bool> SyncIdentityUserAsync(
@@ -416,21 +417,72 @@ public static class MemoryAdmission
         Guid sessionId,
         CancellationToken cancellationToken)
     {
-        _ = sourceEntryIds;
+        var existing = await memories.FindActiveUserBySubjectAsync(
+            userOwner,
+            sessionItem.Kind,
+            sessionItem.Subject,
+            cancellationToken).ConfigureAwait(false);
+        if (existing is null)
+        {
+            try
+            {
+                await memories.PromoteSessionToUserAsync(
+                    sessionOwner,
+                    sessionItem.MemoryId,
+                    userOwner,
+                    promotionAllowed: true,
+                    admission,
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch (AgentCoreException ex) when (ex.Code == "Conflict")
+            {
+                existing = await memories.FindActiveUserBySubjectAsync(
+                    userOwner,
+                    sessionItem.Kind,
+                    sessionItem.Subject,
+                    cancellationToken).ConfigureAwait(false);
+                if (existing is null)
+                {
+                    logger.LogDebug(ex, "User memory promotion conflict without lookup for session {SessionId}", sessionId);
+                    return false;
+                }
+            }
+            catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected")
+            {
+                logger.LogDebug(ex, "User memory promotion skipped for session {SessionId}", sessionId);
+                return false;
+            }
+        }
+
+        if (existing is not null
+            && string.Equals(existing.Content, sessionItem.Content, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (existing is null)
+        {
+            return false;
+        }
+
         try
         {
-            await memories.PromoteSessionToUserAsync(
-                sessionOwner,
-                sessionItem.MemoryId,
+            await memories.UpdateUserAsync(
                 userOwner,
-                promotionAllowed: true,
+                new MemoryUpdateProposal(
+                    existing.MemoryId,
+                    sessionItem.Subject,
+                    sessionItem.Content,
+                    sourceEntryIds),
+                retrievalAllowed: true,
                 admission,
                 cancellationToken).ConfigureAwait(false);
             return true;
         }
         catch (AgentCoreException ex) when (ex.Code is "Conflict" or "PolicyDenied" or "MemoryRejected")
         {
-            logger.LogDebug(ex, "User memory promotion skipped for session {SessionId}", sessionId);
+            logger.LogDebug(ex, "User memory update skipped for session {SessionId}", sessionId);
             return false;
         }
     }
