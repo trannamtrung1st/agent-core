@@ -3,6 +3,7 @@ import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 
 const base = process.env.BASE_URL;
 const scenario = process.argv[2];
+const realtimeProtocol = process.env.AGENTCORE_REALTIME_PROTOCOL === "json" ? "json" : "messagepack";
 if (!base || !scenario) {
   console.error("usage: node client.mjs <scenario>");
   process.exit(2);
@@ -54,17 +55,47 @@ async function ensureOwner() {
 
 async function connect() {
   await ensureOwner();
-  const connection = new HubConnectionBuilder()
-    .withUrl(`${base}/hubs/session`, {
-      skipNegotiation: true,
-      transport: HttpTransportType.WebSockets,
-      headers: { "X-AgentCore-Owner-Capability": ownerToken }
-    })
-    .withHubProtocol(new MessagePackHubProtocol())
-    .build();
+  const builder = new HubConnectionBuilder().withUrl(`${base}/hubs/session`, {
+    skipNegotiation: true,
+    transport: HttpTransportType.WebSockets,
+    headers: { "X-AgentCore-Owner-Capability": ownerToken }
+  });
+  const connection = (realtimeProtocol === "json" ? builder : builder.withHubProtocol(new MessagePackHubProtocol())).build();
   connection.on("SessionEvent", (evt) => events.push(evt));
   await connection.start();
   return connection;
+}
+
+function bytesOf(data) {
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return new Uint8Array(data);
+  }
+
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  if (typeof data === "string") {
+    if (data.length === 0 || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+      return new Uint8Array();
+    }
+
+    return new Uint8Array(Buffer.from(data, "base64"));
+  }
+
+  if (data && typeof data === "object" && Array.isArray(data.data)) {
+    return Uint8Array.from(data.data);
+  }
+
+  if (Array.isArray(data)) {
+    return Uint8Array.from(data);
+  }
+
+  return new Uint8Array();
 }
 
 async function ownerHeaders(extra = {}) {
@@ -1619,9 +1650,144 @@ async function run() {
       await connection.stop();
       break;
     }
+    case "json-diagnostic-roundtrip": {
+      if (realtimeProtocol !== "json") {
+        throw new Error("json-diagnostic-roundtrip requires AGENTCORE_REALTIME_PROTOCOL=json");
+      }
+
+      const session = await createSession();
+      const first = await connect();
+      const attachAck = await attachSession(first, session.sessionId);
+      if (!attachAck.accepted) {
+        throw new Error(JSON.stringify(attachAck));
+      }
+      await waitFor((evt) => evt.type === "session.ready");
+      const firstAttachment = events[0].attachmentId;
+      const send = await first.invoke(
+        "SendText",
+        command(session.sessionId, 1, "user.text", { text: "Hello" }, { attachmentId: firstAttachment })
+      );
+      if (!send.accepted) {
+        throw new Error(JSON.stringify(send));
+      }
+      await waitFor((evt) => evt.type === "agent.response.started");
+      await waitFor((evt) => evt.type === "agent.response.completed");
+      const types = events.map((evt) => evt.type);
+      if (!types.includes("agent.text.delta") && !types.includes("agent.block.upsert")) {
+        throw new Error(`missing text or semantic display: ${types.join(",")}`);
+      }
+      if (events.some((evt) => evt.correlationId == null || evt.sequence < 1)) {
+        throw new Error("server envelopes missing correlation or sequence");
+      }
+      await first.stop();
+
+      events.length = 0;
+      const second = await connect();
+      const audioFrames = [];
+      second.on("AudioOutput", (frame) => audioFrames.push(frame));
+      const reattached = await attachSession(second, session.sessionId);
+      if (!reattached.accepted) {
+        throw new Error(JSON.stringify(reattached));
+      }
+      await waitFor((evt) => evt.type === "session.ready");
+      const attachmentId = events[0].attachmentId;
+      const mode = await second.invoke(
+        "SetMode",
+        command(session.sessionId, 1, "session.mode.set", { mode: "voice" }, { attachmentId })
+      );
+      if (!mode.accepted) {
+        throw new Error(JSON.stringify(mode));
+      }
+      await waitFor((evt) => evt.type === "session.state.changed" && evt.payload?.mode === "voice");
+      const voiced = await second.invoke(
+        "SendText",
+        command(session.sessionId, 2, "user.text", { text: "Hello" }, { attachmentId })
+      );
+      if (!voiced.accepted) {
+        throw new Error(JSON.stringify(voiced));
+      }
+      const frame = await waitForAudio(audioFrames);
+      const payload = frame.data ?? frame.Data;
+      if (typeof payload !== "string") {
+        throw new Error(`JSON audio payload was ${typeof payload}`);
+      }
+      const bytes = bytesOf(payload);
+      if (bytes.length === 0) {
+        throw new Error("JSON audio payload did not decode");
+      }
+      const started = events.find((evt) => evt.type === "agent.response.started");
+      const cancel = await second.invoke(
+        "CancelResponse",
+        command(session.sessionId, 3, "agent.response.cancel", {}, { attachmentId, responseId: started.responseId })
+      );
+      if (!cancel.accepted) {
+        throw new Error(JSON.stringify(cancel));
+      }
+      await waitFor((evt) => evt.type === "agent.response.interrupted" && evt.responseId === started.responseId);
+
+      const failed = await second.invoke(
+        "SendText",
+        command(session.sessionId, 4, "user.text", { text: "synthetic-fail-turn" }, { attachmentId })
+      );
+      if (!failed.accepted) {
+        throw new Error(JSON.stringify(failed));
+      }
+      const failure = await waitForEvent((evt) => evt.type === "error" && isGuid(evt.payload?.diagnosticId));
+      await waitFor((evt) => evt.type === "agent.response.completed" && evt.responseId === failure.responseId);
+      const page = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?after=0`, {
+        headers: await ownerHeaders()
+      });
+      if (!page.ok) {
+        throw new Error(`history ${page.status}`);
+      }
+      const history = await page.json();
+      const diagnosed = history.items.find((item) => item.failure?.diagnosticId);
+      if (!diagnosed || diagnosed.failure.diagnosticId.toLowerCase() !== failure.payload.diagnosticId.toLowerCase()) {
+        throw new Error(`history diagnostic mismatch ${JSON.stringify(history.items.map((item) => item.failure ?? null))}`);
+      }
+
+      const rejected = await second.invoke(
+        "SendText",
+        command(
+          session.sessionId,
+          5,
+          "user.text",
+          { text: "Hello" },
+          { attachmentId, correlationId: uuid() }
+        )
+      );
+      if (rejected.accepted || rejected.error?.code !== "ProtocolError" || rejected.error?.diagnosticId) {
+        throw new Error(JSON.stringify(rejected));
+      }
+      try {
+        await second.stop();
+      } catch {
+        // A fatal protocol rejection closes the socket after the ack.
+      }
+      break;
+    }
     default:
       throw new Error(`unknown scenario ${scenario}`);
   }
+}
+
+function isGuid(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function waitForAudio(frames, timeoutMs = 8000) {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(() => {
+      if (frames.length > 0) {
+        clearInterval(timer);
+        resolve(frames[0]);
+      } else if (Date.now() - started > timeoutMs) {
+        clearInterval(timer);
+        reject(new Error("timeout waiting for audio"));
+      }
+    }, 20);
+  });
 }
 
 function waitFor(match, timeoutMs = 8000) {

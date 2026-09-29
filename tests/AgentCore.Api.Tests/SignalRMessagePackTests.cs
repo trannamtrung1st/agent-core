@@ -79,7 +79,7 @@ public class KestrelHostFixture : IAsyncLifetime
         _process.Dispose();
     }
 
-    public async Task RunJsAsync(string scenario)
+    public async Task RunJsAsync(string scenario, string? realtimeProtocol = null)
     {
         var root = FindRepoRoot();
         var jsDir = Path.Combine(root, "tests", "realtime-js");
@@ -91,6 +91,10 @@ public class KestrelHostFixture : IAsyncLifetime
             UseShellExecute = false
         };
         start.Environment["BASE_URL"] = BaseAddress;
+        if (realtimeProtocol is not null)
+        {
+            start.Environment["AGENTCORE_REALTIME_PROTOCOL"] = realtimeProtocol;
+        }
         using var process = Process.Start(start) ?? throw new InvalidOperationException("node failed to start.");
         var stdout = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
         var stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
@@ -171,6 +175,9 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
     [InlineData("approval-stale-respond")]
     [InlineData("approval-reject-respond")]
     public Task JavaScript_messagepack_scenarios(string scenario) => host.RunJsAsync(scenario);
+
+    [Fact]
+    public Task JavaScript_json_diagnostic_roundtrip() => host.RunJsAsync("json-diagnostic-roundtrip", "json");
 }
 
 [CollectionDefinition("kestrel-client-speech", DisableParallelization = true)]

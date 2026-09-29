@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_AGENTCORE_REALTIME_PROTOCOL?: string;
+}
+
 interface Window {
   __agentCore?: {
     audioFramesSent: () => number;

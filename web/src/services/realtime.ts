@@ -914,7 +914,7 @@ function asEventNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
 }
 
-function bytesOf(data: unknown): Uint8Array {
+export function bytesOf(data: unknown): Uint8Array {
   if (data instanceof Uint8Array) {
     return data;
   }
@@ -927,6 +927,10 @@ function bytesOf(data: unknown): Uint8Array {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
 
+  if (typeof data === "string") {
+    return bytesFromBase64(data);
+  }
+
   if (data && typeof data === "object" && "data" in (data as { data?: unknown }) && Array.isArray((data as { data: unknown }).data)) {
     return Uint8Array.from((data as { data: number[] }).data);
   }
@@ -936,6 +940,20 @@ function bytesOf(data: unknown): Uint8Array {
   }
 
   return new Uint8Array();
+}
+
+function bytesFromBase64(value: string): Uint8Array {
+  if (value.length === 0 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    return new Uint8Array();
+  }
+
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }
 
 function handleAudioOutput(dto: {
@@ -1725,13 +1743,16 @@ async function startConnection(
   audioOutputsReceived = 0;
   const epoch = ++connectionEpoch;
   const ownerCapability = await ensureOwnerCapability();
-  connection = new HubConnectionBuilder()
-    .withUrl("/hubs/session", {
-      skipNegotiation: true,
-      transport: HttpTransportType.WebSockets,
-      headers: { "X-AgentCore-Owner-Capability": ownerCapability }
-    })
-    .withHubProtocol(new MessagePackHubProtocol())
+  const builder = new HubConnectionBuilder().withUrl("/hubs/session", {
+    skipNegotiation: true,
+    transport: HttpTransportType.WebSockets,
+    headers: { "X-AgentCore-Owner-Capability": ownerCapability }
+  });
+  const selected =
+    import.meta.env.VITE_AGENTCORE_REALTIME_PROTOCOL === "json"
+      ? builder
+      : builder.withHubProtocol(new MessagePackHubProtocol());
+  connection = selected
     .withAutomaticReconnect({
       nextRetryDelayInMilliseconds(retryContext) {
         if (retryContext.elapsedMilliseconds >= RECONNECT_BUDGET_MS) {

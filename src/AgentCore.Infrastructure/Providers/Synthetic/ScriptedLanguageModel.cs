@@ -35,6 +35,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly TaskCompletionSource? _compactionStarted;
     private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
     private static readonly ITriggerCommandAuthorizer ScheduleAuthorizer = new HeuristicTriggerCommandAuthorizer();
+    private const string DiagnosticFailureMarker = "synthetic-fail-turn";
 
     private sealed class ScheduleScratch
     {
@@ -116,6 +117,14 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
             yield return new ModelTextDelta(completionJson);
             yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
+
+        var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (diagnosticUser.Contains(DiagnosticFailureMarker, StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Synthetic turn failure."));
             yield break;
         }
 
