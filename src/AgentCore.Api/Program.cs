@@ -97,8 +97,11 @@ if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
         client.AddHttpMessageHandler<ForbiddenOutboundHandler>());
 }
 builder.Services.AddOpenApi();
+builder.Services.AddExceptionHandler<DiagnosticExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+app.UseExceptionHandler();
 await InitializePersistenceAsync(app.Services).ConfigureAwait(false);
 
 var spaIndex = ResolveSpaIndex(app);

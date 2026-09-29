@@ -410,6 +410,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.ProgressSummary).HasMaxLength(WorkLimits.MaxProgressCharacters);
             entity.Property(row => row.FailureCode).HasMaxLength(WorkLimits.MaxFailureCodeCharacters);
             entity.Property(row => row.FailureSummary).HasMaxLength(WorkLimits.MaxFailureSummaryCharacters);
+            entity.Property(row => row.FailureDiagnosticId).HasMaxLength(36);
             entity.Property(row => row.KnownEffectSummary).HasMaxLength(WorkLimits.MaxKnownEffectCharacters);
             entity.Property(row => row.ResultText).HasMaxLength(WorkLimits.MaxResultCharacters);
             entity.Property(row => row.CheckpointJson).HasMaxLength(WorkLimits.MaxCheckpointBytes);

@@ -1,21 +1,68 @@
+using AgentCore.Application.Observability;
+using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Api.Http;
 
 public static class ProblemResults
 {
-    public static IResult From(AgentCoreException exception)
+    public static IResult From(AgentCoreException exception) => new ClassifiedProblemResult(exception);
+
+    private sealed class ClassifiedProblemResult(AgentCoreException exception) : IResult
     {
-        var problem = new ProblemDetails
+        public async Task ExecuteAsync(HttpContext httpContext)
         {
-            Type = "about:blank",
-            Title = exception.Code,
-            Status = exception.StatusCode,
-            Detail = exception.Message
-        };
-        problem.Extensions["code"] = exception.Code;
-        return Results.Json(problem, statusCode: exception.StatusCode);
+            var problem = new ProblemDetails
+            {
+                Type = "about:blank",
+                Title = exception.Code,
+                Status = exception.StatusCode,
+                Detail = exception.Message
+            };
+            problem.Extensions["code"] = exception.Code;
+            if (exception.Code == "SessionPersistenceUnavailable")
+            {
+                var diagnosticId = exception.DiagnosticId;
+                if (diagnosticId is null || diagnosticId == Guid.Empty)
+                {
+                    diagnosticId = httpContext.RequestServices.GetRequiredService<IDiagnosticIdSource>().NewId();
+                    DiagnosticLog.Error(
+                        httpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("AgentCore.Api.Http"),
+                        exception,
+                        diagnosticId.Value,
+                        "Persistent save failed.",
+                        RouteContext(httpContext, "Session", exception.Code));
+                }
+
+                problem.Extensions["diagnosticId"] = diagnosticId.Value.ToString("D");
+            }
+
+            httpContext.Response.StatusCode = exception.StatusCode;
+            await httpContext.Response.WriteAsJsonAsync(problem).ConfigureAwait(false);
+        }
+    }
+
+    internal static DiagnosticContext RouteContext(HttpContext httpContext, string category, string code)
+    {
+        return new DiagnosticContext(
+            SessionId: RouteGuid(httpContext, "sessionId"),
+            WorkItemId: RouteGuid(httpContext, "workItemId"),
+            ErrorCategory: category,
+            ErrorCode: code);
+    }
+
+    private static Guid? RouteGuid(HttpContext httpContext, string key)
+    {
+        if (httpContext.Request.RouteValues.TryGetValue(key, out var value)
+            && Guid.TryParse(Convert.ToString(value), out var id)
+            && id != Guid.Empty)
+        {
+            return id;
+        }
+
+        return null;
     }
 }
 

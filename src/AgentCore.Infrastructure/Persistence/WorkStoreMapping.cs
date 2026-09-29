@@ -43,6 +43,7 @@ internal static class WorkStoreMapping
         row.FailureCode = item.Failure?.Code;
         row.FailureSummary = item.Failure?.Summary;
         row.FailureAtUtc = item.Failure is null ? null : item.Failure.FailedAtUtc.ToUnixTimeMilliseconds();
+        row.FailureDiagnosticId = item.Failure?.DiagnosticId?.ToString("D");
         row.SideEffectDisposition = (int)item.SideEffect.Disposition;
         row.SideEffectToolCallId = item.SideEffect.ToolCallId;
         row.SideEffectActionHash = item.SideEffect.ActionHash;
@@ -119,7 +120,11 @@ internal static class WorkStoreMapping
             : new WorkResult(row.ResultText, FromUnix(row.ResultCompletedAtUtc));
         var failure = row.FailureCode is null
             ? null
-            : new WorkFailure(row.FailureCode, row.FailureSummary ?? "", FromUnix(row.FailureAtUtc));
+            : new WorkFailure(
+                row.FailureCode,
+                row.FailureSummary ?? "",
+                FromUnix(row.FailureAtUtc),
+                ParseDiagnosticId(row.FailureDiagnosticId));
         var sideEffectDisposition = (WorkSideEffectDisposition)row.SideEffectDisposition;
         WorkSideEffect sideEffect;
         if (sideEffectDisposition == WorkSideEffectDisposition.None)
@@ -222,6 +227,17 @@ internal static class WorkStoreMapping
     private static string? OptionalId(Guid? value) => value?.ToString("D");
 
     private static Guid? ParseOptional(string? value) => value is null ? null : Guid.Parse(value);
+
+    private static Guid? ParseDiagnosticId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var id = Guid.Parse(value);
+        return id == Guid.Empty ? null : id;
+    }
 
     private static long? Unix(DateTimeOffset? value) => value?.ToUnixTimeMilliseconds();
 

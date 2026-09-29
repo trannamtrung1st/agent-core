@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Work;
 using Microsoft.Data.Sqlite;
@@ -6,8 +7,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> contexts) : IWorkItemStore
+public sealed class SqliteWorkItemStore(
+    IDbContextFactory<AgentCoreDbContext> contexts,
+    IDiagnosticIdSource? diagnostics = null) : IWorkItemStore
 {
+    private readonly IDiagnosticIdSource _diagnostics = diagnostics ?? new SystemDiagnosticIdSource();
     public async ValueTask<WorkItemCreateResult> CreateAsync(WorkItem item, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -173,7 +177,15 @@ public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> co
         CancellationToken cancellationToken = default) =>
         Required(MutateAsync(
             workItemId,
-            item => item.Fail(expectedRevision, generation, failureCode, failureSummary, replaySafe, failedAtUtc, nextRetryAtUtc),
+            item => item.Fail(
+                expectedRevision,
+                generation,
+                failureCode,
+                failureSummary,
+                replaySafe,
+                failedAtUtc,
+                nextRetryAtUtc,
+                _diagnostics.NewId),
             cancellationToken));
 
     public ValueTask<WorkItem> RequestCancellationAsync(
@@ -218,7 +230,7 @@ public sealed class SqliteWorkItemStore(IDbContextFactory<AgentCoreDbContext> co
             WorkItem updated;
             try
             {
-                updated = current.RecoverExpiredClaim(asOfUtc);
+                updated = current.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
             }
             catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
             {

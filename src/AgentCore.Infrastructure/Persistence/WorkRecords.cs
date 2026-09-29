@@ -52,6 +52,8 @@ public sealed class WorkItemRecord
 
     public long? FailureAtUtc { get; set; }
 
+    public string? FailureDiagnosticId { get; set; }
+
     public int SideEffectDisposition { get; set; }
 
     public string? SideEffectToolCallId { get; set; }

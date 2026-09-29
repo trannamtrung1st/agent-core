@@ -268,7 +268,8 @@ public sealed record WorkItemResponse(
     string? FailureSummary,
     string? KnownEffect,
     string CreatedAt,
-    string UpdatedAt);
+    string UpdatedAt,
+    string? DiagnosticId = null);
 
 public sealed record WorkItemListResponse(IReadOnlyList<WorkItemResponse> Items);
 

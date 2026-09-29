@@ -136,10 +136,10 @@ export async function deleteAdminAgentInstance(instanceId: string, expectedRevis
     body: JSON.stringify({ expectedRevision })
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(
+    throw await adminProblemMessage(
       response,
       "This instance could not be deleted. Archive it first, or remove the references listed by the server."
-    ));
+    );
   }
 }
 
@@ -156,10 +156,10 @@ export async function deleteAdminDefinition(
     body: JSON.stringify(witness)
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(
+    throw await adminProblemMessage(
       response,
       "This definition could not be deleted. It may still be referenced, or it changed since this page loaded."
-    ));
+    );
   }
 }
 
@@ -226,7 +226,7 @@ export async function createNewAdminDefinitionDraft(definitionId: string): Promi
     body: JSON.stringify({ definitionId })
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, "The definition could not be created. Check the ID and try again."));
+    throw await adminProblemMessage(response, "The definition could not be created. Check the ID and try again.");
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -242,7 +242,7 @@ export async function forkAdminDefinitionDraft(
     body: JSON.stringify({ definitionId, sourceVersion, sourceKind })
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, "The draft could not be created from that version. Try again."));
+    throw await adminProblemMessage(response, "The draft could not be created from that version. Try again.");
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -258,12 +258,12 @@ export async function updateAdminDefinitionDraft(
     body: JSON.stringify({ expectedRevision, candidate })
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(
+    throw await adminProblemMessage(
       response,
       response.status === 409
         ? "This draft changed somewhere else. Reload it, then try again."
         : "The draft could not be saved. Check the form and try again."
-    ));
+    );
   }
   return (await response.json()) as AdminDefinitionDraft;
 }
@@ -277,7 +277,7 @@ export async function deleteAdminDefinitionDraft(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin delete draft failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin delete draft failed (${response.status})`);
   }
 }
 
@@ -291,7 +291,7 @@ export async function publishAdminDefinitionDraft(
     body: JSON.stringify({ expectedRevision })
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin publish draft failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin publish draft failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionPublicationSummary;
 }
@@ -318,7 +318,7 @@ export async function validateAdminDefinitionDraft(
     method: "POST"
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin validate draft failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin validate draft failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionDraftValidation;
 }
@@ -342,7 +342,7 @@ export type AdminDefinitionDraftDiff = {
 export async function getAdminDefinitionDraftDiff(draftId: string): Promise<AdminDefinitionDraftDiff> {
   const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/diff`);
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin draft diff failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin draft diff failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionDraftDiff;
 }
@@ -380,7 +380,7 @@ export async function listAdminDefinitionEvaluationScenarios(
 ): Promise<AdminDefinitionEvaluationScenario[]> {
   const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-scenarios`);
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin evaluation scenarios failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin evaluation scenarios failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionEvaluationScenario[];
 }
@@ -403,7 +403,7 @@ export async function upsertAdminDefinitionEvaluationScenario(
     body: JSON.stringify(body)
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin upsert evaluation scenario failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin upsert evaluation scenario failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionEvaluationScenario;
 }
@@ -418,7 +418,7 @@ export async function removeAdminDefinitionEvaluationScenario(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin remove evaluation scenario failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin remove evaluation scenario failed (${response.status})`);
   }
 }
 
@@ -431,7 +431,7 @@ export async function runAdminDefinitionEvaluationScenario(
     { method: "POST" }
   );
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin run evaluation scenario failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin run evaluation scenario failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionEvaluationResult;
 }
@@ -441,7 +441,7 @@ export async function listAdminDefinitionEvaluationResults(
 ): Promise<AdminDefinitionEvaluationResult[]> {
   const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/evaluation-results`);
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin evaluation results failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin evaluation results failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionEvaluationResult[];
 }
@@ -471,7 +471,7 @@ export async function deprecateAdminDefinitionPublication(
     }
   );
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin deprecate publication failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin deprecate publication failed (${response.status})`);
   }
   return (await response.json()) as AdminDefinitionPublicationSummary;
 }
@@ -562,6 +562,28 @@ const adminDetailMessages: Record<string, string> = {
     "This draft changed somewhere else. Reload it, then try again."
 };
 
+export function adminRequestErrorFromProblem(
+  problem: { title?: string; detail?: string; diagnosticId?: unknown; extensions?: unknown },
+  fallback: string
+): AdminRequestError {
+  const diagnosticId = typeof problem.diagnosticId === "string" && problem.diagnosticId.length > 0
+    ? problem.diagnosticId
+    : undefined;
+  return new AdminRequestError(
+    friendlyAdminDetail(problem.detail ?? problem.title, fallback),
+    diagnosticId);
+}
+
+export class AdminRequestError extends Error {
+  readonly diagnosticId?: string;
+
+  constructor(message: string, diagnosticId?: string) {
+    super(message);
+    this.name = "AdminRequestError";
+    this.diagnosticId = diagnosticId;
+  }
+}
+
 export function friendlyAdminDetail(detail: string | undefined, fallback: string): string {
   const text = detail?.trim() ?? "";
   if (text.length === 0) {
@@ -586,12 +608,12 @@ export function friendlyAdminDetail(detail: string | undefined, fallback: string
   return text;
 }
 
-async function adminProblemMessage(response: Response, fallback: string): Promise<string> {
+async function adminProblemMessage(response: Response, fallback: string): Promise<AdminRequestError> {
   try {
-    const problem = (await response.json()) as { title?: string; detail?: string };
-    return friendlyAdminDetail(problem.detail ?? problem.title, fallback);
+    const problem = (await response.json()) as { title?: string; detail?: string; diagnosticId?: unknown };
+    return adminRequestErrorFromProblem(problem, fallback);
   } catch {
-    return fallback;
+    return new AdminRequestError(fallback);
   }
 }
 
@@ -698,7 +720,7 @@ export async function bindAdminDraftResources(
     body: JSON.stringify({ expectedRevision, items })
   });
   if (!response.ok) {
-    throw new Error(await adminProblemMessage(response, `Admin resource bind failed (${response.status})`));
+    throw await adminProblemMessage(response, `Admin resource bind failed (${response.status})`);
   }
   return (await response.json()) as { revision: number; items: AdminDefinitionDraftResource[] };
 }
@@ -829,9 +851,7 @@ export async function listAdminLearnedMemory(
     `/api/v2/admin/agent-instances/${instanceId}/learned-memory?${params.toString()}`
   );
   if (!response.ok) {
-    throw new Error(
-      await adminProblemMessage(response, `Admin learned memory list failed (${response.status})`)
-    );
+    throw await adminProblemMessage(response, `Admin learned memory list failed (${response.status})`);
   }
   const payload = (await response.json()) as { items: AdminLearnedMemoryItem[] };
   return payload.items;
@@ -852,9 +872,7 @@ export async function deleteAdminLearnedMemory(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw new Error(
-      await adminProblemMessage(response, `Admin learned memory delete failed (${response.status})`)
-    );
+    throw await adminProblemMessage(response, `Admin learned memory delete failed (${response.status})`);
   }
 }
 
@@ -869,9 +887,7 @@ export async function resetAdminLearnedMemoryScope(
     body: JSON.stringify({ scope, sessionId: sessionId ?? null, confirm: true })
   });
   if (!response.ok) {
-    throw new Error(
-      await adminProblemMessage(response, `Admin learned memory reset failed (${response.status})`)
-    );
+    throw await adminProblemMessage(response, `Admin learned memory reset failed (${response.status})`);
   }
   const payload = (await response.json()) as { itemsRemoved: number };
   return payload.itemsRemoved;
@@ -902,11 +918,9 @@ export async function cancelAdminAutomationRegistration(
     }
   );
   if (response.status === 409) {
-    throw new Error(
-      await adminProblemMessage(
-        response,
-        "Registration revision conflict — reload registrations and try again."
-      )
+    throw await adminProblemMessage(
+      response,
+      "Registration revision conflict — reload registrations and try again."
     );
   }
   if (!response.ok) {

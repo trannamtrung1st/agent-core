@@ -299,12 +299,18 @@ public sealed class WorkResult
 
 public sealed class WorkFailure
 {
-    public WorkFailure(string code, string summary, DateTimeOffset failedAtUtc)
+    public WorkFailure(string code, string summary, DateTimeOffset failedAtUtc, Guid? diagnosticId = null)
     {
         WorkTime.RequireUtc(failedAtUtc, "Failure");
         Code = WorkText.RequireFailureCode(code);
         Summary = WorkText.RequireLine(summary, WorkLimits.MaxFailureSummaryCharacters, "Failure");
         FailedAtUtc = failedAtUtc;
+        if (diagnosticId == Guid.Empty)
+        {
+            throw new ArgumentException("Diagnostic id is required.", nameof(diagnosticId));
+        }
+
+        DiagnosticId = diagnosticId;
     }
 
     public string Code { get; }
@@ -312,6 +318,8 @@ public sealed class WorkFailure
     public string Summary { get; }
 
     public DateTimeOffset FailedAtUtc { get; }
+
+    public Guid? DiagnosticId { get; }
 }
 
 public sealed class WorkSideEffect
@@ -517,7 +525,8 @@ public sealed record WorkItemPublicSummary(
     string? KnownEffectSummary,
     bool CancellationAvailable,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    Guid? FailureDiagnosticId = null);
 
 internal static class WorkTime
 {

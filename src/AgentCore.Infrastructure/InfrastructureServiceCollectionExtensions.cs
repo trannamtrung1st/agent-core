@@ -114,7 +114,8 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<ITriggerStore>(provider => new SqliteTriggerStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IWorkItemStore>(provider => new SqliteWorkItemStore(
-                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+                provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
+                provider.GetRequiredService<IDiagnosticIdSource>()));
             services.AddSingleton<IConversationTurnExecutionStore>(provider => new SqliteConversationTurnExecutionStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.AddSingleton<IDurableWorkHandoff>(provider => new SqliteDurableWorkHandoff(
@@ -170,7 +171,9 @@ public static class InfrastructureServiceCollectionExtensions
                 new InMemoryTriggerStore(provider.GetRequiredService<InMemoryDurableState>()));
             services.TryAddSingleton<ITriggerStore>(provider => provider.GetRequiredService<InMemoryTriggerStore>());
             services.TryAddSingleton(provider =>
-                new InMemoryWorkItemStore(provider.GetRequiredService<InMemoryDurableState>()));
+                new InMemoryWorkItemStore(
+                    provider.GetRequiredService<InMemoryDurableState>(),
+                    provider.GetRequiredService<IDiagnosticIdSource>()));
             services.TryAddSingleton<IWorkItemStore>(provider => provider.GetRequiredService<InMemoryWorkItemStore>());
             services.TryAddSingleton(provider =>
                 new InMemoryConversationTurnExecutionStore(provider.GetRequiredService<InMemoryDurableState>()));

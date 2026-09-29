@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Work;
 
@@ -7,16 +8,18 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class InMemoryWorkItemStore : IWorkItemStore
 {
     private readonly InMemoryDurableState _state;
+    private readonly IDiagnosticIdSource _diagnostics;
 
     public InMemoryWorkItemStore()
         : this(new InMemoryDurableState())
     {
     }
 
-    internal InMemoryWorkItemStore(InMemoryDurableState state)
+    internal InMemoryWorkItemStore(InMemoryDurableState state, IDiagnosticIdSource? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         _state = state;
+        _diagnostics = diagnostics ?? new SystemDiagnosticIdSource();
     }
 
     internal bool CrashOnNextClearSideEffect { get; set; }
@@ -205,7 +208,8 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             failureSummary,
             replaySafe,
             failedAtUtc,
-            nextRetryAtUtc));
+            nextRetryAtUtc,
+            _diagnostics.NewId));
 
     public ValueTask<WorkItem> RequestCancellationAsync(
         WorkOwner owner,
@@ -238,7 +242,7 @@ public sealed class InMemoryWorkItemStore : IWorkItemStore
             {
                 try
                 {
-                    _state.WorkItems[item.WorkItemId] = item.RecoverExpiredClaim(asOfUtc);
+                    _state.WorkItems[item.WorkItemId] = item.RecoverExpiredClaim(asOfUtc, _diagnostics.NewId);
                 }
                 catch (Exception exception) when (exception is WorkItemTransitionException or ArgumentException)
                 {

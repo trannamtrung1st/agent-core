@@ -141,6 +141,7 @@ public sealed class WorkItemApiTests
             $"/api/v2/sessions/{session.SessionId}/work-items/{rejection.WorkItemId}/approvals/{rejectView!.ApprovalId}/reject",
             new DecideWorkApprovalRequest(rejectView.Revision, rejectView.ApprovalRevision!.Value, new string('b', 64)));
         Assert.Equal(HttpStatusCode.Conflict, altered.StatusCode);
+        Assert.DoesNotContain("diagnosticId", await altered.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         var staleDecision = await client.PostAsJsonAsync(
             $"/api/v2/sessions/{session.SessionId}/work-items/{rejection.WorkItemId}/approvals/{rejectView!.ApprovalId}/reject",
             new DecideWorkApprovalRequest(rejectView.Revision + 5, rejectView.ApprovalRevision!.Value, rejectView.ActionHash!));

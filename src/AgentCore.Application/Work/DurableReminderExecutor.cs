@@ -4,6 +4,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Work;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Work;
 
@@ -14,7 +15,8 @@ public sealed class DurableReminderExecutor(
     IIdGenerator ids,
     TimeProvider time,
     WorkCancellationRegistry cancellation,
-    SessionToolExecutor tools)
+    SessionToolExecutor tools,
+    ILogger<DurableReminderExecutor>? logger = null)
 {
     private readonly DurableOccurrenceExecution occurrence = new(tools, time);
     public const string BeforeModelCheckpoint = """{"phase":"before-model"}""";
@@ -376,6 +378,24 @@ public sealed class DurableReminderExecutor(
             asOfUtc,
             nextRetryAtUtc,
             cancellationToken).ConfigureAwait(false);
+        if (failed.Status == WorkItemStatus.Failed
+            && failed.Failure?.DiagnosticId is Guid diagnosticId
+            && logger is not null)
+        {
+            DiagnosticLog.Error(
+                logger,
+                null,
+                diagnosticId,
+                "Work item failed.",
+                new DiagnosticContext(
+                    SessionId: failed.Provenance.SourceSessionId,
+                    TriggerRegistrationId: failed.Provenance.RegistrationId,
+                    TriggerOccurrenceId: failed.Provenance.SourceOccurrenceId,
+                    WorkItemId: failed.WorkItemId,
+                    ErrorCategory: "work",
+                    ErrorCode: failed.Failure.Code));
+        }
+
         RuntimeTelemetry.RecordWork(failed.Status == WorkItemStatus.WaitingToRetry ? "retry" : "failed");
         return failed;
     }

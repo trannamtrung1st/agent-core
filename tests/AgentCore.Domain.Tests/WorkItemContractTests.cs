@@ -131,9 +131,12 @@ public sealed class WorkItemContractTests
 
         var second = recovered.TakeClaim(GenerationB, Now.AddMinutes(1), Now.AddMinutes(2));
         Assert.Equal(2, second.AttemptCount);
-        var exhausted = second.RecoverExpiredClaim(Now.AddMinutes(2));
+        var exhaustedId = Guid.Parse("019944af-0008-7000-8000-0000000000d1");
+        var exhausted = second.RecoverExpiredClaim(Now.AddMinutes(2), () => exhaustedId);
         Assert.Equal(WorkItemStatus.Failed, exhausted.Status);
         Assert.Equal("attempts-exhausted", exhausted.Failure!.Code);
+        Assert.Equal(exhaustedId, exhausted.Failure.DiagnosticId);
+        Assert.Null(recovered.Failure);
         Assert.True(exhausted.IsTerminal);
         Assert.Throws<WorkItemTransitionException>(() => exhausted.TakeClaim(GenerationA, Now.AddMinutes(3), Now.AddMinutes(4)));
     }
@@ -154,8 +157,10 @@ public sealed class WorkItemContractTests
         var claimed = NewItem().TakeClaim(GenerationA, Now, Now.AddMinutes(1));
         var prepared = claimed.MarkSideEffect(2, GenerationA, WorkSideEffectDisposition.Prepared, ToolCallId, ActionHash, Now.AddSeconds(1));
         var inFlight = prepared.MarkSideEffect(3, GenerationA, WorkSideEffectDisposition.InFlight, ToolCallId, ActionHash, Now.AddSeconds(2));
-        var recovered = inFlight.RecoverExpiredClaim(Now.AddMinutes(1));
+        var recoveredId = Guid.Parse("019944af-0008-7000-8000-0000000000d2");
+        var recovered = inFlight.RecoverExpiredClaim(Now.AddMinutes(1), () => recoveredId);
         Assert.Equal(WorkItemStatus.Failed, recovered.Status);
+        Assert.Equal(recoveredId, recovered.Failure!.DiagnosticId);
         Assert.Equal(WorkSideEffectDisposition.Indeterminate, recovered.SideEffect.Disposition);
         Assert.Equal("side-effect-indeterminate", recovered.Failure!.Code);
         Assert.Throws<WorkItemTransitionException>(() => recovered.TakeClaim(GenerationB, Now.AddMinutes(2), Now.AddMinutes(3)));
@@ -339,10 +344,31 @@ public sealed class WorkItemContractTests
         Assert.False(retrying.HasLiveClaim);
         Assert.Null(retrying.Failure);
         var again = retrying.TakeClaim(GenerationB, Now.AddSeconds(2), Now.AddMinutes(2));
-        var failed = again.Fail(again.Revision, GenerationB, "model-unavailable", "Model timed out.", true, Now.AddSeconds(3), Now.AddSeconds(4));
+        var failedId = Guid.Parse("019944af-0008-7000-8000-0000000000d3");
+        var failed = again.Fail(
+            again.Revision,
+            GenerationB,
+            "model-unavailable",
+            "Model timed out.",
+            true,
+            Now.AddSeconds(3),
+            Now.AddSeconds(4),
+            () => failedId);
         Assert.Equal(WorkItemStatus.Failed, failed.Status);
         Assert.Equal("model-unavailable", failed.Failure!.Code);
-        Assert.Equal(failed.Revision, failed.Fail(1, GenerationB, "model-unavailable", "Model timed out.", true, Now.AddSeconds(5), null).Revision);
+        Assert.Equal(failedId, failed.Failure.DiagnosticId);
+        Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
+        var repeated = failed.Fail(
+            1,
+            GenerationB,
+            "model-unavailable",
+            "Model timed out.",
+            true,
+            Now.AddSeconds(5),
+            null,
+            () => Guid.Parse("019944af-0008-7000-8000-0000000000d4"));
+        Assert.Equal(failed.Revision, repeated.Revision);
+        Assert.Equal(failedId, repeated.Failure!.DiagnosticId);
     }
 
     [Fact]

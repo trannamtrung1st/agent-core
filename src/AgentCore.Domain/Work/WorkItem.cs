@@ -404,7 +404,8 @@ public sealed class WorkItem
         string failureSummary,
         bool replaySafe,
         DateTimeOffset failedAtUtc,
-        DateTimeOffset? nextRetryAtUtc)
+        DateTimeOffset? nextRetryAtUtc,
+        Func<Guid>? allocateDiagnosticId = null)
     {
         if (Status == WorkItemStatus.Failed
             && failureCode is not null
@@ -424,7 +425,7 @@ public sealed class WorkItem
             var summary = unsafeEffect
                 ? "External effect outcome is unknown and was not replayed."
                 : failureSummary ?? throw new ArgumentException("Failure is required.");
-            return AsFailed(failedAtUtc, code, summary, effect);
+            return AsFailed(failedAtUtc, code, summary, effect, RequireDiagnosticId(allocateDiagnosticId));
         }
 
         if (nextRetryAtUtc is null || nextRetryAtUtc < failedAtUtc)
@@ -512,7 +513,7 @@ public sealed class WorkItem
         return AsCancelled(cancelledAtUtc, knownEffectSummary ?? KnownEffectSummary);
     }
 
-    public WorkItem RecoverExpiredClaim(DateTimeOffset asOfUtc)
+    public WorkItem RecoverExpiredClaim(DateTimeOffset asOfUtc, Func<Guid>? allocateDiagnosticId = null)
     {
         WorkTime.RequireUtc(asOfUtc, "Recovery");
         if (Status != WorkItemStatus.Running || Claim is null || Claim.LeaseExpiresAtUtc > asOfUtc)
@@ -531,12 +532,18 @@ public sealed class WorkItem
                 asOfUtc,
                 "side-effect-indeterminate",
                 "External effect outcome is unknown and was not replayed.",
-                AsIndeterminate(asOfUtc));
+                AsIndeterminate(asOfUtc),
+                RequireDiagnosticId(allocateDiagnosticId));
         }
 
         if (AttemptCount >= MaxAttempts)
         {
-            return AsFailed(asOfUtc, "attempts-exhausted", "Retry budget is exhausted.", SideEffect);
+            return AsFailed(
+                asOfUtc,
+                "attempts-exhausted",
+                "Retry budget is exhausted.",
+                SideEffect,
+                RequireDiagnosticId(allocateDiagnosticId));
         }
 
         return Copy(
@@ -822,7 +829,8 @@ public sealed class WorkItem
             KnownEffectSummary,
             CancellationAvailable: !IsTerminal,
             CreatedAtUtc,
-            UpdatedAtUtc);
+            UpdatedAtUtc,
+            Status == WorkItemStatus.Failed ? Failure?.DiagnosticId : null);
 
     private WorkItem AsCancelled(DateTimeOffset cancelledAtUtc, string? knownEffectSummary)
     {
@@ -850,7 +858,12 @@ public sealed class WorkItem
             cancelledAtUtc);
     }
 
-    private WorkItem AsFailed(DateTimeOffset failedAtUtc, string code, string summary, WorkSideEffect sideEffect) =>
+    private WorkItem AsFailed(
+        DateTimeOffset failedAtUtc,
+        string code,
+        string summary,
+        WorkSideEffect sideEffect,
+        Guid diagnosticId) =>
         Copy(
             WorkItemStatus.Failed,
             Revision + 1,
@@ -863,10 +876,21 @@ public sealed class WorkItem
             Progress,
             Checkpoint,
             result: null,
-            new WorkFailure(code, summary, failedAtUtc),
+            new WorkFailure(code, summary, failedAtUtc, diagnosticId),
             sideEffect,
             Approval,
             failedAtUtc);
+
+    private static Guid RequireDiagnosticId(Func<Guid>? allocateDiagnosticId)
+    {
+        var diagnosticId = allocateDiagnosticId?.Invoke() ?? Guid.Empty;
+        if (diagnosticId == Guid.Empty)
+        {
+            throw new ArgumentException("A terminal work failure requires a diagnostic id.");
+        }
+
+        return diagnosticId;
+    }
 
     private WorkSideEffect AsIndeterminate(DateTimeOffset updatedAtUtc)
     {

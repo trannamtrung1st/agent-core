@@ -253,7 +253,8 @@ public static class WorkItemEndpoints
             summary.FailureSummary,
             summary.KnownEffectSummary,
             HttpMapping.Format(summary.CreatedAtUtc),
-            HttpMapping.Format(summary.UpdatedAtUtc));
+            HttpMapping.Format(summary.UpdatedAtUtc),
+            summary.FailureDiagnosticId?.ToString("D"));
     }
 
     private static string ToStatus(WorkItemStatus status) => status switch

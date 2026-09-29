@@ -297,6 +297,7 @@ public sealed class DurableReminderTests
             Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
             var waiting = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.WaitingToRetry, waiting!.Status);
+            Assert.Null(waiting.Failure);
             Assert.Equal(Now.Add(DurableReminderExecutor.RetryDelay(1)), waiting.NextRetryAtUtc);
             Assert.Equal(0, await harness.Executor.ExecuteDueAsync(Now, 10));
 
@@ -306,13 +307,46 @@ public sealed class DurableReminderTests
             var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Failed, failed!.Status);
             Assert.Equal("model-unavailable", failed.Failure!.Code);
+            Assert.NotEqual(Guid.Empty, failed.Failure.DiagnosticId);
+            Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(0, await harness.Executor.ExecuteDueAsync(due.AddHours(1), 10));
 
             var reopened = await harness.Reopen();
             var stored = await reopened.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
             Assert.Equal(WorkItemStatus.Failed, stored!.Status);
             Assert.Equal(created.WorkItemId, stored.WorkItemId);
+            Assert.Equal(failed.Failure.DiagnosticId, stored.Failure!.DiagnosticId);
+            Assert.Equal(failed.Failure.Summary, stored.Failure.Summary);
         }, () => new FailingModel());
+    }
+
+    [Fact]
+    public async Task Terminal_work_failure_log_matches_the_stored_diagnostic_id()
+    {
+        var logs = new DiagnosticLogCapture<DurableReminderExecutor>();
+        await ForEachInMemoryOnly(async (harness, _) =>
+        {
+            var owner = new TriggerOwner(InstanceId, ProfileId);
+            var scheduled = await AwaitDurableAsync(harness.Triggers, owner, Now, "check the oven");
+            await AcceptScheduledAsync(harness, scheduled, 2);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(Now, 10));
+            var due = Now.Add(DurableReminderExecutor.RetryDelay(1));
+            harness.Time.SetUtcNow(due);
+            Assert.Equal(1, await harness.Executor.ExecuteDueAsync(due, 10));
+            var failed = await harness.Work.GetBySourceOccurrenceAsync(scheduled.OccurrenceId);
+            var diagnosticId = failed!.Failure!.DiagnosticId;
+            Assert.NotNull(diagnosticId);
+            var matches = logs.Entries
+                .Where(entry => entry.Level == LogLevel.Error
+                    && entry.Properties.TryGetValue("DiagnosticId", out var logged)
+                    && logged is Guid loggedId
+                    && loggedId == diagnosticId)
+                .ToArray();
+            var match = Assert.Single(matches);
+            Assert.Contains(diagnosticId.Value.ToString("D"), match.Message, StringComparison.Ordinal);
+            Assert.Equal(failed.WorkItemId, match.Properties["WorkItemId"]);
+            Assert.DoesNotContain("stack", failed.Failure.Summary, StringComparison.OrdinalIgnoreCase);
+        }, () => new FailingModel(), logs);
     }
 
     [Fact]
@@ -1604,7 +1638,8 @@ public sealed class DurableReminderTests
 
     private static async Task ForEachInMemoryOnly(
         Func<Harness, InMemoryWorkItemStore, Task> exercise,
-        Func<ILanguageModel>? modelFactory)
+        Func<ILanguageModel>? modelFactory,
+        ILogger<DurableReminderExecutor>? logger = null)
     {
         var definition = await LoadDefinitionAsync();
         var state = new InMemoryDurableState();
@@ -1616,7 +1651,8 @@ public sealed class DurableReminderTests
                 work,
                 new InMemoryDurableWorkHandoff(state),
                 static (triggers, workStore, handoff) => Task.FromResult(new StoreSet(triggers, workStore, handoff)),
-                modelFactory),
+                modelFactory,
+                logger),
             work);
     }
 
@@ -1666,7 +1702,8 @@ public sealed class DurableReminderTests
         IWorkItemStore work,
         IDurableWorkHandoff handoff,
         Func<ITriggerStore, IWorkItemStore, IDurableWorkHandoff, Task<StoreSet>> reopen,
-        Func<ILanguageModel>? modelFactory)
+        Func<ILanguageModel>? modelFactory,
+        ILogger<DurableReminderExecutor>? logger = null)
     {
         var catalog = new ConfigurationModelCatalog(
             "scripted-alpha",
@@ -1725,7 +1762,8 @@ public sealed class DurableReminderTests
             new SessionToolExecutor(
                 RoleKnowledgeService.FromApprovedCatalog(knowledge, time),
                 emailProvider: new SyntheticEmailProvider(),
-                httpRequestClient: http));
+                httpRequestClient: http),
+            logger);
         return new Harness(
             triggers,
             work,
