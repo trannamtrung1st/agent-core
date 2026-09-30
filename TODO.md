@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` at `275e482` on **2026-09-29**. P8 is specified here and has not started.
+Reviewed against `main` at **`1cadf46`** on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** is specified here and is the active next implementation phase.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -33,7 +33,7 @@ Reopen a frozen phase only for a reproducible regression, or for a new product r
 
 P7 owns Harness Admin W01–W08 only. Observer durability for `ConversationTurnExecution` is closed session bookkeeping, not part of the Admin contract: last behavior `93cb2ab`, stabilization `2c4d46f`, workflow `36336971087` green. Do not merge that appendix into Harness Admin.
 
-P7.6 does not redefine P7 or P7.5. P7.7 does not reopen P7.6. The Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` is finished follow-up evidence. It is not a new freeze, it is not hosted-green, and it does not move the P7.6 SHA. Diagnostic corrections after `40a1d92` are recorded in `docs/reports/p7.7-diagnostic-followup.md`. That follow-up does not move the P7.7 SHA. The hosted green gate on `40a1d92` does not cover those corrections.
+P7.6 does not redefine P7 or P7.5. P7.7 does not reopen P7.6. The Admin lifecycle follow-up in `docs/reports/p76-admin-lifecycle-followup.md` is finished follow-up evidence. It is not a new freeze, it is not hosted-green, and it does not move the P7.6 SHA. Bounded work after P7.7 freeze **`40a1d92`** (diagnostics, learned-memory admission, memory receipts) is **closed** on **`1cadf46`** with hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green. Evidence: `docs/reports/p7.7-diagnostic-followup.md`. That follow-up does not move the P7.7 SHA. The hosted green gate on **`40a1d92`** alone does not cover those corrections.
 
 ### What the frozen phases still mean
 
@@ -43,7 +43,7 @@ P7.6 does not redefine P7 or P7.5. P7.7 does not reopen P7.6. The Admin lifecycl
 
 **P7.6 — Admin usability.** The existing Definition can be authored through Form or Advanced JSON on one revisioned draft. New Definition and New Instance flows are explicit. Knowledge Sources bind to Knowledge resources. Published versions stay immutable. Evidence: `docs/reports/p7.6-freeze-candidate.md`.
 
-**P7.7 — Operational diagnosability.** Delivered a server-owned safe `DiagnosticId`, structured server-side failure logging, optional same-hub JSON realtime mode, and unchanged scheduling ownership. MessagePack stays canonical. Evidence: `docs/reports/p7.7-freeze-candidate.md`. Later diagnostic corrections are follow-up evidence in `docs/reports/p7.7-diagnostic-followup.md`, not a new freeze.
+**P7.7 — Operational diagnosability.** Delivered a server-owned safe `DiagnosticId`, structured server-side failure logging, optional same-hub JSON realtime mode, and unchanged scheduling ownership. MessagePack stays canonical. Evidence: `docs/reports/p7.7-freeze-candidate.md`. Post-freeze diagnostics, learned-memory admission, and memory-receipt corrections are **closed** follow-up evidence in `docs/reports/p7.7-diagnostic-followup.md` (**`1cadf46`**, workflow **`36667172857`** green), not a new freeze.
 
 Retained diagnostic rules, because later phases must reuse them:
 
@@ -55,7 +55,7 @@ TraceId         = infrastructure trace id only when a real Activity exists
 
 Clients cannot supply trusted diagnostic, correlation, or causation identity. JSON realtime is a diagnostic transport on the same hub and the same event contract. It is not a second protocol. A missed recurrence still coalesces to the latest due occurrence. `SkipMissed` and `CatchUp` are not implemented.
 
-**Pre-P8 memory admission.** Conversation memory is agent-proposed and Core-admitted. Proposals are staged with semantic output and admitted once when that response completes successfully. A memory policy enables scope; it does not store every proposal. Phrase matching is not the write authority. A reliable proposal channel is native structured output or the adapter response function. `[[memory:...]]` is best effort. Without that channel, recall still works and autonomous creation is unavailable. Model source is `userExplicit` or `agentInferred`. The admission receipt is controller-owned metadata on the assistant envelope. It is not appended to display text or speech. User-explicit failure stays visible; inferred outcomes stay quiet. Admission rejects credentials and blob-like content. It does not yet classify sensitive personal attributes. The open choice is never to store them, to store them only when the user explicitly asks, or to follow application policy. The current lean is explicit request only. That taxonomy is not implemented. This does not start P8.
+**Pre-P8 memory admission.** Conversation memory is agent-proposed and Core-admitted. Proposals are staged with semantic output and admitted once when that response completes successfully. A memory policy enables scope; it does not store every proposal. Phrase matching is not the write authority. A reliable proposal channel is native structured output or the adapter response function. `[[memory:...]]` is best effort. Without that channel, recall still works and autonomous creation is unavailable. Model source is `userExplicit` or `agentInferred`. The admission receipt is controller-owned metadata on the assistant envelope. It is not appended to display text or speech. Receipt **`scopes[]`** lists memory layers successfully established or confirmed by admission (`session`, `identityUser`, `user`); **`outcome`** reflects successful session-layer admission and stays coherent with partial promotion. User-explicit failure stays visible; inferred outcomes stay quiet. Admission rejects credentials and blob-like content. It does not yet classify sensitive personal attributes. The open choice is never to store them, to store them only when the user explicitly asks, or to follow application policy. The current lean is explicit request only. That taxonomy is not implemented. Bounded follow-up through **`1cadf46`** is closed in `docs/reports/p7.7-diagnostic-followup.md`. This does not start P8.
 
 ## Active phase
 
@@ -72,7 +72,7 @@ P9 follows only after P8 is frozen. P10 and P11 stay requirement-triggered.
 1. **P0–P7 — frozen.**
 2. **P7.5 — frozen** on `70a5720`.
 3. **P7.6 — frozen** on `17d89ae`.
-4. **P7.7 — frozen** on `40a1d92` (workflow `36594702224` green).
+4. **P7.7 — frozen** on `40a1d92` (workflow `36594702224` green). Post-freeze / pre-P8 bounded follow-up **closed** on `1cadf46` (workflow [`36667172857`](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green).
 5. **P8 — Agent Execution Contract, Application Actions & Skills — active next.**
 6. **P9 — Harness/platform extensibility — after P8.**
 7. **P10 — Sandbox evolution — when the current sandbox is insufficient.**
@@ -360,7 +360,7 @@ Each of these waits for its own trigger: PostgreSQL, Redis, a broker, Kubernetes
 
 **Status: active next implementation phase. Specified only. Implementation has not started.**
 
-P7.7 stays frozen on `40a1d92` (workflow `36594702224` green). P8 does not reopen it.
+P7.7 stays frozen on `40a1d92` (workflow `36594702224` green). Post-freeze / pre-P8 bounded follow-up is **closed** on `1cadf46` (workflow [`36667172857`](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green). P8 does not reopen P7.7.
 
 ## Goal
 
