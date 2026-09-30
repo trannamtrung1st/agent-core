@@ -99,7 +99,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await expect(page.getByText(intermediate)).toBeVisible();
   const overflow = await page.evaluate(() => {
     const message = document.querySelector('[data-role="applicationMessage"]');
-    const column = document.querySelector(".conversation-column");
+    const column = document.querySelector(".conversation-list")?.closest(".conversation-column");
     return {
       message: message instanceof HTMLElement && message.scrollWidth > message.clientWidth + 1,
       column: column instanceof HTMLElement && column.scrollWidth > column.clientWidth + 1

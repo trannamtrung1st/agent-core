@@ -747,7 +747,9 @@ describe("Conversation", () => {
     expect(message).toHaveAttribute("aria-live", "polite");
     expect(message).toHaveClass("chat-message-application");
     expect(message).not.toHaveClass("chat-message-assistant");
-    expect(screen.getByText("Still working")).toBeInTheDocument();
+    const status = screen.getByText("Still working");
+    expect(status).toHaveClass("application-status");
+    expect(status.closest(".ant-tag")).toBeNull();
     expect(message).toHaveTextContent("Alex");
     expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
     expect(screen.queryByText("app.message.send")).not.toBeInTheDocument();

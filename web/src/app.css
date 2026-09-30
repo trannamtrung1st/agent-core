@@ -355,15 +355,12 @@ body,
   align-items: stretch;
 }
 
-.application-status {
-  font-size: 12px;
-}
-
 .chat-message-application .assistant-body,
 .chat-message-application .markdown-message {
   max-width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
+  color: var(--ac-color-text-secondary);
 }
 
 .chat-message-meta {
@@ -375,7 +372,8 @@ body,
 }
 
 .chat-message-speaker,
-.chat-message-time {
+.chat-message-time,
+.application-status {
   font-size: 12px;
 }
 
@@ -461,7 +459,8 @@ body,
 
 .spoken-text-label,
 .spoken-text-caption.ant-typography,
-.spoken-text-icon {
+.spoken-text-icon,
+.application-status.ant-typography {
   color: var(--ac-color-text-tertiary) !important;
 }
 
