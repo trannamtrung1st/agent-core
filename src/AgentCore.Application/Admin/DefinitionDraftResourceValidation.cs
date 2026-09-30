@@ -9,15 +9,40 @@ internal static class DefinitionDraftResourceValidation
         AgentDefinitionCandidate candidate,
         IReadOnlyList<AgentDefinitionDraftResource> draftResources)
     {
+        var resourcesByPath = draftResources
+            .GroupBy(item => DefinitionPublicationResourceReader.NormalizeLogicalPath(item.LogicalPath), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        if (candidate.Skills is not null)
+        {
+            for (var skillIndex = 0; skillIndex < candidate.Skills.Count; skillIndex++)
+            {
+                var paths = candidate.Skills[skillIndex].ResourcePaths;
+                if (paths is null)
+                {
+                    continue;
+                }
+
+                for (var pathIndex = 0; pathIndex < paths.Count; pathIndex++)
+                {
+                    var expectedPath = DefinitionPublicationResourceReader.NormalizeLogicalPath(paths[pathIndex]);
+                    if (!resourcesByPath.ContainsKey(expectedPath))
+                    {
+                        yield return new DefinitionValidationFinding(
+                            $"skills[{skillIndex}].resourcePaths[{pathIndex}]",
+                            "missing_skill_resource",
+                            $"Draft is missing a definition resource at '{expectedPath}'.",
+                            DefinitionValidationSeverity.Blocking);
+                    }
+                }
+            }
+        }
+
         var environment = candidate.Environment;
         if (environment is null)
         {
             yield break;
         }
-
-        var resourcesByPath = draftResources
-            .GroupBy(item => DefinitionPublicationResourceReader.NormalizeLogicalPath(item.LogicalPath), StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
         for (var index = 0; index < environment.KnowledgeList.Count; index++)
         {

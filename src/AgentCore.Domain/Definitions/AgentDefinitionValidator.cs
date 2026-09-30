@@ -144,6 +144,107 @@ public static class AgentDefinitionValidator
 
         ValidateEnvironment(RoleEnvironments.Of(definition));
         ValidateTriggerPolicy(definition.TriggerPolicy);
+        ValidateSkills(definition.Skills);
+    }
+
+    private static void ValidateSkills(IReadOnlyList<SkillSpec>? skills)
+    {
+        if (skills is null)
+        {
+            return;
+        }
+
+        if (skills.Count > 16)
+        {
+            throw new ArgumentException("skills must contain at most 16 entries.");
+        }
+
+        if (skills.Any(skill => skill is null))
+        {
+            throw new ArgumentException("skill is missing required fields.");
+        }
+
+        if (skills.Select(skill => skill.Id).Distinct(StringComparer.Ordinal).Count() != skills.Count)
+        {
+            throw new ArgumentException("skill ids must be unique.");
+        }
+
+        var procedureCharacters = 0;
+        foreach (var skill in skills)
+        {
+            if (string.IsNullOrWhiteSpace(skill.Id) || !ToolPattern.IsMatch(skill.Id))
+            {
+                throw new ArgumentException("skill id is invalid.");
+            }
+
+            if (skill.Name is null || skill.Name.Length is < 1 or > 80)
+            {
+                throw new ArgumentException("skill name is invalid.");
+            }
+
+            if (skill.Description is null || skill.Description.Length > 240)
+            {
+                throw new ArgumentException("skill description is invalid.");
+            }
+
+            if (skill.Procedure is null || skill.Procedure.Length is < 1 or > 4000)
+            {
+                throw new ArgumentException("skill procedure is invalid.");
+            }
+
+            procedureCharacters += skill.Procedure.Length;
+            ValidateActivation(skill.ActivationKeywords);
+            ValidateCapabilities(skill.RequiredCapabilities);
+            ValidateResourcePaths(skill.ResourcePaths);
+        }
+
+        if (procedureCharacters > 12000)
+        {
+            throw new ArgumentException("skill procedure text exceeds 12000 characters.");
+        }
+    }
+
+    private static void ValidateActivation(IReadOnlyList<string>? keywords)
+    {
+        if (keywords is null
+            || keywords.Count > 8
+            || keywords.Any(keyword => string.IsNullOrWhiteSpace(keyword) || keyword.Length > 64 || keyword != keyword.Trim())
+            || keywords.Distinct(StringComparer.Ordinal).Count() != keywords.Count)
+        {
+            throw new ArgumentException("skill activation shape is invalid.");
+        }
+    }
+
+    private static void ValidateCapabilities(IReadOnlyList<string>? capabilities)
+    {
+        if (capabilities is null
+            || capabilities.Count > 8
+            || capabilities.Distinct(StringComparer.Ordinal).Count() != capabilities.Count
+            || capabilities.Any(capability => string.IsNullOrWhiteSpace(capability) || !ToolPattern.IsMatch(capability)))
+        {
+            throw new ArgumentException("skill required capabilities are invalid.");
+        }
+    }
+
+    private static void ValidateResourcePaths(IReadOnlyList<string>? paths)
+    {
+        if (paths is null || paths.Count > 4 || paths.Distinct(StringComparer.Ordinal).Count() != paths.Count)
+        {
+            throw new ArgumentException("skill resource path is invalid.");
+        }
+
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path)
+                || path.Length > 240
+                || path != path.Trim()
+                || path.StartsWith('/')
+                || path.Contains('\\', StringComparison.Ordinal)
+                || path.Split('/', StringSplitOptions.None).Any(segment => segment is "" or "." or ".."))
+            {
+                throw new ArgumentException("skill resource path is invalid.");
+            }
+        }
     }
 
     private static void ValidateTriggerPolicy(TriggerPolicy? policy)

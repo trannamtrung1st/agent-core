@@ -68,6 +68,7 @@ internal static class AgentDefinitionCandidateValidator
         }
 
         findings.AddRange(CollectToolFindings(definition, configurationGate));
+        findings.AddRange(CollectSkillCapabilityFindings(candidate));
         return findings;
     }
 
@@ -257,6 +258,48 @@ internal static class AgentDefinitionCandidateValidator
             }
         }
 
+        if (candidate.Skills is not null)
+        {
+            for (var index = 0; index < candidate.Skills.Count; index++)
+            {
+                var skill = candidate.Skills[index];
+                if (skill is null)
+                {
+                    continue;
+                }
+
+                foreach (var finding in CollectSecretFieldFindings($"skills[{index}].name", skill.Name))
+                {
+                    yield return finding;
+                }
+
+                foreach (var finding in CollectSecretFieldFindings($"skills[{index}].description", skill.Description))
+                {
+                    yield return finding;
+                }
+
+                foreach (var finding in CollectSecretFieldFindings($"skills[{index}].procedure", skill.Procedure))
+                {
+                    yield return finding;
+                }
+
+                if (skill.ActivationKeywords is null)
+                {
+                    continue;
+                }
+
+                for (var keywordIndex = 0; keywordIndex < skill.ActivationKeywords.Count; keywordIndex++)
+                {
+                    foreach (var finding in CollectSecretFieldFindings(
+                                 $"skills[{index}].activationKeywords[{keywordIndex}]",
+                                 skill.ActivationKeywords[keywordIndex]))
+                    {
+                        yield return finding;
+                    }
+                }
+            }
+        }
+
         if (candidate.Environment is null)
         {
             yield break;
@@ -302,6 +345,52 @@ internal static class AgentDefinitionCandidateValidator
                      candidate.Environment.WorkspacePolicy.TemplateId))
         {
             yield return finding;
+        }
+    }
+
+    private static IEnumerable<DefinitionValidationFinding> CollectSkillCapabilityFindings(
+        AgentDefinitionCandidate candidate)
+    {
+        if (candidate.Skills is null || candidate.Skills.Count == 0)
+        {
+            yield break;
+        }
+
+        var allowed = RoleEnvironments.Of(candidate.ToPublished(1)).ToolList.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < candidate.Skills.Count; index++)
+        {
+            var capabilities = candidate.Skills[index].RequiredCapabilities;
+            if (capabilities is null)
+            {
+                continue;
+            }
+
+            for (var capabilityIndex = 0; capabilityIndex < capabilities.Count; capabilityIndex++)
+            {
+                var capability = capabilities[capabilityIndex];
+                if (string.Equals(capability, SkillCapabilities.ChatRespond, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var field = $"skills[{index}].requiredCapabilities[{capabilityIndex}]";
+                if (!ToolRegistry.TryGet(capability, out _))
+                {
+                    yield return Blocking(
+                        field,
+                        "unknown_capability",
+                        $"Capability '{capability}' is not a known capability.");
+                    continue;
+                }
+
+                if (!allowed.Contains(capability))
+                {
+                    yield return Blocking(
+                        field,
+                        "capability_not_allowed",
+                        $"Capability '{capability}' is not on the definition tool allowlist.");
+                }
+            }
         }
     }
 

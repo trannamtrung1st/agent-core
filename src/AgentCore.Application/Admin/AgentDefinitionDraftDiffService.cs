@@ -140,6 +140,11 @@ public sealed class AgentDefinitionDraftDiffService(
             "Trigger policy",
             FormatTriggerPolicy(baseline.TriggerPolicy),
             FormatTriggerPolicy(current.TriggerPolicy));
+        yield return TextSection(
+            "skills",
+            "Skills",
+            FormatSkills(baseline.Skills),
+            FormatSkills(current.Skills));
     }
 
     private static IEnumerable<DefinitionDiffSection> AddedCandidateSections(AgentDefinitionCandidate current)
@@ -155,6 +160,7 @@ public sealed class AgentDefinitionDraftDiffService(
         yield return AddedSection("capabilities", "Capabilities", FormatEnvironment(current.Environment));
         yield return AddedSection("memoryPolicy", "Memory policy", FormatMemoryPolicy(current.MemoryPolicy));
         yield return AddedSection("triggerPolicy", "Trigger policy", FormatTriggerPolicy(current.TriggerPolicy));
+        yield return AddedSection("skills", "Skills", FormatSkills(current.Skills));
     }
 
     private static DefinitionDiffSection AddedResourcesSection(IReadOnlyList<AgentDefinitionDraftResource> current)
@@ -260,6 +266,19 @@ public sealed class AgentDefinitionDraftDiffService(
 
         return
             $"sessionMemory={policy.SessionMemory}; identityUserPromotion={policy.IdentityUserPromotion}; identityUserRetrieval={policy.IdentityUserRetrieval}; userPromotion={policy.UserPromotion}; userRetrieval={policy.UserRetrieval}";
+    }
+
+    private static string FormatSkills(IReadOnlyList<SkillSpec>? skills)
+    {
+        if (skills is null || skills.Count == 0)
+        {
+            return "(none)";
+        }
+
+        return string.Join(
+            "\n",
+            skills.Where(skill => skill is not null).Select(skill =>
+                $"{skill.Id}: {skill.Name}; capabilities=[{string.Join(", ", skill.RequiredCapabilities ?? [])}]; procedure={skill.Procedure}"));
     }
 
     private static string FormatEnvironment(RoleEnvironment? environment)

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Domain.Definitions;
 
 /// <summary>
@@ -19,8 +21,12 @@ public sealed record AgentDefinitionCandidate(
     RoleEnvironment? Environment = null,
     AgentModelDefaults? ModelDefaults = null,
     MemoryPolicy? MemoryPolicy = null,
-    TriggerPolicy? TriggerPolicy = null)
+    TriggerPolicy? TriggerPolicy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SkillSpec>? Skills = null)
 {
+    public IReadOnlyList<SkillSpec> SkillList => Skills ?? [];
+
     public AgentDefinition ToPublished(int version) =>
         new(
             SchemaVersion,
@@ -38,7 +44,8 @@ public sealed record AgentDefinitionCandidate(
             Environment,
             ModelDefaults,
             MemoryPolicy,
-            TriggerPolicy);
+            TriggerPolicy,
+            Skills);
 
     public static AgentDefinitionCandidate FromDefinition(AgentDefinition definition) =>
         new(
@@ -56,5 +63,6 @@ public sealed record AgentDefinitionCandidate(
             definition.Environment,
             definition.ModelDefaults,
             definition.MemoryPolicy,
-            definition.TriggerPolicy);
+            definition.TriggerPolicy,
+            definition.Skills);
 }

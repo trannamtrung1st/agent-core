@@ -30,6 +30,7 @@ public static class AdminEventSummaryPolicy
             "capabilities",
             "memoryPolicy",
             "triggerPolicy",
+            "skills",
             "resources"
         });
 
