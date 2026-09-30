@@ -1,6 +1,7 @@
 using AgentCore.Application.Execution;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
@@ -333,6 +334,35 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Contains(inner.LastRequest!.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
         Assert.Equal(ModelToolChoice.Named, inner.LastRequest.ToolChoice);
         Assert.Equal(AssistantResponseSchema.ResponseFunctionName, inner.LastRequest.ToolChoiceName);
+    }
+
+    [Fact]
+    public async Task Function_channel_forwards_continuation_tools_without_treating_them_as_the_response()
+    {
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("m1", ToolCatalog.AppMessageSend, """{"text":"Still checking the order"}""")),
+            new ModelToolCallEvent(new ModelToolCall("load-1", ToolCatalog.SkillsLoad, """{"ids":["order.lookup"]}""")),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var request = Contracted with
+        {
+            Tools =
+            [
+                ToolRegistry.Get(ToolCatalog.AppMessageSend).ModelDefinition,
+                ToolRegistry.Get(ToolCatalog.SkillsLoad).ModelDefinition
+            ]
+        };
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), request);
+        Assert.Equal(
+            [ToolCatalog.AppMessageSend, ToolCatalog.SkillsLoad],
+            events.OfType<ModelToolCallEvent>().Select(item => item.Call.Name).ToArray());
+        Assert.Equal(ModelStopReason.ToolCalls, Assert.Single(events.OfType<ModelCompleted>()).Reason);
+        Assert.DoesNotContain(events, item => item is ModelSemanticResponseReady);
+        Assert.Contains(inner.LastRequest!.Tools!, tool => tool.Name == ToolCatalog.AppMessageSend);
+        Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == ToolCatalog.SkillsLoad);
+        Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
+        Assert.Equal(ModelToolChoice.Required, inner.LastRequest.ToolChoice);
     }
 
     [Fact]

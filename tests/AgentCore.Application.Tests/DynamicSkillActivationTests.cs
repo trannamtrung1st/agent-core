@@ -253,6 +253,29 @@ public sealed class DynamicSkillActivationTests
     }
 
     [Fact]
+    public async Task No_tools_model_omits_continuation_capabilities_and_still_preloads()
+    {
+        var model = new TerminalLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition(
+            Skill("refund.handle", "REFUND_PROCEDURE", ["refund"]),
+            Skill("order.lookup", "ORDER_PROCEDURE", ["order"])));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("check the order");
+        await runtime.WaitUntilIdleAsync();
+
+        var request = Assert.Single(model.Requests);
+        Assert.True(request.Tools is null || request.Tools.Count == 0);
+        var text = Text(request);
+        Assert.Contains("ORDER_PROCEDURE", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("REFUND_PROCEDURE", text, StringComparison.Ordinal);
+        var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
+        var pinned = await turns.GetBySourceEventAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
+        Assert.Equal(["order.lookup"], pinned!.PinnedActiveSkillIds);
+        Assert.Equal(0, pinned.SkillLoadCount);
+    }
+
+    [Fact]
     public async Task Recovery_reads_the_stored_pin_and_does_not_reselect_keywords()
     {
         var model = new TerminalLanguageModel();
