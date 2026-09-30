@@ -132,6 +132,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptMessagingSkillJourney(request, out var journeyEvents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var journeyEvent in journeyEvents)
+            {
+                yield return journeyEvent;
+            }
+
+            yield break;
+        }
+
         if (HasSessionTools(request) && (_alwaysToolCall || ShouldScriptTools(request)))
         {
             await foreach (var item in GenerateToolScriptAsync(request, cancellationToken).ConfigureAwait(false))
@@ -965,6 +976,76 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         }
 
         return Enum.IsDefined(checkType);
+    }
+
+    public const string MessagingSkillJourneyMarker = "[test:p85-journey]";
+
+    public const string MessagingSkillJourneyMessage = "Still checking the billing case.";
+
+    public const string MessagingSkillJourneyAnswer = "Billing review is complete.";
+
+    public const string MessagingSkillJourneyTargetSkill = "billing.review";
+
+    public const string MessagingSkillJourneyProcedure = "BILLING_PROCEDURE";
+
+    private static bool TryScriptMessagingSkillJourney(
+        ModelRequest request,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (!lastUser.Contains(MessagingSkillJourneyMarker, StringComparison.Ordinal)
+            || !Offers(request, ToolCatalog.AppMessageSend)
+            || !Offers(request, ToolCatalog.SkillsLoad))
+        {
+            return false;
+        }
+
+        var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+        if (toolRounds == 0)
+        {
+            events =
+            [
+                new ModelToolCallEvent(new ModelToolCall(
+                    "p85-message",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = MessagingSkillJourneyMessage }))),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ];
+            return true;
+        }
+
+        if (toolRounds == 1)
+        {
+            events =
+            [
+                new ModelToolCallEvent(new ModelToolCall(
+                    "p85-load",
+                    ToolCatalog.SkillsLoad,
+                    JsonSerializer.Serialize(new { ids = new[] { MessagingSkillJourneyTargetSkill } }))),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ];
+            return true;
+        }
+
+        var prompt = string.Join('\n', request.Messages.Select(message => message.Text));
+        if (!prompt.Contains(MessagingSkillJourneyProcedure, StringComparison.Ordinal))
+        {
+            events =
+            [
+                new ModelFailed(new ProviderFailure(
+                    ProviderErrorCode.InvalidResponse,
+                    "Synthetic journey missed the loaded procedure."))
+            ];
+            return true;
+        }
+
+        events =
+        [
+            new ModelTextDelta(MessagingSkillJourneyAnswer),
+            new ModelCompleted(ModelStopReason.Completed)
+        ];
+        return true;
     }
 
     public const string EmailHarnessMarker = "email harness";

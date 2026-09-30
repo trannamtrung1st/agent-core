@@ -65,7 +65,7 @@ export type HistoryEntry = {
   entryId: string;
   sequence: number;
   sourceEventId: string | null;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "applicationMessage";
   text: string;
   responseId: string | null;
   status: string;
@@ -402,7 +402,7 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       entryId: asString(row.entryId),
       sequence: asNumber(row.sequence),
       sourceEventId: row.sourceEventId == null ? null : asString(row.sourceEventId),
-      role: asString(row.role) === "assistant" ? "assistant" : "user",
+      role: historyRole(asString(row.role)),
       text: asString(row.text),
       responseId: row.responseId == null ? null : asString(row.responseId),
       status: asString(row.status),
@@ -419,6 +419,14 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       memoryReceipts: asMemoryReceipts(row.memoryReceipts)
     };
   });
+}
+
+function historyRole(value: string): HistoryEntry["role"] {
+  if (value === "assistant" || value === "applicationMessage") {
+    return value;
+  }
+
+  return "user";
 }
 
 function asMemoryReceipts(raw: unknown): MemoryReceiptView[] | undefined {
@@ -631,7 +639,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
     };
   }
 
-    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain" || event.type === "agent.progress" || event.type === "agent.approval.requested")) {
+    if (event.responseId && state.tombstones[event.responseId] && (event.type.startsWith("agent.text") || event.type === "agent.block.upsert" || event.type === "playback.gain" || event.type === "agent.progress" || event.type === "agent.approval.requested" || event.type === "session.entry.upsert")) {
     return { ...state, lastServerSequence: event.sequence };
   }
 
@@ -687,6 +695,23 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
         historyOlderLoading: false,
         modelMutationPending: false,
         modelMutationOwner: null
+      };
+    }
+    case "session.entry.upsert": {
+      const entry = historyFromPayload([event.payload])[0];
+      if (!entry || entry.role !== "applicationMessage") {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      const responseId = event.responseId ?? entry.responseId;
+      if (responseId && state.liveResponseId && responseId !== state.liveResponseId) {
+        return { ...state, lastServerSequence: event.sequence };
+      }
+
+      return {
+        ...state,
+        lastServerSequence: event.sequence,
+        entries: upsert(state.entries, entry)
       };
     }
     case "agent.response.started": {

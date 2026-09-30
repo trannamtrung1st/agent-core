@@ -1068,6 +1068,76 @@ describe("agent.progress", () => {
   });
 });
 
+describe("application message delivery", () => {
+  const message = {
+    entryId: "app-1",
+    sequence: 3,
+    sourceEventId: null,
+    role: "applicationMessage",
+    text: "Still checking the billing case.",
+    responseId: "r1",
+    status: "completed",
+    deliveryMode: "text",
+    heardTextEndExclusive: 0,
+    receivedTextEndExclusive: 32,
+    createdAt: "2026-09-30T12:00:00.000Z",
+    speechText: null
+  };
+
+  it("keeps the applicationMessage role and upserts one entry", () => {
+    const hydrated = historyFromPayload([message, { ...message, role: "assistant", entryId: "a1", text: "Done" }]);
+    expect(hydrated.map((entry) => entry.role)).toEqual(["applicationMessage", "assistant"]);
+    expect(hydrated[0]?.speechText ?? null).toBeNull();
+
+    let state = applyServerEvent(
+      { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },
+      event({
+        type: "agent.response.started",
+        sequence: 1,
+        responseId: "r1",
+        payload: { entryId: "a1", entrySequence: 1, trigger: "userTurn" }
+      })
+    );
+    state = applyServerEvent(
+      state,
+      event({ type: "session.entry.upsert", sequence: 2, responseId: "r1", payload: message })
+    );
+    state = applyServerEvent(
+      state,
+      event({ type: "session.entry.upsert", sequence: 3, responseId: "r1", payload: message })
+    );
+    expect(state.entries.filter((entry) => entry.entryId === "app-1")).toHaveLength(1);
+    expect(state.entries.find((entry) => entry.entryId === "app-1")?.role).toBe("applicationMessage");
+
+    state = applyServerEvent(
+      state,
+      event({
+        type: "session.entry.upsert",
+        sequence: 4,
+        responseId: "stale",
+        payload: { ...message, entryId: "app-2", text: "Late" }
+      })
+    );
+    expect(state.entries.some((entry) => entry.entryId === "app-2")).toBe(false);
+
+    state = applyServerEvent(
+      state,
+      event({
+        type: "session.ready",
+        sequence: 5,
+        payload: {
+          agent: { name: "Examiner", role: "examiner", voiceAvailable: true, language: "en" },
+          mode: "text",
+          status: "attached",
+          history: [message, { ...message, role: "assistant", entryId: "a1", sequence: 2, text: "Done" }]
+        }
+      })
+    );
+    expect(state.entries.filter((entry) => entry.entryId === "app-1")).toHaveLength(1);
+    expect(state.entries.filter((entry) => entry.role === "assistant")).toHaveLength(1);
+  });
+});
+
 describe("historyFromPayload", () => {
   it("preserves finishReason on hydrated history rows", () => {
     const entries = historyFromPayload([

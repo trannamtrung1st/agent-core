@@ -3716,7 +3716,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private async Task HandleReceiptAsync(ResponseReceiptReceived input, CancellationToken cancellationToken)
     {
-        var entry = _snapshot.Entries.FirstOrDefault(item => item.ResponseId == input.ResponseId);
+        var entry = _snapshot.Entries.FirstOrDefault(item =>
+            item.Role == ConversationRole.Assistant && item.ResponseId == input.ResponseId);
         if (entry is null
             || _snapshot.Status is SessionStatus.Paused or SessionStatus.Ending or SessionStatus.Ended)
         {
@@ -3758,7 +3759,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var received = input.TextEndExclusive;
         var envelope = MarkBlocksDelivered(entry.Envelope, blockIds);
         var entries = _snapshot.Entries.Select(item =>
-                item.ResponseId == input.ResponseId
+                item.Role != ConversationRole.ApplicationMessage && item.ResponseId == input.ResponseId
                     ? item with { ReceivedTextEndExclusive = received, Envelope = envelope }
                     : item)
             .ToArray();
