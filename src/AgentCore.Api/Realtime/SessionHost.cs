@@ -2590,6 +2590,7 @@ public static class SessionEventMapper
                 ["reason"] = intent.Reason,
                 ["advisory"] = intent.Advisory
             }),
+            HistoryEntryUpsertOutput entry => ("session.entry.upsert", HistoryItem(entry.Entry)),
             ResponseProgressOutput progress => ("agent.progress", new Dictionary<string, object?>
             {
                 ["operationId"] = progress.OperationId?.ToString(),
@@ -2670,49 +2671,7 @@ public static class SessionEventMapper
 
     private static Dictionary<string, object?> Ready(SessionReadyProjection ready, IModelCatalog? catalog)
     {
-        var history = ready.History.Select(entry => (object)new Dictionary<string, object?>
-        {
-            ["entryId"] = entry.EntryId.ToString(),
-            ["sequence"] = entry.Sequence,
-            ["sourceEventId"] = entry.SourceEventId?.ToString(),
-            ["role"] = HttpMapping.ToHistoryRole(entry.Role),
-            ["text"] = entry.Text,
-            ["responseId"] = entry.ResponseId?.ToString(),
-            ["status"] = HttpMapping.ToEntryStatus(entry.Status),
-            ["deliveryMode"] = HttpMapping.ToMode(entry.DeliveryMode),
-            ["heardTextEndExclusive"] = entry.HeardTextEndExclusive,
-            ["receivedTextEndExclusive"] = entry.ReceivedTextEndExclusive,
-            ["createdAt"] = entry.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
-            ["attachments"] = entry.Attachments?.Select(item => (object)new Dictionary<string, object?>
-            {
-                ["attachmentId"] = item.AttachmentId.ToString(),
-                ["displayName"] = item.DisplayName,
-                ["contentType"] = item.ContentType
-            }).ToArray(),
-            ["blocks"] = entry.Blocks.Select(block => (object)new Dictionary<string, object?>
-            {
-                ["blockId"] = block.BlockId,
-                ["kind"] = block.Kind,
-                ["text"] = block.Text,
-                ["fallbackText"] = block.FallbackText,
-                ["attachmentId"] = block.AttachmentId,
-                ["artifactId"] = block.ArtifactId
-            }).ToArray(),
-            ["finishReason"] = entry.FinishReason,
-            ["interruptReason"] = entry.InterruptReason,
-            ["speechText"] = entry.SpeechText,
-            ["memoryReceipts"] = MemoryReceiptPayload(entry.MemoryReceipts),
-            ["failure"] = entry.Failure is { } failure
-                ? new Dictionary<string, object?>
-                {
-                    ["diagnosticId"] = failure.DiagnosticId.ToString("D"),
-                    ["correlationId"] = failure.CorrelationId?.ToString("D"),
-                    ["category"] = failure.Category,
-                    ["code"] = failure.Code
-                }
-                : null
-        }).ToArray();
-
+        var history = ready.History.Select(entry => (object)HistoryItem(entry)).ToArray();
         return new Dictionary<string, object?>
         {
             ["mode"] = HttpMapping.ToMode(ready.Mode),
@@ -2789,6 +2748,50 @@ public static class SessionEventMapper
                 : null
         };
     }
+
+    internal static Dictionary<string, object?> HistoryItem(PublicHistoryEntry entry) =>
+        new()
+        {
+            ["entryId"] = entry.EntryId.ToString(),
+            ["sequence"] = entry.Sequence,
+            ["sourceEventId"] = entry.SourceEventId?.ToString(),
+            ["role"] = HttpMapping.ToHistoryRole(entry.Role),
+            ["text"] = entry.Text,
+            ["responseId"] = entry.ResponseId?.ToString(),
+            ["status"] = HttpMapping.ToEntryStatus(entry.Status),
+            ["deliveryMode"] = HttpMapping.ToMode(entry.DeliveryMode),
+            ["heardTextEndExclusive"] = entry.HeardTextEndExclusive,
+            ["receivedTextEndExclusive"] = entry.ReceivedTextEndExclusive,
+            ["createdAt"] = entry.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            ["attachments"] = entry.Attachments?.Select(item => (object)new Dictionary<string, object?>
+            {
+                ["attachmentId"] = item.AttachmentId.ToString(),
+                ["displayName"] = item.DisplayName,
+                ["contentType"] = item.ContentType
+            }).ToArray(),
+            ["blocks"] = entry.Blocks.Select(block => (object)new Dictionary<string, object?>
+            {
+                ["blockId"] = block.BlockId,
+                ["kind"] = block.Kind,
+                ["text"] = block.Text,
+                ["fallbackText"] = block.FallbackText,
+                ["attachmentId"] = block.AttachmentId,
+                ["artifactId"] = block.ArtifactId
+            }).ToArray(),
+            ["finishReason"] = entry.FinishReason,
+            ["interruptReason"] = entry.InterruptReason,
+            ["speechText"] = entry.SpeechText,
+            ["memoryReceipts"] = MemoryReceiptPayload(entry.MemoryReceipts),
+            ["failure"] = entry.Failure is { } failure
+                ? new Dictionary<string, object?>
+                {
+                    ["diagnosticId"] = failure.DiagnosticId.ToString("D"),
+                    ["correlationId"] = failure.CorrelationId?.ToString("D"),
+                    ["category"] = failure.Category,
+                    ["code"] = failure.Code
+                }
+                : null
+        };
 
     private static Dictionary<string, object?> MapPendingApproval(PublicPendingApproval approval) =>
         new(StringComparer.Ordinal)

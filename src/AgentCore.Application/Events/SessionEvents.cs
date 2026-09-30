@@ -509,6 +509,8 @@ public static class ResponseProgressMessages
 
 public sealed record CompletionIntentOutput(string Reason, bool Advisory) : OutputPayload;
 
+public sealed record HistoryEntryUpsertOutput(PublicHistoryEntry Entry) : OutputPayload;
+
 public interface ISessionOutput
 {
     ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default);

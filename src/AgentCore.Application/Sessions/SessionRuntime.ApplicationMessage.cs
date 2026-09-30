@@ -149,6 +149,13 @@ public sealed partial class SessionRuntime
             ApplicationMessageEffectKey: effectKey);
         _snapshot = Append(entry);
         RequestPersist(_snapshot);
+        await PublishAsync(
+                new SessionOutput(
+                    input.Context,
+                    input.ResponseId,
+                    new HistoryEntryUpsertOutput(PublicHistory.FromEntry(entry))),
+                cancellationToken)
+            .ConfigureAwait(false);
         await PublishStateAsync(input.Context, cancellationToken).ConfigureAwait(false);
         return new ApplicationMessageMailboxResult(ApplicationMessageAdmission.Success(effectKey), "admitted");
     }

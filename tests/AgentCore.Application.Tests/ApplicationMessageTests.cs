@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
@@ -181,7 +182,8 @@ public sealed class ApplicationMessageTests
     {
         var model = new MessagingLanguageModel();
         var turns = new InMemoryConversationTurnExecutionStore();
-        await using var runtime = Create(model, turns, Definition());
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(model, turns, Definition(), output);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hello");
         await runtime.WaitUntilIdleAsync();
@@ -222,6 +224,17 @@ public sealed class ApplicationMessageTests
         }
 
         Assert.Equal(3, admitted.Select(entry => entry.ApplicationMessageEffectKey).Distinct().Count());
+        var published = output.Items.Where(item => item.Payload is HistoryEntryUpsertOutput).ToArray();
+        var upserts = published.Select(item => (HistoryEntryUpsertOutput)item.Payload).ToArray();
+        Assert.Equal([FirstText, SecondText, ThirdText], upserts.Select(item => item.Entry.Text).ToArray());
+        Assert.Equal(upserts.Select(item => item.Entry.ResponseId).ToArray(), published.Select(item => item.ResponseId).ToArray());
+        Assert.All(upserts, item =>
+        {
+            Assert.Equal(ConversationRole.ApplicationMessage, item.Entry.Role);
+            Assert.Null(item.Entry.SpeechText);
+            Assert.Equal(0, item.Entry.HeardTextEndExclusive);
+        });
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechOutputSegmentOutput or SpeechOutputCompletedOutput);
         await runtime.SubmitUserTextAsync("thanks");
         await runtime.WaitUntilIdleAsync();
         var next = Text(model.Requests[^1]);
@@ -237,7 +250,8 @@ public sealed class ApplicationMessageTests
     {
         var model = new CancelMessagingLanguageModel();
         var turns = new InMemoryConversationTurnExecutionStore();
-        await using var runtime = Create(model, turns, Definition());
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(model, turns, Definition(), output);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hello");
         await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -249,6 +263,9 @@ public sealed class ApplicationMessageTests
         var admitted = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.ApplicationMessage);
         Assert.Equal(FirstText, admitted.Text);
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains(SecondText, StringComparison.Ordinal));
+        var upsert = Assert.Single(output.Items.Select(item => item.Payload).OfType<HistoryEntryUpsertOutput>());
+        Assert.Equal(FirstText, upsert.Entry.Text);
+        Assert.Equal(admitted.EntryId, upsert.Entry.EntryId);
     }
 
     private static string Text(ModelRequest request) =>
@@ -280,7 +297,11 @@ public sealed class ApplicationMessageTests
             Skills = []
         };
 
-    private static SessionRuntime Create(ILanguageModel model, InMemoryConversationTurnExecutionStore turns, AgentDefinition definition)
+    private static SessionRuntime Create(
+        ILanguageModel model,
+        InMemoryConversationTurnExecutionStore turns,
+        AgentDefinition definition,
+        CapturingSessionOutput? output = null)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -315,7 +336,7 @@ public sealed class ApplicationMessageTests
             model,
             new DefaultAgentBrain(new PromptContextBuilder()),
             memory,
-            new CapturingSessionOutput(),
+            output ?? new CapturingSessionOutput(),
             ids,
             time,
             NullLogger<SessionRuntime>.Instance,
