@@ -161,11 +161,67 @@ public sealed class SemanticCutoverRuntimeTests
         Assert.DoesNotContain("folder/notes.txt", string.Join('|', blocks.Select(block => block.FallbackText)));
     }
 
+    [Fact]
+    public async Task Second_semantic_ready_refreshes_the_same_assistant_entry()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new TwiceReadyLanguageModel());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Other", assistant.Text);
+    }
+
+    [Fact]
+    public async Task Streamed_text_turn_reloads_as_one_durable_response()
+    {
+        var output = new CapturingSessionOutput();
+        var store = new InMemoryMemoryStore();
+        await using var runtime = Create(output, new RecordingLanguageModel(), store: store);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Contains(output.Items, item => item.Payload is TextDeltaOutput);
+        var loaded = await store.LoadAsync(runtime.SessionId);
+        Assert.NotNull(loaded);
+        var assistant = Assert.Single(loaded!.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Shown", assistant.Text);
+    }
+
+    [Fact]
+    public async Task Wait_disposition_does_not_complete_the_assistant_successfully()
+    {
+        await using var runtime = Create(new CapturingSessionOutput(), new DispositionLanguageModel("Wait"));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Failed, assistant.Status);
+        Assert.Null(assistant.Envelope);
+        Assert.NotEqual(EntryStatus.Completed, assistant.Status);
+    }
+
+    [Fact]
+    public async Task Continue_disposition_delivers_one_chat_response()
+    {
+        await using var runtime = Create(new CapturingSessionOutput(), new DispositionLanguageModel("Continue"));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Shown", assistant.Text);
+    }
+
     private static SessionRuntime Create(
         ISessionOutput output,
         ILanguageModel model,
         bool voice = false,
-        ISpeechSynthesizer? synthesizer = null)
+        ISpeechSynthesizer? synthesizer = null,
+        InMemoryMemoryStore? store = null)
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var ids = new DeterministicIdGenerator(
@@ -187,7 +243,7 @@ public sealed class SemanticCutoverRuntimeTests
             LocalUserProfile.Id,
             now,
             now);
-        var store = new InMemoryMemoryStore();
+        store ??= new InMemoryMemoryStore();
         store.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
         synthesizer ??= voice ? new RecordingSynthesizer() : null;
         return new SessionRuntime(
@@ -320,6 +376,44 @@ public sealed class SemanticCutoverRuntimeTests
         {
             Texts.Add(request.Text);
             return _inner.SynthesizeAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class TwiceReadyLanguageModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            yield return new ModelDisplayDelta("Shown");
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse("Shown", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse("Other", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class DispositionLanguageModel(string disposition) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            yield return new ModelDisplayDelta("Shown");
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse(
+                    "Shown",
+                    new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                    [],
+                    Disposition: disposition));
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 }

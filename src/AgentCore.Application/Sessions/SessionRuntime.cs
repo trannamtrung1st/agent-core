@@ -93,6 +93,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private bool _usesResponseContract;
     private bool _structuredOutput;
     private bool _semanticReady;
+    private long _chatAcceptedTimestamp;
     private IReadOnlyList<MemoryProposal>? _stagedMemoryProposals;
     private bool _memoryCommitSettled;
     private int _publishedDisplayLength;
@@ -1733,6 +1734,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _envelope = null;
         _usesResponseContract = true;
         _semanticReady = false;
+        _chatAcceptedTimestamp = 0;
         _stagedMemoryProposals = null;
         _memoryCommitSettled = false;
         _structuredOutput = false;
@@ -3226,6 +3228,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await CommitStagedMemoryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (!failed && _chatAcceptedTimestamp != 0)
+        {
+            RuntimeTelemetry.Record("agent.step.terminal", RuntimeTelemetry.ElapsedMs(_chatAcceptedTimestamp));
+            _chatAcceptedTimestamp = 0;
+        }
+
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         _initiativeHeld = false;
@@ -3685,17 +3693,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var accepted = (AgentStepAccepted)normalization;
         var decision = AgentStepController.Decide(accepted.Step);
         var actionKind = decision.Chat is null ? "none" : AgentStepNormalizer.ChatRespondKind;
-        var executed = decision.ExecuteChat ? "chat" : "none";
-        RuntimeTelemetry.RecordAgentStep("accepted", accepted.Step.Disposition.ToString(), actionKind, "none", executed);
-        _logger.LogInformation(
-            "Agent step accepted {SessionId} {ResponseId} disposition {Disposition} action {ActionKind} executed {Executed}",
-            SessionId,
-            responseId,
-            accepted.Step.Disposition,
-            actionKind,
-            executed);
         if (!decision.ExecuteChat || decision.Chat is null)
         {
+            RuntimeTelemetry.RecordAgentStep("accepted", accepted.Step.Disposition.ToString(), actionKind, "none", "none");
+            _logger.LogInformation(
+                "Agent step accepted {SessionId} {ResponseId} disposition {Disposition} action {ActionKind} executed {Executed}",
+                SessionId,
+                responseId,
+                accepted.Step.Disposition,
+                actionKind,
+                "none");
             var code = decision.Effect switch
             {
                 AgentStepEffect.BlockActivation => "Blocked",
@@ -3713,12 +3720,50 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        var admission = ChatActionAdmission.Evaluate(LiveChatAdmission(responseId));
+        if (admission.Outcome != ChatAdmissionOutcome.Allow
+            || admission.RequiresApproval
+            || admission.BoundSessionId != _snapshot.SessionId)
+        {
+            RuntimeTelemetry.RecordAgentStep(
+                "accepted",
+                accepted.Step.Disposition.ToString(),
+                actionKind,
+                "denied",
+                "none");
+            _logger.LogInformation(
+                "Agent step accepted {SessionId} {ResponseId} disposition {Disposition} action {ActionKind} executed {Executed}",
+                SessionId,
+                responseId,
+                accepted.Step.Disposition,
+                actionKind,
+                "none");
+            await FailSemanticReadyAsync(
+                    context,
+                    responseId,
+                    finalizingOperationId,
+                    ReferenceForResponse(context, responseId, "ChatDenied", exception: null),
+                    "The response could not be completed.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        RuntimeTelemetry.RecordAgentStep("accepted", accepted.Step.Disposition.ToString(), actionKind, "none", "chat");
+        _logger.LogInformation(
+            "Agent step accepted {SessionId} {ResponseId} disposition {Disposition} action {ActionKind} executed {Executed}",
+            SessionId,
+            responseId,
+            accepted.Step.Disposition,
+            actionKind,
+            "chat");
+
         ResponseEnvelope mapped;
         try
         {
             mapped = SemanticResponseMapper.ToEnvelope(
-                semantic,
-                _snapshot.SessionId,
+                decision.Chat,
+                admission.BoundSessionId,
                 _artifacts,
                 AttachmentAllowed);
         }
@@ -3738,6 +3783,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _semanticReady = true;
         _envelope = mapped;
+        if (_chatAcceptedTimestamp == 0)
+        {
+            _chatAcceptedTimestamp = Stopwatch.GetTimestamp();
+        }
+
         StageMemoryProposals(decision.StageMemoryAfterChatSuccess ? accepted.Step.MemoryProposals : null);
         _accumulator.Replace(mapped.DisplayText);
         if (finalizingOperationId is { } completedOp)
@@ -3770,6 +3820,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await ReleaseClientSpeechAsync(context, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    private ChatAdmissionRequest LiveChatAdmission(Guid responseId) =>
+        new(
+            AgentStepNormalizer.ChatRespondKind,
+            _snapshot.SessionId,
+            ModelSessionId: null,
+            ModelDestination: null,
+            ModelProfileId: null,
+            ModelTenant: null,
+            ModelRecipient: null,
+            DetachedExecution: false,
+            EpochMatches: true,
+            ResponseMatches: _activeResponseId == responseId,
+            AlreadyAccepted: false);
 
     private async Task FailSemanticReadyAsync(
         EventContext context,
@@ -4191,6 +4255,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _progressStartedTimestamp = 0;
         _usesResponseContract = false;
         _semanticReady = false;
+        _chatAcceptedTimestamp = 0;
         _stagedMemoryProposals = null;
         _memoryCommitSettled = false;
         _structuredOutput = false;

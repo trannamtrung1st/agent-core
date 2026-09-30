@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 
@@ -5,6 +6,20 @@ namespace AgentCore.Application.Models;
 
 public static class SemanticResponseMapper
 {
+    public static ResponseEnvelope ToEnvelope(
+        ChatRespondAction action,
+        Guid sessionId,
+        IArtifactReferenceAuthorizer artifacts,
+        Func<string, bool>? attachmentAllowed = null)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return ToEnvelope(
+            new ModelSemanticResponse(action.DisplayText, action.Speech, action.Blocks),
+            sessionId,
+            artifacts,
+            attachmentAllowed);
+    }
+
     public static ResponseEnvelope ToEnvelope(
         ModelSemanticResponse semantic,
         Guid sessionId,

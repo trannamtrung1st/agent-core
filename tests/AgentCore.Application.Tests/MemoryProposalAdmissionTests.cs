@@ -274,7 +274,7 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
-    public async Task Later_semantic_response_replaces_the_staged_proposal()
+    public async Task Later_semantic_response_replaces_the_staged_proposal_without_a_second_entry()
     {
         var memories = Service();
         await using var runtime = await RuntimeAsync(memories, Enabled(), new ReplacingSemanticModel());
@@ -286,6 +286,9 @@ public sealed class MemoryProposalAdmissionTests
         var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
         var item = Assert.Single(stored);
         Assert.Equal("Borealis", item.Content);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Second.", assistant.Text);
         AssertSilentStored(runtime, "project codename");
     }
 

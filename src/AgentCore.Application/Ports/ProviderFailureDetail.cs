@@ -14,6 +14,9 @@ public static class ProviderFailureReason
     public const string InvalidMemoryProposal = "invalidMemoryProposal";
     public const string ResponseFunctionArgumentsInvalid = "responseFunctionArgumentsInvalid";
     public const string InvalidMarkerEnvelope = "invalidMarkerEnvelope";
+    public const string ModelSuppliedDestination = "modelSuppliedDestination";
+    public const string UnknownAction = "unknownAction";
+    public const string UnknownDisposition = "unknownDisposition";
 }
 
 public static class ProviderResponseChannel

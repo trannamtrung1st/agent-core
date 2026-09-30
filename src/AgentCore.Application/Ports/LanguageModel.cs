@@ -99,7 +99,9 @@ public sealed record ModelSemanticResponse(
     string DisplayText,
     ModelSpeechProjection Speech,
     IReadOnlyList<ModelResponseBlock> Blocks,
-    IReadOnlyList<MemoryProposal>? Memory = null);
+    IReadOnlyList<MemoryProposal>? Memory = null,
+    string? Disposition = null,
+    string? ActionKind = null);
 
 /// <summary>
 /// Incremental visible conversational text for a request that carries <see cref="ModelResponseContract"/>.

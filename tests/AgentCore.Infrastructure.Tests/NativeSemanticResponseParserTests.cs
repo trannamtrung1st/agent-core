@@ -11,6 +11,14 @@ public sealed class NativeSemanticResponseParserTests
     [InlineData("""{"speech":{"mode":"same"}}""", ProviderFailureReason.MissingDisplayText)]
     [InlineData("""{"displayText":"","speech":{"mode":"same"}}""", ProviderFailureReason.MissingDisplayText)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"maybe"}}""", ProviderFailureReason.InvalidSpeech)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"sessionId":"other"}""", ProviderFailureReason.ModelSuppliedDestination)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"destination":"other"}""", ProviderFailureReason.ModelSuppliedDestination)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"profileId":"p"}""", ProviderFailureReason.ModelSuppliedDestination)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"tenant":"t"}""", ProviderFailureReason.ModelSuppliedDestination)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"recipient":"u"}""", ProviderFailureReason.ModelSuppliedDestination)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"action":"teams.reply"}""", ProviderFailureReason.UnknownAction)]
+    [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"disposition":"Frobnicate"}""", ProviderFailureReason.UnknownDisposition)]
+    [InlineData("not-json-step", ProviderFailureReason.InvalidJson)]
     [InlineData(
         """{"displayText":"Shown","speech":{"mode":"same"},"memory":[{"operation":"upsert","kind":"fact","subject":"x"}]}""",
         ProviderFailureReason.InvalidMemoryProposal)]

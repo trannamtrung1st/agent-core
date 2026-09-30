@@ -58,10 +58,12 @@ public static class AgentStepNormalizer
     {
         ArgumentNullException.ThrowIfNull(response);
         return new AgentStepCandidate(
-            nameof(AgentStepDisposition.Complete),
+            string.IsNullOrWhiteSpace(response.Disposition)
+                ? nameof(AgentStepDisposition.Complete)
+                : response.Disposition,
             [
                 new AgentActionCandidate(
-                    ChatRespondKind,
+                    string.IsNullOrWhiteSpace(response.ActionKind) ? ChatRespondKind : response.ActionKind,
                     response.DisplayText ?? string.Empty,
                     response.Speech ?? new ModelSpeechProjection(ModelSpeechMode.Same, null),
                     response.Blocks ?? [])

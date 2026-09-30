@@ -42,6 +42,22 @@ internal static class NativeSemanticResponseParser
             }
 
             var root = document.RootElement;
+            if (ContainsDestination(root))
+            {
+                failureReason = ProviderFailureReason.ModelSuppliedDestination;
+                return false;
+            }
+
+            if (!TryDisposition(root, out var disposition, out failureReason))
+            {
+                return false;
+            }
+
+            if (!TryActionKind(root, out var actionKind, out failureReason))
+            {
+                return false;
+            }
+
             if (!root.TryGetProperty("displayText", out var displayEl) || displayEl.ValueKind != JsonValueKind.String)
             {
                 failureReason = ProviderFailureReason.MissingDisplayText;
@@ -76,10 +92,148 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
-            response = new ModelSemanticResponse(display, speech, blocks, memory);
+            response = new ModelSemanticResponse(display, speech, blocks, memory, disposition, actionKind);
             failureReason = string.Empty;
             return true;
         }
+    }
+
+    private static bool ContainsDestination(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.Name is "sessionId" or "destination" or "profileId" or "tenant" or "recipient")
+                    {
+                        return true;
+                    }
+
+                    if (ContainsDestination(property.Value))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (ContainsDestination(item))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryDisposition(JsonElement root, out string? disposition, out string failureReason)
+    {
+        disposition = null;
+        failureReason = string.Empty;
+        if (!root.TryGetProperty("disposition", out var dispositionEl))
+        {
+            return true;
+        }
+
+        if (dispositionEl.ValueKind != JsonValueKind.String)
+        {
+            failureReason = ProviderFailureReason.UnknownDisposition;
+            return false;
+        }
+
+        var name = dispositionEl.GetString();
+        if (name is "Continue" or "Wait" or "Complete" or "Blocked")
+        {
+            disposition = name;
+            return true;
+        }
+
+        failureReason = ProviderFailureReason.UnknownDisposition;
+        return false;
+    }
+
+    private static bool TryActionKind(JsonElement root, out string? actionKind, out string failureReason)
+    {
+        actionKind = null;
+        failureReason = string.Empty;
+        string? single = null;
+        if (root.TryGetProperty("action", out var action))
+        {
+            if (!TryReadKind(action, out single, out failureReason))
+            {
+                return false;
+            }
+        }
+
+        if (root.TryGetProperty("actions", out var actions))
+        {
+            if (actions.ValueKind != JsonValueKind.Array)
+            {
+                failureReason = ProviderFailureReason.UnknownAction;
+                return false;
+            }
+
+            var count = 0;
+            foreach (var item in actions.EnumerateArray())
+            {
+                count++;
+                if (!TryReadKind(item, out var kind, out failureReason))
+                {
+                    return false;
+                }
+
+                if (single is not null && !string.Equals(single, kind, StringComparison.Ordinal))
+                {
+                    failureReason = ProviderFailureReason.UnknownAction;
+                    return false;
+                }
+
+                single = kind;
+            }
+
+            if (count > 1)
+            {
+                failureReason = ProviderFailureReason.UnknownAction;
+                return false;
+            }
+        }
+
+        actionKind = single;
+        return true;
+    }
+
+    private static bool TryReadKind(JsonElement action, out string? kind, out string failureReason)
+    {
+        kind = null;
+        failureReason = ProviderFailureReason.UnknownAction;
+        if (action.ValueKind == JsonValueKind.String)
+        {
+            kind = action.GetString();
+        }
+        else if (action.ValueKind == JsonValueKind.Object
+            && action.TryGetProperty("kind", out var kindEl)
+            && kindEl.ValueKind == JsonValueKind.String)
+        {
+            kind = kindEl.GetString();
+        }
+        else
+        {
+            return false;
+        }
+
+        if (!string.Equals(kind, "chat.respond", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        failureReason = string.Empty;
+        return true;
     }
 
     private static bool TryMemory(JsonElement root, out IReadOnlyList<MemoryProposal> memory, out string failureReason)
