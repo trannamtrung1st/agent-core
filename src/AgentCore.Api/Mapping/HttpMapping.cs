@@ -152,7 +152,7 @@ public static partial class HttpMapping
                 item.Outcome,
                 item.Operation,
                 item.Subject,
-                item.Scope,
+                item.Scopes,
                 item.Presentation,
                 item.Label)).ToArray());
     }

@@ -2663,7 +2663,7 @@ public static class SessionEventMapper
                 ["outcome"] = item.Outcome,
                 ["operation"] = item.Operation,
                 ["subject"] = item.Subject,
-                ["scope"] = item.Scope,
+                ["scopes"] = item.Scopes,
                 ["presentation"] = item.Presentation,
                 ["label"] = item.Label
             }).ToArray();

@@ -9,7 +9,8 @@ public static class ResponseEnvelopeJson
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new MemoryReceiptJsonConverter() }
     };
 
     public static string Serialize(ResponseEnvelope envelope)

@@ -29,7 +29,7 @@ public static class MemoryReceiptProjection
             operation,
             Source(proposal.Source),
             proposal.Subject.Trim(),
-            Scope(result.Status, proposal.ScopeHint),
+            result.AffectedScopes,
             Presentation(proposal.Source, proposal.Operation, result.Status));
     }
 
@@ -58,21 +58,6 @@ public static class MemoryReceiptProjection
             ? MemoryReceipt.Indicator
             : MemoryReceipt.Explicit;
     }
-
-    private static string? Scope(MemoryAdmissionStatus status, MemoryScopeHint? hint) => status switch
-    {
-        MemoryAdmissionStatus.StoredSessionOnly or MemoryAdmissionStatus.UpdatedSessionOnly => "session",
-        MemoryAdmissionStatus.Stored
-            or MemoryAdmissionStatus.Updated
-            or MemoryAdmissionStatus.AlreadyStored
-            or MemoryAdmissionStatus.Deleted => hint switch
-            {
-                MemoryScopeHint.Session => "session",
-                MemoryScopeHint.User => "user",
-                _ => "identityUser"
-            },
-        _ => null
-    };
 
     private static string Outcome(MemoryAdmissionStatus status) => status switch
     {

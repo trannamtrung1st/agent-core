@@ -280,7 +280,7 @@ public sealed record PublicMemoryReceipt(
     string Outcome,
     string Operation,
     string Subject,
-    string? Scope,
+    IReadOnlyList<string>? Scopes,
     string Presentation,
     string Label)
 {
@@ -320,7 +320,7 @@ public sealed record PublicMemoryReceipt(
             receipt.Outcome,
             receipt.Operation,
             subject,
-            receipt.Scope,
+            receipt.Scopes,
             receipt.Presentation,
             label);
     }

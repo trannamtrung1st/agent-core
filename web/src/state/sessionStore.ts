@@ -86,7 +86,7 @@ export type MemoryReceiptView = {
   outcome: string;
   operation: string;
   subject: string;
-  scope?: string | null;
+  scopes?: string[] | null;
   presentation: "indicator" | "explicit";
   label: string;
 };
@@ -439,12 +439,23 @@ function asMemoryReceipts(raw: unknown): MemoryReceiptView[] | undefined {
       continue;
     }
 
-    const scope = asString(row.scope).trim();
+    const scopesRaw = row.scopes;
+    let scopes: string[] | null = null;
+    if (Array.isArray(scopesRaw)) {
+      const parsed = scopesRaw
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter((value) => value.length > 0);
+      scopes = parsed.length > 0 ? parsed : null;
+    } else {
+      const legacyScope = asString(row.scope).trim();
+      scopes = legacyScope ? [legacyScope] : null;
+    }
+
     receipts.push({
       outcome: asString(row.outcome),
       operation: asString(row.operation),
       subject: asString(row.subject),
-      scope: scope || null,
+      scopes,
       presentation,
       label
     });

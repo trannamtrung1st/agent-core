@@ -1191,7 +1191,7 @@ describe("historyFromPayload", () => {
             outcome: "stored",
             operation: "upsert",
             subject: "project codename",
-            scope: "identityUser",
+            scopes: ["identityUser"],
             presentation: "indicator",
             label: "Remembered"
           },
@@ -1211,7 +1211,7 @@ describe("historyFromPayload", () => {
         outcome: "stored",
         operation: "upsert",
         subject: "project codename",
-        scope: "identityUser",
+        scopes: ["identityUser"],
         presentation: "indicator",
         label: "Remembered"
       }

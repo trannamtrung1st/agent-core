@@ -308,7 +308,7 @@ describe("Conversation", () => {
                 outcome: "stored",
                 operation: "upsert",
                 subject: "User identity",
-                scope: "identityUser",
+                scopes: ["identityUser"],
                 presentation: "indicator",
                 label: "Remembered"
               }

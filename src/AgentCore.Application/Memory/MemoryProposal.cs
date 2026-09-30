@@ -49,7 +49,10 @@ public sealed record MemoryProposal(
     MemoryScopeHint? ScopeHint,
     MemoryProposalSource Source);
 
-public sealed record MemoryAdmissionResult(MemoryAdmissionStatus Status, MemoryProposal Proposal);
+public sealed record MemoryAdmissionResult(
+    MemoryAdmissionStatus Status,
+    MemoryProposal Proposal,
+    IReadOnlyList<string>? AffectedScopes = null);
 
 public static class MemoryProposalCodec
 {

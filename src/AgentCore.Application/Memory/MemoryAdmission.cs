@@ -36,7 +36,7 @@ public static class MemoryAdmission
                 continue;
             }
 
-            var status = await AdmitOneAsync(
+            var outcome = await AdmitOneWithOutcomeAsync(
                 memories,
                 definition,
                 sessionId,
@@ -47,7 +47,7 @@ public static class MemoryAdmission
                 proposal,
                 logger,
                 cancellationToken).ConfigureAwait(false);
-            results.Add(new MemoryAdmissionResult(status, proposal));
+            results.Add(new MemoryAdmissionResult(outcome.Status, proposal, outcome.AffectedScopes));
         }
 
         return results;
@@ -63,17 +63,40 @@ public static class MemoryAdmission
         Guid sourceEntryId,
         MemoryProposal proposal,
         ILogger logger,
+        CancellationToken cancellationToken = default) =>
+        (await AdmitOneWithOutcomeAsync(
+            memories,
+            definition,
+            sessionId,
+            agentInstanceId,
+            profile,
+            entries,
+            sourceEntryId,
+            proposal,
+            logger,
+            cancellationToken).ConfigureAwait(false)).Status;
+
+    private static async ValueTask<AdmissionOutcome> AdmitOneWithOutcomeAsync(
+        IStructuredMemoryService memories,
+        AgentDefinition definition,
+        Guid sessionId,
+        Guid? agentInstanceId,
+        UserProfile? profile,
+        IReadOnlyList<ConversationEntry> entries,
+        Guid sourceEntryId,
+        MemoryProposal proposal,
+        ILogger logger,
         CancellationToken cancellationToken = default)
     {
         var policy = EffectiveConfigurationComposer.MemoryPolicyOf(definition);
         if (!policy.SessionMemory)
         {
-            return MemoryAdmissionStatus.Unavailable;
+            return AdmissionOutcome.Unavailable;
         }
 
         if (!IsShapeValid(proposal))
         {
-            return MemoryAdmissionStatus.Rejected;
+            return AdmissionOutcome.Rejected;
         }
 
         var sourceIds = sourceEntryId == Guid.Empty ? Array.Empty<Guid>() : new[] { sourceEntryId };
@@ -107,7 +130,6 @@ public static class MemoryAdmission
                 sessionId,
                 cancellationToken).ConfigureAwait(false);
         }
-
         StructuredMemoryItem sessionItem;
         MemoryAdmissionStatus sessionOutcome;
         var existing = await memories.FindActiveBySubjectAsync(owner, proposal.Kind, proposal.Subject, cancellationToken)
@@ -126,7 +148,7 @@ public static class MemoryAdmission
             catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "MemoryCapacity")
             {
                 logger.LogDebug(ex, "Memory proposal rejected for session {SessionId}", sessionId);
-                return MemoryAdmissionStatus.Rejected;
+                return AdmissionOutcome.Rejected;
             }
         }
         else if (string.Equals(existing.Content, proposal.Content.Trim(), StringComparison.Ordinal))
@@ -148,13 +170,14 @@ public static class MemoryAdmission
             catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "MemoryCapacity")
             {
                 logger.LogDebug(ex, "Memory proposal update rejected for session {SessionId}", sessionId);
-                return MemoryAdmissionStatus.Rejected;
+                return AdmissionOutcome.Rejected;
             }
         }
 
         if (!allowIdentity && !allowUser)
         {
-            return SessionOnly(sessionOutcome);
+            var sessionOnly = SessionOnly(sessionOutcome);
+            return new AdmissionOutcome(sessionOnly, UpsertScopes(sessionOutcome, identitySynced: false, userSynced: false));
         }
 
         var identitySynced = false;
@@ -189,16 +212,53 @@ public static class MemoryAdmission
 
         if (allowIdentity && !identitySynced)
         {
-            return SessionOnly(sessionOutcome);
+            var sessionOnly = SessionOnly(sessionOutcome);
+            return new AdmissionOutcome(sessionOnly, UpsertScopes(sessionOutcome, identitySynced: false, userSynced: userSynced));
         }
 
         if (allowUser && !userSynced)
         {
-            return SessionOnly(sessionOutcome);
+            var sessionOnly = SessionOnly(sessionOutcome);
+            return new AdmissionOutcome(sessionOnly, UpsertScopes(sessionOutcome, identitySynced, userSynced: false));
         }
 
-        return sessionOutcome;
+        return new AdmissionOutcome(sessionOutcome, UpsertScopes(sessionOutcome, identitySynced, userSynced));
     }
+
+    private readonly record struct AdmissionOutcome(MemoryAdmissionStatus Status, IReadOnlyList<string>? AffectedScopes)
+    {
+        public static AdmissionOutcome Unavailable => new(MemoryAdmissionStatus.Unavailable, null);
+        public static AdmissionOutcome Rejected => new(MemoryAdmissionStatus.Rejected, null);
+    }
+
+    private static IReadOnlyList<string>? UpsertScopes(
+        MemoryAdmissionStatus sessionOutcome,
+        bool identitySynced,
+        bool userSynced)
+    {
+        if (!SessionLayerAffected(sessionOutcome))
+        {
+            return null;
+        }
+
+        var scopes = new List<string>(3) { "session" };
+        if (identitySynced)
+        {
+            scopes.Add("identityUser");
+        }
+
+        if (userSynced)
+        {
+            scopes.Add("user");
+        }
+
+        return scopes;
+    }
+
+    private static bool SessionLayerAffected(MemoryAdmissionStatus sessionOutcome) =>
+        sessionOutcome is MemoryAdmissionStatus.Stored
+            or MemoryAdmissionStatus.Updated
+            or MemoryAdmissionStatus.AlreadyStored;
 
     private static bool IsShapeValid(MemoryProposal proposal)
     {
@@ -240,7 +300,7 @@ public static class MemoryAdmission
         _ => "agent_inferred"
     };
 
-    private static async ValueTask<MemoryAdmissionStatus> DeleteAsync(
+    private static async ValueTask<AdmissionOutcome> DeleteAsync(
         IStructuredMemoryService memories,
         TrustedMemoryOwner owner,
         MemoryProposal proposal,
@@ -253,6 +313,7 @@ public static class MemoryAdmission
         Guid sessionId,
         CancellationToken cancellationToken)
     {
+        var scopes = new List<string>(3);
         var deleted = false;
         var existing = await memories.FindActiveBySubjectAsync(owner, proposal.Kind, proposal.Subject, cancellationToken)
             .ConfigureAwait(false);
@@ -262,6 +323,7 @@ public static class MemoryAdmission
             {
                 await memories.DeleteAsync(owner, existing.MemoryId, cancellationToken).ConfigureAwait(false);
                 deleted = true;
+                scopes.Add("session");
             }
             catch (AgentCoreException ex) when (ex.Code is "MemoryRejected" or "NotFound")
             {
@@ -287,6 +349,7 @@ public static class MemoryAdmission
                         retrievalAllowed: true,
                         cancellationToken).ConfigureAwait(false);
                     deleted = true;
+                    scopes.Add("identityUser");
                 }
                 catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected" or "NotFound")
                 {
@@ -313,6 +376,7 @@ public static class MemoryAdmission
                         retrievalAllowed: true,
                         cancellationToken).ConfigureAwait(false);
                     deleted = true;
+                    scopes.Add("user");
                 }
                 catch (AgentCoreException ex) when (ex.Code is "PolicyDenied" or "MemoryRejected" or "NotFound")
                 {
@@ -322,7 +386,9 @@ public static class MemoryAdmission
         }
 
         _ = admission;
-        return deleted ? MemoryAdmissionStatus.Deleted : MemoryAdmissionStatus.Rejected;
+        return deleted
+            ? new AdmissionOutcome(MemoryAdmissionStatus.Deleted, scopes)
+            : AdmissionOutcome.Rejected;
     }
 
     private static async ValueTask<bool> SyncIdentityUserAsync(

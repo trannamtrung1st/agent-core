@@ -526,6 +526,39 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
+    public async Task User_promotion_receipt_records_all_mutated_scopes()
+    {
+        var memories = Service();
+        var definition = SampleDefinitions.Support with
+        {
+            MemoryPolicy = new MemoryPolicy(SessionMemory: true, IdentityUserPromotion: true, UserPromotion: true, UserRetrieval: true)
+        };
+        var results = await MemoryAdmission.AdmitAsync(
+            memories,
+            definition,
+            SessionA,
+            InstanceA,
+            Profile(),
+            [],
+            Guid.NewGuid(),
+            [
+                new MemoryProposal(
+                    MemoryProposalOperation.Upsert,
+                    MemoryKind.Fact,
+                    "project codename",
+                    "Atlas",
+                    MemoryScopeHint.User,
+                    MemoryProposalSource.UserExplicit)
+            ],
+            NullLogger.Instance);
+        var result = Assert.Single(results);
+        Assert.Equal(MemoryAdmissionStatus.Stored, result.Status);
+        Assert.Equal(["session", "identityUser", "user"], result.AffectedScopes);
+        var receipt = MemoryReceiptProjection.FromResult(result);
+        Assert.Equal(["session", "identityUser", "user"], receipt.Scopes);
+    }
+
+    [Fact]
     public async Task Application_command_uses_the_same_admission_seam()
     {
         var memories = Service();

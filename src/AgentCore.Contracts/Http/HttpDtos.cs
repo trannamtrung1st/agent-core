@@ -139,7 +139,7 @@ public sealed record HistoryMemoryReceiptResponse(
     string Outcome,
     string Operation,
     string Subject,
-    string? Scope,
+    IReadOnlyList<string>? Scopes,
     string Presentation,
     string Label);
 

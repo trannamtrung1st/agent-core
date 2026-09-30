@@ -49,7 +49,7 @@ public sealed class MemoryReceiptProjectionTests
             [],
             ResponseSpeechMode.Custom,
             [
-                new MemoryReceipt("stored", "upsert", "agentInferred", "User identity", "identityUser", MemoryReceipt.Silent),
+                new MemoryReceipt("stored", "upsert", "agentInferred", "User identity", ["identityUser"], MemoryReceipt.Silent),
                 new MemoryReceipt("rejected", "upsert", "userExplicit", "project codename", null, MemoryReceipt.Explicit)
             ]);
         var entry = new ConversationEntry(

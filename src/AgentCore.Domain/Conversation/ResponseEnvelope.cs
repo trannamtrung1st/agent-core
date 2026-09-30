@@ -34,7 +34,7 @@ public sealed record MemoryReceipt(
     string Operation,
     string Source,
     string Subject,
-    string? Scope,
+    IReadOnlyList<string>? Scopes,
     string Presentation)
 {
     public const string Silent = "silent";

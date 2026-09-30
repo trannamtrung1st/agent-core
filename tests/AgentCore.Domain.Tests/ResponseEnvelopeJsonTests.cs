@@ -48,9 +48,10 @@ public sealed class ResponseEnvelopeJsonTests
             "Spoken line.",
             [],
             ResponseSpeechMode.Custom,
-            [new MemoryReceipt("stored", "upsert", "userExplicit", "project codename", "identityUser", MemoryReceipt.Indicator)]);
+            [new MemoryReceipt("stored", "upsert", "userExplicit", "project codename", ["session", "identityUser"], MemoryReceipt.Indicator)]);
         var json = ResponseEnvelopeJson.Serialize(original);
         Assert.Contains("\"memoryReceipts\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"scopes\":[\"session\",\"identityUser\"]", json, StringComparison.Ordinal);
         Assert.DoesNotContain("Memory saved", json, StringComparison.Ordinal);
         Assert.Contains("\"displayText\":\"Got it.\"", json, StringComparison.Ordinal);
         var restored = ResponseEnvelopeJson.Deserialize(json);
@@ -59,7 +60,18 @@ public sealed class ResponseEnvelopeJsonTests
         var receipt = Assert.Single(restored.MemoryReceipts!);
         Assert.Equal("project codename", receipt.Subject);
         Assert.Equal(MemoryReceipt.Indicator, receipt.Presentation);
-        Assert.Equal("identityUser", receipt.Scope);
+        Assert.Equal(["session", "identityUser"], receipt.Scopes);
+    }
+
+    [Fact]
+    public void Legacy_memory_receipt_scope_deserializes_as_scopes()
+    {
+        var restored = ResponseEnvelopeJson.Deserialize(
+            """
+            {"displayText":"Hi","speech":{"mode":"same"},"blocks":[],"memoryReceipts":[{"outcome":"stored","operation":"upsert","source":"userExplicit","subject":"token","scope":"session","presentation":"indicator"}]}
+            """);
+        var receipt = Assert.Single(restored!.MemoryReceipts!);
+        Assert.Equal(["session"], receipt.Scopes);
     }
 
     [Fact]
