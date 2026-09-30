@@ -36,8 +36,10 @@ test("background work stays out of the transcript at wide and narrow widths", as
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer.getByText("No background work yet")).toBeVisible();
-  await page.keyboard.press("Escape");
+  await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
+  await expect(opener).toBeVisible();
+  await expect(opener).toBeEnabled();
 
   let approved = false;
   await page.route("**/work-items**", async (route) => {
