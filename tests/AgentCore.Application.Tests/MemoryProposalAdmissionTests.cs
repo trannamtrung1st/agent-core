@@ -603,6 +603,50 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
+    public async Task Partial_identity_promotion_keeps_outcome_coherent_with_scopes()
+    {
+        var inner = Service();
+        var memories = new StructuredMemoryServiceIntercept(inner) { BlockUserPromotion = true };
+        var definition = SampleDefinitions.Support with
+        {
+            MemoryPolicy = new MemoryPolicy(SessionMemory: true, IdentityUserPromotion: true, UserPromotion: true, UserRetrieval: true)
+        };
+        var result = Assert.Single(await MemoryAdmission.AdmitAsync(
+            memories,
+            definition,
+            SessionA,
+            InstanceA,
+            Profile(),
+            [],
+            Guid.NewGuid(),
+            [
+                new MemoryProposal(
+                    MemoryProposalOperation.Upsert,
+                    MemoryKind.Fact,
+                    "project codename",
+                    "Atlas",
+                    MemoryScopeHint.User,
+                    MemoryProposalSource.UserExplicit)
+            ],
+            NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.Stored, result.Status);
+        Assert.Equal(["session", "identityUser"], result.AffectedScopes);
+        var receipt = MemoryReceiptProjection.FromResult(result);
+        Assert.Equal("stored", receipt.Outcome);
+        Assert.Equal(["session", "identityUser"], receipt.Scopes);
+        Assert.Single(await inner.SearchIdentityUserAsync(
+            new TrustedIdentityUserOwner(InstanceA, ProfileId),
+            new MemorySearchQuery(null, null),
+            retrievalAllowed: true,
+            Admission("user_explicit")));
+        Assert.Empty(await inner.SearchUserAsync(
+            new TrustedUserOwner(ProfileId),
+            new MemorySearchQuery(null, null),
+            retrievalAllowed: true,
+            Admission("user_explicit")));
+    }
+
+    [Fact]
     public async Task Application_command_uses_the_same_admission_seam()
     {
         var memories = Service();
