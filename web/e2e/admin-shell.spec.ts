@@ -63,7 +63,7 @@ test("chat to admin effective config and back with a new turn", async ({ page })
   await openFirstInstanceEffectiveConfig(page);
   await expect(page.getByText(/Compatibility \/ legacy|Managed/).first()).toBeVisible();
   await expect(page.getByRole("region", { name: "Persona" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Automation" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Automation", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Return to last chat" }).click();
   await expect(page).toHaveURL(chatUrl);
