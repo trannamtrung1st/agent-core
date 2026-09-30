@@ -133,7 +133,7 @@ Deterministic journeys cover detached reminder completion, approval across a SQL
 
 ## P8 Agent Step, Chat action, and Skills (implemented, not frozen)
 
-Deterministic tests cover Agent Step normalization, disposition outcomes, Chat admission, exactly-once delivery, Wait return-control, Skill validation, publication, fork, keyword activation, pinned procedures in the prompt, and the Admin form/JSON Skill round-trip. `chat.respond` is not a tool. Required capabilities do not grant authority. Hosted Synthetic CI on a P8 closure SHA is not recorded here. P8 is not frozen.
+Deterministic tests cover Agent Step normalization, disposition outcomes, Chat admission, exactly-once delivery, Wait return-control, Skill validation, publication, fork, keyword activation, pinned procedures in the prompt, and the Admin form/JSON Skill round-trip. `chat.respond` is not a tool. Required capabilities do not grant authority. On `ce14ee7`, `CI=1` Playwright passed 67 tests across `synthetic`, `browser-stt`, and `browser-browser`, plus one `faithful-manual`, one `admin-lifecycle`, and one `p76-admin`. Those browser projects do not open the Definition Skill form. `pnpm run test --run` on that SHA passed 75 files and 546 tests. `dotnet test AgentCore.sln --nologo` on the parent docs commit passed Domain 137, Application 926 with 1 skipped, API 252, and Infrastructure 559 with 13 skipped. Hosted Synthetic CI on a P8 closure SHA is not recorded here. P8 is not frozen.
 
 ## Post-MVP planned until verified
 
