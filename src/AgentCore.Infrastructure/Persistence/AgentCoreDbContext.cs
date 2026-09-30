@@ -381,6 +381,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.ClaimGeneration).HasMaxLength(36);
             entity.Property(row => row.AssistantEntryId).HasMaxLength(36);
             entity.Property(row => row.PinnedActiveSkillIdsJson).HasMaxLength(512);
+            entity.Property(row => row.SkillLoadCount).HasDefaultValue(0);
             entity.HasIndex(row => new { row.SessionId, row.SourceEventId }).IsUnique();
             entity.HasIndex(row => new { row.Status, row.ClaimLeaseExpiresAtUtc });
             entity.HasIndex(row => new { row.SessionId, row.Status });

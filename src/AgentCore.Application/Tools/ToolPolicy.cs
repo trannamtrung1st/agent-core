@@ -23,6 +23,25 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (descriptor.OfferRule == ToolOfferRule.CurrentExecutionCapability)
+        {
+            if (admission is null
+                || admission.Detached
+                || admission.TriggerKind != TriggerKind.UserTurn
+                || ToolResources.IsOccurrence(admission.TriggerKind))
+            {
+                return ToolPolicyDecision.Deny;
+            }
+
+            if (string.Equals(toolName, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
+                && definition.SkillList.Count == 0)
+            {
+                return ToolPolicyDecision.Deny;
+            }
+
+            return ToolPolicyDecision.Allow;
+        }
+
         if (descriptor.OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows
             && !RoleEnvironments.Of(definition).ToolList.Contains(toolName, StringComparer.Ordinal))
         {
@@ -100,6 +119,11 @@ public static class ToolPolicy
             ToolOfferRule.ConfigurationWhenRoleAllows =>
                 RoleEnvironments.Of(definition).ToolList.Contains(descriptor.Name, StringComparer.Ordinal)
                 && configurationGate.IsConfigured(descriptor.Name),
+            ToolOfferRule.CurrentExecutionCapability => context is not null
+                && context.Trigger.Kind == TriggerKind.UserTurn
+                && !context.DetachedExecution
+                && !ToolResources.IsOccurrence(context.Trigger.Kind)
+                && (descriptor.Name != ToolCatalog.SkillsLoad || definition.SkillList.Count > 0),
             _ => false
         };
     }

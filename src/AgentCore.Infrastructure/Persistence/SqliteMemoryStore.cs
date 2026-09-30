@@ -1288,6 +1288,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await ColumnExistsAsync(connection, "ConversationTurnExecutions", "SkillLoadCount", cancellationToken)
+            .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260930174851_P85SkillLoadCount', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(

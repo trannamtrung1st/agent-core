@@ -41,6 +41,14 @@ public interface IConversationTurnExecutionStore
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default);
 
+    ValueTask<ConversationTurnExecution> AdmitActiveSkillsAsync(
+        Guid executionId,
+        long expectedRevision,
+        Guid generation,
+        IReadOnlyList<string> skillIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
     ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,

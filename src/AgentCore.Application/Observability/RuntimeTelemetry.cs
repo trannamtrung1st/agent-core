@@ -104,6 +104,12 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");
+    private static readonly Counter<long> SkillLoads = Meter.CreateCounter<long>("skill_loads");
+
+    public static void RecordSkillLoad(string outcome)
+    {
+        SkillLoads.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
 
     public static void RecordAgentStep(
         string outcome,
@@ -123,7 +129,7 @@ public static class RuntimeTelemetry
 
     public static void RecordActiveSkills(int count)
     {
-        var bounded = Math.Clamp(count, 0, 3).ToString();
+        var bounded = Math.Clamp(count, 0, 4).ToString();
         ActiveSkills.Add(1, new KeyValuePair<string, object?>("count", bounded));
     }
 

@@ -31,6 +31,7 @@ public static class ToolCatalog
     public const string TriggerList = "trigger.list";
     public const string TriggerUpdate = "trigger.update";
     public const string TriggerCancel = "trigger.cancel";
+    public const string SkillsLoad = "skills.load";
 
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,
@@ -68,6 +69,18 @@ public static class ToolCatalog
             && seen.Add(AttachmentsRead))
         {
             offered.Add(attachmentDescriptor.ModelDefinition);
+        }
+
+        foreach (var descriptor in ToolRegistry.All)
+        {
+            if (descriptor.OfferRule != ToolOfferRule.CurrentExecutionCapability
+                || !ToolPolicy.IsOffered(descriptor, definition, context, configurationGate)
+                || !seen.Add(descriptor.Name))
+            {
+                continue;
+            }
+
+            offered.Add(descriptor.ModelDefinition);
         }
 
         return offered;

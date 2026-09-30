@@ -35,6 +35,16 @@ public sealed class SkillPinStoreTests
                 now.AddMinutes(1),
                 now.AddMinutes(6));
             Assert.Equal(["refund.handle", "order.lookup"], claimed!.PinnedActiveSkillIds);
+            var admitted = await reopened.AdmitActiveSkillsAsync(
+                claimed.ExecutionId,
+                claimed.Revision,
+                Guid.Parse("019944af-00d1-7000-8000-0000000000b9"),
+                ["billing.note"],
+                now.AddMinutes(2));
+            Assert.Equal(["refund.handle", "order.lookup", "billing.note"], admitted.PinnedActiveSkillIds);
+            Assert.Equal(1, admitted.SkillLoadCount);
+            var reloadedCount = await reopened.GetAsync(admitted.ExecutionId);
+            Assert.Equal(1, reloadedCount!.SkillLoadCount);
 
             var empty = await reopened.CreateAsync(Execution(
                 sessionId,

@@ -72,6 +72,15 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             new(ModelRole.System, sections.ModeSystem),
             new(ModelRole.System, sections.MemorySystem)
         };
+        if (context.Trigger.Kind == TriggerKind.UserTurn)
+        {
+            var catalog = BuildSkillCatalogSystem(context.Definition);
+            if (catalog.Length > 0)
+            {
+                messages.Add(new ModelMessage(ModelRole.System, catalog));
+            }
+        }
+
         var skills = BuildActiveSkillSystem(context.Definition, context.ActiveSkillIds);
         if (skills.Length > 0)
         {
@@ -418,6 +427,92 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
         ]);
     }
 
+    public const string SkillCatalogPrefix =
+        "Available skills for this definition version.";
+
+    public const string ActiveSkillSystemPrefix =
+        "Active skill procedures apply to this turn.";
+
+    public static string BuildSkillCatalogSystem(AgentDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (definition.SkillList.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var lines = new List<string>
+        {
+            SkillCatalogPrefix
+                + " Load a Skill with skills.load when its procedure is needed. Catalog entries are metadata and do not grant tools, credentials, or approval."
+        };
+        foreach (var skill in definition.SkillList)
+        {
+            var keywords = string.Join(", ", skill.ActivationKeywords);
+            if (keywords.Length > SkillActivationLimits.MaxCatalogKeywordCharacters)
+            {
+                keywords = keywords[..SkillActivationLimits.MaxCatalogKeywordCharacters];
+            }
+
+            var capabilities = skill.RequiredCapabilities.Count == 0
+                ? "(none)"
+                : string.Join(", ", skill.RequiredCapabilities);
+            lines.Add(
+                $"id: {skill.Id}; name: {skill.Name}; description: {skill.Description}; keywords: {keywords}; requiredCapabilities: {capabilities}");
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    public static bool IsActiveSkillSystem(ModelMessage message) =>
+        message.Role == ModelRole.System
+        && message.Text.StartsWith(ActiveSkillSystemPrefix, StringComparison.Ordinal);
+
+    public static IReadOnlyList<ModelMessage> WithActiveSkillSystem(
+        IReadOnlyList<ModelMessage> messages,
+        AgentDefinition definition,
+        IReadOnlyList<string> activeIds)
+    {
+        var text = BuildActiveSkillSystem(definition, activeIds);
+        var rebuilt = new List<ModelMessage>(messages.Count + 1);
+        foreach (var message in messages)
+        {
+            if (!IsActiveSkillSystem(message))
+            {
+                rebuilt.Add(message);
+            }
+        }
+
+        if (text.Length == 0)
+        {
+            return rebuilt;
+        }
+
+        var insertAt = 0;
+        for (var index = 0; index < rebuilt.Count; index++)
+        {
+            var message = rebuilt[index];
+            if (message.Role != ModelRole.System)
+            {
+                break;
+            }
+
+            if (message.Text.StartsWith("Memory capability:", StringComparison.Ordinal))
+            {
+                insertAt = index + 1;
+            }
+
+            if (message.Text.StartsWith(SkillCatalogPrefix, StringComparison.Ordinal))
+            {
+                insertAt = index + 1;
+                break;
+            }
+        }
+
+        rebuilt.Insert(insertAt, new ModelMessage(ModelRole.System, text));
+        return rebuilt;
+    }
+
     public static string BuildActiveSkillSystem(AgentDefinition definition, IReadOnlyList<string>? activeIds)
     {
         if (activeIds is null || activeIds.Count == 0)
@@ -444,7 +539,8 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
 
         RuntimeTelemetry.RecordActiveSkills(procedures.Count);
         return
-            "Active skill procedures apply to this turn. Required capabilities are requirements and do not grant tools, credentials, or approval.\n\n"
+            ActiveSkillSystemPrefix
+            + " Required capabilities are requirements and do not grant tools, credentials, or approval.\n\n"
             + string.Join("\n\n", procedures);
     }
 

@@ -1124,6 +1124,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case DurableOccurrenceAbandonReceived abandon:
                     await HandleDurableOccurrenceAbandonAsync(abandon).ConfigureAwait(false);
                     break;
+                case SkillLoadRequested skillLoad:
+                    await HandleSkillLoadAsync(skillLoad, cancellationToken).ConfigureAwait(false);
+                    break;
                 case MailboxSaturatedReceived saturated:
                     await HandleMailboxSaturatedAsync(saturated, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1159,6 +1162,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             if (input is ResponseReceiptReceived receipt)
             {
                 receipt.Admitted.TrySetResult(false);
+            }
+
+            if (input is SkillLoadRequested skillLoad)
+            {
+                skillLoad.Completed.TrySetResult(SkillLoadMailboxResult.Failed(
+                    SkillLoadAdmission.Error("stale", "Skill load is no longer owned by this execution."),
+                    "stale"));
             }
         }
     }
@@ -1775,11 +1785,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _structuredOutput = model.Capabilities.StructuredOutput;
         BeginWork();
         var responseToken = _responseCts.Token;
+        var activeSkillIds = ResolveActiveSkillIds(input.Trigger, input.ResponseId);
         _ = Task.Run(async () =>
         {
             try
             {
-                await PumpModelAsync(model, request, input.Context, input.Trigger, responseToken).ConfigureAwait(false);
+                await PumpModelAsync(model, request, input.Context, input.Trigger, activeSkillIds, responseToken)
+                    .ConfigureAwait(false);
             }
             finally
             {
@@ -2215,6 +2227,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return executions;
         }
 
+        if (promptExecution.AssistantEntryId is not null || promptExecution.SkillLoadCount > 0)
+        {
+            return executions;
+        }
+
         var skillIds = DeterministicSkillSelector.SelectActiveIds(_snapshot.Definition, triggerText);
         if (skillIds.SequenceEqual(promptExecution.PinnedActiveSkillIds))
         {
@@ -2444,11 +2461,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ModelRequest request,
         EventContext cause,
         AgentTrigger trigger,
+        IReadOnlyList<string> activeSkillIds,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var messages = request.Messages.ToList();
+        var pinnedSkills = activeSkillIds.ToArray();
         var steps = 0;
         var outputBytes = 0;
         var toolDeadline = request.Tools is { Count: > 0 };
@@ -2462,6 +2481,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 var pending = new List<ModelToolCall>();
                 var finished = false;
+                messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
                 var working = request with { Messages = messages };
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
@@ -2561,6 +2581,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
                             if (args.ValueKind != JsonValueKind.Object)
                             {
+                                if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+                                {
+                                    RuntimeTelemetry.RecordSkillLoad("denied");
+                                }
+
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
                                 args = default;
@@ -2568,6 +2593,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         }
                         catch (JsonException)
                         {
+                            if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+                            {
+                                RuntimeTelemetry.RecordSkillLoad("denied");
+                            }
+
                             executionResult = ToolExecutionResult.FromText(
                                 """{"error":"invalid","message":"Tool arguments were malformed."}""");
                             args = default;
@@ -2581,9 +2611,28 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 admission: new ToolExecutionAdmission(Detached: false, trigger.Kind));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
+                                if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+                                {
+                                    RuntimeTelemetry.RecordSkillLoad("denied");
+                                }
+
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
+                            }
+                            else if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+                            {
+                                var loaded = await RequestSkillLoadAsync(
+                                        cause,
+                                        request.ResponseId,
+                                        call.ArgumentsJson,
+                                        overallCts.Token)
+                                    .ConfigureAwait(false);
+                                executionResult = ToolExecutionResult.FromText(loaded.ToolResultJson);
+                                if (loaded.ActiveSkillIds is { } admittedIds)
+                                {
+                                    pinnedSkills = admittedIds.ToArray();
+                                }
                             }
                             else
                             {

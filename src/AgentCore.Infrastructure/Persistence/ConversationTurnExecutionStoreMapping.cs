@@ -48,6 +48,7 @@ internal static class ConversationTurnExecutionStoreMapping
         row.PinnedActiveSkillIdsJson = item.PinnedActiveSkillIds.Count == 0
             ? null
             : JsonSerializer.Serialize(item.PinnedActiveSkillIds, Json);
+        row.SkillLoadCount = item.SkillLoadCount;
     }
 
     public static ConversationTurnExecution ToDomain(ConversationTurnExecutionRecord row)
@@ -97,7 +98,8 @@ internal static class ConversationTurnExecutionStoreMapping
                 : null,
             DateTimeOffset.FromUnixTimeMilliseconds(row.AcceptedAtUtc),
             DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
-            pinnedSkills);
+            pinnedSkills,
+            row.SkillLoadCount);
     }
 
     public static Exception Map(Exception exception) =>

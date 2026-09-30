@@ -4,5 +4,6 @@ public enum ToolOfferRule
 {
     RoleAllowlist,
     SessionAttachmentsWhenRoleAllows,
-    ConfigurationWhenRoleAllows
+    ConfigurationWhenRoleAllows,
+    CurrentExecutionCapability
 }

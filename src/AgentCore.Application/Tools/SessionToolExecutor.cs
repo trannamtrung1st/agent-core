@@ -62,6 +62,11 @@ public sealed partial class SessionToolExecutor(
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+        {
+            return TextResult(Error("forbidden", "Tool effect is owned by the session runtime."));
+        }
+
         if (admission?.Detached == true && ToolResources.IsSessionTool(call.Name))
         {
             return TextResult(Error("forbidden", "Session context is required."));
