@@ -52,7 +52,7 @@ Confirmed MVP UI/product facts (see `/docs`; do not extend here):
 - Visible status such as Listening, User speaking, Thinking, Agent speaking, Interrupted, Reconnecting (see [docs/13](../../docs/13-frontend-implementation-spec.md)). Assistant content renders as sanitized Markdown and blocks per docs/13; interrupted/failed entries keep a status label.
 - Session catalog rail, attachment picker, and authorized blob fetch for history chips are shipped MVP UI (see [docs/13](../../docs/13-frontend-implementation-spec.md)); artifact refs show fixture labels only.
 - Synthetic mode must not pretend to transcribe arbitrary speech; it is scripted and hardware-free by default.
-- Admin is a shipped route area on the same Ant Design dark UI (`/admin`, definition detail, instance detail). Behavior, including leaving Chat and returning, stays in [docs/13](../../docs/13-frontend-implementation-spec.md).
+- Admin is a shipped route area on the same Ant Design dark UI (`/admin`, definition detail, instance detail). A definition draft edits Skills on the same Form and Advanced JSON candidate. Required capabilities are requirements, not grants. A definition can have no skills. Behavior, including leaving Chat and returning, stays in [docs/13](../../docs/13-frontend-implementation-spec.md).
 
 Explicitly out of this UI foundation and out of MVP product UI:
 
