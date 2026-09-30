@@ -80,9 +80,7 @@ describe("realtime protocol selection", () => {
     ["messagepack", "messagepack"],
     ["other", "other"]
   ] as const)("uses MessagePack and one handler path when the protocol is %s", async (_label, protocol) => {
-    if (protocol !== undefined) {
-      vi.stubEnv("VITE_AGENTCORE_REALTIME_PROTOCOL", protocol);
-    }
+    vi.stubEnv("VITE_AGENTCORE_REALTIME_PROTOCOL", protocol ?? "");
 
     await retryConnection();
 
