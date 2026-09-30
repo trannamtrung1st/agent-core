@@ -28,6 +28,7 @@ public sealed record ResponseSpeech(ResponseSpeechMode Mode, string? Text);
 
 /// <summary>
 /// Controller admission outcome stored beside the reply. It is not display or speech text.
+/// <see cref="Scopes"/> lists memory layers covered by a successful admission, not proposal hints.
 /// </summary>
 public sealed record MemoryReceipt(
     string Outcome,

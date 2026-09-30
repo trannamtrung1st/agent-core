@@ -210,19 +210,33 @@ public static class MemoryAdmission
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (allowIdentity && !identitySynced)
+        var status = ResolveUpsertStatus(
+            sessionOutcome,
+            identitySynced,
+            userSynced,
+            allowIdentity,
+            allowUser);
+        return new AdmissionOutcome(status, UpsertScopes(sessionOutcome, identitySynced, userSynced));
+    }
+
+    private static MemoryAdmissionStatus ResolveUpsertStatus(
+        MemoryAdmissionStatus sessionOutcome,
+        bool identitySynced,
+        bool userSynced,
+        bool allowIdentity,
+        bool allowUser)
+    {
+        var promotionIncomplete =
+            (allowIdentity && !identitySynced)
+            || (allowUser && !userSynced);
+        if (promotionIncomplete)
         {
-            var sessionOnly = SessionOnly(sessionOutcome);
-            return new AdmissionOutcome(sessionOnly, UpsertScopes(sessionOutcome, identitySynced: false, userSynced: userSynced));
+            return identitySynced || userSynced
+                ? sessionOutcome
+                : SessionOnly(sessionOutcome);
         }
 
-        if (allowUser && !userSynced)
-        {
-            var sessionOnly = SessionOnly(sessionOutcome);
-            return new AdmissionOutcome(sessionOnly, UpsertScopes(sessionOutcome, identitySynced, userSynced: false));
-        }
-
-        return new AdmissionOutcome(sessionOutcome, UpsertScopes(sessionOutcome, identitySynced, userSynced));
+        return sessionOutcome;
     }
 
     private readonly record struct AdmissionOutcome(MemoryAdmissionStatus Status, IReadOnlyList<string>? AffectedScopes)

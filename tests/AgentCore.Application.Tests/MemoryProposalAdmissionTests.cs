@@ -526,7 +526,7 @@ public sealed class MemoryProposalAdmissionTests
     }
 
     [Fact]
-    public async Task User_promotion_receipt_records_all_mutated_scopes()
+    public async Task User_promotion_receipt_records_all_covered_scopes()
     {
         var memories = Service();
         var definition = SampleDefinitions.Support with
@@ -556,6 +556,50 @@ public sealed class MemoryProposalAdmissionTests
         Assert.Equal(["session", "identityUser", "user"], result.AffectedScopes);
         var receipt = MemoryReceiptProjection.FromResult(result);
         Assert.Equal(["session", "identityUser", "user"], receipt.Scopes);
+    }
+
+    [Fact]
+    public async Task Partial_user_promotion_keeps_outcome_coherent_with_scopes()
+    {
+        var inner = Service();
+        var memories = new StructuredMemoryServiceIntercept(inner) { BlockIdentityPromotion = true };
+        var definition = SampleDefinitions.Support with
+        {
+            MemoryPolicy = new MemoryPolicy(SessionMemory: true, IdentityUserPromotion: true, UserPromotion: true, UserRetrieval: true)
+        };
+        var result = Assert.Single(await MemoryAdmission.AdmitAsync(
+            memories,
+            definition,
+            SessionA,
+            InstanceA,
+            Profile(),
+            [],
+            Guid.NewGuid(),
+            [
+                new MemoryProposal(
+                    MemoryProposalOperation.Upsert,
+                    MemoryKind.Fact,
+                    "project codename",
+                    "Atlas",
+                    MemoryScopeHint.User,
+                    MemoryProposalSource.UserExplicit)
+            ],
+            NullLogger.Instance));
+        Assert.Equal(MemoryAdmissionStatus.Stored, result.Status);
+        Assert.Equal(["session", "user"], result.AffectedScopes);
+        var receipt = MemoryReceiptProjection.FromResult(result);
+        Assert.Equal("stored", receipt.Outcome);
+        Assert.Equal(["session", "user"], receipt.Scopes);
+        Assert.Empty(await inner.SearchIdentityUserAsync(
+            new TrustedIdentityUserOwner(InstanceA, ProfileId),
+            new MemorySearchQuery(null, null),
+            retrievalAllowed: true,
+            Admission("user_explicit")));
+        Assert.Single(await inner.SearchUserAsync(
+            new TrustedUserOwner(ProfileId),
+            new MemorySearchQuery(null, null),
+            retrievalAllowed: true,
+            Admission("user_explicit")));
     }
 
     [Fact]

@@ -52,6 +52,9 @@ public sealed record MemoryProposal(
 public sealed record MemoryAdmissionResult(
     MemoryAdmissionStatus Status,
     MemoryProposal Proposal,
+    /// <summary>
+    /// Memory layers successfully established or confirmed by this admission (session, identityUser, user).
+    /// </summary>
     IReadOnlyList<string>? AffectedScopes = null);
 
 public static class MemoryProposalCodec
