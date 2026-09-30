@@ -131,7 +131,7 @@ Deterministic coverage uses `FakeTimeProvider` and Synthetic scripts, not wall-c
 
 Deterministic journeys cover detached reminder completion, approval across a SQLite reopen, and cancellation that a stale worker cannot complete. Playwright `e2e/durable-journeys.spec.ts` ends the chat before a seeded due reminder and cancels a retrying item from Background Work. `scripts/compose-sqlite-volume.sh` recreates the API on a SQLite volume that already holds a completed result and a pending approval. Manual wall-clock firing is recorded separately from those seeded tests. Phase I recovery suites for Support, Compliance, and `sandbox.run` after `RequestDeactivate` remain not-applicable. Counts, manual times, and freeze evidence are in [P6 freeze candidate](reports/p6-freeze-candidate.md).
 
-## P8 Agent Step, Chat action, and Skills (implemented, not frozen)
+## P8 Agent Step, Chat action, and Skills (frozen)
 
 Deterministic tests cover Agent Step normalization, disposition outcomes, Chat admission, exactly-once delivery, Wait return-control, Skill validation, publication, fork, keyword activation, pinned procedures in the prompt, and the Admin form/JSON Skill round-trip. `chat.respond` is not a tool. Required capabilities do not grant authority. On `ce14ee7`, `CI=1` Playwright passed 67 tests across `synthetic`, `browser-stt`, and `browser-browser`, plus one `faithful-manual`, one `admin-lifecycle`, and one `p76-admin`. Those browser projects do not open the Definition Skill form. `pnpm run test --run` on that SHA passed 75 files and 546 tests. `dotnet test AgentCore.sln --nologo` on the parent docs commit passed Domain 137, Application 926 with 1 skipped, API 252, and Infrastructure 559 with 13 skipped.
 
@@ -141,7 +141,7 @@ Impeccable context loaded `.agents/context/PRODUCT.md` and `DESIGN.md` for `defi
 
 Section 17.8 searches on this tree: docs do not call `SystemInstructions` the identity (`docs/12` lists `AgentIdentity` separately). No Skill wording grants a capability. `ChatActionAdmission` admits Chat and `ToolPolicy` stays the tool path. `AgentStepNormalizer` rejects a model-supplied destination, and Chat admission denies `ModelDestination`. Domain has no provider DTO. `ModelReasoningDelta` is counted as `llm.reasoning.delta` present and is not appended to reminder or compaction text. Diagnostic ids stay on `IDiagnosticIdSource`. `src/` has no Playwright or browser-automation provider. No production compose or Terraform files were added.
 
-Hosted Synthetic workflow [36693649631](https://github.com/trannamtrung1st/agent-core/actions/runs/36693649631) failed on `af3b4cd`. A green hosted run on the closure SHA is not recorded here. `docs/reports/p8-freeze-candidate.md` is not written. P8 is not frozen.
+Hosted Synthetic workflow [36696902928](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) is green on `ca3eb235a3b458e55002d2c8f610df868b2cd39d`. The public Actions page records Status Success, total 23m 59s, Synthetic offline gates 23m 55s, and Synthetic Compose smoke 1m 14s. Earlier workflow [36693649631](https://github.com/trannamtrung1st/agent-core/actions/runs/36693649631) failed on `af3b4cd`. P8 is frozen on `ca3eb23`. Closure report: [p8-freeze-candidate.md](reports/p8-freeze-candidate.md).
 
 ## Post-MVP planned until verified
 

@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` at **`de8b4d2`** on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** is implemented and is not frozen. Hosted Synthetic CI on a P8 closure SHA is not recorded.
+Reviewed against `main` at **`ca3eb23`** on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** is **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green).
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -57,11 +57,9 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 ## Active phase
 
-**P8 — Agent Execution Contract, Application Actions & Skills** is implemented and is not frozen.
+**P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). See `docs/reports/p8-freeze-candidate.md`.
 
-The Agent Step, Chat action, and Definition Skills exist in the product. This TODO does not mark P8 frozen.
-
-P9 follows only after P8 is frozen. P10 and P11 stay requirement-triggered.
+P9 follows. P10 and P11 stay requirement-triggered.
 
 ---
 
@@ -71,7 +69,7 @@ P9 follows only after P8 is frozen. P10 and P11 stay requirement-triggered.
 2. **P7.5 — frozen** on `70a5720`.
 3. **P7.6 — frozen** on `17d89ae`.
 4. **P7.7 — frozen** on `40a1d92` (workflow `36594702224` green). Post-freeze / pre-P8 bounded follow-up **closed** on `1cadf46` (workflow [`36667172857`](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green).
-5. **P8 — Agent Execution Contract, Application Actions & Skills — implemented, not frozen.**
+5. **P8 — Agent Execution Contract, Application Actions & Skills — frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green).
 6. **P9 — Harness/platform extensibility — after P8.**
 7. **P10 — Sandbox evolution — when the current sandbox is insufficient.**
 8. **P11 — Multi-user and production infrastructure — when a real hosting or pilot requirement appears.**
@@ -247,7 +245,7 @@ Properties that already belong in the current stack: durable source of truth whe
 
 # Product / Architecture North Star
 
-**Status: long-term direction. P8 is the implemented bounded slice and is not frozen. The rest is future guidance.**
+**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. The rest is future guidance.**
 
 This section says why later phases exist. P8 and P9 say what to implement and verify. It does not reopen frozen phases, widen P8 past its stop condition, or pull P9, P10, or P11 forward.
 
@@ -332,7 +330,7 @@ Workspace scopes, if a concrete workflow requires them, stay separate lifecycles
 
 Unattended work extends Trigger, Occurrence, and WorkItem. It is not a permanent `while(true)` model loop. The shape is a goal or task, a WorkItem, an authorized action, a checkpoint, then continue, wait for an event or approval, or complete. Waiting must not require a live model call or browser session. Delegation between identities, if it is ever required, carries identity, authority, provenance, and work ownership. It is not an agent swarm.
 
-P8 makes Chat one authorized application action on this path. That proof is implemented and is not frozen. Multi-agent coordination stays future.
+P8 makes Chat one authorized application action on this path. That proof is frozen on `ca3eb23`. Multi-agent coordination stays future.
 
 ## Browser and native integration — strategic direction
 
@@ -356,7 +354,7 @@ Each of these waits for its own trigger: PostgreSQL, Redis, a broker, Kubernetes
 
 # P8 — Agent Execution Contract, Application Actions & Skills
 
-**Status: implemented, not frozen. Hosted closure is not recorded.**
+**Status: frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Closure report: `docs/reports/p8-freeze-candidate.md`.
 
 P7.7 stays frozen on `40a1d92` (workflow `36594702224` green). Post-freeze / pre-P8 bounded follow-up is **closed** on `1cadf46` (workflow [`36667172857`](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green). P8 does not reopen P7.7.
 
