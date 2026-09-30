@@ -102,6 +102,12 @@ The current semantic envelope maps to disposition `Complete` and exactly one `ch
 
 `ChatActionAdmission` binds the Chat target to the runtime's current Session. Ordinary same-session Chat is an explicit allow and does not require approval. A model-supplied session, destination, profile, tenant, or recipient is rejected. Detached work cannot gain a Session Chat effect. A later semantic result for the same live response refreshes that assistant entry and does not append a second one or fail the original response. After the response is terminal, a stale or duplicate observation is dropped and admits no memory. A stale epoch or response id is dropped before effects. The admitted `ChatRespondAction` is what `SemanticResponseMapper` turns into the envelope. Unauthorized attachment and artifact references still fall back inside that successful response. Failed, denied, or stale terminal results discard staged memory.
 
+## Definition Skills
+
+Optional `SkillSpec` values live on `AgentDefinition` and `AgentDefinitionCandidate`. A missing or null `skills` list is an empty set. `schemaVersion` stays 1. Each skill has an id, name, description, procedure, activation keywords, required capabilities, and resource paths. A skill is procedure for that definition version. Required capabilities are requirements. They do not add tools, credentials, approval, or owner scope. `chat.respond` may be required and is not inserted into the tool allowlist.
+
+`ISkillSelector` is implemented by `DeterministicSkillSelector`. It matches activation keywords with case-insensitive containment, keeps definition order, and returns at most three known ids. No match yields an empty set. The execution the prompt reads stores those ids. After the model request is built, retry and recovery read that stored pin. `PromptContextBuilder` includes full procedure text only for the pinned skills.
+
 ## Independent speech ports
 
 ```csharp
