@@ -307,6 +307,58 @@ public sealed class ConversationTurnExecution
             updatedAtUtc,
             PinnedActiveSkillIds);
 
+    public ConversationTurnExecution PinActiveSkillsBeforeStart(
+        long expectedRevision,
+        IReadOnlyList<string>? pinnedActiveSkillIds,
+        DateTimeOffset updatedAtUtc)
+    {
+        if (Revision != expectedRevision)
+        {
+            throw new WorkItemTransitionException(WorkTransitionFailure.StaleRevision, "Turn execution revision is stale.");
+        }
+
+        var beforeModelRequest =
+            (Status == ConversationTurnExecutionStatus.Queued && Claim is null)
+            || (Status == ConversationTurnExecutionStatus.Running
+                && Claim is not null
+                && AssistantEntryId is null);
+        if (!beforeModelRequest)
+        {
+            throw new WorkItemTransitionException(
+                WorkTransitionFailure.Illegal,
+                "Active skills can be pinned only before the model request.");
+        }
+
+        var normalized = NormalizePinnedSkills(pinnedActiveSkillIds);
+        if (normalized.SequenceEqual(PinnedActiveSkillIds))
+        {
+            return this;
+        }
+
+        WorkTime.RequireUtc(updatedAtUtc, "Updated");
+        return new(
+            ExecutionId,
+            SessionId,
+            SourceUserEntryId,
+            SourceEventId,
+            ResponseId,
+            AgentInstanceId,
+            ProfileId,
+            DefinitionId,
+            DefinitionVersion,
+            PinnedPersona,
+            PinnedModel,
+            Status,
+            Revision + 1,
+            Claim,
+            AssistantEntryId,
+            CancellationRequested,
+            CancellationRequestedAtUtc,
+            AcceptedAtUtc,
+            updatedAtUtc,
+            normalized);
+    }
+
     public ConversationTurnExecution WithCancellationRequested(DateTimeOffset requestedAtUtc) =>
         new(
             ExecutionId,

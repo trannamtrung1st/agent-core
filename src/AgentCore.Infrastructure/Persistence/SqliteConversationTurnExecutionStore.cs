@@ -99,6 +99,17 @@ public sealed class SqliteConversationTurnExecutionStore(IDbContextFactory<Agent
         return rows.Select(ConversationTurnExecutionStoreMapping.ToDomain).ToArray();
     }
 
+    public ValueTask<ConversationTurnExecution> PinActiveSkillsAsync(
+        Guid executionId,
+        long expectedRevision,
+        IReadOnlyList<string> skillIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            executionId,
+            item => item.PinActiveSkillsBeforeStart(expectedRevision, skillIds, updatedAtUtc),
+            cancellationToken);
+
     public async ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,

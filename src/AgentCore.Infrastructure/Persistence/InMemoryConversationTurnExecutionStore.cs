@@ -128,6 +128,14 @@ public sealed class InMemoryConversationTurnExecutionStore : IConversationTurnEx
         }
     }
 
+    public ValueTask<ConversationTurnExecution> PinActiveSkillsAsync(
+        Guid executionId,
+        long expectedRevision,
+        IReadOnlyList<string> skillIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        Mutate(executionId, item => item.PinActiveSkillsBeforeStart(expectedRevision, skillIds, updatedAtUtc));
+
     public ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,

@@ -1981,6 +1981,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var last = suffix[^1];
         var executions = await EnsureConversationExecutionsForUserBatchAsync(suffix, cancellationToken)
             .ConfigureAwait(false);
+        executions = await PinPromptExecutionForTriggerAsync(executions, last.Text, cancellationToken)
+            .ConfigureAwait(false);
         if (!await BindConversationExecutionsForStartAsync(executions, cancellationToken).ConfigureAwait(false))
         {
             return false;
@@ -2189,6 +2191,46 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         null)),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<ConversationTurnExecution>> PinPromptExecutionForTriggerAsync(
+        IReadOnlyList<ConversationTurnExecution> executions,
+        string triggerText,
+        CancellationToken cancellationToken)
+    {
+        if (_turnExecutions is null || executions.Count == 0)
+        {
+            return executions;
+        }
+
+        var promptExecution = executions[0];
+        var queued = promptExecution.Status == ConversationTurnExecutionStatus.Queued && promptExecution.Claim is null;
+        var replacingDeferredTrigger = _deferredUserTurn is { } deferred
+            && deferred.ResponseId == promptExecution.ResponseId
+            && promptExecution.Status == ConversationTurnExecutionStatus.Running
+            && promptExecution.Claim is not null
+            && promptExecution.AssistantEntryId is null;
+        if (!queued && !replacingDeferredTrigger)
+        {
+            return executions;
+        }
+
+        var skillIds = DeterministicSkillSelector.SelectActiveIds(_snapshot.Definition, triggerText);
+        if (skillIds.SequenceEqual(promptExecution.PinnedActiveSkillIds))
+        {
+            return executions;
+        }
+
+        var updated = await _turnExecutions.PinActiveSkillsAsync(
+                promptExecution.ExecutionId,
+                promptExecution.Revision,
+                skillIds,
+                _time.GetUtcNow(),
+                cancellationToken)
+            .ConfigureAwait(false);
+        var pinned = executions.ToArray();
+        pinned[0] = updated;
+        return pinned;
     }
 
     private IReadOnlyList<string> ResolveActiveSkillIds(AgentTrigger trigger, Guid responseId)

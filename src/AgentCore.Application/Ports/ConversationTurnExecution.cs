@@ -34,6 +34,13 @@ public interface IConversationTurnExecutionStore
         int limit,
         CancellationToken cancellationToken = default);
 
+    ValueTask<ConversationTurnExecution> PinActiveSkillsAsync(
+        Guid executionId,
+        long expectedRevision,
+        IReadOnlyList<string> skillIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
     ValueTask<ConversationTurnExecution?> TryClaimAsync(
         Guid executionId,
         Guid generation,
