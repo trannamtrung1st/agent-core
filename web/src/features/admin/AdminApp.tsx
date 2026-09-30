@@ -37,7 +37,7 @@ import {
   cloneCandidate,
   type DefinitionCandidate
 } from "./definitionCandidate";
-import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { DefinitionCandidateEditor, PublishedSkillList, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { DefinitionDraftPublishGatePanel } from "./definitionDraftPublishGatePanel";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
@@ -1429,6 +1429,7 @@ function DefinitionDetail({
                     <span>
                       {item.status} · metadata rev {item.metadataRevision} · {item.publishedAt}
                     </span>
+                    <PublishedSkillList skills={item.skills} />
                     <PublicationResourcesSummary definitionId={definitionId} version={item.version} />
                     <Flex gap={8} wrap="wrap" align="center">
                       <Tooltip

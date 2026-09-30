@@ -10,6 +10,80 @@ export type VoiceAliasDefaults = {
   speechSynthesizer: string | null;
 };
 
+export type SkillDraft = {
+  id: string;
+  name: string;
+  description: string;
+  procedure: string;
+  activationKeywords: string;
+  requiredCapabilities: string;
+  resourcePaths: string;
+};
+
+export function readSkills(candidate: DefinitionCandidate): SkillDraft[] {
+  const raw = candidate.skills;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: readSkillString(row.id),
+      name: readSkillString(row.name),
+      description: readSkillString(row.description),
+      procedure: readSkillString(row.procedure),
+      activationKeywords: joinSkillList(row.activationKeywords),
+      requiredCapabilities: joinSkillList(row.requiredCapabilities),
+      resourcePaths: joinSkillList(row.resourcePaths)
+    };
+  });
+}
+
+export function writeSkills(candidate: DefinitionCandidate, skills: SkillDraft[]): DefinitionCandidate {
+  if (skills.length === 0) {
+    const next = { ...candidate };
+    delete next.skills;
+    return next;
+  }
+
+  const existing = Array.isArray(candidate.skills) ? candidate.skills : [];
+  return {
+    ...candidate,
+    skills: skills.map((skill, index) => {
+      const prior = existing[index] && typeof existing[index] === "object"
+        ? { ...(existing[index] as Record<string, unknown>) }
+        : {};
+      return {
+        ...prior,
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        procedure: skill.procedure,
+        activationKeywords: splitSkillList(skill.activationKeywords),
+        requiredCapabilities: splitSkillList(skill.requiredCapabilities),
+        resourcePaths: splitSkillList(skill.resourcePaths)
+      };
+    })
+  };
+}
+
+function readSkillString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function joinSkillList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value.filter((item): item is string => typeof item === "string").join(", ");
+}
+
+function splitSkillList(value: string) {
+  return value.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
 export function candidateForPersistence(candidate: DefinitionCandidate): DefinitionCandidate {
   return clearSpeechAliasesWhenVoiceOff(omitBlankKnowledgeSources(candidate));
 }

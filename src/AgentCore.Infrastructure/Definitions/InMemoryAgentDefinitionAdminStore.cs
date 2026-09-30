@@ -396,7 +396,13 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
                 item.Version,
                 item.Status,
                 item.MetadataRevision,
-                item.PublishedAt))
+                item.PublishedAt,
+                item.Payload.SkillList
+                    .Select(skill => new PublishedSkillReference(
+                        skill.Id,
+                        skill.Name,
+                        skill.RequiredCapabilities))
+                    .ToArray()))
             .ToArray();
         return ValueTask.FromResult<IReadOnlyList<AgentDefinitionPublicationSummary>>(items);
     }

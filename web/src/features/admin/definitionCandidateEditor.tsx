@@ -9,13 +9,16 @@ import {
   readCandidateStringList,
   readMetadataRows,
   readNumber,
+  readSkills,
   readString,
   triggerPolicyDefaults,
   writeMetadataRows,
   writeModelDefault,
   writeNullableString,
   writePath,
-  type DefinitionCandidate
+  writeSkills,
+  type DefinitionCandidate,
+  type SkillDraft
 } from "./definitionCandidate";
 import { listAdminAuthoringOptions, type AdminAuthoringOptions } from "../../services/adminApi";
 import { describeAdminError } from "./adminErrors";
@@ -235,6 +238,41 @@ function DefinitionCandidateForm({
             }
           />
         </label>
+      </section>
+
+      <section className="admin-draft-form-section" aria-label="Skills">
+        <Typography.Title level={5}>Skills</Typography.Title>
+        <Typography.Paragraph type="secondary">
+          Skills are procedures for this definition. Required capabilities are requirements, not grants. They do not add tools, credentials, or approval.
+        </Typography.Paragraph>
+        {readSkills(candidate).length === 0 ? (
+          <Typography.Text type="secondary">No skills yet. A definition without skills runs with an empty skill set.</Typography.Text>
+        ) : (
+          readSkills(candidate).map((skill, index) => (
+            <SkillCard
+              key={`skill-${index}`}
+              index={index}
+              skill={skill}
+              disabled={busy}
+              onChange={(next) => {
+                const skills = readSkills(candidate).map((item, itemIndex) => (itemIndex === index ? next : item));
+                onCandidateChange(writeSkills(candidate, skills));
+              }}
+              onRemove={() => {
+                const existing = Array.isArray(candidate.skills) ? candidate.skills : [];
+                const nextExisting = existing.filter((_, itemIndex) => itemIndex !== index);
+                const skills = readSkills(candidate).filter((_, itemIndex) => itemIndex !== index);
+                onCandidateChange(writeSkills({ ...candidate, skills: nextExisting }, skills));
+              }}
+            />
+          ))
+        )}
+        <Button
+          onClick={() => onCandidateChange(writeSkills(candidate, [...readSkills(candidate), emptySkill()]))}
+          disabled={busy}
+        >
+          Add skill
+        </Button>
       </section>
 
       <section className="admin-draft-form-section" aria-label="Behavior and conversation">
@@ -718,6 +756,138 @@ function DefinitionCandidateForm({
         </Button>
       </section>
     </Flex>
+  );
+}
+
+function emptySkill(): SkillDraft {
+  return {
+    id: "",
+    name: "",
+    description: "",
+    procedure: "",
+    activationKeywords: "",
+    requiredCapabilities: "",
+    resourcePaths: ""
+  };
+}
+
+function SkillCard({
+  index,
+  skill,
+  disabled,
+  onChange,
+  onRemove
+}: {
+  index: number;
+  skill: SkillDraft;
+  disabled: boolean;
+  onChange: (skill: SkillDraft) => void;
+  onRemove: () => void;
+}) {
+  const number = index + 1;
+  return (
+    <div className="admin-skill-card" aria-label={`Skill ${number}`}>
+      <Flex justify="space-between" align="center" gap={8} wrap="wrap">
+        <Typography.Text strong>{skill.name.trim() || `Skill ${number}`}</Typography.Text>
+        <Button
+          danger
+          type="text"
+          icon={<DeleteOutlined />}
+          aria-label={`Remove skill ${number}`}
+          disabled={disabled}
+          onClick={onRemove}
+        />
+      </Flex>
+      <div className="admin-draft-field-grid">
+        <TextField
+          label={`Skill ${number} id`}
+          hint="Lowercase id, such as refund.handle."
+          value={skill.id}
+          disabled={disabled}
+          onChange={(id) => onChange({ ...skill, id })}
+        />
+        <TextField
+          label={`Skill ${number} name`}
+          value={skill.name}
+          disabled={disabled}
+          onChange={(name) => onChange({ ...skill, name })}
+        />
+      </div>
+      <TextField
+        label={`Skill ${number} description`}
+        value={skill.description}
+        disabled={disabled}
+        onChange={(description) => onChange({ ...skill, description })}
+      />
+      <label className="admin-draft-field">
+        <Typography.Text strong>{`Skill ${number} procedure`}</Typography.Text>
+        <Input.TextArea
+          aria-label={`Skill ${number} procedure`}
+          rows={4}
+          value={skill.procedure}
+          disabled={disabled}
+          className="admin-draft-instructions"
+          onChange={(event) => onChange({ ...skill, procedure: event.target.value })}
+        />
+      </label>
+      <TextField
+        label={`Skill ${number} activation keywords`}
+        hint="Comma-separated. Keywords select this skill; they do not grant authority."
+        value={skill.activationKeywords}
+        disabled={disabled}
+        onChange={(activationKeywords) => onChange({ ...skill, activationKeywords })}
+      />
+      <TextField
+        label={`Skill ${number} required capabilities`}
+        hint="Comma-separated requirements, not grants. They do not add tools, credentials, or approval."
+        value={skill.requiredCapabilities}
+        disabled={disabled}
+        onChange={(requiredCapabilities) => onChange({ ...skill, requiredCapabilities })}
+      />
+      <TextField
+        label={`Skill ${number} resource paths`}
+        hint="Comma-separated relative paths."
+        value={skill.resourcePaths}
+        disabled={disabled}
+        onChange={(resourcePaths) => onChange({ ...skill, resourcePaths })}
+      />
+      {skill.id.trim().length === 0 ? (
+        <Typography.Text type="danger">Skill id is required before publish.</Typography.Text>
+      ) : null}
+    </div>
+  );
+}
+
+export type PublishedSkill = {
+  id: string;
+  name: string;
+  requiredCapabilities: string[];
+};
+
+export function PublishedSkillList({ skills }: { skills?: PublishedSkill[] | null }) {
+  if (!skills) {
+    return null;
+  }
+
+  if (skills.length === 0) {
+    return <Typography.Text type="secondary">No skills on this published version.</Typography.Text>;
+  }
+
+  return (
+    <ul className="admin-published-skills" aria-label="Published skills">
+      {skills.map((skill) => (
+        <li key={skill.id}>
+          <Typography.Text>
+            {skill.name} ({skill.id})
+          </Typography.Text>
+          <Typography.Text type="secondary">
+            {skill.requiredCapabilities.length === 0
+              ? " No required capabilities. Requirements do not grant tools, credentials, or approval."
+              : ` Requires ${skill.requiredCapabilities.join(", ")}. Requirements do not grant tools, credentials, or approval.`}
+          </Typography.Text>
+        </li>
+      ))}
+    </ul>
   );
 }
 

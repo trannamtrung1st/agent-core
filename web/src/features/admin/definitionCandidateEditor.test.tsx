@@ -227,6 +227,63 @@ describe("definition candidate editor", () => {
     vi.clearAllMocks();
   });
 
+  it("round-trips a skill through form and JSON and keeps a forked skill", async () => {
+    mockDraft({
+      ...storedCandidate,
+      skills: [
+        {
+          id: "order.lookup",
+          name: "Order lookup",
+          description: "Look up an order",
+          procedure: "ORDER_PROCEDURE",
+          activationKeywords: ["order"],
+          requiredCapabilities: ["web.search"],
+          resourcePaths: []
+        }
+      ]
+    });
+    await openDraft();
+
+    expect(screen.getByText(/Required capabilities are requirements, not grants/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Skill 1 procedure")).toHaveValue("ORDER_PROCEDURE");
+    expect(screen.getByLabelText("Skill 1 required capabilities")).toHaveAccessibleDescription(
+      /requirements, not grants/
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
+    expect(screen.getByText("Skill id is required before publish.")).toBeInTheDocument();
+    setText("Skill 2 id", "refund.handle");
+    setText("Skill 2 name", "Refund");
+    setText("Skill 2 procedure", "REFUND_PROCEDURE");
+    setText("Skill 2 activation keywords", "refund, return");
+    setText("Skill 2 required capabilities", "workspace.read, chat.respond");
+    setText("Skill 2 resource paths", "notes/refund.md");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
+    const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
+    expect(json.value).toContain("REFUND_PROCEDURE");
+    expect(json.value).toContain("ORDER_PROCEDURE");
+    fireEvent.change(json, {
+      target: {
+        value: json.value.replace("REFUND_PROCEDURE", "REFUND_PROCEDURE_EDITED")
+      }
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Form" }));
+    expect(screen.getByLabelText("Skill 2 procedure")).toHaveValue("REFUND_PROCEDURE_EDITED");
+    expect(screen.getByLabelText("Skill 1 procedure")).toHaveValue("ORDER_PROCEDURE");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => {
+      expect(updateAdminDefinitionDraft).toHaveBeenCalled();
+    });
+    const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls[0]?.[2] as {
+      skills: Array<{ id: string; procedure: string; requiredCapabilities: string[] }>;
+    };
+    expect(saved.skills.map((skill) => skill.id)).toEqual(["order.lookup", "refund.handle"]);
+    expect(saved.skills[1]?.procedure).toBe("REFUND_PROCEDURE_EDITED");
+    expect(saved.skills[1]?.requiredCapabilities).toEqual(["workspace.read", "chat.respond"]);
+  });
+
   it("edits every supported candidate area through the form and saves that candidate", async () => {
     mockDraft();
     await openDraft();

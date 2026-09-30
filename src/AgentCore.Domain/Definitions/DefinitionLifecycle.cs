@@ -40,9 +40,15 @@ public sealed record AgentDefinitionPublication(
     long MetadataRevision,
     DateTimeOffset PublishedAt);
 
+public sealed record PublishedSkillReference(
+    string Id,
+    string Name,
+    IReadOnlyList<string> RequiredCapabilities);
+
 public sealed record AgentDefinitionPublicationSummary(
     string DefinitionId,
     int Version,
     DefinitionPublicationStatus Status,
     long MetadataRevision,
-    DateTimeOffset PublishedAt);
+    DateTimeOffset PublishedAt,
+    IReadOnlyList<PublishedSkillReference>? Skills = null);

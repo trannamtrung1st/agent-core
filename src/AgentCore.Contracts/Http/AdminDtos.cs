@@ -120,12 +120,18 @@ public sealed record AdminDefinitionDraftResponse(
 public sealed record AdminDefinitionPublicationListResponse(
     IReadOnlyList<AdminDefinitionPublicationSummaryResponse> Items);
 
+public sealed record AdminPublishedSkillResponse(
+    string Id,
+    string Name,
+    IReadOnlyList<string> RequiredCapabilities);
+
 public sealed record AdminDefinitionPublicationSummaryResponse(
     string DefinitionId,
     int Version,
     string Status,
     long MetadataRevision,
-    string PublishedAt);
+    string PublishedAt,
+    IReadOnlyList<AdminPublishedSkillResponse> Skills);
 
 public sealed record AdminCreateDefinitionDraftRequest(string DefinitionId, JsonElement Candidate);
 

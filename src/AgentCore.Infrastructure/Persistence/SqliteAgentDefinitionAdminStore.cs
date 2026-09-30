@@ -385,7 +385,13 @@ public sealed class SqliteAgentDefinitionAdminStore(
                     publication.Version,
                     publication.Status,
                     publication.MetadataRevision,
-                    publication.PublishedAt);
+                    publication.PublishedAt,
+                    publication.Payload.SkillList
+                        .Select(skill => new PublishedSkillReference(
+                            skill.Id,
+                            skill.Name,
+                            skill.RequiredCapabilities))
+                        .ToArray());
             })
             .ToArray();
     }

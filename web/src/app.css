@@ -1906,6 +1906,20 @@ body,
   border-block-start: 1px solid var(--ac-color-border);
 }
 
+.admin-skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-default);
+  min-width: 0;
+  padding: var(--ac-space-default);
+  border: 1px solid var(--ac-color-border);
+}
+
+.admin-published-skills {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
 .admin-draft-form-section > h5.ant-typography,
 .admin-draft-section-heading h5.ant-typography {
   margin: 0;

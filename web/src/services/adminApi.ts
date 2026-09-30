@@ -200,6 +200,11 @@ export type AdminDefinitionPublicationSummary = {
   status: string;
   metadataRevision: number;
   publishedAt: string;
+  skills?: Array<{
+    id: string;
+    name: string;
+    requiredCapabilities: string[];
+  }>;
 };
 
 export async function listAdminDefinitionDrafts(): Promise<AdminDefinitionDraftSummary[]> {

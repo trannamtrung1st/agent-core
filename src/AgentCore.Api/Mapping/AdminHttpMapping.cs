@@ -132,7 +132,8 @@ internal static class AdminHttpMapping
             item.Version,
             item.Status.ToString(),
             item.MetadataRevision,
-            item.PublishedAt.ToString("o"));
+            item.PublishedAt.ToString("o"),
+            ToPublishedSkills(item.Skills));
 
     public static AdminDefinitionPublicationSummaryResponse ToPublicationSummary(AgentDefinitionPublication publication) =>
         new(
@@ -140,7 +141,19 @@ internal static class AdminHttpMapping
             publication.Version,
             publication.Status.ToString(),
             publication.MetadataRevision,
-            publication.PublishedAt.ToString("o"));
+            publication.PublishedAt.ToString("o"),
+            publication.Payload.SkillList
+                .Select(skill => new AdminPublishedSkillResponse(
+                    skill.Id,
+                    skill.Name,
+                    skill.RequiredCapabilities))
+                .ToArray());
+
+    private static IReadOnlyList<AdminPublishedSkillResponse> ToPublishedSkills(
+        IReadOnlyList<PublishedSkillReference>? skills) =>
+        (skills ?? [])
+            .Select(skill => new AdminPublishedSkillResponse(skill.Id, skill.Name, skill.RequiredCapabilities))
+            .ToArray();
 
     public static AdminDefinitionDraftValidationResponse ToValidation(DefinitionValidationResult result) =>
         new(

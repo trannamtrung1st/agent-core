@@ -7,7 +7,8 @@ import {
   candidatesEqual,
   patchRecord,
   writeModelDefault,
-  writePath
+  writePath,
+  writeSkills
 } from "./definitionCandidate";
 
 const sample = {
@@ -146,5 +147,50 @@ describe("definitionCandidate", () => {
     expect(clearedKey.modelDefaults).toEqual({ catalogKey: null, reasoningEffort: "low" });
     const cleared = writeModelDefault(clearedKey, "reasoningEffort", "");
     expect(cleared.modelDefaults).toBeNull();
+  });
+
+  it("round-trips skills and omits an empty list", () => {
+    const withExtra = writeSkills(sample, [
+      {
+        id: "refund.handle",
+        name: "Refund",
+        description: "Handle a refund",
+        procedure: "REFUND_PROCEDURE",
+        activationKeywords: "refund, return",
+        requiredCapabilities: "workspace.read, chat.respond",
+        resourcePaths: "notes/refund.md"
+      }
+    ]);
+    const preserved = writeSkills(
+      { ...withExtra, skills: [{ ...(withExtra.skills as object[])[0], marker: "keep" }] },
+      [
+        {
+          id: "refund.handle",
+          name: "Refund",
+          description: "Handle a refund",
+          procedure: "REFUND_PROCEDURE",
+          activationKeywords: "refund, return",
+          requiredCapabilities: "workspace.read, chat.respond",
+          resourcePaths: "notes/refund.md"
+        }
+      ]
+    );
+    const skill = (preserved.skills as Array<Record<string, unknown>>)[0];
+    expect(skill).toMatchObject({
+      id: "refund.handle",
+      name: "Refund",
+      procedure: "REFUND_PROCEDURE",
+      activationKeywords: ["refund", "return"],
+      requiredCapabilities: ["workspace.read", "chat.respond"],
+      resourcePaths: ["notes/refund.md"],
+      marker: "keep"
+    });
+    expect(candidateToJson(preserved)).toContain("REFUND_PROCEDURE");
+    const applied = applyCandidateJson(candidateToJson(preserved));
+    expect(applied.ok).toBe(true);
+    if (applied.ok) {
+      expect(applied.candidate.skills).toEqual(preserved.skills);
+    }
+    expect(writeSkills(preserved, []).skills).toBeUndefined();
   });
 });
