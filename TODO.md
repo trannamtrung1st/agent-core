@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` at **`ca3eb23`** on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** is **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green).
+Reviewed against current `main` at **`c9aec29e76e3af0fe0bb6eabd3cd394cf8fdf065`** on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green); this roadmap update does not move or reopen that freeze.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -59,20 +59,17 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). See `docs/reports/p8-freeze-candidate.md`.
 
-P9 follows. A bounded post-freeze provider-contract correction is recorded under Next implementation item and does not move the P8 SHA. P10 and P11 stay requirement-triggered.
+**P8.5 — Application Messaging & Dynamic Skill Activation** is next and is not implemented. It adds bounded current-application messaging and agent-requested, Core-admitted Skill activation without changing the P8 freeze. P9 follows only after P8.5 closes. P10 and P11 stay requirement-triggered.
 
 ---
 
 # Current roadmap
 
-1. **P0–P7 — frozen.**
-2. **P7.5 — frozen** on `70a5720`.
-3. **P7.6 — frozen** on `17d89ae`.
-4. **P7.7 — frozen** on `40a1d92` (workflow `36594702224` green). Post-freeze / pre-P8 bounded follow-up **closed** on `1cadf46` (workflow [`36667172857`](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green).
-5. **P8 — Agent Execution Contract, Application Actions & Skills — frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green).
-6. **P9 — Harness/platform extensibility — after P8.**
-7. **P10 — Sandbox evolution — when the current sandbox is insufficient.**
-8. **P11 — Multi-user and production infrastructure — when a real hosting or pilot requirement appears.**
+1. **P0–P8 — frozen.** P7.5 is frozen on `70a5720`; P7.6 on `17d89ae`; P7.7 on `40a1d92`; and P8 on `ca3eb23`. Post-P7.7 / pre-P8 bounded follow-up is closed on `1cadf46`.
+2. **P8.5 — Application Messaging & Dynamic Skill Activation — next.**
+3. **P9 — Harness / Platform Extensibility — after P8.5.**
+4. **P10 — Sandbox Evolution — when the current sandbox is insufficient.**
+5. **P11 — Multi-user + Production Infrastructure — when a real hosting or pilot requirement appears.**
 
 ---
 
@@ -245,9 +242,9 @@ Properties that already belong in the current stack: durable source of truth whe
 
 # Product / Architecture North Star
 
-**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. The rest is future guidance.**
+**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is the next planned slice. The rest is future guidance.**
 
-This section says why later phases exist. P8 and P9 say what to implement and verify. It does not reopen frozen phases, widen P8 past its stop condition, or pull P9, P10, or P11 forward.
+This section says why later phases exist. P8, P8.5, and P9 say what to implement and verify. It does not reopen frozen phases, widen P8 past its stop condition, or pull P9, P10, or P11 forward.
 
 > Agent Core hosts durable AI identities that can participate in applications, conversations, tasks, and events with scoped memory, capabilities, authority, and working context.
 
@@ -340,13 +337,13 @@ A bounded browser capability can reach many existing web applications before a d
 
 Browser use is access to logged-in applications. Availability is not authority. Do not share one authenticated browser profile across identities or applications. Do not persist every click, selector, or DOM observation as product history. Durable receipts are for meaningful observations, approvals, and side effects. Profile ownership, application and session scope, allowlists, cookie retention, and tenant isolation are unresolved until a real browser workflow forces the design.
 
-P9 is where that first concrete browser provider is evaluated. The execution path it must use is specified in P9, on top of the P8 contract.
+P9 is where that first concrete browser provider is evaluated. Its execution path builds on the frozen P8 contract and the P8.5 messaging and Skill-activation semantics. Browser capability must not define either of those semantics.
 
 ---
 
 # Infrastructure stance before production
 
-The development stack in the architectural baseline stays the default. Add a production dependency only when it solves a real hosting or pilot problem. P11 is that phase. P8 and P9 must not start it early.
+The development stack in the architectural baseline stays the default. Add a production dependency only when it solves a real hosting or pilot problem. P11 is that phase. P8.5 and P9 must not start it early.
 
 Each of these waits for its own trigger: PostgreSQL, Redis, a broker, Kubernetes, a service mesh, a distributed cache or scheduler, remote object storage, a cloud secret manager, multi-node SignalR, and microservice splits.
 
@@ -688,13 +685,145 @@ It also does not include the deferred infrastructure in the section below. Chat 
 
 P8 is complete when Agent Core owns a provider-neutral structured execution contract; provider-native structured output and tool calls are normalized at the edge; controller disposition is distinct from requested external actions; the model does not own runtime transitions; application interaction goes through authorized capabilities; Chat is the first application proving that model; streaming stays a delivery concern; existing text, voice, realtime, and durable conversation behavior remains intact; Definitions can contain multiple typed skills frozen with the published version; skills represent procedure rather than permission and can require capabilities or resources without granting them; relevant skills can be activated without injecting every skill into every request; persona, standing instructions, skills, knowledge, capabilities, authority, memory, application context, and task context stay distinct; deterministic and Synthetic gates are green; and documentation matches observed Admin and Chat behavior.
 
+P8.5 consumes this frozen contract. It does not move P8 evidence. P9 waits for P8.5 so browser/platform work can reuse current-application messaging and dynamic Skill activation instead of defining them.
+
+---
+
+# P8.5 — Application Messaging & Dynamic Skill Activation
+
+**Status: next. Planned, not implemented.**
+
+P8.5 is a small semantic phase between the frozen P8 contract and P9 platform work. It introduces bounded intermediate communication to the trusted current application context and replaces keyword-only Skill selection as the long-term activation authority. Exact capability names are finalized in the implementation proposal.
+
+## P8.5A — Application messaging
+
+Plan an intermediate application capability, conceptually:
+
+```text
+app.message.send(...)
+```
+
+Meaning: send a user-visible message into the **trusted current application context**, then return control to the agent so it can continue the same bounded execution.
+
+```text
+app.message.send
+= intermediate communication; agent continues
+
+chat.respond
+= terminal AgentStep application action
+```
+
+This is general application messaging, not assistant-specific `report_progress`. System-owned operational states such as `Searching…`, `Running tool…`, and `Reading attachment…` remain separate and do not require this capability.
+
+```text
+Agent execution
+   ├ tool/browser/workspace invocation
+   ├ app.message.send(...)
+   ├ continue work
+   └ terminal AgentStep
+         └ chat.respond(...)
+```
+
+Reuse the existing bounded model/tool continuation mechanics. Do not introduce an `AgentStep → model → AgentStep → model → ...` cycle solely for intermediate messaging.
+
+Admission and execution rules:
+
+- Agent Core binds the destination from trusted execution and application context. The model supplies message content, never `sessionId`, user, tenant, channel, recipient, application id, or another routing identity.
+- Arbitrary cross-application or arbitrary-recipient messaging is a separate future capability with separate authorization.
+- Reuse existing capability, policy, approval where applicable, execution, cancellation, and response/execution-identity boundaries. Messaging grants no authority and widens no owner, session, or application scope.
+- A stale, cancelled, or superseded execution cannot emit a late message.
+- Bound message length, messages per activation, and continuation work. No unlimited messaging loop.
+- Intermediate messages do not automatically become canonical conversation prompt history.
+- If later persisted for reload or audit, intermediate messages remain distinguishable from normal assistant conversation history.
+
+## P8.5B — Dynamic Skill activation
+
+The P8 deterministic keyword selector is useful scaffolding and may remain as a cheap preload optimization. It is not the long-term authority for Skill activation.
+
+Current limitations:
+
+- keyword and synonym sensitivity, with possible false matches;
+- compound tasks;
+- the current maximum of three Skills is an implementation/context-budget choice, not a permanent product rule;
+- the relevant Skill may become apparent only after tool or browser observations;
+- current activation is focused on user turns.
+
+Plan an agent-requested, Core-admitted loading mechanism, conceptually:
+
+```text
+compact available Skill catalog
+      ↓
+agent
+      ↓
+skills.load(["skill.id"])
+      ↓
+Agent Core validates / admits
+      ↓
+pin active Skill IDs
+      ↓
+expose trusted full procedures
+      ↓
+agent continues
+```
+
+Exact capability naming is deferred to the implementation proposal. Before activation, the model sees only compact metadata: `id`, `name`, `description`, activation hints, and required capabilities. Full trusted procedure text is injected only after Core admission.
+
+Core admission ensures:
+
+- the requested Skill exists on the pinned Definition version and is available in the current context;
+- the activation/context budget permits it;
+- the accepted execution still owns the work;
+- active Skill IDs remain inspectable and stable for retry and recovery.
+
+```text
+Skill requires capability
+≠
+Skill grants capability
+```
+
+Loading a Skill never adds a tool to an allowlist, grants credentials or application access, satisfies approval, widens owner/session/application scope, or overrides runtime or security policy.
+
+The architecture must permit later loading during the same bounded execution when observations reveal the need. Do not add a mandatory second LLM Skill-router call before every turn.
+
+```text
+obvious deterministic match → optional preload
+ambiguous or later-discovered need → agent requests Skill
+```
+
+Replace the fixed semantic idea of “max 3 Skills” with a bounded activation/context budget that may include maximum active Skill count, maximum aggregate procedure tokens or characters, and maximum Skill-load invocations per activation. Exact limits wait for implementation evidence.
+
+Do not add embeddings, vector search, a Skill marketplace, independently versioned shared Skills, or a dedicated Skill-router model in P8.5.
+
+## Why P8.5 precedes P9
+
+Browser/platform work creates longer and less predictable executions. P9 must consume these semantics rather than invent them:
+
+```text
+longer execution
+   ├ inspect / use tools
+   ├ dynamically load relevant Skill
+   ├ app.message.send useful intermediate communication
+   ├ continue browser / tool work
+   └ terminal AgentStep + chat.respond
+```
+
+Browser capability must not define messaging or Skill-selection semantics.
+
+## P8.5 non-goals
+
+P8.5 does not include browser implementation, MCP implementation, full Application Binding persistence, cross-app or arbitrary-recipient messaging, Slack/Teams/email messaging implementation, a Skill or plugin marketplace, embeddings/vector Skill retrieval, independently versioned global Skills, multi-agent coordination, an autonomous infinite loop, or production infrastructure.
+
+## P8.5 stop condition
+
+P8.5 closes when an agent can send a bounded intermediate message to the trusted current application context and continue; intermediate messaging is distinct from terminal `chat.respond` and system operational progress; the model cannot choose an unauthorized destination; Skill activation is no longer semantically dependent only on keyword matching; the agent can request Skills as work unfolds; Core validates, budgets, and pins active Skill IDs; Skill loading never grants capability or authority; deterministic matching is only an optional optimization; existing P8 execution and security behavior remains intact; and P9 can start without inventing messaging or Skill-selection semantics.
+
 ---
 
 # P9 — Harness / platform extensibility
 
-**Status: after P8. Not active.**
+**Status: after P8.5. Not active.**
 
-P9 starts only after the P8 Agent Step, controller/action boundary, and Chat proof exist. P9 consumes that contract. It does not define it.
+P9 starts only after P8.5 closes. Its prerequisites are the frozen P8 Agent Step, controller/action boundary, and Chat proof, plus P8.5 bounded current-application messaging and Core-admitted dynamic Skill activation. P9 consumes those contracts. It does not define them.
 
 Start from one concrete provider need. Do not add a universal provider interface. The North Star is not a P9 backlog. A second real implementation is what proves which extension seams are needed.
 
@@ -703,7 +832,11 @@ Browser automation is the broad compatibility path. Native integrations are the 
 ```text
 Agent
    ↓
-AgentStep
+bounded execution
+   ├ optionally load a Core-admitted Skill
+   ├ optionally message the trusted current application
+   ↓
+terminal AgentStep
    ↓
 Controller
    ↓
@@ -716,7 +849,7 @@ external web application
 
 **First candidate to evaluate:** Playwright, Playwright MCP, or a narrow adapter around Playwright. Choose the narrowest shape that fits the P8 architecture. Do not decide that shape before the concrete need is in hand.
 
-MCP is an optional edge adapter. It is not Agent Core’s semantic center and it is not an authority source. Native Agent Core tools stay first-class. External tools still pass through Agent Core policy. Provider credentials stay outside model context. Provider DTOs stay out of Domain and Application. An extension failure must not corrupt durable agent, session, or WorkItem state.
+MCP is an optional edge adapter. It is not Agent Core’s semantic center and it is not an authority source. Native Agent Core tools stay first-class. External tools still pass through Agent Core policy. Provider credentials stay outside model context. Provider DTOs stay out of Domain and Application. An extension failure must not corrupt durable agent, session, or WorkItem state. Browser/platform adapters do not choose message destinations, define Skill activation authority, or turn Skill requirements into permissions.
 
 Repository evidence today: Playwright and Playwright MCP exist for frontend tests and development. Neither is a runtime capability. Tool registration and dispatch are still static and in-process, so a real browser provider would exercise the second tool-host seam noted in P7.5. Browser profile ownership, authentication isolation, application and domain scope, durable receipts, and live versus detached execution are still unresolved. Resolve them from the concrete workflow, using the North Star constraints: no shared authenticated profile, no unrestricted authority, and no click-level product history.
 
@@ -762,15 +895,15 @@ Start when Agent Core leaves trusted single-owner local development or begins a 
 
 # Deferred / requirement-triggered work
 
-These items are recorded decisions. They do not block P8. They are not reasons to start P9, P10, or P11 early. Each waits for a concrete requirement.
+These items are recorded decisions. They do not block P8.5. They are not reasons to start P9, P10, or P11 early. Each waits for a concrete requirement.
 
 **Production infrastructure and distributed scheduling.** The P11 stack, plus Hangfire, Quartz, or another job framework. If a scheduler is ever justified, it implements wake-up and dispatch under Trigger → Occurrence → WorkItem. It does not replace that model. Misfire policies beyond current coalesce-to-latest (`SkipMissed`, `CatchUp`) wait for a workflow that needs them.
 
 **Platform and packaging.** A universal plugin framework, plugin marketplace, Skill marketplace, application marketplace, prepared-worker marketplace, ZIP or package import/export, Git resource sync, remote filesystem or object-storage browsing, live folder sync, and FTP/SFTP. P9 may add one concrete provider seam. It may not absorb this list.
 
-**Bindings and skills beyond P8.** Full Application Binding persistence. An independently versioned Skill shared across many Definitions.
+**Bindings, messaging, and skills beyond P8.5.** Full Application Binding persistence. Cross-application and arbitrary-recipient messaging, including Slack/Teams/email delivery implementations. An independently versioned Skill shared across many Definitions. Skill or plugin marketplaces. Embeddings/vector Skill retrieval and a dedicated Skill-router model.
 
-**Agent scope.** Multi-agent coordination or an agent swarm. A visual workflow builder. An arbitrary autonomous loop. A persistent general Agent Instance filesystem. An Admin assistant agent. Progress reporting through a tool call, still unspecified.
+**Agent scope.** Multi-agent coordination or an agent swarm. A visual workflow builder. An arbitrary autonomous loop. A persistent general Agent Instance filesystem. An Admin assistant agent.
 
 **Voice and hosted providers.** The known Real/OpenRouter historical-image reread gap: bounded, credential-gated, outside default CI. HOSTED-04, one non-Synthetic voice smoke on an explicitly selected hosted configuration. Replacing realtime `OpenAiSpeechRecognizer` only when a concrete need exists. Native speech-to-speech only if measured latency or quality shows that `STT → text model → TTS` is insufficient.
 
@@ -789,7 +922,7 @@ These items are recorded decisions. They do not block P8. They are not reasons t
 
 # Implemented baseline
 
-Orientation for what P8 can build on. Detail and gate history are in `/docs` and `docs/reports/`.
+Orientation for what P8.5 can build on. Detail and gate history are in `/docs` and `docs/reports/`.
 
 **Conversation and runtime.** Session-owned conversation, purpose and lifecycle, queue versus steer, Stop, interruption, detach and reconnect, durable accepted turns, observer reattachment, history and restore, semantic compaction, and display/speech response semantics with transient progress.
 
@@ -813,15 +946,15 @@ Orientation for what P8 can build on. Detail and gate history are in `/docs` and
 
 # Next implementation item
 
-**P9 — Harness / platform extensibility.**
+**P8.5 — Application Messaging & Dynamic Skill Activation.**
 
-P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). A bounded post-freeze provider-contract correction does not move that SHA. The strict schema and `agent_core_respond` now carry Agent Step `disposition` and `action`. Omitted fields and the plain-text channel still default to `Complete` plus `chat.respond`.
+P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). P8.5 does not move or reopen that SHA. Plan and implement bounded intermediate messaging to the trusted current application context plus agent-requested, Core-admitted Skill loading under an activation/context budget. Preserve the existing P8 execution, policy, cancellation, supersession, retry/recovery, and authority boundaries. P9 follows only after P8.5 closes.
 
-Recorded limits, so P9 does not treat them as already general:
+Recorded P8 limits that P8.5 must address without treating them as already general:
 
 - `Continue` delivers Chat when that action is present and does not schedule another generation.
 - Skill activation applies to user turns only.
 - `Wait` is stored as an empty interrupted assistant entry, and the user-turn execution commits as cancelled. Do not reuse that row as the general meaning of `Wait`.
 - `ChatActionAdmission` is the Chat seam. It is not yet a generic action-authorization framework.
 
-P10 and P11 remain requirement-triggered. Do not begin P9 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+P10 and P11 remain requirement-triggered. Do not begin P8.5 or P9 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
