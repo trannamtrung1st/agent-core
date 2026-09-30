@@ -268,6 +268,41 @@ public sealed class ApplicationMessageTests
         Assert.Equal(admitted.EntryId, upsert.Entry.EntryId);
     }
 
+    [Fact]
+    public async Task Steered_turn_drops_the_late_application_message_and_does_not_speak_it()
+    {
+        var model = new LateMessageLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(model, turns, Definition(), output);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var superseded = runtime.ActiveResponseId;
+        Assert.NotNull(superseded);
+
+        await runtime.SubmitPersistedUserTextAsync(
+            "take over",
+            Guid.NewGuid(),
+            CancellationToken.None,
+            null,
+            UserTextBehavior.Interrupt);
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains(SecondText, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            output.Items.Select(item => item.Payload).OfType<HistoryEntryUpsertOutput>(),
+            item => item.Entry.Text.Contains(SecondText, StringComparison.Ordinal));
+        var assistant = Assert.Single(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
+        Assert.Equal("Noted", assistant.Text);
+        Assert.NotEqual(superseded, assistant.ResponseId);
+        Assert.Contains(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User && entry.Text == "take over");
+        Assert.DoesNotContain(output.Items, item => item.Payload is SpeechOutputSegmentOutput or SpeechOutputCompletedOutput);
+    }
+
     private static string Text(ModelRequest request) =>
         string.Join('\n', request.Messages.Select(message => message.Text));
 
@@ -435,6 +470,51 @@ public sealed class ApplicationMessageTests
             await Release.Task;
             cancellationToken.ThrowIfCancellationRequested();
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+
+    private sealed class LateMessageLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            if (generation == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "m1",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = FirstText })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (generation == 2)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "m2",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = SecondText })));
+                Entered.TrySetResult();
+                await Release.Task;
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelTextDelta("Noted");
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 }
