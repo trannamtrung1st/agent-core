@@ -240,6 +240,7 @@ Hairline 1px `{colors.border}` separators. No colored 2px side rails, no glass.
 - User: right-aligned bubble (`8px 12px`, 18px radius).
 - Live user transcript: the same bubble at 92% opacity with a restrained dashed border; pulse only when reduced motion is not requested.
 - Assistant: when public `speechText` meaningfully differs from display, show **Spoken** first (the TTS projection), then open sanitized Markdown, blocks, and files. Spoken is the same list item: speaker icon (decorative) + visible “Spoken” label (tertiary via CSS), body secondary with `pre-wrap`; 8px stack gap; 8px padding below a 1px border before on-screen detail. Not a second bubble, avatar, or timestamp.
+- Application message: in the same reading column, before the assistant entry that shares its response. Agent speaker, visible “Still working” in the tertiary label color, Markdown body in secondary text, `data-role="applicationMessage"`, `aria-live="polite"`. Not a card, not Spoken, and not the activity row.
 
 ### Composer toolbar
 - Left: Model (reasoning level inside the Model button when supported), Attach, Voice, microphone.

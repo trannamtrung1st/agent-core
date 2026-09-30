@@ -4,7 +4,7 @@ Living roadmap: current status, active requirements, future dependency order, an
 
 Detailed architecture and behavior live in `/docs`. Historical implementation and freeze evidence live in `docs/reports/`. This file does not duplicate either.
 
-Reviewed against `main` through **`48cb4e92a918d48423616443a60569d0aeb249e4`** with P8 post-freeze bookkeeping closure on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** is next; **P9** follows only after P8.5 closes.
+Reviewed against `main` through **`48cb4e92a918d48423616443a60569d0aeb249e4`** with P8 post-freeze bookkeeping closure on **2026-09-30**. Pre-P8 bounded follow-up after P7.7 is **closed** (hosted Synthetic [**`36667172857`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36667172857) green on **`1cadf46`**). **P8** remains **frozen** on **`ca3eb23`** (hosted Synthetic [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). **Post-freeze P8 follow-up is closed** on **`c9aec29`** (provider-contract **`6fda4c5`**, CI stabilization **`c9aec29`**, hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). That closure does not move or reopen the P8 freeze. **P8.5** behavior is implemented locally and is not closed; **P9** follows only after that closure.
 
 Closure reports through P7.7 still say the next phase was P8. That sentence records the handoff at freeze time, when P8 meant harness/platform extensibility. Those reports were not rewritten. In this TODO that work is P9.
 
@@ -59,14 +59,14 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze bounded follow-up (provider contract **`6fda4c5`**, CI stabilization **`c9aec29`**) is **closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green. See `docs/reports/p8-freeze-candidate.md` (freeze narrative + appendix).
 
-**P8.5 — Application Messaging & Dynamic Skill Activation** is next and is not implemented. It adds bounded current-application messaging and agent-requested, Core-admitted Skill activation without changing the P8 freeze. P9 follows only after P8.5 closes. P10 and P11 stay requirement-triggered.
+**P8.5 — Application Messaging & Dynamic Skill Activation** is implemented locally and is not closed. `app.message.send` and `skills.load` continue the same bounded user-turn execution. They do not change the P8 freeze. P9 follows only after P8.5 closes. P10 and P11 stay requirement-triggered.
 
 ---
 
 # Current roadmap
 
 1. **P0–P8 — frozen.** P7.5 is frozen on `70a5720`; P7.6 on `17d89ae`; P7.7 on `40a1d92`; and P8 on `ca3eb23`. Post-P7.7 / pre-P8 bounded follow-up is closed on `1cadf46`. Post-freeze P8 follow-up is **closed** on `c9aec29` (hosted Synthetic **`36745126226`** green).
-2. **P8.5 — Application Messaging & Dynamic Skill Activation — next.**
+2. **P8.5 — Application Messaging & Dynamic Skill Activation — implemented locally; not closed.**
 3. **P9 — Harness / Platform Extensibility — after P8.5.**
 4. **P10 — Sandbox Evolution — when the current sandbox is insufficient.**
 5. **P11 — Multi-user + Production Infrastructure — when a real hosting or pilot requirement appears.**
@@ -242,7 +242,7 @@ Properties that already belong in the current stack: durable source of truth whe
 
 # Product / Architecture North Star
 
-**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 is the next planned slice. The rest is future guidance.**
+**Status: long-term direction. P8 is the frozen bounded slice on `ca3eb23`. P8.5 behavior is implemented locally and is not closed. The rest is future guidance.**
 
 This section says why later phases exist. P8, P8.5, and P9 say what to implement and verify. It does not reopen frozen phases, widen P8 past its stop condition, or pull P9, P10, or P11 forward.
 
@@ -691,13 +691,13 @@ P8.5 consumes this frozen contract. It does not move P8 evidence. P9 waits for P
 
 # P8.5 — Application Messaging & Dynamic Skill Activation
 
-**Status: next. Planned, not implemented.**
+**Status: implemented locally. Not closed. Hosted Synthetic CI is still required before P9.**
 
-P8.5 is a small semantic phase between the frozen P8 contract and P9 platform work. It introduces bounded intermediate communication to the trusted current application context and replaces keyword-only Skill selection as the long-term activation authority. Exact capability names are finalized in the implementation proposal.
+P8.5 sits between the frozen P8 contract and P9 platform work. A tool-capable user turn can send one bounded intermediate message to the current session and can ask Core to pin another Skill from that definition version. Keyword preload remains an optimization. It is not the only way a Skill becomes active.
 
 ## P8.5A — Application messaging
 
-Plan an intermediate application capability, conceptually:
+The continuation tool is:
 
 ```text
 app.message.send(...)
@@ -726,15 +726,14 @@ Agent execution
 
 Reuse the existing bounded model/tool continuation mechanics. Do not introduce an `AgentStep → model → AgentStep → model → ...` cycle solely for intermediate messaging.
 
-Admission and execution rules:
+Observed admission:
 
-- Agent Core binds the destination from trusted execution and application context. The model supplies message content, never `sessionId`, user, tenant, channel, recipient, application id, or another routing identity.
+- The model supplies trimmed `text` only, at most 2000 characters. Routing fields are rejected. Core binds the destination to the current session.
 - Arbitrary cross-application or arbitrary-recipient messaging is a separate future capability with separate authorization.
 - Reuse existing capability, policy, approval where applicable, execution, cancellation, and response/execution-identity boundaries. Messaging grants no authority and widens no owner, session, or application scope.
-- A stale, cancelled, or superseded execution cannot emit a late message.
-- Bound message length, messages per activation, and continuation work. No unlimited messaging loop.
-- Intermediate messages do not automatically become canonical conversation prompt history.
-- If later persisted for reload or audit, intermediate messages remain distinguishable from normal assistant conversation history.
+- A stale, cancelled, or superseded execution cannot emit a late message. An already admitted message stays. A steered turn drops a buffered send that has not been admitted.
+- At most three admitted messages per execution. The same response text, or the same effect key `v1:{executionId}:{toolCallId}`, does not create a second visible entry.
+- The role is `applicationMessage`. It is stored and reloaded, omitted from prompt history, and not spoken. Chat shows it before that response’s assistant answer, with the visible status “Still working”. Runtime activity such as Thinking stays a separate row.
 
 ## P8.5B — Dynamic Skill activation
 
@@ -744,11 +743,11 @@ Current limitations:
 
 - keyword and synonym sensitivity, with possible false matches;
 - compound tasks;
-- the current maximum of three Skills is an implementation/context-budget choice, not a permanent product rule;
+- keyword preload still stops at three; one execution pin can reach four after `skills.load`;
 - the relevant Skill may become apparent only after tool or browser observations;
 - current activation is focused on user turns.
 
-Plan an agent-requested, Core-admitted loading mechanism, conceptually:
+The observed load path is:
 
 ```text
 compact available Skill catalog
@@ -766,7 +765,7 @@ expose trusted full procedures
 agent continues
 ```
 
-Exact capability naming is deferred to the implementation proposal. Before activation, the model sees only compact metadata: `id`, `name`, `description`, activation hints, and required capabilities. Full trusted procedure text is injected only after Core admission.
+The tool name is `skills.load`. Before activation, the model sees a compact catalog that omits procedure bodies. Full procedure text is injected only for ids Core has pinned.
 
 Core admission ensures:
 
@@ -790,7 +789,7 @@ obvious deterministic match → optional preload
 ambiguous or later-discovered need → agent requests Skill
 ```
 
-Replace the fixed semantic idea of “max 3 Skills” with a bounded activation/context budget that may include maximum active Skill count, maximum aggregate procedure tokens or characters, and maximum Skill-load invocations per activation. Exact limits wait for implementation evidence.
+Keyword preload still pins at most three Skills. A later `skills.load` on the same execution can raise the pin to four. Aggregate procedure text is capped at 8000 characters, one load accepts at most four ids, and one execution accepts at most two load invocations. Recovery reads the stored pin when a load has already happened and does not run keyword selection again.
 
 Do not add embeddings, vector search, a Skill marketplace, independently versioned shared Skills, or a dedicated Skill-router model in P8.5.
 
@@ -958,7 +957,7 @@ Orientation for what P8.5 can build on. Detail and gate history are in `/docs` a
 
 **P8.5 — Application Messaging & Dynamic Skill Activation.**
 
-P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze P8 follow-up is **closed** on `c9aec29` (workflow [`36745126226`](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). P8.5 does not move or reopen that SHA. Plan and implement bounded intermediate messaging to the trusted current application context plus agent-requested, Core-admitted Skill loading under an activation/context budget. Preserve the existing P8 execution, policy, cancellation, supersession, retry/recovery, and authority boundaries. P9 follows only after P8.5 closes.
+P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). Post-freeze P8 follow-up is **closed** on `c9aec29` (workflow [`36745126226`](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) green). P8.5 does not move or reopen that SHA. The messaging and Skill-load behavior above is implemented. Local Synthetic gates have passed. P8.5 is not closed until hosted Synthetic CI is green on the candidate SHA. P9 follows only after that closure.
 
 Recorded P8 limits that P8.5 must address without treating them as already general:
 
@@ -967,4 +966,4 @@ Recorded P8 limits that P8.5 must address without treating them as already gener
 - `Wait` is stored as an empty interrupted assistant entry, and the user-turn execution commits as cancelled. Do not reuse that row as the general meaning of `Wait`.
 - `ChatActionAdmission` is the Chat seam. It is not yet a generic action-authorization framework.
 
-P10 and P11 remain requirement-triggered. Do not begin P8.5 or P9 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
+P10 and P11 remain requirement-triggered. Do not close P8.5 or begin P9 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.

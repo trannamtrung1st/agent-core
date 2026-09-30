@@ -156,6 +156,14 @@ Session-scoped LLM work resolves through `ILanguageModelResolver` from the persi
 
 **Consequence:** [Interfaces](04-backend-interfaces.md) owns catalog/resolver ports; [Persistence](15-persistence-and-configuration.md) owns durable selection and provenance; [Protocol](14-api-and-realtime-protocol.md) owns catalog and session model HTTP; [Frontend](13-frontend-implementation-spec.md) owns Default/effort UX; [Implementation Plan](18-implementation-plan.md) owns the P2D gate.
 
+## Decision: bounded application messaging and dynamic Skill load
+
+**Decision:** On a tool-capable user turn, `app.message.send` and `skills.load` continue the existing model/tool pump inside one accepted execution. They are not Agent Step actions, not a second hub, and not a second generation started by `Continue`. The message destination is the bound session. The visible role is `applicationMessage`: stored, omitted from prompt history, and not spoken. Chat shows it before that response’s assistant answer. `skills.load` pins ids from the current definition version onto the same execution, up to four, after keyword preload of at most three. Loading a Skill does not grant tools, credentials, or approval. Stale, cancelled, and superseded executions do not emit a late message.
+
+**Rationale / trade-off:** Intermediate communication and later Skill discovery stay inside the frozen P8 execution fence. Keyword matching remains a preload, not the only admission path.
+
+**Future migration path:** P9 consumes these contracts. It does not redefine destination binding or Skill authority. Cross-application messaging, a Skill marketplace, and embeddings stay out of this decision.
+
 ## Decision: first-class transient response progress
 
 **Decision:** Live response progress is a first-class transient Application event (`ResponseProgressOutput`, wire `agent.progress`) owned by the outer envelope `responseId`. Nested tool or attachment work may carry a runtime-generated `operationId`. Kinds are `preparing`, `readingAttachments`, `runningTool`, `waitingExternal`, and `finalizing`; states are `started`, `updated`, `completed`, and `failed`. Progress is never durable history, `session.ready` replay, provider reasoning, conversational assistant text, response blocks, or TTS/`clientSpeech` input. Trusted bounded `message` values are status copy only. Coarse `session.state.changed.outputState` remains. The browser keeps one replaceable `activeProgress` status. Telemetry records `agent.progress.event` with `kind` and `state` tags only, plus optional kind-tagged `agent.progress.active_ms`.
