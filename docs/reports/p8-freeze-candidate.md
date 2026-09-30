@@ -1,6 +1,6 @@
 # P8 — Agent Step, Chat action, and Skills closure evidence
 
-This report records the P8 closure. The hosted Synthetic workflow is green on `ca3eb235a3b458e55002d2c8f610df868b2cd39d`. Workflow [`36693649631`](https://github.com/trannamtrung1st/agent-core/actions/runs/36693649631) failed earlier on `af3b4cd` because the Skill journey left a voice-disabled managed instance as the default chat identity, and 10 Voice-control tests could not find the Voice button. `ca3eb23` archives that instance after the journey's pin check. The commit that records this hosted URL is documentation only. **P9** is next. Do not reopen P8 without a reproducible regression. Do not reopen frozen P4–P7.7 reports.
+This report records the **P8 freeze** and, in a separate bookkeeping appendix, bounded **post-freeze** provider-contract correction and CI stabilization. The canonical P8 hosted Synthetic workflow is **green** on `ca3eb235a3b458e55002d2c8f610df868b2cd39d` ([workflow `36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928)). Workflow [`36693649631`](https://github.com/trannamtrung1st/agent-core/actions/runs/36693649631) failed earlier on `af3b4cd` because the Skill journey left a voice-disabled managed instance as the default chat identity, and 10 Voice-control tests could not find the Voice button. `ca3eb23` archives that instance after the journey's pin check. **Post-freeze P8 follow-up is closed** on hosted Synthetic [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) — **green** on **`c9aec29e76e3af0fe0bb6eabd3cd394cf8fdf065`**. **P8.5** is next. Do not move the P8 freeze SHA. Do not reopen P8 without a reproducible regression. Do not reopen frozen P4–P7.7 reports.
 
 ## Candidate
 
@@ -30,7 +30,7 @@ Chat remains the only P8 application proof. Streaming, voice, response identity,
 
 ## Non-goals left deferred
 
-Browser or computer automation, a Playwright runtime provider, MCP as the semantic center, Application Binding persistence, a Skill marketplace, a generic Agent Step event store, an autonomous recursive loop, a general Instance filesystem, PostgreSQL, Redis, Kubernetes, microservices, RBAC, and production infrastructure. P9 owns the next provider/extensibility exercise.
+Browser or computer automation, a Playwright runtime provider, MCP as the semantic center, Application Binding persistence, a Skill marketplace, a generic Agent Step event store, an autonomous recursive loop, a general Instance filesystem, PostgreSQL, Redis, Kubernetes, microservices, RBAC, and production infrastructure. P8.5 is next; P9 owns browser/platform extensibility after P8.5 closes.
 
 ## Verification
 
@@ -57,4 +57,37 @@ Impeccable context loaded `.agents/context/PRODUCT.md` and `DESIGN.md` for the d
 
 ## Deferred
 
-P9 is next and is not started. Browser automation, Application Binding persistence, a global Skill platform, and production infrastructure remain out of P8.
+P8.5 is next and is not started. P9 follows only after P8.5 closes. Browser automation, Application Binding persistence, a global Skill platform, and production infrastructure remain out of P8.
+
+---
+
+## Bookkeeping appendix — post-freeze correction and CI stabilization (not a new P8 freeze)
+
+The **P8 behavior freeze** stays on **`ca3eb235a3b458e55002d2c8f610df868b2cd39d`**. Hosted gate [**`36696902928`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) — **green** on that SHA. Later commits are bounded post-freeze correction and stabilization; they do **not** replace or move the freeze SHA.
+
+```text
+P8 frozen on ca3eb23
+      ↓
+bounded post-freeze provider-contract correction
+      6fda4c5
+      ↓
+CI stabilization
+      c9aec29
+      ↓
+hosted Synthetic green
+      ↓
+post-freeze P8 follow-up closed
+      ↓
+P8.5 next
+```
+
+| SHA | Role |
+| --- | --- |
+| **`ca3eb23`** | **Canonical P8 freeze** (Agent Step, Chat action, Definition Skills, bounded journey, shared-catalog Voice cleanup) |
+| **`6fda4c5`** | **Post-freeze provider-contract correction** — strict structured output and `agent_core_respond` carry Agent Step `disposition` and `action`; compatibility providers still default plain text to `Complete` + `chat.respond` |
+| **`c9aec29`** | **CI stabilization only** — Background Work E2E closes the drawer via its accessible Close control instead of flaky Escape; no production behavior change |
+| **Hosted closure (post-freeze follow-up)** | Workflow [**`36745126226`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36745126226) — **green** on **`c9aec29`** (Synthetic offline gates and Compose smoke) |
+
+Prior hosted attempt on the provider-contract head **`6fda4c5`**: workflow [**`36736879395`**](https://github.com/trannamtrung1st/agent-core/actions/runs/36736879395) — **failed** (Synthetic Playwright `background-work.spec.ts`; unrelated to P8 semantics). **`c9aec29`** addresses that flake only.
+
+Known P8 limits intentionally handed to P8.5 or later (unchanged by this appendix): `Continue` does not start another generation; Skill activation is currently user-turn/keyword oriented; Wait's current Chat persistence shape is not a universal Wait representation; `ChatActionAdmission` is not yet a generic application-action policy framework.
