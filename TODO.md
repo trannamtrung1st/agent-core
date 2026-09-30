@@ -16,18 +16,18 @@ Closure reports through P7.7 still say the next phase was P8. That sentence reco
 
 Reopen a frozen phase only for a reproducible regression, or for a new product requirement that belongs in that phase rather than a later one. Do not rewrite closure evidence to match later numbering.
 
-| Phase | Freeze | Hosted gate | Report |
-| --- | --- | --- | --- |
-| P1 | `dceaccb` | — | phase history in `docs/08-development-roadmap.md` |
-| P2 | `47d6ff6` | workflow `35552740853` green | roadmap / implementation plan |
-| P3 | `4dbb920` | — | roadmap / implementation plan |
-| P4 | `822028f` | workflow `35806764609` green | `docs/reports/p4-freeze-candidate.md` |
-| P5 | `4bbc0c1` | workflow `35954811544` green | `docs/reports/p5-freeze-candidate.md` |
-| P6 | `30adaeb` | workflow `36085265506` green | implementation plan |
-| P7 Harness Admin | follow-up tree `2acb1a8`; last harness behavior `1090535`; canonical W08 `f4107d7` | workflow `36239630112` green on `f4107d7` | `docs/reports/p7-freeze-candidate.md` |
-| P7.5 | `70a5720` | workflow `36368766449` green | `docs/reports/p7.5-freeze-candidate.md` |
-| P7.6 | `17d89ae` | workflow `36427670239` green | `docs/reports/p7.6-freeze-candidate.md` |
-| P7.7 | `40a1d92` | workflow `36594702224` green | `docs/reports/p7.7-freeze-candidate.md` |
+| Phase            | Freeze                                                                             | Hosted gate                               | Report                                            |
+| ---------------- | ---------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------- |
+| P1               | `dceaccb`                                                                          | —                                         | phase history in `docs/08-development-roadmap.md` |
+| P2               | `47d6ff6`                                                                          | workflow `35552740853` green              | roadmap / implementation plan                     |
+| P3               | `4dbb920`                                                                          | —                                         | roadmap / implementation plan                     |
+| P4               | `822028f`                                                                          | workflow `35806764609` green              | `docs/reports/p4-freeze-candidate.md`             |
+| P5               | `4bbc0c1`                                                                          | workflow `35954811544` green              | `docs/reports/p5-freeze-candidate.md`             |
+| P6               | `30adaeb`                                                                          | workflow `36085265506` green              | implementation plan                               |
+| P7 Harness Admin | follow-up tree `2acb1a8`; last harness behavior `1090535`; canonical W08 `f4107d7` | workflow `36239630112` green on `f4107d7` | `docs/reports/p7-freeze-candidate.md`             |
+| P7.5             | `70a5720`                                                                          | workflow `36368766449` green              | `docs/reports/p7.5-freeze-candidate.md`           |
+| P7.6             | `17d89ae`                                                                          | workflow `36427670239` green              | `docs/reports/p7.6-freeze-candidate.md`           |
+| P7.7             | `40a1d92`                                                                          | workflow `36594702224` green              | `docs/reports/p7.7-freeze-candidate.md`           |
 
 P7 owns Harness Admin W01–W08 only. Observer durability for `ConversationTurnExecution` is closed session bookkeeping, not part of the Admin contract: last behavior `93cb2ab`, stabilization `2c4d46f`, workflow `36336971087` green. Do not merge that appendix into Harness Admin.
 
@@ -917,6 +917,16 @@ These items are recorded decisions. They do not block P8.5. They are not reasons
 - Keep Playwright coverage for meaningful user-visible workflows.
 - Make race-sensitive tests deterministic. Prefer explicit gates and `TimeProvider` over wall-clock sleeps.
 - Update canonical docs when observed behavior changes. Keep historical gate narratives in `docs/reports/`.
+
+---
+
+# Maintainer notes
+
+Always keep this section.
+
+- [ ] Admin assistant agent remains a future idea.
+
+- [ ] Allow self-learning, self skill management, and self-improvement (configurable, on/off) [TBD].
 
 ---
 
