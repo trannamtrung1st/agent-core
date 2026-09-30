@@ -123,7 +123,15 @@ test("P8 publishes two skills, activates the matching one, and keeps one chat re
   await expect(published).toContainText("Requirements do not grant tools, credentials, or approval.");
   await expect(published.getByRole("textbox")).toHaveCount(0);
 
+  const instanceResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST"
+      && response.url().includes("/api/v2/admin/agent-instances")
+      && response.ok()
+  );
   await definitionDraftsSection(page).getByRole("button", { name: "Start managed chat for v1" }).click();
+  const instance = (await (await instanceResponsePromise).json()) as { instanceId: string };
+  expect(instance.instanceId).toBeTruthy();
   await expect(page).toHaveURL(/\/c\/[0-9a-f-]+/i, { timeout: 20_000 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
   await page.getByLabel("Message").fill("please refund this");
@@ -143,6 +151,12 @@ test("P8 publishes two skills, activates the matching one, and keeps one chat re
   });
   expect(pins).toContain("refund.handle");
   expect(pins).not.toContain("order.lookup");
+
+  await page.goto(`/admin/instances/${instance.instanceId}`);
+  const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
+  await lifecycle.getByRole("button", { name: "Archive instance" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });
 
   expect(failedRequests.filter((item) => !item.includes("favicon"))).toEqual([]);
   expect(consoleErrors.filter((line) => !antdNoise(line) && !line.includes("favicon"))).toEqual([]);
