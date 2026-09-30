@@ -713,4 +713,71 @@ describe("Conversation", () => {
     );
     expect(screen.getByRole("button", { name: "Load earlier messages" })).toBeDisabled();
   });
+
+  it("shows an in-flow application message before the assistant answer and apart from activity", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({ entryId: "u1", role: "user", sequence: 1, text: "please review this account" }),
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            sequence: 2,
+            responseId: "r1",
+            text: "Billing review is complete."
+          }),
+          entry({
+            entryId: "m1",
+            role: "applicationMessage",
+            sequence: 3,
+            responseId: "r1",
+            text: "Still checking the billing case.",
+            heardTextEndExclusive: 0
+          })
+        ]}
+        activity={{ kind: "thinking", label: "Thinking…" }}
+      />
+    );
+
+    const roles = screen.getAllByRole("listitem").map((item) => item.getAttribute("data-role"));
+    expect(roles).toEqual(["user", "applicationMessage", "assistant"]);
+    const message = screen.getByText("Still checking the billing case.").closest("li");
+    expect(message).toHaveAttribute("aria-live", "polite");
+    expect(message).toHaveClass("chat-message-application");
+    expect(message).not.toHaveClass("chat-message-assistant");
+    expect(screen.getByText("Still working")).toBeInTheDocument();
+    expect(message).toHaveTextContent("Alex");
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
+    expect(screen.queryByText("app.message.send")).not.toBeInTheDocument();
+    expect(message).not.toHaveClass("user-bubble-live");
+  });
+
+  it("wraps a long application message inside a narrow column", () => {
+    const text = `billing-${"detail".repeat(80)}`;
+    render(
+      <div style={{ width: 390 }}>
+        <Conversation
+          agentName="Alex"
+          sessionId="s1"
+          entries={[
+            entry({
+              entryId: "m1",
+              role: "applicationMessage",
+              sequence: 1,
+              responseId: "r1",
+              text
+            })
+          ]}
+          activity={{ kind: "idle" }}
+        />
+      </div>
+    );
+
+    const message = screen.getByText(/billing-detail/).closest("li");
+    expect(message).toHaveClass("chat-message-application");
+    expect(message?.querySelector(".markdown-message")).not.toBeNull();
+    expect(text.length).toBeGreaterThan(390);
+  });
 });

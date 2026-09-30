@@ -19,12 +19,13 @@ export function ChatMessage({
 }) {
   const { token } = theme.useToken();
   const isUser = entry.role === "user";
+  const isApplication = entry.role === "applicationMessage";
   const speaker = isUser ? "You" : agentName || "Agent";
-  const status = statusLabel(entry.status, entry.finishReason, entry.interruptReason);
+  const status = isApplication ? null : statusLabel(entry.status, entry.finishReason, entry.interruptReason);
   const timeLabel = formatChatTime(entry.createdAt);
   const hasFiles = Boolean(entry.attachments?.length && sessionId);
   const hasBlocks = Boolean(entry.blocks?.length);
-  const showSpeech = !isUser && shouldShowSpeechText(entry.text, entry.speechText);
+  const showSpeech = !isUser && !isApplication && shouldShowSpeechText(entry.text, entry.speechText);
   const hasBody = Boolean(entry.text) || hasBlocks || hasFiles || showSpeech;
   const blocks = hasBlocks && entry.blocks ? (
     <div className="entry-blocks">
@@ -45,14 +46,24 @@ export function ChatMessage({
     <li
       data-role={entry.role}
       data-turn-anchor={turnAnchor ? "true" : undefined}
-      className={isUser ? "chat-message chat-message-user" : "chat-message chat-message-assistant"}
+      aria-live={isApplication ? "polite" : undefined}
+      className={
+        isUser
+          ? "chat-message chat-message-user"
+          : isApplication
+            ? "chat-message chat-message-application"
+            : "chat-message chat-message-assistant"
+      }
     >
-      <Flex align="baseline" gap={8} className="chat-message-meta">
+      <Flex align="baseline" gap={8} wrap className="chat-message-meta">
         {isUser ? null : (
           <Typography.Text type="secondary" className="chat-message-speaker">
             {speaker}
           </Typography.Text>
         )}
+        {isApplication ? (
+          <Typography.Text className="application-status">Still working</Typography.Text>
+        ) : null}
         {timeLabel ? (
           <Typography.Text type="secondary" className="chat-message-time">
             <time dateTime={entry.createdAt}>{timeLabel}</time>

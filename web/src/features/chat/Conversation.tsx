@@ -4,6 +4,7 @@ import type { HistoryEntry } from "../../state/sessionStore";
 import { AgentActivity } from "./AgentActivity";
 import type { AgentActivityState } from "./activityState";
 import { ChatMessage } from "./ChatMessage";
+import { orderConversationEntries } from "./conversationOrder";
 import { formatChatTime, statusLabel } from "./chatTime";
 
 const REPLY_SPACE_RATIO = 0.5;
@@ -48,9 +49,9 @@ export function Conversation({
   const [replySpace, setReplySpace] = useState(0);
   const placeholderEntry = entries.find((entry) => isStreamingPlaceholder(entry, sessionId));
   const suppressPlaceholder = activity.kind !== "idle" && placeholderEntry != null;
-  const visibleEntries = suppressPlaceholder
-    ? entries.filter((entry) => entry !== placeholderEntry)
-    : entries;
+  const visibleEntries = orderConversationEntries(
+    suppressPlaceholder ? entries.filter((entry) => entry !== placeholderEntry) : entries
+  );
   const lastUserIndex = lastUserEntryIndex(visibleEntries);
   const lastUserId = lastUserIndex >= 0 ? visibleEntries[lastUserIndex]?.entryId ?? null : null;
   const lastEntryId = visibleEntries.at(-1)?.entryId ?? null;

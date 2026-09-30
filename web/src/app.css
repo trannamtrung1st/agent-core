@@ -350,8 +350,20 @@ body,
 }
 
 .chat-message-assistant,
+.chat-message-application,
 .chat-message-empty {
   align-items: stretch;
+}
+
+.application-status {
+  font-size: 12px;
+}
+
+.chat-message-application .assistant-body,
+.chat-message-application .markdown-message {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .chat-message-meta {
@@ -1347,6 +1359,11 @@ body,
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;
+  }
+
+  .chat-message-application {
+    animation: none;
+    transition: none;
   }
 }
 

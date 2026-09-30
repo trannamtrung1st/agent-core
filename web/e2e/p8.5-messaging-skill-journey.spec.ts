@@ -29,6 +29,7 @@ async function saveDraft(page: Page, editor: Locator) {
 
 test("P8.5 sends one intermediate message, loads the missed skill, and keeps one answer", async ({ page }) => {
   test.setTimeout(300_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1280, height: 900 });
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
@@ -82,20 +83,42 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText(intermediate)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(answer)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Still working")).toBeVisible();
   await expect(page.locator('[data-role="applicationMessage"]')).toHaveCount(1);
   await expect(page.locator('[data-role="assistant"]')).toHaveCount(1);
   await expect(page.locator('[data-role="user"]')).toHaveCount(1);
+  await expect(page.getByText("app.message.send")).toHaveCount(0);
+  const roles = await page.locator(".conversation-list > li").evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-role"))
+  );
+  expect(roles).toEqual(["user", "applicationMessage", "assistant"]);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Open chats" })).toBeVisible();
   await expect(page.getByLabel("Message")).toBeVisible();
   await expect(page.getByText(intermediate)).toBeVisible();
-  await expect(page.getByText(answer)).toBeVisible();
+  const overflow = await page.evaluate(() => {
+    const message = document.querySelector('[data-role="applicationMessage"]');
+    const column = document.querySelector(".conversation-column");
+    return {
+      message: message instanceof HTMLElement && message.scrollWidth > message.clientWidth + 1,
+      column: column instanceof HTMLElement && column.scrollWidth > column.clientWidth + 1
+    };
+  });
+  expect(overflow).toEqual({ message: false, column: false });
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
   await expect(page.getByText(intermediate)).toHaveCount(1);
+  await expect(page.getByText("Still working")).toHaveCount(1);
   await expect(page.getByText(answer)).toHaveCount(1);
+  const motion = await page.locator('[data-role="applicationMessage"]').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { animationName: style.animationName, transitionDuration: style.transitionDuration };
+  });
+  expect(motion.animationName === "none" || motion.animationName === "").toBe(true);
+  expect(motion.transitionDuration === "0s" || motion.transitionDuration === "").toBe(true);
   await expect(page.locator('[data-role="applicationMessage"]')).toHaveCount(1);
   await expect(page.locator('[data-role="assistant"]')).toHaveCount(1);
   await expect(page.locator('[data-role="user"]')).toHaveCount(1);
