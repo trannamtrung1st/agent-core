@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Providers;
@@ -294,6 +295,8 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Equal(ModelRole.System, instruction.Role);
         Assert.StartsWith(AssistantResponseSchema.CompatibilityInstructionPrefix, instruction.Text, StringComparison.Ordinal);
         Assert.Contains("[[speech:", instruction.Text, StringComparison.Ordinal);
+        Assert.Contains("Complete with one chat.respond", instruction.Text, StringComparison.Ordinal);
+        Assert.Contains("Do not emit JSON", instruction.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("You are", instruction.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("examiner", instruction.Text, StringComparison.OrdinalIgnoreCase);
         Assert.True(instruction.Text.Length < 800);
@@ -417,6 +420,147 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Equal(ModelSpeechMode.None, ready.Speech.Mode);
         Assert.Null(ready.Speech.Text);
     }
+
+    [Fact]
+    public void Strict_schema_requires_agent_step_fields_and_rejects_extra_properties()
+    {
+        using var schema = System.Text.Json.JsonDocument.Parse(AssistantResponseSchema.JsonSchemaJson);
+        var root = schema.RootElement;
+        Assert.False(root.GetProperty("additionalProperties").GetBoolean());
+        var required = root.GetProperty("required").EnumerateArray().Select(item => item.GetString()!).ToArray();
+        Assert.Equal(
+            ["disposition", "action", "displayText", "speech", "blocks", "memory"],
+            required);
+        var properties = root.GetProperty("properties");
+        Assert.Equal(
+            ["Continue", "Wait", "Complete", "Blocked"],
+            properties.GetProperty("disposition").GetProperty("enum").EnumerateArray().Select(item => item.GetString()!).ToArray());
+        var action = properties.GetProperty("action");
+        var actionObject = action.GetProperty("anyOf").EnumerateArray()
+            .Single(item => item.TryGetProperty("type", out var type) && type.GetString() == "object");
+        Assert.False(actionObject.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(
+            "chat.respond",
+            actionObject.GetProperty("properties").GetProperty("kind").GetProperty("enum")[0].GetString());
+        Assert.Contains("disposition", AssistantResponseSchema.ResponseFunction.ParametersJson, StringComparison.Ordinal);
+        Assert.Equal(AssistantResponseSchema.JsonSchemaJson, AssistantResponseSchema.ResponseFunction.ParametersJson);
+        Assert.DoesNotContain("sessionId", AssistantResponseSchema.JsonSchemaJson, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Contract_complete_chat_respond_normalizes_one_chat_action(bool native)
+    {
+        var json = """
+            {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Shown","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}
+            """;
+        var ready = await ReadyAsync(json, native);
+        Assert.Equal("Complete", ready.Disposition);
+        Assert.Equal(AgentStepNormalizer.ChatRespondKind, ready.ActionKind);
+        Assert.True(ready.ActionSpecified);
+        var step = Step(ready);
+        Assert.Equal(AgentStepDisposition.Complete, step.Disposition);
+        var chat = Assert.IsType<ChatRespondAction>(Assert.Single(step.Actions));
+        Assert.Equal("Shown", chat.DisplayText);
+        Assert.False(AgentStepController.Decide(step).ScheduleAnotherGeneration);
+        Assert.True(AgentStepController.Decide(step).ExecuteChat);
+    }
+
+    [Theory]
+    [InlineData(true, "Wait")]
+    [InlineData(false, "Wait")]
+    [InlineData(true, "Blocked")]
+    [InlineData(false, "Blocked")]
+    public async Task Contract_return_control_dispositions_do_not_invent_chat(bool native, string disposition)
+    {
+        var json = $$"""
+            {"disposition":"{{disposition}}","action":null,"displayText":"","speech":{"mode":"none","text":null},"blocks":[],"memory":[]}
+            """;
+        var ready = await ReadyAsync(json, native);
+        Assert.Equal(disposition, ready.Disposition);
+        Assert.Null(ready.ActionKind);
+        Assert.True(ready.ActionSpecified);
+        var step = Step(ready);
+        Assert.Equal(Enum.Parse<AgentStepDisposition>(disposition), step.Disposition);
+        Assert.Empty(step.Actions);
+        var decision = AgentStepController.Decide(step);
+        Assert.False(decision.ExecuteChat);
+        Assert.False(decision.ScheduleAnotherGeneration);
+        Assert.False(decision.StageMemoryAfterChatSuccess);
+        Assert.Equal(
+            disposition == "Wait" ? AgentStepEffect.WaitForExternalInput : AgentStepEffect.BlockActivation,
+            decision.Effect);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Contract_invalid_action_is_invalid_response(bool native)
+    {
+        var json = """
+            {"disposition":"Complete","action":{"kind":"teams.reply"},"displayText":"Shown","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}
+            """;
+        var events = await CollectAsync(Channel(json, native), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderErrorCode.InvalidResponse, failed.Failure.Code);
+        Assert.Equal(ProviderFailureReason.UnknownAction, failed.Failure.FailureReason);
+        Assert.Equal(
+            native ? ProviderResponseChannel.StructuredOutput : ProviderResponseChannel.ResponseFunction,
+            failed.Failure.ResponseChannel);
+        Assert.DoesNotContain(events, item => item is ModelSemanticResponseReady or ModelDisplayDelta);
+        Assert.DoesNotContain("teams.reply", failed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Omitted_step_fields_default_to_complete_chat_respond()
+    {
+        var json = """{"displayText":"Shown","speech":{"mode":"same"},"blocks":[]}""";
+        var ready = await ReadyAsync(json, native: true);
+        Assert.Null(ready.Disposition);
+        Assert.Null(ready.ActionKind);
+        Assert.False(ready.ActionSpecified);
+        var step = Step(ready);
+        Assert.Equal(AgentStepDisposition.Complete, step.Disposition);
+        Assert.Equal("Shown", Assert.IsType<ChatRespondAction>(Assert.Single(step.Actions)).DisplayText);
+    }
+
+    [Fact]
+    public async Task Compatibility_plain_text_defaults_to_complete_chat_respond()
+    {
+        var inner = new ScriptedInner(
+            [new ModelTextDelta("Hello."), new ModelCompleted(ModelStopReason.Completed)]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Hello.", ready.DisplayText);
+        Assert.Null(ready.Disposition);
+        Assert.False(ready.ActionSpecified);
+        var step = Step(ready);
+        Assert.Equal(AgentStepDisposition.Complete, step.Disposition);
+        Assert.IsType<ChatRespondAction>(Assert.Single(step.Actions));
+        Assert.Contains("Complete with one chat.respond", inner.LastRequest!.Messages[^1].Text, StringComparison.Ordinal);
+    }
+
+    private static async Task<ModelSemanticResponse> ReadyAsync(string json, bool native)
+    {
+        var events = await CollectAsync(Channel(json, native), Contracted);
+        return Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+    }
+
+    private static SemanticResponseLanguageModel Channel(string json, bool native) =>
+        native
+            ? new SemanticResponseLanguageModel(new ScriptedInner(
+                [new ModelTextDelta(json), new ModelCompleted(ModelStopReason.Completed)],
+                structured: true))
+            : new SemanticResponseLanguageModel(new ScriptedInner(
+            [
+                new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ]));
+
+    private static AgentStep Step(ModelSemanticResponse response) =>
+        Assert.IsType<AgentStepAccepted>(
+            AgentStepNormalizer.Normalize(AgentStepNormalizer.FromSemanticResponse(response))).Step;
 
     private static async Task<List<ModelGenerationEvent>> CollectAsync(ILanguageModel model, ModelRequest request)
     {

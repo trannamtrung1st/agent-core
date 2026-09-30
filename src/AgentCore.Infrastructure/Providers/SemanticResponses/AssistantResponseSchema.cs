@@ -28,6 +28,7 @@ internal static class AssistantResponseSchema
             + "Use [[speech:none]] when the answer must stay visual-only. "
             + "Optional rich blocks use [[md:...]], [[attachment:<id>]], or [[artifact:<id>]]. "
             + "Do not include hidden reasoning. Do not emit JSON. "
+            + "This plain-text channel is Complete with one chat.respond. "
             + memory;
     }
 
@@ -35,7 +36,7 @@ internal static class AssistantResponseSchema
 
     public static ModelToolDefinition ResponseFunction { get; } = new(
         ResponseFunctionName,
-        "Submit the assistant response. Memory entries are proposals. This call does not save memory.",
+        "Submit one agent step for the current session. disposition is Continue, Wait, Complete, or Blocked. action is {\"kind\":\"chat.respond\"} or null. Continue does not start another generation. Memory entries are proposals. This call does not save memory and does not choose a destination.",
         JsonSchemaJson);
 
     public const string SchemaName = "agent_core_assistant_response";
@@ -44,11 +45,34 @@ internal static class AssistantResponseSchema
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["displayText", "speech", "blocks", "memory"],
+          "required": ["disposition", "action", "displayText", "speech", "blocks", "memory"],
           "properties": {
+            "disposition": {
+              "type": "string",
+              "enum": ["Continue", "Wait", "Complete", "Blocked"],
+              "description": "Continue delivers chat.respond once when that action is present and does not start another generation. Wait returns control and does not deliver Chat. Complete finishes this activation. Blocked means this activation cannot succeed."
+            },
+            "action": {
+              "description": "The single requested application action, or null when this step requests no effect. Only chat.respond is valid. Do not include a session, destination, profile, tenant, or recipient.",
+              "anyOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind"],
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["chat.respond"],
+                      "description": "Deliver displayText, speech, and blocks to the current session."
+                    }
+                  }
+                }
+              ]
+            },
             "displayText": {
               "type": "string",
-              "description": "Visible conversational answer shown to the user."
+              "description": "Visible conversational answer when action is chat.respond. Use an empty string when action is null."
             },
             "speech": {
               "type": "object",

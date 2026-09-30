@@ -7,6 +7,7 @@ using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -210,6 +211,48 @@ public sealed class SemanticCutoverRuntimeTests
         var completed = Assert.IsType<ResponseCompletedOutput>(terminal);
         Assert.False(completed.Failed);
         Assert.Equal("wait", completed.InterruptReason);
+    }
+
+    [Fact]
+    public async Task Structured_wait_json_returns_control_as_an_empty_interrupted_assistant()
+    {
+        var json = """
+            {"disposition":"Wait","action":null,"displayText":"","speech":{"mode":"none","text":null},"blocks":[],"memory":[]}
+            """;
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(
+            output,
+            new SemanticResponseLanguageModel(new NativeJsonLanguageModel(json, structured: true)));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Interrupted, assistant.Status);
+        Assert.Equal(string.Empty, assistant.Text);
+        Assert.Null(assistant.Envelope);
+        Assert.Null(assistant.Failure);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.False(completed.Failed);
+        Assert.Equal("wait", completed.InterruptReason);
+    }
+
+    [Fact]
+    public async Task Structured_complete_chat_json_delivers_one_assistant_response()
+    {
+        var json = """
+            {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Shown","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}
+            """;
+        await using var runtime = Create(
+            new CapturingSessionOutput(),
+            new SemanticResponseLanguageModel(new NativeJsonLanguageModel(json, structured: true)));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Shown", assistant.Text);
     }
 
     [Fact]

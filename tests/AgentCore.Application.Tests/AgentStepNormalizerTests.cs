@@ -39,6 +39,39 @@ public sealed class AgentStepNormalizerTests
     }
 
     [Fact]
+    public void Omitted_action_defaults_to_chat_respond_and_explicit_null_does_not()
+    {
+        var omitted = Assert.IsType<AgentStepAccepted>(
+            AgentStepNormalizer.Normalize(AgentStepNormalizer.FromSemanticResponse(Semantic("Shown"))));
+        Assert.Equal(AgentStepDisposition.Complete, omitted.Step.Disposition);
+        Assert.IsType<ChatRespondAction>(Assert.Single(omitted.Step.Actions));
+
+        var stated = new ModelSemanticResponse(
+            "Shown",
+            new ModelSpeechProjection(ModelSpeechMode.Same, null),
+            [],
+            Disposition: nameof(AgentStepDisposition.Continue),
+            ActionKind: AgentStepNormalizer.ChatRespondKind,
+            ActionSpecified: true);
+        var continued = Assert.IsType<AgentStepAccepted>(
+            AgentStepNormalizer.Normalize(AgentStepNormalizer.FromSemanticResponse(stated)));
+        Assert.Equal(AgentStepDisposition.Continue, continued.Step.Disposition);
+        Assert.IsType<ChatRespondAction>(Assert.Single(continued.Step.Actions));
+        Assert.False(AgentStepController.Decide(continued.Step).ScheduleAnotherGeneration);
+
+        var waiting = new ModelSemanticResponse(
+            string.Empty,
+            new ModelSpeechProjection(ModelSpeechMode.None, null),
+            [],
+            Disposition: nameof(AgentStepDisposition.Wait),
+            ActionSpecified: true);
+        var waited = Assert.IsType<AgentStepAccepted>(
+            AgentStepNormalizer.Normalize(AgentStepNormalizer.FromSemanticResponse(waiting)));
+        Assert.Equal(AgentStepDisposition.Wait, waited.Step.Disposition);
+        Assert.Empty(waited.Step.Actions);
+    }
+
+    [Fact]
     public void Empty_actions_are_a_valid_step_without_chat()
     {
         var accepted = Assert.IsType<AgentStepAccepted>(

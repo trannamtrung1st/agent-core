@@ -9,8 +9,17 @@ namespace AgentCore.Application.Execution;
 /// </summary>
 public enum AgentStepDisposition
 {
+    /// <summary>
+    /// Same Chat effect as <see cref="Complete"/> when a Chat action is present.
+    /// This does not schedule another generation. A later execution layer owns any real continuation.
+    /// </summary>
     Continue,
+
+    /// <summary>
+    /// Return control without Chat, memory admission, or a failure diagnostic.
+    /// </summary>
     Wait,
+
     Complete,
     Blocked
 }

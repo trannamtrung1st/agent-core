@@ -57,17 +57,22 @@ public static class AgentStepNormalizer
     public static AgentStepCandidate FromSemanticResponse(ModelSemanticResponse response)
     {
         ArgumentNullException.ThrowIfNull(response);
-        return new AgentStepCandidate(
-            string.IsNullOrWhiteSpace(response.Disposition)
-                ? nameof(AgentStepDisposition.Complete)
-                : response.Disposition,
+        var explicitNone = response.ActionSpecified && string.IsNullOrWhiteSpace(response.ActionKind);
+        IReadOnlyList<AgentActionCandidate> actions = explicitNone
+            ? []
+            :
             [
                 new AgentActionCandidate(
                     string.IsNullOrWhiteSpace(response.ActionKind) ? ChatRespondKind : response.ActionKind,
                     response.DisplayText ?? string.Empty,
                     response.Speech ?? new ModelSpeechProjection(ModelSpeechMode.Same, null),
                     response.Blocks ?? [])
-            ],
+            ];
+        return new AgentStepCandidate(
+            string.IsNullOrWhiteSpace(response.Disposition)
+                ? nameof(AgentStepDisposition.Complete)
+                : response.Disposition,
+            actions,
             response.Memory);
     }
 

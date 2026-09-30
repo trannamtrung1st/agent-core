@@ -95,13 +95,19 @@ public sealed record ModelResponseBlock(
     string? AttachmentId = null,
     string? ArtifactId = null);
 
+/// <summary>
+/// Provider-neutral assistant envelope. Omitted disposition and action are the compatibility
+/// shape. <see cref="ActionSpecified"/> with a null <see cref="ActionKind"/> is an explicit
+/// empty action list and must not be filled in as chat.respond.
+/// </summary>
 public sealed record ModelSemanticResponse(
     string DisplayText,
     ModelSpeechProjection Speech,
     IReadOnlyList<ModelResponseBlock> Blocks,
     IReadOnlyList<MemoryProposal>? Memory = null,
     string? Disposition = null,
-    string? ActionKind = null);
+    string? ActionKind = null,
+    bool ActionSpecified = false);
 
 /// <summary>
 /// Incremental visible conversational text for a request that carries <see cref="ModelResponseContract"/>.

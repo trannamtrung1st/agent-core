@@ -53,31 +53,18 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
-            if (!TryActionKind(root, out var actionKind, out failureReason))
+            if (!TryActionKind(root, out var actionKind, out var actionSpecified, out failureReason))
             {
                 return false;
             }
 
-            if (!root.TryGetProperty("displayText", out var displayEl) || displayEl.ValueKind != JsonValueKind.String)
+            var noAction = actionSpecified && string.IsNullOrWhiteSpace(actionKind);
+            if (!TryDisplay(root, noAction, out var display, out failureReason))
             {
-                failureReason = ProviderFailureReason.MissingDisplayText;
                 return false;
             }
 
-            var display = displayEl.GetString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(display))
-            {
-                failureReason = ProviderFailureReason.MissingDisplayText;
-                return false;
-            }
-
-            if (display.Length > AssistantResponseSchema.MaxDisplayCharacters)
-            {
-                failureReason = ProviderFailureReason.ResponseTooLarge;
-                return false;
-            }
-
-            if (!TrySpeech(root, out var speech, out failureReason))
+            if (!TrySpeech(root, noAction, out var speech, out failureReason))
             {
                 return false;
             }
@@ -92,7 +79,14 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
-            response = new ModelSemanticResponse(display, speech, blocks, memory, disposition, actionKind);
+            response = new ModelSemanticResponse(
+                display,
+                speech,
+                blocks,
+                memory,
+                disposition,
+                actionKind,
+                actionSpecified);
             failureReason = string.Empty;
             return true;
         }
@@ -158,21 +152,74 @@ internal static class NativeSemanticResponseParser
         return false;
     }
 
-    private static bool TryActionKind(JsonElement root, out string? actionKind, out string failureReason)
+    private static bool TryDisplay(JsonElement root, bool noAction, out string display, out string failureReason)
     {
-        actionKind = null;
-        failureReason = string.Empty;
-        string? single = null;
-        if (root.TryGetProperty("action", out var action))
+        display = string.Empty;
+        failureReason = ProviderFailureReason.MissingDisplayText;
+        if (!root.TryGetProperty("displayText", out var displayEl))
         {
-            if (!TryReadKind(action, out single, out failureReason))
+            return noAction;
+        }
+
+        if (displayEl.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        display = displayEl.GetString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(display))
+        {
+            display = string.Empty;
+            if (!noAction)
             {
                 return false;
+            }
+
+            failureReason = string.Empty;
+            return true;
+        }
+
+        if (display.Length > AssistantResponseSchema.MaxDisplayCharacters)
+        {
+            failureReason = ProviderFailureReason.ResponseTooLarge;
+            return false;
+        }
+
+        failureReason = string.Empty;
+        return true;
+    }
+
+    private static bool TryActionKind(
+        JsonElement root,
+        out string? actionKind,
+        out bool actionSpecified,
+        out string failureReason)
+    {
+        actionKind = null;
+        actionSpecified = false;
+        failureReason = string.Empty;
+        string? single = null;
+        var explicitNone = false;
+        if (root.TryGetProperty("action", out var action))
+        {
+            actionSpecified = true;
+            if (action.ValueKind == JsonValueKind.Null)
+            {
+                explicitNone = true;
+            }
+            else if (!TryReadKind(action, out single, out failureReason))
+            {
+                return false;
+            }
+            else if (single is null)
+            {
+                explicitNone = true;
             }
         }
 
         if (root.TryGetProperty("actions", out var actions))
         {
+            actionSpecified = true;
             if (actions.ValueKind != JsonValueKind.Array)
             {
                 failureReason = ProviderFailureReason.UnknownAction;
@@ -188,13 +235,19 @@ internal static class NativeSemanticResponseParser
                     return false;
                 }
 
-                if (single is not null && !string.Equals(single, kind, StringComparison.Ordinal))
+                if (kind is null)
+                {
+                    explicitNone = true;
+                }
+                else if (single is not null && !string.Equals(single, kind, StringComparison.Ordinal))
                 {
                     failureReason = ProviderFailureReason.UnknownAction;
                     return false;
                 }
-
-                single = kind;
+                else
+                {
+                    single = kind;
+                }
             }
 
             if (count > 1)
@@ -202,6 +255,17 @@ internal static class NativeSemanticResponseParser
                 failureReason = ProviderFailureReason.UnknownAction;
                 return false;
             }
+
+            if (count == 0 && single is null)
+            {
+                explicitNone = true;
+            }
+        }
+
+        if (explicitNone && single is not null)
+        {
+            failureReason = ProviderFailureReason.UnknownAction;
+            return false;
         }
 
         actionKind = single;
@@ -212,19 +276,31 @@ internal static class NativeSemanticResponseParser
     {
         kind = null;
         failureReason = ProviderFailureReason.UnknownAction;
+        if (action.ValueKind == JsonValueKind.Null)
+        {
+            failureReason = string.Empty;
+            return true;
+        }
+
         if (action.ValueKind == JsonValueKind.String)
         {
             kind = action.GetString();
         }
         else if (action.ValueKind == JsonValueKind.Object
             && action.TryGetProperty("kind", out var kindEl)
-            && kindEl.ValueKind == JsonValueKind.String)
+            && kindEl.ValueKind is JsonValueKind.String or JsonValueKind.Null)
         {
-            kind = kindEl.GetString();
+            kind = kindEl.ValueKind == JsonValueKind.Null ? null : kindEl.GetString();
         }
         else
         {
             return false;
+        }
+
+        if (kind is null)
+        {
+            failureReason = string.Empty;
+            return true;
         }
 
         if (!string.Equals(kind, "chat.respond", StringComparison.Ordinal))
@@ -273,11 +349,16 @@ internal static class NativeSemanticResponseParser
         return true;
     }
 
-    private static bool TrySpeech(JsonElement root, out ModelSpeechProjection speech, out string failureReason)
+    private static bool TrySpeech(JsonElement root, bool noAction, out ModelSpeechProjection speech, out string failureReason)
     {
-        speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
+        speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
         failureReason = ProviderFailureReason.InvalidSpeech;
-        if (!root.TryGetProperty("speech", out var speechEl) || speechEl.ValueKind != JsonValueKind.Object)
+        if (!root.TryGetProperty("speech", out var speechEl))
+        {
+            return noAction;
+        }
+
+        if (speechEl.ValueKind != JsonValueKind.Object)
         {
             return false;
         }

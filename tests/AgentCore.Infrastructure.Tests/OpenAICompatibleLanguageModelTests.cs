@@ -923,6 +923,9 @@ public sealed class OpenAICompatibleLanguageModelTests
         Assert.Contains("agent_core_assistant_response", handler.LastBody, StringComparison.Ordinal);
         Assert.Contains("\"strict\":true", handler.LastBody.Replace(" ", string.Empty), StringComparison.Ordinal);
         Assert.Contains("displayText", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("disposition", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("chat.respond", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("Blocked", handler.LastBody, StringComparison.Ordinal);
         Assert.Contains("attachmentReference", handler.LastBody, StringComparison.Ordinal);
         Assert.DoesNotContain("blockId", handler.LastBody, StringComparison.Ordinal);
         Assert.DoesNotContain("DisplayDelivered", handler.LastBody, StringComparison.Ordinal);

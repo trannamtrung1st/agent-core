@@ -2235,6 +2235,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private IReadOnlyList<string> ResolveActiveSkillIds(AgentTrigger trigger, Guid responseId)
     {
+        // Intentional P8 limit: only a user turn selects Skills. Other triggers stay inactive.
         if (trigger.Kind != TriggerKind.UserTurn)
         {
             return [];

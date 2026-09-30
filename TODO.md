@@ -59,7 +59,7 @@ Clients cannot supply trusted diagnostic, correlation, or causation identity. JS
 
 **P8 — Agent Execution Contract, Application Actions & Skills** is **frozen** on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). See `docs/reports/p8-freeze-candidate.md`.
 
-P9 follows. P10 and P11 stay requirement-triggered.
+P9 follows. A bounded post-freeze provider-contract correction is recorded under Next implementation item and does not move the P8 SHA. P10 and P11 stay requirement-triggered.
 
 ---
 
@@ -813,17 +813,15 @@ Orientation for what P8 can build on. Detail and gate history are in `/docs` and
 
 # Next implementation item
 
-**P8 — Agent Execution Contract, Application Actions & Skills.**
+**P9 — Harness / platform extensibility.**
 
-The detailed requirements, non-goals, and stop condition are in the P8 section above. This TODO does not mean implementation has started.
+P8 is frozen on `ca3eb23` (workflow [`36696902928`](https://github.com/trannamtrung1st/agent-core/actions/runs/36696902928) green). A bounded post-freeze provider-contract correction does not move that SHA. The strict schema and `agent_core_respond` now carry Agent Step `disposition` and `action`. Omitted fields and the plain-text channel still default to `Complete` plus `chat.respond`.
 
-Before implementation:
+Recorded limits, so P9 does not treat them as already general:
 
-- produce and review a bounded P8 proposal against that section;
-- preserve the frozen runtime, security, scheduling, and infrastructure invariants.
+- `Continue` delivers Chat when that action is present and does not schedule another generation.
+- Skill activation applies to user turns only.
+- `Wait` is stored as an empty interrupted assistant entry, and the user-turn execution commits as cancelled. Do not reuse that row as the general meaning of `Wait`.
+- `ChatActionAdmission` is the Chat seam. It is not yet a generic action-authorization framework.
 
-P9 harness and browser extensibility follows only after P8 is frozen.
-
-P10 and P11 remain requirement-triggered. Do not pull them forward for speculative P8 work.
-
-Do not begin P8 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith, and do not begin it with browser automation, a plugin framework, or an Application Binding platform.
+P10 and P11 remain requirement-triggered. Do not begin P9 by replacing SQLite, Docker, local storage, the single-process scheduler, or the modular monolith.
