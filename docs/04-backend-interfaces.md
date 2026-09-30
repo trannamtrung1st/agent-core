@@ -81,6 +81,25 @@ Exactly one terminal Completed/Failed event per successful enumeration, followed
 
 The Language Model reasons over normalized text messages only. ModelRequest has no vendor model ID. A trusted `IModelCatalog` exposes operator-configured descriptors (catalog key, display name, trusted provider alias, concrete model ID, capabilities including `StructuredOutput`, supported reasoning-effort values). `ILanguageModelResolver.Resolve(SessionModelSelection, ModelPurpose)` captures an immutable client for Conversation, Initiative, or CompletionEvaluation from the persisted session selection and copies trusted catalog `Tools`, `Vision`, and `StructuredOutput` onto cloned provider options and resolved `ModelCapabilities`. This P2D slice uses the session-selected model for all three purposes. Compaction reuses `ModelPurpose.Conversation`; it is not a separate provider port. Do not mutate singleton `LanguageModelProviderOptions` when a session changes model. Browser input never supplies provider alias, BaseUrl, ApiKey, or arbitrary provider JSON. Hidden provider reasoning fields are not spoken content and never become ModelTextDelta. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
+## Terminal Agent Step
+
+After Infrastructure emits `ModelSemanticResponse`, Application `AgentStepNormalizer` validates one terminal Agent Step before Chat delivery. The step is an Agent Core contract, not a provider DTO. `IAgentBrain` / `AgentDecision` (`StaySilent`, `Speak`, `RequestDeactivate`) stays the pre-generation decision and is not this step.
+
+```csharp
+public enum AgentStepDisposition { Continue, Wait, Complete, Blocked }
+public abstract record AgentAction;
+public sealed record ChatRespondAction(
+    string DisplayText, ModelSpeechProjection Speech, IReadOnlyList<ModelResponseBlock> Blocks) : AgentAction;
+public sealed record AgentStep(
+    AgentStepDisposition Disposition,
+    IReadOnlyList<AgentAction> Actions,
+    IReadOnlyList<MemoryProposal> MemoryProposals);
+```
+
+The current semantic envelope maps to disposition `Complete` and exactly one `chat.respond` action. Memory proposals are copied beside actions and are not actions. `chat.respond` is not a `ToolRegistry` entry and is not a fake `agentcore.wait`, `agentcore.complete`, or `agentcore.continue` tool. The action carries no session, profile, tenant, or recipient. A model-supplied `sessionId`, `destination`, `profileId`, `tenant`, or `recipient` rejects the whole step. Unknown disposition, unknown action, and malformed payload also reject the whole step as `ProviderErrorCode.InvalidResponse`, execute nothing, admit no memory, and use the existing diagnostic id path. Hidden reasoning is not a step field.
+
+`AgentStepController` chooses the effect and does not itself mutate Session lifecycle, WorkItem, approval, trigger registration, or memory. `Complete` or `Continue` with one Chat action delivers that action once and does not start another model generation. Zero Chat actions return control with no Chat effect and no memory admission. `Wait` executes no actions, admits no memory, and does not record a successful assistant completion. `Blocked` uses the existing safe failure path and diagnostic id, without executing Chat or admitting memory. Chat text, speech, and blocks still reach the user through `SemanticResponseMapper` until the Chat action path owns delivery.
+
 ## Independent speech ports
 
 ```csharp

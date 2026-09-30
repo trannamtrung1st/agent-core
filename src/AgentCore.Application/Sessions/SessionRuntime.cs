@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
 using AgentCore.Application.Events;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Interaction;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Models;
@@ -3656,6 +3657,62 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
+        var normalization = AgentStepNormalizer.Normalize(AgentStepNormalizer.FromSemanticResponse(semantic));
+        if (normalization is AgentStepRejected rejected)
+        {
+            RuntimeTelemetry.RecordAgentStep("rejected", "none", "none", rejected.Rejection.FailureReason, "none");
+            _logger.LogInformation(
+                "Agent step rejected {SessionId} {ResponseId} rejection {Rejection}",
+                SessionId,
+                responseId,
+                rejected.Rejection.FailureReason);
+            var failure = new ProviderFailure(
+                rejected.Rejection.Code,
+                "The response could not be completed.",
+                FailureReason: rejected.Rejection.FailureReason);
+            var reference = ReferenceForProvider(context, responseId, failure, existingId: null);
+            await FailSemanticReadyAsync(
+                    context,
+                    responseId,
+                    finalizingOperationId,
+                    reference,
+                    failure.SafeMessage,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var accepted = (AgentStepAccepted)normalization;
+        var decision = AgentStepController.Decide(accepted.Step);
+        var actionKind = decision.Chat is null ? "none" : AgentStepNormalizer.ChatRespondKind;
+        var executed = decision.ExecuteChat ? "chat" : "none";
+        RuntimeTelemetry.RecordAgentStep("accepted", accepted.Step.Disposition.ToString(), actionKind, "none", executed);
+        _logger.LogInformation(
+            "Agent step accepted {SessionId} {ResponseId} disposition {Disposition} action {ActionKind} executed {Executed}",
+            SessionId,
+            responseId,
+            accepted.Step.Disposition,
+            actionKind,
+            executed);
+        if (!decision.ExecuteChat || decision.Chat is null)
+        {
+            var code = decision.Effect switch
+            {
+                AgentStepEffect.BlockActivation => "Blocked",
+                AgentStepEffect.WaitForExternalInput => "Wait",
+                _ => "NoChatAction"
+            };
+            await FailSemanticReadyAsync(
+                    context,
+                    responseId,
+                    finalizingOperationId,
+                    ReferenceForResponse(context, responseId, code, exception: null),
+                    "The response could not be completed.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         ResponseEnvelope mapped;
         try
         {
@@ -3667,36 +3724,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         catch (ArgumentException ex)
         {
-            if (finalizingOperationId is { } failedOp)
-            {
-                await PublishProgressAsync(
-                        context,
-                        responseId,
-                        ResponseProgressKind.Finalizing,
-                        ResponseProgressState.Failed,
-                        failedOp,
-                        ResponseProgressMessages.Finalizing,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            _envelope = null;
-            _accumulator.Reset();
             var reference = ReferenceForResponse(context, responseId, "InvalidEnvelope", ex);
-            await CompleteAsync(
+            await FailSemanticReadyAsync(
                     context,
                     responseId,
-                    failed: true,
-                    cancellationToken,
+                    finalizingOperationId,
                     reference,
-                    "The response could not be completed.")
+                    "The response could not be completed.",
+                    cancellationToken)
                 .ConfigureAwait(false);
             return;
         }
 
         _semanticReady = true;
         _envelope = mapped;
-        StageMemoryProposals(semantic.Memory);
+        StageMemoryProposals(decision.StageMemoryAfterChatSuccess ? accepted.Step.MemoryProposals : null);
         _accumulator.Replace(mapped.DisplayText);
         if (finalizingOperationId is { } completedOp)
         {
@@ -3727,6 +3769,39 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             KickTts(context);
             await ReleaseClientSpeechAsync(context, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async Task FailSemanticReadyAsync(
+        EventContext context,
+        Guid responseId,
+        Guid? finalizingOperationId,
+        FailureReference? reference,
+        string safeMessage,
+        CancellationToken cancellationToken)
+    {
+        if (finalizingOperationId is { } failedOp)
+        {
+            await PublishProgressAsync(
+                    context,
+                    responseId,
+                    ResponseProgressKind.Finalizing,
+                    ResponseProgressState.Failed,
+                    failedOp,
+                    ResponseProgressMessages.Finalizing,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        _envelope = null;
+        _accumulator.Reset();
+        await CompleteAsync(
+                context,
+                responseId,
+                failed: true,
+                cancellationToken,
+                reference,
+                safeMessage)
+            .ConfigureAwait(false);
     }
 
     private bool AttachmentAllowed(string attachmentId)

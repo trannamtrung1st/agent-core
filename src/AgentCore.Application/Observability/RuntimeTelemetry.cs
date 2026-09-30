@@ -102,6 +102,23 @@ public static class RuntimeTelemetry
     }
 
     private static readonly Counter<long> WorkEvents = Meter.CreateCounter<long>("work_events");
+    private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
+
+    public static void RecordAgentStep(
+        string outcome,
+        string disposition,
+        string action,
+        string rejection,
+        string executed)
+    {
+        AgentSteps.Add(
+            1,
+            new KeyValuePair<string, object?>("outcome", outcome),
+            new KeyValuePair<string, object?>("disposition", disposition),
+            new KeyValuePair<string, object?>("action", action),
+            new KeyValuePair<string, object?>("rejection", rejection),
+            new KeyValuePair<string, object?>("executed", executed));
+    }
 
     public static void RecordWork(string outcome)
     {
