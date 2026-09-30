@@ -2191,6 +2191,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    private IReadOnlyList<string> ResolveActiveSkillIds(AgentTrigger trigger, Guid responseId)
+    {
+        if (trigger.Kind != TriggerKind.UserTurn)
+        {
+            return [];
+        }
+
+        if (_boundConversationExecution is { } execution && execution.ResponseId == responseId)
+        {
+            return execution.PinnedActiveSkillIds;
+        }
+
+        if (_turnExecutions is not null)
+        {
+            return [];
+        }
+
+        return DeterministicSkillSelector.SelectActiveIds(_snapshot.Definition, trigger.Text);
+    }
+
     private void LaunchBrain(
         EventContext cause,
         AgentTrigger trigger,
@@ -2266,7 +2286,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     LearnedMemories: learned,
                     Persona: _snapshot.PinnedPersona,
                     ScheduleConversation: _scheduleConversationContext,
-                    ScheduleDraft: _scheduleDraftContext);
+                    ScheduleDraft: _scheduleDraftContext,
+                    ActiveSkillIds: ResolveActiveSkillIds(trigger, responseId));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;

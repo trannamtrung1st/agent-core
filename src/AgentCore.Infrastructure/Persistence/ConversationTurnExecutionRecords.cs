@@ -49,4 +49,6 @@ public sealed class ConversationTurnExecutionRecord
     public long AcceptedAtUtc { get; set; }
 
     public long UpdatedAtUtc { get; set; }
+
+    public string? PinnedActiveSkillIdsJson { get; set; }
 }

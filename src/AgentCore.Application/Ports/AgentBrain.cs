@@ -49,7 +49,8 @@ public sealed record AgentContext(
     AgentIdentity? Persona = null,
     ScheduleConversationContext? ScheduleConversation = null,
     ScheduleDraftContext? ScheduleDraft = null,
-    bool DetachedExecution = false)
+    bool DetachedExecution = false,
+    IReadOnlyList<string>? ActiveSkillIds = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

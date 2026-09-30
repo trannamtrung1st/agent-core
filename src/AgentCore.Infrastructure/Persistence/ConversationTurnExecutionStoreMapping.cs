@@ -45,6 +45,9 @@ internal static class ConversationTurnExecutionStoreMapping
         row.CancellationRequestedAtUtc = Unix(item.CancellationRequestedAtUtc);
         row.AcceptedAtUtc = item.AcceptedAtUtc.ToUnixTimeMilliseconds();
         row.UpdatedAtUtc = item.UpdatedAtUtc.ToUnixTimeMilliseconds();
+        row.PinnedActiveSkillIdsJson = item.PinnedActiveSkillIds.Count == 0
+            ? null
+            : JsonSerializer.Serialize(item.PinnedActiveSkillIds, Json);
     }
 
     public static ConversationTurnExecution ToDomain(ConversationTurnExecutionRecord row)
@@ -64,6 +67,12 @@ internal static class ConversationTurnExecutionStoreMapping
                 Guid.Parse(row.ClaimGeneration),
                 DateTimeOffset.FromUnixTimeMilliseconds(claimed),
                 DateTimeOffset.FromUnixTimeMilliseconds(lease));
+        }
+
+        IReadOnlyList<string> pinnedSkills = [];
+        if (!string.IsNullOrWhiteSpace(row.PinnedActiveSkillIdsJson))
+        {
+            pinnedSkills = JsonSerializer.Deserialize<string[]>(row.PinnedActiveSkillIdsJson, Json) ?? [];
         }
 
         return ConversationTurnExecution.Restore(
@@ -87,7 +96,8 @@ internal static class ConversationTurnExecutionStoreMapping
                 ? DateTimeOffset.FromUnixTimeMilliseconds(cancelled)
                 : null,
             DateTimeOffset.FromUnixTimeMilliseconds(row.AcceptedAtUtc),
-            DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc));
+            DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc),
+            pinnedSkills);
     }
 
     public static Exception Map(Exception exception) =>

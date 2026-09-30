@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
 
@@ -15,6 +16,8 @@ public enum ConversationTurnExecutionStatus
 
 public sealed class ConversationTurnExecution
 {
+    private static readonly Regex SkillIdPattern = new("^[a-z][a-z0-9._]{0,63}$", RegexOptions.Compiled);
+
     private ConversationTurnExecution(
         Guid executionId,
         Guid sessionId,
@@ -34,7 +37,8 @@ public sealed class ConversationTurnExecution
         bool cancellationRequested,
         DateTimeOffset? cancellationRequestedAtUtc,
         DateTimeOffset acceptedAtUtc,
-        DateTimeOffset updatedAtUtc)
+        DateTimeOffset updatedAtUtc,
+        IReadOnlyList<string>? pinnedActiveSkillIds = null)
     {
         if (executionId == Guid.Empty)
         {
@@ -103,6 +107,7 @@ public sealed class ConversationTurnExecution
         CancellationRequestedAtUtc = cancellationRequestedAtUtc;
         AcceptedAtUtc = acceptedAtUtc;
         UpdatedAtUtc = updatedAtUtc;
+        PinnedActiveSkillIds = NormalizePinnedSkills(pinnedActiveSkillIds);
     }
 
     public Guid ExecutionId { get; }
@@ -143,6 +148,8 @@ public sealed class ConversationTurnExecution
 
     public DateTimeOffset UpdatedAtUtc { get; }
 
+    public IReadOnlyList<string> PinnedActiveSkillIds { get; }
+
     public bool IsOpen => Status is ConversationTurnExecutionStatus.Queued
         or ConversationTurnExecutionStatus.Running
         or ConversationTurnExecutionStatus.WaitingForApproval;
@@ -168,7 +175,8 @@ public sealed class ConversationTurnExecution
         bool cancellationRequested,
         DateTimeOffset? cancellationRequestedAtUtc,
         DateTimeOffset acceptedAtUtc,
-        DateTimeOffset updatedAtUtc) =>
+        DateTimeOffset updatedAtUtc,
+        IReadOnlyList<string>? pinnedActiveSkillIds = null) =>
         new(
             executionId,
             sessionId,
@@ -188,7 +196,8 @@ public sealed class ConversationTurnExecution
             cancellationRequested,
             cancellationRequestedAtUtc,
             acceptedAtUtc,
-            updatedAtUtc);
+            updatedAtUtc,
+            pinnedActiveSkillIds);
 
     public static ConversationTurnExecution AcceptNew(
         Guid executionId,
@@ -202,7 +211,8 @@ public sealed class ConversationTurnExecution
         int definitionVersion,
         AgentIdentity? pinnedPersona,
         WorkModelPin pinnedModel,
-        DateTimeOffset acceptedAtUtc) =>
+        DateTimeOffset acceptedAtUtc,
+        IReadOnlyList<string>? pinnedActiveSkillIds = null) =>
         new(
             executionId,
             sessionId,
@@ -222,7 +232,8 @@ public sealed class ConversationTurnExecution
             false,
             null,
             acceptedAtUtc,
-            acceptedAtUtc);
+            acceptedAtUtc,
+            pinnedActiveSkillIds);
 
     public ConversationTurnExecution WithClaim(WorkClaim claim, ConversationTurnExecutionStatus status, DateTimeOffset updatedAtUtc) =>
         new(
@@ -244,7 +255,8 @@ public sealed class ConversationTurnExecution
             CancellationRequested,
             CancellationRequestedAtUtc,
             AcceptedAtUtc,
-            updatedAtUtc);
+            updatedAtUtc,
+            PinnedActiveSkillIds);
 
     public ConversationTurnExecution WithAssistant(Guid assistantEntryId, DateTimeOffset updatedAtUtc) =>
         new(
@@ -266,7 +278,8 @@ public sealed class ConversationTurnExecution
             CancellationRequested,
             CancellationRequestedAtUtc,
             AcceptedAtUtc,
-            updatedAtUtc);
+            updatedAtUtc,
+            PinnedActiveSkillIds);
 
     public ConversationTurnExecution WithStatus(
         ConversationTurnExecutionStatus status,
@@ -291,7 +304,8 @@ public sealed class ConversationTurnExecution
             CancellationRequested,
             CancellationRequestedAtUtc,
             AcceptedAtUtc,
-            updatedAtUtc);
+            updatedAtUtc,
+            PinnedActiveSkillIds);
 
     public ConversationTurnExecution WithCancellationRequested(DateTimeOffset requestedAtUtc) =>
         new(
@@ -313,7 +327,8 @@ public sealed class ConversationTurnExecution
             true,
             requestedAtUtc,
             AcceptedAtUtc,
-            requestedAtUtc);
+            requestedAtUtc,
+            PinnedActiveSkillIds);
 
     public ConversationTurnExecution TakeClaim(Guid generation, DateTimeOffset claimedAtUtc, DateTimeOffset leaseExpiresAtUtc)
     {
@@ -413,6 +428,24 @@ public sealed class ConversationTurnExecution
             CancellationRequested,
             CancellationRequestedAtUtc,
             AcceptedAtUtc,
-            updatedAtUtc);
+            updatedAtUtc,
+            PinnedActiveSkillIds);
+    }
+
+    private static IReadOnlyList<string> NormalizePinnedSkills(IReadOnlyList<string>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        if (ids.Count > 3
+            || ids.Distinct(StringComparer.Ordinal).Count() != ids.Count
+            || ids.Any(id => string.IsNullOrWhiteSpace(id) || !SkillIdPattern.IsMatch(id)))
+        {
+            throw new ArgumentException("Pinned active skill ids are invalid.");
+        }
+
+        return ids.ToArray();
     }
 }

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Memory;
+using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
@@ -71,6 +72,12 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             new(ModelRole.System, sections.ModeSystem),
             new(ModelRole.System, sections.MemorySystem)
         };
+        var skills = BuildActiveSkillSystem(context.Definition, context.ActiveSkillIds);
+        if (skills.Length > 0)
+        {
+            messages.Add(new ModelMessage(ModelRole.System, skills));
+        }
+
         var learned = SessionMemoryPrompt.Render(context.LearnedMemories);
         if (learned.Length > 0)
         {
@@ -409,6 +416,36 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             "Do not access the Agent Core repository, secrets, or other sessions.",
             "Tool and path permission is runtime-enforced and is not granted by model text."
         ]);
+    }
+
+    public static string BuildActiveSkillSystem(AgentDefinition definition, IReadOnlyList<string>? activeIds)
+    {
+        if (activeIds is null || activeIds.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var procedures = new List<string>();
+        foreach (var id in activeIds)
+        {
+            var skill = definition.SkillList.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            if (skill is null)
+            {
+                continue;
+            }
+
+            procedures.Add($"Skill {skill.Id} ({skill.Name}):\n{skill.Procedure}");
+        }
+
+        if (procedures.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        RuntimeTelemetry.RecordActiveSkills(procedures.Count);
+        return
+            "Active skill procedures apply to this turn. Required capabilities are requirements and do not grant tools, credentials, or approval.\n\n"
+            + string.Join("\n\n", procedures);
     }
 
     public static string BuildMemoryCapability(MemoryPolicy? policy, bool reliableProposalChannel = false)

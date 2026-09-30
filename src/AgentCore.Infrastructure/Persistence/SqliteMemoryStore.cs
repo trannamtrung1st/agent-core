@@ -1277,7 +1277,18 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        if (await ColumnExistsAsync(connection, "ConversationTurnExecutions", "PinnedActiveSkillIdsJson", cancellationToken)
+            .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260930065327_P8PinnedActiveSkillIds', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
         }
+    }
 
     private static async Task RepairEnsureCreatedP7SchemaGapsAsync(
         AgentCoreDbContext db,
@@ -1703,9 +1714,11 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         System.Data.Common.DbConnection connection,
         string table,
         ColumnSpec[] expected,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        bool allowAdditionalColumns = false) =>
         await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false)
-        && await ColumnsMatchAsync(connection, table, expected, cancellationToken).ConfigureAwait(false);
+        && await ColumnsMatchAsync(connection, table, expected, cancellationToken, allowAdditionalColumns)
+            .ConfigureAwait(false);
 
     private static async Task<bool> HasP7DefinitionLifecycleSchemaAsync(
         System.Data.Common.DbConnection connection,
@@ -1821,7 +1834,9 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             connection,
             "ConversationTurnExecutions",
             P7ConversationTurnExecutionColumns,
-            cancellationToken).ConfigureAwait(false)
+            cancellationToken,
+            // Later additive migrations, including the active-skill pin, stay outside this stamp.
+            allowAdditionalColumns: true).ConfigureAwait(false)
         && await HasIndexAsync(
             connection,
             "ConversationTurnExecutions",
@@ -2025,7 +2040,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         System.Data.Common.DbConnection connection,
         string table,
         ColumnSpec[] expected,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowAdditionalColumns = false)
     {
         await using var info = connection.CreateCommand();
         info.CommandText = $"PRAGMA table_info(\"{table}\");";
@@ -2051,7 +2067,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             }
         }
 
-        return found.Count == expected.Length;
+        return allowAdditionalColumns || found.Count == expected.Length;
     }
 
     private static async Task<bool> HasForeignKeyAsync(

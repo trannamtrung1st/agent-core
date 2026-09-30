@@ -1,3 +1,4 @@
+using AgentCore.Application.Agents;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Work;
@@ -36,6 +37,7 @@ public static class ConversationTurnExecutionFactory
             definition.Version,
             snapshot.PinnedPersona,
             pin,
-            acceptedAtUtc);
+            acceptedAtUtc,
+            DeterministicSkillSelector.SelectActiveIds(definition, userEntry.Text));
     }
 }
