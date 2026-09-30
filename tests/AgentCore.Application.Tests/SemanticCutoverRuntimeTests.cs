@@ -194,14 +194,36 @@ public sealed class SemanticCutoverRuntimeTests
     [Fact]
     public async Task Wait_disposition_does_not_complete_the_assistant_successfully()
     {
-        await using var runtime = Create(new CapturingSessionOutput(), new DispositionLanguageModel("Wait"));
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new DispositionLanguageModel("Wait"));
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Interrupted, assistant.Status);
+        Assert.NotEqual(EntryStatus.Completed, assistant.Status);
+        Assert.Null(assistant.Envelope);
+        Assert.Null(assistant.Failure);
+        Assert.Equal(string.Empty, assistant.Text);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+        var terminal = Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload;
+        var completed = Assert.IsType<ResponseCompletedOutput>(terminal);
+        Assert.False(completed.Failed);
+        Assert.Equal("wait", completed.InterruptReason);
+    }
+
+    [Fact]
+    public async Task Blocked_disposition_uses_the_failure_path()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new DispositionLanguageModel("Blocked"));
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.Equal(EntryStatus.Failed, assistant.Status);
-        Assert.Null(assistant.Envelope);
-        Assert.NotEqual(EntryStatus.Completed, assistant.Status);
+        Assert.NotNull(assistant.Failure);
+        Assert.Contains(output.Items, item => item.Payload is ErrorOutput);
     }
 
     [Fact]

@@ -3703,19 +3703,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 accepted.Step.Disposition,
                 actionKind,
                 "none");
-            var code = decision.Effect switch
+            if (decision.Effect == AgentStepEffect.BlockActivation)
             {
-                AgentStepEffect.BlockActivation => "Blocked",
-                AgentStepEffect.WaitForExternalInput => "Wait",
-                _ => "NoChatAction"
-            };
-            await FailSemanticReadyAsync(
-                    context,
-                    responseId,
-                    finalizingOperationId,
-                    ReferenceForResponse(context, responseId, code, exception: null),
-                    "The response could not be completed.",
-                    cancellationToken)
+                await FailSemanticReadyAsync(
+                        context,
+                        responseId,
+                        finalizingOperationId,
+                        ReferenceForResponse(context, responseId, "Blocked", exception: null),
+                        "The response could not be completed.",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            await ReturnWithoutChatAsync(context, responseId, finalizingOperationId, cancellationToken)
                 .ConfigureAwait(false);
             return;
         }
@@ -3834,6 +3835,106 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             EpochMatches: true,
             ResponseMatches: _activeResponseId == responseId,
             AlreadyAccepted: false);
+
+    private async Task ReturnWithoutChatAsync(
+        EventContext context,
+        Guid responseId,
+        Guid? finalizingOperationId,
+        CancellationToken cancellationToken)
+    {
+        if (finalizingOperationId is { } failedOp)
+        {
+            await PublishProgressAsync(
+                    context,
+                    responseId,
+                    ResponseProgressKind.Finalizing,
+                    ResponseProgressState.Failed,
+                    failedOp,
+                    ResponseProgressMessages.Finalizing,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        DiscardStagedMemory();
+        _envelope = null;
+        _accumulator.Reset();
+        _semanticReady = false;
+        _chatAcceptedTimestamp = 0;
+        ClearAssistantWithoutChat();
+        _responseTerminal = true;
+        _responseLifecycle = ResponseLifecycle.Superseded;
+        _initiativeHeld = false;
+        await FinishOwnedProgressAsync(
+                context,
+                ResponseProgressState.Completed,
+                cancellationToken,
+                responseId)
+            .ConfigureAwait(false);
+        await PublishOutputIdleAsync(context, cancellationToken).ConfigureAwait(false);
+        var capturedResponseId = responseId;
+        var capturedEntryId = _activeEntryId;
+        var heard = CurrentHeard();
+        var userTerminal = _activeResponseTriggerKind == TriggerKind.UserTurn;
+        if (userTerminal)
+        {
+            MarkConversationExecutionPendingTerminal();
+        }
+
+        RequestPersist(
+            _snapshot,
+            userConversationTerminal: userTerminal,
+            then: async ct =>
+            {
+                if (userTerminal)
+                {
+                    await FinalizeConversationExecutionAfterPersistAsync(_snapshot, ct).ConfigureAwait(false);
+                }
+
+                var stillOwns = _activeResponseId == capturedResponseId && _activeEntryId == capturedEntryId;
+                if (stillOwns)
+                {
+                    await PublishAsync(
+                            new SessionOutput(
+                                context,
+                                capturedResponseId,
+                                new ResponseCompletedOutput(
+                                    false,
+                                    HeardTextEndExclusive: heard,
+                                    InterruptReason: "wait")),
+                            ct)
+                        .ConfigureAwait(false);
+                }
+
+                if (_activeResponseId == capturedResponseId)
+                {
+                    ClearActive();
+                    await AfterResponseTerminalizedAsync(context, ct).ConfigureAwait(false);
+                }
+            });
+    }
+
+    private void ClearAssistantWithoutChat()
+    {
+        if (_activeEntryId is not { } entryId)
+        {
+            return;
+        }
+
+        var entries = _snapshot.Entries.Select(entry =>
+                entry.EntryId == entryId
+                    ? entry with
+                    {
+                        Text = string.Empty,
+                        Status = EntryStatus.Interrupted,
+                        Envelope = null,
+                        FinishReason = null,
+                        InterruptReason = null,
+                        Failure = null
+                    }
+                    : entry)
+            .ToArray();
+        _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
+    }
 
     private async Task FailSemanticReadyAsync(
         EventContext context,
@@ -5180,9 +5281,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 Status = current.Status == EntryStatus.Streaming ? current.Status : durable.Status,
                 ReceivedTextEndExclusive = Math.Max(durable.ReceivedTextEndExclusive, current.ReceivedTextEndExclusive),
                 HeardTextEndExclusive = Math.Max(durable.HeardTextEndExclusive, current.HeardTextEndExclusive),
-                Envelope = current.Status == EntryStatus.Failed
-                    ? current.Envelope
-                    : ResponseEnvelopeParser.MergeDelivery(durable.Envelope, current.Envelope)
+                Envelope = current.Envelope is null && durable.Envelope is null
+                    ? null
+                    : current.Status == EntryStatus.Failed
+                        ? current.Envelope
+                        : ResponseEnvelopeParser.MergeDelivery(durable.Envelope, current.Envelope)
             };
         }
 
