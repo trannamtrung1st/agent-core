@@ -52,7 +52,7 @@ public sealed class SkillActivationTests
         Assert.Contains("REFUND_PROCEDURE", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ORDER_PROCEDURE", text, StringComparison.Ordinal);
         Assert.Equal(
-            [ToolCatalog.WorkspaceRead, ToolCatalog.SkillsLoad],
+            [ToolCatalog.WorkspaceRead, ToolCatalog.AppMessageSend, ToolCatalog.SkillsLoad],
             new PromptContextBuilder().OfferTools(definition, Context(definition, ["refund.handle"])).Select(tool => tool.Name).ToArray());
     }
 

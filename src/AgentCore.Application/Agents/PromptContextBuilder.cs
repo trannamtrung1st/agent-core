@@ -746,7 +746,7 @@ public sealed class PromptContextBuilder(IToolConfigurationGate? configurationGa
             : [];
         var currentIds = currentBatch.Select(entry => entry.EntryId).ToHashSet();
         var eligible = history
-            .Where(entry => entry.Status != EntryStatus.Streaming)
+            .Where(entry => entry.IsPromptTurn && entry.Status != EntryStatus.Streaming)
             .Select(entry => (entry, text: entry.Role == ConversationRole.Assistant
                 ? EligibleAssistantText(entry)
                 : entry.Text))

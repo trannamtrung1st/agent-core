@@ -908,6 +908,46 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
+    public async Task Application_message_effect_key_survives_sqlite_reopen()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-core-app-message-{Guid.NewGuid():N}.db");
+        var entryId = Guid.Parse("019944af-00ee-7000-8000-0000000000f1");
+        var responseId = Guid.Parse("019944af-00ee-7000-8000-0000000000f2");
+        const string text = "Still checking the order";
+        const string effectKey = "v1:019944af00ee70008000000000000f2:m1";
+        var entry = new ConversationEntry(
+            entryId,
+            1,
+            null,
+            ConversationRole.ApplicationMessage,
+            text,
+            responseId,
+            EntryStatus.Completed,
+            SessionMode.Text,
+            0,
+            text.Length,
+            new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero),
+            ApplicationMessageEffectKey: effectKey);
+        var first = First() with { Entries = [entry] };
+        await using (var opened = OpenSqlite(path, deleteOnDispose: false))
+        {
+            await opened.Store.EnsureCreatedAsync();
+            await opened.Store.SaveAsync(first, 0);
+        }
+
+        await using var reopened = OpenSqlite(path, deleteOnDispose: true);
+        await reopened.Store.EnsureCreatedAsync();
+        var loaded = Assert.Single((await reopened.Store.LoadAsync(first.SessionId))!.Entries);
+        Assert.Equal(ConversationRole.ApplicationMessage, loaded.Role);
+        Assert.Equal(text, loaded.Text);
+        Assert.Equal(effectKey, loaded.ApplicationMessageEffectKey);
+        Assert.Equal(0, loaded.HeardTextEndExclusive);
+        Assert.Equal(text.Length, loaded.ReceivedTextEndExclusive);
+        Assert.Null(loaded.Envelope);
+        Assert.Null(loaded.Failure);
+    }
+
+    [Fact]
     public async Task Envelope_and_block_delivery_round_trip_sqlite()
     {
         await using var harness = await SqliteAsync();

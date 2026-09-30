@@ -83,6 +83,8 @@ public sealed class EntryRecord
     public string? FailureReferenceJson { get; set; }
     public string? AttachmentRefsJson { get; set; }
     public string? SourceAdmissionFingerprint { get; set; }
+
+    public string? ApplicationMessageEffectKey { get; set; }
     public string? FinishReason { get; set; }
     public string? InterruptReason { get; set; }
     public string? ModelCatalogKey { get; set; }
@@ -245,6 +247,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.SessionId, row.SourceEventId })
                 .IsUnique()
                 .HasFilter("SourceEventId IS NOT NULL");
+            entity.Property(row => row.ApplicationMessageEffectKey).HasMaxLength(200);
         });
         modelBuilder.Entity<ProfileRecord>(entity =>
         {

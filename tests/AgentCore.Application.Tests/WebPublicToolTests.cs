@@ -20,8 +20,8 @@ public sealed class WebPublicToolTests
         var support = SampleDefinitions.Support;
         var context = Context(generalV2, modelSupportsTools: true);
 
-        Assert.Empty(ToolCatalog.For(generalV1, context, gate).Select(tool => tool.Name));
-        Assert.Empty(ToolCatalog.For(support, context, gate).Select(tool => tool.Name));
+        Assert.Equal([ToolCatalog.AppMessageSend], ToolCatalog.For(generalV1, context, gate).Select(tool => tool.Name));
+        Assert.Equal([ToolCatalog.AppMessageSend], ToolCatalog.For(support, context, gate).Select(tool => tool.Name));
         var offered = ToolCatalog.For(generalV2, context, gate).Select(tool => tool.Name).ToArray();
         Assert.Contains(ToolCatalog.WebSearch, offered);
         Assert.Contains(ToolCatalog.WebFetch, offered);

@@ -105,6 +105,12 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> AgentSteps = Meter.CreateCounter<long>("agent_steps");
     private static readonly Counter<long> ActiveSkills = Meter.CreateCounter<long>("active_skills");
     private static readonly Counter<long> SkillLoads = Meter.CreateCounter<long>("skill_loads");
+    private static readonly Counter<long> ApplicationMessages = Meter.CreateCounter<long>("application_messages");
+
+    public static void RecordApplicationMessage(string outcome)
+    {
+        ApplicationMessages.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    }
 
     public static void RecordSkillLoad(string outcome)
     {

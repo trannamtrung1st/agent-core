@@ -34,6 +34,11 @@ public static class CompactionSourceSelector
         var stable = new List<ConversationEntry>();
         foreach (var entry in page)
         {
+            if (entry.Role == ConversationRole.ApplicationMessage)
+            {
+                continue;
+            }
+
             if (!IsDurable(entry, excluded))
             {
                 break;

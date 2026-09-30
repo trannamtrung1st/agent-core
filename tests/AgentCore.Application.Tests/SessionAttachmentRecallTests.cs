@@ -286,7 +286,10 @@ public sealed class SessionAttachmentRecallTests
             ]);
         var environment = new PromptContextBuilder().BuildSections(context).EnvironmentSystem;
         Assert.Contains("Role tools: (none).", environment, StringComparison.Ordinal);
-        Assert.Contains("Effective tools this request: attachments.read.", environment, StringComparison.Ordinal);
+        Assert.Contains(
+            "Effective tools this request: attachments.read, app.message.send.",
+            environment,
+            StringComparison.Ordinal);
     }
 
     [Fact]

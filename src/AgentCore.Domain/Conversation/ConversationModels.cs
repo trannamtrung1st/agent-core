@@ -3,7 +3,7 @@ using AgentCore.Domain.Diagnostics;
 
 namespace AgentCore.Domain.Conversation;
 
-public enum ConversationRole { User, Assistant }
+public enum ConversationRole { User, Assistant, ApplicationMessage }
 
 public enum EntryStatus { Streaming, Completed, Interrupted, Failed }
 
@@ -34,7 +34,57 @@ public sealed record ConversationEntry(
     string? FinishReason = null,
     string? InterruptReason = null,
     ModelGenerationProvenance? ModelProvenance = null,
-    FailureReference? Failure = null);
+    FailureReference? Failure = null,
+    string? ApplicationMessageEffectKey = null)
+{
+    public bool IsPromptTurn
+    {
+        get
+        {
+            _ = _applicationMessageChecked;
+            return Role is ConversationRole.User or ConversationRole.Assistant;
+        }
+    }
+
+    private readonly bool _applicationMessageChecked = CheckApplicationMessage(
+        Role,
+        ApplicationMessageEffectKey,
+        Envelope,
+        Attachments,
+        Failure,
+        SourceAdmissionFingerprint);
+
+    private static bool CheckApplicationMessage(
+        ConversationRole role,
+        string? effectKey,
+        ResponseEnvelope? envelope,
+        IReadOnlyList<ConversationAttachmentRef>? attachments,
+        FailureReference? failure,
+        string? sourceAdmissionFingerprint)
+    {
+        if (role == ConversationRole.ApplicationMessage)
+        {
+            if (string.IsNullOrWhiteSpace(effectKey) || effectKey.Length > 200)
+            {
+                throw new ArgumentException("Application message effect key is required.", nameof(effectKey));
+            }
+
+            if (envelope is not null
+                || attachments is { Count: > 0 }
+                || failure is not null
+                || !string.IsNullOrEmpty(sourceAdmissionFingerprint))
+            {
+                throw new ArgumentException("Application messages store visible text only.");
+            }
+        }
+        else if (effectKey is not null)
+        {
+            throw new ArgumentException("Effect keys belong only on application messages.", nameof(effectKey));
+        }
+
+        return true;
+    }
+}
 
 public sealed record UserProfile(
     Guid ProfileId,

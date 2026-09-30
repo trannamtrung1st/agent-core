@@ -26,7 +26,8 @@ public static class RolePermissions
 
         var normalized = tool.Trim();
         if (string.Equals(normalized, ToolCatalog.AttachmentsRead, StringComparison.Ordinal)
-            || string.Equals(normalized, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+            || string.Equals(normalized, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
+            || string.Equals(normalized, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
         {
             return true;
         }

@@ -2675,7 +2675,7 @@ public static class SessionEventMapper
             ["entryId"] = entry.EntryId.ToString(),
             ["sequence"] = entry.Sequence,
             ["sourceEventId"] = entry.SourceEventId?.ToString(),
-            ["role"] = entry.Role == ConversationRole.User ? "user" : "assistant",
+            ["role"] = HttpMapping.ToHistoryRole(entry.Role),
             ["text"] = entry.Text,
             ["responseId"] = entry.ResponseId?.ToString(),
             ["status"] = HttpMapping.ToEntryStatus(entry.Status),

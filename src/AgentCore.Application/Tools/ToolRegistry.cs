@@ -148,6 +148,14 @@ public static class ToolRegistry
                 "Update a durable schedule owned by the current user. Requires authorization from the current user turn and expectedRevision. Scheduling does not approve any future tool. Do not send a property named revision.",
                 """{"type":"object","properties":{"registrationId":{"type":"string"},"expectedRevision":{"type":"integer"},"intent":{"type":"string"},"kind":{"type":"string"},"intervalSeconds":{"type":"integer"},"interval":{"type":"integer"},"localTime":{"type":"string"},"timeZone":{"type":"string"},"weekdays":{"type":"array","items":{"type":"string"}},"relativeDelaySeconds":{"type":"integer"},"relativeDayOffset":{"type":"integer"},"localDate":{"type":"string"},"atUtc":{"type":"string"},"startDate":{"type":"string"},"endDate":{"type":"string"},"endAtUtc":{"type":"string"},"maxOccurrences":{"type":"integer"}},"required":["registrationId","expectedRevision"]}""",
                 ToolEffect.Write),
+            [ToolCatalog.AppMessageSend] = Descriptor(
+                ToolCatalog.AppMessageSend,
+                "Send one short user-visible message to the current chat while this turn is still in progress. The runtime chooses the destination. Do not include a session, recipient, or channel.",
+                """{"type":"object","additionalProperties":false,"properties":{"text":{"type":"string","minLength":1,"maxLength":2000}},"required":["text"]}""",
+                ToolEffect.Write,
+                ToolOfferRule.CurrentExecutionCapability,
+                ToolResourceScope.Session,
+                ToolReplaySafety.NonReplayable),
             [ToolCatalog.SkillsLoad] = Descriptor(
                 ToolCatalog.SkillsLoad,
                 "Load procedures for Skill ids from the pinned definition version. Required capabilities stay requirements and do not grant tools, credentials, or approval.",

@@ -112,6 +112,13 @@ public static partial class HttpMapping
             record.WorkspaceLogicalPath,
             Format(record.CreatedAt));
 
+    public static string ToHistoryRole(ConversationRole role) => role switch
+    {
+        ConversationRole.User => "user",
+        ConversationRole.ApplicationMessage => "applicationMessage",
+        _ => "assistant"
+    };
+
     public static HistoryItemResponse ToHistoryItem(ConversationEntry entry)
     {
         var projected = PublicHistory.FromEntry(entry);
@@ -119,7 +126,7 @@ public static partial class HttpMapping
             projected.EntryId.ToString(),
             projected.Sequence,
             projected.SourceEventId?.ToString(),
-            projected.Role == ConversationRole.User ? "user" : "assistant",
+            ToHistoryRole(projected.Role),
             projected.Text,
             projected.ResponseId?.ToString(),
             ToEntryStatus(projected.Status),

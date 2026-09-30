@@ -56,6 +56,14 @@ public sealed record AttachmentsProcessedReceived(
     IReadOnlyList<AttachmentProcessResult> Results,
     bool Failed = false) : SessionInput(Context);
 
+public sealed record ApplicationMessageRequested(
+    EventContext Context,
+    Guid ResponseId,
+    Guid Epoch,
+    string ToolCallId,
+    string ArgumentsJson,
+    TaskCompletionSource<ApplicationMessageMailboxResult> Completed) : SessionInput(Context);
+
 public sealed record SkillLoadRequested(
     EventContext Context,
     Guid ResponseId,

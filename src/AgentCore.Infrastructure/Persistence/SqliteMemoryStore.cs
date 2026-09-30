@@ -840,7 +840,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.DeliveryMode == entry.DeliveryMode.ToString()
         && row.ResponseId == entry.ResponseId?.ToString("D")
         && row.SourceEventId == entry.SourceEventId?.ToString("D")
-        && row.EntrySequence == entry.Sequence;
+        && row.EntrySequence == entry.Sequence
+        && row.ApplicationMessageEffectKey == entry.ApplicationMessageEffectKey;
 
     private static void ApplySession(SessionRecord row, SessionSnapshot snapshot)
     {
@@ -929,6 +930,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.EnvelopeJson = SerializeEnvelope(entry.Envelope);
         row.AttachmentRefsJson = SerializeAttachmentRefs(entry.Attachments);
         row.SourceAdmissionFingerprint = entry.SourceAdmissionFingerprint;
+        row.ApplicationMessageEffectKey = entry.ApplicationMessageEffectKey;
         row.FinishReason = entry.FinishReason;
         row.InterruptReason = entry.InterruptReason;
         row.FailureReferenceJson = FailureReferenceJson.Serialize(entry.Failure);
@@ -1002,7 +1004,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.FinishReason,
             row.InterruptReason,
             ReadModelProvenance(row),
-            FailureReferenceJson.Deserialize(row.FailureReferenceJson));
+            FailureReferenceJson.Deserialize(row.FailureReferenceJson),
+            row.ApplicationMessageEffectKey);
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }
@@ -1296,6 +1299,17 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
                 """
                 INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
                 VALUES ('20260930174851_P85SkillLoadCount', '10.0.12');
+                """,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await ColumnExistsAsync(connection, "ConversationEntries", "ApplicationMessageEffectKey", cancellationToken)
+            .ConfigureAwait(false))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('20260930181733_P85ApplicationMessageEffectKey', '10.0.12');
                 """,
                 cancellationToken).ConfigureAwait(false);
         }

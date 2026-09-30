@@ -32,6 +32,7 @@ public static class ToolCatalog
     public const string TriggerUpdate = "trigger.update";
     public const string TriggerCancel = "trigger.cancel";
     public const string SkillsLoad = "skills.load";
+    public const string AppMessageSend = "app.message.send";
 
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,

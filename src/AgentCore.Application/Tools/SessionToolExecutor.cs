@@ -62,7 +62,8 @@ public sealed partial class SessionToolExecutor(
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+        if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
+            || string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
         {
             return TextResult(Error("forbidden", "Tool effect is owned by the session runtime."));
         }

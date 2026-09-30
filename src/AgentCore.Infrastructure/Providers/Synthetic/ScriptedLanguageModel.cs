@@ -845,7 +845,10 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     }
 
     private static bool HasSessionTools(ModelRequest request) =>
-        request.Tools?.Any(tool => tool.Name != AssistantResponseSchema.ResponseFunctionName) == true;
+        request.Tools?.Any(tool =>
+            tool.Name != AssistantResponseSchema.ResponseFunctionName
+            && tool.Name != ToolCatalog.AppMessageSend
+            && tool.Name != ToolCatalog.SkillsLoad) == true;
 
     private bool ShouldScriptTools(ModelRequest request)
     {

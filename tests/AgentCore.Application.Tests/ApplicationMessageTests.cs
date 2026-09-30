@@ -1,0 +1,419 @@
+using System.Text.Json;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Application.Testing;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Definitions;
+using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+
+namespace AgentCore.Application.Tests;
+
+public sealed class ApplicationMessageTests
+{
+    private const string FirstText = "Still checking the order";
+    private const string SecondText = "Second notice";
+    private const string ThirdText = "Third notice";
+    private const string FourthText = "Fourth notice";
+    private const string ChangedText = "Changed text";
+
+    [Fact]
+    public void Payload_rules_reject_routing_empty_and_oversize_text()
+    {
+        Assert.False(ApplicationMessageAdmission.TryParseText(
+            JsonDocument.Parse("""{"text":"  "}""").RootElement,
+            out _,
+            out var empty));
+        Assert.Contains("empty", empty, StringComparison.OrdinalIgnoreCase);
+
+        var oversize = new string('x', ApplicationMessageLimits.MaxCharacters + 1);
+        Assert.False(ApplicationMessageAdmission.TryParseText(
+            JsonDocument.Parse(JsonSerializer.Serialize(new { text = oversize })).RootElement,
+            out _,
+            out var tooLong));
+        Assert.Contains("too long", tooLong, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(oversize, tooLong, StringComparison.Ordinal);
+
+        Assert.False(ApplicationMessageAdmission.TryParseText(
+            JsonDocument.Parse("""{"text":"hello","sessionId":"secret"}""").RootElement,
+            out _,
+            out var routed));
+        Assert.Contains("only text", routed, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", routed, StringComparison.Ordinal);
+
+        Assert.True(ApplicationMessageAdmission.TryParseText(
+            JsonDocument.Parse("""{"text":"  hello  "}""").RootElement,
+            out var text,
+            out _));
+        Assert.Equal("hello", text);
+
+        var executionId = Guid.Parse("019944af-00ee-7000-8000-0000000000e1");
+        Assert.False(ApplicationMessageAdmission.TryCreateEffectKey(executionId, new string('k', 170), out _));
+        Assert.True(ApplicationMessageAdmission.TryCreateEffectKey(executionId, "m1", out var key));
+        Assert.Equal($"v1:{executionId:N}:m1", key);
+        Assert.True(key.Length <= ApplicationMessageLimits.MaxEffectKeyCharacters);
+    }
+
+    [Fact]
+    public void Empty_skill_list_still_offers_application_messages_on_a_user_turn()
+    {
+        var definition = Definition();
+        Assert.Empty(definition.SkillList);
+        var context = new AgentContext(
+            definition,
+            [],
+            string.Empty,
+            null,
+            SessionMode.Text,
+            null,
+            false,
+            null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "hello"));
+        var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(tool => tool.Name).ToArray();
+        Assert.Contains(ToolCatalog.AppMessageSend, offered);
+        Assert.DoesNotContain(ToolCatalog.SkillsLoad, offered);
+        Assert.Equal(
+            ToolPolicyDecision.Allow,
+            ToolPolicy.EvaluateExecution(
+                definition,
+                ToolCatalog.AppMessageSend,
+                ToolConfigurationGates.Unconfigured,
+                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn)));
+        Assert.Equal(
+            ToolPolicyDecision.Deny,
+            ToolPolicy.EvaluateExecution(
+                definition,
+                ToolCatalog.AppMessageSend,
+                ToolConfigurationGates.AllowAll,
+                admission: new ToolExecutionAdmission(true, TriggerKind.UserTurn)));
+    }
+
+    [Fact]
+    public async Task Direct_tool_execution_does_not_append_an_application_message()
+    {
+        var executor = new SessionToolExecutor();
+        var result = await executor.ExecuteAsync(
+            Definition(),
+            Guid.NewGuid(),
+            new ModelToolCall("m1", ToolCatalog.AppMessageSend, """{"text":"Still checking the order"}"""),
+            ToolLimits.MaxOutputBytes,
+            admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+        Assert.Contains("owned by the session runtime", result.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(FirstText, result.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Prompt_compaction_and_completion_omit_application_message_text()
+    {
+        var now = DateTimeOffset.Parse("2026-09-30T12:00:00Z");
+        var responseId = Guid.Parse("019944af-00ee-7000-8000-0000000000aa");
+        var message = ApplicationEntry(Guid.Parse("019944af-00ee-7000-8000-0000000000ab"), 2, responseId, FirstText, now);
+        var definition = Definition();
+        var history = new List<ConversationEntry>
+        {
+            PromptEntry(Guid.Parse("019944af-00ee-7000-8000-0000000000a1"), 1, ConversationRole.User, "hello", now),
+            message,
+            PromptEntry(Guid.Parse("019944af-00ee-7000-8000-0000000000a2"), 3, ConversationRole.Assistant, "Shown", now)
+        };
+        var request = new PromptContextBuilder().Build(
+            new AgentContext(
+                definition,
+                history,
+                string.Empty,
+                null,
+                SessionMode.Text,
+                null,
+                false,
+                null,
+                new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "thanks"),
+                ActiveSkillIds: []),
+            Guid.NewGuid());
+        var prompt = string.Join('\n', request.Messages.Select(item => item.Text));
+        Assert.Contains("hello", prompt, StringComparison.Ordinal);
+        Assert.Contains("Shown", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(FirstText, prompt, StringComparison.Ordinal);
+
+        var page = new List<ConversationEntry> { message };
+        for (var index = 0; index < CompactionPolicy.TriggerEligibleEntries; index++)
+        {
+            var role = index % 2 == 0 ? ConversationRole.User : ConversationRole.Assistant;
+            page.Add(PromptEntry(
+                Guid.Parse($"019944af-00ef-7000-8000-{index + 1:D12}"),
+                index + 10,
+                role,
+                $"turn-{index}",
+                now));
+        }
+
+        var selected = CompactionSourceSelector.Select(page, string.Empty, 0);
+        Assert.True(selected.Ready);
+        Assert.DoesNotContain(message.EntryId, selected.Source.Select(entry => entry.EntryId));
+        Assert.DoesNotContain(FirstText, selected.PromptText, StringComparison.Ordinal);
+        Assert.Contains("turn-0", selected.PromptText, StringComparison.Ordinal);
+
+        var snapshot = new SessionSnapshot(
+            1,
+            Guid.Parse("019944af-00ee-7000-8000-0000000000c1"),
+            1,
+            definition,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            history,
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now);
+        var evaluation = string.Join('\n', CompletionEvaluator.CreateEvaluationRequest(snapshot, now).Messages.Select(item => item.Text));
+        Assert.DoesNotContain(FirstText, evaluation, StringComparison.Ordinal);
+        Assert.Contains("Shown", evaluation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Send_admits_three_visible_messages_and_the_next_turn_does_not_see_them()
+    {
+        var model = new MessagingLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(8, model.Requests.Count);
+        Assert.Contains(ToolCatalog.AppMessageSend, model.Requests[0].Tools!.Select(tool => tool.Name));
+        Assert.DoesNotContain(ToolCatalog.SkillsLoad, model.Requests[0].Tools!.Select(tool => tool.Name));
+        Assert.Contains("duplicate", Text(model.Requests[2]), StringComparison.Ordinal);
+        Assert.Contains("only text", Text(model.Requests[3]), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("limit reached", Text(model.Requests[7]), StringComparison.OrdinalIgnoreCase);
+        foreach (var request in model.Requests)
+        {
+            var text = Text(request);
+            Assert.DoesNotContain(FirstText, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(SecondText, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(ThirdText, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(FourthText, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(ChangedText, text, StringComparison.Ordinal);
+        }
+
+        var admitted = runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.ApplicationMessage).ToArray();
+        Assert.Equal([FirstText, SecondText, ThirdText], admitted.Select(entry => entry.Text).ToArray());
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry =>
+            entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
+        Assert.Equal("Shown", assistant.Text);
+        foreach (var entry in admitted)
+        {
+            Assert.True(entry.Sequence > assistant.Sequence);
+            Assert.Equal(assistant.ResponseId, entry.ResponseId);
+            Assert.Equal(EntryStatus.Completed, entry.Status);
+            Assert.Equal(0, entry.HeardTextEndExclusive);
+            Assert.Equal(entry.Text.Length, entry.ReceivedTextEndExclusive);
+            Assert.Null(entry.Envelope);
+            Assert.Null(entry.Failure);
+            Assert.Null(entry.SourceAdmissionFingerprint);
+            Assert.StartsWith("v1:", entry.ApplicationMessageEffectKey, StringComparison.Ordinal);
+            Assert.True(entry.ApplicationMessageEffectKey!.Length <= ApplicationMessageLimits.MaxEffectKeyCharacters);
+        }
+
+        Assert.Equal(3, admitted.Select(entry => entry.ApplicationMessageEffectKey).Distinct().Count());
+        await runtime.SubmitUserTextAsync("thanks");
+        await runtime.WaitUntilIdleAsync();
+        var next = Text(model.Requests[^1]);
+        Assert.DoesNotContain(FirstText, next, StringComparison.Ordinal);
+        Assert.DoesNotContain(SecondText, next, StringComparison.Ordinal);
+        Assert.DoesNotContain(ThirdText, next, StringComparison.Ordinal);
+        Assert.Contains("thanks", next, StringComparison.Ordinal);
+        Assert.Contains("hello", next, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cancelled_send_writes_nothing_and_keeps_an_already_admitted_message()
+    {
+        var model = new CancelMessagingLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.NotNull(runtime.ActiveResponseId);
+        await runtime.CancelResponseAsync(runtime.ActiveResponseId!.Value);
+        model.Release.TrySetResult();
+        await runtime.WaitUntilIdleAsync();
+
+        var admitted = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.ApplicationMessage);
+        Assert.Equal(FirstText, admitted.Text);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains(SecondText, StringComparison.Ordinal));
+    }
+
+    private static string Text(ModelRequest request) =>
+        string.Join('\n', request.Messages.Select(message => message.Text));
+
+    private static ConversationEntry PromptEntry(Guid id, long sequence, ConversationRole role, string text, DateTimeOffset now) =>
+        new(id, sequence, id, role, text, role == ConversationRole.Assistant ? id : null, EntryStatus.Completed, SessionMode.Text, text.Length, text.Length, now);
+
+    private static ConversationEntry ApplicationEntry(Guid id, long sequence, Guid responseId, string text, DateTimeOffset now) =>
+        new(
+            id,
+            sequence,
+            null,
+            ConversationRole.ApplicationMessage,
+            text,
+            responseId,
+            EntryStatus.Completed,
+            SessionMode.Text,
+            0,
+            text.Length,
+            now,
+            ApplicationMessageEffectKey: $"v1:{responseId:N}:unit");
+
+    private static AgentDefinition Definition() =>
+        SampleDefinitions.Examiner with
+        {
+            Voice = new VoiceConfiguration(false, "default", 1),
+            ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
+            Skills = []
+        };
+
+    private static SessionRuntime Create(ILanguageModel model, InMemoryConversationTurnExecutionStore turns, AgentDefinition definition)
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
+        var ids = new DeterministicIdGenerator(
+            Enumerable.Range(1, 80).Select(index => Guid.Parse($"019944af-00ee-7000-8000-{index:D12}")),
+            [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
+        var now = time.GetUtcNow();
+        var snapshot = new SessionSnapshot(
+            1,
+            ids.NewSessionId(),
+            1,
+            definition,
+            SessionMode.Text,
+            null,
+            SessionStatus.Created,
+            [],
+            string.Empty,
+            0,
+            null,
+            null,
+            now,
+            now,
+            ModelSelection: new SessionModelSelection(
+                "synthetic-offline/scripted",
+                "primary-llm",
+                "scripted",
+                ModelSelectionSource.SystemDefault,
+                null));
+        var memory = new InMemoryMemoryStore();
+        memory.SaveAsync(snapshot, 0).AsTask().GetAwaiter().GetResult();
+        return new SessionRuntime(
+            snapshot,
+            model,
+            new DefaultAgentBrain(new PromptContextBuilder()),
+            memory,
+            new CapturingSessionOutput(),
+            ids,
+            time,
+            NullLogger<SessionRuntime>.Instance,
+            new FakeInterruptionClassifier(),
+            turnExecutions: turns);
+    }
+
+    private sealed class MessagingLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            switch (generation)
+            {
+                case 1:
+                    yield return Call("m1", JsonSerializer.Serialize(new { text = FirstText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 2:
+                    yield return Call("m1", JsonSerializer.Serialize(new { text = ChangedText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 3:
+                    yield return Call("m-route", """{"text":"Nope","sessionId":"secret-session"}""");
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 4:
+                    yield return Call("m-dup", JsonSerializer.Serialize(new { text = $"  {FirstText}  " }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 5:
+                    yield return Call("m2", JsonSerializer.Serialize(new { text = SecondText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 6:
+                    yield return Call("m3", JsonSerializer.Serialize(new { text = ThirdText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 7:
+                    yield return Call("m4", JsonSerializer.Serialize(new { text = FourthText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                default:
+                    yield return new ModelTextDelta(generation == 8 ? "Shown" : "Noted");
+                    yield return new ModelCompleted(ModelStopReason.Completed);
+                    yield break;
+            }
+        }
+
+        private static ModelToolCallEvent Call(string id, string arguments) =>
+            new(new ModelToolCall(id, ToolCatalog.AppMessageSend, arguments));
+    }
+
+    private sealed class CancelMessagingLanguageModel : ILanguageModel
+    {
+        private int _generation;
+
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var generation = Interlocked.Increment(ref _generation);
+            await Task.Yield();
+            if (generation == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall(
+                    "m1",
+                    ToolCatalog.AppMessageSend,
+                    JsonSerializer.Serialize(new { text = FirstText })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            yield return new ModelToolCallEvent(new ModelToolCall(
+                "m2",
+                ToolCatalog.AppMessageSend,
+                JsonSerializer.Serialize(new { text = SecondText })));
+            Entered.TrySetResult();
+            await Release.Task;
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
+        }
+    }
+}

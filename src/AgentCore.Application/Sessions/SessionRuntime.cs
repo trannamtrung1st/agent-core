@@ -1124,6 +1124,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case DurableOccurrenceAbandonReceived abandon:
                     await HandleDurableOccurrenceAbandonAsync(abandon).ConfigureAwait(false);
                     break;
+                case ApplicationMessageRequested applicationMessage:
+                    await HandleApplicationMessageAsync(applicationMessage, cancellationToken).ConfigureAwait(false);
+                    break;
                 case SkillLoadRequested skillLoad:
                     await HandleSkillLoadAsync(skillLoad, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1168,6 +1171,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 skillLoad.Completed.TrySetResult(SkillLoadMailboxResult.Failed(
                     SkillLoadAdmission.Error("stale", "Skill load is no longer owned by this execution."),
+                    "stale"));
+            }
+
+            if (input is ApplicationMessageRequested applicationMessage)
+            {
+                applicationMessage.Completed.TrySetResult(ApplicationMessageMailboxResult.Failed(
+                    ApplicationMessageAdmission.Error("stale", "Application message is no longer owned by this execution."),
                     "stale"));
             }
         }
@@ -2586,6 +2596,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     RuntimeTelemetry.RecordSkillLoad("denied");
                                 }
 
+                                if (string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
+                                {
+                                    RuntimeTelemetry.RecordApplicationMessage("denied");
+                                }
+
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
                                 args = default;
@@ -2596,6 +2611,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
                             {
                                 RuntimeTelemetry.RecordSkillLoad("denied");
+                            }
+
+                            if (string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
+                            {
+                                RuntimeTelemetry.RecordApplicationMessage("denied");
                             }
 
                             executionResult = ToolExecutionResult.FromText(
@@ -2616,6 +2636,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     RuntimeTelemetry.RecordSkillLoad("denied");
                                 }
 
+                                if (string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
+                                {
+                                    RuntimeTelemetry.RecordApplicationMessage("denied");
+                                }
+
                                 OperationalDiagnostics.RecordToolDenial(call.Name);
                                 executionResult = ToolExecutionResult.FromText(
                                     """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
@@ -2633,6 +2658,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 {
                                     pinnedSkills = admittedIds.ToArray();
                                 }
+                            }
+                            else if (string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
+                            {
+                                var sent = await RequestApplicationMessageAsync(
+                                        cause,
+                                        request.ResponseId,
+                                        call.Id,
+                                        call.ArgumentsJson,
+                                        overallCts.Token)
+                                    .ConfigureAwait(false);
+                                executionResult = ToolExecutionResult.FromText(sent.ToolResultJson);
                             }
                             else
                             {

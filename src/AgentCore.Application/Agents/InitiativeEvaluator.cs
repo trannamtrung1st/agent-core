@@ -87,6 +87,7 @@ public static class InitiativeEvaluator
                 context.SummarizedThroughEntrySequence,
                 context.LastEntrySequence,
                 context.History)
+            .Where(entry => entry.IsPromptTurn)
             .TakeLast(8)
             .Select(entry => new
             {

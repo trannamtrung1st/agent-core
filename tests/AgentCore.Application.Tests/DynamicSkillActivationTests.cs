@@ -38,7 +38,7 @@ public sealed class DynamicSkillActivationTests
         Assert.DoesNotContain("ORDER_PROCEDURE", active.Text, StringComparison.Ordinal);
 
         var offered = new PromptContextBuilder().OfferTools(definition, context).Select(tool => tool.Name).ToArray();
-        Assert.Equal([ToolCatalog.WorkspaceRead, ToolCatalog.SkillsLoad], offered);
+        Assert.Equal([ToolCatalog.WorkspaceRead, ToolCatalog.AppMessageSend, ToolCatalog.SkillsLoad], offered);
         Assert.Equal(
             offered,
             new PromptContextBuilder().OfferTools(definition, Context(definition, ["refund.handle", "order.lookup"]))

@@ -74,6 +74,7 @@ public static class CompletionEvaluator
                 snapshot.SummarizedThroughEntrySequence,
                 snapshot.DurableLastEntrySequence,
                 snapshot.Entries)
+            .Where(entry => entry.IsPromptTurn)
             .TakeLast(8)
             .Select(entry => new
             {
