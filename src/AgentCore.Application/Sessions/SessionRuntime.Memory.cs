@@ -7,13 +7,19 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
-    private async Task<string?> ApplyMemoryProposalsAsync(
+    private async Task<IReadOnlyList<MemoryReceipt>> ApplyMemoryProposalsAsync(
         IReadOnlyList<MemoryProposal> proposals,
         CancellationToken cancellationToken)
     {
-        if (_structuredMemory is null || proposals.Count == 0)
+        if (proposals.Count == 0)
         {
-            return null;
+            return [];
+        }
+
+        if (_structuredMemory is null)
+        {
+            return MemoryReceiptProjection.FromResults(
+                proposals.Select(proposal => new MemoryAdmissionResult(MemoryAdmissionStatus.Unavailable, proposal)).ToArray());
         }
 
         var results = await MemoryAdmission.AdmitAsync(
@@ -27,7 +33,7 @@ public sealed partial class SessionRuntime
             proposals,
             _logger,
             cancellationToken).ConfigureAwait(false);
-        return MemoryAdmissionPrompt.Render(results);
+        return MemoryReceiptProjection.FromResults(results);
     }
 
     private Guid UserTurnSourceEntryId()
@@ -85,10 +91,7 @@ public sealed partial class SessionRuntime
         _stagedMemoryProposals = null;
     }
 
-    private async Task CommitStagedMemoryAsync(
-        EventContext context,
-        Guid responseId,
-        CancellationToken cancellationToken)
+    private async Task CommitStagedMemoryAsync(CancellationToken cancellationToken)
     {
         if (_memoryCommitSettled)
         {
@@ -103,22 +106,15 @@ public sealed partial class SessionRuntime
             return;
         }
 
-        var note = await ApplyMemoryProposalsAsync(proposals, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(note))
+        var receipts = await ApplyMemoryProposalsAsync(proposals, cancellationToken).ConfigureAwait(false);
+        if (receipts.Count == 0)
         {
             return;
         }
 
-        var display = _envelope.DisplayText.TrimEnd() + "\n" + note;
-        var speechText = _envelope.SpeechText;
-        if (_envelope.SpeechMode == ResponseSpeechMode.Custom && !string.IsNullOrEmpty(speechText))
-        {
-            speechText = speechText.TrimEnd() + "\n" + note;
-        }
-
-        _envelope = _envelope with { DisplayText = display, SpeechText = speechText };
-        _accumulator.Replace(display);
-        await PublishEnvelopeProgressAsync(context, responseId, finalize: false, cancellationToken)
-            .ConfigureAwait(false);
+        _envelope = _envelope with { MemoryReceipts = receipts };
     }
+
+    private IReadOnlyList<PublicMemoryReceipt>? VisibleMemoryReceipts() =>
+        PublicMemoryReceipt.Visible(_envelope?.MemoryReceipts);
 }

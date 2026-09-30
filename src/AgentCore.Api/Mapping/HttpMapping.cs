@@ -147,7 +147,14 @@ public static partial class HttpMapping
                     failure.CorrelationId?.ToString("D"),
                     failure.Category,
                     failure.Code)
-                : null);
+                : null,
+            projected.MemoryReceipts?.Select(item => new HistoryMemoryReceiptResponse(
+                item.Outcome,
+                item.Operation,
+                item.Subject,
+                item.Scope,
+                item.Presentation,
+                item.Label)).ToArray());
     }
 
     public static string ToMode(SessionMode mode) => mode == SessionMode.Voice ? "voice" : "text";

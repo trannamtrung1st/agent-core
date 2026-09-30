@@ -33,7 +33,8 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
     if (incomingTerminal && !currentTerminal) {
       byId.set(entry.entryId, {
         ...entry,
-        speechText: entry.speechText || current.speechText
+        speechText: entry.speechText || current.speechText,
+        memoryReceipts: entry.memoryReceipts?.length ? entry.memoryReceipts : current.memoryReceipts
       });
       continue;
     }
@@ -45,7 +46,8 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
     if (currentTerminal && incomingTerminal) {
       byId.set(entry.entryId, {
         ...current,
-        speechText: current.speechText || entry.speechText
+        speechText: current.speechText || entry.speechText,
+        memoryReceipts: current.memoryReceipts?.length ? current.memoryReceipts : entry.memoryReceipts
       });
       continue;
     }
@@ -54,14 +56,16 @@ export function mergeHistoryEntries(existing: HistoryEntry[], incoming: HistoryE
         || entry.receivedTextEndExclusive > current.receivedTextEndExclusive) {
       byId.set(entry.entryId, {
         ...entry,
-        speechText: entry.speechText || current.speechText
+        speechText: entry.speechText || current.speechText,
+        memoryReceipts: entry.memoryReceipts?.length ? entry.memoryReceipts : current.memoryReceipts
       });
       continue;
     }
 
     byId.set(entry.entryId, {
       ...current,
-      speechText: current.speechText || entry.speechText
+      speechText: current.speechText || entry.speechText,
+      memoryReceipts: current.memoryReceipts?.length ? current.memoryReceipts : entry.memoryReceipts
     });
   }
 

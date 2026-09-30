@@ -79,6 +79,16 @@ export type HistoryEntry = {
   interruptReason?: string | null;
   speechText?: string | null;
   failure?: HistoryFailure | null;
+  memoryReceipts?: MemoryReceiptView[];
+};
+
+export type MemoryReceiptView = {
+  outcome: string;
+  operation: string;
+  subject: string;
+  scope?: string | null;
+  presentation: "indicator" | "explicit";
+  label: string;
 };
 
 export type ServerEvent = {
@@ -405,9 +415,42 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       finishReason: row.finishReason == null ? null : asString(row.finishReason),
       interruptReason: row.interruptReason == null ? null : asString(row.interruptReason),
       speechText: asSpeechText(row.speechText),
-      failure: asHistoryFailure(row.failure)
+      failure: asHistoryFailure(row.failure),
+      memoryReceipts: asMemoryReceipts(row.memoryReceipts)
     };
   });
+}
+
+function asMemoryReceipts(raw: unknown): MemoryReceiptView[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const receipts: MemoryReceiptView[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const row = item as Record<string, unknown>;
+    const presentation = asString(row.presentation);
+    const label = asString(row.label).trim();
+    if ((presentation !== "indicator" && presentation !== "explicit") || !label) {
+      continue;
+    }
+
+    const scope = asString(row.scope).trim();
+    receipts.push({
+      outcome: asString(row.outcome),
+      operation: asString(row.operation),
+      subject: asString(row.subject),
+      scope: scope || null,
+      presentation,
+      label
+    });
+  }
+
+  return receipts.length > 0 ? receipts : undefined;
 }
 
 function asHistoryFailure(raw: unknown): HistoryFailure | null {
@@ -857,6 +900,7 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
                 finishReason: finishReason ?? entry.finishReason ?? null,
                 interruptReason: interruptReason ?? entry.interruptReason ?? null,
                 speechText: asSpeechText(event.payload.speechText) ?? entry.speechText,
+                memoryReceipts: asMemoryReceipts(event.payload.memoryReceipts) ?? entry.memoryReceipts,
                 failure: entry.failure ?? failureForResponse(state.sessionError, event.responseId)
               }
             : entry)

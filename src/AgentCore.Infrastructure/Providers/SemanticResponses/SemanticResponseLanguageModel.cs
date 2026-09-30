@@ -82,9 +82,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                 case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls && responseCalls.Count > 0:
                     var arguments = responseCalls[^1].ArgumentsJson;
                     responseCalls.Clear();
-                    if (!NativeSemanticResponseParser.TryParse(arguments, out var parsed, out _))
+                    if (!NativeSemanticResponseParser.TryParse(arguments, out var parsed, out var failureReason))
                     {
-                        yield return Fail();
+                        yield return Fail(failureReason, ProviderResponseChannel.ResponseFunction);
                         yield break;
                     }
 
@@ -114,7 +114,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                 case ModelTextDelta delta:
                     if (buffer.Length + delta.Text.Length > AssistantResponseSchema.MaxJsonCharacters)
                     {
-                        yield return Fail();
+                        yield return Fail(
+                            ProviderFailureReason.ResponseTooLarge,
+                            ProviderResponseChannel.StructuredOutput);
                         yield break;
                     }
 
@@ -146,14 +148,14 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                         yield break;
                     }
 
-                    if (NativeSemanticResponseParser.TryParse(buffer.ToString(), out var response, out _))
+                    if (NativeSemanticResponseParser.TryParse(buffer.ToString(), out var response, out var failureReason))
                     {
                         yield return new ModelSemanticResponseReady(response!);
                         yield return completed;
                         yield break;
                     }
 
-                    yield return Fail();
+                    yield return Fail(failureReason, ProviderResponseChannel.StructuredOutput);
                     yield break;
                 default:
                     yield return item;
@@ -218,9 +220,13 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                         yield break;
                     }
 
-                    if (!parser.TryFinish(out var response, out _))
+                    if (!parser.TryFinish(out var response, out var failureReason))
                     {
-                        yield return Fail();
+                        yield return Fail(
+                            string.IsNullOrEmpty(failureReason)
+                                ? ProviderFailureReason.InvalidMarkerEnvelope
+                                : failureReason,
+                            ProviderResponseChannel.MarkerCompatibility);
                         yield break;
                     }
 
@@ -300,6 +306,10 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         return true;
     }
 
-    private static ModelFailed Fail() =>
-        new(new ProviderFailure(ProviderErrorCode.InvalidResponse, "Malformed assistant envelope."));
+    private static ModelFailed Fail(string failureReason, string responseChannel) =>
+        new(new ProviderFailure(
+            ProviderErrorCode.InvalidResponse,
+            "Malformed assistant envelope.",
+            FailureReason: failureReason,
+            ResponseChannel: responseChannel));
 }

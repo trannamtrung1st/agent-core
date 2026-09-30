@@ -450,6 +450,7 @@ describe("applyServerEvent", () => {
     expect(completed.outputState).toBe("idle");
     expect(completed.entries[0]?.status).toBe("completed");
     expect(completed.entries[0]?.speechText).toBe("Spoken hello");
+    expect(completed.entries[0]?.text).toBe("Hello");
   });
 
   it("marks interrupted output when the live response is barged in", () => {
@@ -1170,6 +1171,91 @@ describe("historyFromPayload", () => {
       }
     ]);
     expect(entries[0]?.speechText).toBe("Hidden speech");
+  });
+
+  it("keeps memory receipts off the reply text", () => {
+    const entries = historyFromPayload([
+      {
+        entryId: "e1",
+        sequence: 1,
+        role: "assistant",
+        text: "Got it.",
+        responseId: "r1",
+        status: "completed",
+        deliveryMode: "text",
+        heardTextEndExclusive: 7,
+        receivedTextEndExclusive: 7,
+        createdAt: "2026-09-18T00:00:00.000Z",
+        memoryReceipts: [
+          {
+            outcome: "stored",
+            operation: "upsert",
+            subject: "project codename",
+            scope: "identityUser",
+            presentation: "indicator",
+            label: "Remembered"
+          },
+          {
+            outcome: "stored",
+            operation: "upsert",
+            subject: "quiet",
+            presentation: "silent",
+            label: "Remembered"
+          }
+        ]
+      }
+    ]);
+    expect(entries[0]?.text).toBe("Got it.");
+    expect(entries[0]?.memoryReceipts).toEqual([
+      {
+        outcome: "stored",
+        operation: "upsert",
+        subject: "project codename",
+        scope: "identityUser",
+        presentation: "indicator",
+        label: "Remembered"
+      }
+    ]);
+
+    const completed = applyServerEvent(
+      {
+        ...emptySession(),
+        entries: [
+          {
+            entryId: "e1",
+            sequence: 1,
+            sourceEventId: null,
+            role: "assistant",
+            text: "Got it.",
+            responseId: "r1",
+            status: "streaming",
+            deliveryMode: "text",
+            heardTextEndExclusive: 7,
+            receivedTextEndExclusive: 7,
+            createdAt: "2026-09-18T00:00:00.000Z"
+          }
+        ]
+      },
+      event({
+        type: "agent.response.completed",
+        sequence: 2,
+        responseId: "r1",
+        payload: {
+          status: "completed",
+          memoryReceipts: [
+            {
+              outcome: "unavailable",
+              operation: "delete",
+              subject: "project codename",
+              presentation: "explicit",
+              label: "Not forgotten: project codename."
+            }
+          ]
+        }
+      })
+    );
+    expect(completed.entries[0]?.text).toBe("Got it.");
+    expect(completed.entries[0]?.memoryReceipts?.[0]?.label).toBe("Not forgotten: project codename.");
   });
 });
 

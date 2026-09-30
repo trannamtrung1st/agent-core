@@ -6,12 +6,19 @@ namespace AgentCore.Infrastructure.Providers.SemanticResponses;
 
 internal static class NativeSemanticResponseParser
 {
-    public static bool TryParse(string json, out ModelSemanticResponse? response, out string safeFailure)
+    public static bool TryParse(string json, out ModelSemanticResponse? response, out string failureReason)
     {
         response = null;
-        safeFailure = "Malformed assistant envelope.";
-        if (string.IsNullOrWhiteSpace(json) || json.Length > AssistantResponseSchema.MaxJsonCharacters)
+        failureReason = ProviderFailureReason.InvalidJson;
+        if (string.IsNullOrWhiteSpace(json))
         {
+            failureReason = ProviderFailureReason.ResponseFunctionArgumentsInvalid;
+            return false;
+        }
+
+        if (json.Length > AssistantResponseSchema.MaxJsonCharacters)
+        {
+            failureReason = ProviderFailureReason.ResponseTooLarge;
             return false;
         }
 
@@ -22,6 +29,7 @@ internal static class NativeSemanticResponseParser
         }
         catch (JsonException)
         {
+            failureReason = ProviderFailureReason.InvalidJson;
             return false;
         }
 
@@ -29,47 +37,58 @@ internal static class NativeSemanticResponseParser
         {
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
+                failureReason = ProviderFailureReason.InvalidJson;
                 return false;
             }
 
             var root = document.RootElement;
             if (!root.TryGetProperty("displayText", out var displayEl) || displayEl.ValueKind != JsonValueKind.String)
             {
+                failureReason = ProviderFailureReason.MissingDisplayText;
                 return false;
             }
 
             var display = displayEl.GetString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(display) || display.Length > AssistantResponseSchema.MaxDisplayCharacters)
+            if (string.IsNullOrWhiteSpace(display))
+            {
+                failureReason = ProviderFailureReason.MissingDisplayText;
+                return false;
+            }
+
+            if (display.Length > AssistantResponseSchema.MaxDisplayCharacters)
+            {
+                failureReason = ProviderFailureReason.ResponseTooLarge;
+                return false;
+            }
+
+            if (!TrySpeech(root, out var speech, out failureReason))
             {
                 return false;
             }
 
-            if (!TrySpeech(root, out var speech))
+            if (!TryBlocks(root, out var blocks, out failureReason))
             {
                 return false;
             }
 
-            if (!TryBlocks(root, out var blocks))
-            {
-                return false;
-            }
-
-            if (!TryMemory(root, out var memory))
+            if (!TryMemory(root, out var memory, out failureReason))
             {
                 return false;
             }
 
             response = new ModelSemanticResponse(display, speech, blocks, memory);
-            safeFailure = string.Empty;
+            failureReason = string.Empty;
             return true;
         }
     }
 
-    private static bool TryMemory(JsonElement root, out IReadOnlyList<MemoryProposal> memory)
+    private static bool TryMemory(JsonElement root, out IReadOnlyList<MemoryProposal> memory, out string failureReason)
     {
         memory = [];
+        failureReason = ProviderFailureReason.InvalidMemory;
         if (!root.TryGetProperty("memory", out var memoryEl))
         {
+            failureReason = string.Empty;
             return true;
         }
 
@@ -83,6 +102,7 @@ internal static class NativeSemanticResponseParser
         {
             if (!MemoryProposalCodec.TryRead(item, out var proposal) || proposal is null)
             {
+                failureReason = ProviderFailureReason.InvalidMemoryProposal;
                 return false;
             }
 
@@ -95,12 +115,14 @@ internal static class NativeSemanticResponseParser
         }
 
         memory = proposals;
+        failureReason = string.Empty;
         return true;
     }
 
-    private static bool TrySpeech(JsonElement root, out ModelSpeechProjection speech)
+    private static bool TrySpeech(JsonElement root, out ModelSpeechProjection speech, out string failureReason)
     {
         speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
+        failureReason = ProviderFailureReason.InvalidSpeech;
         if (!root.TryGetProperty("speech", out var speechEl) || speechEl.ValueKind != JsonValueKind.Object)
         {
             return false;
@@ -149,6 +171,7 @@ internal static class NativeSemanticResponseParser
                 }
 
                 speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
+                failureReason = string.Empty;
                 return true;
             case ModelSpeechMode.Custom:
                 if (string.IsNullOrWhiteSpace(text) || text.Length > AssistantResponseSchema.MaxSpeechCharacters)
@@ -157,6 +180,7 @@ internal static class NativeSemanticResponseParser
                 }
 
                 speech = new ModelSpeechProjection(ModelSpeechMode.Custom, text);
+                failureReason = string.Empty;
                 return true;
             case ModelSpeechMode.None:
                 if (text is not null)
@@ -165,22 +189,26 @@ internal static class NativeSemanticResponseParser
                 }
 
                 speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+                failureReason = string.Empty;
                 return true;
             default:
                 return false;
         }
     }
 
-    private static bool TryBlocks(JsonElement root, out IReadOnlyList<ModelResponseBlock> blocks)
+    private static bool TryBlocks(JsonElement root, out IReadOnlyList<ModelResponseBlock> blocks, out string failureReason)
     {
         blocks = [];
+        failureReason = ProviderFailureReason.InvalidBlocks;
         if (!root.TryGetProperty("blocks", out var blocksEl))
         {
+            failureReason = string.Empty;
             return true;
         }
 
         if (blocksEl.ValueKind == JsonValueKind.Null)
         {
+            failureReason = string.Empty;
             return true;
         }
 
@@ -207,6 +235,7 @@ internal static class NativeSemanticResponseParser
                 || attachmentId is { Length: > AssistantResponseSchema.MaxBlockCharacters }
                 || artifactId is { Length: > AssistantResponseSchema.MaxBlockCharacters })
             {
+                failureReason = ProviderFailureReason.ResponseTooLarge;
                 return false;
             }
 
@@ -244,6 +273,7 @@ internal static class NativeSemanticResponseParser
         }
 
         blocks = listed;
+        failureReason = string.Empty;
         return true;
     }
 

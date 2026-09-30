@@ -293,6 +293,64 @@ describe("Conversation", () => {
     expect(screen.getByText("[Unsupported content]")).toBeInTheDocument();
   });
 
+  it("shows memory receipts beside the reply without folding them into the message", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Got it. Your secret's safe with me.",
+            memoryReceipts: [
+              {
+                outcome: "stored",
+                operation: "upsert",
+                subject: "User identity",
+                scope: "identityUser",
+                presentation: "indicator",
+                label: "Remembered"
+              }
+            ]
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Got it. Your secret's safe with me.")).toBeInTheDocument();
+    expect(screen.getByText("✓ Remembered")).toBeInTheDocument();
+    expect(screen.queryByText(/Memory saved/)).not.toBeInTheDocument();
+  });
+
+  it("shows an explicit memory failure outside the assistant reply", () => {
+    render(
+      <Conversation
+        agentName="Alex"
+        sessionId="s1"
+        entries={[
+          entry({
+            entryId: "a1",
+            role: "assistant",
+            text: "Sure.",
+            memoryReceipts: [
+              {
+                outcome: "unavailable",
+                operation: "upsert",
+                subject: "project codename",
+                presentation: "explicit",
+                label: "Not saved: project codename."
+              }
+            ]
+          })
+        ]}
+        activity={{ kind: "idle" }}
+      />
+    );
+    expect(screen.getByText("Sure.")).toBeInTheDocument();
+    expect(screen.getByText("Not saved: project codename.")).toBeInTheDocument();
+  });
+
     it("does not add a Spoken or Speech text section when speech is absent or equivalent", () => {
     const { rerender } = render(
       <Conversation

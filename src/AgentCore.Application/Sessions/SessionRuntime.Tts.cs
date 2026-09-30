@@ -536,6 +536,15 @@ public sealed partial class SessionRuntime
             return;
         }
 
+        if (failed)
+        {
+            DiscardStagedMemory();
+        }
+        else
+        {
+            await CommitStagedMemoryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         _responseTerminal = true;
         _responseLifecycle = failed ? ResponseLifecycle.Failed : ResponseLifecycle.Completed;
         UpdateAssistant(failed ? EntryStatus.Failed : EntryStatus.Completed);
@@ -582,7 +591,8 @@ public sealed partial class SessionRuntime
                                     failed,
                                     HeardTextEndExclusive: heard,
                                     FinishReason: failed ? null : _modelFinishReason,
-                                    SpeechText: PublicSpeechText())),
+                                    SpeechText: PublicSpeechText(),
+                                    MemoryReceipts: VisibleMemoryReceipts())),
                             ct)
                         .ConfigureAwait(false);
                 }

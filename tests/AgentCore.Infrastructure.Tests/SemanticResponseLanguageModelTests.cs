@@ -54,6 +54,8 @@ public sealed class SemanticResponseLanguageModelTests
         var failed = Assert.Single(events.OfType<ModelFailed>());
         Assert.Equal(ProviderErrorCode.InvalidResponse, failed.Failure.Code);
         Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrEmpty(failed.Failure.FailureReason));
+        Assert.Equal(ProviderResponseChannel.StructuredOutput, failed.Failure.ResponseChannel);
         Assert.DoesNotContain(events, item => item is ModelDisplayDelta or ModelSemanticResponseReady);
     }
 
@@ -328,6 +330,23 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Contains(inner.LastRequest!.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
         Assert.Equal(ModelToolChoice.Named, inner.LastRequest.ToolChoice);
         Assert.Equal(AssistantResponseSchema.ResponseFunctionName, inner.LastRequest.ToolChoiceName);
+    }
+
+    [Fact]
+    public async Task Function_channel_invalid_memory_proposal_carries_bounded_failure_detail()
+    {
+        var json = """{"displayText":"Shown","speech":{"mode":"same"},"blocks":[],"memory":[{"operation":"upsert","kind":"fact","subject":"token"}]}""";
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.InvalidMemoryProposal, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ResponseChannel);
+        Assert.DoesNotContain("token", failed.Failure.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -86,13 +86,17 @@ describe("failed assistant details", () => {
     );
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Could not speak.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Error details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Failed — show error details" }));
     const details = await screen.findByTestId("diagnostic-details");
-    expect(details).toHaveTextContent("Diagnostic ID: diag-row");
-    expect(details).toHaveTextContent("Correlation ID: corr-1");
-    expect(details).toHaveTextContent("Session ID: session-1");
-    expect(details).toHaveTextContent("Response ID: r2");
-    expect(details).toHaveTextContent("Error: Provider / Unavailable");
+    expect(screen.getByTestId("diagnostic-id")).toHaveTextContent("diag-row");
+    expect(details).toHaveTextContent("Correlation ID");
+    expect(details).toHaveTextContent("corr-1");
+    expect(details).toHaveTextContent("Session ID");
+    expect(details).toHaveTextContent("session-1");
+    expect(details).toHaveTextContent("Response ID");
+    expect(details).toHaveTextContent("r2");
+    expect(details).toHaveTextContent("Error");
+    expect(details).toHaveTextContent("Provider / Unavailable");
     expect(details).not.toHaveTextContent("Could not speak.");
     fireEvent.click(screen.getByRole("button", { name: "Copy diagnostic" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Diagnostic ID: diag-row"));
@@ -149,9 +153,12 @@ describe("diagnosed work and admin errors", () => {
     expect(await screen.findByText("The model timed out.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Error details" }));
     const details = await screen.findByTestId("diagnostic-details");
-    expect(details).toHaveTextContent("Work Item ID: work-failed");
-    expect(details).toHaveTextContent("Occurrence ID: occurrence-1");
-    expect(details).toHaveTextContent("Error: model-timeout");
+    expect(details).toHaveTextContent("Work Item ID");
+    expect(details).toHaveTextContent("work-failed");
+    expect(details).toHaveTextContent("Occurrence ID");
+    expect(details).toHaveTextContent("occurrence-1");
+    expect(details).toHaveTextContent("Error");
+    expect(details).toHaveTextContent("model-timeout");
     expect(details).not.toHaveTextContent("Trigger ID");
     expect(details).not.toHaveTextContent("The model timed out.");
   });
@@ -161,7 +168,7 @@ describe("diagnosed work and admin errors", () => {
       <AdminDeletionBlockedAlert message="The request could not be completed." diagnosticId="diag-admin" />
     );
     fireEvent.click(screen.getByRole("button", { name: "Error details" }));
-    expect(await screen.findByTestId("diagnostic-id")).toHaveTextContent("diag-admin");
+    expect(await screen.findByTestId("diagnostic-id")).toHaveTextContent(/^diag-admin$/);
     rerender(<AdminDeletionBlockedAlert message="Draft is invalid." />);
     expect(screen.queryByRole("button", { name: "Error details" })).not.toBeInTheDocument();
   });

@@ -273,7 +273,58 @@ public sealed record PublicHistoryEntry(
     string? FinishReason = null,
     string? InterruptReason = null,
     string? SpeechText = null,
-    PublicFailureReference? Failure = null);
+    PublicFailureReference? Failure = null,
+    IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null);
+
+public sealed record PublicMemoryReceipt(
+    string Outcome,
+    string Operation,
+    string Subject,
+    string? Scope,
+    string Presentation,
+    string Label)
+{
+    public static IReadOnlyList<PublicMemoryReceipt>? Visible(IReadOnlyList<MemoryReceipt>? receipts)
+    {
+        if (receipts is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var visible = new List<PublicMemoryReceipt>(receipts.Count);
+        foreach (var receipt in receipts)
+        {
+            if (From(receipt) is { } projected)
+            {
+                visible.Add(projected);
+            }
+        }
+
+        return visible.Count == 0 ? null : visible;
+    }
+
+    public static PublicMemoryReceipt? From(MemoryReceipt receipt)
+    {
+        if (!receipt.IsUserVisible)
+        {
+            return null;
+        }
+
+        var subject = string.IsNullOrWhiteSpace(receipt.Subject) ? "that" : receipt.Subject.Trim();
+        var label = receipt.Presentation == MemoryReceipt.Indicator
+            ? receipt.Operation == "delete" ? "Forgotten" : "Remembered"
+            : receipt.Operation == "delete"
+                ? $"Not forgotten: {subject}."
+                : $"Not saved: {subject}.";
+        return new PublicMemoryReceipt(
+            receipt.Outcome,
+            receipt.Operation,
+            subject,
+            receipt.Scope,
+            receipt.Presentation,
+            label);
+    }
+}
 
 public sealed record PublicFailureReference(
     Guid DiagnosticId,
@@ -356,7 +407,8 @@ public sealed record ResponseCompletedOutput(
     int HeardTextEndExclusive,
     string? InterruptReason = null,
     string? FinishReason = null,
-    string? SpeechText = null) : OutputPayload;
+    string? SpeechText = null,
+    IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null) : OutputPayload;
 
 public sealed record ResponseInterruptedOutput(string Reason, int HeardTextEndExclusive) : OutputPayload;
 
@@ -486,6 +538,9 @@ public static class PublicHistory
         var speechText = entry.Role == ConversationRole.Assistant
             ? entry.Envelope?.PublicCustomSpeech()
             : null;
+        var memoryReceipts = entry.Role == ConversationRole.Assistant
+            ? PublicMemoryReceipt.Visible(entry.Envelope?.MemoryReceipts)
+            : null;
         return new PublicHistoryEntry(
             entry.EntryId,
             entry.Sequence,
@@ -505,7 +560,8 @@ public static class PublicHistory
             speechText,
             entry.Status == EntryStatus.Failed && entry.Failure is { } failure
                 ? new PublicFailureReference(failure.DiagnosticId, failure.CorrelationId, failure.Category, failure.Code)
-                : null);
+                : null,
+            memoryReceipts);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

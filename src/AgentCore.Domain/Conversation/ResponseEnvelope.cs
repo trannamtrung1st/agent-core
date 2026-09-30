@@ -26,11 +26,30 @@ public enum ResponseSpeechMode
 
 public sealed record ResponseSpeech(ResponseSpeechMode Mode, string? Text);
 
+/// <summary>
+/// Controller admission outcome stored beside the reply. It is not display or speech text.
+/// </summary>
+public sealed record MemoryReceipt(
+    string Outcome,
+    string Operation,
+    string Source,
+    string Subject,
+    string? Scope,
+    string Presentation)
+{
+    public const string Silent = "silent";
+    public const string Indicator = "indicator";
+    public const string Explicit = "explicit";
+
+    public bool IsUserVisible => Presentation is Indicator or Explicit;
+}
+
 public sealed record ResponseEnvelope(
     string DisplayText,
     string? SpeechText,
     IReadOnlyList<ResponseBlock> Blocks,
-    ResponseSpeechMode SpeechMode)
+    ResponseSpeechMode SpeechMode,
+    IReadOnlyList<MemoryReceipt>? MemoryReceipts = null)
 {
     public ResponseEnvelope(string displayText, string? speechText, IReadOnlyList<ResponseBlock> blocks)
         : this(

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -304,7 +305,11 @@ public sealed class ExplicitUserMemoryTests
                     captureRequest.Messages,
                     message => message.Text.Contains("Explicit memory capture", StringComparison.Ordinal));
                 var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-                Assert.Contains("Memory saved for later sessions: project codename.", assistant.Text, StringComparison.Ordinal);
+                Assert.DoesNotContain("Memory saved", assistant.Text, StringComparison.Ordinal);
+                var receipt = Assert.Single(assistant.Envelope!.MemoryReceipts!);
+                Assert.Equal(MemoryReceipt.Silent, receipt.Presentation);
+                Assert.Equal("stored", receipt.Outcome);
+                Assert.Null(PublicMemoryReceipt.From(receipt));
             }
 
             var admission = Admission();

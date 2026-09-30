@@ -56,6 +56,34 @@ public sealed class ConversationFailureDiagnosticTests
     }
 
     [Fact]
+    public async Task Invalid_response_provider_failure_logs_bounded_reason_and_channel()
+    {
+        var logs = new DiagnosticLogCapture<SessionRuntime>();
+        var diagnostics = new QueueDiagnosticIdSource([DiagnosticId, SecondDiagnosticId]);
+        await using var runtime = CreateRuntime(new ScriptedEventsModel(
+            [
+                new ModelFailed(new ProviderFailure(
+                    ProviderErrorCode.InvalidResponse,
+                    "Malformed assistant envelope.",
+                    FailureReason: ProviderFailureReason.InvalidMemoryProposal,
+                    ResponseChannel: ProviderResponseChannel.ResponseFunction))
+            ]), logs, diagnostics);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "fail",
+            Guid.Parse("019944af-00d7-7000-8000-000000000041")));
+        await runtime.WaitUntilIdleAsync();
+
+        var failed = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(DiagnosticId, failed.Failure!.DiagnosticId);
+        Assert.Equal("InvalidResponse", failed.Failure.Code);
+        var logged = Assert.Single(logs.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Equal(DiagnosticId, logged.Properties["DiagnosticId"]);
+        Assert.Equal(ProviderFailureReason.InvalidMemoryProposal, logged.Properties["FailureReason"]);
+        Assert.Equal(ProviderResponseChannel.ResponseFunction, logged.Properties["ProviderResponseChannel"]);
+        Assert.DoesNotContain("Malformed assistant envelope.", logged.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Model_pump_catch_logs_the_exception_with_the_only_id()
     {
         var logs = new DiagnosticLogCapture<SessionRuntime>();

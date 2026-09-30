@@ -37,6 +37,29 @@ public sealed class ResponseEnvelopeJsonTests
         Assert.Equal(ResponseSpeechMode.Custom, restored.SpeechMode);
         Assert.Equal("Spoken", restored.SpeechText);
         Assert.True(Assert.Single(restored.Blocks).DisplayDelivered);
+        Assert.Null(restored.MemoryReceipts);
+    }
+
+    [Fact]
+    public void Memory_receipts_round_trip_apart_from_display_and_speech()
+    {
+        var original = new ResponseEnvelope(
+            "Got it.",
+            "Spoken line.",
+            [],
+            ResponseSpeechMode.Custom,
+            [new MemoryReceipt("stored", "upsert", "userExplicit", "project codename", "identityUser", MemoryReceipt.Indicator)]);
+        var json = ResponseEnvelopeJson.Serialize(original);
+        Assert.Contains("\"memoryReceipts\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory saved", json, StringComparison.Ordinal);
+        Assert.Contains("\"displayText\":\"Got it.\"", json, StringComparison.Ordinal);
+        var restored = ResponseEnvelopeJson.Deserialize(json);
+        Assert.Equal("Got it.", restored!.DisplayText);
+        Assert.Equal("Spoken line.", restored.SpeechText);
+        var receipt = Assert.Single(restored.MemoryReceipts!);
+        Assert.Equal("project codename", receipt.Subject);
+        Assert.Equal(MemoryReceipt.Indicator, receipt.Presentation);
+        Assert.Equal("identityUser", receipt.Scope);
     }
 
     [Fact]

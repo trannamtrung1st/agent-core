@@ -16,10 +16,12 @@ public static class ResponseEnvelopeJson
     {
         ArgumentNullException.ThrowIfNull(envelope);
         envelope = NormalizeForPersistence(envelope);
+        var receipts = envelope.MemoryReceipts is { Count: > 0 } ? envelope.MemoryReceipts : null;
         var dto = new EnvelopeDto(
             envelope.DisplayText,
             new SpeechDto(ToWire(envelope.SpeechMode), WireSpeechText(envelope)),
-            envelope.Blocks);
+            envelope.Blocks,
+            receipts);
         return JsonSerializer.Serialize(dto, Json);
     }
 
@@ -38,6 +40,15 @@ public static class ResponseEnvelopeJson
         var blocks = root.TryGetProperty("blocks", out var blocksEl)
             ? JsonSerializer.Deserialize<ResponseBlock[]>(blocksEl.GetRawText(), Json) ?? []
             : [];
+        IReadOnlyList<MemoryReceipt>? receipts = null;
+        if (root.TryGetProperty("memoryReceipts", out var receiptsEl) && receiptsEl.ValueKind == JsonValueKind.Array)
+        {
+            receipts = JsonSerializer.Deserialize<MemoryReceipt[]>(receiptsEl.GetRawText(), Json);
+            if (receipts is not { Count: > 0 })
+            {
+                receipts = null;
+            }
+        }
 
         if (root.TryGetProperty("speech", out var speechEl) && speechEl.ValueKind == JsonValueKind.Object)
         {
@@ -49,7 +60,7 @@ public static class ResponseEnvelopeJson
                 text = textEl.GetString();
             }
 
-            return Reconstruct(display, mode, text, blocks);
+            return Reconstruct(display, mode, text, blocks, receipts);
         }
 
         string? legacy = null;
@@ -60,25 +71,29 @@ public static class ResponseEnvelopeJson
 
         if (!string.IsNullOrEmpty(legacy))
         {
-            return new ResponseEnvelope(display, legacy, blocks, ResponseSpeechMode.Custom);
+            return new ResponseEnvelope(display, legacy, blocks, ResponseSpeechMode.Custom, receipts);
         }
 
-        return new ResponseEnvelope(display, null, blocks, ResponseSpeechMode.Same);
+        return new ResponseEnvelope(display, null, blocks, ResponseSpeechMode.Same, receipts);
     }
 
     private static ResponseEnvelope Reconstruct(
         string display,
         ResponseSpeechMode mode,
         string? text,
-        IReadOnlyList<ResponseBlock> blocks)
+        IReadOnlyList<ResponseBlock> blocks,
+        IReadOnlyList<MemoryReceipt>? receipts)
     {
         try
         {
-            return ResponseEnvelope.Create(display, new ResponseSpeech(mode, text), blocks);
+            return ResponseEnvelope.Create(display, new ResponseSpeech(mode, text), blocks) with
+            {
+                MemoryReceipts = receipts
+            };
         }
         catch (ArgumentException)
         {
-            return new ResponseEnvelope(display, RestoreSpeechText(mode, text), blocks, mode);
+            return new ResponseEnvelope(display, RestoreSpeechText(mode, text), blocks, mode, receipts);
         }
     }
 
@@ -125,7 +140,11 @@ public static class ResponseEnvelopeJson
         _ => ResponseSpeechMode.Same
     };
 
-    private sealed record EnvelopeDto(string DisplayText, SpeechDto Speech, IReadOnlyList<ResponseBlock> Blocks);
+    private sealed record EnvelopeDto(
+        string DisplayText,
+        SpeechDto Speech,
+        IReadOnlyList<ResponseBlock> Blocks,
+        IReadOnlyList<MemoryReceipt>? MemoryReceipts = null);
 
     private sealed record SpeechDto(string Mode, string? Text);
 }

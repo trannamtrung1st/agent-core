@@ -167,32 +167,7 @@ public static class MemoryProposalCodec
 public static class MemoryAdmissionPrompt
 {
     public const string SelectivityGuidance = """
-        Memory proposals are optional structured intents. Propose durable memory only when it is reasonably useful beyond this turn: stable preferences, durable facts, user goals, decisions, open loops, or working context likely to recur. Do not propose incidental small talk, ephemeral current state, duplicates, guesses stated as fact, assistant-invented details, secrets, or information the memory policy disallows. Do not say that information was saved, remembered, or forgotten. That wording rule is guidance. After a response completes successfully, the runtime appends its own admission receipt. The receipt is the authoritative outcome. The runtime does not rewrite earlier sentences.
+        Memory proposals are optional structured intents. Propose durable memory only when it is reasonably useful beyond this turn: stable preferences, durable facts, user goals, decisions, open loops, or working context likely to recur. Do not propose incidental small talk, ephemeral current state, duplicates, guesses stated as fact, assistant-invented details, secrets, or information the memory policy disallows. Do not say that information was saved, remembered, or forgotten. That wording rule is guidance. After a response completes successfully, the runtime records the admission outcome apart from the reply. It does not append that outcome to the answer. The receipt is the authoritative outcome. The runtime does not rewrite earlier sentences.
         """;
 
-    public static string? Render(IReadOnlyList<MemoryAdmissionResult> results)
-    {
-        if (results.Count == 0)
-        {
-            return null;
-        }
-
-        return string.Join('\n', results.Select(result => Render(result.Status, result.Proposal.Subject)));
-    }
-
-    public static string Render(MemoryAdmissionStatus status, string subject)
-    {
-        var label = string.IsNullOrWhiteSpace(subject) ? "memory" : subject.Trim();
-        return status switch
-        {
-            MemoryAdmissionStatus.Stored => $"Memory saved for later sessions: {label}.",
-            MemoryAdmissionStatus.Updated => $"Memory updated for later sessions: {label}.",
-            MemoryAdmissionStatus.AlreadyStored => $"Memory already saved: {label}.",
-            MemoryAdmissionStatus.StoredSessionOnly => $"Memory saved for this session only: {label}.",
-            MemoryAdmissionStatus.UpdatedSessionOnly => $"Memory updated for this session only: {label}.",
-            MemoryAdmissionStatus.Deleted => $"Memory removed: {label}.",
-            MemoryAdmissionStatus.Rejected or MemoryAdmissionStatus.Unavailable => $"Memory was not saved: {label}.",
-            _ => $"Memory was not saved: {label}."
-        };
-    }
 }

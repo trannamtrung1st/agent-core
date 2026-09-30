@@ -182,15 +182,30 @@ public sealed class TriggerScheduler
             }
         }
 
-        _logger.LogInformation(
-            "Trigger scan finished. Scanned {Scanned}, admitted {Admitted}, deduplicated {Deduplicated}, stale {Stale}, expired {Expired}, completed {Completed}, failed {Failed}.",
-            due.Count,
-            admitted,
-            deduplicated,
-            stale,
-            expired,
-            completed,
-            failed);
+        if (due.Count == 0 && failed == 0)
+        {
+            _logger.LogDebug(
+                "Trigger scan finished. Scanned {Scanned}, admitted {Admitted}, deduplicated {Deduplicated}, stale {Stale}, expired {Expired}, completed {Completed}, failed {Failed}.",
+                due.Count,
+                admitted,
+                deduplicated,
+                stale,
+                expired,
+                completed,
+                failed);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Trigger scan finished. Scanned {Scanned}, admitted {Admitted}, deduplicated {Deduplicated}, stale {Stale}, expired {Expired}, completed {Completed}, failed {Failed}.",
+                due.Count,
+                admitted,
+                deduplicated,
+                stale,
+                expired,
+                completed,
+                failed);
+        }
         return new TriggerSchedulerPass(
             due.Count,
             admitted,

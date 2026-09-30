@@ -11,7 +11,9 @@ public enum ProviderErrorCode
 public sealed record ProviderFailure(
     ProviderErrorCode Code,
     string SafeMessage,
-    TimeSpan? RetryAfter = null);
+    TimeSpan? RetryAfter = null,
+    string? FailureReason = null,
+    string? ResponseChannel = null);
 
 public enum ModelRole { System, User, Assistant, Tool }
 

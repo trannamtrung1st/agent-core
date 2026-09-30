@@ -1,5 +1,5 @@
 import { Button, Flex, Tag, Typography, theme } from "antd";
-import type { HistoryBlock, HistoryEntry } from "../../state/sessionStore";
+import type { HistoryBlock, HistoryEntry, MemoryReceiptView } from "../../state/sessionStore";
 import { HistoryAttachmentView } from "./AttachmentPreview";
 import { formatChatTime, statusLabel } from "./chatTime";
 import { DiagnosticDetails } from "./DiagnosticDetails";
@@ -79,16 +79,15 @@ export function ChatMessage({
           )}
         </div>
       ) : null}
+      {entry.memoryReceipts?.length ? (
+        <Flex wrap gap={token.paddingXS} className="chat-message-receipts">
+          {entry.memoryReceipts.map((receipt, index) => (
+            <MemoryReceiptLine key={`${receipt.operation}-${receipt.subject}-${index}`} receipt={receipt} />
+          ))}
+        </Flex>
+      ) : null}
       {status ? (
         <Flex align="center" gap={token.paddingXS} className="chat-message-status-row">
-          <Tag
-            color={entry.status === "failed" ? "red" : "gold"}
-            variant="solid"
-            className="chat-message-status"
-            title={entry.interruptReason ?? undefined}
-          >
-            {status}
-          </Tag>
           {entry.status === "failed" && entry.failure?.diagnosticId ? (
             <DiagnosticDetails
               fields={{
@@ -99,11 +98,40 @@ export function ChatMessage({
                 category: entry.failure.category,
                 code: entry.failure.code
               }}
+              trigger={
+                <Button
+                  danger
+                  type="primary"
+                  size="small"
+                  className="chat-message-status"
+                  aria-label="Failed — show error details"
+                >
+                  {status}
+                </Button>
+              }
             />
-          ) : null}
+          ) : (
+            <Tag
+              color={entry.status === "failed" ? "red" : "gold"}
+              variant="solid"
+              className="chat-message-status"
+              title={entry.interruptReason ?? undefined}
+            >
+              {status}
+            </Tag>
+          )}
         </Flex>
       ) : null}
     </li>
+  );
+}
+
+function MemoryReceiptLine({ receipt }: { receipt: MemoryReceiptView }) {
+  const explicit = receipt.presentation === "explicit";
+  return (
+    <Typography.Text type={explicit ? "danger" : "secondary"} className="chat-message-receipt">
+      {explicit ? receipt.label : `✓ ${receipt.label}`}
+    </Typography.Text>
   );
 }
 

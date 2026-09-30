@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { CopyOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { type ReactNode, useState } from "react";
 import { Button, Flex, Popover, Typography, theme } from "antd";
 import { diagnosticCopyText, type DiagnosticFields } from "./diagnosticCopy";
 
-export function DiagnosticDetails({ fields }: { fields: DiagnosticFields }) {
+export function DiagnosticDetails({ fields, trigger }: { fields: DiagnosticFields; trigger?: ReactNode }) {
   const { token } = theme.useToken();
   const copyText = diagnosticCopyText(fields);
   const [copied, setCopied] = useState(false);
@@ -11,7 +12,13 @@ export function DiagnosticDetails({ fields }: { fields: DiagnosticFields }) {
   }
 
   const diagnosticId = fields.diagnosticId.trim();
-  const idStyle = { userSelect: "text" as const, fontFamily: token.fontFamilyCode, wordBreak: "break-all" as const };
+  const idStyle = {
+    display: "block",
+    userSelect: "text" as const,
+    fontFamily: token.fontFamilyCode,
+    fontSize: token.fontSizeSM,
+    wordBreak: "break-all" as const
+  };
   async function copy() {
     try {
       await navigator.clipboard.writeText(copyText ?? "");
@@ -24,6 +31,7 @@ export function DiagnosticDetails({ fields }: { fields: DiagnosticFields }) {
   return (
     <Popover
       trigger="click"
+      placement="topLeft"
       title="Error details"
       getPopupContainer={() => document.body}
       onOpenChange={(open) => {
@@ -32,58 +40,68 @@ export function DiagnosticDetails({ fields }: { fields: DiagnosticFields }) {
         }
       }}
       content={
-        <Flex vertical gap={token.paddingXS} data-testid="diagnostic-details">
-          <Typography.Text>Agent Core diagnostic</Typography.Text>
-          <Typography.Text style={idStyle} data-testid="diagnostic-id">
-            Diagnostic ID: {diagnosticId}
-          </Typography.Text>
+        <Flex
+          vertical
+          gap={token.paddingXS}
+          data-testid="diagnostic-details"
+          className="ac-scroll-pane"
+          style={{
+            width: "min(360px, calc(100vw - 32px))",
+            maxHeight: "calc(40vh - 8px)",
+            paddingInlineEnd: token.paddingXXS
+          }}
+        >
+          <DiagnosticField label="Diagnostic ID" value={diagnosticId} testId="diagnostic-id" />
           {fields.correlationId?.trim() ? (
-            <Typography.Text style={idStyle}>
-              Correlation ID: {fields.correlationId.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Correlation ID" value={fields.correlationId.trim()} />
           ) : null}
           {fields.sessionId?.trim() ? (
-            <Typography.Text style={idStyle}>
-              Session ID: {fields.sessionId.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Session ID" value={fields.sessionId.trim()} />
           ) : null}
           {fields.responseId?.trim() ? (
-            <Typography.Text style={idStyle}>
-              Response ID: {fields.responseId.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Response ID" value={fields.responseId.trim()} />
           ) : null}
           {fields.workItemId?.trim() ? (
-            <Typography.Text style={idStyle}>
-              Work Item ID: {fields.workItemId.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Work Item ID" value={fields.workItemId.trim()} />
           ) : null}
           {fields.triggerRegistrationId?.trim() ? (
-            <Typography.Text style={idStyle}>
-              Trigger ID: {fields.triggerRegistrationId.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Trigger ID" value={fields.triggerRegistrationId.trim()} />
           ) : null}
           {fields.triggerOccurrenceId?.trim() ? (
-            <Typography.Text style={idStyle}>
-              Occurrence ID: {fields.triggerOccurrenceId.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Occurrence ID" value={fields.triggerOccurrenceId.trim()} />
           ) : null}
           {fields.category?.trim() && fields.code?.trim() ? (
-            <Typography.Text>
-              Error: {fields.category.trim()} / {fields.code.trim()}
-            </Typography.Text>
+            <DiagnosticField label="Error" value={`${fields.category.trim()} / ${fields.code.trim()}`} />
           ) : fields.code?.trim() ? (
-            <Typography.Text>Error: {fields.code.trim()}</Typography.Text>
+            <DiagnosticField label="Error" value={fields.code.trim()} />
           ) : null}
-          <Button size="small" aria-label="Copy diagnostic" onClick={() => void copy()}>
-            Copy
+          <Button
+            icon={<CopyOutlined />}
+            aria-label="Copy diagnostic"
+            onClick={() => void copy()}
+            style={{ alignSelf: "flex-start", flex: "0 0 auto" }}
+          >
+            <span role="status">{copied ? "Copied" : "Copy details"}</span>
           </Button>
-          {copied ? <Typography.Text role="status">Copied</Typography.Text> : null}
         </Flex>
       }
     >
-      <Button size="small" aria-label="Error details">
-        Error details
-      </Button>
+      {trigger ?? (
+        <Button type="text" icon={<InfoCircleOutlined />} aria-label="Error details" title="Error details" />
+      )}
     </Popover>
   );
+
+  function DiagnosticField({ label, value, testId }: { label: string; value: string; testId?: string }) {
+    return (
+      <div style={{ flex: "0 0 auto" }}>
+        <Typography.Text type="secondary" style={{ display: "block", fontSize: token.fontSizeSM }}>
+          {label}
+        </Typography.Text>
+        <Typography.Text style={idStyle} data-testid={testId}>
+          {value}
+        </Typography.Text>
+      </div>
+    );
+  }
 }

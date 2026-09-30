@@ -16,7 +16,7 @@ internal sealed class MarkerSemanticResponseParser
         return AdvanceDisplay(parsed.DisplayText);
     }
 
-    public bool TryFinish(out ModelSemanticResponse? response, out string safeFailure)
+    public bool TryFinish(out ModelSemanticResponse? response, out string failureReason)
     {
         var parsed = Parse(_raw.ToString(), finalize: true);
         if (parsed.DisplayText.Length > AssistantResponseSchema.MaxDisplayCharacters
@@ -24,14 +24,14 @@ internal sealed class MarkerSemanticResponseParser
             || parsed.Speech.Text is { Length: > AssistantResponseSchema.MaxSpeechCharacters })
         {
             response = null;
-            safeFailure = "Malformed assistant envelope.";
+            failureReason = ProviderFailureReason.ResponseTooLarge;
             return false;
         }
 
         if (string.IsNullOrWhiteSpace(parsed.DisplayText))
         {
             response = null;
-            safeFailure = "Malformed assistant envelope.";
+            failureReason = ProviderFailureReason.MissingDisplayText;
             return false;
         }
 
@@ -48,7 +48,7 @@ internal sealed class MarkerSemanticResponseParser
         }
 
         response = parsed;
-        safeFailure = string.Empty;
+        failureReason = string.Empty;
         return true;
     }
 

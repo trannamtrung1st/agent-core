@@ -1,4 +1,5 @@
 using AgentCore.Application.Agents;
+using AgentCore.Application.Events;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Testing;
 using AgentCore.Application.Ports;
@@ -54,7 +55,11 @@ public sealed class MemoryProposalAdmissionTests
         Assert.Equal("agent_inferred", item.Provenance.Source);
         var user = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.User);
         Assert.Equal(user.EntryId, Assert.Single(item.Provenance.SourceEntryIds));
-        Assert.Contains("Memory saved for later sessions: answer length.", AssistantText(runtime), StringComparison.Ordinal);
+        AssertReplyOmitsReceipt(AssistantText(runtime));
+        var saved = AssistantReceipt(runtime);
+        Assert.Equal(MemoryReceipt.Silent, saved.Presentation);
+        Assert.Equal("stored", saved.Outcome);
+        Assert.Equal("answer length", saved.Subject);
     }
 
     [Fact]
@@ -75,6 +80,10 @@ public sealed class MemoryProposalAdmissionTests
         var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit"));
         Assert.Equal("not verbose", Assert.Single(stored).Content);
         Assert.Equal("user_explicit", stored[0].Provenance.Source);
+        AssertReplyOmitsReceipt(AssistantText(runtime));
+        var receipt = AssistantReceipt(runtime);
+        Assert.Equal(MemoryReceipt.Indicator, receipt.Presentation);
+        Assert.Equal("Remembered", PublicMemoryReceipt.From(receipt)!.Label);
     }
 
     [Fact]
@@ -154,8 +163,10 @@ public sealed class MemoryProposalAdmissionTests
             "My favorite editor is Rider.",
             Guid.Parse("019944af-0030-7000-8000-000000000015")));
         await runtime.WaitUntilIdleAsync();
-        Assert.Contains("Memory was not saved: editor.", AssistantText(runtime), StringComparison.Ordinal);
-        Assert.DoesNotContain("Memory saved", AssistantText(runtime), StringComparison.Ordinal);
+        AssertReplyOmitsReceipt(AssistantText(runtime));
+        var rejected = AssistantReceipt(runtime);
+        Assert.Equal(MemoryReceipt.Silent, rejected.Presentation);
+        Assert.Equal("unavailable", rejected.Outcome);
         Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred")));
     }
 
@@ -200,12 +211,17 @@ public sealed class MemoryProposalAdmissionTests
         Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit")));
         var text = AssistantText(runtime);
         Assert.StartsWith("Understood.", text, StringComparison.Ordinal);
-        Assert.Contains("Memory was not saved: token.", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Memory saved", text, StringComparison.Ordinal);
+        AssertReplyOmitsReceipt(text);
+        var rejected = AssistantReceipt(runtime);
+        Assert.Equal(MemoryReceipt.Explicit, rejected.Presentation);
+        Assert.Equal("Not saved: token.", PublicMemoryReceipt.From(rejected)!.Label);
+        var projected = PublicHistory.FromEntry(runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant));
+        Assert.Equal("Understood.", projected.Text);
+        Assert.Equal("Not saved: token.", Assert.Single(projected.MemoryReceipts!).Label);
     }
 
     [Fact]
-    public async Task Custom_speech_carries_the_same_memory_result_as_the_display()
+    public async Task Custom_speech_stays_free_of_the_memory_receipt()
     {
         var memories = Service();
         await using var runtime = await RuntimeAsync(
@@ -221,8 +237,9 @@ public sealed class MemoryProposalAdmissionTests
 
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         Assert.Contains("Here is the result.", assistant.Envelope?.SpeechText, StringComparison.Ordinal);
-        Assert.Contains("Memory was not saved: token.", assistant.Text, StringComparison.Ordinal);
-        Assert.Contains("Memory was not saved: token.", assistant.Envelope?.SpeechText, StringComparison.Ordinal);
+        AssertReplyOmitsReceipt(assistant.Text);
+        Assert.DoesNotContain("Memory was not saved", assistant.Envelope?.SpeechText, StringComparison.Ordinal);
+        Assert.Equal(MemoryReceipt.Explicit, Assert.Single(assistant.Envelope!.MemoryReceipts!).Presentation);
         Assert.Empty(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("user_explicit")));
     }
 
@@ -269,7 +286,7 @@ public sealed class MemoryProposalAdmissionTests
         var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
         var item = Assert.Single(stored);
         Assert.Equal("Borealis", item.Content);
-        Assert.Contains("Memory saved for later sessions: project codename.", AssistantText(runtime), StringComparison.Ordinal);
+        AssertSilentStored(runtime, "project codename");
     }
 
     [Fact]
@@ -284,7 +301,7 @@ public sealed class MemoryProposalAdmissionTests
 
         var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
         Assert.Equal("Rider", Assert.Single(stored).Content);
-        Assert.Contains("Memory saved for later sessions: editor.", AssistantText(runtime), StringComparison.Ordinal);
+        AssertSilentStored(runtime, "editor");
         Assert.DoesNotContain("already saved", AssistantText(runtime), StringComparison.Ordinal);
     }
 
@@ -411,7 +428,7 @@ public sealed class MemoryProposalAdmissionTests
         await runtime.WaitUntilIdleAsync();
         var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
         Assert.Equal("Atlas", Assert.Single(stored).Content);
-        Assert.Contains("Memory saved for later sessions: project codename.", AssistantText(runtime), StringComparison.Ordinal);
+        AssertSilentStored(runtime, "project codename");
     }
 
     [Fact]
@@ -426,7 +443,7 @@ public sealed class MemoryProposalAdmissionTests
         await runtime.WaitUntilIdleAsync();
         var stored = await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"));
         Assert.Equal("Atlas", Assert.Single(stored).Content);
-        Assert.Contains("Memory saved for later sessions: project codename.", AssistantText(runtime), StringComparison.Ordinal);
+        AssertSilentStored(runtime, "project codename");
         Assert.Contains("can propose new learned memory", model.LastRequest!.Messages.Single(message => message.Text.Contains("Memory capability:", StringComparison.Ordinal)).Text, StringComparison.Ordinal);
     }
 
@@ -443,7 +460,7 @@ public sealed class MemoryProposalAdmissionTests
             Guid.Parse("019944af-0030-7000-8000-000000000023")));
         await runtime.WaitUntilIdleAsync();
         Assert.Equal("Rider", Assert.Single(await memories.SearchAsync(new TrustedMemoryOwner(SessionA), new MemorySearchQuery(null, null), Admission("agent_inferred"))).Content);
-        Assert.Contains("Memory saved for later sessions: editor.", AssistantText(runtime), StringComparison.Ordinal);
+        AssertSilentStored(runtime, "editor");
     }
 
     [Fact]
@@ -540,6 +557,28 @@ public sealed class MemoryProposalAdmissionTests
 
     private static string AssistantText(SessionRuntime runtime) =>
         runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Text;
+
+    private static MemoryReceipt AssistantReceipt(SessionRuntime runtime) =>
+        Assert.Single(runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant).Envelope!.MemoryReceipts!);
+
+    private static void AssertReplyOmitsReceipt(string text)
+    {
+        Assert.DoesNotContain("Memory saved", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory was not saved", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory updated", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory removed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Memory already", text, StringComparison.Ordinal);
+    }
+
+    private static void AssertSilentStored(SessionRuntime runtime, string subject)
+    {
+        AssertReplyOmitsReceipt(AssistantText(runtime));
+        var receipt = AssistantReceipt(runtime);
+        Assert.Equal(MemoryReceipt.Silent, receipt.Presentation);
+        Assert.Equal("stored", receipt.Outcome);
+        Assert.Equal(subject, receipt.Subject);
+        Assert.Null(PublicHistory.FromEntry(runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant)).MemoryReceipts);
+    }
 
     private static MemoryProposal Proposal(MemoryKind kind, string subject, string content, MemoryProposalSource source) =>
         new(MemoryProposalOperation.Upsert, kind, subject, content, null, source);

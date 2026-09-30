@@ -135,6 +135,14 @@ public sealed record HistoryBlockResponse(
 
 public sealed record HistoryAttachmentResponse(string AttachmentId, string DisplayName, string ContentType);
 
+public sealed record HistoryMemoryReceiptResponse(
+    string Outcome,
+    string Operation,
+    string Subject,
+    string? Scope,
+    string Presentation,
+    string Label);
+
 public sealed record HistoryItemResponse(
     string EntryId,
     long Sequence,
@@ -153,7 +161,9 @@ public sealed record HistoryItemResponse(
     string? SpeechText = null,
     string? InterruptReason = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    HistoryFailureResponse? Failure = null);
+    HistoryFailureResponse? Failure = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<HistoryMemoryReceiptResponse>? MemoryReceipts = null);
 
 public sealed record HistoryFailureResponse(
     string DiagnosticId,

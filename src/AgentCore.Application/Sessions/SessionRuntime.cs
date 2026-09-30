@@ -3222,7 +3222,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         else
         {
-            await CommitStagedMemoryAsync(context, responseId, cancellationToken).ConfigureAwait(false);
+            await CommitStagedMemoryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         _responseTerminal = true;
@@ -3293,7 +3293,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     failed,
                                     HeardTextEndExclusive: heard,
                                     FinishReason: failed ? null : _modelFinishReason,
-                                    SpeechText: PublicSpeechText())),
+                                    SpeechText: PublicSpeechText(),
+                                    MemoryReceipts: VisibleMemoryReceipts())),
                             ct)
                         .ConfigureAwait(false);
                 }
@@ -3481,7 +3482,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             "provider",
             failure.Code.ToString(),
             "Assistant response failed.",
-            null);
+            null,
+            failure.FailureReason,
+            failure.ResponseChannel);
         return new FailureReference(diagnosticId, "provider", failure.Code.ToString(), CorrelationOrNull(context));
     }
 
@@ -3510,7 +3513,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string category,
         string code,
         string message,
-        Exception? exception) =>
+        Exception? exception,
+        string? failureReason = null,
+        string? providerResponseChannel = null) =>
         DiagnosticLog.Error(
             _logger,
             exception,
@@ -3523,7 +3528,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 AgentInstanceId: _snapshot.AgentInstanceId,
                 ErrorCategory: category,
                 ErrorCode: code,
-                ProviderAlias: _snapshot.ModelSelection?.ProviderAlias));
+                ProviderAlias: _snapshot.ModelSelection?.ProviderAlias,
+                FailureReason: failureReason,
+                ProviderResponseChannel: providerResponseChannel));
 
     private static Guid? CorrelationOrNull(EventContext context) =>
         context.CorrelationId == Guid.Empty ? null : context.CorrelationId;

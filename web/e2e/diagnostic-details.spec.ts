@@ -9,10 +9,10 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await page.getByRole("button", { name: "Send" }).click();
   const row = page.locator(".chat-message-assistant").last();
   await expect(row.getByText("Failed")).toBeVisible({ timeout: 15_000 });
-  await row.getByRole("button", { name: "Error details" }).click();
+  await row.getByRole("button", { name: "Failed — show error details" }).click();
   const details = page.getByTestId("diagnostic-details");
-  await expect(details).toContainText("Diagnostic ID:");
-  const diagnosticId = (await page.getByTestId("diagnostic-id").innerText()).replace("Diagnostic ID: ", "").trim();
+  await expect(details).toContainText("Diagnostic ID");
+  const diagnosticId = (await page.getByTestId("diagnostic-id").innerText()).trim();
   expect(diagnosticId).toMatch(/^[0-9a-f-]{36}$/i);
   await page.getByRole("button", { name: "Copy diagnostic" }).click();
   await expect(page.getByRole("status")).toHaveText("Copied");
@@ -24,8 +24,8 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   const reloaded = page.locator(".chat-message-assistant").last();
   await expect(reloaded.getByText("Failed")).toBeVisible();
-  await reloaded.getByRole("button", { name: "Error details" }).click();
-  await expect(page.getByTestId("diagnostic-id")).toHaveText(`Diagnostic ID: ${diagnosticId}`);
+  await reloaded.getByRole("button", { name: "Failed — show error details" }).click();
+  await expect(page.getByTestId("diagnostic-id")).toHaveText(diagnosticId);
 });
 
 test("background work shows a seeded terminal diagnostic", async ({ page }) => {
@@ -66,9 +66,10 @@ test("background work shows a seeded terminal diagnostic", async ({ page }) => {
   await expect(drawer.getByText("The model timed out.")).toBeVisible();
   await drawer.getByRole("button", { name: "Error details" }).click();
   const details = page.getByTestId("diagnostic-details");
-  await expect(details).toContainText("Diagnostic ID: 019944af-0008-7000-8000-0000000000d9");
-  await expect(details).toContainText("Work Item ID: 019944af-00c5-7000-8000-0000000000aa");
-  await expect(details).toContainText("Error: model-timeout");
+  await expect(page.getByTestId("diagnostic-id")).toHaveText("019944af-0008-7000-8000-0000000000d9");
+  await expect(details).toContainText("Work Item ID");
+  await expect(details).toContainText("019944af-00c5-7000-8000-0000000000aa");
+  await expect(details).toContainText("model-timeout");
   await expect(details).not.toContainText("Trigger ID");
   await expect(details).not.toContainText("Occurrence ID");
 });
@@ -92,9 +93,7 @@ test("admin inventory keeps a server diagnostic id", async ({ page }) => {
   const definitions = page.locator('section[aria-label="Definitions"]');
   await expect(definitions.getByText("The request could not be completed.")).toBeVisible({ timeout: 15_000 });
   await definitions.getByRole("button", { name: "Error details" }).click();
-  await expect(page.getByTestId("diagnostic-id")).toHaveText(
-    "Diagnostic ID: 019944af-0008-7000-8000-0000000000e1"
-  );
+  await expect(page.getByTestId("diagnostic-id")).toHaveText("019944af-0008-7000-8000-0000000000e1");
 });
 
 async function openNewDraftForm(page: import("@playwright/test").Page, definitionId: string) {
@@ -126,9 +125,7 @@ test("authoring options warning keeps a server diagnostic id", async ({ page }) 
   const form = page.locator("section[aria-label='Model and providers']");
   await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
   await form.getByRole("button", { name: "Error details" }).click();
-  await expect(page.getByTestId("diagnostic-id")).toHaveText(
-    "Diagnostic ID: 019944af-0008-7000-8000-0000000000e2"
-  );
+  await expect(page.getByTestId("diagnostic-id")).toHaveText("019944af-0008-7000-8000-0000000000e2");
 });
 
 test("authoring options warning hides details when the response has no id", async ({ page }) => {

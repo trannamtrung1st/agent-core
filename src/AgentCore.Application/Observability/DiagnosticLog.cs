@@ -16,11 +16,13 @@ public readonly record struct DiagnosticContext(
     Guid? WorkItemId = null,
     string? ErrorCategory = null,
     string? ErrorCode = null,
-    string? ProviderAlias = null)
+    string? ProviderAlias = null,
+    string? FailureReason = null,
+    string? ProviderResponseChannel = null)
 {
     public IReadOnlyList<KeyValuePair<string, object?>> ToFields(Guid diagnosticId, string? traceId)
     {
-        var items = new List<KeyValuePair<string, object?>>(12)
+        var items = new List<KeyValuePair<string, object?>>(14)
         {
             new("DiagnosticId", diagnosticId)
         };
@@ -35,6 +37,8 @@ public readonly record struct DiagnosticContext(
         AddToken(items, "ErrorCategory", ErrorCategory);
         AddToken(items, "ErrorCode", ErrorCode);
         AddToken(items, "ProviderAlias", ProviderAlias);
+        AddToken(items, "FailureReason", FailureReason);
+        AddToken(items, "ProviderResponseChannel", ProviderResponseChannel);
         return items;
     }
 
