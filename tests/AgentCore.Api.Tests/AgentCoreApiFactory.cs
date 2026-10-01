@@ -19,6 +19,8 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
             var values = new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:DetachGracePeriodSeconds"] = "0",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Providers:Speech:Recognition:Adapter"] = "Synthetic",

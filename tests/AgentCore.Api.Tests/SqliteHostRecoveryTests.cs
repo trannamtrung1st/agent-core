@@ -653,6 +653,8 @@ internal sealed class DurableSqliteHostFactory(string dbPath, bool runScheduler 
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={dbPath}"
@@ -778,6 +780,8 @@ internal sealed class GatedUserTurnSqliteFactory(string dbPath) : WebApplication
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={dbPath}"
@@ -903,6 +907,8 @@ internal sealed class GatedEndSqliteFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={_db}"
@@ -1050,6 +1056,8 @@ internal sealed class PauseAfterEndSqliteFactory : WebApplicationFactory<Program
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={_db}"
@@ -1198,6 +1206,8 @@ internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={_db}"
@@ -1326,6 +1336,8 @@ internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Progr
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={_db}"

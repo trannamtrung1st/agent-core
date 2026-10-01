@@ -30,8 +30,8 @@ using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Infrastructure;
 
@@ -337,6 +337,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
+        services.TryAddSingleton(sp => new PlaywrightBrowserSession(
+            sp.GetRequiredService<BrowserOptions>(),
+            sp.GetService<ILoggerFactory>()));
+        services.TryAddSingleton<IBrowserSession>(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
+        services.AddHostedService(sp => sp.GetRequiredService<PlaywrightBrowserSession>());
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
             provider.GetService<IAttachmentStore>(),

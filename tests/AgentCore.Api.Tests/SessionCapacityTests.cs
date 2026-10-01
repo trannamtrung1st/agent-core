@@ -116,6 +116,8 @@ public sealed class CapacityOneApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Browser:FixturePort"] = "0",
+                ["Browser:Headless"] = "true",
                 ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
                 ["AgentCore:MaxActiveSessions"] = "1",
                 ["AgentCore:DetachGracePeriodSeconds"] = "0"

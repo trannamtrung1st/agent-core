@@ -87,7 +87,11 @@ export default defineConfig({
           ?? path.join(playwrightData, "artifacts"),
         // Keep the durability gate fast while still exercising grace expiry and headless continuation.
         AgentCore__DetachGracePeriodSeconds: "2",
-        AgentCore__MaxActiveSessions: "32"
+        AgentCore__MaxActiveSessions: "32",
+        Browser__Enabled: "true",
+        Browser__Headless: "true",
+        Browser__FixturePort: "5091",
+        Browser__TargetOrigins__0: "http://127.0.0.1:5091"
       },
       url: `${apiUrl}/health`,
       reuseExistingServer: !process.env.CI,
@@ -117,7 +121,11 @@ export default defineConfig({
         Providers__Speech__Recognition__Adapter: "Browser",
         AGENTCORE_LIVE_PROVIDER_TESTS: "0",
         AGENTCORE_LIVE_OPENAI_STT: "0",
-        AGENTCORE_LIVE_OPENAI_TTS: "0"
+        AGENTCORE_LIVE_OPENAI_TTS: "0",
+        Browser__Enabled: "true",
+        Browser__Headless: "true",
+        Browser__FixturePort: "5092",
+        Browser__TargetOrigins__0: "http://127.0.0.1:5092"
       },
       url: `${browserSttApiUrl}/health`,
       reuseExistingServer: false,
@@ -145,7 +153,11 @@ export default defineConfig({
         Providers__Speech__Synthesis__Adapter: "Browser",
         AGENTCORE_LIVE_PROVIDER_TESTS: "0",
         AGENTCORE_LIVE_OPENAI_STT: "0",
-        AGENTCORE_LIVE_OPENAI_TTS: "0"
+        AGENTCORE_LIVE_OPENAI_TTS: "0",
+        Browser__Enabled: "true",
+        Browser__Headless: "true",
+        Browser__FixturePort: "5093",
+        Browser__TargetOrigins__0: "http://127.0.0.1:5093"
       },
       url: `${browserBrowserApiUrl}/health`,
       reuseExistingServer: false,

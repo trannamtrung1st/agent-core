@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Isolate</title>
+</head>
+<body>
+  <p id="cookie-value">alpha</p>
+  <p id="local-value">p9_local_value</p>
+  <p id="session-value">p9_session_storage_value</p>
+  <label for="secret">Password</label>
+  <input id="secret" type="password" value="p9-password-secret">
+  <script>
+    document.cookie = "p9_session=alpha; path=/";
+    localStorage.setItem("p9_local", "p9_local_value");
+    sessionStorage.setItem("p9_session_storage", "p9_session_storage_value");
+  </script>
+</body>
+</html>
