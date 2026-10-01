@@ -78,6 +78,7 @@ public sealed class ReadyHistoryProjectionTests
         await runtime.SubmitUserTextAsync("Hello");
         await output.WaitForAsync(item => item.Payload is TextDeltaOutput);
         await runtime.WaitUntilMailboxDrainedAsync();
+        await store.StreamingAssistantPersisted.Task;
         var assistant = runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
         var responseId = assistant.ResponseId!.Value;
         Assert.Equal("T1", assistant.Text);
@@ -172,17 +173,27 @@ public sealed class ReadyHistoryProjectionTests
 
 file sealed class LaggingAssistantPersistStore(InMemoryMemoryStore inner) : IMemoryStore
 {
+    public TaskCompletionSource StreamingAssistantPersisted { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
         inner.LoadAsync(sessionId, cancellationToken);
 
-    public ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
+    public async ValueTask SaveAsync(SessionSnapshot snapshot, long expectedRevision, CancellationToken cancellationToken = default)
     {
         var entries = snapshot.Entries
             .Select(entry => entry is { Role: ConversationRole.Assistant, Status: EntryStatus.Streaming } && entry.Text.Length > 0
                 ? entry with { Text = entry.Text[..1], ReceivedTextEndExclusive = 0 }
                 : entry)
             .ToArray();
-        return inner.SaveAsync(snapshot with { Entries = entries }, expectedRevision, cancellationToken);
+        await inner.SaveAsync(snapshot with { Entries = entries }, expectedRevision, cancellationToken);
+        if (entries.Any(entry =>
+                entry.Role == ConversationRole.Assistant
+                && entry.Status == EntryStatus.Streaming
+                && entry.Text.Length > 0))
+        {
+            StreamingAssistantPersisted.TrySetResult();
+        }
     }
 
     public ValueTask<IReadOnlyList<ConversationEntry>> ReadHistoryAsync(
