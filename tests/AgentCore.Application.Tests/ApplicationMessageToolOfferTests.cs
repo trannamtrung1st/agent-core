@@ -91,8 +91,30 @@ public sealed class ApplicationMessageToolOfferTests
             ToolConfigurationGates.AllowAll,
             modelSupportsTools: true)!;
 
-        var description = Assert.Single(offered, tool => tool.Name == ToolCatalog.AppMessageSend).Description;
-        Assert.Contains("9 intermediate messages remain", description, StringComparison.Ordinal);
+        var appMessage = Assert.Single(offered, tool => tool.Name == ToolCatalog.AppMessageSend);
+        Assert.Contains("9 intermediate messages remain", appMessage.Description, StringComparison.Ordinal);
+        Assert.Contains("7900 aggregate characters remain", appMessage.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_schema_maxLength_matches_remaining_aggregate_characters()
+    {
+        var definition = Definition([ToolCatalog.WorkspaceList]);
+        var trigger = new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "hi");
+        var authorized = new[] { ToolRegistry.Get(ToolCatalog.WorkspaceList).ModelDefinition };
+        var budget = new ApplicationMessageBudget(0, 7880, ApplicationMessagePolicy.Default);
+
+        var offered = ApplicationMessageToolOffer.Apply(
+            authorized,
+            intermediateMessagingAllowed: true,
+            budget,
+            definition,
+            trigger,
+            ToolConfigurationGates.AllowAll,
+            modelSupportsTools: true)!;
+
+        var parameters = Assert.Single(offered, tool => tool.Name == ToolCatalog.AppMessageSend).ParametersJson;
+        Assert.Contains("\"maxLength\":120", parameters, StringComparison.Ordinal);
     }
 
     private static AgentDefinition Definition(IReadOnlyList<string> tools) =>

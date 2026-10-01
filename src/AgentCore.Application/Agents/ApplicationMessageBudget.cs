@@ -15,6 +15,11 @@ public readonly record struct ApplicationMessageBudget(
 
     public bool CanOfferTool => !IsExhausted;
 
+    public int EffectiveMaxTextLengthForOffer =>
+        Math.Min(
+            Policy.MaxCharactersPerMessage,
+            Math.Max(1, RemainingCharacters));
+
     public bool CanAdmit(int textLength) =>
         textLength > 0
         && textLength <= Policy.MaxCharactersPerMessage
