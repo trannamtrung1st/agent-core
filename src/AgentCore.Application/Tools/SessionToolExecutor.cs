@@ -35,6 +35,8 @@ public sealed partial class SessionToolExecutor(
     private readonly IToolConfigurationGate _configurationGate =
         configurationGate ?? ToolConfigurationGates.Unconfigured;
 
+    internal IToolConfigurationGate ConfigurationGate => _configurationGate;
+
     private readonly ITriggerCommandAuthorizer _triggerAuthorizer =
         triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
 

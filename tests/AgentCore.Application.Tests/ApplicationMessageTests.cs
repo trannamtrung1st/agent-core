@@ -61,7 +61,7 @@ public sealed class ApplicationMessageTests
     }
 
     [Fact]
-    public void Empty_skill_list_still_offers_application_messages_on_a_user_turn()
+    public void Empty_skill_list_does_not_offer_application_messages_before_substantive_work()
     {
         var definition = Definition();
         Assert.Empty(definition.SkillList);
@@ -76,22 +76,27 @@ public sealed class ApplicationMessageTests
             null,
             new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "hello"));
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(tool => tool.Name).ToArray();
-        Assert.Contains(ToolCatalog.AppMessageSend, offered);
+        Assert.DoesNotContain(ToolCatalog.AppMessageSend, offered);
         Assert.DoesNotContain(ToolCatalog.SkillsLoad, offered);
-        Assert.Equal(
-            ToolPolicyDecision.Allow,
-            ToolPolicy.EvaluateExecution(
-                definition,
-                ToolCatalog.AppMessageSend,
-                ToolConfigurationGates.Unconfigured,
-                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn)));
+        Assert.Contains(ToolCatalog.WorkspaceRead, offered);
+        var unlocked = context with { IntermediateMessagingAllowed = true };
+        Assert.Contains(
+            ToolCatalog.AppMessageSend,
+            ToolCatalog.For(definition, unlocked, ToolConfigurationGates.AllowAll).Select(tool => tool.Name));
         Assert.Equal(
             ToolPolicyDecision.Deny,
             ToolPolicy.EvaluateExecution(
                 definition,
                 ToolCatalog.AppMessageSend,
                 ToolConfigurationGates.AllowAll,
-                admission: new ToolExecutionAdmission(true, TriggerKind.UserTurn)));
+                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn)));
+        Assert.Equal(
+            ToolPolicyDecision.Allow,
+            ToolPolicy.EvaluateExecution(
+                definition,
+                ToolCatalog.AppMessageSend,
+                ToolConfigurationGates.AllowAll,
+                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn, IntermediateMessagingAllowed: true)));
     }
 
     [Fact]
@@ -178,6 +183,25 @@ public sealed class ApplicationMessageTests
     }
 
     [Fact]
+    public async Task Casual_greeting_completes_with_chat_respond_and_no_application_messages()
+    {
+        var model = new GreetingLanguageModel();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(model, turns, Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("how you doing");
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.ApplicationMessage);
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        Assert.Equal("Doing well, thanks for asking.", assistant.Text);
+        Assert.Null(assistant.Failure);
+        var initialTools = model.Requests[0].Tools?.Select(tool => tool.Name).ToArray() ?? [];
+        Assert.DoesNotContain(ToolCatalog.AppMessageSend, initialTools);
+    }
+
+    [Fact]
     public async Task Send_admits_three_visible_messages_and_the_next_turn_does_not_see_them()
     {
         var model = new MessagingLanguageModel();
@@ -188,12 +212,14 @@ public sealed class ApplicationMessageTests
         await runtime.SubmitUserTextAsync("hello");
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Equal(8, model.Requests.Count);
-        Assert.Contains(ToolCatalog.AppMessageSend, model.Requests[0].Tools!.Select(tool => tool.Name));
+        Assert.Equal(9, model.Requests.Count);
+        Assert.DoesNotContain(ToolCatalog.AppMessageSend, model.Requests[0].Tools!.Select(tool => tool.Name));
         Assert.DoesNotContain(ToolCatalog.SkillsLoad, model.Requests[0].Tools!.Select(tool => tool.Name));
-        Assert.Contains("duplicate", Text(model.Requests[2]), StringComparison.Ordinal);
-        Assert.Contains("only text", Text(model.Requests[3]), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("limit reached", Text(model.Requests[7]), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(ToolCatalog.WorkspaceList, model.Requests[0].Tools!.Select(tool => tool.Name));
+        Assert.Contains(ToolCatalog.AppMessageSend, model.Requests[1].Tools!.Select(tool => tool.Name));
+        Assert.Contains("duplicate", Text(model.Requests[3]), StringComparison.Ordinal);
+        Assert.Contains("only text", Text(model.Requests[4]), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("limit reached", Text(model.Requests[8]), StringComparison.OrdinalIgnoreCase);
         foreach (var request in model.Requests)
         {
             var text = Text(request);
@@ -329,7 +355,8 @@ public sealed class ApplicationMessageTests
         {
             Voice = new VoiceConfiguration(false, "default", 1),
             ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
-            Skills = []
+            Skills = [],
+            Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };
 
     private static SessionRuntime Create(
@@ -379,13 +406,35 @@ public sealed class ApplicationMessageTests
             turnExecutions: turns);
     }
 
+    private sealed class GreetingLanguageModel : ILanguageModel
+    {
+        public List<ModelRequest> Requests { get; } = [];
+
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse(
+                    "Doing well, thanks for asking.",
+                    new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                    []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
     private sealed class MessagingLanguageModel : ILanguageModel
     {
         private int _generation;
 
         public List<ModelRequest> Requests { get; } = [];
 
-        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
             ModelRequest request,
@@ -398,35 +447,43 @@ public sealed class ApplicationMessageTests
             switch (generation)
             {
                 case 1:
-                    yield return Call("m1", JsonSerializer.Serialize(new { text = FirstText }));
+                    yield return new ModelToolCallEvent(new ModelToolCall("wk-1", ToolCatalog.WorkspaceList, "{}"));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 2:
-                    yield return Call("m1", JsonSerializer.Serialize(new { text = ChangedText }));
+                    yield return Call("m1", JsonSerializer.Serialize(new { text = FirstText }));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 3:
-                    yield return Call("m-route", """{"text":"Nope","sessionId":"secret-session"}""");
+                    yield return Call("m1", JsonSerializer.Serialize(new { text = ChangedText }));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 4:
-                    yield return Call("m-dup", JsonSerializer.Serialize(new { text = $"  {FirstText}  " }));
+                    yield return Call("m-route", """{"text":"Nope","sessionId":"secret-session"}""");
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 5:
-                    yield return Call("m2", JsonSerializer.Serialize(new { text = SecondText }));
+                    yield return Call("m-dup", JsonSerializer.Serialize(new { text = $"  {FirstText}  " }));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 6:
-                    yield return Call("m3", JsonSerializer.Serialize(new { text = ThirdText }));
+                    yield return Call("m2", JsonSerializer.Serialize(new { text = SecondText }));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 7:
+                    yield return Call("m3", JsonSerializer.Serialize(new { text = ThirdText }));
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                    yield break;
+                case 8:
                     yield return Call("m4", JsonSerializer.Serialize(new { text = FourthText }));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 default:
-                    yield return new ModelTextDelta(generation == 8 ? "Shown" : "Noted");
+                    yield return new ModelSemanticResponseReady(
+                        new ModelSemanticResponse(
+                            generation == 9 ? "Shown" : "Noted",
+                            new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                            []));
                     yield return new ModelCompleted(ModelStopReason.Completed);
                     yield break;
             }
@@ -444,7 +501,7 @@ public sealed class ApplicationMessageTests
 
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
             ModelRequest request,
@@ -453,6 +510,13 @@ public sealed class ApplicationMessageTests
             var generation = Interlocked.Increment(ref _generation);
             await Task.Yield();
             if (generation == 1)
+            {
+                yield return new ModelToolCallEvent(new ModelToolCall("wk-1", ToolCatalog.WorkspaceList, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (generation == 2)
             {
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     "m1",
@@ -481,7 +545,7 @@ public sealed class ApplicationMessageTests
 
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true);
+        public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
 
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
             ModelRequest request,
@@ -491,6 +555,13 @@ public sealed class ApplicationMessageTests
             await Task.Yield();
             if (generation == 1)
             {
+                yield return new ModelToolCallEvent(new ModelToolCall("wk-1", ToolCatalog.WorkspaceList, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
+
+            if (generation == 2)
+            {
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     "m1",
                     ToolCatalog.AppMessageSend,
@@ -499,7 +570,7 @@ public sealed class ApplicationMessageTests
                 yield break;
             }
 
-            if (generation == 2)
+            if (generation == 3)
             {
                 yield return new ModelToolCallEvent(new ModelToolCall(
                     "m2",
@@ -513,7 +584,11 @@ public sealed class ApplicationMessageTests
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            yield return new ModelTextDelta("Noted");
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse(
+                    "Noted",
+                    new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                    []));
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }

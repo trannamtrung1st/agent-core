@@ -56,6 +56,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private readonly IStructuredMemoryService? _structuredMemory;
     private readonly IArtifactReferenceAuthorizer _artifacts;
     private readonly SessionToolExecutor _tools;
+    private readonly PromptContextBuilder _promptContextBuilder;
+    private bool _intermediateMessagingAllowed;
     private readonly InteractionPolicy _policy;
     private readonly VoiceAvailability _voice;
     private readonly object _audioGate = new();
@@ -223,6 +225,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _turnExecutions = turnExecutions;
         _artifacts = artifacts ?? new FixtureArtifactReferenceAuthorizer();
         _tools = tools ?? new SessionToolExecutor();
+        _promptContextBuilder = new PromptContextBuilder(_tools.ConfigurationGate);
         _voice = voice ?? new VoiceAvailability { SpeechAdaptersResolved = true };
         _recognition = recognition
             ?? _voice.EffectivePlan.RecognitionCapabilities
@@ -1766,6 +1769,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ResetSpeechOutput();
         _responseTerminal = false;
         _responseLifecycle = ResponseLifecycle.Live;
+        _intermediateMessagingAllowed = false;
         _outputActivity = OutputActivity.AgentGenerating;
         _responseCts = new CancellationTokenSource();
         _lastCheckpoint = DateTimeOffset.MinValue;
@@ -2467,6 +2471,83 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }, CancellationToken.None);
     }
 
+    private AgentContext CreateToolOfferContext(
+        AgentTrigger trigger,
+        IReadOnlyList<string> activeSkillIds,
+        ILanguageModel model) =>
+        new(
+            _snapshot.Definition,
+            _snapshot.Entries,
+            _snapshot.Summary,
+            _profile,
+            _snapshot.Mode,
+            _snapshot.PendingTopic,
+            _helpOfferedDuringSilence,
+            LastInterruptedHeardText(),
+            trigger,
+            SessionAttachments: SessionAttachmentManifestFromSnapshot(),
+            ModelSupportsTools: model.Capabilities.Tools,
+            ActiveSkillIds: activeSkillIds,
+            IntermediateMessagingAllowed: _intermediateMessagingAllowed);
+
+    private IReadOnlyList<SessionAttachmentManifestItem> SessionAttachmentManifestFromSnapshot()
+    {
+        var items = new List<SessionAttachmentManifestItem>();
+        var seen = new HashSet<Guid>();
+        foreach (var entry in _snapshot.Entries)
+        {
+            if (entry.Attachments is not { Count: > 0 } attachments)
+            {
+                continue;
+            }
+
+            foreach (var attachment in attachments)
+            {
+                if (!seen.Add(attachment.AttachmentId))
+                {
+                    continue;
+                }
+
+                items.Add(new SessionAttachmentManifestItem(
+                    attachment.AttachmentId,
+                    attachment.DisplayName,
+                    attachment.ContentType,
+                    entry.Sequence));
+            }
+        }
+
+        return items.Count == 0
+            ? []
+            : items
+                .OrderBy(item => item.UploadedWithEntrySequence)
+                .ThenBy(item => item.DisplayName, StringComparer.Ordinal)
+                .ToArray();
+    }
+
+    private ModelRequest WithOfferedTools(
+        ModelRequest request,
+        AgentTrigger trigger,
+        IReadOnlyList<string> activeSkillIds,
+        ILanguageModel model)
+    {
+        var tools = _promptContextBuilder.OfferTools(_snapshot.Definition, CreateToolOfferContext(trigger, activeSkillIds, model));
+        if (tools.Count == 0)
+        {
+            return request with
+            {
+                Tools = null,
+                ToolChoice = ModelToolChoice.Auto,
+                ToolChoiceName = null
+            };
+        }
+
+        return request with
+        {
+            Tools = tools,
+            MaxOutputTokens = ModelOutputBudgets.ForTurn(request.MaxOutputTokens, toolsOffered: true)
+        };
+    }
+
     private async Task PumpModelAsync(
         ILanguageModel model,
         ModelRequest request,
@@ -2493,7 +2574,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var pending = new List<ModelToolCall>();
                 var finished = false;
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, _snapshot.Definition, pinnedSkills).ToList();
-                var working = request with { Messages = messages };
+                var working = WithOfferedTools(
+                    request with { Messages = messages },
+                    trigger,
+                    pinnedSkills,
+                    model);
                 await foreach (var evt in model.GenerateAsync(working, generateToken).ConfigureAwait(false))
                 {
                     switch (evt)
@@ -2629,7 +2714,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             var policy = _tools.EvaluateExecutionPolicy(
                                 _snapshot.Definition,
                                 call.Name,
-                                admission: new ToolExecutionAdmission(Detached: false, trigger.Kind));
+                                admission: new ToolExecutionAdmission(
+                                    Detached: false,
+                                    trigger.Kind,
+                                    _intermediateMessagingAllowed));
                             if (policy == ToolPolicyDecision.Deny || string.IsNullOrWhiteSpace(call.Name))
                             {
                                 if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
@@ -2753,7 +2841,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             toolCts.Token,
                                             approvalGrant,
                                             TriggerCommand(trigger),
-                                            new ToolExecutionAdmission(Detached: false, trigger.Kind))
+                                            new ToolExecutionAdmission(
+                                                Detached: false,
+                                                trigger.Kind,
+                                                _intermediateMessagingAllowed))
                                         .ConfigureAwait(false);
                                     if (executionResult.ReplaceTriggerProposal)
                                     {
@@ -2761,6 +2852,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     }
 
                                     ApplyScheduleConversationFromTool(call.Name, executionResult.Text);
+                                    if (ApplicationMessageToolPolicy.UnlocksIntermediateMessaging(call.Name))
+                                    {
+                                        _intermediateMessagingAllowed = true;
+                                    }
                                 }
                             }
                         }

@@ -120,7 +120,7 @@ public sealed class AdminReadServiceTests
         Assert.Equal("knowledge/handbook", source.ResolvedResourcePath);
         Assert.Equal(MemoryPolicy.Disabled, config.MemoryPolicy);
         Assert.Equal(preferences, config.ProviderPreferences);
-        Assert.Equal([ToolCatalog.AppMessageSend, ToolCatalog.KnowledgeRetrieve], config.EffectiveToolAllowlist);
+        Assert.Equal([ToolCatalog.KnowledgeRetrieve], config.EffectiveToolAllowlist);
         Assert.Equal("scripted-alpha", config.EffectiveModel.CatalogKey);
         Assert.Equal("systemDefault", config.EffectiveModel.SelectionSource);
     }

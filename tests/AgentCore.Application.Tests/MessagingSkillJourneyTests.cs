@@ -4,6 +4,7 @@ using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Testing;
+using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Definitions;
@@ -39,10 +40,10 @@ public sealed class MessagingSkillJourneyTests
         await runtime.SubmitUserTextAsync(userText);
         await runtime.WaitUntilIdleAsync();
 
-        Assert.Equal(3, recording.Requests.Count);
+        Assert.Equal(4, recording.Requests.Count);
         var first = Text(recording.Requests[0]);
-        var afterMessage = Text(recording.Requests[1]);
-        var afterLoad = Text(recording.Requests[2]);
+        var afterMessage = Text(recording.Requests[2]);
+        var afterLoad = Text(recording.Requests[3]);
         Assert.DoesNotContain(ScriptedLanguageModel.MessagingSkillJourneyProcedure, first, StringComparison.Ordinal);
         Assert.DoesNotContain("ORDER_PROCEDURE", first, StringComparison.Ordinal);
         Assert.DoesNotContain(ScriptedLanguageModel.MessagingSkillJourneyProcedure, afterMessage, StringComparison.Ordinal);
@@ -103,7 +104,8 @@ public sealed class MessagingSkillJourneyTests
         {
             Voice = new VoiceConfiguration(true, "default", 1),
             ProviderPreferences = new ProviderPreferences("primary-llm", null, null),
-            Skills = skills
+            Skills = skills,
+            Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.WorkspaceList, ToolCatalog.WorkspaceRead])
         };
 
     private static SkillSpec Skill(string id, string procedure, IReadOnlyList<string> keywords) =>

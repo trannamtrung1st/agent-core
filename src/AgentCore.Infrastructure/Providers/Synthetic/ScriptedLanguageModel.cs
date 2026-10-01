@@ -995,14 +995,23 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         events = [];
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         if (!lastUser.Contains(MessagingSkillJourneyMarker, StringComparison.Ordinal)
-            || !Offers(request, ToolCatalog.AppMessageSend)
-            || !Offers(request, ToolCatalog.SkillsLoad))
+            || !Offers(request, ToolCatalog.WorkspaceList))
         {
             return false;
         }
 
         var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
         if (toolRounds == 0)
+        {
+            events =
+            [
+                new ModelToolCallEvent(new ModelToolCall("p85-work", ToolCatalog.WorkspaceList, "{}")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ];
+            return true;
+        }
+
+        if (toolRounds == 1 && Offers(request, ToolCatalog.AppMessageSend))
         {
             events =
             [
@@ -1015,7 +1024,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
-        if (toolRounds == 1)
+        if (toolRounds == 2)
         {
             events =
             [
@@ -1042,7 +1051,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
         events =
         [
-            new ModelTextDelta(MessagingSkillJourneyAnswer),
+            new ModelSemanticResponseReady(
+                new ModelSemanticResponse(
+                    MessagingSkillJourneyAnswer,
+                    new ModelSpeechProjection(ModelSpeechMode.Same, null),
+                    [])),
             new ModelCompleted(ModelStopReason.Completed)
         ];
         return true;

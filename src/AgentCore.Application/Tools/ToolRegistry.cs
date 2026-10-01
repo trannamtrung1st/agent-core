@@ -150,7 +150,7 @@ public static class ToolRegistry
                 ToolEffect.Write),
             [ToolCatalog.AppMessageSend] = Descriptor(
                 ToolCatalog.AppMessageSend,
-                "Send one short user-visible message to the current chat while this turn is still in progress. The runtime chooses the destination. Do not include a session, recipient, or channel.",
+                "Send a brief intermediate progress or status update only while substantive work is still continuing in this turn. Never use this as the final answer, for ordinary conversation, greetings, acknowledgements, or when no further work remains. A direct user request must still finish with chat.respond. The runtime chooses the destination. Do not include a session, recipient, or channel.",
                 """{"type":"object","additionalProperties":false,"properties":{"text":{"type":"string","minLength":1,"maxLength":2000}},"required":["text"]}""",
                 ToolEffect.Write,
                 ToolOfferRule.CurrentExecutionCapability,

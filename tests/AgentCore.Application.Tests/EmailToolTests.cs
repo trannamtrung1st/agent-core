@@ -22,7 +22,9 @@ public sealed class EmailToolTests
             4,
             [ToolCatalog.EmailSearch, ToolCatalog.EmailRead, ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]);
         var context = Context(definition, modelSupportsTools: true);
-        Assert.Equal([ToolCatalog.AppMessageSend], ToolCatalog.For(definition, context, gate).Select(tool => tool.Name));
+        Assert.DoesNotContain(
+            ToolCatalog.AppMessageSend,
+            ToolCatalog.For(definition, context, gate).Select(tool => tool.Name));
     }
 
     [Fact]

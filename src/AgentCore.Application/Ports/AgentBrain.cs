@@ -50,7 +50,8 @@ public sealed record AgentContext(
     ScheduleConversationContext? ScheduleConversation = null,
     ScheduleDraftContext? ScheduleDraft = null,
     bool DetachedExecution = false,
-    IReadOnlyList<string>? ActiveSkillIds = null)
+    IReadOnlyList<string>? ActiveSkillIds = null,
+    bool IntermediateMessagingAllowed = false)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

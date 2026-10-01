@@ -24,7 +24,10 @@ public enum ToolResourceScope
     External
 }
 
-public sealed record ToolExecutionAdmission(bool Detached, TriggerKind TriggerKind);
+public sealed record ToolExecutionAdmission(
+    bool Detached,
+    TriggerKind TriggerKind,
+    bool IntermediateMessagingAllowed = false);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

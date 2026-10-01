@@ -39,6 +39,12 @@ public static class ToolPolicy
                 return ToolPolicyDecision.Deny;
             }
 
+            if (string.Equals(toolName, ToolCatalog.AppMessageSend, StringComparison.Ordinal)
+                && admission is not { IntermediateMessagingAllowed: true })
+            {
+                return ToolPolicyDecision.Deny;
+            }
+
             return ToolPolicyDecision.Allow;
         }
 
@@ -123,7 +129,8 @@ public static class ToolPolicy
                 && context.Trigger.Kind == TriggerKind.UserTurn
                 && !context.DetachedExecution
                 && !ToolResources.IsOccurrence(context.Trigger.Kind)
-                && (descriptor.Name != ToolCatalog.SkillsLoad || definition.SkillList.Count > 0),
+                && (descriptor.Name != ToolCatalog.SkillsLoad || definition.SkillList.Count > 0)
+                && (descriptor.Name != ToolCatalog.AppMessageSend || context.IntermediateMessagingAllowed),
             _ => false
         };
     }

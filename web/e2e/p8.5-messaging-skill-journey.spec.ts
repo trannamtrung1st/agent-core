@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   completeDefinitionDraftPublishGate,
+  ensureToolAllowlisted,
   publishDraftFromInstructions
 } from "./admin-definition-gate-helpers";
 import { definitionDraftsSection, draftEditorSection } from "./admin-draft-editor-helpers";
@@ -64,6 +65,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await editor.getByLabel("Skill 2 procedure").fill("ORDER_PROCEDURE");
   await editor.getByLabel("Skill 2 activation keywords").fill("order");
   await saveDraft(page, editor);
+  await ensureToolAllowlisted(page, editor, "workspace.list");
   await completeDefinitionDraftPublishGate(page, editor);
   await publishDraftFromInstructions(page, editor);
 
