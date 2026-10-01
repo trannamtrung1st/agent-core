@@ -6,7 +6,9 @@ namespace AgentCore.Infrastructure.Tools;
 public sealed class ToolConfigurationGate(
     IWebSearchProvider? webSearch,
     IPublicWebFetcher? publicWebFetcher,
-    IEmailProvider? emailProvider) : IToolConfigurationGate
+    IEmailProvider? emailProvider,
+    IBrowserSession? browserSession = null,
+    bool browserEnabled = false) : IToolConfigurationGate
 {
     public bool IsConfigured(string toolName) =>
         toolName switch
@@ -15,6 +17,7 @@ public sealed class ToolConfigurationGate(
             ToolCatalog.WebFetch => publicWebFetcher is not null,
             ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend
                 => emailProvider?.IsAvailable == true,
+            _ when ToolCatalog.IsBrowserTool(toolName) => browserEnabled && browserSession is not null,
             _ => true
         };
 }

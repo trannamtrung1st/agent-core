@@ -10,6 +10,7 @@ using AgentCore.Application.Sessions;
 using AgentCore.Application.Triggers;
 using AgentCore.Contracts.Http;
 using AgentCore.Infrastructure;
+using AgentCore.Infrastructure.Browser;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
@@ -40,7 +41,8 @@ builder.Services.AddAgentCoreInfrastructure(
         DegradedInterruptMs: builder.Configuration.GetValue("Interaction:DegradedInterruptMs", 250),
         PendingVoiceTimeoutMs: builder.Configuration.GetValue("Interaction:PendingVoiceTimeoutMs", 30_000),
         BackchannelMaxMs: builder.Configuration.GetValue("Interaction:BackchannelMaxMs", 700),
-        MaxUtteranceSeconds: Math.Clamp(builder.Configuration.GetValue("Voice:MaxUtteranceSeconds", 120), 1, 180)));
+        MaxUtteranceSeconds: Math.Clamp(builder.Configuration.GetValue("Voice:MaxUtteranceSeconds", 120), 1, 180)),
+    browser: builder.Configuration.GetSection(BrowserOptions.SectionName).Get<BrowserOptions>() ?? new BrowserOptions());
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
 builder.Services.AddOptions<ObservabilityOptions>()
     .Bind(builder.Configuration.GetSection("Observability"))

@@ -23,6 +23,14 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (ToolCatalog.IsBrowserTool(toolName)
+            && (admission is null
+                || admission.Detached
+                || admission.TriggerKind != TriggerKind.UserTurn))
+        {
+            return ToolPolicyDecision.Deny;
+        }
+
         if (descriptor.OfferRule == ToolOfferRule.CurrentExecutionCapability)
         {
             if (admission is null
@@ -111,6 +119,14 @@ public static class ToolPolicy
         }
 
         if (!RolePermissions.AllowsTool(definition, descriptor.Name))
+        {
+            return false;
+        }
+
+        if (ToolCatalog.IsBrowserTool(descriptor.Name)
+            && (context is null
+                || context.DetachedExecution
+                || context.Trigger.Kind != TriggerKind.UserTurn))
         {
             return false;
         }

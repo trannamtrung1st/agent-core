@@ -22,6 +22,7 @@ using AgentCore.Infrastructure.Workspaces;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Browser;
 using AgentCore.Infrastructure.Email;
 using AgentCore.Infrastructure.PublicWeb;
 using AgentCore.Infrastructure.Tools;
@@ -43,9 +44,12 @@ public static class InfrastructureServiceCollectionExtensions
         LanguageModelProviderOptions? languageModel = null,
         PersistenceOptions? persistence = null,
         InteractionPolicy? interaction = null,
-        SpeechProvidersOptions? speech = null)
+        SpeechProvidersOptions? speech = null,
+        BrowserOptions? browser = null)
     {
         persistence ??= new PersistenceOptions();
+        browser ??= new BrowserOptions();
+        services.TryAddSingleton(browser);
         if (speech is not null)
         {
             services.TryAddSingleton(speech);
@@ -74,7 +78,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IToolConfigurationGate>(provider => new ToolConfigurationGate(
             provider.GetService<IWebSearchProvider>(),
             provider.GetService<IPublicWebFetcher>(),
-            provider.GetService<IEmailProvider>()));
+            provider.GetService<IEmailProvider>(),
+            provider.GetService<IBrowserSession>(),
+            provider.GetRequiredService<BrowserOptions>().Enabled));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(provider.GetRequiredService<IToolConfigurationGate>()));
         services.TryAddSingleton<DefinitionDraftSyntheticOfflineLanguageModel>();
@@ -347,7 +353,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<ITriggerCommandAuthorizer>(),
             provider.GetRequiredService<IAgentInstanceStore>(),
             provider.GetRequiredService<IAgentDefinitionStore>(),
-            provider.GetRequiredService<IMemoryStore>()));
+            provider.GetRequiredService<IMemoryStore>(),
+            provider.GetService<IBrowserSession>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

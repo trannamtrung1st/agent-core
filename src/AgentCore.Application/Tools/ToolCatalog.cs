@@ -33,6 +33,12 @@ public static class ToolCatalog
     public const string TriggerCancel = "trigger.cancel";
     public const string SkillsLoad = "skills.load";
     public const string AppMessageSend = "app.message.send";
+    public const string BrowserNavigate = "browser.navigate";
+    public const string BrowserObserve = "browser.observe";
+    public const string BrowserAct = "browser.act";
+
+    public static bool IsBrowserTool(string toolName) =>
+        toolName is BrowserNavigate or BrowserObserve or BrowserAct;
 
     public static IReadOnlyList<ModelToolDefinition> For(
         AgentDefinition definition,

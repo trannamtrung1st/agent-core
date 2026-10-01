@@ -27,7 +27,8 @@ public sealed partial class SessionToolExecutor(
     ITriggerCommandAuthorizer? triggerAuthorizer = null,
     IAgentInstanceStore? agentInstances = null,
     IAgentDefinitionStore? agentDefinitions = null,
-    IMemoryStore? profiles = null)
+    IMemoryStore? profiles = null,
+    IBrowserSession? browser = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -168,6 +169,15 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.HttpRequest => FitResult(
                     remainingOutputBytes,
                     await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.BrowserNavigate => FitResult(
+                    remainingOutputBytes,
+                    await NavigateBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.BrowserObserve => FitResult(
+                    remainingOutputBytes,
+                    await ObserveBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.BrowserAct => FitResult(
+                    remainingOutputBytes,
+                    await ActBrowserAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
                 ToolCatalog.EmailSearch => FitResult(

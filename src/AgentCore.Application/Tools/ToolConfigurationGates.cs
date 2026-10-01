@@ -8,7 +8,8 @@ public static class ToolConfigurationGates
             ToolCatalog.EmailSearch
             or ToolCatalog.EmailRead
             or ToolCatalog.EmailCreateDraft
-            or ToolCatalog.EmailSend));
+            or ToolCatalog.EmailSend)
+        && !ToolCatalog.IsBrowserTool(toolName));
 
     public static IToolConfigurationGate AllowAll { get; } = new DelegatingToolConfigurationGate(_ => true);
 
