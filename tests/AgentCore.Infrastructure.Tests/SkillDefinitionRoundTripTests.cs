@@ -19,7 +19,12 @@ public sealed class SkillDefinitionRoundTripTests
         var store = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         var definitions = await store.ListAsync();
         Assert.NotEmpty(definitions);
-        Assert.All(definitions, definition => Assert.Empty(definition.SkillList));
+        Assert.All(
+            definitions.Where(definition => definition.Id != "general-assistant" || definition.Version != 11),
+            definition => Assert.Empty(definition.SkillList));
+        var skill = Assert.Single(
+            Assert.Single(definitions, definition => definition.Id == "general-assistant" && definition.Version == 11).SkillList);
+        Assert.Equal("browser.record.lookup", skill.Id);
     }
 
     [Fact]
