@@ -1,4 +1,5 @@
 using AgentCore.Application.Agents;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -193,7 +194,7 @@ public sealed class SemanticCutoverRuntimeTests
     }
 
     [Fact]
-    public async Task Wait_disposition_does_not_complete_the_assistant_successfully()
+    public async Task Wait_on_direct_user_turn_fails_as_invalid_agent_step()
     {
         var output = new CapturingSessionOutput();
         await using var runtime = Create(output, new DispositionLanguageModel("Wait"));
@@ -201,20 +202,17 @@ public sealed class SemanticCutoverRuntimeTests
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Interrupted, assistant.Status);
-        Assert.NotEqual(EntryStatus.Completed, assistant.Status);
-        Assert.Null(assistant.Envelope);
-        Assert.Null(assistant.Failure);
-        Assert.Equal(string.Empty, assistant.Text);
-        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
-        var terminal = Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload;
-        var completed = Assert.IsType<ResponseCompletedOutput>(terminal);
-        Assert.False(completed.Failed);
-        Assert.Equal("wait", completed.InterruptReason);
+        Assert.Equal(EntryStatus.Failed, assistant.Status);
+        Assert.NotNull(assistant.Failure);
+        Assert.Contains(output.Items, item => item.Payload is ErrorOutput);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.True(completed.Failed);
+        Assert.Null(completed.InterruptReason);
     }
 
     [Fact]
-    public async Task Structured_wait_json_returns_control_as_an_empty_interrupted_assistant()
+    public async Task Structured_wait_json_on_user_turn_uses_the_failure_path()
     {
         var json = """
             {"disposition":"Wait","action":null,"displayText":"","speech":{"mode":"none","text":null},"blocks":[],"memory":[]}
@@ -227,15 +225,29 @@ public sealed class SemanticCutoverRuntimeTests
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Interrupted, assistant.Status);
-        Assert.Equal(string.Empty, assistant.Text);
-        Assert.Null(assistant.Envelope);
-        Assert.Null(assistant.Failure);
+        Assert.Equal(EntryStatus.Failed, assistant.Status);
+        Assert.NotNull(assistant.Failure);
+        Assert.Contains(output.Items, item => item.Payload is ErrorOutput);
+        var completed = Assert.IsType<ResponseCompletedOutput>(
+            Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload);
+        Assert.True(completed.Failed);
+        Assert.Null(completed.InterruptReason);
+    }
+
+    [Fact]
+    public async Task Complete_without_chat_removes_the_assistant_placeholder_without_interrupt()
+    {
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, new NoChatCompleteLanguageModel());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("Hello");
+        await runtime.WaitUntilIdleAsync();
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
         Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
         var completed = Assert.IsType<ResponseCompletedOutput>(
             Assert.Single(output.Items, item => item.Payload is ResponseCompletedOutput).Payload);
         Assert.False(completed.Failed);
-        Assert.Equal("wait", completed.InterruptReason);
+        Assert.Null(completed.InterruptReason);
     }
 
     [Fact]
@@ -458,6 +470,27 @@ public sealed class SemanticCutoverRuntimeTests
                 new ModelSemanticResponse("Shown", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
             yield return new ModelSemanticResponseReady(
                 new ModelSemanticResponse("Other", new ModelSpeechProjection(ModelSpeechMode.Same, null), []));
+            yield return new ModelCompleted(ModelStopReason.Completed);
+        }
+    }
+
+    private sealed class NoChatCompleteLanguageModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true, StructuredOutput: true);
+
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
+            ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            yield return new ModelSemanticResponseReady(
+                new ModelSemanticResponse(
+                    string.Empty,
+                    new ModelSpeechProjection(ModelSpeechMode.None, null),
+                    [],
+                    Disposition: nameof(AgentStepDisposition.Complete),
+                    ActionKind: null,
+                    ActionSpecified: true));
             yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }

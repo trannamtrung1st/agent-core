@@ -1988,6 +1988,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         EventContext cause,
         CancellationToken cancellationToken)
     {
+        if (_suppressPendingUserBatchOnce)
+        {
+            _suppressPendingUserBatchOnce = false;
+            return false;
+        }
+
         if (!CanStartUserConversationBatch())
         {
             return false;
@@ -3881,7 +3887,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return;
             }
 
-            await ReturnWithoutChatAsync(context, responseId, finalizingOperationId, cancellationToken)
+            if (decision.Effect == AgentStepEffect.WaitForExternalInput
+                && _activeResponseTriggerKind == TriggerKind.UserTurn)
+            {
+                await FailSemanticReadyAsync(
+                        context,
+                        responseId,
+                        finalizingOperationId,
+                        ReferenceForResponse(context, responseId, "InvalidAgentStep", exception: null),
+                        "The model returned Wait, which is not valid for a direct chat request.",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            await ReturnWithoutChatAsync(context, responseId, finalizingOperationId, decision.Effect, cancellationToken)
                 .ConfigureAwait(false);
             return;
         }
@@ -4005,16 +4025,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         EventContext context,
         Guid responseId,
         Guid? finalizingOperationId,
+        AgentStepEffect effect,
         CancellationToken cancellationToken)
     {
-        if (finalizingOperationId is { } failedOp)
+        _logger.LogInformation(
+            "Agent step returned without chat {SessionId} {ResponseId} effect {Effect}",
+            SessionId,
+            responseId,
+            effect);
+        if (finalizingOperationId is { } completedOp)
         {
             await PublishProgressAsync(
                     context,
                     responseId,
                     ResponseProgressKind.Finalizing,
-                    ResponseProgressState.Failed,
-                    failedOp,
+                    ResponseProgressState.Completed,
+                    completedOp,
                     ResponseProgressMessages.Finalizing,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -4025,9 +4051,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _accumulator.Reset();
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
-        ClearAssistantWithoutChat();
+        _pendingNoChatTerminal = true;
         _responseTerminal = true;
         _responseLifecycle = ResponseLifecycle.Superseded;
+        RemoveActiveAssistantPlaceholder();
         _initiativeHeld = false;
         await FinishOwnedProgressAsync(
                 context,
@@ -4043,6 +4070,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (userTerminal)
         {
             MarkConversationExecutionPendingTerminal();
+            _suppressPendingUserBatchOnce = true;
         }
 
         RequestPersist(
@@ -4064,8 +4092,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 capturedResponseId,
                                 new ResponseCompletedOutput(
                                     false,
-                                    HeardTextEndExclusive: heard,
-                                    InterruptReason: "wait")),
+                                    HeardTextEndExclusive: heard)),
                             ct)
                         .ConfigureAwait(false);
                 }
@@ -4078,26 +4105,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             });
     }
 
-    private void ClearAssistantWithoutChat()
+    private void RemoveActiveAssistantPlaceholder()
     {
-        if (_activeEntryId is not { } entryId)
+        var entryId = _activeEntryId;
+        if (entryId is null && _activeResponseId is { } responseId)
+        {
+            entryId = _snapshot.Entries
+                .LastOrDefault(entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == responseId)
+                ?.EntryId;
+        }
+
+        if (entryId is null)
         {
             return;
         }
 
-        var entries = _snapshot.Entries.Select(entry =>
-                entry.EntryId == entryId
-                    ? entry with
-                    {
-                        Text = string.Empty,
-                        Status = EntryStatus.Interrupted,
-                        Envelope = null,
-                        FinishReason = null,
-                        InterruptReason = null,
-                        Failure = null
-                    }
-                    : entry)
-            .ToArray();
+        var entries = _snapshot.Entries.Where(entry => entry.EntryId != entryId).ToArray();
         _snapshot = _snapshot with { Entries = entries, UpdatedAt = _time.GetUtcNow() };
     }
 
@@ -5382,6 +5405,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         if (_snapshot.Status is SessionStatus.Paused)
+        {
+            return;
+        }
+
+        if (_responseTerminal && saved.Entries.Count > _snapshot.Entries.Count)
         {
             return;
         }

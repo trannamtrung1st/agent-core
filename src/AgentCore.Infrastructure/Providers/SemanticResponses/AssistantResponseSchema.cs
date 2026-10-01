@@ -22,6 +22,9 @@ internal static class AssistantResponseSchema
         var memory = responseFunction
             ? $"Call {ResponseFunctionName} with the structured answer. That call is the reliable memory proposal channel. [[memory:...]] alone is best effort. "
             : "[[memory:...]] is best effort only. Do not claim that memory was saved. ";
+        var agentStep = responseFunction
+            ? "For a normal user request: use available tools and Skills as needed; finish with disposition Complete and action chat.respond. chat.respond MUST include non-empty displayText (never whitespace-only). Use action null only when this step intentionally delivers no Chat. Wait only for a real external waiting condition—not because work is long, difficult, or unfinished. Continue does not request another model turn. "
+            : string.Empty;
         return CompatibilityInstructionPrefix
             + speech
             + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
@@ -29,6 +32,7 @@ internal static class AssistantResponseSchema
             + "Optional rich blocks use [[md:...]], [[attachment:<id>]], or [[artifact:<id>]]. "
             + "Do not include hidden reasoning. Do not emit JSON. "
             + "This plain-text channel is Complete with one chat.respond. "
+            + agentStep
             + memory;
     }
 
@@ -36,7 +40,7 @@ internal static class AssistantResponseSchema
 
     public static ModelToolDefinition ResponseFunction { get; } = new(
         ResponseFunctionName,
-        "Submit one agent step for the current session. disposition is Continue, Wait, Complete, or Blocked. action is {\"kind\":\"chat.respond\"} or null. Continue does not start another generation. Memory entries are proposals. This call does not save memory and does not choose a destination.",
+        "Submit one agent step for the current session. For a normal user request: use tools and Skills as needed, then Complete with action {\"kind\":\"chat.respond\"} and a non-empty displayText answer; never call chat.respond with empty or whitespace-only displayText. disposition is Continue, Wait, Complete, or Blocked. action is {\"kind\":\"chat.respond\"} or null. Continue delivers chat.respond once when present and does not start another generation; it does not request more model thinking. Wait returns control without Chat only when an external condition must arrive first—not because a task is long, difficult, needs tools, or is unfinished. action null means no Chat this step. Memory entries are proposals. This call does not save memory and does not choose a destination.",
         JsonSchemaJson);
 
     public const string SchemaName = "agent_core_assistant_response";
@@ -50,7 +54,7 @@ internal static class AssistantResponseSchema
             "disposition": {
               "type": "string",
               "enum": ["Continue", "Wait", "Complete", "Blocked"],
-              "description": "Continue delivers chat.respond once when that action is present and does not start another generation. Wait returns control and does not deliver Chat. Complete finishes this activation. Blocked means this activation cannot succeed."
+              "description": "For ordinary user chat: prefer Complete. Continue delivers chat.respond once when that action is present and does not start another generation; it does not invoke another model turn or buy more thinking time. Wait returns control without Chat only when an external condition must arrive first; never use Wait because work is long, difficult, needs tools, or is unfinished. Complete finishes this activation. Blocked means this activation cannot succeed."
             },
             "action": {
               "description": "The single requested application action, or null when this step requests no effect. Only chat.respond is valid. Do not include a session, destination, profile, tenant, or recipient.",
@@ -64,7 +68,7 @@ internal static class AssistantResponseSchema
                     "kind": {
                       "type": "string",
                       "enum": ["chat.respond"],
-                      "description": "Deliver displayText, speech, and blocks to the current session."
+                      "description": "Deliver a non-empty displayText answer, speech, and blocks to the current session. Invalid with empty or whitespace-only displayText."
                     }
                   }
                 }
@@ -72,7 +76,7 @@ internal static class AssistantResponseSchema
             },
             "displayText": {
               "type": "string",
-              "description": "Visible conversational answer when action is chat.respond. Use an empty string when action is null."
+              "description": "Visible conversational answer. REQUIRED non-empty text when action is chat.respond; empty or whitespace-only displayText with chat.respond is invalid. Use an empty string only when action is null."
             },
             "speech": {
               "type": "object",

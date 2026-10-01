@@ -10,6 +10,12 @@ public sealed class NativeSemanticResponseParserTests
     [InlineData("not-json", ProviderFailureReason.InvalidJson)]
     [InlineData("""{"speech":{"mode":"same"}}""", ProviderFailureReason.MissingDisplayText)]
     [InlineData("""{"displayText":"","speech":{"mode":"same"}}""", ProviderFailureReason.MissingDisplayText)]
+    [InlineData(
+        """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}""",
+        ProviderFailureReason.MissingDisplayText)]
+    [InlineData(
+        """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"   ","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}""",
+        ProviderFailureReason.MissingDisplayText)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"maybe"}}""", ProviderFailureReason.InvalidSpeech)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"sessionId":"other"}""", ProviderFailureReason.ModelSuppliedDestination)]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"destination":"other"}""", ProviderFailureReason.ModelSuppliedDestination)]

@@ -375,7 +375,9 @@ public sealed class SemanticResponseLanguageModelTests
     [Fact]
     public async Task Compatibility_injects_one_bounded_instruction_when_unstructured()
     {
-        var inner = new ScriptedInner([new ModelTextDelta("OK."), new ModelCompleted(ModelStopReason.Completed)]);
+        var inner = new ScriptedInner(
+            [new ModelTextDelta("OK."), new ModelCompleted(ModelStopReason.Completed)],
+            tools: false);
         var voice = Contracted with { ResponseContract = new ModelResponseContract(SpeechWillBeUsed: true) };
         _ = await CollectAsync(new SemanticResponseLanguageModel(inner), voice);
         var sent = inner.LastRequest!;
@@ -452,6 +454,24 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == ToolCatalog.SkillsLoad);
         Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
         Assert.Equal(ModelToolChoice.Required, inner.LastRequest.ToolChoice);
+    }
+
+    [Fact]
+    public async Task Function_channel_rejects_chat_respond_with_empty_display_text()
+    {
+        var json = """
+            {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}
+            """;
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.MissingDisplayText, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ResponseChannel);
+        Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
     }
 
     [Fact]
