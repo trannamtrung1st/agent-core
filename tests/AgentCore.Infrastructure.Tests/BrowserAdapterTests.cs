@@ -278,6 +278,81 @@ public sealed class PlaywrightBrowserAdapterTests(BrowserHostFixture fixture) : 
         }
     }
 
+    [Fact]
+    public async Task OpenWeb_navigates_an_unlisted_page_and_keeps_a_popup()
+    {
+        var port = BindEphemeralPort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var origin = $"http://127.0.0.1:{port}";
+        using var stop = new CancellationTokenSource();
+        var serving = ServeOpenWebAsync(listener, stop.Token);
+        var session = new PlaywrightBrowserSession(
+            new BrowserOptions
+            {
+                Enabled = true,
+                Headless = true,
+                PolicyMode = nameof(BrowserPolicyMode.OpenWeb),
+                FixtureEnabled = false,
+                NavigationOrigins = [],
+                InteractionOrigins = []
+            },
+            loggerFactory: null);
+        await session.StartAsync(CancellationToken.None);
+        try
+        {
+            Assert.False(session.Fixture.IsAvailable);
+            Assert.Equal(BrowserPolicyMode.OpenWeb, session.HostPolicy.PolicyMode);
+            var denied = await session.NavigateAsync(
+                new BrowserNavigateRequest(Guid.NewGuid(), new Uri("file:///tmp/secret")));
+            Assert.Equal("target_denied", denied.ErrorCode);
+            var id = Guid.NewGuid();
+            var home = await session.NavigateAsync(new BrowserNavigateRequest(id, new Uri(origin + "/")));
+            Assert.Null(home.ErrorCode);
+            Assert.Equal("Open page", home.Observation!.Title);
+            var link = Assert.Single(home.Observation.Elements, element => element.Name == "Open next");
+            var next = await session.ActAsync(new BrowserActRequest(id, "click", link.Ref, null));
+            Assert.Null(next.ErrorCode);
+            var again = await session.ObserveAsync(id);
+            Assert.Null(again.ErrorCode);
+            Assert.Equal("Next page", again.Observation!.Title);
+        }
+        finally
+        {
+            await session.StopAsync(CancellationToken.None);
+            await stop.CancelAsync();
+            listener.Stop();
+            await serving;
+        }
+    }
+
+    private static async Task ServeOpenWebAsync(HttpListener listener, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && listener.IsListening)
+        {
+            HttpListenerContext context;
+            try
+            {
+                context = await listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or HttpListenerException or ObjectDisposedException)
+            {
+                break;
+            }
+
+            var path = context.Request.Url?.AbsolutePath;
+            var html = path == "/next"
+                ? "<!DOCTYPE html><html><head><title>Next page</title></head><body>Next page</body></html>"
+                : "<!DOCTYPE html><html><head><title>Open page</title></head><body><button type=\"button\" onclick=\"window.open('/next')\">Open next</button></body></html>";
+            var bytes = Encoding.UTF8.GetBytes(html);
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            context.Response.Close();
+        }
+    }
+
     private static int BindEphemeralPort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);

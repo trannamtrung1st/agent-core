@@ -12,31 +12,21 @@ public readonly record struct BrowserTargetDecision(bool Allowed, string? Code, 
 
 public static class BrowserTargetPolicy
 {
-    public static BrowserTargetDecision EvaluateDestination(string? url, IReadOnlyList<string>? targetOrigins)
+    public static BrowserTargetDecision EvaluateDestination(
+        string? url,
+        IReadOnlyList<string>? targetOrigins,
+        BrowserPolicyMode policyMode = BrowserPolicyMode.Restricted)
     {
-        if (string.IsNullOrWhiteSpace(url))
+        if (!TryHttpTarget(url, out var uri, out var rejected))
         {
-            return BrowserTargetDecision.Deny("invalid", "url is required.");
+            return rejected;
         }
 
-        if (url.Length > BrowserToolLimits.MaxUrlLength)
+        if (policyMode == BrowserPolicyMode.OpenWeb)
         {
-            return BrowserTargetDecision.Deny("invalid", "url must be at most 2048 characters.");
-        }
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-        {
-            return BrowserTargetDecision.Deny("invalid", "url must be an absolute http or https URL.");
-        }
-
-        if (!IsHttp(uri) || !string.IsNullOrEmpty(uri.UserInfo))
-        {
-            return BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.");
-        }
-
-        if (uri.Host.Contains('*', StringComparison.Ordinal))
-        {
-            return BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.");
+            return IsMetadataAddress(uri)
+                ? BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.")
+                : BrowserTargetDecision.Allow;
         }
 
         if (!IsListedOrigin(uri, targetOrigins))
@@ -47,10 +37,13 @@ public static class BrowserTargetPolicy
         return BrowserTargetDecision.Allow;
     }
 
-    public static BrowserTargetDecision EvaluatePopup(string? url, IReadOnlyList<string>? targetOrigins)
+    public static BrowserTargetDecision EvaluatePopup(
+        string? url,
+        IReadOnlyList<string>? targetOrigins,
+        BrowserPolicyMode policyMode = BrowserPolicyMode.Restricted)
     {
-        var destination = EvaluateDestination(url, targetOrigins);
-        if (!destination.Allowed)
+        var destination = EvaluateDestination(url, targetOrigins, policyMode);
+        if (!destination.Allowed || policyMode == BrowserPolicyMode.OpenWeb)
         {
             return destination;
         }
@@ -61,8 +54,14 @@ public static class BrowserTargetPolicy
     public static BrowserTargetDecision EvaluateResource(
         string? url,
         IReadOnlyList<string>? navigationOrigins,
-        IReadOnlyList<string>? resourceOrigins)
+        IReadOnlyList<string>? resourceOrigins,
+        BrowserPolicyMode policyMode = BrowserPolicyMode.Restricted)
     {
+        if (policyMode == BrowserPolicyMode.OpenWeb)
+        {
+            return EvaluateDestination(url, navigationOrigins, policyMode);
+        }
+
         var navigation = EvaluateDestination(url, navigationOrigins);
         if (navigation.Allowed)
         {
@@ -78,20 +77,70 @@ public static class BrowserTargetPolicy
     public static BrowserTargetDecision EvaluateAct(
         BrowserInteractionMode interactionMode,
         string? currentPageUrl,
-        IReadOnlyList<string>? interactionOrigins)
+        IReadOnlyList<string>? interactionOrigins,
+        BrowserPolicyMode policyMode = BrowserPolicyMode.Restricted)
     {
         if (interactionMode != BrowserInteractionMode.InteractiveDemo)
         {
             return BrowserTargetDecision.Deny("forbidden", "Browser actions are not allowed in this interaction mode.");
         }
 
-        var page = EvaluateDestination(currentPageUrl, interactionOrigins);
+        var page = policyMode == BrowserPolicyMode.OpenWeb
+            ? EvaluateDestination(currentPageUrl, interactionOrigins, policyMode)
+            : EvaluateDestination(currentPageUrl, interactionOrigins);
         if (!page.Allowed)
         {
             return BrowserTargetDecision.Deny("forbidden", "Browser actions are limited to a trusted interaction origin.");
         }
 
         return BrowserTargetDecision.Allow;
+    }
+
+    private static bool TryHttpTarget(string? url, out Uri uri, out BrowserTargetDecision rejected)
+    {
+        uri = null!;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            rejected = BrowserTargetDecision.Deny("invalid", "url is required.");
+            return false;
+        }
+
+        if (url.Length > BrowserToolLimits.MaxUrlLength)
+        {
+            rejected = BrowserTargetDecision.Deny("invalid", "url must be at most 2048 characters.");
+            return false;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out uri!))
+        {
+            rejected = BrowserTargetDecision.Deny("invalid", "url must be an absolute http or https URL.");
+            return false;
+        }
+
+        if (!IsHttp(uri) || !string.IsNullOrEmpty(uri.UserInfo) || uri.Host.Contains('*', StringComparison.Ordinal))
+        {
+            rejected = BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.");
+            return false;
+        }
+
+        rejected = default;
+        return true;
+    }
+
+    private static bool IsMetadataAddress(Uri uri)
+    {
+        if (!IPAddress.TryParse(NormalizeHost(uri.Host), out var address))
+        {
+            return false;
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 169 && bytes[1] == 254;
     }
 
     public static bool IsLoopback(string? url)

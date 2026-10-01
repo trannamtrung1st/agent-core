@@ -107,6 +107,53 @@ public sealed class BrowserRecordJourneyTests
         Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
     }
 
+    [Fact]
+    public async Task Human_verification_page_completes_and_stays_observable()
+    {
+        var browser = new FixtureBrowser();
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var output = new CapturingSessionOutput();
+        var turns = new InMemoryConversationTurnExecutionStore();
+        await using var runtime = Create(
+            new SemanticResponseLanguageModel(recording),
+            output,
+            Definition(),
+            browser,
+            turns);
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("Please open the page that needs human verification."));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Equal(["http://127.0.0.1:5094/challenge"], browser.NavigatedUrls);
+        Assert.Equal(1, browser.ObserveCalls);
+        Assert.Equal(0, browser.ActCalls);
+        var first = Assert.Single(
+            runtime.Snapshot.Entries,
+            entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed);
+        Assert.Equal(ScriptedLanguageModel.BrowserChallengeAnswer, first.Text);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Failed);
+        Assert.Contains(
+            recording.Requests.SelectMany(request => request.Messages),
+            message => message.Role == ModelRole.Tool
+                && message.Text.Contains("Human verification required", StringComparison.Ordinal));
+
+        Assert.True(await runtime.SubmitUserTextAsync("continue"));
+        await runtime.WaitUntilIdleAsync();
+
+        Assert.Single(browser.NavigatedUrls);
+        Assert.Equal(2, browser.ObserveCalls);
+        Assert.Equal(0, browser.ActCalls);
+        var answers = runtime.Snapshot.Entries
+            .Where(entry => entry.Role == ConversationRole.Assistant && entry.Status == EntryStatus.Completed)
+            .Select(entry => entry.Text)
+            .ToArray();
+        Assert.Equal(
+            [ScriptedLanguageModel.BrowserChallengeAnswer, ScriptedLanguageModel.BrowserChallengeContinueAnswer],
+            answers);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Failed);
+        Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
+    }
+
     private static AgentDefinition Definition() =>
         new(
             1,
@@ -235,12 +282,12 @@ public sealed class BrowserRecordJourneyTests
         {
             NavigatedUrls.Add(request.Url.AbsoluteUri);
             if (!string.Equals(request.Url.GetLeftPart(UriPartial.Authority), Origin, StringComparison.Ordinal)
-                || request.Url.AbsolutePath is not ("/" or ""))
+                || request.Url.AbsolutePath is not ("/" or "" or "/challenge"))
             {
                 return new(new BrowserOperationResult("target_denied", null));
             }
 
-            _page = "home";
+            _page = request.Url.AbsolutePath == "/challenge" ? "challenge" : "home";
             _filled = null;
             return new(Ok(Capture()));
         }
@@ -283,6 +330,7 @@ public sealed class BrowserRecordJourneyTests
         {
             "record" => new Uri(Origin + "/records/AC-1042"),
             "nomatch" => new Uri(Origin + "/search"),
+            "challenge" => new Uri(Origin + "/challenge"),
             _ => new Uri(Origin + "/")
         };
 
@@ -294,6 +342,11 @@ public sealed class BrowserRecordJourneyTests
             _mint++;
             return _page switch
             {
+                "challenge" => Page(
+                    Origin + "/challenge",
+                    "Human verification required",
+                    "Human verification required",
+                    []),
                 "record" => Page(
                     Origin + "/records/AC-1042",
                     "AC-1042",

@@ -44,9 +44,6 @@ public sealed class SemanticResponseLanguageModelTests
     [Theory]
     [InlineData("""{"speech":{"mode":"same"}}""")]
     [InlineData("""{"displayText":"","speech":{"mode":"same"}}""")]
-    [InlineData("""{"displayText":"Shown","speech":{"mode":"maybe"}}""")]
-    [InlineData("""{"displayText":"Shown","speech":{"mode":"custom"}}""")]
-    [InlineData("""{"displayText":"Shown","speech":{"mode":"none","text":"no"}}""")]
     [InlineData("""{"displayText":"Shown","speech":{"mode":"same"},"blocks":[{"kind":"widget"}]}""")]
     [InlineData("not-json")]
     public async Task Native_invalid_payload_is_invalid_response(string json)
@@ -454,6 +451,66 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == ToolCatalog.SkillsLoad);
         Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
         Assert.Equal(ModelToolChoice.Required, inner.LastRequest.ToolChoice);
+    }
+
+    [Theory]
+    [InlineData("""{"mode":"same","text":null}""")]
+    [InlineData("""{"mode":"same","text":""}""")]
+    [InlineData("""{"mode":"same","text":"redundant provider text"}""")]
+    [InlineData("""{"mode":"custom","text":""}""")]
+    [InlineData("""{"mode":"maybe","text":"ignored"}""")]
+    public async Task Function_channel_text_turn_accepts_harmless_same_speech(string speech)
+    {
+        var json = $$"""{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Google is asking for human verification.","speech":{{speech}},"blocks":[],"memory":[]}""";
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var ready = Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response;
+        Assert.Equal("Google is asking for human verification.", ready.DisplayText);
+        Assert.Equal(ModelSpeechMode.Same, ready.Speech.Mode);
+        Assert.Null(ready.Speech.Text);
+        Assert.DoesNotContain(events, item => item is ModelFailed);
+        Assert.DoesNotContain(json, string.Join('\n', events.OfType<ModelFailed>().Select(item => item.Failure.SafeMessage)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Function_channel_voice_turn_rejects_empty_custom_speech()
+    {
+        var json = """
+            {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Shown","speech":{"mode":"custom","text":""},"blocks":[],"memory":[]}
+            """;
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var voice = Contracted with { ResponseContract = new ModelResponseContract(SpeechWillBeUsed: true) };
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), voice);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.MissingCustomSpeechText, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ResponseChannel);
+        Assert.DoesNotContain(json, failed.Failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Function_channel_rejects_unknown_speech_mode()
+    {
+        var json = """
+            {"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Shown","speech":{"mode":"maybe","text":null},"blocks":[],"memory":[]}
+            """;
+        var inner = new ScriptedInner(
+        [
+            new ModelToolCallEvent(new ModelToolCall("call-1", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls)
+        ]);
+        var voice = Contracted with { ResponseContract = new ModelResponseContract(SpeechWillBeUsed: true) };
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), voice);
+        var failed = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.InvalidSpeechMode, failed.Failure.FailureReason);
+        Assert.Equal(ProviderResponseChannel.ResponseFunction, failed.Failure.ResponseChannel);
     }
 
     [Fact]

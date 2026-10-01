@@ -18,7 +18,9 @@ internal static class AssistantResponseSchema
     {
         var speech = contract.SpeechWillBeUsed
             ? "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
-            : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
+            : responseFunction
+                ? "This is a text turn. agent_core_respond speech must be {\"mode\":\"same\",\"text\":null}. Do not copy displayText into speech.text. "
+                : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
         var memory = responseFunction
             ? $"Call {ResponseFunctionName} with the structured answer. That call is the reliable memory proposal channel. [[memory:...]] alone is best effort. "
             : "[[memory:...]] is best effort only. Do not claim that memory was saved. ";
@@ -247,10 +249,15 @@ internal static class AssistantResponseSchema
         }
         """;
 
-    private static string ResponseFunctionDescription(ModelResponseContract contract) =>
-        contract.RequireChatResponse
-            ? "Submit the agent step for a direct user chat request. disposition must be Continue or Complete. action must be {\"kind\":\"chat.respond\"} with non-empty displayText. Wait, Blocked, and action null are invalid for this request. Memory entries are proposals."
-            : "Submit one agent step for the current session. For a normal user request: use tools and Skills as needed, then Complete with action {\"kind\":\"chat.respond\"} and a non-empty displayText answer; never call chat.respond with empty or whitespace-only displayText. disposition is Continue, Wait, Complete, or Blocked. action is {\"kind\":\"chat.respond\"} or null. Continue delivers chat.respond once when present and does not start another generation; it does not request more model thinking. Wait returns control without Chat only when an external condition must arrive first—not because a task is long, difficult, needs tools, or is unfinished. action null means no Chat this step. Memory entries are proposals. This call does not save memory and does not choose a destination.";
+    private static string ResponseFunctionDescription(ModelResponseContract contract)
+    {
+        var speech = contract.SpeechWillBeUsed
+            ? " When speech is used, same and none keep text null; custom requires non-empty text."
+            : " For a text turn, speech must be {\"mode\":\"same\",\"text\":null}.";
+        return contract.RequireChatResponse
+            ? "Submit the agent step for a direct user chat request. disposition must be Continue or Complete. action must be {\"kind\":\"chat.respond\"} with non-empty displayText. Wait, Blocked, and action null are invalid for this request. Memory entries are proposals." + speech
+            : "Submit one agent step for the current session. For a normal user request: use tools and Skills as needed, then Complete with action {\"kind\":\"chat.respond\"} and a non-empty displayText answer; never call chat.respond with empty or whitespace-only displayText. disposition is Continue, Wait, Complete, or Blocked. action is {\"kind\":\"chat.respond\"} or null. Continue delivers chat.respond once when present and does not start another generation; it does not request more model thinking. Wait returns control without Chat only when an external condition must arrive first—not because a task is long, difficult, needs tools, or is unfinished. action null means no Chat this step. Memory entries are proposals. This call does not save memory and does not choose a destination." + speech;
+    }
 
     public static object OpenAiCompatibleResponseFormat(ModelResponseContract contract) =>
         new Dictionary<string, object?>

@@ -11,13 +11,15 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string NoMatchResource = "AgentCore.Infrastructure.Browser.Fixture.no-match.html";
     public const string RecordResource = "AgentCore.Infrastructure.Browser.Fixture.record.html";
     public const string IsolateResource = "AgentCore.Infrastructure.Browser.Fixture.isolate.html";
+    public const string ChallengeResource = "AgentCore.Infrastructure.Browser.Fixture.challenge.html";
 
     private static readonly string[] RequiredResources =
     [
         IndexResource,
         NoMatchResource,
         RecordResource,
-        IsolateResource
+        IsolateResource,
+        ChallengeResource
     ];
 
     private readonly ILogger _logger;
@@ -208,6 +210,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/isolate", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, IsolateResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/challenge", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, ChallengeResource, 200).ConfigureAwait(false);
                 return;
             }
 

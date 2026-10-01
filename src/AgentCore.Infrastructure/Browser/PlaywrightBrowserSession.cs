@@ -181,7 +181,10 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return Unavailable();
         }
 
-        var decision = BrowserTargetPolicy.EvaluateDestination(request.Url.AbsoluteUri, _policy.NavigationOrigins);
+        var decision = BrowserTargetPolicy.EvaluateDestination(
+            request.Url.AbsoluteUri,
+            _policy.NavigationOrigins,
+            _policy.PolicyMode);
         if (!decision.Allowed)
         {
             return Result(decision.Code ?? "target_denied");
@@ -290,6 +293,7 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         {
             await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             entered = true;
+            await AdoptOpenWebPageAsync(session, cancellationToken).ConfigureAwait(false);
             if (!IsAllowed(session.Page.Url))
             {
                 return Unavailable();
@@ -356,7 +360,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         var decision = BrowserTargetPolicy.EvaluateAct(
             _policy.InteractionMode,
             current.AbsoluteUri,
-            _policy.EffectiveInteractionOrigins);
+            _policy.EffectiveInteractionOrigins,
+            _policy.PolicyMode);
         if (!decision.Allowed)
         {
             return Result(decision.Code ?? "forbidden");
@@ -405,6 +410,8 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             {
                 return Result(session.PopupCode);
             }
+
+            await AdoptOpenWebPageAsync(session, cancellationToken).ConfigureAwait(false);
 
             if (session.DeniedNavigation || !IsAllowed(session.Page.Url))
             {
@@ -504,7 +511,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             try
             {
                 _playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-                var options = new BrowserTypeLaunchOptions { Headless = _options.Headless };
+                var options = new BrowserTypeLaunchOptions
+                {
+                    Headless = _options.Headless,
+                    Args = ["--disable-popup-blocking"]
+                };
                 _browser = await _playwright.Chromium.LaunchAsync(options).WaitAsync(cancellationToken).ConfigureAwait(false);
                 LaunchedHeadless = options.Headless;
                 return _browser;
@@ -541,10 +552,17 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         {
             if (!ReferenceEquals(page, session.Page))
             {
+                if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb
+                    && (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || Allows(url, true)))
+                {
+                    await route.ContinueAsync().ConfigureAwait(false);
+                    return;
+                }
+
                 if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                     || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.NavigationOrigins);
+                    var popup = BrowserTargetPolicy.EvaluatePopup(url, _policy.NavigationOrigins, _policy.PolicyMode);
                     session.PopupCode ??= popup.Code ?? "unsupported_operation";
                 }
 
@@ -574,6 +592,18 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             {
                 session.DeniedNavigation = true;
                 await route.AbortAsync().ConfigureAwait(false);
+                return;
+            }
+
+            if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
+            {
+                if (IsCancelled(session, session.OperationCall))
+                {
+                    await route.AbortAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                await route.ContinueAsync().ConfigureAwait(false);
                 return;
             }
 
@@ -682,6 +712,22 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         if (operation == "click")
         {
             await handle.ClickAsync(new ElementHandleClickOptions { Timeout = timeout })
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (operation == "check")
+        {
+            await handle.CheckAsync(new ElementHandleCheckOptions { Timeout = timeout })
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (operation == "uncheck")
+        {
+            await handle.UncheckAsync(new ElementHandleUncheckOptions { Timeout = timeout })
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
             return;
@@ -904,6 +950,11 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
             return;
         }
 
+        if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
+        {
+            return;
+        }
+
         var close = CloseQuietlyAsync(opened);
         lock (session.PopupGate)
         {
@@ -911,8 +962,51 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
         }
     }
 
+    private async Task AdoptOpenWebPageAsync(SessionBrowser session, CancellationToken cancellationToken)
+    {
+        if (_policy.PolicyMode != BrowserPolicyMode.OpenWeb || session.Context.Pages.Count < 2)
+        {
+            return;
+        }
+
+        IPage? opened = null;
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            opened = null;
+            foreach (var page in session.Context.Pages)
+            {
+                if (!ReferenceEquals(page, session.Page))
+                {
+                    opened = page;
+                }
+            }
+
+            if (opened is not null && IsAllowed(opened.Url))
+            {
+                break;
+            }
+
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (opened is null || !IsAllowed(opened.Url))
+        {
+            return;
+        }
+
+        opened.SetDefaultTimeout(TimeoutMs());
+        opened.SetDefaultNavigationTimeout(TimeoutMs());
+        session.Page = opened;
+        session.Generation++;
+    }
+
     private async Task SettlePopupsAsync(SessionBrowser session)
     {
+        if (_policy.PolicyMode == BrowserPolicyMode.OpenWeb)
+        {
+            return;
+        }
+
         try
         {
             for (var attempt = 0; attempt < 8; attempt++)
@@ -975,11 +1069,15 @@ public sealed class PlaywrightBrowserSession : IBrowserSession, IBrowserSessionL
 
     private bool Allows(string url, bool documentNavigation) =>
         documentNavigation
-            ? BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins).Allowed
-            : BrowserTargetPolicy.EvaluateResource(url, _policy.NavigationOrigins, _policy.EffectiveResourceOrigins).Allowed;
+            ? BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins, _policy.PolicyMode).Allowed
+            : BrowserTargetPolicy.EvaluateResource(
+                url,
+                _policy.NavigationOrigins,
+                _policy.EffectiveResourceOrigins,
+                _policy.PolicyMode).Allowed;
 
     private bool IsAllowed(string url) =>
-        BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins).Allowed;
+        BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins, _policy.PolicyMode).Allowed;
 
     private void RemoveRefs(Guid sessionId)
     {

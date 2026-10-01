@@ -128,6 +128,29 @@ public sealed class BrowserToolTests
         Assert.Equal("forbidden", unlistedLoopback.Code);
         Assert.True(BrowserTargetPolicy.IsLoopback("http://[::1]:5091/"));
         Assert.False(BrowserTargetPolicy.IsLoopback("http://169.254.169.254/"));
+
+        var openWeb = BrowserPolicyMode.OpenWeb;
+        Assert.True(BrowserTargetPolicy.EvaluateDestination("https://docs.nopcommerce.com/en/index.html", [], openWeb).Allowed);
+        Assert.True(BrowserTargetPolicy.EvaluateDestination("http://127.0.0.1:5000/admin", [], openWeb).Allowed);
+        Assert.True(BrowserTargetPolicy.EvaluateResource("https://cdn.example/app.js", [], [], openWeb).Allowed);
+        Assert.True(BrowserTargetPolicy.EvaluatePopup("https://docs.example/oauth", [], openWeb).Allowed);
+        Assert.True(BrowserTargetPolicy.EvaluateAct(
+            BrowserInteractionMode.InteractiveDemo,
+            "https://docs.nopcommerce.com/en/index.html",
+            [],
+            openWeb).Allowed);
+        Assert.Equal(
+            "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("http://169.254.169.254/latest", [], openWeb).Code);
+        Assert.Equal(
+            "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("file:///tmp/secret", [], openWeb).Code);
+        Assert.Equal(
+            "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("javascript:alert(1)", [], openWeb).Code);
+        Assert.Equal(
+            "target_denied",
+            BrowserTargetPolicy.EvaluateDestination("http://user:secret@docs.example/", [], openWeb).Code);
     }
 
     [Fact]
@@ -525,6 +548,24 @@ public sealed class BrowserToolTests
                 ["http://127.0.0.1:5091"],
                 [])
         };
+        var openWeb = new FakeBrowser
+        {
+            HostPolicy = new BrowserHostPolicy(
+                true,
+                false,
+                BrowserInteractionMode.InteractiveDemo,
+                FixtureOrigin,
+                FixtureOrigin,
+                [],
+                BrowserPolicyMode.OpenWeb)
+        };
+        Assert.DoesNotContain(
+            "Trusted browser start:",
+            new PromptContextBuilder(ToolConfigurationGates.AllowAll, openWeb)
+                .OfferTools(v11, userTurn)
+                .Single(tool => tool.Name == ToolCatalog.BrowserNavigate)
+                .Description,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "Trusted browser start:",
             new PromptContextBuilder(ToolConfigurationGates.AllowAll, external)

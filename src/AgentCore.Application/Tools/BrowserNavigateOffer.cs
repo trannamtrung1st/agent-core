@@ -33,7 +33,8 @@ internal static class BrowserNavigateOffer
 
     public static string? HomeUrl(IBrowserSession? browser)
     {
-        if (browser is not { IsAvailable: true })
+        if (browser is not { IsAvailable: true }
+            || browser.HostPolicy.PolicyMode == BrowserPolicyMode.OpenWeb)
         {
             return null;
         }

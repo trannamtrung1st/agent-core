@@ -13,6 +13,8 @@ public sealed class BrowserOptions
 
     public string InteractionMode { get; set; } = "InteractiveDemo";
 
+    public string PolicyMode { get; set; } = nameof(BrowserPolicyMode.Restricted);
+
     public bool FixtureEnabled { get; set; } = true;
 
     public int FixturePort { get; set; } = 5091;
@@ -32,7 +34,13 @@ public sealed class BrowserOptions
             ResolveMode(),
             ResolveNavigation(),
             ResolveInteraction(ResolveNavigation()),
-            ResourceOrigins ?? []);
+            ResourceOrigins ?? [],
+            ResolvePolicy());
+
+    public BrowserPolicyMode ResolvePolicy() =>
+        string.Equals(PolicyMode, nameof(BrowserPolicyMode.OpenWeb), StringComparison.OrdinalIgnoreCase)
+            ? BrowserPolicyMode.OpenWeb
+            : BrowserPolicyMode.Restricted;
 
     public BrowserInteractionMode ResolveMode() =>
         string.Equals(InteractionMode, nameof(BrowserInteractionMode.InteractiveDemo), StringComparison.Ordinal)

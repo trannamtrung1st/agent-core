@@ -37,7 +37,10 @@ public sealed partial class SessionToolExecutor
                 Error("provider_unavailable", "Browser is unavailable."));
         }
 
-        var decision = BrowserTargetPolicy.EvaluateDestination(url, browser.HostPolicy.NavigationOrigins);
+        var decision = BrowserTargetPolicy.EvaluateDestination(
+            url,
+            browser.HostPolicy.NavigationOrigins,
+            browser.HostPolicy.PolicyMode);
         if (!decision.Allowed)
         {
             return FinishBrowser(
@@ -156,7 +159,8 @@ public sealed partial class SessionToolExecutor
             var decision = BrowserTargetPolicy.EvaluateAct(
                 browser.HostPolicy.InteractionMode,
                 current.AbsoluteUri,
-                browser.HostPolicy.EffectiveInteractionOrigins);
+                browser.HostPolicy.EffectiveInteractionOrigins,
+                browser.HostPolicy.PolicyMode);
             if (!decision.Allowed)
             {
                 return FinishBrowser(

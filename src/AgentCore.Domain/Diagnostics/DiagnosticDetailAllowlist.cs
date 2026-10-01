@@ -12,6 +12,8 @@ public static class DiagnosticDetailAllowlist
         "responseTooLarge",
         "missingDisplayText",
         "invalidSpeech",
+        "invalidSpeechMode",
+        "missingCustomSpeechText",
         "invalidBlocks",
         "invalidMemory",
         "invalidMemoryProposal",

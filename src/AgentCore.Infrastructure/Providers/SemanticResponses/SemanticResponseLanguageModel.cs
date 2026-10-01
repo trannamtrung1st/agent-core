@@ -82,7 +82,11 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                 case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls && responseCalls.Count > 0:
                     var arguments = responseCalls[^1].ArgumentsJson;
                     responseCalls.Clear();
-                    if (!NativeSemanticResponseParser.TryParse(arguments, out var parsed, out var failureReason))
+                    if (!NativeSemanticResponseParser.TryParse(
+                            arguments,
+                            out var parsed,
+                            out var failureReason,
+                            request.ResponseContract))
                     {
                         yield return Fail(failureReason, ProviderResponseChannel.ResponseFunction);
                         yield break;
@@ -148,7 +152,11 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                         yield break;
                     }
 
-                    if (NativeSemanticResponseParser.TryParse(buffer.ToString(), out var response, out var failureReason))
+                    if (NativeSemanticResponseParser.TryParse(
+                            buffer.ToString(),
+                            out var response,
+                            out var failureReason,
+                            request.ResponseContract))
                     {
                         yield return new ModelSemanticResponseReady(response!);
                         yield return completed;

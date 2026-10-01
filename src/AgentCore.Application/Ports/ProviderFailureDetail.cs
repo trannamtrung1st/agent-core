@@ -9,6 +9,8 @@ public static class ProviderFailureReason
     public const string ResponseTooLarge = "responseTooLarge";
     public const string MissingDisplayText = "missingDisplayText";
     public const string InvalidSpeech = "invalidSpeech";
+    public const string InvalidSpeechMode = "invalidSpeechMode";
+    public const string MissingCustomSpeechText = "missingCustomSpeechText";
     public const string InvalidBlocks = "invalidBlocks";
     public const string InvalidMemory = "invalidMemory";
     public const string InvalidMemoryProposal = "invalidMemoryProposal";

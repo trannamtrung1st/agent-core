@@ -12,7 +12,7 @@ public static class BrowserToolLimits
     public const int MaxAccessibleNameLength = 200;
     public const int MaxRoleLength = 80;
 
-    public static readonly string[] Operations = ["click", "fill", "select", "press"];
+    public static readonly string[] Operations = ["click", "fill", "select", "press", "check", "uncheck"];
 
     public static readonly string[] PressKeys = ["Enter", "Tab", "Escape"];
 }

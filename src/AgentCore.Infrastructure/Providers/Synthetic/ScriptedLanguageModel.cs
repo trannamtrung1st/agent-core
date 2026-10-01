@@ -143,6 +143,17 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (TryScriptBrowserChallenge(request, out var challengeEvents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var challengeEvent in challengeEvents)
+            {
+                yield return challengeEvent;
+            }
+
+            yield break;
+        }
+
         if (TryScriptBrowserTargetDenied(request, out var denialEvents))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1083,6 +1094,14 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         return true;
     }
 
+    public const string BrowserChallengeMarker = "human verification";
+
+    public const string BrowserChallengeAnswer =
+        "The page is asking for human verification. The browser is still open. Complete the check manually, then tell me to continue.";
+
+    public const string BrowserChallengeContinueAnswer =
+        "The verification page is still open. Tell me when you have finished the check.";
+
     public const string BrowserDenialMarker = "https://example.invalid";
 
     public const string BrowserDenialAnswer = "That site is outside the trusted browser scope.";
@@ -1094,6 +1113,73 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     public const string BrowserRecordAnswer = "AC-1042 is In review.";
 
     public const string BrowserRecordSkillId = "browser.record.lookup";
+
+    private static bool TryScriptBrowserChallenge(
+        ModelRequest request,
+        out IReadOnlyList<ModelGenerationEvent> events)
+    {
+        events = [];
+        if (!Offers(request, ToolCatalog.BrowserNavigate) || !TryReadTrustedBrowserStart(request, out var startUrl))
+        {
+            return false;
+        }
+
+        var users = request.Messages
+            .Where(message => message.Role == ModelRole.User)
+            .Select(message => message.Text ?? string.Empty)
+            .ToArray();
+        if (users.Length == 0)
+        {
+            return false;
+        }
+
+        var continuing = users.Length > 1
+            && users[^1].Trim().Equals("continue", StringComparison.OrdinalIgnoreCase)
+            && users.Take(users.Length - 1).Any(text => text.Contains(BrowserChallengeMarker, StringComparison.OrdinalIgnoreCase));
+        var opening = users[^1].Contains(BrowserChallengeMarker, StringComparison.OrdinalIgnoreCase);
+        if (!continuing && !opening)
+        {
+            return false;
+        }
+
+        var rounds = ToolRoundsSinceLastUser(request.Messages);
+        if (continuing)
+        {
+            if (rounds == 0)
+            {
+                events = ToolTurn("p9-challenge-again", ToolCatalog.BrowserObserve, "{}");
+                return true;
+            }
+
+            events =
+            [
+                new ModelTextDelta(BrowserChallengeContinueAnswer),
+                new ModelCompleted(ModelStopReason.Completed)
+            ];
+            return true;
+        }
+
+        switch (rounds)
+        {
+            case 0:
+                var challengeUrl = startUrl.TrimEnd('/') + "/challenge";
+                events = ToolTurn(
+                    "p9-challenge-open",
+                    ToolCatalog.BrowserNavigate,
+                    JsonSerializer.Serialize(new Dictionary<string, string> { ["url"] = challengeUrl }));
+                return true;
+            case 1:
+                events = ToolTurn("p9-challenge-observe", ToolCatalog.BrowserObserve, "{}");
+                return true;
+            default:
+                events =
+                [
+                    new ModelTextDelta(BrowserChallengeAnswer),
+                    new ModelCompleted(ModelStopReason.Completed)
+                ];
+                return true;
+        }
+    }
 
     private static bool TryScriptBrowserTargetDenied(
         ModelRequest request,

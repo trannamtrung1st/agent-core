@@ -6,7 +6,11 @@ namespace AgentCore.Infrastructure.Providers.SemanticResponses;
 
 internal static class NativeSemanticResponseParser
 {
-    public static bool TryParse(string json, out ModelSemanticResponse? response, out string failureReason)
+    public static bool TryParse(
+        string json,
+        out ModelSemanticResponse? response,
+        out string failureReason,
+        ModelResponseContract? contract = null)
     {
         response = null;
         failureReason = ProviderFailureReason.InvalidJson;
@@ -64,7 +68,8 @@ internal static class NativeSemanticResponseParser
                 return false;
             }
 
-            if (!TrySpeech(root, noAction, out var speech, out failureReason))
+            var speechWillBeUsed = contract?.SpeechWillBeUsed ?? true;
+            if (!TrySpeech(root, noAction, speechWillBeUsed, out var speech, out failureReason))
             {
                 return false;
             }
@@ -349,16 +354,95 @@ internal static class NativeSemanticResponseParser
         return true;
     }
 
-    private static bool TrySpeech(JsonElement root, bool noAction, out ModelSpeechProjection speech, out string failureReason)
+    private static bool TrySpeech(
+        JsonElement root,
+        bool noAction,
+        bool speechWillBeUsed,
+        out ModelSpeechProjection speech,
+        out string failureReason)
     {
-        speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+        speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
+        if (!speechWillBeUsed)
+        {
+            if (TryRecognizeSpeech(root, out var recognized, out var customText)
+                && (recognized != ModelSpeechMode.Custom || !string.IsNullOrWhiteSpace(customText))
+                && (customText is null || customText.Length <= AssistantResponseSchema.MaxSpeechCharacters))
+            {
+                speech = new ModelSpeechProjection(
+                    recognized,
+                    recognized == ModelSpeechMode.Custom ? customText : null);
+            }
+
+            failureReason = string.Empty;
+            return true;
+        }
+
         failureReason = ProviderFailureReason.InvalidSpeech;
         if (!root.TryGetProperty("speech", out var speechEl))
         {
-            return noAction;
+            if (noAction)
+            {
+                speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+                failureReason = string.Empty;
+                return true;
+            }
+
+            return false;
         }
 
         if (speechEl.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        if (!speechEl.TryGetProperty("mode", out var modeEl) || modeEl.ValueKind != JsonValueKind.String)
+        {
+            failureReason = ProviderFailureReason.InvalidSpeechMode;
+            return false;
+        }
+
+        var modeText = modeEl.GetString();
+        if (string.Equals(modeText, "same", StringComparison.OrdinalIgnoreCase))
+        {
+            speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
+            failureReason = string.Empty;
+            return true;
+        }
+
+        if (string.Equals(modeText, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
+            failureReason = string.Empty;
+            return true;
+        }
+
+        if (!string.Equals(modeText, "custom", StringComparison.OrdinalIgnoreCase))
+        {
+            failureReason = ProviderFailureReason.InvalidSpeechMode;
+            return false;
+        }
+
+        if (!TrySpeechText(speechEl, out var text) || string.IsNullOrWhiteSpace(text))
+        {
+            failureReason = ProviderFailureReason.MissingCustomSpeechText;
+            return false;
+        }
+
+        if (text.Length > AssistantResponseSchema.MaxSpeechCharacters)
+        {
+            return false;
+        }
+
+        speech = new ModelSpeechProjection(ModelSpeechMode.Custom, text);
+        failureReason = string.Empty;
+        return true;
+    }
+
+    private static bool TryRecognizeSpeech(JsonElement root, out ModelSpeechMode mode, out string? customText)
+    {
+        mode = ModelSpeechMode.Same;
+        customText = null;
+        if (!root.TryGetProperty("speech", out var speechEl) || speechEl.ValueKind != JsonValueKind.Object)
         {
             return false;
         }
@@ -369,66 +453,44 @@ internal static class NativeSemanticResponseParser
         }
 
         var modeText = modeEl.GetString();
-        ModelSpeechMode mode;
         if (string.Equals(modeText, "same", StringComparison.OrdinalIgnoreCase))
         {
             mode = ModelSpeechMode.Same;
+            return true;
         }
-        else if (string.Equals(modeText, "custom", StringComparison.OrdinalIgnoreCase))
-        {
-            mode = ModelSpeechMode.Custom;
-        }
-        else if (string.Equals(modeText, "none", StringComparison.OrdinalIgnoreCase))
+
+        if (string.Equals(modeText, "none", StringComparison.OrdinalIgnoreCase))
         {
             mode = ModelSpeechMode.None;
+            return true;
         }
-        else
+
+        if (!string.Equals(modeText, "custom", StringComparison.OrdinalIgnoreCase)
+            || !TrySpeechText(speechEl, out customText))
         {
             return false;
         }
 
-        string? text = null;
-        if (speechEl.TryGetProperty("text", out var textEl) && textEl.ValueKind == JsonValueKind.String)
+        mode = ModelSpeechMode.Custom;
+        return true;
+    }
+
+    private static bool TrySpeechText(JsonElement speechEl, out string? text)
+    {
+        text = null;
+        if (!speechEl.TryGetProperty("text", out var textEl)
+            || textEl.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
-            text = textEl.GetString();
+            return true;
         }
-        else if (speechEl.TryGetProperty("text", out textEl) && textEl.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+
+        if (textEl.ValueKind != JsonValueKind.String)
         {
             return false;
         }
 
-        switch (mode)
-        {
-            case ModelSpeechMode.Same:
-                if (text is not null)
-                {
-                    return false;
-                }
-
-                speech = new ModelSpeechProjection(ModelSpeechMode.Same, null);
-                failureReason = string.Empty;
-                return true;
-            case ModelSpeechMode.Custom:
-                if (string.IsNullOrWhiteSpace(text) || text.Length > AssistantResponseSchema.MaxSpeechCharacters)
-                {
-                    return false;
-                }
-
-                speech = new ModelSpeechProjection(ModelSpeechMode.Custom, text);
-                failureReason = string.Empty;
-                return true;
-            case ModelSpeechMode.None:
-                if (text is not null)
-                {
-                    return false;
-                }
-
-                speech = new ModelSpeechProjection(ModelSpeechMode.None, null);
-                failureReason = string.Empty;
-                return true;
-            default:
-                return false;
-        }
+        text = textEl.GetString();
+        return true;
     }
 
     private static bool TryBlocks(JsonElement root, out IReadOnlyList<ModelResponseBlock> blocks, out string failureReason)

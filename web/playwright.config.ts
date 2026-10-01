@@ -90,6 +90,8 @@ export default defineConfig({
         AgentCore__MaxActiveSessions: "32",
         Browser__Enabled: "true",
         Browser__Headless: "true",
+        Browser__PolicyMode: "Restricted",
+        Browser__FixtureEnabled: "true",
         Browser__FixturePort: "5091",
         Browser__NavigationOrigins__0: "http://127.0.0.1:5091",
         Browser__InteractionOrigins__0: "http://127.0.0.1:5091"
@@ -125,6 +127,8 @@ export default defineConfig({
         AGENTCORE_LIVE_OPENAI_TTS: "0",
         Browser__Enabled: "true",
         Browser__Headless: "true",
+        Browser__PolicyMode: "Restricted",
+        Browser__FixtureEnabled: "true",
         Browser__FixturePort: "5092",
         Browser__NavigationOrigins__0: "http://127.0.0.1:5092",
         Browser__InteractionOrigins__0: "http://127.0.0.1:5092"
@@ -158,6 +162,8 @@ export default defineConfig({
         AGENTCORE_LIVE_OPENAI_TTS: "0",
         Browser__Enabled: "true",
         Browser__Headless: "true",
+        Browser__PolicyMode: "Restricted",
+        Browser__FixtureEnabled: "true",
         Browser__FixturePort: "5093",
         Browser__NavigationOrigins__0: "http://127.0.0.1:5093",
         Browser__InteractionOrigins__0: "http://127.0.0.1:5093"

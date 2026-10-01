@@ -6,13 +6,20 @@ public enum BrowserInteractionMode
     InteractiveDemo
 }
 
+public enum BrowserPolicyMode
+{
+    Restricted,
+    OpenWeb
+}
+
 public sealed record BrowserHostPolicy(
     bool Enabled,
     bool Headless,
     BrowserInteractionMode InteractionMode,
     IReadOnlyList<string> NavigationOrigins,
     IReadOnlyList<string>? InteractionOrigins = null,
-    IReadOnlyList<string>? ResourceOrigins = null)
+    IReadOnlyList<string>? ResourceOrigins = null,
+    BrowserPolicyMode PolicyMode = BrowserPolicyMode.Restricted)
 {
     public IReadOnlyList<string> TargetOrigins => NavigationOrigins;
 

@@ -23,6 +23,8 @@ const failureReasonTokens = new Set([
   "responseTooLarge",
   "missingDisplayText",
   "invalidSpeech",
+  "invalidSpeechMode",
+  "missingCustomSpeechText",
   "invalidBlocks",
   "invalidMemory",
   "invalidMemoryProposal",
